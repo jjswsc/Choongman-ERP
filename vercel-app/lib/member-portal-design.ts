@@ -17,29 +17,45 @@ export const MEMBER_PORTAL_BG_STYLE = {
 
 export const MP_MAX_WIDTH = 'max-w-[430px]'
 
+/** 페이지 배경·본문 텍스트 — 화사한 웜 라이트 톤 */
+export const MP_PAGE_BG = '#faf7f2'
+export const MP_PAGE_BG_CLASS = 'bg-[#faf7f2]'
+export const MP_TEXT_PRIMARY = 'text-stone-900'
+export const MP_TEXT_SECONDARY = 'text-stone-600'
+export const MP_TEXT_MUTED = 'text-stone-500'
+export const MP_TEXT_SUBTLE = 'text-stone-400'
+
 /** 하단 탭 네비 고정 시 본문·플로팅 버튼 여백 (safe-area 포함) */
 export const MP_BOTTOM_NAV_CLEARANCE =
   'calc(5.25rem + env(safe-area-inset-bottom, 0px))'
+
+/** CRM iframe 미리보기 — 스크롤 없이 상단 홈 구역 노출 */
+export const MP_EMBED_PREVIEW_BOTTOM_CLEARANCE = 'calc(4.75rem + env(safe-area-inset-bottom, 0px))'
 
 /** 멤버십 카드 가로:세로 — 황금비 φ (신용카드형) */
 export const MEMBERSHIP_CARD_GOLDEN_RATIO = 1.618033988749895
 
 export const mpGlassCard =
-  'rounded-[1.35rem] border border-white/[0.11] bg-[rgba(8,8,10,0.52)] shadow-[0_12px_40px_rgba(0,0,0,0.38)] backdrop-blur-2xl'
+  'rounded-[1.35rem] border border-amber-900/[0.08] bg-white/95 shadow-[0_8px_32px_rgba(28,21,16,0.07)] backdrop-blur-md'
 
 export const mpGlassCardSoft =
-  'rounded-[1.25rem] border border-white/[0.08] bg-[rgba(12,12,14,0.42)] backdrop-blur-xl'
+  'rounded-[1.25rem] border border-stone-200/80 bg-white/88 shadow-[0_4px_20px_rgba(28,21,16,0.05)] backdrop-blur-sm'
 
 export const mpGlassInset =
-  'rounded-2xl border border-white/[0.07] bg-black/25 backdrop-blur-md'
+  'rounded-2xl border border-stone-200/70 bg-stone-50/90 backdrop-blur-sm'
 
 export const mpInputClass =
-  'rounded-2xl border-white/12 bg-black/35 text-white placeholder:text-white/35 focus-visible:border-amber-400/45 focus-visible:ring-amber-400/15'
+  'rounded-2xl border-stone-200 bg-white text-stone-900 placeholder:text-stone-400 shadow-sm focus-visible:border-amber-500/50 focus-visible:ring-amber-400/20'
 
 export const mpPrimaryBtn =
   'h-12 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-[#f5d78e] text-base font-semibold text-[#1a1208] shadow-[0_8px_24px_rgba(212,175,55,0.28)] hover:from-amber-300 hover:to-amber-200'
 
-export const mpGoldText = 'bg-gradient-to-br from-[#fff7e6] via-amber-100 to-amber-300 bg-clip-text text-transparent'
+export const mpGoldText =
+  'bg-gradient-to-br from-[#8b6914] via-amber-700 to-amber-500 bg-clip-text text-transparent'
+
+/** 어두운 멤버십 카드 위 골드 타이틀 */
+export const mpGoldTextOnDark =
+  'bg-gradient-to-br from-[#fff7e6] via-amber-100 to-amber-300 bg-clip-text text-transparent'
 
 export function resolveMemberPortalLoungeBackgroundUrl(customUrl: string): string {
   const url = String(customUrl || '').trim()

@@ -1,7 +1,6 @@
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import {
   escapeHtmlReceiptEmphasizeChannelToken,
-  escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
   formatPosReceiptOrderNoDisplay,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
@@ -34,6 +33,7 @@ import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import {
   expandBanbanComposeLineForPrint,
+  filterReceiptOptionLinesForBanban,
   parseBanbanFlavorsFromDisplayName,
 } from '@/lib/pos-banban-utils'
 import {
@@ -538,7 +538,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       esc(tr('posTable', '테이블')) +
       c('span') +
       '<span class="receipt-meta-value">' +
-      escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableDisplay) +
+      esc(tableDisplay) +
       c('span') +
       c('div')
     : ''
@@ -564,8 +564,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         esc(tr('posChannelOrderNo', '채널 주문번호')) +
         c('span') +
         '<span class="receipt-meta-value">' +
-        esc('#') +
-        escapeHtmlReceiptEmphasizeChannelToken(channelOrderPick.text.trim()) +
+        esc('#' + channelOrderPick.text.trim()) +
         c('span') +
         c('div')
       : ''
@@ -648,7 +647,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           )
         : []
       const lineOptionTokens = banban
-        ? banbanFlavorLines
+        ? [
+            ...filterReceiptOptionLinesForBanban(grabOptionLines, banban),
+            ...banbanFlavorLines,
+          ]
         : grabInbound
           ? grabOptionLines
           : splitReceiptOptionTokens(lineOption)

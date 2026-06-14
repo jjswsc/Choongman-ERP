@@ -16,6 +16,7 @@ import {
   Ticket,
   UserRound,
 } from "lucide-react"
+import { useMemberPortalEmbedPreview } from "@/lib/member-portal-embed-preview"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -119,7 +120,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80 transition hover:bg-white/10"
+      className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1 text-xs text-stone-700 shadow-sm transition hover:bg-stone-50"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text)
@@ -138,6 +139,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 
 export function MemberPortalApp() {
   const brand = useAppBrandConfig()
+  const embedPreview = useMemberPortalEmbedPreview()
   const { lang, t } = useMemberPortalLang()
   const { tiers: portalTiers } = useMemberPortalTiers()
   const dateLocale = memberPortalDateLocale(lang)
@@ -595,8 +597,8 @@ export function MemberPortalApp() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#08080a] text-white/70">
-        <Loader2 className="h-8 w-8 animate-spin text-amber-300" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#faf7f2] text-stone-500">
+        <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
       </div>
     )
   }
@@ -604,11 +606,11 @@ export function MemberPortalApp() {
   if (!member) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
     const portalFieldClass =
-      "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white shadow-inner shadow-black/20 placeholder:text-white/30 focus-visible:border-amber-400/50 focus-visible:ring-amber-400/20"
-    const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-white/45"
+      "h-12 rounded-2xl border-stone-200 bg-white text-stone-900 shadow-sm placeholder:text-stone-400 focus-visible:border-amber-500/50 focus-visible:ring-amber-400/20"
+    const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500"
 
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white">
+      <div className={`relative bg-[#faf7f2] text-stone-900 ${embedPreview ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh] overflow-x-hidden"}`}>
         <MemberPortalLoungeBackdrop
           customFullBackgroundUrl={designBackgrounds.loginBackgroundUrl}
           heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
@@ -625,15 +627,15 @@ export function MemberPortalApp() {
           <div className="mb-10 flex flex-col items-center text-center">
             <div className="relative mb-5">
               <div className="absolute inset-0 scale-110 rounded-[28px] bg-amber-400/20 blur-xl" />
-              <div className="relative flex h-[88px] w-[88px] items-center justify-center rounded-[28px] border border-white/15 bg-white/[0.06] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+              <div className="relative flex h-[88px] w-[88px] items-center justify-center rounded-[28px] border border-stone-200 bg-white p-3 shadow-md">
                 <Image src={brand.logoSymbolSrc} alt={brand.logoAlt} width={64} height={64} className="h-16 w-16 object-contain" />
               </div>
             </div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.28em] text-amber-200/70">{t("memberLounge")}</p>
-            <h1 className="mt-2 bg-gradient-to-br from-white via-white to-white/70 bg-clip-text text-[2.35rem] font-bold leading-none tracking-tight text-transparent">
+            <p className="text-[11px] font-medium uppercase tracking-[0.28em] text-amber-700/80">{t("memberLounge")}</p>
+            <h1 className="mt-2 bg-gradient-to-br from-stone-900 via-stone-800 to-stone-600 bg-clip-text text-[2.35rem] font-bold leading-none tracking-tight text-transparent">
               {brand.headerWordmark}
             </h1>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/50">
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-stone-500">
               {t("loginSubtitle")}
             </p>
           </div>
@@ -654,9 +656,9 @@ export function MemberPortalApp() {
             <MemberPwaInstallBanner />
           </div>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <div className="mb-4 flex items-center gap-2 text-white/70">
-              <Sparkles className="h-4 w-4 text-amber-300/80" aria-hidden />
+          <div className="rounded-[28px] border border-stone-200/80 bg-white/95 p-5 shadow-[0_12px_40px_rgba(28,21,16,0.08)]">
+            <div className="mb-4 flex items-center gap-2 text-stone-600">
+              <Sparkles className="h-4 w-4 text-amber-600" aria-hidden />
               <p className="text-sm font-medium tracking-wide">{t("lineLoginDesc")}</p>
             </div>
 
@@ -684,7 +686,7 @@ export function MemberPortalApp() {
                   className={`h-[50px] rounded-2xl px-3 text-sm font-semibold transition ${
                     authPanel === "signup"
                       ? "bg-gradient-to-br from-[#ef233c] to-[#c1121f] text-white shadow-[0_8px_24px_rgba(239,35,60,0.25)]"
-                      : "border border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.07]"
+                      : "border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100"
                   }`}
                 >
                   {t("signupBtn")}
@@ -698,7 +700,7 @@ export function MemberPortalApp() {
                   className={`h-[50px] rounded-2xl px-3 text-sm font-semibold transition ${
                     authPanel === "login"
                       ? "border border-amber-400/40 bg-amber-400/10 text-amber-100"
-                      : "border border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.07]"
+                      : "border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100"
                   }`}
                 >
                   {t("loginBtn")}
@@ -980,8 +982,9 @@ export function MemberPortalApp() {
     <MemberPortalAmbienceBackground
       imageUrl={designBackgrounds.appBackgroundUrl}
       heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
+      className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
-      <MemberPortalShell>
+      <MemberPortalShell embedPreview={embedPreview}>
         <PremiumAppHeader
           wordmark={t("memberLounge")}
           displayName={member.fullName || member.name || "Member"}
@@ -994,13 +997,13 @@ export function MemberPortalApp() {
         />
 
         {!!notice && (
-          <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 backdrop-blur-md">
+          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             {notice}
           </div>
         )}
 
         {!!error && (
-          <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 backdrop-blur-md">
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
           </div>
         )}
@@ -1069,14 +1072,14 @@ export function MemberPortalApp() {
               </GlassCard>
             ) : null}
 
-            <GlassCard className="border-amber-400/15 bg-gradient-to-br from-amber-400/10 to-transparent">
+            <GlassCard className="border-amber-200/80 bg-gradient-to-br from-amber-50 to-white">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold">{t("referTitle")}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-white/50">{t("referDesc")}</p>
-                  <p className="mt-3 font-mono text-xl tracking-[0.2em] text-amber-200">{activeDashboard.referralCode}</p>
+                  <p className="text-sm font-semibold text-stone-900">{t("referTitle")}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-stone-500">{t("referDesc")}</p>
+                  <p className="mt-3 font-mono text-xl tracking-[0.2em] text-amber-700">{activeDashboard.referralCode}</p>
                 </div>
-                <Share2 className="h-5 w-5 shrink-0 text-amber-300/80" />
+                <Share2 className="h-5 w-5 shrink-0 text-amber-600" />
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <CopyButton text={activeDashboard.referralCode} label={t("copyCode")} />
@@ -1402,7 +1405,7 @@ export function MemberPortalApp() {
 
             <MemberPortalProfileContactLinks urls={contactUrls} />
 
-            <GlassCard soft className="text-sm text-white/50">
+            <GlassCard soft className="text-sm text-stone-600">
               <p>{t("memberNo")} {member.memberNo}</p>
               {activeDashboard.referralCode ? (
                 <p className="mt-1">{t("myReferralCode")} {activeDashboard.referralCode}</p>
@@ -1416,7 +1419,7 @@ export function MemberPortalApp() {
         )}
       </MemberPortalShell>
 
-      <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} />
+      <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} embedPreview={embedPreview} />
 
       <MemberPortalContentSheet
         open={homePromoOpen}

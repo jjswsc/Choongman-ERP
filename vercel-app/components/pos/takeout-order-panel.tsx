@@ -503,7 +503,7 @@ export function TakeoutOrderPanel({
                   disabled={!canAddOrder}
                   onClick={() => onAddOrder?.()}
                 >
-                  {t('posOrderButton') || '주문'}
+                  {t('posAddOrderButton') || ti('posAddOrderButton') || '추가 주문'}
                 </Button>
                 <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
                   {isPaid
@@ -673,7 +673,7 @@ export function TakeoutOrderPanel({
                   disabled={!canAddOrder}
                   onClick={() => onAddOrder?.()}
                 >
-                  {t('posOrderButton') || '주문'}
+                  {t('posAddOrderButton') || ti('posAddOrderButton') || '추가 주문'}
                 </Button>
                 <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
                   {isPaid

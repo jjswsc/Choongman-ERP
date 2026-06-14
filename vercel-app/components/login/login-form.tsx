@@ -1163,7 +1163,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </Select>
 
             <Select value={store} onValueChange={handleStoreChange}>
-              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
+              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }} data-testid="login-select-store">
                 <SelectValue placeholder={`${t.selectStore}...`} />
               </SelectTrigger>
               <SelectContent className="login-select-content">
@@ -1176,7 +1176,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </Select>
 
             <Select value={user} onValueChange={setUser} disabled={!store}>
-              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
+              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }} data-testid="login-select-user">
                 <SelectValue placeholder={`${t.selectName}...`} />
               </SelectTrigger>
               <SelectContent className="login-select-content">
@@ -1224,6 +1224,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               className="login-input-field"
               autoComplete="off"
               aria-label="Password"
+              data-testid="login-password"
             />
 
             {error &&
@@ -1275,7 +1276,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 </div>
               ))}
 
-            <button type="submit" className="login-btn" disabled={submitting}>
+            <button type="submit" className="login-btn" disabled={submitting} data-testid="login-submit">
               {submitting ? t.loggingIn : t.login}
             </button>
 

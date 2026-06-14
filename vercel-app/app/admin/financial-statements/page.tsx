@@ -24,6 +24,7 @@ import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from "@/lib
 import { canFranchiseeAggregateAllowedStores } from "@/lib/franchisee-multi-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import {
   adminTabsContentCn,
   adminTabsListRowCn,
@@ -77,7 +78,11 @@ export default function FinancialStatementsPage() {
         ? scopedStoreChoices[0]
         : "All"
   )
-  const [tab, setTab] = React.useState<"income" | "balance" | "reconcile" | "margin">("income")
+  const [tab, setTab] = useAdminUrlTab(
+    "tab",
+    ["income", "balance", "reconcile", "margin"] as const,
+    "income"
+  )
   const [queryToken, setQueryToken] = React.useState(0)
   const searchParams = useSearchParams()
   const urlAppliedRef = React.useRef(false)
@@ -85,18 +90,9 @@ export default function FinancialStatementsPage() {
   React.useEffect(() => {
     if (urlAppliedRef.current) return
     urlAppliedRef.current = true
-    const tabParam = searchParams.get("tab")
     const ymStart = searchParams.get("ymStart")
     const ymEnd = searchParams.get("ymEnd")
     const store = searchParams.get("store")
-    if (
-      tabParam === "income" ||
-      tabParam === "balance" ||
-      tabParam === "reconcile" ||
-      tabParam === "margin"
-    ) {
-      setTab(tabParam)
-    }
     if (ymStart && /^\d{4}-\d{2}$/.test(ymStart)) setYearMonthStart(ymStart)
     if (ymEnd && /^\d{4}-\d{2}$/.test(ymEnd)) setYearMonthEnd(ymEnd)
     if (store) setStoreFilter(store)

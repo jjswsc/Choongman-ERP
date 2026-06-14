@@ -52,9 +52,6 @@ import {
   QrCode,
   Wallet,
   Users,
-  Receipt,
-  Building2,
-  User,
   X,
   Pencil,
   LayoutGrid,
@@ -68,7 +65,6 @@ import {
   Clock3,
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
-import { formatPosDineInTableNameForStorage } from '@/lib/pos-table-floor-match'
 import { cn, formatBahtNum, formatBahtWhole, formatPosQtyCompact } from '@/lib/utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
@@ -79,14 +75,12 @@ import {
   getMembers,
   getPosCollabCampaigns,
   getPosPaymentMethodItems,
-  getPosTaxInvoiceRecipients,
   upsertPosTaxInvoiceRecipient,
   validatePosCoupons,
   type PosAppliedCoupon,
   type PosMenu,
   type PosMenuOption,
   type PosPaymentMethodItem,
-  type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import {
@@ -97,7 +91,6 @@ import {
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { isMemberCouponQrPayload, parseMemberCouponQrPayload } from '@/lib/member-coupon-qr'
 import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
-import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
   computePosPricing,
   receiptTaxDisplayFieldsFromPricing,
@@ -106,10 +99,7 @@ import {
   type PosPricingAdjustments,
   type PosPricingResult,
 } from '@/lib/pos-pricing'
-import {
-  manualDiscountSeedFromCheckoutSnapshot,
-  type PosExistingOrderCheckoutDiscount,
-} from '@/lib/pos-existing-order-checkout-discount'
+import type { PosExistingOrderCheckoutDiscount } from '@/lib/pos-existing-order-checkout-discount'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import {
   translateReceiptTableDisplayName,
@@ -166,105 +156,27 @@ import {
   sumCartPanelPaymentSnapshot,
   type CartPanelPaymentMethodTab,
 } from '@/lib/cart-panel-payment-utils'
+import {
+  buildCartPanelOrderMemoWithTaxInvoice,
+  isSyntheticTaxRegistryKey,
+  normalizeTaxInvoiceFields,
+  profileToTaxInvoiceSavePayload,
+  taxRegistryLocalKey,
+  validateTaxInvoiceFields,
+  type TaxInvoiceProfile,
+  type TaxSearchField,
+} from '@/lib/cart-panel-tax-invoice-utils'
+import { searchCartPanelTaxInvoiceProfile } from '@/lib/cart-panel-tax-invoice-search'
+import { CartPanelTaxInvoiceSection } from '@/components/pos/cart-panel-tax-invoice-section'
+import {
+  normalizeExistingPosOrderId,
+  resetCheckoutDiscountUiState,
+  seedCheckoutDiscountFromExistingOrder,
+  resolveDineInTableNameForStorage,
+} from '@/lib/cart-panel-checkout-helpers'
 
 type PaymentMethodTab = CartPanelPaymentMethodTab
 type MenuLineDiscountMode = CartPanelMenuLineDiscountMode
-
-type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
-type TaxInvoiceProfile = {
-  type: 'individual' | 'corporate'
-  name: string
-  taxId: string
-  branchCode: string
-  phone: string
-  email: string
-  address: string
-}
-
-/** 로컬 레지스트리 키: 회원번호 우선, 없으면 taxId_branch (비회원) */
-function taxRegistryLocalKey(
-  memberNoInput: string,
-  linkedMemberNo: string | undefined,
-  taxId: string,
-  branchNo: string
-): string {
-  const m = (memberNoInput || linkedMemberNo || '').trim()
-  if (m) return m
-  return `${taxId}_${branchNo}`
-}
-
-function isSyntheticTaxRegistryKey(key: string): boolean {
-  return /^\d{13}_\d{5}$/.test(key)
-}
-
-function rowToTaxProfile(row: PosTaxInvoiceRecipientRow): TaxInvoiceProfile {
-  return {
-    type: row.customer_type === 'company' ? 'corporate' : 'individual',
-    name: row.name || '',
-    taxId: row.tax_id || '',
-    branchCode: row.branch_no || '',
-    phone: row.phone || '',
-    email: row.email || '',
-    address: row.address || '',
-  }
-}
-
-function normalizeExistingPosOrderId(raw: unknown): number | null {
-  const n = typeof raw === 'number' ? raw : Number(raw)
-  if (!Number.isFinite(n) || n <= 0) return null
-  const id = Math.trunc(n)
-  return id > 0 ? id : null
-}
-
-function resetCheckoutDiscountUiState(setters: {
-  setDiscountType: (v: 'percent' | 'fixed') => void
-  setDiscountValue: (v: number) => void
-  setDiscountReason: (v: string) => void
-  setAppliedCollabId: (v: string | null) => void
-  setCouponCode: (v: string) => void
-  setAppliedCoupons: (v: PosAppliedCoupon[]) => void
-  setCouponQuantity: (v: number) => void
-  setCouponMessage: (v: string) => void
-  setPointUsed: (v: string) => void
-}) {
-  setters.setDiscountType('percent')
-  setters.setDiscountValue(0)
-  setters.setDiscountReason('')
-  setters.setAppliedCollabId(null)
-  setters.setCouponCode('')
-  setters.setAppliedCoupons([])
-  setters.setCouponQuantity(1)
-  setters.setCouponMessage('')
-  setters.setPointUsed('0')
-}
-
-function seedCheckoutDiscountFromExistingOrder(
-  orderDiscount: PosExistingOrderCheckoutDiscount | undefined,
-  items: { price: number; quantity: number }[],
-  pricingAdjustments: PosPricingAdjustments | undefined,
-  setters: {
-    setDiscountType: (v: 'percent' | 'fixed') => void
-    setDiscountValue: (v: number) => void
-    setDiscountReason: (v: string) => void
-  }
-): number {
-  if (!orderDiscount) return 0
-  const seed = manualDiscountSeedFromCheckoutSnapshot({
-    snapshot: orderDiscount,
-    items: items.map((i) => ({ price: i.price, qty: i.quantity })),
-    adjustments: pricingAdjustments,
-  })
-  if (seed.discountValue > 0.0001) {
-    setters.setDiscountType('fixed')
-    setters.setDiscountValue(seed.discountValue)
-    setters.setDiscountReason(seed.discountReason)
-    return seed.discountValue
-  }
-  setters.setDiscountType('percent')
-  setters.setDiscountValue(0)
-  setters.setDiscountReason(seed.discountReason)
-  return 0
-}
 
 interface CartPanelProps {
   stores: Store[]
@@ -446,16 +358,6 @@ interface CartPanelProps {
 }
 
 type CartItem = OrderItem
-
-function resolveDineInTableNameForStorage(
-  table: Pick<Table, 'name' | 'floor'> | null | undefined,
-  fallbackName: string,
-  multiFloorLayout: boolean
-): string {
-  const raw = (String(fallbackName ?? '').trim() || String(table?.name ?? '').trim()).trim()
-  if (!raw) return ''
-  return formatPosDineInTableNameForStorage(raw, table?.floor, multiFloorLayout)
-}
 
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
   stores: _stores,
@@ -1656,26 +1558,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const isMemberOrder = selectedMemberId !== ''
   const selectedMemberDetail = memberMap[selectedMemberId]
   const memberSearchEmpty = !membersLoading && memberKeyword.trim().length >= 2 && memberOptions.length === 0
-  const normalizedTaxId = taxId.replace(/\D/g, '').slice(0, 13)
-  const normalizedTaxBranchNo = taxBranchNo.replace(/\D/g, '').slice(0, 5)
-  const normalizedTaxPhone = taxPhone.replace(/\D/g, '').slice(0, 10)
-  const normalizedTaxEmail = taxEmail.trim()
-  const normalizedTaxAddress = taxAddress.trim()
-  const normalizedTaxName = taxName.trim()
+  const normalizedTaxFields = normalizeTaxInvoiceFields({
+    taxName,
+    taxId,
+    taxBranchNo,
+    taxPhone,
+    taxEmail,
+    taxAddress,
+    invoiceCustomerType,
+  })
   const taxBranchRequired = invoiceCustomerType === 'company'
-  const effectiveTaxBranchNo = taxBranchRequired ? normalizedTaxBranchNo : (normalizedTaxBranchNo || '00000')
-  const emailValid = normalizedTaxEmail.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedTaxEmail)
-  const taxInvoiceValidationErrors: string[] = []
-  if (needTaxInvoice) {
-    if (!normalizedTaxName) taxInvoiceValidationErrors.push('name')
-    if (normalizedTaxId.length !== 13) taxInvoiceValidationErrors.push('taxId')
-    if (taxBranchRequired && effectiveTaxBranchNo.length !== 5) taxInvoiceValidationErrors.push('branch')
-    if (!taxBranchRequired && normalizedTaxBranchNo && normalizedTaxBranchNo.length !== 5) taxInvoiceValidationErrors.push('branch')
-    if (normalizedTaxPhone.length < 9 || normalizedTaxPhone.length > 10) taxInvoiceValidationErrors.push('phone')
-    if (!normalizedTaxAddress) taxInvoiceValidationErrors.push('address')
-    if (!emailValid) taxInvoiceValidationErrors.push('email')
-  }
-  const taxInvoiceInvalid = needTaxInvoice && taxInvoiceValidationErrors.length > 0
+  const { errors: taxInvoiceValidationErrors, invalid: taxInvoiceInvalid } = validateTaxInvoiceFields({
+    needTaxInvoice,
+    normalized: normalizedTaxFields,
+    invoiceCustomerType,
+  })
   const deliveryAppLabel =
     deliveryAppNameProp && deliveryAppNameProp.trim()
       ? deliveryAppNameProp.trim()
@@ -1871,79 +1768,29 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     fillTaxFieldsFromProfile(profile)
   }
 
-  const applyTaxProfileFromServerRow = (row: PosTaxInvoiceRecipientRow) => {
-    const profile = rowToTaxProfile(row)
-    setTaxMemberNo(row.member_no?.trim() || '')
-    fillTaxFieldsFromProfile(profile)
-    const lk = taxRegistryLocalKey(row.member_no?.trim() || '', undefined, row.tax_id, row.branch_no)
-    setTaxMemberRegistry((prev) => ({ ...prev, [lk]: profile }))
-  }
-
   const handleTaxProfileSearch = async () => {
-    const keyword = taxSearchKeyword.trim()
-    if (!keyword) {
-      setTaxSearchMessage(t('posTaxSearchNeedKeyword'))
+    const result = await searchCartPanelTaxInvoiceProfile({
+      keyword: taxSearchKeyword,
+      taxSearchField,
+      taxMemberRegistry,
+      authStore: auth?.store,
+      authRole: auth?.role,
+      currentStoreId,
+    })
+    if (!result.ok) {
+      setTaxSearchMessage(t(result.messageKey))
       return
     }
-    const byApi: 'phone' | 'taxId' | 'name' | 'memberNo' =
-      taxSearchField === 'memberNo'
-        ? 'memberNo'
-        : taxSearchField === 'taxId'
-          ? 'taxId'
-          : taxSearchField === 'name'
-            ? 'name'
-            : 'phone'
-    const qForApi =
-      taxSearchField === 'taxId' || taxSearchField === 'phone'
-        ? keyword.replace(/\D/g, '')
-        : keyword
-
-    if (auth?.store && auth?.role && currentStoreId && qForApi.length > 0) {
-      try {
-        const res = await getPosTaxInvoiceRecipients({
-          userStore: auth.store,
-          userRole: auth.role,
-          storeCode: currentStoreId,
-          q: qForApi,
-          by: byApi,
-          limit: 20,
-        })
-        if (res.success && res.rows?.length) {
-          const usable = res.rows.filter((r) => r.is_active)
-          const pick = (usable.length ? usable : res.rows)[0]
-          applyTaxProfileFromServerRow(pick)
-          setTaxSearchMessage(t('posTaxSearchLoadedServer'))
-          return
-        }
-      } catch (e) {
-        console.error('getPosTaxInvoiceRecipients:', e)
-      }
+    applyTaxProfile(result.registryKey, result.profile)
+    setTaxMemberNo(result.memberNo)
+    if (result.messageKey === 'posTaxSearchLoadedServer') {
+      setTaxMemberRegistry((prev) => ({ ...prev, [result.registryKey]: result.profile }))
     }
-
-    const entries = Object.entries(taxMemberRegistry)
-    let found: [string, TaxInvoiceProfile] | undefined
-    if (taxSearchField === 'memberNo') {
-      found = entries.find(([memberNo]) => memberNo === keyword)
-    } else if (taxSearchField === 'phone') {
-      const k = keyword.replace(/\D/g, '')
-      found = entries.find(([, profile]) => String(profile.phone || '').replace(/\D/g, '').includes(k))
-    } else if (taxSearchField === 'taxId') {
-      const k = keyword.replace(/\D/g, '')
-      found = entries.find(([, profile]) => {
-        const tid = String(profile.taxId || '').replace(/\D/g, '')
-        return tid === k || (k.length >= 5 && tid.includes(k))
-      })
+    if (result.messageKey === 'posTaxSearchLoadedServer') {
+      setTaxSearchMessage(t('posTaxSearchLoadedServer'))
     } else {
-      const k = keyword.toLowerCase()
-      found = entries.find(([, profile]) => String(profile.name || '').toLowerCase().includes(k))
+      setTaxSearchMessage(t('posTaxSearchLoaded').replace('{no}', result.displayNo || result.registryKey))
     }
-    if (!found) {
-      setTaxSearchMessage(t('posTaxSearchNoSavedProfile'))
-      return
-    }
-    applyTaxProfile(found[0], found[1])
-    const displayNo = isSyntheticTaxRegistryKey(found[0]) ? found[1].taxId || found[0] : found[0]
-    setTaxSearchMessage(t('posTaxSearchLoaded').replace('{no}', displayNo))
   }
 
   useEffect(() => {
@@ -2783,17 +2630,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     opts?: { includeTaxInvoice?: boolean }
   ) => {
     const includeTax = opts?.includeTaxInvoice !== false && needTaxInvoice
-    if (!includeTax) return baseMemo
-    return upsertPosOrderTaxInvoiceMemo(baseMemo, {
-      memberNo: taxMemberNo.trim(),
-      customerType: invoiceCustomerType === 'company' ? 'company' : 'person',
-      name: normalizedTaxName,
-      taxId: normalizedTaxId,
-      branchNo: effectiveTaxBranchNo,
-      phone: normalizedTaxPhone,
-      email: normalizedTaxEmail,
-      address: normalizedTaxAddress,
-      member: isMemberOrder,
+    return buildCartPanelOrderMemoWithTaxInvoice({
+      baseMemo,
+      includeTaxInvoice: includeTax,
+      taxMemberNo,
+      invoiceCustomerType,
+      normalized: normalizedTaxFields,
+      isMemberOrder,
     })
   }
 
@@ -3055,20 +2898,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const payOtherBreakdown = resolvedPayment.paymentOtherBreakdown
     const splitReceipts = buildSplitReceiptPayloads()
     if (needTaxInvoice && !taxInvoiceInvalid) {
-      const profile: TaxInvoiceProfile = {
-        type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
-        name: normalizedTaxName,
-        taxId: normalizedTaxId,
-        branchCode: effectiveTaxBranchNo,
-        phone: normalizedTaxPhone,
-        email: normalizedTaxEmail,
-        address: normalizedTaxAddress,
-      }
+      const profile = profileToTaxInvoiceSavePayload({
+        profile: {
+          type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
+          name: normalizedTaxFields.name,
+          taxId: normalizedTaxFields.taxId,
+          branchCode: normalizedTaxFields.effectiveBranchNo,
+          phone: normalizedTaxFields.phone,
+          email: normalizedTaxFields.email,
+          address: normalizedTaxFields.address,
+        },
+        invoiceCustomerType,
+        normalized: normalizedTaxFields,
+      })
       const regKey = taxRegistryLocalKey(
         taxMemberNo.trim(),
         memberMap[selectedMemberId]?.memberNo,
-        normalizedTaxId,
-        effectiveTaxBranchNo
+        normalizedTaxFields.taxId,
+        normalizedTaxFields.effectiveBranchNo
       )
       setTaxMemberRegistry((prev) => ({ ...prev, [regKey]: profile }))
       if (auth?.store && auth?.role && currentStoreId) {
@@ -3079,12 +2926,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memberId: selectedMemberId ? Number(selectedMemberId) : null,
           memberNo: taxMemberNo.trim() || memberMap[selectedMemberId]?.memberNo || null,
           customerType: invoiceCustomerType === 'company' ? 'company' : 'person',
-          name: normalizedTaxName,
-          taxId: normalizedTaxId,
-          branchNo: effectiveTaxBranchNo,
-          phone: normalizedTaxPhone,
-          email: normalizedTaxEmail,
-          address: normalizedTaxAddress,
+          name: normalizedTaxFields.name,
+          taxId: normalizedTaxFields.taxId,
+          branchNo: normalizedTaxFields.effectiveBranchNo,
+          phone: normalizedTaxFields.phone,
+          email: normalizedTaxFields.email,
+          address: normalizedTaxFields.address,
           source: 'pos_payment',
         }).catch(() => {})
       }
@@ -5338,168 +5185,39 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               )}
             </div>
 
-            {/* Tax Invoice */}
-            <Collapsible open={showTaxInvoiceDetails} onOpenChange={setShowTaxInvoiceDetails}>
-              <div className="min-h-[72px] space-y-2 rounded-2xl border border-border/70 bg-gradient-to-br from-slate-50/80 to-card p-4 shadow-sm dark:from-slate-950/40 dark:to-card">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                      <Receipt className="h-5 w-5 text-primary" />
-                    </div>
-                    <Label className="text-sm font-semibold">{t('posReceiptTaxInvoice')}</Label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={needTaxInvoice ? 'default' : 'outline'}
-                      className="h-8"
-                      data-tour="pos-tour-tax-invoice-toggle"
-                      onClick={() => setNeedTaxInvoice((v) => !v)}
-                    >
-                      {needTaxInvoice ? t('posTaxInvoiceOn') : t('posTaxInvoiceOff')}
-                    </Button>
-                  </div>
-                  <CollapsibleTrigger asChild>
-                    <Button type="button" variant="ghost" size="sm" className="h-8 px-2 rounded-xl">
-                      {showTaxInvoiceDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-                <CollapsibleContent>
-                  {needTaxInvoice && (
-                    <div className="grid gap-2 pt-1" data-tour="pos-tour-tax-invoice-fields">
-                  <div className="grid gap-2 lg:grid-cols-[auto_auto_1fr_auto] items-center">
-                    <Button
-                      type="button"
-                      size="default"
-                      variant={invoiceCustomerType === 'person' ? 'default' : 'outline'}
-                      className="h-12 rounded-xl"
-                      onClick={() => setInvoiceCustomerType('person')}
-                    >
-                      <User className="h-4 w-4 mr-1.5" />
-                      {t('posTaxCustomerIndividual')}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="default"
-                      variant={invoiceCustomerType === 'company' ? 'default' : 'outline'}
-                      className="h-12 rounded-xl"
-                      onClick={() => setInvoiceCustomerType('company')}
-                    >
-                      <Building2 className="h-4 w-4 mr-1.5" />
-                      {t('posTaxCustomerCorporate')}
-                    </Button>
-                    <div className="grid grid-cols-[7.5rem_1fr_auto] gap-2 min-w-0">
-                      <Select value={taxSearchField} onValueChange={(v) => setTaxSearchField(v as TaxSearchField)}>
-                        <SelectTrigger className="h-12 rounded-xl">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="memberNo">{t('posMemberNo') || '회원번호'}</SelectItem>
-                          <SelectItem value="phone">{t('posPhone') || '전화번호'}</SelectItem>
-                          <SelectItem value="name">{t('posName') || '이름'}</SelectItem>
-                          <SelectItem value="taxId">{t('posTaxIdLabel') || 'Tax ID'}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder={
-                          taxSearchField === 'memberNo'
-                            ? (t('posMemberNoInputPh') || '회원번호 입력')
-                            : taxSearchField === 'phone'
-                              ? (t('posPhoneInputPh') || '전화번호 입력')
-                              : taxSearchField === 'taxId'
-                                ? (t('posTaxIdThirteenPlaceholder') || 'Tax ID 13자리')
-                                : (t('posNameInputPh') || '이름 입력')
-                        }
-                        value={taxSearchKeyword}
-                        onChange={(e) => setTaxSearchKeyword(e.target.value)}
-                        className="h-12 rounded-xl"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleTaxProfileSearch()
-                          }
-                        }}
-                      />
-                      <Button type="button" size="default" variant="secondary" className="h-12 rounded-xl" onClick={handleTaxProfileSearch}>
-                        {t('posSearch') || '검색'}
-                      </Button>
-                    </div>
-                    {isMemberOrder && (
-                      <span className="text-xs text-muted-foreground self-center">
-                        {t('posTaxMemberLinkedHint')}
-                      </span>
-                    )}
-                  </div>
-                  {!!taxSearchMessage && (
-                    <p className="text-xs text-muted-foreground">{taxSearchMessage}</p>
-                  )}
-                  <Input
-                    placeholder={t('posMemberNo') || '회원번호'}
-                    value={taxMemberNo}
-                    onChange={(e) => setTaxMemberNo(e.target.value.trim())}
-                    className="h-12 rounded-xl max-w-[10rem]"
-                  />
-                  <div className="grid sm:grid-cols-2 gap-2">
-                    <Input
-                      className="h-12 rounded-xl"
-                      placeholder={t('posTaxRecipientNamePlaceholder')}
-                      value={taxName}
-                      onChange={(e) => setTaxName(e.target.value)}
-                    />
-                    <Input
-                      className="h-12 rounded-xl"
-                      placeholder={t('posTaxIdThirteenPlaceholder')}
-                      value={taxId}
-                      onChange={(e) => setTaxId(e.target.value.replace(/\D/g, '').slice(0, 13))}
-                      inputMode="numeric"
-                      data-tour="pos-tour-tax-id-input"
-                    />
-                    <Input
-                      className="h-12 rounded-xl"
-                      placeholder={taxBranchRequired ? t('posTaxBranchFiveCompany') : t('posTaxBranchFivePerson')}
-                      value={taxBranchNo}
-                      onChange={(e) => setTaxBranchNo(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                      inputMode="numeric"
-                      data-tour="pos-tour-tax-branch-input"
-                    />
-                    <Input
-                      className="h-12 rounded-xl"
-                      placeholder={t('posTaxPhonePlaceholder')}
-                      value={taxPhone}
-                      onChange={(e) => setTaxPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                      inputMode="numeric"
-                      data-tour="pos-tour-tax-phone-input"
-                    />
-                    <Input
-                      className="h-12 rounded-xl"
-                      placeholder={t('posTaxEmailOptionalPlaceholder')}
-                      value={taxEmail}
-                      onChange={(e) => setTaxEmail(e.target.value)}
-                    />
-                    <Input
-                      className="h-12 rounded-xl"
-                      placeholder={t('posTaxAddressPlaceholder')}
-                      value={taxAddress}
-                      onChange={(e) => setTaxAddress(e.target.value)}
-                      data-tour="pos-tour-tax-address-input"
-                    />
-                  </div>
-                  {taxInvoiceInvalid && (
-                    <div className="rounded-xl bg-amber-500/10 p-3 text-xs text-amber-700 space-y-0.5">
-                      <p>{t('posTaxValidationTitle')}</p>
-                      {taxInvoiceValidationErrors.includes('name') && <p>- {t('posTaxErrName')}</p>}
-                      {taxInvoiceValidationErrors.includes('taxId') && <p>- {t('posTaxErrTaxId')}</p>}
-                      {taxInvoiceValidationErrors.includes('branch') && <p>- {t('posTaxErrBranch')}</p>}
-                      {taxInvoiceValidationErrors.includes('phone') && <p>- {t('posTaxErrPhone')}</p>}
-                      {taxInvoiceValidationErrors.includes('address') && <p>- {t('posTaxErrAddress')}</p>}
-                      {taxInvoiceValidationErrors.includes('email') && <p>- {t('posTaxErrEmail')}</p>}
-                    </div>
-                  )}
-                    </div>
-                  )}
-                </CollapsibleContent>
-              </div>
-            </Collapsible>
+            <CartPanelTaxInvoiceSection
+              showTaxInvoiceDetails={showTaxInvoiceDetails}
+              onShowTaxInvoiceDetailsChange={setShowTaxInvoiceDetails}
+              needTaxInvoice={needTaxInvoice}
+              onNeedTaxInvoiceChange={setNeedTaxInvoice}
+              invoiceCustomerType={invoiceCustomerType}
+              onInvoiceCustomerTypeChange={setInvoiceCustomerType}
+              taxSearchField={taxSearchField}
+              onTaxSearchFieldChange={setTaxSearchField}
+              taxSearchKeyword={taxSearchKeyword}
+              onTaxSearchKeywordChange={setTaxSearchKeyword}
+              onTaxProfileSearch={() => void handleTaxProfileSearch()}
+              taxSearchMessage={taxSearchMessage}
+              isMemberOrder={isMemberOrder}
+              taxMemberNo={taxMemberNo}
+              onTaxMemberNoChange={setTaxMemberNo}
+              taxName={taxName}
+              onTaxNameChange={setTaxName}
+              taxId={taxId}
+              onTaxIdChange={setTaxId}
+              taxBranchNo={taxBranchNo}
+              onTaxBranchNoChange={setTaxBranchNo}
+              taxBranchRequired={taxBranchRequired}
+              taxPhone={taxPhone}
+              onTaxPhoneChange={setTaxPhone}
+              taxEmail={taxEmail}
+              onTaxEmailChange={setTaxEmail}
+              taxAddress={taxAddress}
+              onTaxAddressChange={setTaxAddress}
+              taxInvoiceInvalid={taxInvoiceInvalid}
+              taxInvoiceValidationErrors={taxInvoiceValidationErrors}
+              t={t}
+            />
 
             {/* Dutch Pay - 가로 compact, 터치 44px */}
             <Collapsible

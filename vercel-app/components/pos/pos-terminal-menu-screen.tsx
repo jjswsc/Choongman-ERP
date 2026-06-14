@@ -59,6 +59,7 @@ import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { formatPosMenuImageUploadSpecHint } from '@/lib/pos-menu-image-upload-spec'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
+import { PosMenuLoadingSkeleton } from '@/components/pos/pos-menu-loading-skeleton'
 import { resolvePromoTileImageSrc } from '@/lib/pos-menu-display-image'
 import { loadPosDeliveryMenuImageByMenuId } from '@/lib/load-pos-delivery-menu-images'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
@@ -1112,9 +1113,11 @@ export function PosTerminalMenuScreen({
 
   if (loading) {
     return (
-      <div className={cn('flex h-full items-center justify-center rounded-lg border bg-card text-muted-foreground text-sm', className)}>
-        {t('posMenuLoading')}
-      </div>
+      <PosMenuLoadingSkeleton
+        className={className}
+        tileCols={screenConfig.menuTileCols}
+        hint={t('posMenuLoading')}
+      />
     )
   }
 

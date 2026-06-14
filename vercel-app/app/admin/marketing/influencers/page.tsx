@@ -26,6 +26,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   adminTabsBarCn,
@@ -103,7 +104,11 @@ export default function MarketingInfluencersPage() {
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const { auth } = useAuth()
   const { stores, loading: storesLoading, formatStoreLabel } = useStoreList()
-  const [mainTab, setMainTab] = React.useState<MainTab>("compose")
+  const [mainTab, setMainTab] = useAdminUrlTab(
+    "tab",
+    ["compose", "inquiry", "directory"] as const,
+    "compose"
+  )
   const [inquirySearchApplyToken, setInquirySearchApplyToken] = React.useState(0)
   const [inquirySearchApplyQuery, setInquirySearchApplyQuery] = React.useState("")
   const [list, setList] = React.useState<MarketingInfluencer[]>([])

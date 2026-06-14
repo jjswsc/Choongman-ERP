@@ -24,17 +24,17 @@ function AmbienceOverlays({ variant }: { variant: "login" | "app" }) {
   if (variant === "login") {
     return (
       <>
-        <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/48 via-[#08080a]/68 to-[#08080a]/84" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(212,175,55,0.14),transparent_42%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/55 via-[#faf7f2]/72 to-[#f3ebe0]/88" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,rgba(212,175,55,0.18),transparent_42%)]" />
       </>
     )
   }
 
   return (
     <>
-      <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/28 via-[#08080a]/48 to-[#050506]/82" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_18%,rgba(212,175,55,0.12),transparent_55%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.05),transparent_50%)]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/35 via-[#faf7f2]/55 to-[#f3ebe0]/82" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_18%,rgba(212,175,55,0.14),transparent_55%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.06),transparent_50%)]" />
     </>
   )
 }
@@ -61,11 +61,11 @@ export function MemberPortalLoungeBackdrop({
           }}
         />
         {variant === "login" ? (
-          <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/62 via-[#08080a]/74 to-[#08080a]/82" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/68 via-[#faf7f2]/78 to-[#f3ebe0]/92" />
         ) : (
           <>
-            <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/50 via-[#08080a]/68 to-[#050506]/92" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.1),transparent_55%)]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/45 via-[#faf7f2]/62 to-[#f3ebe0]/90" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.12),transparent_55%)]" />
           </>
         )}
       </div>
@@ -119,7 +119,7 @@ export function MemberPortalLoungeBackdrop({
             </div>
           </div>
         </div>
-        <div className="absolute inset-x-0 top-[36%] h-40 bg-gradient-to-b from-transparent via-[#08080a]/18 to-[#08080a]/72" />
+        <div className="absolute inset-x-0 top-[36%] h-40 bg-gradient-to-b from-transparent via-[#faf7f2]/25 to-[#f3ebe0]/75" />
         <AmbienceOverlays variant={variant} />
       </div>
     )
@@ -173,7 +173,7 @@ export function MemberPortalLoungeBackdrop({
         </div>
       </div>
 
-      <div className="absolute inset-x-0 top-[42%] h-32 bg-gradient-to-b from-transparent via-[#08080a]/20 to-[#08080a]/55" />
+      <div className="absolute inset-x-0 top-[42%] h-32 bg-gradient-to-b from-transparent via-[#faf7f2]/28 to-[#f3ebe0]/62" />
 
       <AmbienceOverlays variant={variant} />
     </div>

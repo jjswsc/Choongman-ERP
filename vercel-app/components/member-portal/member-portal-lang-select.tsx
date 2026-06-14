@@ -13,7 +13,7 @@ export function MemberPortalLangSelect({ className }: { className?: string }) {
 
   return (
     <label className={`inline-flex items-center gap-2 ${className || ''}`}>
-      <Languages className="h-4 w-4 shrink-0 text-white/50" aria-hidden />
+      <Languages className="h-4 w-4 shrink-0 text-stone-400" aria-hidden />
       <span className="sr-only">{t('langLabel')}</span>
       <select
         value={lang}
@@ -23,11 +23,11 @@ export function MemberPortalLangSelect({ className }: { className?: string }) {
             startTransition(() => setLang(next))
           })
         }}
-        className="h-9 max-w-[9.5rem] truncate rounded-xl border border-white/10 bg-black/30 px-2 text-xs text-white/85 outline-none focus:border-amber-400/40"
+        className="h-9 max-w-[9.5rem] truncate rounded-xl border border-stone-200 bg-white px-2 text-xs text-stone-800 shadow-sm outline-none focus:border-amber-400/60"
         aria-label={t('langLabel')}
       >
         {MEMBER_PORTAL_LANG_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value} className="bg-[#121214] text-white">
+          <option key={opt.value} value={opt.value} className="bg-white text-stone-900">
             {opt.label}
           </option>
         ))}

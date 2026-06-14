@@ -12,6 +12,7 @@ import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { AdminHelpHandoverPanel } from "@/components/erp/admin-help-handover-panel"
 import { AdminHelpInlineRegistrationProvider, useAdminHelpInlineTabBarCount } from "@/components/erp/admin-help-inline-registration"
 import { AdminHelpModeToggle, ERP_HELP_PARAM } from "@/components/erp/admin-help-mode-toggle"
+import { AdminPageKeepAlive } from "@/components/erp/admin-page-keep-alive"
 
 type AdminContentHelpTabShellProps = { children: React.ReactNode }
 
@@ -33,7 +34,13 @@ function AdminContentHelpShellBody({
   const inlineTabBarCount = useAdminHelpInlineTabBarCount()
 
   if (!shellActive) {
-    return <div className="min-h-0 flex-1">{children}</div>
+    return (
+      <div className="min-h-0 flex-1">
+        <React.Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
+          <AdminPageKeepAlive>{children}</AdminPageKeepAlive>
+        </React.Suspense>
+      </div>
+    )
   }
 
   const hk = helpSumKey || ""
@@ -55,7 +62,11 @@ function AdminContentHelpShellBody({
           <AdminHelpHandoverPanel helpHref={mh} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1">{children}</div>
+        <div className="min-h-0 flex-1">
+          <React.Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
+            <AdminPageKeepAlive>{children}</AdminPageKeepAlive>
+          </React.Suspense>
+        </div>
       )}
     </div>
   )

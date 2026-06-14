@@ -44,6 +44,7 @@ function catalogFixture(): PromoPricingCatalog {
         ],
       ],
     ]),
+    promoIdByMirrorMenuId: new Map(),
   }
 }
 

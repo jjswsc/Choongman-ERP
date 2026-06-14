@@ -21,9 +21,6 @@ on:
       - "vercel-app/sql/**"
       - "landing/**"
       - ".cursor/**"
-      - "chungman-erp/**"
-      - "old_files_backup/**"
-      - "backup_before_680/**"
   pull_request:
     branches: [main]
     paths-ignore:
@@ -37,9 +34,6 @@ on:
       - "vercel-app/sql/**"
       - "landing/**"
       - ".cursor/**"
-      - "chungman-erp/**"
-      - "old_files_backup/**"
-      - "backup_before_680/**"
 
 jobs:
   build:

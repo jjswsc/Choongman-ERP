@@ -28,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#08080a",
+  themeColor: "#faf7f2",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -36,7 +36,7 @@ export const viewport: Viewport = {
 
 export default function MemberPortalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-[#08080a] text-white antialiased">
+    <div className="min-h-[100dvh] overflow-x-hidden bg-[#faf7f2] text-stone-900 antialiased">
       <MemberPortalPwaHead />
       {children}
     </div>

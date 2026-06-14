@@ -10,7 +10,7 @@ import {
   tierVisual,
   type PortalDashboard,
 } from "@/components/member-portal/portal-ui"
-import { MEMBERSHIP_CARD_GOLDEN_RATIO, mpGoldText } from "@/lib/member-portal-design"
+import { MEMBERSHIP_CARD_GOLDEN_RATIO, mpGoldTextOnDark } from "@/lib/member-portal-design"
 
 type MembershipCardTierProgress = {
   subtitle: string
@@ -80,7 +80,7 @@ function MembershipCardHeader({
         <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/50">
           {showQr ? t("scanAtCounter") : t("membership")}
         </p>
-        <h2 className={`mt-0.5 truncate text-[1.2rem] font-bold leading-tight tracking-tight ${mpGoldText}`}>
+        <h2 className={`mt-0.5 truncate text-[1.2rem] font-bold leading-tight tracking-tight ${mpGoldTextOnDark}`}>
           {displayName}
         </h2>
         {subtitle ? <p className="mt-0.5 text-xs text-white/60">{subtitle}</p> : null}

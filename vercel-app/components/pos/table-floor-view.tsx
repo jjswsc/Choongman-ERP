@@ -4,6 +4,13 @@ import { useMemo, useState, useEffect } from 'react'
 import { Armchair, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getPosTableAabb } from '@/lib/pos-table-layout-aabb'
+import {
+  POS_PANEL_SHELL_CLASS,
+  posCookStageElapsedBadgeClass,
+  posCookStageStatusBadgeClass,
+  posCookStageTableSurfaceClass,
+  posCookStageTableTextClass,
+} from '@/lib/pos-ui-tokens'
 import type { PosTableItem } from '@/lib/api-client'
 
 const FLOOR_W = 720
@@ -312,7 +319,8 @@ export function TableFloorView({
   return (
     <div
       className={cn(
-        'relative w-full rounded-xl border-2 border-slate-200 bg-slate-100 overflow-hidden',
+        'relative w-full overflow-hidden',
+        POS_PANEL_SHELL_CLASS,
         className
       )}
       style={{ aspectRatio: `${FLOOR_W} / ${FLOOR_H}` }}
@@ -381,14 +389,14 @@ export function TableFloorView({
         const showDelayBadge = Boolean(delayBadgeEnabled && delayOver >= delayAlertOverMin && status === 'preparing')
         const elapsedClass =
           stage === 'urgent'
-            ? 'border-red-300/90 bg-red-950/88 text-red-50 ring-1 ring-red-400/40'
+            ? posCookStageElapsedBadgeClass.urgent
             : stage === 'warning'
-              ? 'border-amber-300/90 bg-amber-950/88 text-amber-50 ring-1 ring-amber-400/35'
+              ? posCookStageElapsedBadgeClass.warning
               : status === 'completed'
                 ? 'border-slate-300/90 bg-slate-900/88 text-slate-50 ring-1 ring-slate-300/25'
                 : status === 'partial_served'
                   ? 'border-sky-300/90 bg-sky-950/88 text-sky-50 ring-1 ring-sky-400/35'
-                : 'border-lime-300/90 bg-lime-950/88 text-lime-50 ring-1 ring-lime-400/35'
+                : posCookStageElapsedBadgeClass.fresh
         const isOccupied = status !== null
         const statusLabel =
           status === 'preparing'
@@ -401,10 +409,10 @@ export function TableFloorView({
         const statusBadgeClass =
           status === 'preparing'
             ? (stage === 'urgent'
-                ? 'border-red-300/95 bg-red-950/90 text-red-50 ring-1 ring-red-400/45'
+                ? posCookStageStatusBadgeClass.urgent
                 : stage === 'warning'
-                  ? 'border-amber-300/95 bg-amber-950/90 text-amber-50 ring-1 ring-amber-400/40'
-                  : 'border-lime-300/95 bg-lime-950/90 text-lime-50 ring-1 ring-lime-400/40')
+                  ? posCookStageStatusBadgeClass.warning
+                  : posCookStageStatusBadgeClass.fresh)
             : status === 'partial_served'
               ? 'border-sky-300/95 bg-sky-950/90 text-sky-50 ring-1 ring-sky-400/40'
               : status === 'completed'
@@ -431,9 +439,9 @@ export function TableFloorView({
           isSquare && !isOccupied && 'bg-stone-500/90 border-stone-600',
           !isSquare && !isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
           isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
-          status === 'preparing' && stage === 'fresh' && 'bg-lime-400/95 border-lime-600 ring-2 ring-lime-600/80',
-          status === 'preparing' && stage === 'warning' && 'bg-amber-500/90 border-amber-600 ring-2 ring-amber-600/80',
-          status === 'preparing' && stage === 'urgent' && 'bg-red-500/90 border-red-600 ring-2 ring-red-600/80',
+          status === 'preparing' && stage === 'fresh' && posCookStageTableSurfaceClass.fresh,
+          status === 'preparing' && stage === 'warning' && posCookStageTableSurfaceClass.warning,
+          status === 'preparing' && stage === 'urgent' && posCookStageTableSurfaceClass.urgent,
           status === 'partial_served' && 'bg-sky-400/95 border-sky-600 ring-2 ring-sky-600/80',
           status === 'completed' && 'bg-slate-500/90 border-slate-600 ring-2 ring-slate-600/80'
         )
@@ -445,9 +453,9 @@ export function TableFloorView({
           isSquare && !isOccupied && 'text-white',
           !isSquare && !isRound && !isOccupied && 'text-stone-800',
           isRound && !isOccupied && 'text-stone-800',
-          status === 'preparing' && stage === 'fresh' && 'text-lime-950',
-          status === 'preparing' && stage === 'warning' && 'text-amber-950',
-          status === 'preparing' && stage === 'urgent' && 'text-red-950',
+          status === 'preparing' && stage === 'fresh' && posCookStageTableTextClass.fresh,
+          status === 'preparing' && stage === 'warning' && posCookStageTableTextClass.warning,
+          status === 'preparing' && stage === 'urgent' && posCookStageTableTextClass.urgent,
           status === 'partial_served' && 'text-sky-950',
           status === 'completed' && 'text-slate-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.75)]'
         )

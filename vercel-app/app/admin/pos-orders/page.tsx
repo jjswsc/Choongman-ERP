@@ -93,6 +93,7 @@ import {
   ADMIN_NUMERIC_CN,
 } from "@/lib/admin-ui-standards"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
+import { useErpActiveSubscription, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import {
   buildKitchenSlipGroupOpts,
@@ -792,11 +793,10 @@ export default function PosOrdersPage() {
     [t]
   )
 
-  React.useEffect(() => {
-    return subscribeKitchenPrintFailureChanges(() => {
-      setKitchenPrintFailureVersion((v) => v + 1)
-    })
-  }, [])
+  useErpActiveSubscription(
+    subscribeKitchenPrintFailureChanges,
+    () => setKitchenPrintFailureVersion((v) => v + 1)
+  )
 
   const resolveKitchenPrintOrderRef = React.useCallback((o: Pick<PosOrder, "id" | "orderNo">) => {
     const orderNo = String(o.orderNo ?? "").trim()
@@ -1079,6 +1079,22 @@ export default function PosOrdersPage() {
     loadOrders,
     loadTenderRules,
   ])
+
+  useErpRefetchOnActivate(() => {
+    if (activeTab === "linkposFailed") {
+      if (hasSearchedAttempts) loadAttempts()
+      return
+    }
+    if (activeTab === "grabIntegration") {
+      if (hasSearchedGrab) loadGrabIntegrations()
+      return
+    }
+    if (activeTab === "auditTrail") {
+      if (hasSearchedAudit) loadAuditTrail()
+      return
+    }
+    if (hasSearchedOrders) loadOrders()
+  })
 
   const handleAuditFilterKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>, clearField: () => void) => {

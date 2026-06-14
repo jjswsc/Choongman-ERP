@@ -42,6 +42,7 @@ import { computedGiftRemaining, giftRowQtyMismatch } from "@/lib/marketing-mater
 import { cn } from "@/lib/utils"
 import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
@@ -531,6 +532,10 @@ export default function MarketingCampaignsPage() {
   React.useEffect(() => {
     loadList()
   }, [loadList])
+
+  useErpRefetchOnActivate(() => {
+    void loadList()
+  })
 
   React.useEffect(() => {
     setMaterialTypeOptions(loadMarketingMaterialTypeOptions())

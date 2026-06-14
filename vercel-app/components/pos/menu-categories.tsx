@@ -6,6 +6,8 @@ import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos
 import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { PosMenuLoadingSkeleton } from '@/components/pos/pos-menu-loading-skeleton'
+import { PosMenuEmptyState } from '@/components/pos/pos-menu-empty-state'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 
@@ -48,11 +50,7 @@ export function MenuCategories({ onItemSelect }: MenuCategoriesProps) {
     : menus
 
   if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center text-muted-foreground text-sm p-4">
-        {t('posMenuLoading')}
-      </div>
-    )
+    return <PosMenuLoadingSkeleton className="h-full" tileCols={3} hint={t('posMenuLoading')} />
   }
 
   return (
@@ -99,9 +97,7 @@ export function MenuCategories({ onItemSelect }: MenuCategoriesProps) {
           ))}
         </div>
         {filteredMenus.length === 0 && (
-          <div className="flex items-center justify-center text-muted-foreground text-sm py-8">
-            {t('posMenuEmpty')}
-          </div>
+          <PosMenuEmptyState message={t('posMenuEmpty')} className="py-8" />
         )}
       </ScrollArea>
     </div>

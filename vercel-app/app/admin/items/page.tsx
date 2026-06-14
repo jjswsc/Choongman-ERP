@@ -32,6 +32,7 @@ import { compareByCode } from "@/lib/sort-utils"
 import { useAuth } from "@/lib/auth-context"
 import { canToggleItemOrderDisabled } from "@/lib/permissions"
 import { isOfficeRole } from "@/lib/permissions"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 
 export type Product = AdminItem
 
@@ -91,8 +92,9 @@ export default function ItemsPage() {
     }
   }, [])
 
-  React.useEffect(() => {
-    Promise.all([getAdminItems(), getItemCategories(), getWarehouseLocations()])
+  const reloadCatalog = React.useCallback(() => {
+    setLoading(true)
+    return Promise.all([getAdminItems(), getItemCategories(), getWarehouseLocations()])
       .then(([list, { categories }, locs]) => {
         setProducts(list || [])
         setAllCategories(categories || [])
@@ -105,6 +107,14 @@ export default function ItemsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  React.useEffect(() => {
+    void reloadCatalog()
+  }, [reloadCatalog])
+
+  useErpRefetchOnActivate(() => {
+    void reloadCatalog()
+  })
 
   const prefillAppliedKey = React.useRef<string | null>(null)
   React.useEffect(() => {

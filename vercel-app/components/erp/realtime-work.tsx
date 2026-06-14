@@ -28,6 +28,7 @@ import {
   canonicalStoreSegmentForJoinKey,
   findAttendanceForRealtimeScheduleRow,
 } from "@/lib/today-realtime-join"
+import { useErpPolling } from "@/lib/erp-page-visibility"
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { cn } from "@/lib/utils"
 
@@ -225,13 +226,10 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
 
   // 당일 조회 중일 때 실시간 반영: 60초마다 출퇴근 데이터 재조회(관리자 트래픽 절감)
   const isViewingToday = date === todayStr()
-  React.useEffect(() => {
-    if (!hasSearched || !isViewingToday) return
-    const interval = setInterval(() => {
-      loadTodayData()
-    }, 60 * 1000)
-    return () => clearInterval(interval)
-  }, [hasSearched, isViewingToday, loadTodayData])
+  useErpPolling(loadTodayData, 60 * 1000, {
+    enabled: hasSearched && isViewingToday,
+    refetchOnActivate: true,
+  })
 
   const filteredSchedule =
     areaFilter === "all"

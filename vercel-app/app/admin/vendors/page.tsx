@@ -12,6 +12,7 @@ import { getAdminVendors, getStoreTaxFilingProfiles, saveVendor, deleteVendor, u
 import type { Vendor } from "@/components/erp/vendor-table"
 import type { VendorLinkedStore } from "@/components/erp/vendor-table"
 import { storesLinkedToVendor } from "@/lib/store-vendor-tax-link"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 
 const emptyForm: VendorFormData = {
   code: "",
@@ -49,8 +50,9 @@ export default function VendorsPage() {
     [storeList]
   )
 
-  React.useEffect(() => {
-    Promise.all([getAdminVendors(), getStoreTaxFilingProfiles()])
+  const reloadVendors = React.useCallback(() => {
+    setLoading(true)
+    return Promise.all([getAdminVendors(), getStoreTaxFilingProfiles()])
       .then(([list, profRes]) => {
         setVendors(list)
         const map: Record<string, { storeCode: string; vendorCode?: string }> = {}
@@ -66,6 +68,14 @@ export default function VendorsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  React.useEffect(() => {
+    void reloadVendors()
+  }, [reloadVendors])
+
+  useErpRefetchOnActivate(() => {
+    void reloadVendors()
+  })
 
   const linkedStoresByVendor = React.useMemo(() => {
     const out: Record<string, VendorLinkedStore[]> = {}

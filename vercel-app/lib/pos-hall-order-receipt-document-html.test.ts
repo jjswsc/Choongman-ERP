@@ -374,6 +374,39 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).not.toContain('CHEESE TORNADO / GARLIC')
   })
 
+  it('GF-258 Grab banban keeps sidedish on hall receipt (flavors separate, Pickled Radish not dropped)', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C008-5', name: 'Pickled Radish (30 g.)' }])
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: 'GF-258',
+        storeCode: 'CM The Street',
+        orderType: 'delivery',
+        tableName: 'Grab #GF-258',
+        items: [
+          {
+            id: 'grab:banban-258',
+            name: 'Banban Chicken (SNOW ONION / CURRY Bar.B.Q FRIED CHICKEN)',
+            price: 279,
+            qty: 1,
+            note: 'mods:Pickled Radish (30 g.) · optc:C008-5 · banbanFlavors:SNOW ONION,CURRY Bar.B.Q FRIED CHICKEN · eco:no plastic cutlery requested',
+            deliveryAppCode: 'grab',
+          },
+        ],
+        subtotal: 498,
+        discountAmt: 0,
+        total: 498,
+      },
+      t: (k) => k,
+      lang: 'en',
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(html).toContain('Banban Chicken')
+    expect(html).toContain('SNOW ONION')
+    expect(html).toContain('CURRY Bar.B.Q FRIED CHICKEN')
+    expect(html).toContain('Pickled Radish')
+    expect(html).not.toContain('SNOW ONION / CURRY')
+  })
+
   it('prints digits-only POS order number below date and omits store name', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {
@@ -510,7 +543,7 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('Kimchi 30g.')
   })
 
-  it('emphasizes channel order token (e.g. GF-268) on hall order receipt header and channel row', () => {
+  it('emphasizes channel order token (e.g. GF-268) only once on hall order receipt header', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {
         orderNo: '20260608033',
@@ -526,7 +559,10 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
       t: (k) => k,
       lang: 'th',
     })
-    expect(html.match(/receipt-delivery-channel-no[\s\S]*?GF-268/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(html.match(/class="receipt-delivery-channel-no"/g)?.length ?? 0).toBe(1)
+    expect(html).toContain('Grab #GF-268')
+    expect(html).toContain('receipt-delivery-channel-no">GF-268</span>')
+    expect(html).not.toContain('receipt-delivery-channel-no">Grab')
   })
 
   it('replaces promo placeholder code with menu name on hall order receipt', () => {

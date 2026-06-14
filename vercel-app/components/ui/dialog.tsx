@@ -7,8 +7,16 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useErpOverlayBack } from "@/lib/erp-navigation"
 
-const Dialog = DialogPrimitive.Root
+function ErpAwareDialog({
+  open,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  useErpOverlayBack(open, onOpenChange)
+  return <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} {...props} />
+}
 
 const DialogTrigger = DialogPrimitive.Trigger
 
@@ -118,7 +126,7 @@ function DialogDescription({
 }
 
 export {
-  Dialog,
+  ErpAwareDialog as Dialog,
   DialogPortal,
   DialogOverlay,
   DialogTrigger,

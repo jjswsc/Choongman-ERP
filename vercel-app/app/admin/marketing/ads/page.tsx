@@ -36,6 +36,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   adminTabsBarCn,
@@ -95,7 +96,7 @@ export default function MarketingAdsPage() {
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const { auth } = useAuth()
-  const [mainTab, setMainTab] = React.useState<MainTab>("compose")
+  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["compose", "inquiry"] as const, "compose")
   const [list, setList] = React.useState<MarketingAd[]>([])
   const [allAds, setAllAds] = React.useState<MarketingAd[]>([])
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])

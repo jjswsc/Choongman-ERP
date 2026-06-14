@@ -2,8 +2,8 @@
 
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { Suspense, useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { Calendar } from "lucide-react"
 import { AdminLeaveApproval } from "@/components/admin/admin-leave-approval"
 import { AdminLeaveStats } from "@/components/admin/admin-leave-stats"
@@ -21,14 +21,7 @@ import { useT } from "@/lib/i18n"
 function AdminLeavePageInner() {
   const { lang } = useLang()
   const t = useT(lang)
-  const searchParams = useSearchParams()
-  const [tab, setTab] = useState<"approval" | "stats">("approval")
-
-  useEffect(() => {
-    const p = searchParams.get("tab")
-    if (p === "stats") setTab("stats")
-    else if (p === "approval") setTab("approval")
-  }, [searchParams])
+  const [tab, setTab] = useAdminUrlTab("tab", ["approval", "stats"] as const, "approval")
 
   return (
     <HrPageShell icon={Calendar} title={t("adminLeave")} subtitle={t("adminLeaveSub")}>

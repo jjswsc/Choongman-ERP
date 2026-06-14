@@ -1,27 +1,14 @@
-type DeliveryAppCode = "grab" | "lineman" | "shopee"
-
-const DELIVERY_APP_LOGO_SRC: Record<DeliveryAppCode, string> = {
-  grab: "/member-portal/delivery-apps/grab.svg",
-  lineman: "/member-portal/delivery-apps/lineman.svg",
-  shopee: "/member-portal/delivery-apps/shopee.svg",
-}
+import { DeliveryAppBrandLogo } from '@/components/shared/delivery-app-brand-logo'
+import type { DeliveryAppBrandCode } from '@/lib/delivery-app-brand'
 
 export function MemberPortalDeliveryAppLogo({
   code,
-  className = "h-8 w-8",
+  className = 'h-8 w-auto shrink-0',
+  variant = 'onDark',
 }: {
-  code: DeliveryAppCode
+  code: DeliveryAppBrandCode
   className?: string
+  variant?: 'onDark' | 'onLight'
 }) {
-  return (
-    <img
-      src={DELIVERY_APP_LOGO_SRC[code]}
-      alt=""
-      width={32}
-      height={32}
-      className={`shrink-0 ${className}`}
-      aria-hidden
-      draggable={false}
-    />
-  )
+  return <DeliveryAppBrandLogo code={code} variant={variant} className={className} />
 }

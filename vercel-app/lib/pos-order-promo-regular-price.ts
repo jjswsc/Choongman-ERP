@@ -22,6 +22,8 @@ export type PromoPricingCatalog = {
   optionsByMenuId: Record<string, PromoOptionLike[]>
   promoMetaById: Map<string, PromoPricingCatalogPromoMeta>
   promoItemsByPromoId: Map<string, PromoLineLike[]>
+  /** POS 세트 미러 메뉴 id → pos_promos.id */
+  promoIdByMirrorMenuId: Map<string, string>
 }
 
 export function orderTypeToPromoRegularPriceChannel(orderType: unknown): RegularPriceChannel {

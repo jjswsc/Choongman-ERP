@@ -5,6 +5,11 @@ import { cn } from '@/lib/utils'
 import { useLang, type LangCode } from '@/lib/lang-context'
 import { formatPosTimeHm24Bangkok } from '@/lib/pos-datetime-locale'
 import { getOrderBarCookElapsedMinutes } from '@/lib/pos-order-bar-cook-elapsed'
+import {
+  POS_PANEL_SHELL_CLASS,
+  posCookStageOrderBarCardClass,
+  posCookStagePillClass,
+} from '@/lib/pos-ui-tokens'
 
 export type OrderBarStatus = 'pending' | 'preparing' | 'partial_served' | 'packaged' | 'completed' | null
 type OrderBarStage = 'fresh' | 'warning' | 'urgent'
@@ -116,7 +121,7 @@ export function OrderBarList({
   }, [])
 
   return (
-    <div className={cn('h-full rounded-xl border-2 border-slate-200 bg-slate-100 p-2 overflow-auto', className)}>
+    <div className={cn('h-full overflow-auto p-2', POS_PANEL_SHELL_CLASS, className)}>
       <div className="space-y-2">
         {items.map((item) => {
           const targetMin = Number(item.targetMin ?? 0)
@@ -142,14 +147,14 @@ export function OrderBarList({
           const showDelayBadge = Boolean(delayBadgeEnabled && delayOver >= delayAlertOverMin && item.status === 'preparing')
 
           const isDeliveryWithAccent = Boolean(item.deliveryAppAccent)
-          const accentColor = item.deliveryAppAccent === 'grab' || item.deliveryAppAccent === 'lime' ? 'lime' :
-            item.deliveryAppAccent === 'lineman' || item.deliveryAppAccent === 'sky' ? 'sky' :
-            item.deliveryAppAccent === 'shopee' || item.deliveryAppAccent === 'amber' ? 'amber' :
-            item.deliveryAppAccent === 'slate' ? 'slate' : 'lime'
+          const accentColor = item.deliveryAppAccent === 'grab' || item.deliveryAppAccent === 'lime' ? 'grab' :
+            item.deliveryAppAccent === 'lineman' || item.deliveryAppAccent === 'sky' ? 'lineman' :
+            item.deliveryAppAccent === 'shopee' || item.deliveryAppAccent === 'amber' ? 'shopee' :
+            item.deliveryAppAccent === 'slate' ? 'slate' : 'grab'
           const deliveryBorderClass = isDeliveryWithAccent ? (
-            accentColor === 'lime' ? 'border-l-[6px] border-l-lime-500' :
-            accentColor === 'sky' ? 'border-l-[6px] border-l-sky-400' :
-            accentColor === 'amber' ? 'border-l-[6px] border-l-amber-400' :
+            accentColor === 'grab' ? 'border-l-[6px] border-l-[#00B14F]' :
+            accentColor === 'lineman' ? 'border-l-[6px] border-l-[#06C755]' :
+            accentColor === 'shopee' ? 'border-l-[6px] border-l-[#EE4D2D]' :
             accentColor === 'slate' ? 'border-l-[6px] border-l-slate-400' : ''
           ) : ''
           const pillBadgeClass = item.status === 'completed'
@@ -161,11 +166,11 @@ export function OrderBarList({
               : item.status === 'pending'
                 ? 'bg-sky-600 text-white ring-1 ring-sky-700/30'
               : item.status === 'preparing' && stage === 'fresh'
-                ? 'bg-lime-500 text-white ring-1 ring-lime-600/30'
+                ? posCookStagePillClass.fresh
                 : item.status === 'preparing' && stage === 'warning'
-                  ? 'bg-amber-500 text-white ring-1 ring-amber-600/30'
+                  ? posCookStagePillClass.warning
                   : item.status === 'preparing' && stage === 'urgent'
-                    ? 'bg-red-500 text-white ring-1 ring-red-600/30'
+                    ? posCookStagePillClass.urgent
                     : 'bg-slate-400 text-white ring-1 ring-slate-500/30'
           const statusLabel = item.status === 'completed' ? (t('posPaymentComplete') || '결제 완료') :
             item.status === 'packaged' ? (t('posDeliveryPackagingComplete') || '포장 완료') :
@@ -176,9 +181,9 @@ export function OrderBarList({
           const platformLabel = item.deliveryAppName ?? (item.deliveryAppAccent === 'grab' ? 'Grab' :
             item.deliveryAppAccent === 'lineman' ? 'Line Man' :
             item.deliveryAppAccent === 'shopee' ? 'Shopee' : null)
-          const platformBadgeClass = accentColor === 'lime' ? 'bg-lime-500 text-white ring-1 ring-lime-600/40' :
-            accentColor === 'sky' ? 'bg-sky-500 text-white ring-1 ring-sky-600/40' :
-            accentColor === 'amber' ? 'bg-amber-500 text-white ring-1 ring-amber-600/40' :
+          const platformBadgeClass = accentColor === 'grab' ? 'bg-[#00B14F] text-white ring-1 ring-[#008f41]/40' :
+            accentColor === 'lineman' ? 'bg-[#06C755] text-white ring-1 ring-[#049a44]/40' :
+            accentColor === 'shopee' ? 'bg-[#EE4D2D] text-white ring-1 ring-[#d73211]/40' :
             accentColor === 'slate' ? 'bg-slate-500 text-white ring-1 ring-slate-600/40' : ''
 
           return (
@@ -187,14 +192,15 @@ export function OrderBarList({
               type="button"
               onClick={() => onSelect?.(item.id)}
               className={cn(
-                'w-full rounded-lg border px-3 text-left transition shadow-sm touch-manipulation',
+                'w-full rounded-lg border px-3 text-left shadow-sm touch-manipulation transition-all duration-200',
+                'hover:shadow-md active:scale-[0.98]',
                 touchMode === 'large' ? 'py-3.5 min-h-[68px]' : 'py-2 min-h-[50px]',
                 isDeliveryWithAccent ? 'bg-white border-slate-200' : 'border-slate-300',
                 !isDeliveryWithAccent && item.status == null && 'bg-white text-slate-800',
                 !isDeliveryWithAccent && item.status === 'pending' && 'bg-sky-50 border-sky-400 text-sky-950',
-                !isDeliveryWithAccent && item.status === 'preparing' && stage === 'fresh' && 'bg-lime-400/95 border-lime-600 text-lime-950',
-                !isDeliveryWithAccent && item.status === 'preparing' && stage === 'warning' && 'bg-amber-500/90 border-amber-600 text-amber-950',
-                !isDeliveryWithAccent && item.status === 'preparing' && stage === 'urgent' && 'bg-red-500/90 border-red-600 text-red-950',
+                !isDeliveryWithAccent && item.status === 'preparing' && stage === 'fresh' && posCookStageOrderBarCardClass.fresh,
+                !isDeliveryWithAccent && item.status === 'preparing' && stage === 'warning' && posCookStageOrderBarCardClass.warning,
+                !isDeliveryWithAccent && item.status === 'preparing' && stage === 'urgent' && posCookStageOrderBarCardClass.urgent,
                 !isDeliveryWithAccent && item.status === 'partial_served' && 'bg-violet-400/95 border-violet-600 text-violet-950',
                 !isDeliveryWithAccent && item.status === 'packaged' && 'bg-emerald-500/90 border-emerald-600 text-emerald-50',
                 !isDeliveryWithAccent && item.status === 'completed' && 'bg-slate-500/90 border-slate-600 text-slate-100',

@@ -102,11 +102,20 @@ export type TheoreticalCostResolveContext = {
   knownMenuIds: Set<string>
   menuIdByNormalizedName: Map<string, string>
   promoItemsByPromoId?: Map<string, PromoLineLike[]>
+  /** POS 세트 미러 메뉴 id → promo id */
+  promoIdByMirrorMenuId?: Map<string, string>
+  /** 세트/프로모 이름 → promo id */
+  promoIdByNormalizedName?: Map<string, string>
+  /** SET-xxx 등 프로모 코드 → promo id */
+  promoIdByCode?: Map<string, string>
 }
 
 export function buildTheoreticalCostResolveContext(params: {
   costIndex: Map<string, PosMenuCostIndexEntry>
-  catalog?: Pick<PromoPricingCatalog, 'menus' | 'promoItemsByPromoId'>
+  catalog?: Pick<
+    PromoPricingCatalog,
+    'menus' | 'promoItemsByPromoId' | 'promoMetaById' | 'promoIdByMirrorMenuId'
+  >
 }): TheoreticalCostResolveContext {
   const knownMenuIds = new Set<string>()
   for (const key of params.costIndex.keys()) {
@@ -114,6 +123,8 @@ export function buildTheoreticalCostResolveContext(params: {
     if (mid) knownMenuIds.add(mid)
   }
   const menuIdByNormalizedName = new Map<string, string>()
+  const promoIdByNormalizedName = new Map<string, string>()
+  const promoIdByCode = new Map<string, string>()
   for (const menu of params.catalog?.menus ?? []) {
     const id = str(menu.id)
     const name = str((menu as PromoMenuLike).name)
@@ -121,10 +132,19 @@ export function buildTheoreticalCostResolveContext(params: {
     if (!id || !name) continue
     menuIdByNormalizedName.set(normalizeLookupName(name), id)
   }
+  for (const [promoId, meta] of params.catalog?.promoMetaById ?? []) {
+    const name = str(meta.name)
+    const code = str(meta.code).toUpperCase()
+    if (name) promoIdByNormalizedName.set(normalizeLookupName(name), promoId)
+    if (code) promoIdByCode.set(code, promoId)
+  }
   return {
     knownMenuIds,
     menuIdByNormalizedName,
     promoItemsByPromoId: params.catalog?.promoItemsByPromoId,
+    promoIdByMirrorMenuId: params.catalog?.promoIdByMirrorMenuId,
+    promoIdByNormalizedName,
+    promoIdByCode,
   }
 }
 
@@ -164,6 +184,36 @@ function isGrabSetChildRow(row: Record<string, unknown>): boolean {
   return row.grabSetChild === true || row.grab_set_child === true
 }
 
+function resolvePromoIdForCostRow(
+  row: Record<string, unknown>,
+  ctx?: TheoreticalCostResolveContext
+): string {
+  const direct = str(row.promoId ?? row.promo_id)
+  if (direct) return direct
+
+  const promoCode = str(row.promoCode ?? row.promo_code).toUpperCase()
+  if (promoCode && ctx?.promoIdByCode?.has(promoCode)) {
+    return ctx.promoIdByCode.get(promoCode) ?? ''
+  }
+
+  let menuId = resolveLineMenuId(row)
+  if (!menuId) menuId = resolveMenuIdFromLineId(str(row.id), ctx?.knownMenuIds ?? new Set())
+
+  if (menuId && ctx?.promoIdByMirrorMenuId?.has(menuId)) {
+    return ctx.promoIdByMirrorMenuId.get(menuId) ?? ''
+  }
+
+  const lineName = resolveLineMenuName(row)
+  const grabParsed = parseGrabSetChildLineName(lineName)
+  const promoLookupName = grabParsed?.promoLabel || lineName
+  if (promoLookupName && ctx?.promoIdByNormalizedName) {
+    const byName = ctx.promoIdByNormalizedName.get(normalizeLookupName(promoLookupName))
+    if (byName) return byName
+  }
+
+  return ''
+}
+
 function effectivePromoItemRows(
   row: Record<string, unknown>,
   ctx?: TheoreticalCostResolveContext
@@ -172,7 +222,7 @@ function effectivePromoItemRows(
   if (Array.isArray(raw) && raw.length > 0) {
     return raw.filter((x) => x && typeof x === 'object') as Record<string, unknown>[]
   }
-  const promoId = str(row.promoId ?? row.promo_id)
+  const promoId = resolvePromoIdForCostRow(row, ctx)
   if (!promoId || !ctx?.promoItemsByPromoId) return []
   const template = ctx.promoItemsByPromoId.get(promoId)
   if (!template?.length) return []

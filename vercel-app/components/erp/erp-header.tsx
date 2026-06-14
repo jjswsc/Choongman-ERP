@@ -1,7 +1,7 @@
 "use client"
 
 import { appAlert } from "@/lib/app-message"
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download, X } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -38,37 +38,12 @@ import { useStoreView } from "@/lib/store-view-context"
 import { useAutoTranslate } from "@/lib/auto-translate"
 import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
-
-const ERP_HISTORY_KEY_CURR = "erp_back_curr"
-const ERP_HISTORY_KEY_PREV = "erp_back_prev"
-const ERP_HISTORY_BY_SCOPE_KEY = "erp_back_by_scope_v1"
-
-type ScopeHistoryEntry = {
-  curr: string
-  prev: string
-}
-
-function normalizePath(path: string): string {
-  if (!path) return path
-  if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1)
-  return path
-}
-
-/**
- * 관리자 메뉴의 "같은 메뉴" 범위를 계산한다.
- * 예) /admin/members/points -> /admin/members
- */
-function getAdminMenuScope(path: string): string {
-  const normalized = normalizePath(path)
-  if (!normalized.startsWith("/admin")) return normalized
-  const parts = normalized.split("/").filter(Boolean) // ["admin", "..."]
-  if (parts.length <= 2) return normalized
-  return `/${parts[0]}/${parts[1]}`
-}
+import { useErpNavigation } from "@/lib/erp-navigation"
 
 export function ErpHeader() {
   const router = useRouter()
   const pathname = usePathname()
+  const { goBack, clearPageCache, closeCurrentPage } = useErpNavigation()
   const { auth, logout, setAuth } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
@@ -100,72 +75,8 @@ export function ErpHeader() {
   }, [t])
   const autoTranslateLabel = t("header_auto_translate")
 
-  // ERP 내 이동 시 이전/현재 경로 저장 (뒤로가기용)
-  useEffect(() => {
-    if (typeof window === "undefined" || !pathname || isLoginPage) return
-    if (!pathname.startsWith("/admin")) return
-    const normalizedPath = normalizePath(pathname)
-    const curr = sessionStorage.getItem(ERP_HISTORY_KEY_CURR)
-    if (curr !== normalizedPath) {
-      sessionStorage.setItem(ERP_HISTORY_KEY_PREV, curr || "")
-      sessionStorage.setItem(ERP_HISTORY_KEY_CURR, normalizedPath)
-    }
-
-    const scope = getAdminMenuScope(normalizedPath)
-    try {
-      const raw = sessionStorage.getItem(ERP_HISTORY_BY_SCOPE_KEY)
-      const parsed = raw ? (JSON.parse(raw) as Record<string, ScopeHistoryEntry>) : {}
-      const existing = parsed[scope]
-      if (!existing || existing.curr !== normalizedPath) {
-        parsed[scope] = {
-          prev: existing?.curr || "",
-          curr: normalizedPath,
-        }
-        sessionStorage.setItem(ERP_HISTORY_BY_SCOPE_KEY, JSON.stringify(parsed))
-      }
-    } catch {
-      // 세션스토리지 파싱 오류 시에도 뒤로가기는 동작해야 하므로 무시
-    }
-  }, [pathname, isLoginPage])
-
-  const handleBack = () => {
-    const normalizedPath = normalizePath(pathname || "")
-    const currentScope = getAdminMenuScope(normalizedPath)
-    try {
-      const raw = sessionStorage.getItem(ERP_HISTORY_BY_SCOPE_KEY)
-      const parsed = raw ? (JSON.parse(raw) as Record<string, ScopeHistoryEntry>) : {}
-      const entry = parsed[currentScope]
-      const scopePrev = entry?.prev
-      if (
-        scopePrev &&
-        scopePrev !== normalizedPath &&
-        scopePrev.startsWith(currentScope)
-      ) {
-        router.push(scopePrev)
-        return
-      }
-    } catch {
-      // 파싱 실패 시 기존 fallback 사용
-    }
-
-    if (normalizedPath !== currentScope && currentScope.startsWith("/admin")) {
-      router.push(currentScope)
-      return
-    }
-
-    const prev = sessionStorage.getItem(ERP_HISTORY_KEY_PREV)
-    if (prev && prev !== normalizedPath && prev.startsWith("/admin")) {
-      router.push(prev)
-      return
-    }
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back()
-      return
-    }
-    router.push("/admin")
-  }
-
   const handleLogout = () => {
+    clearPageCache()
     logout()
     router.replace("/admin/login")
   }
@@ -181,11 +92,22 @@ export function ErpHeader() {
               variant="ghost"
               size="sm"
               className="h-8 gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={handleBack}
+              onClick={goBack}
               title={t("posBack") || "뒤로가기"}
             >
               <ArrowLeft className="h-4 w-4" />
               <span className="hidden sm:inline text-xs">{t("posBack") || "뒤로가기"}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={closeCurrentPage}
+              title={t("erpCloseScreen") || "화면 닫기"}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">{t("erpCloseScreen") || "화면 닫기"}</span>
             </Button>
             <Separator orientation="vertical" className="h-5" />
           </>

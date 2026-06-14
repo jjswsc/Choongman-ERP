@@ -8,7 +8,13 @@ import { ChevronRight, Gift, History, Ticket } from "lucide-react"
 import {
   DEFAULT_MEMBER_APP_BG,
   MP_BOTTOM_NAV_CLEARANCE,
+  MP_EMBED_PREVIEW_BOTTOM_CLEARANCE,
   MP_MAX_WIDTH,
+  MP_PAGE_BG_CLASS,
+  MP_TEXT_MUTED,
+  MP_TEXT_PRIMARY,
+  MP_TEXT_SECONDARY,
+  MP_TEXT_SUBTLE,
   mpGlassCard,
   mpGlassCardSoft,
   mpGlassInset,
@@ -28,7 +34,7 @@ export function MemberPortalAmbienceBackground({
   className?: string
 }) {
   return (
-    <div className={`relative min-h-[100dvh] bg-[#050506] text-white ${className}`}>
+    <div className={`relative min-h-[100dvh] overflow-x-hidden ${MP_PAGE_BG_CLASS} ${MP_TEXT_PRIMARY} ${className}`}>
       <MemberPortalLoungeBackdrop
         className="fixed"
         customFullBackgroundUrl={imageUrl}
@@ -42,13 +48,17 @@ export function MemberPortalAmbienceBackground({
 
 export function MemberPortalShell({
   children,
+  embedPreview = false,
 }: {
   children: React.ReactNode
+  embedPreview?: boolean
 }) {
   return (
     <div
       className={`relative mx-auto w-full ${MP_MAX_WIDTH} px-4 pt-[max(1rem,env(safe-area-inset-top))]`}
-      style={{ paddingBottom: MP_BOTTOM_NAV_CLEARANCE }}
+      style={{
+        paddingBottom: embedPreview ? MP_EMBED_PREVIEW_BOTTOM_CLEARANCE : MP_BOTTOM_NAV_CLEARANCE,
+      }}
     >
       {children}
     </div>
@@ -83,8 +93,8 @@ export function SectionTitle({
   return (
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight text-white">{title}</h2>
-        {subtitle ? <p className="mt-0.5 text-sm leading-relaxed text-white/50">{subtitle}</p> : null}
+        <h2 className={`text-lg font-semibold tracking-tight ${MP_TEXT_PRIMARY}`}>{title}</h2>
+        {subtitle ? <p className={`mt-0.5 text-sm leading-relaxed ${MP_TEXT_MUTED}`}>{subtitle}</p> : null}
       </div>
       {action}
     </div>
@@ -109,12 +119,12 @@ export function PremiumStatTile({
   onClick?: () => void
 }) {
   const accentMap = {
-    amber: "from-amber-400/20 to-amber-600/5 text-amber-200 border-amber-400/20",
-    rose: "from-rose-400/15 to-rose-600/5 text-rose-200 border-rose-400/20",
-    emerald: "from-emerald-400/15 to-emerald-600/5 text-emerald-200 border-emerald-400/20",
+    amber: "from-amber-100 to-amber-50 text-amber-700 border-amber-200/80",
+    rose: "from-rose-100 to-rose-50 text-rose-700 border-rose-200/80",
+    emerald: "from-emerald-100 to-emerald-50 text-emerald-700 border-emerald-200/80",
   }
   const compact = size === "compact"
-  const className = `${mpGlassCardSoft} ${compact ? "p-3" : "p-4"} text-left transition ${onClick ? "cursor-pointer hover:border-white/15 active:scale-[0.98]" : ""}`
+  const className = `${mpGlassCardSoft} ${compact ? "p-3" : "p-4"} text-left transition ${onClick ? "cursor-pointer hover:border-amber-300/60 active:scale-[0.98]" : ""}`
   const inner = (
     <>
       <div
@@ -122,13 +132,13 @@ export function PremiumStatTile({
       >
         <Icon className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
       </div>
-      <p className={`font-medium uppercase text-white/45 ${compact ? "text-[10px] leading-tight tracking-[0.08em] line-clamp-2" : "text-[11px] tracking-[0.12em]"}`}>
+      <p className={`font-medium uppercase ${MP_TEXT_MUTED} ${compact ? "text-[10px] leading-tight tracking-[0.08em] line-clamp-2" : "text-[11px] tracking-[0.12em]"}`}>
         {label}
       </p>
-      <p className={`font-semibold leading-snug tracking-tight text-white ${compact ? "mt-1 text-lg" : "mt-1.5 line-clamp-2 text-base"}`}>
+      <p className={`font-semibold leading-snug tracking-tight ${MP_TEXT_PRIMARY} ${compact ? "mt-1 text-lg" : "mt-1.5 line-clamp-2 text-base"}`}>
         {value}
       </p>
-      {sub ? <p className="mt-1 text-[11px] text-white/40">{sub}</p> : null}
+      {sub ? <p className={`mt-1 text-[11px] ${MP_TEXT_SUBTLE}`}>{sub}</p> : null}
     </>
   )
   if (onClick) {
@@ -180,24 +190,24 @@ export function MemberPortalPrivilegeShortcut({
     <button
       type="button"
       onClick={onClick}
-      className={`${mpGlassCardSoft} group flex w-full items-center gap-3.5 p-4 text-left transition hover:border-amber-400/25 active:scale-[0.99]`}
+      className={`${mpGlassCardSoft} group flex w-full items-center gap-3.5 p-4 text-left transition hover:border-amber-300/50 active:scale-[0.99]`}
     >
       <div className="flex shrink-0 items-center pl-1">
-        <span className="relative z-[3] flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/20 to-emerald-600/5 text-emerald-200 shadow-lg shadow-black/20">
+        <span className="relative z-[3] flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-700 shadow-sm">
           <Ticket className="h-4 w-4" aria-hidden />
         </span>
-        <span className="relative z-[2] -ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-rose-400/20 bg-gradient-to-br from-rose-400/15 to-rose-600/5 text-rose-200 shadow-lg shadow-black/20">
+        <span className="relative z-[2] -ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 bg-gradient-to-br from-rose-100 to-rose-50 text-rose-700 shadow-sm">
           <Gift className="h-4 w-4" aria-hidden />
         </span>
-        <span className="relative z-[1] -ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/20 bg-gradient-to-br from-amber-400/20 to-amber-600/5 text-amber-200 shadow-lg shadow-black/20">
+        <span className="relative z-[1] -ml-3 flex h-10 w-10 items-center justify-center rounded-xl border border-amber-200 bg-gradient-to-br from-amber-100 to-amber-50 text-amber-700 shadow-sm">
           <History className="h-4 w-4" aria-hidden />
         </span>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-semibold text-white">{title}</p>
-        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-white/45">{subtitle}</p>
+        <p className={`font-semibold ${MP_TEXT_PRIMARY}`}>{title}</p>
+        <p className={`mt-0.5 line-clamp-2 text-xs leading-relaxed ${MP_TEXT_MUTED}`}>{subtitle}</p>
       </div>
-      <ChevronRight className="h-5 w-5 shrink-0 text-white/35 transition group-hover:translate-x-0.5 group-hover:text-amber-300/80" aria-hidden />
+      <ChevronRight className={`h-5 w-5 shrink-0 ${MP_TEXT_SUBTLE} transition group-hover:translate-x-0.5 group-hover:text-amber-600`} aria-hidden />
     </button>
   )
 }
@@ -264,12 +274,12 @@ export function QuickActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-w-[5.5rem] shrink-0 flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/30 px-3 py-3.5 backdrop-blur-md transition active:scale-[0.98] hover:border-amber-400/25 hover:bg-black/40`}
+      className={`flex min-w-[5.5rem] shrink-0 flex-col items-center gap-2 rounded-2xl border border-stone-200/80 bg-white/90 px-3 py-3.5 shadow-sm transition active:scale-[0.98] hover:border-amber-300/60 hover:bg-white`}
     >
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400/25 to-amber-600/10 text-amber-100 shadow-inner">
+      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 text-amber-700 shadow-inner">
         <Icon className="h-5 w-5" />
       </span>
-      <span className="max-w-[4.5rem] text-center text-[11px] font-medium leading-tight text-white/80">{label}</span>
+      <span className={`max-w-[4.5rem] text-center text-[11px] font-medium leading-tight ${MP_TEXT_SECONDARY}`}>{label}</span>
     </button>
   )
 }
@@ -296,15 +306,15 @@ export function PremiumAppHeader({
   return (
     <header className="mb-5 flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-400/20 bg-black/40 p-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.35)]">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-400/10 to-transparent" />
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-200/80 bg-white p-1.5 shadow-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-50 to-transparent" />
           <Image src={logoSrc} alt={logoAlt} width={32} height={32} className="relative h-8 w-8 object-contain" />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-amber-200/55">{wordmark}</p>
-          <p className="truncate text-base font-semibold tracking-tight">{displayName}</p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-amber-700/70">{wordmark}</p>
+          <p className={`truncate text-base font-semibold tracking-tight ${MP_TEXT_PRIMARY}`}>{displayName}</p>
           {tierLabel ? (
-            <span className="mt-0.5 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-100/90">
+            <span className="mt-0.5 inline-flex rounded-full border border-amber-300/60 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800">
               {tierLabel}
             </span>
           ) : null}
@@ -315,7 +325,7 @@ export function PremiumAppHeader({
         <button
           type="button"
           onClick={onLogout}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/35 text-white/65 backdrop-blur-md transition hover:border-white/20 hover:text-white"
+          className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-stone-200 bg-white/90 ${MP_TEXT_SECONDARY} shadow-sm transition hover:border-stone-300 hover:text-stone-800`}
           aria-label={logoutLabel}
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -331,21 +341,23 @@ export function PremiumBottomNav({
   tab,
   onChange,
   items,
+  embedPreview = false,
 }: {
   tab: PortalTab
   onChange: (tab: PortalTab) => void
   items: Array<{ id: PortalTab; label: string; icon: LucideIcon }>
+  embedPreview?: boolean
 }) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
   const nav = (
     <nav
-      className="fixed inset-x-0 bottom-0 z-[70] isolate pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2"
+      className={`${embedPreview ? "absolute" : "fixed"} inset-x-0 bottom-0 z-[70] isolate pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2`}
       aria-label="Member portal navigation"
     >
       <div className={`mx-auto w-full ${MP_MAX_WIDTH} px-4`}>
-        <div className="rounded-[1.35rem] border border-white/12 bg-[#121214] px-1 py-1.5 shadow-[0_-6px_28px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.06] supports-[backdrop-filter]:bg-[rgba(10,10,12,0.97)] supports-[backdrop-filter]:backdrop-blur-xl">
+        <div className="rounded-[1.35rem] border border-stone-200/90 bg-white/95 px-1 py-1.5 shadow-[0_-4px_24px_rgba(28,21,16,0.08)] ring-1 ring-stone-100 supports-[backdrop-filter]:backdrop-blur-md">
           <div className="grid grid-cols-5">
             {items.map(({ id, label, icon: Icon }) => {
               const active = tab === id
@@ -355,13 +367,13 @@ export function PremiumBottomNav({
                   type="button"
                   onClick={() => onChange(id)}
                   className={`relative flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition ${
-                    active ? "text-amber-200" : "text-white/55 hover:text-white/75"
+                    active ? "text-amber-700" : `${MP_TEXT_MUTED} hover:text-stone-700`
                   }`}
                 >
                   {active ? (
-                    <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-400/20 to-transparent" />
+                    <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-100 to-transparent" />
                   ) : null}
-                  <Icon className={`relative h-5 w-5 ${active ? "text-amber-300" : "text-white/70"}`} />
+                  <Icon className={`relative h-5 w-5 ${active ? "text-amber-600" : "text-stone-500"}`} />
                   <span className="relative max-w-full truncate">{label}</span>
                 </button>
               )
@@ -372,7 +384,7 @@ export function PremiumBottomNav({
     </nav>
   )
 
-  if (!mounted || typeof document === "undefined") return nav
+  if (embedPreview || !mounted || typeof document === "undefined") return nav
   return createPortal(nav, document.body)
 }
 
@@ -397,28 +409,28 @@ export function TierProgressCard({
     <GlassCard>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/50">{subtitle}</p>
+          <p className={`text-sm font-semibold ${MP_TEXT_PRIMARY}`}>{title}</p>
+          <p className={`mt-1 text-xs leading-relaxed ${MP_TEXT_MUTED}`}>{subtitle}</p>
         </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/25 ${accentClass}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 ${accentClass}`}>
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
             <path d="M12 15l-3.5 5h7L12 15zM8.5 9.5L12 3l3.5 6.5H8.5z" />
           </svg>
         </div>
       </div>
-      <div className="relative h-2.5 overflow-hidden rounded-full bg-white/8">
+      <div className="relative h-2.5 overflow-hidden rounded-full bg-stone-200/80">
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-[#f5e6b8] shadow-[0_0_12px_rgba(251,191,36,0.45)] transition-all duration-700"
           style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
         />
       </div>
       <div className="mt-2.5 flex items-center justify-between gap-3">
-        <p className="text-[11px] font-medium tracking-wide text-white/45">{pointRateLabel}</p>
+        <p className={`text-[11px] font-medium tracking-wide ${MP_TEXT_MUTED}`}>{pointRateLabel}</p>
         {actionLabel && onAction ? (
           <button
             type="button"
             onClick={onAction}
-            className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-400/15"
+            className="shrink-0 rounded-full border border-amber-300/60 bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
           >
             {actionLabel}
           </button>

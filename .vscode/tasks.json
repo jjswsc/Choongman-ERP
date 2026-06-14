@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "clasp push",
+      "label": "vercel build (check)",
       "type": "shell",
-      "command": "clasp push",
+      "command": "npm run check:vercel",
       "group": {
         "kind": "build",
         "isDefault": true

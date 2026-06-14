@@ -1115,7 +1115,7 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
                 className={`flex items-center justify-between rounded-2xl border border-white/10 bg-gradient-to-r ${app.color} px-5 py-4 text-white shadow-lg transition hover:brightness-110`}
               >
                 <span className="flex min-w-0 items-center gap-3">
-                  <MemberPortalDeliveryAppLogo code={app.code} className="h-8 w-8 shrink-0" />
+                  <MemberPortalDeliveryAppLogo code={app.code} className="h-7 w-auto shrink-0" />
                   <span className="font-semibold">{app.label}</span>
                 </span>
                 <ExternalLink className="h-4 w-4 shrink-0 opacity-80" />

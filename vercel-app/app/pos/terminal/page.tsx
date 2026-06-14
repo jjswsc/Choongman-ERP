@@ -94,6 +94,10 @@ import {
   orderUiItemsToPosOrderItems,
   resolveCartLineQuantityForSave,
 } from '@/lib/pos-order-item-map'
+import {
+  fetchPosOrderItemsForPaymentMerge,
+  reconcilePayloadItemsWithTerminalCart,
+} from '@/lib/pos-terminal-order-items'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { PosPostPaymentCashChangeDialog } from '@/components/pos/pos-post-payment-cash-change-dialog'
@@ -388,103 +392,6 @@ function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView>
  * `CartPanel`이 넘긴 `payload.items`와 실제 `terminalCartLines`가 한 틱 어긋나거나(0·qty 혼용),
  * 카트 줄 id가 과거에 중복이면 `find`로 잘못 붙을 수 있어, **동일 id가 터미널에 있으면 터미널 수량을 단일 소스로** 쓴다.
  */
-function reconcilePayloadItemsWithTerminalCart<
-  T extends {
-    id?: unknown
-    quantity?: unknown
-    qty?: unknown
-    menuId?: unknown
-    menuId2?: unknown
-    optionId?: unknown
-    optionId2?: unknown
-    optionCode?: unknown
-    optionCode2?: unknown
-    optionCodes?: unknown
-  },
->(payloadItems: T[] | undefined | null, terminalLines: OrderItem[]): T[] {
-  return (payloadItems || []).map((it) => {
-    const hit = (terminalLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
-    if (hit) {
-      const q = resolveCartLineQuantityForSave(hit as { quantity?: unknown; qty?: unknown })
-      const mid = String(
-        (it as { menuId?: unknown }).menuId ?? hit.menuId ?? ''
-      ).trim()
-      const mid2 = String(
-        (it as { menuId2?: unknown }).menuId2 ?? (hit as { menuId2?: unknown }).menuId2 ?? ''
-      ).trim()
-      const oid = String(
-        (it as { optionId?: unknown }).optionId ?? hit.optionId ?? ''
-      ).trim()
-      const oid2 = String(
-        (it as { optionId2?: unknown }).optionId2 ?? (hit as { optionId2?: unknown }).optionId2 ?? ''
-      ).trim()
-      const oc = String(
-        (it as { optionCode?: unknown }).optionCode ?? hit.optionCode ?? ''
-      ).trim()
-      const oc2 = String(
-        (it as { optionCode2?: unknown }).optionCode2 ?? (hit as { optionCode2?: unknown }).optionCode2 ?? ''
-      ).trim()
-      const optionCodes = [
-        ...new Set(
-          [
-            ...((Array.isArray((it as { optionCodes?: unknown }).optionCodes)
-              ? ((it as { optionCodes?: unknown[] }).optionCodes ?? [])
-              : []) as unknown[]).map((x) => String(x ?? '').trim()),
-            oc,
-            oc2,
-          ].filter(Boolean)
-        ),
-      ]
-      return {
-        ...it,
-        quantity: q,
-        ...(mid ? { menuId: mid } : {}),
-        ...(mid2 ? { menuId2: mid2 } : {}),
-        ...(oid ? { optionId: oid } : {}),
-        ...(oid2 ? { optionId2: oid2 } : {}),
-        ...(oc ? { optionCode: oc } : {}),
-        ...(oc2 ? { optionCode2: oc2 } : {}),
-        ...(optionCodes.length > 0 ? { optionCodes } : {}),
-      }
-    }
-    const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
-    if (Number.isFinite(raw) && raw > 0) return it
-    return { ...it, quantity: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }) }
-  })
-}
-
-function posOrderApiItemsToPosOrderItems(
-  rows: NonNullable<PosOrder['items']> | undefined | null
-): PosOrderItem[] {
-  if (!rows?.length) return []
-  return orderUiItemsToPosOrderItems(
-    rows.map((it, idx) => ({
-      id: String(it.id ?? `line-${idx}`),
-      name: String(it.name ?? ''),
-      quantity: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
-      price: Number(it.price ?? 0) || 0,
-      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-      ...(String(it.promoId ?? '').trim() ? { promoId: String(it.promoId).trim() } : {}),
-      ...(String(it.promoCode ?? '').trim() ? { promoCode: String(it.promoCode).trim() } : {}),
-      ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
-      ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
-      ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
-      ...(String(it.cancelledAt ?? '').trim() ? { cancelledAt: String(it.cancelledAt) } : {}),
-      ...(String(it.cancelledBy ?? '').trim() ? { cancelledBy: String(it.cancelledBy) } : {}),
-      ...(String(it.cancelReason ?? '').trim() ? { cancelReason: String(it.cancelReason) } : {}),
-    }))
-  )
-}
-
-async function fetchPosOrderItemsForPaymentMerge(
-  orderId: number,
-  storeCode: string
-): Promise<PosOrderItem[]> {
-  const rows = await getPosOrders({ orderId, storeCode, limit: 1 })
-  const hit = Array.isArray(rows) ? rows[0] : null
-  return posOrderApiItemsToPosOrderItems(hit?.items)
-}
-
 export default function PosTerminalPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -2933,6 +2840,7 @@ export default function PosTerminalPage() {
    * - 해당 주문 자동 선택
    * - 배달앱 코드가 있으면 Grab/LineMan/Shopee 자동 선택
    * - 알림음 재생
+   * - 주문 단말: 웹훅/API 유입(memo 앵커)만 알림 — 다른 POS 수동 키잉은 Realtime 무시
    */
   const autoFocusIncomingDeliveryOrder = useCallback(
     (params: IncomingDeliveryFocusParams) => {
@@ -2941,6 +2849,12 @@ export default function PosTerminalPage() {
       if (!isSessionNewOrder(params.createdAt, posSessionStartedAtRef.current)) return
       const orderType = String(params.orderType ?? '').trim().toLowerCase()
       if (orderType !== 'delivery') return
+      if (
+        !isMainPosDevice &&
+        !isApiInboundDeliveryOrderMemo(String(params.memo ?? ''))
+      ) {
+        return
+      }
       const status = String(params.status ?? '').trim().toLowerCase()
       if (status === 'cancelled' || status === 'refunded') return
       if (promptedPendingDeliveryOrderIdsRef.current.has(orderId)) return
@@ -2962,6 +2876,7 @@ export default function PosTerminalPage() {
     [
       applyIncomingDeliveryFocusUi,
       isIncomingDeliveryFocusLocked,
+      isMainPosDevice,
       playIncomingOrderBeep,
       refetchStores,
       backgroundAcceptAndPrintInboundDeliveryOrder,
@@ -7864,7 +7779,9 @@ export default function PosTerminalPage() {
           : inProgressOrPackagedTakeoutBarItems
 
   const handleTableSelect = (tableId: string) => {
-    if (selectedTableId != null && selectedTableId !== tableId) {
+    /** 서빙 모드(selectedTableId=null)에서 다른 테이블로 바꿀 때도 cart·pending 초기화 */
+    const prevContextTableId = selectedTableId ?? servingTableId
+    if (prevContextTableId !== tableId) {
       clearCartFromTerminal()
       setPendingDineInOrderId(null)
       pendingDineInOrderTableRef.current = ''
@@ -8298,6 +8215,27 @@ export default function PosTerminalPage() {
                 pendingDineInOrderTableRef.current,
                 getTableFloor(selectedTableId ?? servingTableId)
               )
+              if (
+                Number.isFinite(pendingExistingOrderId) &&
+                pendingExistingOrderId > 0 &&
+                pendingTableKey &&
+                payloadTableKey &&
+                pendingTableKey !== payloadTableKey
+              ) {
+                logPosPrintDebug('submit_block_dine_in_pending_table_mismatch', {
+                  pendingExistingOrderId,
+                  pendingTableKey,
+                  payloadTableKey,
+                  payloadTableName: payload.tableName,
+                })
+                await appAlert(
+                  t('posDineInPendingTableMismatch') ||
+                    '다른 테이블 주문과 연결된 상태입니다. 테이블을 다시 선택한 뒤 추가 주문해 주세요.'
+                )
+                posCartBackendBusyRef.current = false
+                setPosCartBackendBusy(false)
+                return
+              }
               if (
                 !(Number.isFinite(existingOrderId) && existingOrderId > 0) &&
                 Number.isFinite(pendingExistingOrderId) &&
@@ -8983,18 +8921,11 @@ export default function PosTerminalPage() {
                       ) || '',
                   }
                 }
-                /** 추가 주문 직후 결제 카트가 DB보다 적어지는 것 방지 — 저장된 전체 줄로 터미널 카트 동기화 */
-                setTerminalCartLines(
-                  receiptPrintItems.map((it) => ({
-                    id: String(it.id ?? ''),
-                    name: String(it.name ?? ''),
-                    quantity: it.qty,
-                    price: Number(it.price ?? 0) || 0,
-                    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-                  }))
-                )
-                setServingTableId(null)
+                /** 저장 후 cart 비움 + 해당 테이블 서빙 패널로 (바닥에 품목 잔존·결제 카트 단절 방지) */
+                const submittedTableId = selectedTableId ?? servingTableId
+                clearCartFromTerminal()
                 setSelectedTableId(null)
+                setServingTableId(submittedTableId)
                 await refreshStoreListAfterOrderSave({
                   orderType: 'dine_in',
                   tableName: payload.tableName,
@@ -10046,6 +9977,8 @@ export default function PosTerminalPage() {
                 }
                 const prevTableId = selectedTableId
                 clearCartFromTerminal()
+                setPendingDineInOrderId(null)
+                pendingDineInOrderTableRef.current = ''
                 if (next === 'tables') {
                   setSelectedTableId(null)
                   setServingTableId(null)
@@ -10379,7 +10312,12 @@ export default function PosTerminalPage() {
                           ? translateReceiptTableDisplayName(selectedTable.name, t)
                           : String(selectedTableId ?? '')
                       }
-                      onBack={() => setSelectedTableId(null)}
+                      onBack={() => {
+                        setSelectedTableId(null)
+                        clearCartFromTerminal()
+                        setPendingDineInOrderId(null)
+                        pendingDineInOrderTableRef.current = ''
+                      }}
                       hideTableContextBar
                       onAddItem={handleAddItemToCart}
                       orderType="dine-in"
@@ -10572,7 +10510,17 @@ export default function PosTerminalPage() {
                     mode="pos-order"
                     storeCode={currentStoreId}
                     selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${takeoutLabel}`}
-                    onBack={() => setSelectedTakeoutTargetId(null)}
+                    onBack={() => {
+                      const pendingOid = pendingTakeoutOrderId
+                      if (pendingOid) {
+                        setPendingTakeoutOrderId(null)
+                        setPendingReceiptOrderNo(null)
+                        clearCartFromTerminal()
+                        setSelectedTakeoutTargetId(`takeout-order-${pendingOid}`)
+                        return
+                      }
+                      setSelectedTakeoutTargetId(null)
+                    }}
                     backButtonLabel={t('posBack') || '뒤로가기'}
                     onAddItem={handleAddItemToCart}
                     orderType="takeout"
@@ -10739,6 +10687,7 @@ export default function PosTerminalPage() {
               }
               onAddOrder={() => {
                 if (!servingTableId) return
+                clearCartFromTerminal()
                 if (servingTable?.order?.id != null) {
                   const sid = Number(servingTable.order.id)
                   if (Number.isFinite(sid) && sid > 0) {
@@ -10821,10 +10770,11 @@ export default function PosTerminalPage() {
                 if (orderPaymentsSum(selectedTakeoutOrder) > 0.005) return
                 const oid = Number(selectedTakeoutOrder.id)
                 if (!Number.isFinite(oid) || oid <= 0) return
+                clearCartFromTerminal()
                 setPendingTakeoutOrderId(oid)
                 setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
                 setSelectedTakeoutTargetLabel(resolveTakeoutOrderBarLabel(selectedTakeoutOrder))
-                setSelectedTakeoutTargetId(null)
+                setSelectedTakeoutTargetId('takeout-draft')
               }}
               onPay={() => {
                 if (!selectedTakeoutOrder) return

@@ -15,7 +15,6 @@ import {
 } from '@/lib/pos-banban-utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
-  escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
   formatPosReceiptOrderNoDisplay,
   resolvePosReceiptOrderNoRaw,
   resolveReceiptDeliveryPaymentChannelCode,
@@ -758,7 +757,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             : ''
         }
         <div class="simple-line"><b>${esc(tr('posOrderType', 'Order Type'))}</b>: ${esc(orderTypeLabel)}</div>
-        ${tableForPrint ? `<div class="simple-line"><b>${esc(tr('posTable', '테이블'))}</b>: ${escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableForPrint)}</div>` : ''}
+        ${tableForPrint ? `<div class="simple-line"><b>${esc(tr('posTable', '테이블'))}</b>: ${esc(tableForPrint)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${isPaymentReceipt && d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
@@ -850,7 +849,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             tableForPrint
               ? receiptMetaRowHtml(
                   esc(tr('posTable', '테이블')),
-                  escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableForPrint)
+                  esc(tableForPrint)
                 )
               : ''
           }

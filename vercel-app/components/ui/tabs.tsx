@@ -3,8 +3,21 @@
 import * as React from 'react'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { cn } from '@/lib/utils'
+import { useErpNavigationOptional } from '@/lib/erp-navigation'
+import { ErpTabActiveProvider } from '@/lib/erp-page-visibility'
 
-const Tabs = TabsPrimitive.Root
+const ErpTabsValueContext = React.createContext<string | undefined>(undefined)
+
+function Tabs({
+  value,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  return (
+    <ErpTabsValueContext.Provider value={value}>
+      <TabsPrimitive.Root value={value} {...props} />
+    </ErpTabsValueContext.Provider>
+  )
+}
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
@@ -39,16 +52,29 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      'mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-      className,
-    )}
-    {...props}
-  />
-))
+>(({ className, value, ...props }, ref) => {
+  const preserveInactive = useErpNavigationOptional() != null
+  const selectedValue = React.useContext(ErpTabsValueContext)
+  // value 미전달(비제어 Tabs)이면 활성 탭을 알 수 없으므로 기존처럼 모두 active로 둔다.
+  const tabActive =
+    selectedValue === undefined ? true : value == null || selectedValue === value
+
+  return (
+    <ErpTabActiveProvider active={tabActive}>
+      <TabsPrimitive.Content
+        ref={ref}
+        value={value}
+        forceMount={preserveInactive ? true : undefined}
+        className={cn(
+          'mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          preserveInactive && 'data-[state=inactive]:hidden',
+          className,
+        )}
+        {...props}
+      />
+    </ErpTabActiveProvider>
+  )
+})
 TabsContent.displayName = TabsPrimitive.Content.displayName
 
 export { Tabs, TabsList, TabsTrigger, TabsContent }

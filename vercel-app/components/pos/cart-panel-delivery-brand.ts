@@ -1,52 +1,52 @@
 import { cn } from '@/lib/utils'
 import type { ReceiptDeliveryChannelContext } from '@/lib/pos-delivery-platform'
 
-/** Grab 녹색 · 라인맨 하늘색 · 쇼피 주황 — 장바구니 칩/뱃지 */
+/** Grab #00B14F · LINE MAN #06C755 · Shopee #EE4D2D — 장바구니 칩/뱃지 */
 export function deliveryAppBrandClasses(app: string | undefined) {
   switch (app) {
     case 'grab':
       return {
-        bike: 'text-emerald-700 dark:text-emerald-300',
+        bike: 'text-[#008f41] dark:text-[#5fd98a]',
         chip: cn(
-          'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
-          'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
-          'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
+          'border-[#00B14F]/40 bg-gradient-to-b from-[#e8f8ef] to-[#d4f0e0]/90 text-[#004d22]',
+          'dark:border-[#00B14F]/35 dark:from-[#003318]/50 dark:to-[#004d22]/60 dark:text-[#e8f8ef]',
+          'shadow-sm ring-1 ring-[#00B14F]/10 dark:ring-[#00B14F]/15'
         ),
         badge:
-          'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
+          'border-[#00B14F]/35 bg-[#e8f8ef] text-[#004d22] hover:bg-[#d4f0e0]/90 dark:border-[#00B14F]/40 dark:bg-[#003318]/55 dark:text-[#e8f8ef] dark:hover:bg-[#004d22]/70',
       }
     case 'lineman':
       return {
-        bike: 'text-sky-600 dark:text-sky-300',
+        bike: 'text-[#049a44] dark:text-[#7ee99a]',
         chip: cn(
-          'border-sky-600/40 bg-gradient-to-b from-sky-50 to-sky-100/90 text-sky-950',
-          'dark:border-sky-500/35 dark:from-sky-950/50 dark:to-sky-900/60 dark:text-sky-50',
-          'shadow-sm ring-1 ring-sky-700/10 dark:ring-sky-400/15'
+          'border-[#06C755]/40 bg-gradient-to-b from-[#eafff0] to-[#d4fadc]/90 text-[#024a18]',
+          'dark:border-[#06C755]/35 dark:from-[#023014]/50 dark:to-[#024a18]/60 dark:text-[#eafff0]',
+          'shadow-sm ring-1 ring-[#06C755]/10 dark:ring-[#06C755]/15'
         ),
         badge:
-          'border-sky-600/35 bg-sky-50 text-sky-900 hover:bg-sky-100/90 dark:border-sky-500/40 dark:bg-sky-950/55 dark:text-sky-50 dark:hover:bg-sky-950/70',
+          'border-[#06C755]/35 bg-[#eafff0] text-[#024a18] hover:bg-[#d4fadc]/90 dark:border-[#06C755]/40 dark:bg-[#023014]/55 dark:text-[#eafff0] dark:hover:bg-[#024a18]/70',
       }
     case 'shopee':
       return {
-        bike: 'text-orange-600 dark:text-orange-400',
+        bike: 'text-[#d73211] dark:text-[#ff8a6a]',
         chip: cn(
-          'border-orange-500/45 bg-gradient-to-b from-orange-50 to-orange-100/90 text-orange-950',
-          'dark:border-orange-500/40 dark:from-orange-950/50 dark:to-orange-900/55 dark:text-orange-50',
-          'shadow-sm ring-1 ring-orange-600/15 dark:ring-orange-400/20'
+          'border-[#EE4D2D]/45 bg-gradient-to-b from-[#fff0eb] to-[#ffe0d6]/90 text-[#7a1a08]',
+          'dark:border-[#EE4D2D]/40 dark:from-[#4a1508]/50 dark:to-[#7a1a08]/55 dark:text-[#fff0eb]',
+          'shadow-sm ring-1 ring-[#EE4D2D]/15 dark:ring-[#EE4D2D]/20'
         ),
         badge:
-          'border-orange-500/40 bg-orange-50 text-orange-950 hover:bg-orange-100/90 dark:border-orange-500/40 dark:bg-orange-950/55 dark:text-orange-50 dark:hover:bg-orange-950/70',
+          'border-[#EE4D2D]/40 bg-[#fff0eb] text-[#7a1a08] hover:bg-[#ffe0d6]/90 dark:border-[#EE4D2D]/40 dark:bg-[#4a1508]/55 dark:text-[#fff0eb] dark:hover:bg-[#7a1a08]/70',
       }
     default:
       return {
-        bike: 'text-emerald-700 dark:text-emerald-300',
+        bike: 'text-[#008f41] dark:text-[#5fd98a]',
         chip: cn(
-          'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
-          'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
-          'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
+          'border-[#00B14F]/40 bg-gradient-to-b from-[#e8f8ef] to-[#d4f0e0]/90 text-[#004d22]',
+          'dark:border-[#00B14F]/35 dark:from-[#003318]/50 dark:to-[#004d22]/60 dark:text-[#e8f8ef]',
+          'shadow-sm ring-1 ring-[#00B14F]/10 dark:ring-[#00B14F]/15'
         ),
         badge:
-          'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
+          'border-[#00B14F]/35 bg-[#e8f8ef] text-[#004d22] hover:bg-[#d4f0e0]/90 dark:border-[#00B14F]/40 dark:bg-[#003318]/55 dark:text-[#e8f8ef] dark:hover:bg-[#004d22]/70',
       }
   }
 }

@@ -15,6 +15,7 @@ import { getGrabStoreIntegrations, type GrabStoreIntegrationSnapshot } from "@/l
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { useErpPolling } from "@/lib/erp-page-visibility"
 
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return "-"
@@ -61,14 +62,10 @@ export default function GrabIntegrationPage() {
     load()
   }, [load])
 
-  React.useEffect(() => {
-    if (!autoRefresh) return
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return
-      load()
-    }, 60000)
-    return () => window.clearInterval(timer)
-  }, [autoRefresh, load])
+  useErpPolling(load, 60000, {
+    enabled: autoRefresh,
+    refetchOnActivate: true,
+  })
 
   return (
     <div className="flex-1 overflow-auto">

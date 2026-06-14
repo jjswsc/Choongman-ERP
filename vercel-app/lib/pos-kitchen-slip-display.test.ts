@@ -412,4 +412,27 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].name).toBe('SPICY YANGNYEOM')
     expect(lines[0].note).toContain('Drumette')
   })
+
+  it('GF-258 Grab banban with slash name keeps Pickled Radish sidedish in kitchen note', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C008-5', name: 'Pickled Radish (30 g.)' }])
+    const lines = buildKitchenHallStyleSlipLines(
+      [
+        {
+          id: 'grab:banban-258',
+          name: 'Banban Chicken (SNOW ONION / CURRY Bar.B.Q FRIED CHICKEN)',
+          qty: 1,
+          note: 'mods:Pickled Radish (30 g.) · optc:C008-5 · banbanFlavors:SNOW ONION,CURRY Bar.B.Q FRIED CHICKEN · eco:no plastic cutlery requested',
+          deliveryAppCode: 'grab',
+        },
+      ],
+      {
+        grabInbound: true,
+        optionNameByCode: catalog.optionNameByCode,
+      }
+    )
+    expect(lines[0].name).toContain('Banban Chicken')
+    expect(lines[0].note).toContain('Pickled Radish')
+    expect(lines[0].note).not.toContain('SNOW ONION')
+    expect(lines[0].note).not.toContain('CURRY')
+  })
 })

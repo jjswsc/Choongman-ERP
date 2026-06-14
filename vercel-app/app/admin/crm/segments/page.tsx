@@ -20,6 +20,7 @@ import { CRM_SEGMENT_DESC_KEYS, CRM_SEGMENT_KEYS, type CrmSegmentKey } from "@/l
 import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 
 type SegmentRow = {
   id: number
@@ -70,6 +71,11 @@ export default function CrmSegmentsPage() {
   React.useEffect(() => {
     load().catch(() => {})
   }, [load])
+
+  useErpRefetchOnActivate(() => {
+    void loadCounts()
+    void load()
+  })
 
   React.useEffect(() => {
     const s = searchParams.get("segment") as CrmSegmentKey | null

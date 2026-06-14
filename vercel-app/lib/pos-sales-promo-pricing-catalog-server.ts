@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { supabaseSelect, supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import type { PromoLineLike, PromoMenuLike, PromoOptionLike } from '@/lib/promo-economics'
 import { promoItemsToPricingLines } from '@/lib/pos-promo-cut-price'
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
@@ -150,10 +150,29 @@ export async function loadPosSalesPromoPricingCatalog(): Promise<PromoPricingCat
     promoItemsByPromoId.set(promoId, lines)
   }
 
+  const promoIdByMirrorMenuId = new Map<string, string>()
+  try {
+    const mirrorRows =
+      ((await supabaseSelectFilterAllPages('pos_menus', 'promo_id=not.is.null', {
+        order: 'id.asc',
+        pageSize: 3000,
+        maxRows: 50000,
+        select: 'id,promo_id',
+      })) as { id?: number | string; promo_id?: number | string | null }[]) ?? []
+    for (const row of mirrorRows) {
+      const menuId = String(row.id ?? '').trim()
+      const promoId = String(row.promo_id ?? '').trim()
+      if (menuId && promoId) promoIdByMirrorMenuId.set(menuId, promoId)
+    }
+  } catch {
+    // promo_id column 미배포 환경
+  }
+
   return {
     menus,
     optionsByMenuId: buildOptionsByMenuId(optionRows),
     promoMetaById,
     promoItemsByPromoId,
+    promoIdByMirrorMenuId,
   }
 }

@@ -100,19 +100,19 @@ function MemberPortalStampPreparingPlaceholder({
   const body = (
     <>
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/35">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-amber-50 text-amber-700">
           <Stamp className="h-5 w-5" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-white/85">{t("stampPreparingTitle")}</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/45">{t("stampPreparingDesc")}</p>
+          <p className="font-semibold text-stone-900">{t("stampPreparingTitle")}</p>
+          <p className="mt-1 text-xs leading-relaxed text-stone-500">{t("stampPreparingDesc")}</p>
         </div>
       </div>
       <div className="mt-3 flex gap-1.5">
         {Array.from({ length: 5 }, (_, i) => (
           <div
             key={i}
-            className="h-2 flex-1 rounded-full bg-white/[0.06]"
+            className="h-2 flex-1 rounded-full bg-stone-200/80"
             style={{ opacity: 1 - i * 0.12 }}
           />
         ))}
@@ -123,7 +123,7 @@ function MemberPortalStampPreparingPlaceholder({
   if (variant === "home") {
     return (
       <div
-        className="mb-4 w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-4"
+        className="mb-4 w-full rounded-[24px] border border-stone-200/80 bg-white/90 p-4 shadow-sm"
         aria-live="polite"
       >
         {body}
@@ -162,16 +162,16 @@ export function MemberPortalStampHomeWidget({
     <button
       type="button"
       onClick={onOpenPrivilege}
-      className="mb-4 w-full rounded-[24px] border border-amber-400/20 bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent p-4 text-left transition hover:border-amber-300/35"
+      className="mb-4 w-full rounded-[24px] border border-amber-200/80 bg-gradient-to-r from-amber-50 via-white to-white p-4 text-left shadow-sm transition hover:border-amber-300/70"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-200">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
             <Stamp className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">{t("stampCardTitle")}</p>
-            <p className="text-xs text-white/50">
+            <p className="text-sm font-semibold text-stone-900">{t("stampCardTitle")}</p>
+            <p className="text-xs text-stone-500">
               {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
             </p>
           </div>

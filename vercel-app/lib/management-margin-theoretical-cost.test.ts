@@ -21,6 +21,7 @@ function ctxFixture() {
   const costIndex = new Map<string, PosMenuCostIndexEntry>([
     ['8|', entry()],
     ['22|', entry()],
+    ['20|', entry()],
   ])
   return buildTheoreticalCostResolveContext({
     costIndex,
@@ -29,7 +30,12 @@ function ctxFixture() {
         { id: '8', name: 'SNOW ONION' },
         { id: '22', name: 'Rice' },
         { id: '20', name: 'GOLDEN FRIED CHICKEN' },
+        { id: '501', name: '[April] Set 2' },
       ],
+      promoMetaById: new Map([
+        ['5', { code: 'SET-A2', name: '[April] Set 2', kind: 'set' }],
+      ]),
+      promoIdByMirrorMenuId: new Map([['501', '5']]),
       promoItemsByPromoId: new Map([
         [
           '5',
@@ -102,6 +108,32 @@ describe('expandOrderLineToCostLines', () => {
     expect(
       expandOrderLineToCostLines({ name: 'SNOW ONION', grabSetChild: true, qty: 1 }, ctx)
     ).toHaveLength(0)
+  })
+
+  it('expands POS mirror set menu id into constituent menu BOM lines', () => {
+    const ctx = ctxFixture()
+    const lines = expandOrderLineToCostLines(
+      { menuId1: '501', name: '[April] Set 2', qty: 3 },
+      ctx
+    )
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatchObject({ menuId: '20', qty: 3 })
+    expect(lines[1]).toMatchObject({ menuId: '22', qty: 3 })
+
+    const costIndex = new Map<string, PosMenuCostIndexEntry>([
+      ['20|', entry(10)],
+      ['22|', entry(5)],
+    ])
+    const rows = collectTheoreticalCostUnmatchedLines({
+      orderRows: [
+        {
+          items_json: JSON.stringify([{ menuId1: '501', name: '[April] Set 2', qty: 2 }]),
+        },
+      ],
+      costIndex,
+      resolveContext: ctx,
+    })
+    expect(rows).toHaveLength(0)
   })
 })
 

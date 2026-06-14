@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useSearchParams } from "next/navigation"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 export default function MarketingCollabMenusPage() {
   const { lang } = useLang()
@@ -50,7 +51,7 @@ export default function MarketingCollabMenusPage() {
   const searchParams = useSearchParams()
   const urlCampaignId = searchParams.get("campaignId")?.trim() ?? ""
   const { stores, loading: storesLoading } = useStoreList()
-  const [mainTab, setMainTab] = React.useState<"edit" | "overview">("edit")
+  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["edit", "overview"] as const, "edit")
   const [list, setList] = React.useState<MarketingCampaign[]>([])
   const [loading, setLoading] = React.useState(true)
   const [selectedCampaignId, setSelectedCampaignId] = React.useState<string>("")

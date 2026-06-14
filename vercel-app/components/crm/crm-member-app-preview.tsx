@@ -24,8 +24,16 @@ export function CrmMemberAppPreview() {
           </a>
         </Button>
       </div>
-      <div className="mx-auto max-w-[280px] overflow-hidden rounded-[1.25rem] border-4 border-slate-800 bg-white shadow-lg">
-        <iframe title={t("crmMemberAppPreview")} src={src} className="h-[480px] w-full border-0" />
+      <div
+        className="relative mx-auto w-full max-w-[300px] overflow-hidden rounded-[2rem] border-[6px] border-stone-800 bg-[#faf7f2] shadow-xl"
+        style={{ aspectRatio: "390 / 844", maxHeight: "min(72vh, 640px)" }}
+      >
+        <iframe
+          title={t("crmMemberAppPreview")}
+          src={src}
+          className="absolute inset-0 h-full w-full border-0"
+          scrolling="no"
+        />
       </div>
     </div>
   )

@@ -16,6 +16,7 @@ import {
 } from "@/lib/api-client"
 import { RankedBarChart } from "./ranked-bar-chart"
 import { attendanceBusinessDayBoundsMs } from "@/lib/attendance-utils"
+import { useErpPolling } from "@/lib/erp-page-visibility"
 
 const TZ = "Asia/Bangkok"
 const POLL_MS = 60_000
@@ -95,16 +96,9 @@ export function VisitTodayTab() {
     load()
   }, [load])
 
-  useEffect(() => {
-    if (!autoRefresh) return
-    const id = setInterval(() => load(), POLL_MS)
-    return () => clearInterval(id)
-  }, [autoRefresh, load])
+  useErpPolling(load, POLL_MS, { enabled: autoRefresh, refetchOnActivate: true })
 
-  useEffect(() => {
-    const id = setInterval(() => setTick((x) => x + 1), 30_000)
-    return () => clearInterval(id)
-  }, [])
+  useErpPolling(() => setTick((x) => x + 1), 30_000)
 
   const businessWindowTickLabels = useMemo(() => {
     if (!todayYmd) return [] as string[]

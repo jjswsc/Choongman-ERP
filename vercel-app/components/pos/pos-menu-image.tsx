@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { UtensilsCrossed } from "lucide-react"
 import {
   normalizePosMenuImageUrl,
   toPosMenuDisplayImageHref,
@@ -18,10 +19,10 @@ type PosMenuFillImageProps = {
 
 function TilePlaceholder({ className = "" }: { className?: string }) {
   const base =
-    "absolute inset-0 flex h-full w-full items-center justify-center bg-slate-100 text-2xl text-slate-400"
+    "absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200/80"
   return (
     <div className={className ? `${base} ${className}` : base} aria-hidden>
-      <span className="font-pos-emoji">🍗</span>
+      <UtensilsCrossed className="h-8 w-8 text-slate-400/70" strokeWidth={1.25} />
     </div>
   )
 }

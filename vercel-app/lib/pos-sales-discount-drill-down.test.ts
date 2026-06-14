@@ -10,6 +10,7 @@ const emptyCatalog: PromoPricingCatalog = {
   optionsByMenuId: {},
   promoMetaById: new Map(),
   promoItemsByPromoId: new Map(),
+  promoIdByMirrorMenuId: new Map(),
 }
 
 describe('collectPosSalesPaymentDiscountDrillOrders', () => {

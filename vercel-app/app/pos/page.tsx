@@ -61,6 +61,7 @@ import {
 } from '@/lib/pos-cash-drawer'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { PosDrawerPinSettingsDialog } from '@/components/pos/pos-drawer-pin-settings-dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 
 /** POS 첫 화면: 주문(매장/포장/배달), 영수증, 결산, 근태 등 타일 */
 function POSMainPageInner() {
@@ -716,8 +717,26 @@ function PosPageLoadingFallback() {
   const { lang } = useLang()
   const t = useT(lang)
   return (
-    <div className="flex h-full min-h-[200px] flex-1 items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 text-slate-600">
-      {t("loading")}
+    <div className="flex h-full min-h-[200px] flex-1 flex-col gap-3 bg-gradient-to-b from-slate-50 to-slate-100 p-3 min-[768px]:p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 min-[768px]:grid-cols-2 min-[768px]:gap-3">
+        <div className="flex min-h-[min(52vh,22rem)] flex-col overflow-hidden rounded-2xl border-2 border-emerald-200/90 bg-white p-3 shadow-lg min-[768px]:p-4">
+          <Skeleton className="mb-3 h-6 w-24 rounded-lg" />
+          <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-2">
+            <Skeleton className="col-span-2 row-span-2 rounded-2xl" />
+            <Skeleton className="rounded-2xl" />
+            <Skeleton className="rounded-2xl" />
+          </div>
+        </div>
+        <div className="flex min-h-[12rem] flex-col overflow-hidden rounded-2xl border-2 border-slate-300/85 bg-slate-50 p-3 min-[768px]:p-4">
+          <Skeleton className="mb-3 h-6 w-20 rounded-lg" />
+          <div className="grid flex-1 grid-cols-2 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="min-h-[76px] rounded-2xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="text-center text-xs text-slate-500">{t('posLoading')}</p>
     </div>
   )
 }

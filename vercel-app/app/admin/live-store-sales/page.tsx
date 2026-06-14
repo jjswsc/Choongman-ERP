@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
+import { useErpPolling } from "@/lib/erp-page-visibility"
 
 const ALL_STORE_VALUE = "All"
 const AUTO_REFRESH_MS = 60_000
@@ -185,14 +186,10 @@ export default function AdminLiveStoreSalesPage() {
     })
   }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode])
 
-  useEffect(() => {
-    if (!autoRefresh) return
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return
-      runRefresh()
-    }, AUTO_REFRESH_MS)
-    return () => window.clearInterval(id)
-  }, [autoRefresh, runRefresh])
+  useErpPolling(runRefresh, AUTO_REFRESH_MS, {
+    enabled: autoRefresh,
+    refetchOnActivate: true,
+  })
 
   const headerActions = (
     <div className="flex flex-col items-end gap-2">

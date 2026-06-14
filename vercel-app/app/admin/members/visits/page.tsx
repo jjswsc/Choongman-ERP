@@ -28,6 +28,8 @@ import { CrmRfmMatrix } from "@/components/crm/crm-rfm-matrix"
 import { apiFetch } from "@/lib/api/fetch"
 import { getMemberVisits, getMembers, useStoreList } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -156,7 +158,7 @@ export default function MemberVisitsPage() {
   const t = useT(lang)
   const { stores: storeKeys } = useStoreList()
   const initialRange = React.useMemo(() => defaultDateRange(), [])
-  const [tab, setTab] = React.useState<"history" | "analysis" | "rfm">("history")
+  const [tab, setTab] = useAdminUrlTab("tab", ["history", "analysis", "rfm"] as const, "history")
   const [startDate, setStartDate] = React.useState(initialRange.startYmd)
   const [endDate, setEndDate] = React.useState(initialRange.endYmd)
   const [storeCode, setStoreCode] = React.useState("All")
@@ -230,6 +232,10 @@ export default function MemberVisitsPage() {
       setLoading(false)
     }
   }, [startDate, endDate, storeCode, memberId, memberSearch, t])
+
+  useErpRefetchOnActivate(() => {
+    if (hasSearched) void load()
+  })
 
   const loadRfm = React.useCallback(async () => {
     setRfmLoading(true)

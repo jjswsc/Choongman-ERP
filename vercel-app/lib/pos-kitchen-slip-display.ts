@@ -9,7 +9,11 @@ import {
   isLikelyPosOptionCode,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
-import { isBanbanKitchenLine, parseBanbanFlavorsFromDisplayName } from '@/lib/pos-banban-utils'
+import {
+  filterReceiptOptionLinesForBanban,
+  isBanbanKitchenLine,
+  parseBanbanFlavorsFromDisplayName,
+} from '@/lib/pos-banban-utils'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import {
   isLikelyPosMenuSkuCode,
@@ -673,9 +677,21 @@ export function buildKitchenHallStyleSlipLines(
         ? String(lineSplit.optionLine).trim()
         : ''
     const hasBanbanFlavorsToken = /banbanFlavors:/i.test(String(resolvedNote ?? ''))
+    const banbanAncillaryNoteLines =
+      banbanLine && banbanFromName
+        ? filterReceiptOptionLinesForBanban(
+            collectGrabPrintOptionLines({
+              note: resolvedNote,
+              optionNameByCode,
+            }),
+            banbanFromName
+          )
+        : []
     const effectiveNote =
       banbanLine && banbanFromName
-        ? undefined
+        ? banbanAncillaryNoteLines.length > 0
+          ? banbanAncillaryNoteLines.join('\n')
+          : undefined
         : banbanLine && hasBanbanFlavorsToken
           ? formatGrabLineNoteForKitchenPrint(resolvedNote, optionNameByCode) ||
             formattedNote ||

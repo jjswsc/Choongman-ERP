@@ -53,7 +53,6 @@ import {
   EmployeeTable,
   EmployeeForm,
   EmployeeEvalHubTab,
-  type EmployeeEvalSubTab,
   EmployeeMovementTab,
   EmployeeHeadcountTab,
   EmployeeJobCatalogTab,
@@ -67,6 +66,8 @@ import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
 import { HrPageShell } from "@/components/hr/hr-page-shell"
 import { EmployeeCsvImportDialog } from "@/components/employees/employee-csv-import-dialog"
+import { useErpBackHandler } from "@/lib/erp-navigation"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
@@ -215,17 +216,35 @@ export default function EmployeesPage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
   const [franchiseeMulti, setFranchiseeMulti] = React.useState<FranchiseeMultiStoreSettings | null>(null)
-  const [hrMainTab, setHrMainTab] = React.useState("list")
-  const [evalSubTab, setEvalSubTab] = React.useState<EmployeeEvalSubTab>("register")
+  const [hrMainTab, setHrMainTab] = useAdminUrlTab(
+    "tab",
+    ["list", "input-history", "movement", "headcount", "job-catalog", "eval"] as const,
+    "list"
+  )
+  const [evalSubTab, setEvalSubTab] = useAdminUrlTab(
+    "evalSub",
+    ["register", "analytics", "list", "warning-letters", "items-setting"] as const,
+    "register"
+  )
   const [evalJumpPayload, setEvalJumpPayload] = React.useState<EmployeeEvalJumpTarget | null>(null)
   const [evalResultSaveSerial, setEvalResultSaveSerial] = React.useState(0)
   const clearEvalJump = React.useCallback(() => setEvalJumpPayload(null), [])
+
+  useErpBackHandler(hrMainTab !== "list", () => {
+    setHrMainTab("list")
+    setEvalSubTab("register")
+    return true
+  })
+  useErpBackHandler(hrMainTab === "eval" && evalSubTab !== "register", () => {
+    setEvalSubTab("register")
+    return true
+  })
 
   const openEvalRegister = React.useCallback((target?: EmployeeEvalJumpTarget) => {
     if (target) setEvalJumpPayload(target)
     setHrMainTab("eval")
     setEvalSubTab("register")
-  }, [])
+  }, [setHrMainTab, setEvalSubTab])
 
   const adminRowToForm = React.useCallback(
     (e: AdminEmployeeItem): EmployeeFormData => {
@@ -534,8 +553,8 @@ export default function EmployeesPage() {
       setEvalSubTab("items-setting")
       return
     }
-    setHrMainTab(next)
-  }, [])
+    setHrMainTab(next as typeof hrMainTab)
+  }, [setHrMainTab, setEvalSubTab])
 
   const handleNew = () => {
     const base = { ...emptyForm }

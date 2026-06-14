@@ -30,6 +30,7 @@ import {
 } from '@/lib/admin-tab-styles'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { useAdminUrlTab } from '@/lib/use-admin-url-tab'
 import { POS_MAIN_CATEGORIES } from '@/lib/pos-menu-categories'
 import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
@@ -61,7 +62,7 @@ export default function MarketingPromosPage() {
     ok: boolean
   } | null>(null)
   const [schemaBannerDismissed, setSchemaBannerDismissed] = React.useState(false)
-  const [mainTab, setMainTab] = React.useState<'compose' | 'inquiry'>('compose')
+  const [mainTab, setMainTab] = useAdminUrlTab('tab', ['compose', 'inquiry'] as const, 'compose')
   const [focusPromoId, setFocusPromoId] = React.useState<string | null>(null)
   const mainCategories = React.useMemo(() => {
     const preset = categoriesConfig?.mainCategories?.length

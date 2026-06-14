@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { getAdminDashboardStats, type AdminDashboardStats } from "@/lib/api-client"
+import { useErpPolling } from "@/lib/erp-page-visibility"
 
 const EMPTY_STATS: AdminDashboardStats = {
   unapprovedOrders: 0,
@@ -11,45 +12,33 @@ const EMPTY_STATS: AdminDashboardStats = {
   attPending: 0,
 }
 
-/** 사이드바 배지용 — POS·주문 흐름과 무관하므로 120s·탭 비활성 시 중지로 Functions 부하 절감 */
+/** 사이드바 배지용 — 120s 간격, keep-alive 숨김·백그라운드 탭에서는 폴링 중지 */
 const REFRESH_MS = 120_000
 
 export function useAdminDashboardStats(options?: { poll?: boolean }) {
   const [stats, setStats] = useState<AdminDashboardStats>(EMPTY_STATS)
+
+  const load = useCallback(() => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+    getAdminDashboardStats()
+      .then(setStats)
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  useErpPolling(load, REFRESH_MS, {
+    enabled: options?.poll,
+    refetchOnActivate: options?.poll,
+  })
 
   const refetch = useCallback(() => {
     return getAdminDashboardStats()
       .then(setStats)
       .catch(() => {})
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const load = () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return
-      getAdminDashboardStats()
-        .then((s) => {
-          if (!cancelled) setStats(s)
-        })
-        .catch(() => {})
-    }
-    load()
-    if (!options?.poll) {
-      return () => {
-        cancelled = true
-      }
-    }
-    const intervalId = window.setInterval(load, REFRESH_MS)
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") load()
-    }
-    document.addEventListener("visibilitychange", onVisibility)
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-      document.removeEventListener("visibilitychange", onVisibility)
-    }
-  }, [options?.poll])
 
   return { stats, refetch }
 }

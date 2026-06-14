@@ -886,7 +886,7 @@ export function TableOrderPanel({
                   className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={onAddOrder}
                 >
-                  {t('posOrderButton') || '주문'}
+                  {t('posAddOrderButton') || '추가 주문'}
                 </Button>
                 <Button className="h-11 text-base font-semibold" onClick={handlePayClick}>
                   {t('posPayButton') || '결제'}
@@ -1088,7 +1088,7 @@ export function TableOrderPanel({
                   className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={onAddOrder}
                 >
-                  {t('posOrderButton') || '주문'}
+                  {t('posAddOrderButton') || '추가 주문'}
                 </Button>
                 <Button className="h-11 text-base font-semibold" onClick={handlePayClick}>
                   {t('posPayButton') || '결제'}
