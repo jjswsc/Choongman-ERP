@@ -27,8 +27,17 @@ import type {
   PosSalesPaymentDiscountRow,
   PosSalesPromoRow,
 } from "@/lib/api-client"
+import type { SalesDiscountDrillTarget } from "@/components/tabs/sales-discount-drill-sheet"
 
 type TrFn = (key: string, fallback: string) => string
+
+type DrillProps = {
+  onDrill?: (target: SalesDiscountDrillTarget) => void
+  drillHint?: string
+}
+
+const DRILLABLE_ROW_CN =
+  "cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
 function formatSalesAmount(n: number) {
   const v = Number(n ?? 0)
@@ -116,6 +125,8 @@ export function SalesPromoBundleDiscountPanel({
   menuSearchAnd,
   setMenuSearchAnd,
   tr,
+  onDrill,
+  drillHint,
 }: {
   data: PosSalesByPromoResult
   menuSearch: string
@@ -123,7 +134,7 @@ export function SalesPromoBundleDiscountPanel({
   menuSearchAnd: boolean
   setMenuSearchAnd: (v: boolean) => void
   tr: TrFn
-}) {
+} & DrillProps) {
   const totals = data.totals
   return (
     <>
@@ -166,6 +177,8 @@ export function SalesPromoBundleDiscountPanel({
       {(data.byKind ?? []).length > 0 ? (
         <KindTableChart
           tr={tr}
+          onDrill={onDrill}
+          drillHint={drillHint}
           rows={(data.byKind ?? []).map((k) => ({
             key: k.kind,
             label: promoKindLabel(k.kind, tr),
@@ -174,6 +187,9 @@ export function SalesPromoBundleDiscountPanel({
             discount: k.bundleDiscount,
             pctGross: k.bundleDiscountPctOfGross,
             share: k.bundleDiscountSharePct,
+            drillTarget: onDrill
+              ? { layer: "bundle" as const, kind: k.kind, label: promoKindLabel(k.kind, tr) }
+              : undefined,
           }))}
           chartData={(data.byKind ?? []).map((k) => ({
             axisLabel: promoKindLabel(k.kind, tr),
@@ -223,7 +239,7 @@ export function SalesPromoBundleDiscountPanel({
           {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
         </p>
       ) : (
-        <PromoDetailTable rows={data.rows} totals={totals} tr={tr} />
+        <PromoDetailTable rows={data.rows} totals={totals} tr={tr} onDrill={onDrill} drillHint={drillHint} />
       )}
       <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
         {tr(
@@ -242,6 +258,8 @@ export function SalesPaymentDiscountPanel({
   menuSearchAnd,
   setMenuSearchAnd,
   tr,
+  onDrill,
+  drillHint,
 }: {
   data: PosSalesByPromoResult
   menuSearch: string
@@ -249,7 +267,7 @@ export function SalesPaymentDiscountPanel({
   menuSearchAnd: boolean
   setMenuSearchAnd: (v: boolean) => void
   tr: TrFn
-}) {
+} & DrillProps) {
   const payment = data.payment!
   const totals = payment.totals
   return (
@@ -297,6 +315,8 @@ export function SalesPaymentDiscountPanel({
       {payment.byKind.length > 0 ? (
         <KindTableChart
           tr={tr}
+          onDrill={onDrill}
+          drillHint={drillHint}
           rows={payment.byKind.map((k) => ({
             key: k.kind,
             label: paymentKindLabel(k.kind, tr),
@@ -304,6 +324,9 @@ export function SalesPaymentDiscountPanel({
             discount: k.discountAmount,
             pctGross: k.discountPctOfGross,
             share: k.discountSharePct,
+            drillTarget: onDrill
+              ? { layer: "payment" as const, kind: k.kind, label: paymentKindLabel(k.kind, tr) }
+              : undefined,
           }))}
           chartData={payment.byKind.map((k) => ({
             axisLabel: paymentKindLabel(k.kind, tr),
@@ -329,7 +352,7 @@ export function SalesPaymentDiscountPanel({
           {tr("salesPaymentDiscountEmpty", "해당 기간 결제 할인 데이터가 없습니다.")}
         </p>
       ) : (
-        <PaymentDetailTable rows={payment.rows} totals={totals} tr={tr} />
+        <PaymentDetailTable rows={payment.rows} totals={totals} tr={tr} onDrill={onDrill} drillHint={drillHint} />
       )}
     </>
   )
@@ -338,10 +361,12 @@ export function SalesPaymentDiscountPanel({
 export function SalesCombinedDiscountPanel({
   data,
   tr,
+  onDrill,
+  drillHint,
 }: {
   data: PosSalesByPromoResult
   tr: TrFn
-}) {
+} & DrillProps) {
   const combined = data.combined!
   const totals = combined.totals
   return (
@@ -384,7 +409,7 @@ export function SalesCombinedDiscountPanel({
         </div>
       </div>
       {combined.byKind.length > 0 ? (
-        <CombinedKindSection byKind={combined.byKind} tr={tr} />
+        <CombinedKindSection byKind={combined.byKind} tr={tr} onDrill={onDrill} drillHint={drillHint} />
       ) : (
         <p className="py-8 text-center text-sm text-muted-foreground">
           {tr("salesNoSalesData", "해당 기간 매출 데이터가 없습니다.")}
@@ -451,6 +476,8 @@ function KindTableChart({
   discountHeader,
   shareHeaderKey,
   shareHeaderFallback,
+  onDrill,
+  drillHint,
 }: {
   tr: TrFn
   rows: {
@@ -461,15 +488,21 @@ function KindTableChart({
     discount: number
     pctGross: number
     share: number
+    drillTarget?: SalesDiscountDrillTarget
   }[]
   chartData: { axisLabel: string; value: number }[]
   col2Header: string
   discountHeader: string
   shareHeaderKey: string
   shareHeaderFallback: string
+  onDrill?: (target: SalesDiscountDrillTarget) => void
+  drillHint?: string
 }) {
   return (
     <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {onDrill && drillHint ? (
+        <p className="text-xs text-muted-foreground lg:col-span-2">{drillHint}</p>
+      ) : null}
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
@@ -485,7 +518,22 @@ function KindTableChart({
           </thead>
           <tbody>
             {rows.map((k) => (
-              <tr key={k.key} className="border-b border-border/60">
+              <tr
+                key={k.key}
+                className={`border-b border-border/60 ${k.drillTarget && onDrill ? DRILLABLE_ROW_CN : ""}`}
+                tabIndex={k.drillTarget && onDrill ? 0 : undefined}
+                role={k.drillTarget && onDrill ? "button" : undefined}
+                onClick={() => {
+                  if (k.drillTarget && onDrill) onDrill(k.drillTarget)
+                }}
+                onKeyDown={(e) => {
+                  if (!k.drillTarget || !onDrill) return
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onDrill(k.drillTarget)
+                  }
+                }}
+              >
                 <td className="px-3 py-1.5 font-medium">{k.label}</td>
                 <td className="px-3 py-1.5 text-right font-erp-numeric">
                   {k.col2}
@@ -517,13 +565,21 @@ function PromoDetailTable({
   rows,
   totals,
   tr,
+  onDrill,
+  drillHint,
 }: {
   rows: PosSalesPromoRow[]
   totals: PosSalesByPromoResult["totals"]
   tr: TrFn
+  onDrill?: (target: SalesDiscountDrillTarget) => void
+  drillHint?: string
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div>
+      {onDrill && drillHint ? (
+        <p className="mb-2 text-xs text-muted-foreground">{drillHint}</p>
+      ) : null}
+      <div className="overflow-x-auto rounded-md border">
       <table className="w-full min-w-[1040px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -540,7 +596,33 @@ function PromoDetailTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.key} className="border-b border-border/60">
+            <tr
+              key={r.key}
+              className={`border-b border-border/60 ${onDrill ? DRILLABLE_ROW_CN : ""}`}
+              tabIndex={onDrill ? 0 : undefined}
+              role={onDrill ? "button" : undefined}
+              onClick={() => {
+                if (!onDrill) return
+                onDrill({
+                  layer: "bundle",
+                  kind: r.kind,
+                  rowKey: r.key,
+                  label: r.name || r.promoCode || promoKindLabel(r.kind, tr),
+                })
+              }}
+              onKeyDown={(e) => {
+                if (!onDrill) return
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  onDrill({
+                    layer: "bundle",
+                    kind: r.kind,
+                    rowKey: r.key,
+                    label: r.name || r.promoCode || promoKindLabel(r.kind, tr),
+                  })
+                }
+              }}
+            >
               <td className="px-3 py-1.5">{r.name}</td>
               <td className="px-3 py-1.5 font-mono text-xs">{r.promoCode || r.promoId || "—"}</td>
               <td className="px-3 py-1.5 text-xs">{promoKindLabel(r.kind, tr)}</td>
@@ -577,6 +659,7 @@ function PromoDetailTable({
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   )
 }
@@ -585,13 +668,21 @@ function PaymentDetailTable({
   rows,
   totals,
   tr,
+  onDrill,
+  drillHint,
 }: {
   rows: PosSalesPaymentDiscountRow[]
   totals: NonNullable<PosSalesByPromoResult["payment"]>["totals"]
   tr: TrFn
+  onDrill?: (target: SalesDiscountDrillTarget) => void
+  drillHint?: string
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div>
+      {onDrill && drillHint ? (
+        <p className="mb-2 text-xs text-muted-foreground">{drillHint}</p>
+      ) : null}
+      <div className="overflow-x-auto rounded-md border">
       <table className="w-full min-w-[920px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -606,7 +697,33 @@ function PaymentDetailTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.key} className="border-b border-border/60">
+            <tr
+              key={r.key}
+              className={`border-b border-border/60 ${onDrill ? DRILLABLE_ROW_CN : ""}`}
+              tabIndex={onDrill ? 0 : undefined}
+              role={onDrill ? "button" : undefined}
+              onClick={() => {
+                if (!onDrill) return
+                onDrill({
+                  layer: "payment",
+                  kind: r.kind,
+                  rowKey: r.key,
+                  label: paymentDiscountRowLabel(r, tr),
+                })
+              }}
+              onKeyDown={(e) => {
+                if (!onDrill) return
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  onDrill({
+                    layer: "payment",
+                    kind: r.kind,
+                    rowKey: r.key,
+                    label: paymentDiscountRowLabel(r, tr),
+                  })
+                }
+              }}
+            >
               <td className="px-3 py-1.5">{paymentDiscountRowLabel(r, tr)}</td>
               <td className="px-3 py-1.5 font-mono text-xs">{r.code || "—"}</td>
               <td className="px-3 py-1.5 text-xs">{paymentKindLabel(r.kind, tr)}</td>
@@ -633,6 +750,7 @@ function PaymentDetailTable({
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
   )
 }
@@ -640,12 +758,19 @@ function PaymentDetailTable({
 export function CombinedKindSection({
   byKind,
   tr,
+  onDrill,
+  drillHint,
 }: {
   byKind: PosSalesCombinedKindTotals[]
   tr: TrFn
+  onDrill?: (target: SalesDiscountDrillTarget) => void
+  drillHint?: string
 }) {
   return (
     <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {onDrill && drillHint ? (
+        <p className="text-xs text-muted-foreground lg:col-span-2">{drillHint}</p>
+      ) : null}
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
@@ -659,7 +784,31 @@ export function CombinedKindSection({
           </thead>
           <tbody>
             {byKind.map((k, idx) => (
-              <tr key={`${k.layer}-${k.kind}-${idx}`} className="border-b border-border/60">
+              <tr
+                key={`${k.layer}-${k.kind}-${idx}`}
+                className={`border-b border-border/60 ${onDrill ? DRILLABLE_ROW_CN : ""}`}
+                tabIndex={onDrill ? 0 : undefined}
+                role={onDrill ? "button" : undefined}
+                onClick={() => {
+                  if (!onDrill) return
+                  onDrill({
+                    layer: k.layer === "payment" ? "payment" : "bundle",
+                    kind: k.kind,
+                    label: combinedKindLabel(k, tr),
+                  })
+                }}
+                onKeyDown={(e) => {
+                  if (!onDrill) return
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onDrill({
+                      layer: k.layer === "payment" ? "payment" : "bundle",
+                      kind: k.kind,
+                      label: combinedKindLabel(k, tr),
+                    })
+                  }
+                }}
+              >
                 <td className="px-3 py-1.5 text-xs">{combinedLayerLabel(k.layer, tr)}</td>
                 <td className="px-3 py-1.5 font-medium">{combinedKindLabel(k, tr)}</td>
                 <td className="px-3 py-1.5 text-right font-erp-numeric text-rose-700 dark:text-rose-300">

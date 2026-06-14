@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,7 +15,7 @@ import { SaasOnboardingStepIndicator } from "@/components/saas/saas-onboarding-s
 import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
 import { useSaasScope } from "@/components/saas/saas-scope-context"
-import { FALLBACK_TENANTS, type TenantItem } from "@/lib/saas-admin-control-plane"
+import { type TenantItem } from "@/lib/saas-admin-control-plane"
 import { computeTenantPricingTotals } from "@/lib/saas-partner-settlement"
 import { SaasPricingBreakdownVisual } from "@/components/saas/saas-pricing-breakdown-visual"
 import { createNewTenantDraft } from "@/lib/saas-tenant-draft"
@@ -180,7 +179,7 @@ export default function SaasOnboardingPage() {
       }
     } catch (error) {
       setLoadNotice(tr(t, "saasAdminCust_loadFailed", { msg: String(error) }))
-      setTenants(FALLBACK_TENANTS)
+      setTenants([])
     } finally {
       setLoading(false)
     }
@@ -980,15 +979,11 @@ export default function SaasOnboardingPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        {t("saasAdminOnboard_altPathBefore")}
+        {t("saasAdminOnboard_afterOnboardingHintBefore")}
         <Link href="/saas-admin/customers" className="text-primary underline underline-offset-4">
           {t("saasAdminNavCustomers")}
         </Link>
-        {t("saasAdminOnboard_altPathMid")}
-        <Badge variant="outline" className="mx-1 align-middle text-xs">
-          {t("saasAdminCust_tabBootstrap")}
-        </Badge>
-        {t("saasAdminOnboard_altPathAfter")}
+        {t("saasAdminOnboard_afterOnboardingHintAfter")}
       </p>
     </main>
   )

@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Activity, BarChart3, LayoutDashboard, Radio, Smartphone } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Activity, BarChart3, LayoutDashboard, Lock, Radio, Smartphone, X } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
@@ -22,6 +23,9 @@ type QuickLink = {
 }
 
 export function AdminHomeDashboard() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const saasModuleLocked = searchParams.get("saas_module_locked") === "1"
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -89,6 +93,32 @@ export function AdminHomeDashboard() {
           </div>
           <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
         </div>
+
+        {saasModuleLocked ? (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
+          >
+            <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="font-semibold">{tr("saasModuleLockedTitle", "구독에 포함되지 않은 기능입니다")}</p>
+              <p className="text-xs leading-relaxed opacity-90">
+                {tr(
+                  "saasModuleLockedDesc",
+                  "요청하신 메뉴는 현재 고객사 요금제에서 비활성화되어 있습니다. SaaS 관리자에게 모듈 활성화를 요청하세요."
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 rounded-md p-1 opacity-70 transition-opacity hover:opacity-100"
+              aria-label={tr("close", "닫기")}
+              onClick={() => router.replace("/admin")}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
 
         {isLogisticsHome ? (
           <AdminOperationsDashboardPanel />

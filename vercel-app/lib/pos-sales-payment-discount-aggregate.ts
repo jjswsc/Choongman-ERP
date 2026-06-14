@@ -78,7 +78,7 @@ function isPlatformDiscountReason(reason: string): boolean {
   return needles.some((n) => r.includes(n))
 }
 
-function resolveCouponLines(order: OrderRowForPaymentDiscountAgg): PosAppliedCouponLine[] {
+export function resolveCouponLines(order: OrderRowForPaymentDiscountAgg): PosAppliedCouponLine[] {
   const parsed = parseAppliedCouponsFromBody(order.applied_coupons)
   if (parsed.length > 0) return parsed
   const couponAmt = Math.max(0, Number(order.coupon_discount_amt) || 0)
@@ -88,7 +88,7 @@ function resolveCouponLines(order: OrderRowForPaymentDiscountAgg): PosAppliedCou
 }
 
 /** 주문 1건 — discount_amt·coupon 중복 저장 패턴 보정 후 비쿠폰·쿠폰 분리 */
-function resolveNonCouponDiscountAmt(
+export function resolveNonCouponDiscountAmt(
   discountAmt: number,
   couponTotal: number
 ): number {
@@ -99,7 +99,7 @@ function resolveNonCouponDiscountAmt(
   return discount
 }
 
-function classifyNonCouponKind(reason: string): Exclude<PosPaymentDiscountKind, 'coupon'> {
+export function classifyNonCouponKind(reason: string): Exclude<PosPaymentDiscountKind, 'coupon'> {
   if (isCollabDiscountReasonText(reason)) return 'collab'
   if (isPlatformDiscountReason(reason)) return 'platform'
   if (reason) return 'manual'

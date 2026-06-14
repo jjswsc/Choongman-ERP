@@ -186,12 +186,6 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     [dateStr, selectedStaff, employeeId, cancelPendingAutoSave]
   )
 
-  React.useEffect(() => {
-    if (!selectedStaff) return
-    setHasSearched(true)
-    void loadData()
-  }, [dateStr, selectedStaff, loadData])
-
   const buildTodayLogsForSave = React.useCallback((): WorkLogItem[] => {
     return localTodayRef.current
       .filter((it) => Boolean(normalizeWorkLogContent(it.content)))
@@ -610,6 +604,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
               onChange={(e) => {
                 cancelPendingAutoSave()
                 setDateStr(e.target.value)
+                setHasSearched(false)
               }}
               className="h-9 w-36 text-xs shrink-0"
             />
@@ -644,12 +639,12 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
           onDatePick={(d) => {
             setDateStr(d)
             setViewMode("day")
-            setHasSearched(true)
+            setHasSearched(false)
           }}
         />
       ) : !hasSearched ? (
         <div className="rounded-xl border bg-card py-16 text-center text-sm text-muted-foreground">
-          {t("loading")}
+          {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
         </div>
       ) : loading ? (
         <div className="flex items-center justify-center rounded-xl border bg-card py-16">

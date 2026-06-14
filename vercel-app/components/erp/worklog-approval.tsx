@@ -124,11 +124,6 @@ export function WorklogApproval({ onPendingChange }: Props) {
   }
 
   React.useEffect(() => {
-    setHasSearched(true)
-    void loadData()
-  }, [loadData])
-
-  React.useEffect(() => {
     setContentTransMap({})
   }, [lang])
 

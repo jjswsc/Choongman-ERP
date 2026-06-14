@@ -14,6 +14,8 @@ import {
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
+import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
+import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 
 const AdminShell = dynamic(
   () => import("@/components/erp/admin-shell").then((m) => m.AdminShell),
@@ -64,6 +66,7 @@ export default function AdminLayout({
   const pathname = usePathname()
   const { auth, initialized, setAuth } = useAuth()
   const { lang, setLang } = useLang()
+  const saasModules = useSaasEnabledModules()
   const isLoginPage = isAdminLoginPath(pathname)
 
   useEffect(() => {
@@ -109,7 +112,13 @@ export default function AdminLayout({
         }
       }
     }
-  }, [auth, initialized, isLoginPage, pathname, router, setAuth])
+    if (auth && !isLoginPage && saasModules != null) {
+      const mod = resolveAdminPathSaasModule(pathname)
+      if (!isSaasModuleEnabled(saasModules, mod)) {
+        router.replace("/admin?saas_module_locked=1")
+      }
+    }
+  }, [auth, initialized, isLoginPage, pathname, router, setAuth, saasModules])
 
   // 로그인 페이지: 사이드바 없이 전체 화면
   if (isLoginPage) {

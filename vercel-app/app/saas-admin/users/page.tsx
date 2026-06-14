@@ -299,7 +299,7 @@ export default function SaasUsersPage() {
           {t("saasAdminUser_pageHintBefore")}
           <strong>{t("saasAdminUser_pageHintStrong")}</strong>
           {t("saasAdminUser_pageHintMid")}
-          <Link href="/saas-admin/customers" className="text-primary underline underline-offset-4">
+          <Link href="/saas-admin/onboarding" className="text-primary underline underline-offset-4">
             {t("saasAdminUser_pageHintLink")}
           </Link>
           {t("saasAdminUser_pageHintAfter")}

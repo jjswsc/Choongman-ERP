@@ -87,6 +87,12 @@ export async function resolveSaasScope(auth: JwtPayload): Promise<SaasScope> {
   }
 }
 
+export async function canAccessSaasControlPlane(auth: JwtPayload): Promise<boolean> {
+  if (canAccessSaasAdmin(auth.role || "")) return true
+  const scope = await resolveSaasScope(auth)
+  return scope.kind === "partner"
+}
+
 export async function requireSaasControlPlane(req: NextRequest): Promise<
   | { scope: SaasScope; auth: JwtPayload; errorResponse: null }
   | { scope: null; auth: null; errorResponse: NextResponse }
@@ -95,7 +101,7 @@ export async function requireSaasControlPlane(req: NextRequest): Promise<
   if (authResult.errorResponse) {
     return { scope: null, auth: null, errorResponse: authResult.errorResponse }
   }
-  if (!canAccessSaasAdmin(authResult.auth.role || "")) {
+  if (!(await canAccessSaasControlPlane(authResult.auth))) {
     return {
       scope: null,
       auth: null,

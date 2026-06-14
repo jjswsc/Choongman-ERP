@@ -9,7 +9,7 @@
 | API 라우트 (`app/api/**/route.ts`) | ~720 |
 | 관리자 페이지 (`app/admin/**/page.tsx`) | ~107 |
 | ERP 사이드바 메뉴 | ~73 (`getErpNavItemsForHelp`) |
-| `lib/api-client/` 모듈 | ~38 |
+| `lib/api-client/` 모듈 | ~73 |
 
 ## 진입점
 
@@ -39,11 +39,12 @@
 
 | 모듈 | 담당 |
 |------|------|
-| `stock`, `inbound`, `outbound`, `purchase-order` | 물류·발주 |
-| `hr`, `admin`, `employees`, `work-log`, `timesheet` | HR·공지·승인 |
-| `receivable-payable`, `income-statement`, `bank-transactions`, … | 회계 |
-| `pos-menus`, `pos-promos`, `pos-operations`, `sales-management` | POS·매출 |
-| `marketing-*`, `marketing-materials` | 마케팅 |
+| `hr`, `admin`, `admin-notices`, `admin-hr-policies`, `admin-approvals`, `employees`, `employees-core`, `employee-evaluations`, `work-log`, `timesheet` | HR·공지·승인·평가 |
+| `pos-menus`, `pos-menu-delivery`, `pos-menu-cost`, `pos-promos`, `pos-operations` (→ `pos-coupons`, `pos-table-printer`, `pos-devices`, `pos-delivery-apps`, `pos-screen-config`, `pos-payment-settings`), `pos-settlement` (→ `pos-orders`, `pos-settlement-close`, `pos-tax-invoice-recipients`), `pos-payment-gateways`, `sales-management` | POS·매출 |
+| `crm-members`, `marketing-*` (→ `marketing-campaigns-core`, `marketing-line-oa`, `marketing-campaign-analytics`), `marketing-materials` | CRM·마케팅 |
+| `purchase-order` (→ `purchase-order-core`, `purchase-order-billing`, `company-hybrid-documents`) | 발주·회사문서 |
+| `income-statement`, `balance-sheet`, `accounting-periods`, `thai-vat-filing` (→ `thai-vat-ledger`, `thai-pnd-filing`, `thai-corporate-tax-filing`), `accounting-workflow`, `thai-tax-filing`, … | 회계 |
+| `interior` (→ `interior-projects`, `interior-materials-expense`), `stock`, `inbound`, `outbound`, `purchase-order`, `items-vendors` | 물류·발주·인테리어 |
 | `mobile-home` | 모바일 홈 공지·급여 |
 
 ## 데이터 조회 전략
@@ -66,4 +67,9 @@
 ## SaaS (외부 고객)
 
 - 모듈 키: `lib/saas-module-pricing.ts` (`pos_base`, `accounting`, `grab`, …)
-- UI 게이트 예: AI 센터 (`lib/ai/tenant-gate.ts`) — 나머지 모듈은 점진 적용 예정
+- **API 게이트**: `erp-route-modules.ts` — **695/695 route prefix 매핑(100%)**, exempt 42 (로그인·SaaS Admin·웹훅 등)
+- **SaaS enforce**: `lib/saas/saas-enforce.ts` — tenantId 있을 때만 게이트 (SaaS **바로 배포**, 별도 파일럿 없음)
+- **충만 🔴 오피스 검증**: `lib/saas/chungman-office-test-config.ts` — env `CM_OFFICE_TEST_STORE_CODES`
+- **충만 보류 목록**: `docs/saas-deferred-chungman-risk.md`
+- **레거시(충만)**: JWT `tenantId` 없으면 전 모듈 허용
+- AI 센터: 동일 게이트 (`ai_center` 모듈)

@@ -15,6 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import {
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmPageHero, CrmKpiCard, CrmMemberLink } from "@/components/crm/crm-shared-ui"
 import { CrmRfmMatrix } from "@/components/crm/crm-rfm-matrix"
@@ -345,14 +352,22 @@ export default function MemberVisitsPage() {
           </>
         )}
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "history" | "analysis" | "rfm")} className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="history">{t("crmVisitsTabHistory")}</TabsTrigger>
-            <TabsTrigger value="analysis">{t("crmVisitsTabAnalysis")}</TabsTrigger>
-            <TabsTrigger value="rfm">{t("crmVisitsTabRfm")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "history" | "analysis" | "rfm")} className={adminTabsRootCn}>
+          <AdminTabsBarWithHelp>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="history" className={adminTabsTriggerCn}>
+                {t("crmVisitsTabHistory")}
+              </TabsTrigger>
+              <TabsTrigger value="analysis" className={adminTabsTriggerCn}>
+                {t("crmVisitsTabAnalysis")}
+              </TabsTrigger>
+              <TabsTrigger value="rfm" className={adminTabsTriggerCn}>
+                {t("crmVisitsTabRfm")}
+              </TabsTrigger>
+            </TabsList>
+          </AdminTabsBarWithHelp>
 
-          <TabsContent value="history">
+          <TabsContent value="history" className={adminTabsContentCn}>
             <Card>
               <CardHeader><CardTitle>{t("memberVisitsHistoryTitle")}</CardTitle></CardHeader>
               <CardContent>
@@ -402,7 +417,7 @@ export default function MemberVisitsPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="analysis">
+          <TabsContent value="analysis" className={adminTabsContentCn}>
             <Card>
               <CardHeader><CardTitle>{t("memberVisitsAnalysisTitle")}</CardTitle></CardHeader>
               <CardContent>
@@ -452,7 +467,7 @@ export default function MemberVisitsPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="rfm">
+          <TabsContent value="rfm" className={adminTabsContentCn}>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>{t("crmVisitsRfmTitle")}</CardTitle>

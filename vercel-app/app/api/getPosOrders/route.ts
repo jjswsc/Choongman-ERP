@@ -12,6 +12,7 @@ import {
 } from '@/lib/pos-sales-business-day-range'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
+import { verifyBearerWithSaasGate } from '@/lib/saas/bearer-saas-gate'
 import { isOfficeRole } from '@/lib/permissions'
 import { addPosStoreCodeVariants, resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
 import { normStoreKey } from '@/lib/store-list-keys'
@@ -250,6 +251,11 @@ async function loadPromoComponentMenuMap(
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const saasBlocked = await verifyBearerWithSaasGate(request, '/api/getPosOrders')
+  if (saasBlocked.blocked) {
+    saasBlocked.blocked.headers.set('Access-Control-Allow-Origin', '*')
+    return saasBlocked.blocked
+  }
   const { searchParams } = new URL(request.url)
   const debugPosOrders =
     searchParams.get('debugPosOrders') === '1' || searchParams.get('debugPosOrders') === 'true'

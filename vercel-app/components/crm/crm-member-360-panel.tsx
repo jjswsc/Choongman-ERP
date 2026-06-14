@@ -4,6 +4,14 @@ import * as React from "react"
 import Link from "next/link"
 import { Gift, UserRound, Wallet, CalendarDays } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import {
+  adminTabsContentEmbeddedCn,
+  adminTabsListRowCn,
+  adminTabsRootEmbeddedCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -102,14 +110,22 @@ export function CrmMember360Panel({ member }: { member: Member | null }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="summary" className="space-y-3">
-          <TabsList className="grid h-auto w-full grid-cols-3 gap-1">
-            <TabsTrigger value="summary">{t("crmMember360Summary")}</TabsTrigger>
-            <TabsTrigger value="notes">{t("crmMember360Notes")}</TabsTrigger>
-            <TabsTrigger value="links">{t("crmMember360Points")}</TabsTrigger>
-          </TabsList>
+        <Tabs defaultValue="summary" className={adminTabsRootEmbeddedCn}>
+          <AdminTabsBarWithHelp withHelp={false} sticky={false}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="summary" className={adminTabsTriggerCn}>
+                {t("crmMember360Summary")}
+              </TabsTrigger>
+              <TabsTrigger value="notes" className={adminTabsTriggerCn}>
+                {t("crmMember360Notes")}
+              </TabsTrigger>
+              <TabsTrigger value="links" className={adminTabsTriggerCn}>
+                {t("crmMember360Points")}
+              </TabsTrigger>
+            </TabsList>
+          </AdminTabsBarWithHelp>
 
-          <TabsContent value="summary" className="space-y-3">
+          <TabsContent value="summary" className={cn(adminTabsContentEmbeddedCn, "space-y-3")}>
             <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <p className="text-xs text-muted-foreground">{t("name")}</p>
@@ -149,7 +165,7 @@ export function CrmMember360Panel({ member }: { member: Member | null }) {
             ) : null}
           </TabsContent>
 
-          <TabsContent value="notes" className="space-y-3">
+          <TabsContent value="notes" className={cn(adminTabsContentEmbeddedCn, "space-y-3")}>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Textarea
                 value={noteDraft}
@@ -180,7 +196,7 @@ export function CrmMember360Panel({ member }: { member: Member | null }) {
             )}
           </TabsContent>
 
-          <TabsContent value="links">
+          <TabsContent value="links" className={adminTabsContentEmbeddedCn}>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href={`/admin/members/points?memberId=${member.id}`}>

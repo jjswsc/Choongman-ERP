@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Star } from "lucide-react"
+import { ChevronRight, Star } from "lucide-react"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
 import { MP_MAX_WIDTH } from "@/lib/member-portal-design"
 import { tierVisual } from "@/components/member-portal/portal-ui"
@@ -177,6 +177,31 @@ export function MemberPortalTierBenefits({ tiers, currentTierCode }: Props) {
   )
 }
 
+export function MemberPortalTierEntryButton({
+  title,
+  description,
+  onClick,
+}: {
+  title: string
+  description?: string
+  onClick: () => void
+}) {
+  return (
+    <button type="button" onClick={onClick} className="w-full text-left">
+      <GlassCard soft className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/[0.06] active:scale-[0.99]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-400/25 bg-amber-400/10">
+          <Star className="h-5 w-5 text-amber-300" fill="currentColor" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-white">{title}</p>
+          {description ? <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-white/50">{description}</p> : null}
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-white/35" aria-hidden />
+      </GlassCard>
+    </button>
+  )
+}
+
 export function MemberPortalTierGuideSheet({
   open,
   tiers,
@@ -213,6 +238,55 @@ export function MemberPortalTierGuideSheet({
         <p className="mt-1 text-xs leading-relaxed text-white/50">{t("tierGuideDesc")}</p>
         <div className="mt-4">
           <TierGuideList tiers={tiers} currentTierCode={currentTierCode} />
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-medium text-white/90 hover:bg-white/10"
+        >
+          {closeLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function MemberPortalTierBenefitsSheet({
+  open,
+  tiers,
+  currentTierCode,
+  closeLabel,
+  onClose,
+}: Props & {
+  open: boolean
+  closeLabel: string
+  onClose: () => void
+}) {
+  const { t } = useMemberPortalLang()
+
+  if (!open || tiers.length === 0) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        aria-label={closeLabel}
+        onClick={onClose}
+      />
+      <div
+        className={`relative mx-auto w-full ${MP_MAX_WIDTH} max-h-[88vh] overflow-y-auto rounded-t-[1.75rem] border border-white/10 bg-[#121214] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tier-benefits-sheet-title"
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+        <h3 id="tier-benefits-sheet-title" className="text-lg font-semibold text-white">
+          {t("tierBenefitsTitle")}
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-white/50">{t("tierBenefitsDesc")}</p>
+        <div className="mt-4">
+          <TierBenefitsList tiers={tiers} currentTierCode={currentTierCode} />
         </div>
         <button
           type="button"

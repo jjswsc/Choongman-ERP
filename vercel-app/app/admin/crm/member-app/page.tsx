@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import {
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
@@ -672,9 +680,10 @@ export default function CrmMemberAppContentPage() {
           </div>
         ) : null}
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-9">
-            <TabsTrigger value="all">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className={adminTabsRootCn}>
+          <AdminTabsBarWithHelp>
+            <TabsList className={adminTabsListRowCn}>
+            <TabsTrigger value="all" className={adminTabsTriggerCn}>
               {t("mpAdmin_tabAll")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
@@ -682,7 +691,7 @@ export default function CrmMemberAppContentPage() {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="promo">
+            <TabsTrigger value="promo" className={adminTabsTriggerCn}>
               {t("mpAdmin_tabPromo")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
@@ -690,7 +699,7 @@ export default function CrmMemberAppContentPage() {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="new_menu">
+            <TabsTrigger value="new_menu" className={adminTabsTriggerCn}>
               {t("mpAdmin_tabNewMenu")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
@@ -698,7 +707,7 @@ export default function CrmMemberAppContentPage() {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="popup">
+            <TabsTrigger value="popup" className={adminTabsTriggerCn}>
               {t("mpAdmin_tabPopup")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
@@ -706,7 +715,7 @@ export default function CrmMemberAppContentPage() {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="info">
+            <TabsTrigger value="info" className={adminTabsTriggerCn}>
               {t("mpAdmin_tabInfo")}
               {items.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
@@ -714,13 +723,14 @@ export default function CrmMemberAppContentPage() {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="stores">{t("mpAdmin_tabStores")}</TabsTrigger>
-            <TabsTrigger value="design">{t("mpAdmin_tabDesign")}</TabsTrigger>
-            <TabsTrigger value="contact">{t("mpAdmin_tabContact")}</TabsTrigger>
-            <TabsTrigger value="delivery">{t("mpAdmin_tabDelivery")}</TabsTrigger>
-          </TabsList>
+            <TabsTrigger value="stores" className={adminTabsTriggerCn}>{t("mpAdmin_tabStores")}</TabsTrigger>
+            <TabsTrigger value="design" className={adminTabsTriggerCn}>{t("mpAdmin_tabDesign")}</TabsTrigger>
+            <TabsTrigger value="contact" className={adminTabsTriggerCn}>{t("mpAdmin_tabContact")}</TabsTrigger>
+            <TabsTrigger value="delivery" className={adminTabsTriggerCn}>{t("mpAdmin_tabDelivery")}</TabsTrigger>
+            </TabsList>
+          </AdminTabsBarWithHelp>
 
-          <TabsContent value="design" className="space-y-4">
+          <TabsContent value="design" className={cn(adminTabsContentCn, "space-y-4")}>
             <CrmMemberAppPreview />
             <Card>
               <CardHeader>
@@ -780,7 +790,7 @@ export default function CrmMemberAppContentPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="contact" className="space-y-4">
+          <TabsContent value="contact" className={cn(adminTabsContentCn, "space-y-4")}>
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_contactTitle")}</CardTitle>
@@ -1044,7 +1054,7 @@ export default function CrmMemberAppContentPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="delivery" className="space-y-4">
+          <TabsContent value="delivery" className={cn(adminTabsContentCn, "space-y-4")}>
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_deliveryTitle")}</CardTitle>
@@ -1251,7 +1261,7 @@ export default function CrmMemberAppContentPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="all" className="space-y-4">
+          <TabsContent value="all" className={cn(adminTabsContentCn, "space-y-4")}>
             <MemberPortalContentAdminPanel
               variant="all"
               items={items}
@@ -1263,7 +1273,7 @@ export default function CrmMemberAppContentPage() {
             />
           </TabsContent>
 
-          <TabsContent value="promo" className="space-y-4">
+          <TabsContent value="promo" className={cn(adminTabsContentCn, "space-y-4")}>
             <MemberPortalContentAdminPanel
               variant="promo"
               items={items}
@@ -1275,7 +1285,7 @@ export default function CrmMemberAppContentPage() {
             />
           </TabsContent>
 
-          <TabsContent value="new_menu" className="space-y-4">
+          <TabsContent value="new_menu" className={cn(adminTabsContentCn, "space-y-4")}>
             <MemberPortalContentAdminPanel
               variant="new_menu"
               items={items}
@@ -1287,7 +1297,7 @@ export default function CrmMemberAppContentPage() {
             />
           </TabsContent>
 
-          <TabsContent value="popup" className="space-y-4">
+          <TabsContent value="popup" className={cn(adminTabsContentCn, "space-y-4")}>
             <MemberPortalContentAdminPanel
               variant="popup"
               items={items}
@@ -1299,7 +1309,7 @@ export default function CrmMemberAppContentPage() {
             />
           </TabsContent>
 
-          <TabsContent value="info" className="space-y-4">
+          <TabsContent value="info" className={cn(adminTabsContentCn, "space-y-4")}>
             <MemberPortalContentAdminPanel
               variant="info"
               items={items}
@@ -1311,7 +1321,7 @@ export default function CrmMemberAppContentPage() {
             />
           </TabsContent>
 
-          <TabsContent value="stores" className="space-y-4">
+          <TabsContent value="stores" className={cn(adminTabsContentCn, "space-y-4")}>
             <MemberPortalStoresPanel
               canEdit={canEdit}
               onNotice={(msg) => {

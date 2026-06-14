@@ -501,7 +501,8 @@ function mergeStoreTablesWithLocalOrders(
       return { ...tbl, order: prevOrder, isOccupied: true }
     }
     const prevKey = orderListMergeKey(prevOrder)
-    if (prevKey && activeOrderKeys.size > 0 && !activeOrderKeys.has(prevKey)) {
+    /** 진행 중 목록이 비었을 때도 구 스냅샷 테이블 주문을 지움(결제·퇴장 후 관리자 새로고침 잔존 방지) */
+    if (prevKey && !activeOrderKeys.has(prevKey)) {
       return tbl
     }
     /** 테이블 이동: 서버는 새 테이블에만 붙였는데 prev 스냅샷이 구 테이블에 남는 경우 */
@@ -671,7 +672,7 @@ export function usePosStoreInternal() {
     async (
       storeCode: string,
       businessDate: string,
-      options?: { layoutFromCacheOnly?: boolean }
+      options?: { layoutFromCacheOnly?: boolean; skipPollMinimalCache?: boolean }
     ): Promise<StoreSnapshot> => {
       const primary = String(storeCode || '').trim()
       const snapshotTimeoutMs = shouldPreferOfflineCache() ? 2800 : 12000
@@ -697,6 +698,7 @@ export function usePosStoreInternal() {
             posBizDayScope: true,
             pollMinimal: true,
             limit: 1000,
+            skipPollMinimalCache: Boolean(options?.skipPollMinimalCache),
           }).catch(() => []),
           snapshotTimeoutMs,
           []
@@ -927,7 +929,10 @@ export function usePosStoreInternal() {
     const businessDate = getPosBusinessDateStr()
     return Promise.all(
       targetStoreCodes.map((storeCode) =>
-        fetchStoreSnapshot(storeCode, businessDate, { layoutFromCacheOnly: backgroundRefresh })
+        fetchStoreSnapshot(storeCode, businessDate, {
+          layoutFromCacheOnly: backgroundRefresh,
+          skipPollMinimalCache: !backgroundRefresh,
+        })
       )
     )
       .then((results) => {

@@ -10,6 +10,7 @@ import { buildPosSalesCombinedDiscount } from '@/lib/pos-sales-combined-discount
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
 import {
   aggregateTheoreticalCostFromOrders,
+  buildTheoreticalCostResolveContext,
   collectTheoreticalCostUnmatchedLines,
   isDeliveryChannelOrderType,
   MANAGEMENT_MARGIN_MISE_RATE,
@@ -110,14 +111,21 @@ export function buildManagementMarginPosSlice(params: {
   const totalDiscount = combined.totals.totalDiscount
   const grossBefore = round2(netSales + totalDiscount)
 
+  const resolveContext = buildTheoreticalCostResolveContext({
+    costIndex: params.costIndex,
+    catalog: params.catalog,
+  })
+
   const theory = aggregateTheoreticalCostFromOrders({
     orderRows: params.orderRows,
     costIndex: params.costIndex,
     miseRatePercent: mise,
+    resolveContext,
   })
   const bomUnmatchedLines = collectTheoreticalCostUnmatchedLines({
     orderRows: params.orderRows,
     costIndex: params.costIndex,
+    resolveContext,
   })
 
   const channelKeys: ManagementMarginChannelKey[] = ['dine_in', 'takeout', 'delivery', 'other']
@@ -140,6 +148,7 @@ export function buildManagementMarginPosSlice(params: {
       orderRows: rows,
       costIndex: params.costIndex,
       miseRatePercent: mise,
+      resolveContext,
     })
     const contribution = round2(chNet - chTheory.totalCost)
     return {

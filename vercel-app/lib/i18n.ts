@@ -744,6 +744,9 @@ export const i18n = {
     attProcessSuccess: '처리가 완료되었습니다.',
     // 관리자 대시보드
     adminDashboard: '대시보드',
+    saasModuleLockedTitle: '구독에 포함되지 않은 기능입니다',
+    saasModuleLockedDesc:
+      '요청하신 메뉴는 현재 고객사 요금제에서 비활성화되어 있습니다. SaaS 관리자에게 모듈 활성화를 요청하세요.',
     header_notifications: '알림',
     header_auto_translate: '자동번역',
     adminFallbackUser: '관리자',
@@ -4249,6 +4252,30 @@ export const i18n = {
     salesPaymentDiscountSearch: '사유·쿠폰 코드 검색',
     salesPaymentDiscountEmpty: '해당 기간 결제 할인 데이터가 없습니다.',
     salesPaymentDiscountReason: '할인 사유',
+    salesDiscountDrillHint: '행을 클릭하면 해당 할인이 적용된 주문 목록과 설명을 볼 수 있습니다.',
+    salesDiscountDrillTitle: '할인 상세',
+    salesDiscountDrillLoading: '주문 목록 불러오는 중…',
+    salesDiscountDrillEmpty: '해당 조건의 주문이 없습니다.',
+    salesDiscountDrillLoadFail: '주문 목록을 불러오지 못했습니다.',
+    salesDiscountDrillTruncated: '조회 한도로 일부 주문만 표시됩니다. 기간을 좁혀 보세요.',
+    salesDiscountDrillColOrderNo: '주문',
+    salesDiscountDrillColOrderType: '종류',
+    salesDiscountDrillColDiscount: '할인액',
+    salesDiscountDrillFootnote: '주문 번호를 클릭하면 영수증 관리에서 해당 주문을 엽니다.',
+    salesDiscountDrillExplainPlatform:
+      '배달앱(Grab·Shopee·Line Man 등) 프로모가 discount_amt에 기록된 주문입니다. 매장 POS에서 결제할 때 직원이 입력한 할인과는 별개로, 플랫폼이 이미 반영한 할인입니다.',
+    salesDiscountDrillExplainManual: 'POS 결제·완료 시 직원이 수동으로 입력한 할인 주문입니다.',
+    salesDiscountDrillExplainCoupon:
+      '회원·프로모 쿠폰이 적용된 주문입니다(coupon_discount_amt·applied_coupons).',
+    salesDiscountDrillExplainCollab: '협업(브랜드·제휴) 할인 사유가 기록된 주문입니다.',
+    salesDiscountDrillExplainPaymentOther:
+      '결제 시점 할인(discount_amt·쿠폰)이 있는 완료 주문입니다. 세트 내재 할인과는 별도 층입니다.',
+    salesDiscountDrillExplainBundleSet:
+      '세트·프로모 메뉴 줄의 정가 대비 판매가 차이(세트 할인)가 있는 주문입니다.',
+    salesDiscountDrillExplainBundleCampaign:
+      '캠페인 프로모 줄의 정가 대비 판매가 차이가 있는 주문입니다.',
+    salesDiscountDrillExplainBundleOther:
+      '프로모 메뉴 줄의 정가 대비 판매가 차이(세트 할인)가 있는 주문입니다.',
     salesCombinedDiscountAnalyticsTitle: '통합 할인 영향 분석',
     salesCombinedDiscountAnalyticsHint:
       '세트 내재 할인과 결제 할인을 합산한 참고 지표입니다. 두 할인은 서로 다른 층이며, 한 주문에 동시에 적용될 수 있습니다.',
@@ -10768,6 +10795,9 @@ Only matters the employee must handle personally on a working day:
     attStoreOnly: 'You can only approve attendance for your store.',
     attProcessSuccess: 'Processing completed.',
     adminDashboard: 'Dashboard',
+    saasModuleLockedTitle: 'This feature is not included in your subscription',
+    saasModuleLockedDesc:
+      'The menu you tried to open is disabled for your tenant plan. Contact your SaaS administrator to enable the module.',
     header_notifications: 'Notifications',
     header_auto_translate: 'Auto translate',
     adminFallbackUser: 'Admin',
@@ -14269,6 +14299,30 @@ Only matters the employee must handle personally on a working day:
     salesPaymentDiscountSearch: 'Search reason or coupon code',
     salesPaymentDiscountEmpty: 'No checkout discount data for this period.',
     salesPaymentDiscountReason: 'Discount reason',
+    salesDiscountDrillHint: 'Click a row to see matching orders and a short explanation.',
+    salesDiscountDrillTitle: 'Discount detail',
+    salesDiscountDrillLoading: 'Loading orders…',
+    salesDiscountDrillEmpty: 'No orders match this filter.',
+    salesDiscountDrillLoadFail: 'Could not load orders.',
+    salesDiscountDrillTruncated: 'Showing a limited slice of orders. Narrow the date range.',
+    salesDiscountDrillColOrderNo: 'Order',
+    salesDiscountDrillColOrderType: 'Type',
+    salesDiscountDrillColDiscount: 'Discount',
+    salesDiscountDrillFootnote: 'Click an order number to open it in Receipts management.',
+    salesDiscountDrillExplainPlatform:
+      'Platform promos (Grab, Shopee, Line Man, etc.) stored in discount_amt. Separate from manual POS checkout discounts.',
+    salesDiscountDrillExplainManual: 'Orders with a manual discount entered at POS checkout.',
+    salesDiscountDrillExplainCoupon:
+      'Orders with member or promo coupons (coupon_discount_amt / applied_coupons).',
+    salesDiscountDrillExplainCollab: 'Orders with collaboration / partner discount reasons.',
+    salesDiscountDrillExplainPaymentOther:
+      'Completed orders with checkout discounts (discount_amt / coupons). A separate layer from built-in set discounts.',
+    salesDiscountDrillExplainBundleSet:
+      'Orders with set/promo lines where sale price is below catalog regular price.',
+    salesDiscountDrillExplainBundleCampaign:
+      'Orders with campaign promo lines priced below regular.',
+    salesDiscountDrillExplainBundleOther:
+      'Orders with promo lines priced below regular (built-in set discount).',
     salesCombinedDiscountAnalyticsTitle: 'Combined discount impact',
     salesCombinedDiscountAnalyticsHint:
       'Reference total of built-in and checkout discounts. Different layers; both may apply on one order.',
@@ -20671,6 +20725,9 @@ orderItemQty: 'Qty',
     attStoreOnly: 'อนุมัติได้เฉพาะการเข้างานของสาขาของคุณ',
     attProcessSuccess: 'ดำเนินการเสร็จสิ้น',
     adminDashboard: 'แดชบอร์ด',
+    saasModuleLockedTitle: 'ฟีเจอร์นี้ไม่ได้อยู่ในแพ็กเกจของคุณ',
+    saasModuleLockedDesc:
+      'เมนูที่คุณพยายามเปิดถูกปิดใช้งานสำหรับแพ็กเกจของลูกค้า กรุณาติดต่อผู้ดูแล SaaS เพื่อเปิดใช้งานโมดูล',
     header_notifications: 'การแจ้งเตือน',
     header_auto_translate: 'แปลอัตโนมัติ',
     adminFallbackUser: 'ผู้ดูแล',

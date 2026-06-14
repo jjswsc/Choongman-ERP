@@ -118,7 +118,7 @@ export function InteriorProjectToolShell({
   )
 
   return (
-    <InteriorPageShell hideHeader showSubnav>
+    <InteriorPageShell hideHeader>
       <div className="flex flex-1 flex-col overflow-auto -mx-4 -mt-2 sm:-mx-6 lg:-mx-8">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="rounded-xl border bg-card p-4 sm:p-5">

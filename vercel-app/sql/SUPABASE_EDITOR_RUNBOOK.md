@@ -210,3 +210,34 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 5. **가이드** — `SUPABASE_EDITOR_RUNBOOK.md`
 
 진단 SELECT만 필요할 때: [`supabase_editor_diagnostic_only.sql`](./supabase_editor_diagnostic_only.sql) (Editor에 상시 보관 X)
+
+---
+
+## 8. Omni(SaaS) 신규 DB / Omni 전용 Supabase
+
+**충만(레거시) DB에는 §8을 실행하지 마세요.** Omni 멀티테넌트·과금·SaaS Admin 전용입니다.
+
+Supabase SQL Editor → **아래 순서대로 파일 전체를 각각 Run** (재실행은 `IF NOT EXISTS` 구간만 안전):
+
+| 순서 | 파일 | 내용 |
+|:---:|---|---|
+| 1 | [`saas_full_bootstrap_one_shot.sql`](./saas_full_bootstrap_one_shot.sql) | **권장** 테넌트·제어평면·RLS 한 번에 (또는 2~5를 개별 실행) |
+| 2 | [`saas_base_schema.sql`](./saas_base_schema.sql) | tenant_id 컬럼·기본 스키마 (one-shot 미사용 시) |
+| 3 | [`saas_admin_control_plane.sql`](./saas_admin_control_plane.sql) | 플랜·한도·과금·`v_tenant_admin_settings` |
+| 4 | [`saas_module_pricing.sql`](./saas_module_pricing.sql) | 모듈별 과금 단가 |
+| 5 | [`saas_tenant_usage_rpc.sql`](./saas_tenant_usage_rpc.sql) | `get_saas_tenant_usage_batch` 등 usage RPC |
+| 6 | [`saas_partner_reseller.sql`](./saas_partner_reseller.sql) | 대리점·`saas_partner_users` |
+| 7 | [`saas_partner_enhancements.sql`](./saas_partner_enhancements.sql) | 대리점 정산 확장 |
+| 8 | [`saas_billing_company_profiles.sql`](./saas_billing_company_profiles.sql) | 청구서 회사 프로필 |
+| 9 | [`saas_tenant_onboarding.sql`](./saas_tenant_onboarding.sql) | 온보딩·연동 메타 |
+| 10 | [`work_log_agg_rpc.sql`](./work_log_agg_rpc.sql) | 업무일지 주간·검토 RPC (ERP 공통, 미배포 시 JS fallback) |
+
+**1번 one-shot**을 쓰면 2~4는 중복이므로 **5~10만** 이어서 실행하면 됩니다.
+
+배포 후 확인:
+
+- SaaS Admin `/saas-admin` → 고객사 목록·usage·한도 표시
+- JWT `tenantId` 있는 테스트 계정 → 모듈 게이트 동작
+- `select * from v_tenant_admin_settings limit 5;`
+
+관련 앱 코드: `lib/saas/` · `docs/SAAS-HYBRID-ONBOARDING.md`

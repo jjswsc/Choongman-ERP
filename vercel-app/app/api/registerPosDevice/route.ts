@@ -6,6 +6,10 @@ import {
   listStoreDevicesForRoleLimits,
 } from '@/lib/pos-device-role-limits-server'
 import { resolveDeviceRoleForRegister } from '@/lib/pos-device-role-limits'
+import {
+  assertSaasPosDeviceRegistrationAllowed,
+  resolveSaasPosDeviceNewForTenant,
+} from '@/lib/saas/saas-pos-device-limit-server'
 
 /** 포스 터미널: 이 기기를 해당 매장에 메인/주문 단말로 등록·갱신 (last_seen_at 갱신) */
 export async function POST(req: NextRequest) {
@@ -26,6 +30,24 @@ export async function POST(req: NextRequest) {
 
     const limits = await getPosDeviceRoleLimits(storeCode)
     const rows = await listStoreDevicesForRoleLimits(storeCode)
+    const storeTokens = rows.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
+    const isNewForTenant = await resolveSaasPosDeviceNewForTenant({
+      storeCode,
+      deviceToken,
+      storeDeviceTokens: storeTokens,
+    })
+    const saasLimit = await assertSaasPosDeviceRegistrationAllowed({
+      storeCode,
+      deviceToken,
+      isNewDeviceForTenant: isNewForTenant,
+    })
+    if (!saasLimit.ok) {
+      return NextResponse.json(
+        { success: false, message: saasLimit.message, code: saasLimit.code },
+        { headers }
+      )
+    }
+
     const resolved = resolveDeviceRoleForRegister(rows, deviceToken, clientRole, limits)
     if (resolved.reject && resolved.reject.ok === false) {
       const existing = rows.some((r) => String(r.device_token ?? '').trim() === deviceToken)

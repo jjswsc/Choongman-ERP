@@ -6,6 +6,8 @@ export type PromoLineLike = {
 
 export type PromoMenuLike = {
   id: string
+  /** POS 메뉴명 — 주문 스냅샷에 menuId 없을 때 역매칭 */
+  name?: string
   price?: number
   /** 메뉴 배달 정가. 없으면 홀 가격과 동일하게 계산 */
   priceDelivery?: number | null

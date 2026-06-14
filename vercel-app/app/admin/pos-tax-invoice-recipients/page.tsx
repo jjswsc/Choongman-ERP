@@ -45,12 +45,14 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
   const [q, setQ] = React.useState("")
   const [rows, setRows] = React.useState<PosTaxInvoiceRecipientRow[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [editRow, setEditRow] = React.useState<PosTaxInvoiceRecipientRow | null>(null)
   const [saving, setSaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
     if (!auth?.store || !auth?.role) return
     setLoading(true)
+    setHasSearched(true)
     try {
       const res = await getPosTaxInvoiceRecipients({
         userStore: auth.store,
@@ -71,10 +73,6 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
       setLoading(false)
     }
   }, [auth?.store, auth?.role, q, by])
-
-  React.useEffect(() => {
-    void load()
-  }, [load])
 
   const openEdit = (r: PosTaxInvoiceRecipientRow) => {
     if (!canEdit) return
@@ -172,7 +170,13 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {!hasSearched ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                    {t("itemsSearchHint") || "검색 버튼을 눌러 주세요."}
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                     {t("adminLeaveNoResult")}

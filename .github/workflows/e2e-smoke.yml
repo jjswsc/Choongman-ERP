@@ -1,0 +1,41 @@
+# Playwright E2E smoke (수동 실행 — 매 push 비용 절감)
+# Actions → E2E Smoke → Run workflow
+
+name: E2E Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Optional deployed URL (empty = local next start after build)'
+        required: false
+        default: ''
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: vercel-app/package-lock.json
+
+      - name: Install, build, Playwright browsers
+        run: |
+          cd vercel-app
+          npm ci
+          npx playwright install chromium --with-deps
+          if [ -z "${{ github.event.inputs.base_url }}" ]; then
+            npm run build
+          fi
+
+      - name: Run E2E smoke
+        env:
+          E2E_BASE_URL: ${{ github.event.inputs.base_url }}
+          E2E_SKIP_WEB_SERVER: ${{ github.event.inputs.base_url != '' && '1' || '' }}
+        run: |
+          cd vercel-app
+          npm run test:e2e

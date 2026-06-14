@@ -81,6 +81,8 @@ import {
 } from "@/lib/permissions"
 import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
 import { useAiCenterModuleEnabled } from "@/lib/use-ai-center-module"
+import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
+import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 interface MenuItem {
   titleKey: string
   icon: React.ElementType
@@ -338,6 +340,21 @@ export function ErpSidebar() {
   const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
   const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
   const aiModuleEnabled = useAiCenterModuleEnabled()
+  const saasModules = useSaasEnabledModules()
+
+  const isNavItemVisible = React.useCallback(
+    (href: string) => {
+      if (!isSaasModuleEnabled(saasModules, resolveAdminPathSaasModule(href))) return false
+      if (href === "/admin/ai-center") {
+        return canAccessAiCenter(auth?.role || "") && aiModuleEnabled !== false
+      }
+      if (href === "/admin/pos-cost-analysis") {
+        return canAccessPosCostAnalysis(auth?.role || "")
+      }
+      return true
+    },
+    [saasModules, auth?.role, aiModuleEnabled]
+  )
 
   React.useEffect(() => {
     let cancelled = false
@@ -537,8 +554,7 @@ export function ErpSidebar() {
             <div className="mb-1">
               <div className="space-y-0.5">
                 {mainItems
-                  .filter((item) => item.href !== "/admin/pos-cost-analysis" || canAccessPosCostAnalysis(auth?.role || ""))
-                  .filter((item) => item.href !== "/admin/ai-center" || (canAccessAiCenter(auth?.role || "") && aiModuleEnabled !== false))
+                  .filter((item) => isNavItemVisible(item.href))
                   .map((item) => (
                   <Link
                     key={item.href}
@@ -561,6 +577,15 @@ export function ErpSidebar() {
             {/* Grouped sections */}
             {menuSections.map((section) => {
               const isExpanded = expandedSections[section.titleKey] ?? false
+              const visibleItems = section.items
+                .filter((item) => !(isManager && MANAGER_HIDDEN_HREFS.has(item.href)))
+                .filter((item) => {
+                  if (!isPosStaff) return isNavItemVisible(item.href)
+                  if (section.titleKey !== "adminSectionPos") return false
+                  const check = POS_MENU_ACCESS[item.href]
+                  return check ? check(auth?.role || "", auth?.store || "") && isNavItemVisible(item.href) : false
+                })
+              if (visibleItems.length === 0) return null
               return (
                 <div key={section.titleKey} className="mb-1">
                   <button
@@ -577,15 +602,7 @@ export function ErpSidebar() {
                   </button>
                   {isExpanded && (
                     <div className="space-y-0.5">
-                      {section.items
-                        .filter((item) => !(isManager && MANAGER_HIDDEN_HREFS.has(item.href)))
-                        .filter((item) => {
-                          if (!isPosStaff) return true
-                          if (section.titleKey !== "adminSectionPos") return false
-                          const check = POS_MENU_ACCESS[item.href]
-                          return check ? check(auth?.role || "", auth?.store || "") : false
-                        })
-                        .map((item) => {
+                      {visibleItems.map((item) => {
                         const interiorExtra =
                           section.titleKey === "adminSectionInterior" && interiorDashTotals
                             ? interiorNavBadge(item.href, interiorDashTotals)

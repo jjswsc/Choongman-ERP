@@ -14,6 +14,8 @@ import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 import { PosStoreProvider } from "@/lib/pos-store-provider"
 import { appAlert } from "@/lib/app-message"
+import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
+import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
 import { sendPosHealthAlert } from "@/lib/pos-health-alert-client"
 
@@ -170,6 +172,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const [topBarHidden, setTopBarHidden] = useState(false)
   const [topBarHydrated, setTopBarHydrated] = useState(false)
   const [isTouchViewport, setIsTouchViewport] = useState(false)
+  const saasModules = useSaasEnabledModules()
 
   useEffect(() => {
     setShellUpdateAvailable(typeof window.cmPosShell?.checkForUpdates === "function")
@@ -331,7 +334,14 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         return
       }
     }
-  }, [auth, initialized, isPosLoginPage, pathname, router])
+    if (saasModules != null) {
+      const mod = resolveAdminPathSaasModule(pathname)
+      if (!isSaasModuleEnabled(saasModules, mod)) {
+        replacePosOfflineAware("/admin?saas_module_locked=1", (p) => router.replace(p))
+        return
+      }
+    }
+  }, [auth, initialized, isPosLoginPage, pathname, router, saasModules])
 
   const showTopChrome = (bar: boolean) => shellChrome && bar && !topBarHidden
   const touchMainButtonClass = isTouchViewport ? "min-h-10 px-3" : "px-2 py-1.5"

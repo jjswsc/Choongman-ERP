@@ -228,69 +228,8 @@ export function resolveCurrentChargeAmount(
   return cycle === "yearly" ? Number(row.yearly || 0) : Number(row.monthly || 0)
 }
 
-export const FALLBACK_TENANTS: TenantItem[] = [
-  {
-    id: "omni-001",
-    companyName: "Bangkok Dakgalbi Co.",
-    ownerName: "Kim Hana",
-    phone: "+66-81-223-4401",
-    billingCompany: {
-      legalName: "Bangkok Dakgalbi Co., Ltd.",
-      taxId: "0105566137147",
-      billingAddress: "123 Sukhumvit Rd, Bangkok",
-      billingEmail: "billing@example.com",
-    },
-    planTier: "growth",
-    billingCycle: "monthly",
-    status: "active",
-    nextBillingDate: "2026-05-01",
-    trialEndsAt: "2026-04-20",
-    timezone: "Asia/Bangkok",
-    features: {
-      pos: true,
-      kitchenDisplay: true,
-      inventory: true,
-      payroll: true,
-      accounting: true,
-      analytics: true,
-      marketing: false,
-      aiAssistant: false,
-      apiAccess: false,
-      sso: false,
-    },
-    limits: DEFAULT_LIMITS_BY_TIER.growth,
-    policy: {
-      salesStage: "erp1",
-      pricingMode: "stage",
-      posDeviceBillingBasis: "usage",
-      autoSuspendOnOverdue: true,
-      allowOverage: false,
-      require2faAdmin: true,
-      requireIpAllowlist: false,
-      forceWeeklyBackup: true,
-      dataRetentionDays: 1095,
-      overdueGraceDays: 7,
-      supportTier: "priority",
-    },
-    usage: {
-      stores: 5,
-      managerAccounts: 14,
-      staffAccounts: 82,
-      tablets: 11,
-      posDevices: 9,
-      monthlyOrders: 56210,
-    },
-    pricing: {
-      currency: "THB",
-      pricingMode: "stage",
-      stagePrices: { ...DEFAULT_STAGE_PRICES },
-      modulePrices: {},
-      currentChargeAmount: resolveCurrentChargeAmount("erp1", "monthly", DEFAULT_STAGE_PRICES),
-    },
-    billingHistory: [],
-    auditTrail: [],
-  },
-]
+/** API/DB 미연결 시 UI용 샘플 — 더미 고객사는 넣지 않는다(빈 목록만). */
+export const FALLBACK_TENANTS: TenantItem[] = []
 
 export function applySalesStageFeatures(base: FeatureFlags, stage: SalesStage): FeatureFlags {
   const next = { ...base }

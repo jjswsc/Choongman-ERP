@@ -201,9 +201,10 @@ export function ExpenseRegisterSearchTab() {
   }, [searchParams])
 
   React.useEffect(() => {
-    void loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 초기 진입 1회만 자동 조회
-  }, [])
+    setLoadedOnce(false)
+    setList([])
+    setSummary({ planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
+  }, [storeFilter, accountId, startStr, endStr, categoryFilter, vendorFilter])
 
   const handledSearchRefreshRef = React.useRef<string | null>(null)
 
@@ -531,7 +532,9 @@ export function ExpenseRegisterSearchTab() {
           {loading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : !loadedOnce ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {t("msg_click_query") || "검색 버튼을 눌러 주세요."}
+            </p>
           ) : filteredList.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {tt("pettyNoData", "No expense registration records found.")}

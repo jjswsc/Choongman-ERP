@@ -36,6 +36,7 @@ export type MemberPortalKey =
   | 'tierGuideViewBtn'
   | 'tierBenefitsTitle'
   | 'tierBenefitsDesc'
+  | 'tierBenefitsViewBtn'
   | 'tierBenefitsEmpty'
   | 'tierCurrentBadge'
   | 'tierEarnRate'
@@ -179,6 +180,8 @@ export type MemberPortalKey =
   | 'privilegeTitle'
   | 'stampCardTitle'
   | 'stampCardDesc'
+  | 'stampPreparingTitle'
+  | 'stampPreparingDesc'
   | 'stampProgress'
   | 'stampNextReward'
   | 'stampTotalEarned'
@@ -446,6 +449,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Benefits provided at each membership level. Content may change without notice.',
     th: 'สิทธิประโยชน์ตามระดับสมาชิก เนื้อหาอาจเปลี่ยนแปลงได้',
     ko: '회원 등급별로 제공되는 혜택입니다. 내용은 변경될 수 있습니다.',
+  },
+  tierBenefitsViewBtn: {
+    en: 'View tier benefits',
+    th: 'ดูสิทธิประโยชน์ตามระดับ',
+    ko: '등급별 혜택 보기',
   },
   tierBenefitsEmpty: {
     en: 'No benefits listed for this tier yet.',
@@ -850,6 +858,16 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Earn a stamp when you visit and pay as a member.',
     th: 'สะสมสแตมป์เมื่อมาใช้บริการและชำระเงินในฐานะสมาชิก',
     ko: '회원으로 방문·결제할 때마다 스탬프가 쌓입니다.',
+  },
+  stampPreparingTitle: {
+    en: 'Stamp card coming soon',
+    th: 'บัตรสแตมป์เร็วๆ นี้',
+    ko: '스탬프 준비 중',
+  },
+  stampPreparingDesc: {
+    en: 'Visit stamps and rewards will be available here soon. Stay tuned!',
+    th: 'สแตมป์และรางวัลจากการมาใช้บริการจะเปิดให้ใช้เร็วๆ นี้',
+    ko: '회원 방문 스탬프 혜택을 준비하고 있습니다. 조금만 기다려 주세요!',
   },
   stampProgress: {
     en: '{current} / {total} stamps',

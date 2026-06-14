@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useSaasScope } from "@/components/saas/saas-scope-context"
-import { FALLBACK_TENANTS, type TenantItem } from "@/lib/saas-admin-control-plane"
+import { type TenantItem } from "@/lib/saas-admin-control-plane"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -114,7 +114,7 @@ export default function SaasPartnerDetailPage() {
       if (tenantRes.ok && tenantJson.success === true && Array.isArray(tenantJson.tenants)) {
         setTenants(tenantJson.tenants.filter((x) => x.partnerId === partnerId))
       } else {
-        setTenants(FALLBACK_TENANTS.filter((x) => x.partnerId === partnerId))
+        setTenants([])
       }
     } catch (e) {
       await appAlert(String(e))

@@ -35,6 +35,10 @@ export const POS_SALES_MENU_ROW_SELECT = `${POS_SALES_ORDER_ROW_SELECT},items_js
 export const POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT =
   `${POS_SALES_ORDER_ROW_SELECT},items_json,discount_reason,applied_coupons,coupon_code`
 
+/** 할인 드릴다운 — 주문 식별·표시 필드 */
+export const POS_SALES_DISCOUNT_DRILL_ROW_SELECT =
+  `${POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT},id,order_no,table_name,paid_at`
+
 export const POS_SALES_DELIVERY_ROW_SELECT =
   `${POS_SALES_ORDER_ROW_SELECT},delivery_app_code,items_json`
 

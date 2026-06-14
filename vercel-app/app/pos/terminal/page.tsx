@@ -289,373 +289,37 @@ import {
 import { PosBusinessOpenGateBlock } from '@/components/pos/pos-business-open-gate-block'
 import { usePosBusinessOpenGate } from '@/lib/use-pos-business-open-gate'
 import { ensurePosBusinessOpenForOrder } from '@/lib/pos-business-open-gate-client'
+import {
+  buildCustomerDisplayPaymentLines,
+  resolveCardPaymentAmountForPricing,
+} from '@/lib/pos-terminal-customer-display'
+import {
+  buildKbankGenerateAuditPaste,
+  extractAmountFromEmvQrPayload,
+  extractKbankGenerateResponseInfo,
+  kbankOrigPartnerTxnUidForFollowup,
+} from '@/lib/pos-terminal-kbank-helpers'
+import {
+  MAIN_POS_META_SCAN_INTERVAL_MS,
+  MAIN_POS_STARTUP_CATCHUP_DURATION_MS,
+  MAIN_POS_STARTUP_CATCHUP_WINDOW_MS,
+  KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
+  DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS,
+  coercePosOrderIdFromRealtime,
+  isPosPrintDebugEnabledInBrowser,
+  isSessionNewOrder,
+  mergeStoreAutoPrintFlags,
+  posGuestCountSpread,
+  posKitchenGuestSpread,
+  readMainPosLastSeenOrderId,
+  storeAutoPrintFlagsFromSettings,
+  writeMainPosLastSeenOrderId,
+  type StoreAutoPrintFlags,
+} from '@/lib/pos-terminal-auto-print'
+import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
+import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
+import { taxInvoiceFromRecipientRow } from '@/lib/pos-terminal-tax-invoice'
 
-function buildCustomerDisplayPaymentLines(
-  draft: CartPanelPaymentPayload | null,
-  t: (k: string) => string
-): { label: string; amount: number }[] {
-  if (!draft) return []
-  const lines: { label: string; amount: number }[] = []
-  if (draft.paymentCash > 0) lines.push({ label: t('posPaymentCash') || '현금', amount: draft.paymentCash })
-  if (draft.paymentCard > 0) lines.push({ label: t('posPaymentCard') || '카드', amount: draft.paymentCard })
-  if (draft.paymentQr > 0) lines.push({ label: t('posPaymentQrCode') || 'QR', amount: draft.paymentQr })
-  if (draft.paymentOther > 0) lines.push({ label: t('posPaymentOther') || '기타', amount: draft.paymentOther })
-  if ((draft.paymentDeliveryApp || 0) > 0) {
-    const ch = draft.deliveryPaymentChannel ? String(draft.deliveryPaymentChannel) : ''
-    lines.push({
-      label: ch
-        ? `${t('posPaymentDeliveryApp') || '배달앱'} (${ch})`
-        : t('posPaymentDeliveryApp') || '배달앱',
-      amount: draft.paymentDeliveryApp || 0,
-    })
-  }
-  return lines
-}
-
-function resolveCardPaymentAmountForPricing(payment?: CartPanelPaymentPayload | null): number {
-  if (!payment) return 0
-  return normalizePosPaymentTender({
-    paymentCard: payment.paymentCard,
-    paymentQr: payment.paymentQr,
-    paymentQrType: payment.paymentQrType,
-  }).paymentCard
-}
-
-function asPlainObject(v: unknown): Record<string, unknown> | null {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
-  return v as Record<string, unknown>
-}
-
-function pickFirstNonEmptyText(
-  sources: Array<Record<string, unknown> | null>,
-  keys: readonly string[]
-): string {
-  for (const src of sources) {
-    if (!src) continue
-    for (const key of keys) {
-      const raw = src[key]
-      if (typeof raw === 'string') {
-        const value = raw.trim()
-        if (value) return value
-        continue
-      }
-      if (typeof raw === 'number' || typeof raw === 'bigint') {
-        const value = String(raw).trim()
-        if (value) return value
-      }
-    }
-  }
-  return ''
-}
-
-function extractKbankGenerateResponseInfo(raw: unknown): {
-  qrPayload: string
-  originalTxnId: string
-  txnNo: string
-  referenceId: string
-  sof: unknown
-  cardScheme: string
-  allowVoid: string
-} {
-  const root = asPlainObject(raw)
-  const data = asPlainObject(root?.data)
-  const result = asPlainObject(root?.result)
-  const payment = asPlainObject(root?.payment)
-  const paymentInfo = asPlainObject(root?.paymentInfo)
-  const sources = [root, data, result, payment, paymentInfo]
-  return {
-    qrPayload: pickFirstNonEmptyText(sources, [
-      'qrPayload',
-      'qrCode',
-      'qrString',
-      'qrData',
-      'payload',
-      'qrRawData',
-      'qrRaw',
-      'thaiQr',
-    ]),
-    originalTxnId: pickFirstNonEmptyText(sources, [
-      'origPartnerTxnUid',
-      'originalTransactionId',
-      'transactionId',
-      'partnerTxnUid',
-    ]),
-    txnNo: pickFirstNonEmptyText(sources, ['txnNo', 'transactionNo']),
-    referenceId: pickFirstNonEmptyText(sources, ['refId', 'referenceId']),
-    sof: (() => {
-      for (const src of sources) {
-        if (!src || src.sof == null) continue
-        return src.sof
-      }
-      return ''
-    })(),
-    cardScheme: pickFirstNonEmptyText(sources, ['cardScheme', 'card_scheme']),
-    allowVoid: pickFirstNonEmptyText(sources, ['allowVoid', 'allow_void']),
-  }
-}
-
-/** Inquiry/Void/Cancel — origPartnerTxnUid must match our Generate partnerTxnUid (not bank echo). */
-function kbankOrigPartnerTxnUidForFollowup(partnerTxnUid: string): string {
-  return String(partnerTxnUid || '').trim().slice(0, 32)
-}
-
-function buildKbankGenerateAuditPaste(input: {
-  partnerTxnUid: string
-  amount: number
-  requestedQrType: string
-  sentQrTypeCode?: string
-  bankQrTypeCode?: string | null
-  bankSof?: string | null
-  requestMessage?: Record<string, unknown> | null
-  responseMessage?: unknown
-  storeCode?: string
-}): string {
-  const lines = [
-    'KBank Generate QR',
-    `store: ${String(input.storeCode || '').trim() || '-'}`,
-    `partnerTxnUid: ${input.partnerTxnUid}`,
-    `amount: ${input.amount.toFixed(2)} THB`,
-    `requestedQrType: ${input.requestedQrType}`,
-    `sentQrType: ${String(input.sentQrTypeCode || '-').trim() || '-'}`,
-    `bankQrType: ${String(input.bankQrTypeCode || '-').trim() || '-'}`,
-    `bankSof: ${String(input.bankSof || '-').trim() || '-'}`,
-    '',
-    '=== Request Body (masked) ===',
-    JSON.stringify(input.requestMessage || {}, null, 2),
-    '',
-    '=== Response Body (masked) ===',
-    JSON.stringify(input.responseMessage || {}, null, 2),
-  ]
-  return lines.join('\n')
-}
-
-function readEmvTagValue(payload: string, wantedTag: string): string {
-  let i = 0
-  while (i + 4 <= payload.length) {
-    const tag = payload.slice(i, i + 2)
-    const lenText = payload.slice(i + 2, i + 4)
-    if (!/^\d{2}$/.test(lenText)) return ''
-    const len = Number(lenText)
-    const valueStart = i + 4
-    const valueEnd = valueStart + len
-    if (valueEnd > payload.length) return ''
-    if (tag === wantedTag) return payload.slice(valueStart, valueEnd).trim()
-    i = valueEnd
-  }
-  return ''
-}
-
-function extractAmountFromEmvQrPayload(payload: string): number {
-  const raw = String(payload || '').trim()
-  if (!raw) return 0
-  const amountText = readEmvTagValue(raw, '54')
-  if (!amountText) return 0
-  const amount = Number(amountText.replace(/,/g, '').trim())
-  if (!Number.isFinite(amount) || amount <= 0) return 0
-  return Math.round(amount * 100) / 100
-}
-
-/** 1–99만 영수증·주방전표에 노출 */
-function posGuestCountForThermalPrint(n: unknown): number | undefined {
-  const g = Math.max(0, Math.min(99, Math.trunc(Number(n) || 0)))
-  return g > 0 ? g : undefined
-}
-
-function posGuestCountSpread(n: unknown): { guestCount: number } | Record<PropertyKey, never> {
-  const g = posGuestCountForThermalPrint(n)
-  return g != null ? { guestCount: g } : {}
-}
-
-function posKitchenGuestSpread(
-  n: unknown,
-  label: string
-): { guestCount: number; guestCountLabel: string } | Record<PropertyKey, never> {
-  const g = posGuestCountForThermalPrint(n)
-  return g != null ? { guestCount: g, guestCountLabel: label } : {}
-}
-
-type StoreAutoPrintFlags = {
-  receiptOnOrder: boolean
-  receiptOnAddOrder: boolean
-  receiptOnPayment: boolean
-  kitchenOnOrder: boolean
-}
-
-function storeAutoPrintFlagsFromSettings(s: PosPrinterSettings | null | undefined): StoreAutoPrintFlags {
-  return {
-    receiptOnOrder: Boolean(s?.autoPrintReceiptOnOrder),
-    receiptOnAddOrder: Boolean(s?.autoPrintReceiptOnAddOrder || s?.autoPrintReceiptOnOrder),
-    receiptOnPayment: Boolean(s?.autoPrintReceiptOnPayment ?? s?.autoPrintReceiptOnOrder),
-    kitchenOnOrder: Boolean(s?.autoPrintKitchenSlipOnOrder),
-  }
-}
-
-function mergeStoreAutoPrintFlags(
-  fromSettings: StoreAutoPrintFlags,
-  fromState: StoreAutoPrintFlags
-): StoreAutoPrintFlags {
-  return {
-    receiptOnOrder: fromState.receiptOnOrder || fromSettings.receiptOnOrder,
-    receiptOnAddOrder: fromState.receiptOnAddOrder || fromSettings.receiptOnAddOrder,
-    receiptOnPayment: fromState.receiptOnPayment || fromSettings.receiptOnPayment,
-    kitchenOnOrder: fromState.kitchenOnOrder || fromSettings.kitchenOnOrder,
-  }
-}
-
-/** Supabase Realtime INSERT 페이로드의 id는 number가 아닐 수 있음(bigint 등 → 문자열) */
-function coercePosOrderIdFromRealtime(raw: unknown): number | null {
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return Math.trunc(raw)
-  if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) {
-    const n = parseInt(raw.trim(), 10)
-    return n > 0 ? n : null
-  }
-  return null
-}
-
-function isSessionNewOrder(createdAtRaw: unknown, sessionStartedAtMs: number, graceMs = 5000): boolean {
-  const s = String(createdAtRaw ?? '').trim()
-  if (!s) return false
-  const ms = new Date(s).getTime()
-  if (!Number.isFinite(ms)) return false
-  return ms >= sessionStartedAtMs - graceMs
-}
-
-const MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX = 'pos_main_last_seen_order_id:'
-const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
-const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
-const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
-const MAIN_POS_META_SCAN_INTERVAL_MS = 12_000
-const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
-/** 로컬 제출 인쇄 직후 Realtime·폴링이 같은 주문을 추가주문으로 오인해 2장째를 찍지 않도록 */
-const DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS = 45_000
-
-function readMainPosLastSeenOrderId(storeCodeRaw: unknown): number {
-  if (typeof window === 'undefined') return 0
-  const storeCode = String(storeCodeRaw ?? '').trim()
-  if (!storeCode) return 0
-  try {
-    const raw = localStorage.getItem(`${MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX}${storeCode}`)
-    const n = Number(raw ?? 0)
-    if (!Number.isFinite(n) || n <= 0) return 0
-    return Math.trunc(n)
-  } catch {
-    return 0
-  }
-}
-
-function writeMainPosLastSeenOrderId(storeCodeRaw: unknown, orderIdRaw: unknown): void {
-  if (typeof window === 'undefined') return
-  const storeCode = String(storeCodeRaw ?? '').trim()
-  const orderId = Number(orderIdRaw)
-  if (!storeCode || !Number.isFinite(orderId) || orderId <= 0) return
-  try {
-    localStorage.setItem(
-      `${MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX}${storeCode}`,
-      String(Math.trunc(orderId))
-    )
-  } catch {
-    /* ignore localStorage failures */
-  }
-}
-
-function isPosPrintDebugEnabledInBrowser(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    const byQuery = new URLSearchParams(window.location.search).get('printDebug')
-    if (byQuery === '1' || byQuery === 'true') return true
-  } catch {
-    /* ignore */
-  }
-  try {
-    return localStorage.getItem(POS_PRINT_DEBUG_STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function extractGrabOrderIdFromMemoText(memo: string): string {
-  return (/grab_order:([A-Za-z0-9._:-]+)/i.exec(String(memo || ''))?.[1] || '').trim()
-}
-
-function taxInvoiceFromRecipientRow(row: PosTaxInvoiceRecipientRow): PosTaxInvoiceData {
-  return {
-    memberNo: String(row.member_no || '').trim(),
-    customerType: row.customer_type === 'company' ? 'company' : 'person',
-    name: String(row.name || '').trim(),
-    taxId: String(row.tax_id || '').replace(/\D/g, '').slice(0, 13),
-    branchNo: String(row.branch_no || '').replace(/\D/g, '').slice(0, 5),
-    phone: String(row.phone || '').trim(),
-    email: String(row.email || '').trim(),
-    address: String(row.address || '').trim(),
-    member: Boolean(row.member_no),
-  }
-}
-
-let POS_INCOMING_WAV_DATA_URI_CACHE = ''
-
-function getPosIncomingWavDataUri(): string {
-  if (POS_INCOMING_WAV_DATA_URI_CACHE) return POS_INCOMING_WAV_DATA_URI_CACHE
-  const sampleRate = 22050
-  const durationSec = 0.62
-  const totalSamples = Math.max(1, Math.floor(sampleRate * durationSec))
-  const pcm = new Int16Array(totalSamples)
-
-  const mixNote = (startSec: number, lenSec: number, freqHz: number, gain: number) => {
-    const start = Math.max(0, Math.floor(startSec * sampleRate))
-    const end = Math.min(totalSamples, Math.floor((startSec + lenSec) * sampleRate))
-    const attack = Math.floor(sampleRate * 0.018)
-    const release = Math.floor(sampleRate * 0.08)
-    for (let i = start; i < end; i += 1) {
-      const t = (i - start) / sampleRate
-      const idx = i - start
-      const tail = end - i
-      const envA = attack > 0 ? Math.min(1, idx / attack) : 1
-      const envR = release > 0 ? Math.min(1, tail / release) : 1
-      const env = Math.min(envA, envR)
-      const v = Math.sin(2 * Math.PI * freqHz * t) * gain * env
-      const next = pcm[i] + Math.floor(v * 32767)
-      pcm[i] = Math.max(-32768, Math.min(32767, next))
-    }
-  }
-
-  // 매장 알림용 3노트 차임
-  mixNote(0.00, 0.16, 784, 0.24)
-  mixNote(0.17, 0.16, 988, 0.22)
-  mixNote(0.34, 0.20, 1174, 0.24)
-
-  const dataSize = pcm.length * 2
-  const buf = new ArrayBuffer(44 + dataSize)
-  const view = new DataView(buf)
-  const writeAscii = (offset: number, s: string) => {
-    for (let i = 0; i < s.length; i += 1) view.setUint8(offset + i, s.charCodeAt(i))
-  }
-  writeAscii(0, 'RIFF')
-  view.setUint32(4, 36 + dataSize, true)
-  writeAscii(8, 'WAVE')
-  writeAscii(12, 'fmt ')
-  view.setUint32(16, 16, true) // fmt chunk size
-  view.setUint16(20, 1, true) // PCM
-  view.setUint16(22, 1, true) // mono
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * 2, true) // byteRate
-  view.setUint16(32, 2, true) // blockAlign
-  view.setUint16(34, 16, true) // bitsPerSample
-  writeAscii(36, 'data')
-  view.setUint32(40, dataSize, true)
-  for (let i = 0; i < pcm.length; i += 1) {
-    view.setInt16(44 + i * 2, pcm[i], true)
-  }
-
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    const part = bytes.subarray(i, i + chunk)
-    binary += String.fromCharCode(...part)
-  }
-  POS_INCOMING_WAV_DATA_URI_CACHE = `data:audio/wav;base64,${btoa(binary)}`
-  return POS_INCOMING_WAV_DATA_URI_CACHE
-}
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
@@ -2951,7 +2615,7 @@ export default function PosTerminalPage() {
         const orderId = Number(params.orderId)
         if (!Number.isFinite(orderId) || orderId <= 0) return
         const memo = String(params.memo || '')
-        const grabOrderId = extractGrabOrderIdFromMemoText(memo)
+        const grabOrderId = extractGrabOrderIdFromMemo(memo)
         if (confirmed) {
           const res = await updatePosOrderStatus({
             id: orderId,
@@ -3228,7 +2892,7 @@ export default function PosTerminalPage() {
       if (backgroundAcceptedDeliveryOrderIdsRef.current.has(orderId)) return
       backgroundAcceptedDeliveryOrderIdsRef.current.add(orderId)
       try {
-        const grabOrderId = extractGrabOrderIdFromMemoText(String(params.memo ?? ''))
+        const grabOrderId = extractGrabOrderIdFromMemo(String(params.memo ?? ''))
         const res = await updatePosOrderStatus({
           id: orderId,
           status: 'cooking',

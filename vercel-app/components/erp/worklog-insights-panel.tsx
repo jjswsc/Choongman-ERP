@@ -83,13 +83,6 @@ export function WorklogInsightsPanel() {
     void loadData()
   }
 
-  React.useEffect(() => {
-    if (employeeFilter !== "all") {
-      setHasSearched(true)
-      void loadData()
-    }
-  }, [employeeFilter, loadData])
-
   const workRows = data?.work || []
   const attendanceRows = data?.attendance || []
   const evalRows = data?.evaluations || []

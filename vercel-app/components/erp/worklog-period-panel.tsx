@@ -47,11 +47,6 @@ export function WorklogPeriodPanel({ employeeId, employeeName, onDatePick, embed
     }
   }, [startStr, endStr, employeeId, employeeName])
 
-  React.useEffect(() => {
-    setHasSearched(true)
-    void loadData()
-  }, [loadData])
-
   const totals = React.useMemo(() => {
     let totalTasks = 0
     let completed = 0

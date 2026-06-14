@@ -70,6 +70,7 @@ import {
   SalesPaymentDiscountPanel,
   SalesPromoBundleDiscountPanel,
 } from "@/components/tabs/sales-discount-analytics-panel"
+import { useSalesDiscountDrillSheet } from "@/components/tabs/sales-discount-drill-sheet"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 import {
   periodRowsForStoreSelection,
@@ -882,6 +883,24 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const orderTypesParam = React.useMemo(
     () => parseOrderTypesParam(orderTypesKey || null) ?? undefined,
     [orderTypesKey]
+  )
+
+  const discountDrillContext = React.useMemo(
+    () => ({
+      startStr,
+      endStr,
+      storeCodes: selectedStoresParam,
+      orderTypes: orderTypesParam,
+    }),
+    [startStr, endStr, selectedStoresParam, orderTypesParam]
+  )
+  const discountDrillHint = tr(
+    "salesDiscountDrillHint",
+    "행을 클릭하면 해당 할인이 적용된 주문 목록과 설명을 볼 수 있습니다."
+  )
+  const { openDrill: openDiscountDrill, sheet: discountDrillSheet } = useSalesDiscountDrillSheet(
+    discountDrillContext,
+    tr
   )
 
   const handleCancelReasonDrilldown = React.useCallback(
@@ -3664,6 +3683,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       menuSearchAnd={menuSearchAnd}
                       setMenuSearchAnd={setMenuSearchAnd}
                       tr={tr}
+                      onDrill={openDiscountDrill}
+                      drillHint={discountDrillHint}
                     />
                   ) : null}
                   {selectedView === "payment-discount" ? (
@@ -3674,13 +3695,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       menuSearchAnd={menuSearchAnd}
                       setMenuSearchAnd={setMenuSearchAnd}
                       tr={tr}
+                      onDrill={openDiscountDrill}
+                      drillHint={discountDrillHint}
                     />
                   ) : null}
                   {selectedView === "discount-all" ? (
-                    <SalesCombinedDiscountPanel data={promoBundleData} tr={tr} />
+                    <SalesCombinedDiscountPanel
+                      data={promoBundleData}
+                      tr={tr}
+                      onDrill={openDiscountDrill}
+                      drillHint={discountDrillHint}
+                    />
                   ) : null}
                 </SalesDiscountAnalyticsShell>
               ))}
+            {discountDrillSheet}
 
             {selectedView === "store" && (
               salesAnalyticsPlaceholder ? (

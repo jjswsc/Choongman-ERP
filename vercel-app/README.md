@@ -25,7 +25,7 @@ vercel-app/
 ├── components/              # React UI (~490 TSX)
 ├── lib/
 │   ├── api-client.ts        # API barrel (re-export)
-│   ├── api-client/          # 도메인별 클라이언트 (~38모듈)
+│   ├── api-client/          # 도메인별 클라이언트 (~53모듈)
 │   ├── api/                 # fetch·auth 코어
 │   ├── supabase-server.ts   # Supabase REST (서버)
 │   └── offline/             # POS·ERP 오프라인 큐

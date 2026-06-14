@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MEMBER_STAMP_POLICY,
+  buildMemberStampPreparingStatus,
   displayMemberStampCount,
   isStampChannelAllowed,
   normalizeMemberStampPolicy,
@@ -32,6 +33,14 @@ describe('member-stamp-card', () => {
       lineNotifyEnabled: false,
       completeBonusPoints: 20,
     })
+  })
+
+  it('builds preparing status when policy is off', () => {
+    const status = buildMemberStampPreparingStatus()
+    expect(status.enabled).toBe(false)
+    expect(status.preparing).toBe(true)
+    expect(status.currentStamps).toBe(0)
+    expect(status.cardSlots).toBe(DEFAULT_MEMBER_STAMP_POLICY.cardSlots)
   })
 
   it('computes display stamp count for reset vs accumulate', () => {

@@ -48,10 +48,22 @@ export async function getPosOrdersWithCache(params: {
   orderBy?: 'created_at.desc' | 'id.desc' | 'updated_at.desc'
   /** 테이블·실시간 목록 — linkpos 제외 경량 select (영수증 탭은 생략) */
   pollMinimal?: boolean
+  /** 수동 새로고침 — 직전 IndexedDB 캐시와 id 합집합 생략(결제 후 잔존 방지) */
+  skipPollMinimalCache?: boolean
   limit?: number
 }): Promise<PosOrder[]> {
-  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope, orderBy, pollMinimal, limit } =
-    params
+  const {
+    startStr,
+    endStr,
+    storeCode,
+    status,
+    debugPosOrders,
+    posBizDayScope,
+    orderBy,
+    pollMinimal,
+    skipPollMinimalCache,
+    limit,
+  } = params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
@@ -79,7 +91,7 @@ export async function getPosOrdersWithCache(params: {
       })
       let rows = data
       /** 테이블·배달 목록 폴링 — API 지연·빈 응답 시 직전 캐시와 id 합집합(주문 직후 사라짐 방지) */
-      if (pollMinimal) {
+      if (pollMinimal && !skipPollMinimalCache) {
         const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
         if (Array.isArray(cached) && cached.length > 0) {
           const byId = new Map<number, PosOrder>()

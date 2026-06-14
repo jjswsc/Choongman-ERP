@@ -40,9 +40,8 @@ import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-in
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
 import { MemberPortalCouponQrButton } from "@/components/member-portal/member-portal-coupon-qr-sheet"
 import {
-  MemberPortalTierBenefits,
-  MemberPortalTierGuide,
-  MemberPortalTierGuideSheet,
+  MemberPortalTierBenefitsSheet,
+  MemberPortalTierEntryButton,
   useMemberPortalTiers,
 } from "@/components/member-portal/member-portal-tier-guide"
 import { MemberPortalProfileContactLinks, MemberPortalContactChannelButtons } from "@/components/member-portal/member-portal-contact-links"
@@ -205,7 +204,7 @@ export function MemberPortalApp() {
   const [favoriteStoreCodes, setFavoriteStoreCodes] = React.useState<string[]>([])
   const [showQr, setShowQr] = React.useState(false)
   const [homePromoOpen, setHomePromoOpen] = React.useState(false)
-  const [tierGuideOpen, setTierGuideOpen] = React.useState(false)
+  const [tierBenefitsOpen, setTierBenefitsOpen] = React.useState(false)
   const [selectedHomePromo, setSelectedHomePromo] = React.useState<MemberPortalContentItem | null>(null)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const [profile, setProfile] = React.useState<PortalProfileForm>({
@@ -376,6 +375,9 @@ export function MemberPortalApp() {
     const lineFriend = params.get("line_friend")
     if (err) {
       setError(memberPortalLoginError(lang, err))
+      if (err === "missing_store" || err === "invalid_store") {
+        setAuthPanel("signup")
+      }
     }
     if (lineFriend === "added") {
       setNotice(t("lineFriendAdded"))
@@ -414,25 +416,6 @@ export function MemberPortalApp() {
       if (res.member) applyLoggedInMember(res.member)
       const ok = await loadSession()
       if (!ok) setError(t("loginFailed"))
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const completeJoinStore = async () => {
-    setActionLoading(true)
-    setError("")
-    try {
-      const res = await postJson<{ success: boolean; code?: string; member?: MemberSummary }>(
-        "/api/member-portal/me/join-store",
-        { joinStoreCode: signupStoreCode }
-      )
-      if (!res.success) {
-        setError(res.code ? memberPortalLoginError(lang, res.code) : t("saveFailed"))
-        return
-      }
-      if (res.member) applyLoggedInMember(res.member)
-      await loadSession()
     } finally {
       setActionLoading(false)
     }
@@ -618,61 +601,6 @@ export function MemberPortalApp() {
     )
   }
 
-  if (member && !member.joinStoreCode) {
-    const portalFieldClass =
-      "h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white shadow-inner shadow-black/20 placeholder:text-white/30 focus-visible:border-amber-400/50 focus-visible:ring-amber-400/20"
-    const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-white/45"
-    return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-[#08080a] text-white">
-        <MemberPortalLoungeBackdrop
-          customFullBackgroundUrl={designBackgrounds.loginBackgroundUrl}
-          heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
-          variant="login"
-        />
-        <div className="relative mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-5 py-8">
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-md">
-            <p className="text-lg font-semibold text-white">{t("joinStoreCompleteTitle")}</p>
-            <p className="mt-2 text-sm text-white/60">{t("joinStoreCompleteDesc")}</p>
-            {!!error && (
-              <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                {error}
-              </div>
-            )}
-            <div className="mt-5 space-y-3">
-              <div className="space-y-1.5">
-                <Label className={portalLabelClass}>{t("signupStoreLabel")}</Label>
-                <select
-                  value={signupStoreCode}
-                  onChange={(e) => setSignupStoreCode(e.target.value)}
-                  className={`${portalFieldClass} w-full px-3 text-sm`}
-                >
-                  <option value="" className="bg-[#141418] text-white/70">
-                    {t("signupStorePlaceholder")}
-                  </option>
-                  <option value={signupOfficeStoreCode} className="bg-[#141418] text-white">
-                    {t("signupStoreOffice")}
-                  </option>
-                  {signupStoreOptions.map((store) => (
-                    <option key={store.storeCode} value={store.storeCode} className="bg-[#141418] text-white">
-                      {store.displayName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button
-                onClick={completeJoinStore}
-                disabled={actionLoading || !signupStoreCode}
-                className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#ef233c] to-[#d90429] text-base font-semibold text-white"
-              >
-                {actionLoading ? t("signupChecking") : t("joinStoreCompleteBtn")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   if (!member) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
     const portalFieldClass =
@@ -733,31 +661,11 @@ export function MemberPortalApp() {
             </div>
 
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label className={portalLabelClass}>{t("signupStoreLabel")}</Label>
-                <select
-                  value={signupStoreCode}
-                  onChange={(e) => setSignupStoreCode(e.target.value)}
-                  className={`${portalFieldClass} w-full px-3 text-sm`}
-                >
-                  <option value="" className="bg-[#141418] text-white/70">
-                    {t("signupStorePlaceholder")}
-                  </option>
-                  <option value={signupOfficeStoreCode} className="bg-[#141418] text-white">
-                    {t("signupStoreOffice")}
-                  </option>
-                  {signupStoreOptions.map((store) => (
-                    <option key={store.storeCode} value={store.storeCode} className="bg-[#141418] text-white">
-                      {store.displayName}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <Button
                 className="h-14 w-full rounded-2xl border-0 bg-[#06C755] text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(6,199,85,0.28)] transition hover:bg-[#05b34c] disabled:opacity-50"
-                disabled={!lineLoginEnabled || !signupStoreCode}
+                disabled={!lineLoginEnabled}
                 onClick={() => {
-                  window.location.href = `/api/member-portal/auth/line/start?joinStore=${encodeURIComponent(signupStoreCode)}`
+                  window.location.href = "/api/member-portal/auth/line/start"
                 }}
               >
                 <span className="inline-flex items-center gap-3">
@@ -802,6 +710,26 @@ export function MemberPortalApp() {
               <div className="mt-5 border-t border-white/10 pt-5">
                 <p className="mb-4 text-sm font-medium text-white/80">{t("signupTitle")}</p>
                 <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <Label className={portalLabelClass}>{t("signupStoreLabel")}</Label>
+                    <select
+                      value={signupStoreCode}
+                      onChange={(e) => setSignupStoreCode(e.target.value)}
+                      className={`${portalFieldClass} w-full px-3 text-sm`}
+                    >
+                      <option value="" className="bg-[#141418] text-white/70">
+                        {t("signupStorePlaceholder")}
+                      </option>
+                      <option value={signupOfficeStoreCode} className="bg-[#141418] text-white">
+                        {t("signupStoreOffice")}
+                      </option>
+                      {signupStoreOptions.map((store) => (
+                        <option key={store.storeCode} value={store.storeCode} className="bg-[#141418] text-white">
+                          {store.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="space-y-1.5">
                     <Label className={portalLabelClass}>{t("signupNameLabel")}</Label>
                     <Input
@@ -886,6 +814,21 @@ export function MemberPortalApp() {
                   >
                     {actionLoading ? t("signupChecking") : t("signupBtn")}
                   </Button>
+                  {lineLoginEnabled ? (
+                    <Button
+                      type="button"
+                      className="h-12 w-full rounded-2xl border-0 bg-[#06C755] text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(6,199,85,0.28)] transition hover:bg-[#05b34c] disabled:opacity-50"
+                      disabled={!signupStoreCode}
+                      onClick={() => {
+                        window.location.href = `/api/member-portal/auth/line/start?joinStore=${encodeURIComponent(signupStoreCode)}`
+                      }}
+                    >
+                      <span className="inline-flex items-center justify-center gap-3">
+                        <LineLogo className="h-8 w-8" />
+                        {t("lineBtnWithLogo")}
+                      </span>
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -922,7 +865,11 @@ export function MemberPortalApp() {
 
           {portalTiers.length > 0 ? (
             <div className="mt-8">
-              <MemberPortalTierGuide tiers={portalTiers} />
+              <MemberPortalTierEntryButton
+                title={t("tierBenefitsTitle")}
+                description={t("tierBenefitsDesc")}
+                onClick={() => setTierBenefitsOpen(true)}
+              />
             </div>
           ) : null}
 
@@ -986,6 +933,13 @@ export function MemberPortalApp() {
               </div>
             </div>
           ) : null}
+
+          <MemberPortalTierBenefitsSheet
+            open={tierBenefitsOpen}
+            tiers={portalTiers}
+            closeLabel={t("contactMenuClose")}
+            onClose={() => setTierBenefitsOpen(false)}
+          />
         </div>
       </div>
     )
@@ -1078,14 +1032,15 @@ export function MemberPortalApp() {
                     : t("tierMax"),
                 progressPercent: activeDashboard.tierProgress.progressPercent,
                 pointRateLabel: `${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · ${activeDashboard.tierProgress.progressPercent}%`,
-                actionLabel: portalTiers.length > 0 ? t("tierGuideViewBtn") : undefined,
-                onAction: portalTiers.length > 0 ? () => setTierGuideOpen(true) : undefined,
+                actionLabel: portalTiers.length > 0 ? t("tierBenefitsViewBtn") : undefined,
+                onAction: portalTiers.length > 0 ? () => setTierBenefitsOpen(true) : undefined,
               }}
             />
 
             <MemberPortalStampHomeWidget
               lang={lang}
               status={stampStatus}
+              loading={stampLoading}
               onOpenPrivilege={() => changeTab("privilege")}
             />
 
@@ -1217,7 +1172,13 @@ export function MemberPortalApp() {
               loading={stampLoading}
               onGoCoupons={() => changeTab("privilege")}
             />
-            <MemberPortalTierBenefits tiers={portalTiers} currentTierCode={activeDashboard.tierProgress.currentTierCode} />
+            {portalTiers.length > 0 ? (
+              <MemberPortalTierEntryButton
+                title={t("tierBenefitsTitle")}
+                description={t("tierBenefitsDesc")}
+                onClick={() => setTierBenefitsOpen(true)}
+              />
+            ) : null}
             {coupons.length === 0 ? (
               <GlassCard soft className="px-5 py-12 text-center text-white/45">
                 {t("noCoupons")}
@@ -1466,12 +1427,12 @@ export function MemberPortalApp() {
           setSelectedHomePromo(null)
         }}
       />
-      <MemberPortalTierGuideSheet
-        open={tierGuideOpen}
+      <MemberPortalTierBenefitsSheet
+        open={tierBenefitsOpen}
         tiers={portalTiers}
         currentTierCode={activeDashboard.tierProgress.currentTierCode}
         closeLabel={t("contactMenuClose")}
-        onClose={() => setTierGuideOpen(false)}
+        onClose={() => setTierBenefitsOpen(false)}
       />
     </MemberPortalAmbienceBackground>
   )

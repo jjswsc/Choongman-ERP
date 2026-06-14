@@ -378,8 +378,10 @@ export default function PosOrdersPage() {
     const qAuditEnd = String(searchParams.get("auditEnd") || "").trim()
     const qAuditEmployee = String(searchParams.get("auditEmployee") || "").trim()
     const qAuditOrderNo = String(searchParams.get("auditOrderNo") || "").trim()
+    const qOrderNo = String(searchParams.get("orderNo") || "").trim()
     if (/^\d{4}-\d{2}-\d{2}$/.test(qStart)) setStartStr(qStart)
     if (/^\d{4}-\d{2}-\d{2}$/.test(qEnd)) setEndStr(qEnd)
+    if (qOrderNo) setSearchTerm(qOrderNo)
     if (qStatus && ["all", "pending", "cooking", "ready", "completed", "paid", "cancelled"].includes(qStatus)) {
       setStatusFilter(qStatus)
     }
@@ -1338,10 +1340,13 @@ export default function PosOrdersPage() {
   React.useEffect(() => {
     if (urlDrilldownSearchedRef.current) return
     const qCancelReason = String(searchParams.get("cancelReason") || "").trim()
+    const qOrderNo = String(searchParams.get("orderNo") || "").trim()
     const qStart = String(searchParams.get("start") || "").trim()
     const qEnd = String(searchParams.get("end") || "").trim()
     const qStatus = String(searchParams.get("status") || "").trim().toLowerCase()
-    if (!qCancelReason || !/^\d{4}-\d{2}-\d{2}$/.test(qStart) || !/^\d{4}-\d{2}-\d{2}$/.test(qEnd)) return
+    const datesOk = /^\d{4}-\d{2}-\d{2}$/.test(qStart) && /^\d{4}-\d{2}-\d{2}$/.test(qEnd)
+    if (!datesOk) return
+    if (!qCancelReason && !qOrderNo) return
     urlDrilldownSearchedRef.current = true
     setHasSearchedOrders(true)
     setLoading(true)
@@ -1351,7 +1356,20 @@ export default function PosOrdersPage() {
       storeCode: orderListStoreCode,
       status: qStatus && qStatus !== "all" ? qStatus : undefined,
     })
-      .then(setOrders)
+      .then((rows) => {
+        setOrders(rows)
+        if (!qOrderNo) return
+        const found = rows.find((o) => String(o.orderNo || "").trim() === qOrderNo)
+        if (!found) return
+        setActiveTab("orders")
+        setExpandedId(found.id)
+        if (typeof document !== "undefined") {
+          window.setTimeout(() => {
+            const el = document.getElementById(`admin-pos-order-row-${found.id}`)
+            el?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }, 120)
+        }
+      })
       .catch(() => setOrders([]))
       .finally(() => setLoading(false))
   }, [searchParams, orderListStoreCode])

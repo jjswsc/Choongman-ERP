@@ -83,10 +83,6 @@ export function MemberPointsSearchPanel({ selectedMemberId, onSelectMember }: Me
     [t]
   )
 
-  React.useEffect(() => {
-    void loadPage({ q: "", afterId: undefined, pageIdx: 0, cursors: [undefined] })
-  }, [loadPage])
-
   const runSearch = React.useCallback(
     (q: string) => {
       const trimmed = q.trim()

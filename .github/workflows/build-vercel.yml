@@ -53,9 +53,10 @@ jobs:
           cache: "npm"
           cache-dependency-path: vercel-app/package-lock.json
 
-      - name: Install, test and build
+      - name: Install, lint, test and build
         run: |
           cd vercel-app
           npm ci
+          npx eslint . --quiet
           npm run test
           npm run build

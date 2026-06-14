@@ -5,8 +5,14 @@ import {
   shopeeFoodIndicatorDenied,
   shopeeFoodVendorAckJson,
 } from '@/lib/shopeefood-webhook'
+import { syncShopeeFoodOrderStatusToPos } from '@/lib/shopeefood-order-status-sync'
 
 export const dynamic = 'force-dynamic'
+
+function shouldFailOpenOnStatusSyncError(message: string): boolean {
+  const msg = String(message || '').trim().toLowerCase()
+  return msg === 'pos_order_not_found'
+}
 
 /**
  * ShopeeFood → 벤더: 주문 상태 변경 푸시
@@ -29,12 +35,49 @@ export async function POST(
     return shopeeFoodVendorAckJson(1000, 'invalid_json')
   }
 
+  const orderId = String(body.id ?? '')
+  const storeId = String(body.store_id ?? '')
+  const status = String(body.status ?? '')
+
   logShopeeFoodWebhook('order_status', req, indicator, {
-    id: String(body.id ?? ''),
-    store_id: String(body.store_id ?? ''),
-    status: String(body.status ?? ''),
+    id: orderId,
+    store_id: storeId,
+    status,
   })
 
-  // TODO: pos_orders 상태·취소 동기화 (필요 시 Shopee 상태 ↔ POS status 매핑)
+  if (!orderId || !status) {
+    return shopeeFoodVendorAckJson(1000, 'missing id or status')
+  }
+
+  const synced = await syncShopeeFoodOrderStatusToPos({
+    orderId,
+    status,
+    storeId,
+    indicator,
+  })
+
+  if (!synced.ok) {
+    if (shouldFailOpenOnStatusSyncError(synced.message)) {
+      logShopeeFoodWebhook('order_status', req, indicator, {
+        id: orderId,
+        store_id: storeId,
+        status,
+        syncIgnored: synced.message,
+      })
+      return shopeeFoodVendorAckJson(0, 'success')
+    }
+    console.error('[shopeefood-webhook] order_status_sync_failed', synced.message)
+    return shopeeFoodVendorAckJson(1000, synced.message)
+  }
+
+  logShopeeFoodWebhook('order_status', req, indicator, {
+    id: orderId,
+    store_id: storeId,
+    status,
+    posOrderId: synced.orderId ?? null,
+    posStatus: synced.status ?? null,
+    updated: synced.updated,
+  })
+
   return shopeeFoodVendorAckJson(0, 'success')
 }

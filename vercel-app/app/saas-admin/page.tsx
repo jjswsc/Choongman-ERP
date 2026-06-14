@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FALLBACK_TENANTS, type TenantItem } from "@/lib/saas-admin-control-plane"
+import { type TenantItem } from "@/lib/saas-admin-control-plane"
 import { aggregateSaasRevenueStats } from "@/lib/saas-module-billing"
 import { completedStepCount, firstIncompleteStep, isOnboardingComplete, ONBOARDING_STEP_ORDER, resolveOnboardingSteps, type OnboardingStatusRow, type OnboardingStepKey } from "@/lib/saas-onboarding-status"
 import { useLang } from "@/lib/lang-context"
@@ -63,7 +63,7 @@ export default function SaasAdminPage() {
       }
     } catch (error) {
       setLoadNotice(tr(t, "saasAdminCust_loadFailed", { msg: String(error) }))
-      setTenants(FALLBACK_TENANTS)
+      setTenants([])
     } finally {
       setLoading(false)
     }

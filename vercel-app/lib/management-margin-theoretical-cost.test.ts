@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   aggregateTheoreticalCostFromOrders,
+  buildTheoreticalCostResolveContext,
   collectTheoreticalCostUnmatchedLines,
   expandOrderLineToCostLines,
   type TheoreticalCostUnmatchedLine,
@@ -14,6 +15,32 @@ function entry(food = 1, packaging = 0): PosMenuCostIndexEntry {
     foodCost: food,
     packagingCost: packaging,
   }
+}
+
+function ctxFixture() {
+  const costIndex = new Map<string, PosMenuCostIndexEntry>([
+    ['8|', entry()],
+    ['22|', entry()],
+  ])
+  return buildTheoreticalCostResolveContext({
+    costIndex,
+    catalog: {
+      menus: [
+        { id: '8', name: 'SNOW ONION' },
+        { id: '22', name: 'Rice' },
+        { id: '20', name: 'GOLDEN FRIED CHICKEN' },
+      ],
+      promoItemsByPromoId: new Map([
+        [
+          '5',
+          [
+            { menuId: '20', quantity: 1 },
+            { menuId: '22', quantity: 1 },
+          ],
+        ],
+      ]),
+    },
+  })
 }
 
 describe('expandOrderLineToCostLines', () => {
@@ -45,6 +72,36 @@ describe('expandOrderLineToCostLines', () => {
     expect(lines).toHaveLength(2)
     expect(lines[0]).toMatchObject({ menuId: '10', optionId: '1', qty: 1 })
     expect(lines[1]).toMatchObject({ menuId: '11', optionId: '2', qty: 1 })
+  })
+
+  it('resolves menu id from cart line id and grab set child name', () => {
+    const ctx = ctxFixture()
+    const fromId = expandOrderLineToCostLines({ id: '8-2', name: 'SNOW ONION', qty: 1 }, ctx)
+    expect(fromId[0]?.menuId).toBe('8')
+
+    const fromGrabChild = expandOrderLineToCostLines(
+      { name: '[[April] Set 1] SNOW ONION', qty: 2 },
+      ctx
+    )
+    expect(fromGrabChild[0]).toMatchObject({ menuId: '8', qty: 2 })
+  })
+
+  it('expands promo template from catalog when order snapshot lacks promoItems', () => {
+    const ctx = ctxFixture()
+    const lines = expandOrderLineToCostLines(
+      { name: '[April] Set 2', promoId: '5', qty: 2 },
+      ctx
+    )
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatchObject({ menuId: '20', qty: 2 })
+    expect(lines[1]).toMatchObject({ menuId: '22', qty: 2 })
+  })
+
+  it('skips grabSetChild rows merged into parent promoItems', () => {
+    const ctx = ctxFixture()
+    expect(
+      expandOrderLineToCostLines({ name: 'SNOW ONION', grabSetChild: true, qty: 1 }, ctx)
+    ).toHaveLength(0)
   })
 })
 

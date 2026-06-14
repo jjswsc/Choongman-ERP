@@ -249,9 +249,6 @@ export const MemberListPanel = React.memo(
 
     const loadPageRef = React.useRef(loadPage)
     loadPageRef.current = loadPage
-    React.useEffect(() => {
-      void loadPageRef.current({ q: "", afterId: undefined, pageIdx: 0, cursors: [undefined] })
-    }, [])
 
     React.useImperativeHandle(
       ref,

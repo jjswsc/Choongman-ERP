@@ -2,7 +2,15 @@
 
 import * as React from "react"
 import { Gift, Megaphone, Stamp, Ticket } from "lucide-react"
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmCouponDefinitionPanel } from "@/components/admin/crm-coupon-definition-panel"
 import { CrmCouponIssuePanel } from "@/components/admin/crm-coupon-issue-panel"
@@ -53,43 +61,46 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
           </div>
         </div>
 
-        <Tabs value={tab} onValueChange={handleTab}>
-          <CrmCouponKpiStrip />
-          <TabsList className="mt-4 flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
-            <TabsTrigger value="definitions" className="gap-1.5">
-              <Ticket className="h-4 w-4" />
-              {t("crmCouponTabDefinitions") || "쿠폰 정의"}
-            </TabsTrigger>
-            <TabsTrigger value="issue" className="gap-1.5">
-              <Gift className="h-4 w-4" />
-              {t("crmCouponTabIssue") || "회원 지급"}
-            </TabsTrigger>
-            <TabsTrigger value="history" className="gap-1.5">
-              {t("crmCouponTabHistory") || "발급·이력"}
-            </TabsTrigger>
-            <TabsTrigger value="campaigns" className="gap-1.5">
-              <Megaphone className="h-4 w-4" />
-              {t("crmCouponTabCampaigns") || t("adminCrmCampaigns") || "쿠폰 캠페인"}
-            </TabsTrigger>
-            <TabsTrigger value="stamp" className="gap-1.5">
-              <Stamp className="h-4 w-4" />
-              {t("crmCouponTabStamp") || "스탬프 카드"}
-            </TabsTrigger>
-          </TabsList>
+        <CrmCouponKpiStrip />
 
-          <TabsContent value="definitions" className="mt-4">
+        <Tabs value={tab} onValueChange={handleTab} className={adminTabsRootCn}>
+          <AdminTabsBarWithHelp>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="definitions" className={adminTabsTriggerCn}>
+                <Ticket className={adminTabsIconCn} aria-hidden />
+                {t("crmCouponTabDefinitions") || "쿠폰 정의"}
+              </TabsTrigger>
+              <TabsTrigger value="issue" className={adminTabsTriggerCn}>
+                <Gift className={adminTabsIconCn} aria-hidden />
+                {t("crmCouponTabIssue") || "회원 지급"}
+              </TabsTrigger>
+              <TabsTrigger value="history" className={adminTabsTriggerCn}>
+                {t("crmCouponTabHistory") || "발급·이력"}
+              </TabsTrigger>
+              <TabsTrigger value="campaigns" className={adminTabsTriggerCn}>
+                <Megaphone className={adminTabsIconCn} aria-hidden />
+                {t("crmCouponTabCampaigns") || t("adminCrmCampaigns") || "쿠폰 캠페인"}
+              </TabsTrigger>
+              <TabsTrigger value="stamp" className={adminTabsTriggerCn}>
+                <Stamp className={adminTabsIconCn} aria-hidden />
+                {t("crmCouponTabStamp") || "스탬프 카드"}
+              </TabsTrigger>
+            </TabsList>
+          </AdminTabsBarWithHelp>
+
+          <TabsContent value="definitions" className={adminTabsContentCn}>
             <CrmCouponDefinitionPanel />
           </TabsContent>
-          <TabsContent value="issue" className="mt-4">
+          <TabsContent value="issue" className={adminTabsContentCn}>
             <CrmCouponIssuePanel />
           </TabsContent>
-          <TabsContent value="history" className="mt-4">
+          <TabsContent value="history" className={adminTabsContentCn}>
             <CrmCouponHistoryPanel />
           </TabsContent>
-          <TabsContent value="campaigns" className="mt-4">
+          <TabsContent value="campaigns" className={adminTabsContentCn}>
             <CrmCouponCampaignPanel />
           </TabsContent>
-          <TabsContent value="stamp" className="mt-4">
+          <TabsContent value="stamp" className={adminTabsContentCn}>
             <CrmCouponStampPanel />
           </TabsContent>
         </Tabs>

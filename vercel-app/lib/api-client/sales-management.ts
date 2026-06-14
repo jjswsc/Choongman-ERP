@@ -363,6 +363,63 @@ export type PosSalesByPromoResult = {
   truncated?: boolean
 }
 
+export type PosSalesDiscountDrillOrderRow = {
+  orderId: number
+  orderNo: string
+  storeCode: string
+  orderType: string
+  tableName: string
+  total: number
+  discountAmount: number
+  discountReason?: string
+  couponCode?: string
+  promoLabel?: string
+  paidAt?: string
+  createdAt: string
+}
+
+export type PosSalesDiscountDrillDownResult = {
+  success: boolean
+  layer?: 'bundle' | 'payment'
+  kind?: string | null
+  rowKey?: string | null
+  orders: PosSalesDiscountDrillOrderRow[]
+  truncated?: boolean
+  message?: string
+}
+
+export async function getPosSalesDiscountDrillDown(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+  layer: 'bundle' | 'payment'
+  kind?: string
+  rowKey?: string
+  limit?: number
+}): Promise<PosSalesDiscountDrillDownResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr, layer: params.layer })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  if (params.kind) q.set('kind', params.kind)
+  if (params.rowKey) q.set('rowKey', params.rowKey)
+  if (params.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline(`/api/posSalesDiscountDrillDown?${q}`)
+  const truncated = res.headers.get('X-Sales-Truncated') === '1'
+  const json = (await res.json()) as Partial<PosSalesDiscountDrillDownResult>
+  return {
+    success: json.success === true,
+    layer: json.layer,
+    kind: json.kind ?? null,
+    rowKey: json.rowKey ?? null,
+    orders: Array.isArray(json.orders) ? json.orders : [],
+    truncated: truncated || json.truncated === true,
+    message: json.message,
+  }
+}
+
 export async function getPosSalesByPromo(params: {
   startStr: string
   endStr: string

@@ -36,3 +36,57 @@ export function paymentDiscountRowLabel(
   if (custom) return custom
   return paymentKindLabel(row.kind, tr)
 }
+
+/** 할인 드릴다운 시트 — 유형별 설명 */
+export function resolveSalesDiscountDrillExplanation(
+  layer: 'bundle' | 'payment',
+  kind: string,
+  tr: SalesDiscountTr
+): string {
+  if (layer === 'payment') {
+    if (kind === 'platform') {
+      return tr(
+        'salesDiscountDrillExplainPlatform',
+        '배달앱(Grab·Shopee·Line Man 등) 프로모가 discount_amt에 기록된 주문입니다. 매장 POS에서 결제할 때 직원이 입력한 할인과는 별개로, 플랫폼이 이미 반영한 할인입니다.'
+      )
+    }
+    if (kind === 'manual') {
+      return tr(
+        'salesDiscountDrillExplainManual',
+        'POS 결제·완료 시 직원이 수동으로 입력한 할인 주문입니다.'
+      )
+    }
+    if (kind === 'coupon') {
+      return tr(
+        'salesDiscountDrillExplainCoupon',
+        '회원·프로모 쿠폰이 적용된 주문입니다(coupon_discount_amt·applied_coupons).'
+      )
+    }
+    if (kind === 'collab') {
+      return tr(
+        'salesDiscountDrillExplainCollab',
+        '협업(브랜드·제휴) 할인 사유가 기록된 주문입니다.'
+      )
+    }
+    return tr(
+      'salesDiscountDrillExplainPaymentOther',
+      '결제 시점 할인(discount_amt·쿠폰)이 있는 완료 주문입니다. 세트 내재 할인과는 별도 층입니다.'
+    )
+  }
+  if (kind === 'set') {
+    return tr(
+      'salesDiscountDrillExplainBundleSet',
+      '세트·프로모 메뉴 줄의 정가 대비 판매가 차이(세트 할인)가 있는 주문입니다.'
+    )
+  }
+  if (kind === 'campaign') {
+    return tr(
+      'salesDiscountDrillExplainBundleCampaign',
+      '캠페인 프로모 줄의 정가 대비 판매가 차이가 있는 주문입니다.'
+    )
+  }
+  return tr(
+    'salesDiscountDrillExplainBundleOther',
+    '프로모 메뉴 줄의 정가 대비 판매가 차이(세트 할인)가 있는 주문입니다.'
+  )
+}

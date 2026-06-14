@@ -134,6 +134,38 @@ export async function getAdminVendors() {
   return jsonAsArray<AdminVendor>(await res.json())
 }
 
+export async function saveVendor(params: {
+  code: string
+  name: string
+  gps_name?: string
+  sales_outlet?: string
+  contact?: string
+  phone?: string
+  email?: string
+  address?: string
+  tax_no?: string
+  type?: string
+  memo?: string
+  direct_settlement?: boolean
+  editingCode?: string
+}) {
+  const res = await apiFetchWithOffline('/api/saveVendor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteVendor(params: { code: string }) {
+  const res = await apiFetchWithOffline('/api/deleteVendor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function saveItem(params: {
   code: string
   name: string

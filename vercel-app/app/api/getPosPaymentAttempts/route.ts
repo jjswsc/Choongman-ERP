@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { verifyToken } from '@/lib/jwt-auth'
+import { verifyBearerWithSaasGate } from '@/lib/saas/bearer-saas-gate'
 import { isOfficeRole } from '@/lib/permissions'
 
 async function resolveBearerCaller(
@@ -35,6 +36,11 @@ function storeCodesLooselyEqual(a: string, b: string): boolean {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const saasBlocked = await verifyBearerWithSaasGate(request, '/api/getPosPaymentAttempts')
+  if (saasBlocked.blocked) {
+    saasBlocked.blocked.headers.set('Access-Control-Allow-Origin', '*')
+    return saasBlocked.blocked
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()

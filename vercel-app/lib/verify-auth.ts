@@ -11,6 +11,21 @@ import {
   isOfficeRole,
   isSupervisorRole,
 } from '@/lib/permissions'
+import { resolveSaasModuleGateResponse } from '@/lib/saas/tenant-module-gate'
+
+async function resolveSaasModuleGateForRequest(auth: JwtPayload, req: NextRequest) {
+  if (!String(auth.tenantId || "").trim()) return null
+  try {
+    return await resolveSaasModuleGateResponse(auth, req.nextUrl.pathname)
+  } catch (err) {
+    console.warn("[saas-gate] requireAuth gate lookup failed", {
+      pathname: req.nextUrl.pathname,
+      tenantId: auth.tenantId,
+      err,
+    })
+    return null
+  }
+}
 
 /** API Route의 Request/NextRequest에서 Bearer JWT만 검증 (선택) */
 export async function tryVerifyBearerFromRequest(req: Request | NextRequest): Promise<JwtPayload | null> {
@@ -26,7 +41,10 @@ export type AuthLevel = 'any' | 'manager' | 'office' | 'director'
  * 요청에서 JWT를 추출하고 검증.
  * @returns 검증된 identity 또는 null (인증 실패)
  */
-export async function getVerifiedAuth(req: NextRequest): Promise<JwtPayload | null> {
+export async function getVerifiedAuth(
+  req: NextRequest,
+  options?: { skipSaasGate?: boolean }
+): Promise<JwtPayload | null> {
   const authHeader = req.headers.get('Authorization')
   let bearerToken: string | null = null
   if (authHeader?.startsWith('Bearer ')) {
@@ -37,23 +55,27 @@ export async function getVerifiedAuth(req: NextRequest): Promise<JwtPayload | nu
   const cookieToken = cookieRaw && String(cookieRaw).trim() ? String(cookieRaw).trim() : null
 
   // Bearer가 있어도 만료·불일치면 무시하고 HttpOnly 쿠키(cm_token)로 재시도 — 탭별 sessionStorage 만료와 쿠키 불일치 시 401 방지
+  let auth: JwtPayload | null = null
   if (bearerToken) {
-    const fromBearer = await verifyToken(bearerToken)
-    if (fromBearer) return fromBearer
+    auth = await verifyToken(bearerToken)
   }
-  if (cookieToken) {
-    const fromRaw = await verifyToken(cookieToken)
-    if (fromRaw) return fromRaw
-    try {
-      const decoded = decodeURIComponent(cookieToken)
-      if (decoded !== cookieToken) {
-        return verifyToken(decoded)
+  if (!auth && cookieToken) {
+    auth = await verifyToken(cookieToken)
+    if (!auth) {
+      try {
+        const decoded = decodeURIComponent(cookieToken)
+        if (decoded !== cookieToken) {
+          auth = await verifyToken(decoded)
+        }
+      } catch {
+        auth = null
       }
-    } catch {
-      return null
     }
   }
-  return null
+  if (!auth || options?.skipSaasGate) return auth
+  const saasBlock = await resolveSaasModuleGateForRequest(auth, req)
+  if (saasBlock) return null
+  return auth
 }
 
 /**
@@ -69,7 +91,7 @@ export async function requireAuth(
   | { auth: JwtPayload; errorResponse: null }
   | { auth: null; errorResponse: NextResponse }
 > {
-  const auth = await getVerifiedAuth(req)
+  const auth = await getVerifiedAuth(req, { skipSaasGate: true })
   if (!auth) {
     return {
       auth: null,
@@ -85,6 +107,8 @@ export async function requireAuth(
   }
 
   if (requiredLevel === 'any') {
+    const saasBlock = await resolveSaasModuleGateForRequest(auth, req)
+    if (saasBlock) return { auth: null, errorResponse: saasBlock }
     return { auth, errorResponse: null }
   }
 
@@ -139,6 +163,9 @@ export async function requireAuth(
       ),
     }
   }
+
+  const saasBlock = await resolveSaasModuleGateForRequest(auth, req)
+  if (saasBlock) return { auth: null, errorResponse: saasBlock }
 
   return { auth, errorResponse: null }
 }

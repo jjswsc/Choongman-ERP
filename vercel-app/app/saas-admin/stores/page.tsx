@@ -267,10 +267,7 @@ export default function SaasStoresPage() {
             {t("saasAdminNavOnboarding")}
           </Link>
           {t("saasAdminStore_pageLinkHint")}
-          <Link href="/saas-admin/customers" className="text-primary underline underline-offset-4">
-            {t("saasAdmin_linkCustomers")}
-          </Link>
-          {t("saasAdminStore_pageLinkHintCustomers")}
+          {t("saasAdminStore_pageLinkHintAfter")}
         </p>
       </div>
 

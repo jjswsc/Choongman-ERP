@@ -14,7 +14,6 @@ import {
   DEFAULT_LIMITS_BY_TIER,
   DEFAULT_POLICY,
   DEFAULT_STAGE_PRICES,
-  FALLBACK_TENANTS,
   type BillingCycle,
   type FeatureFlags,
   type PlanTier,
@@ -508,14 +507,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, tenants: rows, scope: scopeMeta }, { headers })
   } catch (error) {
     console.error("getSaasTenantSettings:", error)
+    const message =
+      error instanceof Error ? error.message : "고객사 설정을 불러오지 못했습니다. Supabase 제어 평면 테이블·RPC 적용 여부를 확인해 주세요."
     return NextResponse.json(
       {
-        success: true,
-        fallback: true,
-        message: "제어 평면 테이블이 아직 적용되지 않아 샘플 데이터로 표시합니다.",
-        tenants: FALLBACK_TENANTS,
+        success: false,
+        message,
+        tenants: [],
       },
-      { headers }
+      { status: 500, headers }
     )
   }
 }

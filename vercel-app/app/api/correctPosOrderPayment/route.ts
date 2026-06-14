@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, type JwtPayload } from '@/lib/jwt-auth'
+import { verifyBearerWithSaasGate } from '@/lib/saas/bearer-saas-gate'
 import { isOfficeRole } from '@/lib/permissions'
 import { normStoreKey } from '@/lib/store-list-keys'
 import {
@@ -52,6 +53,11 @@ function round2(n: number): number {
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const saasBlocked = await verifyBearerWithSaasGate(req, '/api/correctPosOrderPayment')
+  if (saasBlocked.blocked) {
+    saasBlocked.blocked.headers.set('Access-Control-Allow-Origin', '*')
+    return saasBlocked.blocked
+  }
   try {
     const caller = await resolveBearerCaller(req)
     if (!caller) {

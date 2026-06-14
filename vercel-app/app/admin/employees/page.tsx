@@ -323,17 +323,17 @@ export default function EmployeesPage() {
         setAllEmployees(merged)
         if (opts?.updateDisplay !== false) {
           setEmployeeCache(merged)
-        } else {
-          setEmployeeCache([])
         }
         callback?.()
       } catch (e) {
         fullListRef.current = []
         setAllEmployees([])
-        setEmployeeCache([])
-        setStores([])
-        const msg = e instanceof Error ? e.message : String(e)
-        setLoadError(t("emp_list_load_failed").replace("{msg}", msg))
+        if (opts?.updateDisplay !== false) {
+          setEmployeeCache([])
+          setStores([])
+          const msg = e instanceof Error ? e.message : String(e)
+          setLoadError(t("emp_list_load_failed").replace("{msg}", msg))
+        }
       } finally {
         setLoading(false)
       }
@@ -386,17 +386,6 @@ export default function EmployeesPage() {
       }
     })
   }, [searchParams, loadEmployeeList, router, adminRowToForm])
-
-  /** 목록 탭 진입 시 재직 중 목록 자동 1회 로드 (딥링크 진입은 위 effect가 처리) */
-  React.useEffect(() => {
-    if (hrMainTab !== "list") return
-    const employeeId = searchParams.get("employeeId")?.trim()
-    const employeeCode = searchParams.get("employeeCode")?.trim()
-    if (employeeId || employeeCode) return
-    if (hasSearched) return
-    setHasSearched(true)
-    void loadEmployeeList({ updateDisplay: true })
-  }, [hrMainTab, searchParams, hasSearched, loadEmployeeList])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions

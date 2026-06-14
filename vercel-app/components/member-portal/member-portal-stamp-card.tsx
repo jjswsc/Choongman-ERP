@@ -89,17 +89,73 @@ function StampCelebrationSheet({
   )
 }
 
+function MemberPortalStampPreparingPlaceholder({
+  lang,
+  variant,
+}: {
+  lang: LangCode
+  variant: "home" | "card"
+}) {
+  const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
+  const body = (
+    <>
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/35">
+          <Stamp className="h-5 w-5" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-white/85">{t("stampPreparingTitle")}</p>
+          <p className="mt-1 text-xs leading-relaxed text-white/45">{t("stampPreparingDesc")}</p>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-1.5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div
+            key={i}
+            className="h-2 flex-1 rounded-full bg-white/[0.06]"
+            style={{ opacity: 1 - i * 0.12 }}
+          />
+        ))}
+      </div>
+    </>
+  )
+
+  if (variant === "home") {
+    return (
+      <div
+        className="mb-4 w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-4"
+        aria-live="polite"
+      >
+        {body}
+      </div>
+    )
+  }
+
+  return (
+    <GlassCard soft className="px-4 py-4" aria-live="polite">
+      {body}
+    </GlassCard>
+  )
+}
+
 export function MemberPortalStampHomeWidget({
   lang,
   status,
+  loading,
   onOpenPrivilege,
 }: {
   lang: LangCode
   status: MemberStampCardStatus | null
+  loading?: boolean
   onOpenPrivilege: () => void
 }) {
   const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
-  if (!status?.enabled) return null
+  if (loading) return null
+  if (!status) return null
+  if (status.preparing) {
+    return <MemberPortalStampPreparingPlaceholder lang={lang} variant="home" />
+  }
+  if (!status.enabled) return null
   const slots = Math.max(1, status.cardSlots)
   const filled = status.currentStamps
   return (
@@ -209,7 +265,13 @@ export function MemberPortalStampCard({ lang, memberId, status, loading, compact
     )
   }
 
-  if (!status?.enabled) return null
+  if (!status) return null
+
+  if (status.preparing) {
+    return <MemberPortalStampPreparingPlaceholder lang={lang} variant="card" />
+  }
+
+  if (!status.enabled) return null
 
   const slots = Math.max(1, status.cardSlots)
   const filled = Math.max(0, Math.min(slots, status.currentStamps))

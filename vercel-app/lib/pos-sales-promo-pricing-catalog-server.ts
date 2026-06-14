@@ -44,6 +44,7 @@ export async function loadPosSalesPromoPricingCatalog(): Promise<PromoPricingCat
 
   const menus: PromoMenuLike[] = (menusRaw || []).map((m) => ({
     id: String(m.id ?? ''),
+    name: String(m.name ?? '').trim() || undefined,
     price: Number(m.price ?? 0) || 0,
     priceDelivery: m.price_delivery != null ? Number(m.price_delivery) : null,
   }))

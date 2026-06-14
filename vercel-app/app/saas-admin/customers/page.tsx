@@ -18,7 +18,6 @@ import {
   applySalesStageFeatures,
   DEFAULT_POLICY,
   DEFAULT_STAGE_PRICES,
-  FALLBACK_TENANTS,
   resolveCurrentChargeAmount,
   type BillingCycle,
   type PlanTier,
@@ -27,7 +26,6 @@ import {
   type TenantItem,
 } from "@/lib/saas-admin-control-plane"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { SaasAdminTenantIntegrationsPanel } from "@/components/saas/saas-admin-tenant-integrations-panel"
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
 import { SaasBillingCompanyFields } from "@/components/saas/saas-billing-company-fields"
 import { emptySaasBillingCompanyInfo } from "@/lib/saas-billing-company-profile"
@@ -42,11 +40,9 @@ import {
   saasAdminStatusLabel,
 } from "@/lib/i18n-saas-admin"
 import {
-  applyIntegrationFlagsToModules,
   cloneDefaultModulePrices,
   normalizeModulePrices,
   SAAS_MODULE_LABEL_KEY,
-  syncFeaturesFromModules,
   syncModuleEnabledFromFeatures,
 } from "@/lib/saas-module-pricing"
 import {
@@ -68,14 +64,17 @@ const STATUS_VARIANT = {
 const CUSTOMER_DETAIL_TABS = [
   "plan",
   "company",
-  "bootstrap",
   "limits",
-  "policy",
   "usage",
   "billing",
   "audit",
-  "integrations",
 ] as const
+
+function onboardingHref(tenantId: string): string {
+  const p = new URLSearchParams()
+  p.set("tenant", tenantId)
+  return `/saas-admin/onboarding?${p.toString()}`
+}
 
 type CustomerDetailTab = (typeof CUSTOMER_DETAIL_TABS)[number]
 
@@ -263,7 +262,6 @@ export default function SaasCustomersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const dateLocale = saasAdminDateLocale(lang)
-  const fallbackTenant = FALLBACK_TENANTS[0]!
   const [tenants, setTenants] = useState<TenantItem[]>([])
   const [selectedTenantId, setSelectedTenantId] = useState("")
   const [loading, setLoading] = useState(true)
@@ -286,21 +284,15 @@ export default function SaasCustomersPage() {
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
   const [bulkPendingStatus, setBulkPendingStatus] = useState<TenantItem["status"] | null>(null)
 
-  const [bootStoreName, setBootStoreName] = useState("")
-  const [bootStoreCode, setBootStoreCode] = useState("")
-  const [bootAdminName, setBootAdminName] = useState("")
-  const [bootPw, setBootPw] = useState("")
-  const [bootPw2, setBootPw2] = useState("")
   const [auditFilter, setAuditFilter] = useState<"all" | "employee_only">("all")
   const [auditActorQuery, setAuditActorQuery] = useState("")
   const [auditPeriod, setAuditPeriod] = useState<AuditPeriodFilter>("all")
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("plan")
-  const [bootstrapHint, setBootstrapHint] = useState(false)
   const [partnerOptions, setPartnerOptions] = useState<Array<{ id: string; name: string }>>([])
 
   const selectedTenant = useMemo(
-    () => tenants.find((tenant) => tenant.id === selectedTenantId) ?? tenants[0] ?? fallbackTenant,
-    [selectedTenantId, tenants, fallbackTenant]
+    () => tenants.find((tenant) => tenant.id === selectedTenantId) ?? tenants[0] ?? null,
+    [selectedTenantId, tenants]
   )
 
   const filteredTenants = useMemo(() => {
@@ -343,7 +335,7 @@ export default function SaasCustomersPage() {
   }, [tenants])
 
   const filteredAuditTrail = useMemo(() => {
-    const rows = selectedTenant.auditTrail || []
+    const rows = selectedTenant?.auditTrail || []
     const base =
       auditFilter === "employee_only"
         ? rows.filter((row) => String(row.action || "").trim().toLowerCase() === "employee.updated")
@@ -355,9 +347,10 @@ export default function SaasCustomersPage() {
       const actor = `${row.actorName || ""} ${row.actorRole || ""}`.toLowerCase()
       return actor.includes(q)
     })
-  }, [auditActorQuery, auditFilter, auditPeriod, selectedTenant.auditTrail])
+  }, [auditActorQuery, auditFilter, auditPeriod, selectedTenant?.auditTrail])
 
   const updateTenant = (updater: (tenant: TenantItem) => TenantItem) => {
+    if (!selectedTenant) return
     setTenants((prev) => prev.map((tenant) => (tenant.id === selectedTenant.id ? updater(tenant) : tenant)))
   }
 
@@ -383,8 +376,8 @@ export default function SaasCustomersPage() {
     } catch (error) {
       const msg = String(error)
       setLoadNotice(tr(t, "saasAdminCust_loadFailed", { msg }))
-      setTenants(FALLBACK_TENANTS)
-      setSelectedTenantId(FALLBACK_TENANTS[0]!.id)
+      setTenants([])
+      setSelectedTenantId("")
     } finally {
       setLoading(false)
     }
@@ -413,9 +406,21 @@ export default function SaasCustomersPage() {
     const tenant = searchParams.get("tenant")?.trim()
     const tab = searchParams.get("tab")
     if (tenant) setSelectedTenantId(tenant)
+
+    if (tab === "bootstrap" || tab === "integrations") {
+      const href = tenant ? onboardingHref(tenant) : "/saas-admin/onboarding"
+      router.replace(href)
+      return
+    }
+    if (tab === "policy") {
+      setDetailTab("plan")
+      if (tenant) {
+        router.replace(`/saas-admin/customers?tenant=${encodeURIComponent(tenant)}&tab=plan`, { scroll: false })
+      }
+      return
+    }
     if (isCustomerDetailTab(tab)) setDetailTab(tab)
-    if (searchParams.get("created") === "1") setBootstrapHint(true)
-  }, [searchParams])
+  }, [router, searchParams, selectedTenantId])
 
   const syncCustomersUrl = useCallback(
     (patch: { tenantId?: string; tab?: CustomerDetailTab; created?: boolean }) => {
@@ -469,6 +474,7 @@ export default function SaasCustomersPage() {
   }
 
   const saveTenantSettings = async () => {
+    if (!selectedTenant) return
     setLoading(true)
     try {
       await persistTenant(selectedTenant)
@@ -516,68 +522,9 @@ export default function SaasCustomersPage() {
       setNewOwnerName("")
       setNewPhone("")
       await loadTenants()
-      setSelectedTenantId(id)
-      setDetailTab("bootstrap")
-      setBootstrapHint(true)
-      syncCustomersUrl({ tenantId: id, tab: "bootstrap", created: true })
+      router.push(onboardingHref(id))
     } catch (error) {
       await appAlert(tr(t, "saasAdminCust_createFailed", { msg: String(error) }))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const bootstrapTenantLogin = async () => {
-    const tenantId = selectedTenant.id
-    const storeName = bootStoreName.trim()
-    const adminName = bootAdminName.trim()
-    const pw = bootPw.trim()
-    const pw2 = bootPw2.trim()
-    if (!storeName || !adminName || !pw) {
-      await appAlert(t("saasAdminCust_errBootstrapRequired"))
-      return
-    }
-    if (pw.length < 4) {
-      await appAlert(t("saasAdminCust_errPwMin"))
-      return
-    }
-    if (pw !== pw2) {
-      await appAlert(t("saasAdminCust_errPwMismatch"))
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await apiFetch("/api/saasBootstrapTenantLogin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tenantId,
-          storeName,
-          storeCode: bootStoreCode.trim() || undefined,
-          adminName,
-          password: pw,
-        }),
-      })
-      const json = (await res.json()) as { success?: boolean; message?: string; code?: string; companyName?: string }
-      if (!res.ok || json.success !== true) {
-        await appAlert(json.message || t("saasAdminCust_errBootstrapFailed"))
-        return
-      }
-      await appAlert(
-        tr(t, "saasAdminCust_bootstrapSuccess", {
-          company: json.companyName || selectedTenant.companyName,
-          store: storeName,
-          admin: adminName,
-        })
-      )
-      setBootStoreName("")
-      setBootStoreCode("")
-      setBootAdminName("")
-      setBootPw("")
-      setBootPw2("")
-      await loadTenants()
-    } catch (error) {
-      await appAlert(tr(t, "saasAdminCust_errGeneric", { msg: String(error) }))
     } finally {
       setLoading(false)
     }
@@ -815,13 +762,13 @@ export default function SaasCustomersPage() {
   const selectedTenantLoginHref = useMemo(() => {
     const p = new URLSearchParams()
     p.set("redirect", "/admin")
-    if (selectedTenant.companyName) p.set("company", selectedTenant.companyName)
+    if (selectedTenant?.companyName) p.set("company", selectedTenant.companyName)
     return `/admin/login?${p.toString()}`
-  }, [selectedTenant.companyName])
+  }, [selectedTenant?.companyName])
 
   const employeeAuditLink = (employeeId: number): string => {
     const p = new URLSearchParams()
-    if (selectedTenant.companyName) p.set("company", selectedTenant.companyName)
+    if (selectedTenant?.companyName) p.set("company", selectedTenant.companyName)
     p.set("employeeId", String(employeeId))
     return `/admin/employees?${p.toString()}`
   }
@@ -979,7 +926,7 @@ export default function SaasCustomersPage() {
         </Card>
       ) : null}
 
-      {tenants.length > 0 ? <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_minmax(0,2fr)]">
+      {tenants.length > 0 && selectedTenant ? <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_minmax(0,2fr)]">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">{t("saasAdminCust_listTitle")}</CardTitle>
@@ -1100,16 +1047,23 @@ export default function SaasCustomersPage() {
               <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                 <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
                 <TabsTrigger value="company">{t("saasAdminCust_tabCompany")}</TabsTrigger>
-                <TabsTrigger value="bootstrap">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
                 <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
-                <TabsTrigger value="policy">{t("saasAdminCust_tabPolicy")}</TabsTrigger>
                 <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
                 <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
                 <TabsTrigger value="audit">{t("saasAdminCust_tabAudit")}</TabsTrigger>
-                <TabsTrigger value="integrations">{t("saasAdminCust_tabIntegrations")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="plan" className="space-y-4 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 p-3">
+                  <div>
+                    <p className="text-sm font-medium">{t("saasAdminCust_onboardingLinkTitle")}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("saasAdminCust_onboardingLinkDesc")}</p>
+                  </div>
+                  <Button type="button" size="sm" variant="secondary" asChild>
+                    <Link href={onboardingHref(selectedTenant.id)}>{t("saasAdminCust_goOnboarding")}</Link>
+                  </Button>
+                </div>
+
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 p-3">
                   <div>
                     <p className="text-xs text-muted-foreground">{t("saasAdminCust_planChargeSummary")}</p>
@@ -1234,6 +1188,256 @@ export default function SaasCustomersPage() {
                     </label>
                   ))}
                 </div>
+
+                <div className="space-y-4 rounded-md border p-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">{t("saasAdminCust_planOpsSection")}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("saasAdminCust_policyIntro")}</p>
+                  </div>
+
+                  {scope.isPlatform ? (
+                    <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                      <div className="space-y-2">
+                        <Label>{t("saasAdminCust_assignedPartner")}</Label>
+                        <Select
+                          value={selectedTenant.partnerId || "__none__"}
+                          onValueChange={(value) =>
+                            updateTenant((tenant) => ({
+                              ...tenant,
+                              partnerId: value === "__none__" ? null : value,
+                              partnerName:
+                                value === "__none__"
+                                  ? null
+                                  : partnerOptions.find((p) => p.id === value)?.name || value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">{t("saasAdminCust_partnerDirect")}</SelectItem>
+                            {partnerOptions.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">{t("saasAdminCust_assignedPartnerHint")}</p>
+                      </div>
+                    </div>
+                  ) : selectedTenant.partnerName || scope.partnerName ? (
+                    <div className="rounded-md border p-3 text-sm">
+                      {tr(t, "saasAdminCust_partnerBadge", {
+                        name: selectedTenant.partnerName || scope.partnerName || "-",
+                      })}
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="space-y-2">
+                      <Label>{t("saasAdminCust_salesStage")}</Label>
+                      <Select
+                        value={selectedTenant.policy.salesStage}
+                        onValueChange={(value) =>
+                          updateTenant((tenant) => {
+                            const salesStage = value as SalesStage
+                            const next = { ...tenant, policy: { ...tenant.policy, salesStage } }
+                            return {
+                              ...next,
+                              pricing: recalcTenantPricing(next, {}),
+                            }
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SAAS_ADMIN_SALES_STAGES.map((stage) => (
+                            <SelectItem key={stage} value={stage}>
+                              {saasAdminStageLabel(stage, t)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        updateTenant((tenant) => {
+                          const features = applySalesStageFeatures(tenant.features, tenant.policy.salesStage)
+                          const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
+                          if (pricingMode !== "module") {
+                            return { ...tenant, features }
+                          }
+                          const modulePrices = syncModuleEnabledFromFeatures(
+                            normalizeModulePrices(tenant.pricing.modulePrices),
+                            features
+                          )
+                          return {
+                            ...tenant,
+                            features,
+                            pricing: recalcTenantPricing(tenant, { modulePrices }),
+                          }
+                        })
+                      }
+                    >
+                      {t("saasAdminCust_applyStageFeatures")}
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>{t("saasAdminCust_posBillingBasis")}</Label>
+                      <Select
+                        value={selectedTenant.policy.posDeviceBillingBasis ?? "usage"}
+                        onValueChange={(value) =>
+                          updateTenant((tenant) => {
+                            const posDeviceBillingBasis = value as TenantItem["policy"]["posDeviceBillingBasis"]
+                            const next = { ...tenant, policy: { ...tenant.policy, posDeviceBillingBasis } }
+                            return { ...next, pricing: recalcTenantPricing(next, {}) }
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="erp_admin">{t("saasAdminCust_posBillingErpAdmin")}</SelectItem>
+                          <SelectItem value="saas_limit">{t("saasAdminCust_posBillingSaasLimit")}</SelectItem>
+                          <SelectItem value="usage">{t("saasAdminCust_posBillingUsage")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">{t("saasAdminCust_posBillingBasisDesc")}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedTenant.policy.autoSuspendOnOverdue}
+                        onCheckedChange={(checked) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, autoSuspendOnOverdue: Boolean(checked) },
+                          }))
+                        }
+                      />
+                      {t("saasAdminCust_autoSuspendOverdue")}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedTenant.policy.allowOverage}
+                        onCheckedChange={(checked) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, allowOverage: Boolean(checked) },
+                          }))
+                        }
+                      />
+                      {t("saasAdminCust_allowOverage")}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedTenant.policy.require2faAdmin}
+                        onCheckedChange={(checked) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, require2faAdmin: Boolean(checked) },
+                          }))
+                        }
+                      />
+                      {t("saasAdminCust_require2fa")}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedTenant.policy.requireIpAllowlist}
+                        onCheckedChange={(checked) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, requireIpAllowlist: Boolean(checked) },
+                          }))
+                        }
+                      />
+                      {t("saasAdminCust_requireIpAllowlist")}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedTenant.policy.forceWeeklyBackup}
+                        onCheckedChange={(checked) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, forceWeeklyBackup: Boolean(checked) },
+                          }))
+                        }
+                      />
+                      {t("saasAdminCust_forceWeeklyBackup")}
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>{t("saasAdminCust_overdueGraceDays")}</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={selectedTenant.policy.overdueGraceDays}
+                        onChange={(event) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, overdueGraceDays: Number(event.target.value || 0) },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("saasAdminCust_dataRetentionDays")}</Label>
+                      <Input
+                        type="number"
+                        min={90}
+                        value={selectedTenant.policy.dataRetentionDays}
+                        onChange={(event) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, dataRetentionDays: Number(event.target.value || 0) },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("saasAdminCust_supportTier")}</Label>
+                      <Select
+                        value={selectedTenant.policy.supportTier}
+                        onValueChange={(value) =>
+                          updateTenant((tenant) => ({
+                            ...tenant,
+                            policy: { ...tenant.policy, supportTier: value as SupportTier },
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="standard">{t("saasAdminCust_supportStandard")}</SelectItem>
+                          <SelectItem value="priority">{t("saasAdminCust_supportPriority")}</SelectItem>
+                          <SelectItem value="dedicated">{t("saasAdminCust_supportDedicated")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-sm font-medium">{t("saasAdminCust_integrationsOnboardingTitle")}</p>
+                  <p className="text-xs text-muted-foreground">{t("saasAdminCust_integrationsOnboardingDesc")}</p>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href={onboardingHref(selectedTenant.id)}>{t("saasAdminCust_goOnboardingIntegrations")}</Link>
+                  </Button>
+                </div>
               </TabsContent>
 
               <TabsContent value="limits" className="space-y-4 pt-2">
@@ -1350,341 +1554,6 @@ export default function SaasCustomersPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="policy" className="space-y-4 pt-2">
-                <p className="text-sm text-muted-foreground">{t("saasAdminCust_policyIntro")}</p>
-
-                {scope.isPlatform ? (
-                  <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_auto] md:items-end">
-                    <div className="space-y-2">
-                      <Label>{t("saasAdminCust_assignedPartner")}</Label>
-                      <Select
-                        value={selectedTenant.partnerId || "__none__"}
-                        onValueChange={(value) =>
-                          updateTenant((tenant) => ({
-                            ...tenant,
-                            partnerId: value === "__none__" ? null : value,
-                            partnerName:
-                              value === "__none__"
-                                ? null
-                                : partnerOptions.find((p) => p.id === value)?.name || value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">{t("saasAdminCust_partnerDirect")}</SelectItem>
-                          {partnerOptions.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">{t("saasAdminCust_assignedPartnerHint")}</p>
-                    </div>
-                  </div>
-                ) : selectedTenant.partnerName || scope.partnerName ? (
-                  <div className="rounded-md border p-3 text-sm">
-                    {tr(t, "saasAdminCust_partnerBadge", {
-                      name: selectedTenant.partnerName || scope.partnerName || "-",
-                    })}
-                  </div>
-                ) : null}
-
-                <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_auto] md:items-end">
-                  <div className="space-y-2">
-                    <Label>{t("saasAdminCust_salesStage")}</Label>
-                    <Select
-                      value={selectedTenant.policy.salesStage}
-                      onValueChange={(value) =>
-                        updateTenant((tenant) => {
-                          const salesStage = value as SalesStage
-                          const next = { ...tenant, policy: { ...tenant.policy, salesStage } }
-                          return {
-                            ...next,
-                            pricing: recalcTenantPricing(next, {}),
-                          }
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SAAS_ADMIN_SALES_STAGES.map((stage) => (
-                          <SelectItem key={stage} value={stage}>
-                            {saasAdminStageLabel(stage, t)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      updateTenant((tenant) => {
-                        const features = applySalesStageFeatures(tenant.features, tenant.policy.salesStage)
-                        const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
-                        if (pricingMode !== "module") {
-                          return { ...tenant, features }
-                        }
-                        const modulePrices = syncModuleEnabledFromFeatures(
-                          normalizeModulePrices(tenant.pricing.modulePrices),
-                          features
-                        )
-                        return {
-                          ...tenant,
-                          features,
-                          pricing: recalcTenantPricing(tenant, { modulePrices }),
-                        }
-                      })
-                    }
-                  >
-                    {t("saasAdminCust_applyStageFeatures")}
-                  </Button>
-                </div>
-
-                <div className="grid gap-3 rounded-md border p-3 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>{t("saasAdminCust_posBillingBasis")}</Label>
-                    <Select
-                      value={selectedTenant.policy.posDeviceBillingBasis ?? "usage"}
-                      onValueChange={(value) =>
-                        updateTenant((tenant) => {
-                          const posDeviceBillingBasis = value as TenantItem["policy"]["posDeviceBillingBasis"]
-                          const next = { ...tenant, policy: { ...tenant.policy, posDeviceBillingBasis } }
-                          return { ...next, pricing: recalcTenantPricing(next, {}) }
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="erp_admin">{t("saasAdminCust_posBillingErpAdmin")}</SelectItem>
-                        <SelectItem value="saas_limit">{t("saasAdminCust_posBillingSaasLimit")}</SelectItem>
-                        <SelectItem value="usage">{t("saasAdminCust_posBillingUsage")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">{t("saasAdminCust_posBillingBasisDesc")}</p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 rounded-md border p-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">{t("saasAdminCust_stagePricing")}</h3>
-                    <Badge variant="outline">
-                      {tr(t, "saasAdminCust_currentCharge", {
-                        amount: selectedTenant.pricing.currentChargeAmount.toLocaleString(),
-                        currency: selectedTenant.pricing.currency,
-                      })}
-                    </Badge>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("saasAdminCust_stageCol")}</TableHead>
-                        <TableHead>{t("saasAdminCust_monthlyThb")}</TableHead>
-                        <TableHead>{t("saasAdminCust_yearlyThb")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {SAAS_ADMIN_SALES_STAGES.map((stage) => (
-                        <TableRow key={stage}>
-                          <TableCell>{saasAdminStageLabel(stage, t)}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={selectedTenant.pricing.stagePrices[stage].monthly}
-                              onChange={(event) =>
-                                updateTenant((tenant) => {
-                                  const monthly = Math.max(0, Number(event.target.value || 0))
-                                  const stagePrices = {
-                                    ...tenant.pricing.stagePrices,
-                                    [stage]: {
-                                      ...tenant.pricing.stagePrices[stage],
-                                      monthly,
-                                    },
-                                  }
-                                  return {
-                                    ...tenant,
-                                    pricing: recalcTenantPricing(tenant, { stagePrices }),
-                                  }
-                                })
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={selectedTenant.pricing.stagePrices[stage].yearly}
-                              onChange={(event) =>
-                                updateTenant((tenant) => {
-                                  const yearly = Math.max(0, Number(event.target.value || 0))
-                                  const stagePrices = {
-                                    ...tenant.pricing.stagePrices,
-                                    [stage]: {
-                                      ...tenant.pricing.stagePrices[stage],
-                                      yearly,
-                                    },
-                                  }
-                                  return {
-                                    ...tenant,
-                                    pricing: recalcTenantPricing(tenant, { stagePrices }),
-                                  }
-                                })
-                              }
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="grid gap-3 rounded-md border p-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedTenant.policy.autoSuspendOnOverdue}
-                      onCheckedChange={(checked) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, autoSuspendOnOverdue: Boolean(checked) },
-                        }))
-                      }
-                    />
-                    {t("saasAdminCust_autoSuspendOverdue")}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedTenant.policy.allowOverage}
-                      onCheckedChange={(checked) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, allowOverage: Boolean(checked) },
-                        }))
-                      }
-                    />
-                    {t("saasAdminCust_allowOverage")}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedTenant.policy.require2faAdmin}
-                      onCheckedChange={(checked) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, require2faAdmin: Boolean(checked) },
-                        }))
-                      }
-                    />
-                    {t("saasAdminCust_require2fa")}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedTenant.policy.requireIpAllowlist}
-                      onCheckedChange={(checked) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, requireIpAllowlist: Boolean(checked) },
-                        }))
-                      }
-                    />
-                    {t("saasAdminCust_requireIpAllowlist")}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={selectedTenant.policy.forceWeeklyBackup}
-                      onCheckedChange={(checked) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, forceWeeklyBackup: Boolean(checked) },
-                        }))
-                      }
-                    />
-                    {t("saasAdminCust_forceWeeklyBackup")}
-                  </label>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>{t("saasAdminCust_overdueGraceDays")}</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={selectedTenant.policy.overdueGraceDays}
-                      onChange={(event) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, overdueGraceDays: Number(event.target.value || 0) },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t("saasAdminCust_dataRetentionDays")}</Label>
-                    <Input
-                      type="number"
-                      min={90}
-                      value={selectedTenant.policy.dataRetentionDays}
-                      onChange={(event) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, dataRetentionDays: Number(event.target.value || 0) },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t("saasAdminCust_supportTier")}</Label>
-                    <Select
-                      value={selectedTenant.policy.supportTier}
-                      onValueChange={(value) =>
-                        updateTenant((tenant) => ({
-                          ...tenant,
-                          policy: { ...tenant.policy, supportTier: value as SupportTier },
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standard">{t("saasAdminCust_supportStandard")}</SelectItem>
-                        <SelectItem value="priority">{t("saasAdminCust_supportPriority")}</SelectItem>
-                        <SelectItem value="dedicated">{t("saasAdminCust_supportDedicated")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="integrations" className="space-y-4 pt-2">
-                <SaasAdminTenantIntegrationsPanel
-                  tenantId={selectedTenant.id}
-                  companyName={selectedTenant.companyName}
-                  onIntegrationEnabledChange={(provider, enabled) => {
-                    if (!enabled) return
-                    updateTenant((tenant) => {
-                      const modulePrices = applyIntegrationFlagsToModules(
-                        normalizeModulePrices(tenant.pricing.modulePrices),
-                        provider === "kbank" ? { kbank: true } : { grab: true }
-                      )
-                      const features = syncFeaturesFromModules(tenant.features, modulePrices)
-                      return {
-                        ...tenant,
-                        features,
-                        pricing: recalcTenantPricing(tenant, { modulePrices }),
-                      }
-                    })
-                  }}
-                />
-              </TabsContent>
-
               <TabsContent value="company" className="space-y-4 pt-2">
                 <div className="rounded-md border bg-muted/20 p-4 space-y-4">
                   <div>
@@ -1714,74 +1583,6 @@ export default function SaasCustomersPage() {
                     }}
                   />
                   <p className="text-xs text-muted-foreground">{t("saasAdminBillingCompany_saveHint")}</p>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="bootstrap" className="space-y-4 pt-2">
-                {bootstrapHint ? (
-                  <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-                    <p>{t("saasAdminCust_bootstrapBanner")}</p>
-                    <Button asChild size="sm" variant="secondary" className="mt-2">
-                      <Link href="/saas-admin/onboarding">{t("saasAdminNavOnboarding")}</Link>
-                    </Button>
-                  </div>
-                ) : null}
-                <p className="text-sm text-muted-foreground">{t("saasAdminCust_bootstrapIntro")}</p>
-                <div className="rounded-md border border-dashed p-4 space-y-3">
-                  <p className="text-sm font-medium">
-                    {tr(t, "saasAdminCust_selectedTenant", { name: selectedTenant.companyName })}
-                  </p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>{t("saasAdminCust_firstStoreName")}</Label>
-                      <Input
-                        value={bootStoreName}
-                        onChange={(e) => setBootStoreName(e.target.value)}
-                        placeholder={t("saasAdminCust_firstStorePh")}
-                        autoComplete="off"
-                      />
-                      <p className="text-xs text-muted-foreground">{t("saasAdminCust_firstStoreHint")}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t("saasAdmin_storeCodeOptional")}</Label>
-                      <Input
-                        value={bootStoreCode}
-                        onChange={(e) => setBootStoreCode(e.target.value)}
-                        placeholder={t("saasAdmin_autoGenerate")}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t("saasAdminCust_adminDisplayName")}</Label>
-                      <Input
-                        value={bootAdminName}
-                        onChange={(e) => setBootAdminName(e.target.value)}
-                        placeholder={t("saasAdminCust_adminDisplayPh")}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t("saasAdmin_password")}</Label>
-                      <Input
-                        type="password"
-                        value={bootPw}
-                        onChange={(e) => setBootPw(e.target.value)}
-                        autoComplete="new-password"
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>{t("saasAdmin_passwordConfirm")}</Label>
-                      <Input
-                        type="password"
-                        value={bootPw2}
-                        onChange={(e) => setBootPw2(e.target.value)}
-                        autoComplete="new-password"
-                      />
-                    </div>
-                  </div>
-                  <Button type="button" onClick={() => void bootstrapTenantLogin()} disabled={loading}>
-                    {t("saasAdminCust_bootstrapCreate")}
-                  </Button>
                 </div>
               </TabsContent>
 

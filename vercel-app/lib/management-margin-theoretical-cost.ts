@@ -1,5 +1,8 @@
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
+import type { PromoLineLike, PromoMenuLike } from '@/lib/promo-economics'
+import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
 
 export const MANAGEMENT_MARGIN_MISE_RATE = 3
 
@@ -88,6 +91,121 @@ function formatMenuLabel(menuId: string, menuName: string): string {
   return '—'
 }
 
+function normalizeLookupName(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+export type TheoreticalCostResolveContext = {
+  knownMenuIds: Set<string>
+  menuIdByNormalizedName: Map<string, string>
+  promoItemsByPromoId?: Map<string, PromoLineLike[]>
+}
+
+export function buildTheoreticalCostResolveContext(params: {
+  costIndex: Map<string, PosMenuCostIndexEntry>
+  catalog?: Pick<PromoPricingCatalog, 'menus' | 'promoItemsByPromoId'>
+}): TheoreticalCostResolveContext {
+  const knownMenuIds = new Set<string>()
+  for (const key of params.costIndex.keys()) {
+    const mid = key.split('|')[0]?.trim()
+    if (mid) knownMenuIds.add(mid)
+  }
+  const menuIdByNormalizedName = new Map<string, string>()
+  for (const menu of params.catalog?.menus ?? []) {
+    const id = str(menu.id)
+    const name = str((menu as PromoMenuLike).name)
+    if (id) knownMenuIds.add(id)
+    if (!id || !name) continue
+    menuIdByNormalizedName.set(normalizeLookupName(name), id)
+  }
+  return {
+    knownMenuIds,
+    menuIdByNormalizedName,
+    promoItemsByPromoId: params.catalog?.promoItemsByPromoId,
+  }
+}
+
+function lookupMenuIdByName(name: string, ctx?: TheoreticalCostResolveContext): string {
+  const key = normalizeLookupName(name)
+  if (!key || !ctx) return ''
+  return ctx.menuIdByNormalizedName.get(key) ?? ''
+}
+
+function resolveMenuIdFromLineId(id: string, knownMenuIds: Set<string>): string {
+  const s = str(id)
+  if (!s || s.toLowerCase().startsWith('promo-')) return ''
+  if (knownMenuIds.has(s)) return s
+  let best = ''
+  for (const key of knownMenuIds) {
+    if (s === key || s.startsWith(`${key}-`)) {
+      if (key.length > best.length) best = key
+    }
+  }
+  if (best) return best
+  const dash = s.indexOf('-')
+  if (dash > 0) {
+    const prefix = s.slice(0, dash)
+    if (/^\d+$/.test(prefix)) return prefix
+  }
+  return ''
+}
+
+function resolveOptionIdFromLineId(id: string, menuId: string): string {
+  const s = str(id)
+  const mid = str(menuId)
+  if (!s || !mid || !s.startsWith(`${mid}-`)) return ''
+  return s.slice(mid.length + 1).trim()
+}
+
+function isGrabSetChildRow(row: Record<string, unknown>): boolean {
+  return row.grabSetChild === true || row.grab_set_child === true
+}
+
+function effectivePromoItemRows(
+  row: Record<string, unknown>,
+  ctx?: TheoreticalCostResolveContext
+): Record<string, unknown>[] {
+  const raw = row.promoItems ?? row.promo_items
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.filter((x) => x && typeof x === 'object') as Record<string, unknown>[]
+  }
+  const promoId = str(row.promoId ?? row.promo_id)
+  if (!promoId || !ctx?.promoItemsByPromoId) return []
+  const template = ctx.promoItemsByPromoId.get(promoId)
+  if (!template?.length) return []
+  return template.map((item) => ({
+    menuId: item.menuId,
+    optionId: item.optionId ?? null,
+    quantity: item.quantity ?? 1,
+  }))
+}
+
+function resolveMenuAndOptionForCostLine(
+  row: Record<string, unknown>,
+  ctx?: TheoreticalCostResolveContext
+): { menuId: string; optionId: string } {
+  let menuId = resolveLineMenuId(row)
+  let optionId = resolveLineOptionId(row)
+  const knownMenuIds = ctx?.knownMenuIds ?? new Set<string>()
+
+  if (!menuId) {
+    menuId = resolveMenuIdFromLineId(str(row.id), knownMenuIds)
+    if (menuId && !optionId) optionId = resolveOptionIdFromLineId(str(row.id), menuId)
+  }
+
+  if (!menuId) {
+    const lineName = resolveLineMenuName(row)
+    const grabParsed = parseGrabSetChildLineName(lineName)
+    const lookupName = grabParsed?.childName || lineName
+    menuId = lookupMenuIdByName(lookupName, ctx)
+  }
+
+  return { menuId, optionId }
+}
+
 function formatOptionLabel(optionId: string, optionName: string): string {
   if (optionName) return optionName
   if (optionId) return `#${optionId}`
@@ -110,46 +228,53 @@ export type TheoreticalCostLookupLine = {
   qty: number
 }
 
-function promoChildCostLines(row: Record<string, unknown>, parentQty: number): TheoreticalCostLookupLine[] {
-  const raw = row.promoItems ?? row.promo_items
-  if (!Array.isArray(raw) || raw.length === 0) return []
+function promoChildCostLines(
+  promoRows: Record<string, unknown>[],
+  parentQty: number,
+  ctx?: TheoreticalCostResolveContext
+): TheoreticalCostLookupLine[] {
+  if (!promoRows.length) return []
   const out: TheoreticalCostLookupLine[] = []
-  for (const child of raw) {
-    const c = child as Record<string, unknown>
+  for (const c of promoRows) {
     const childQty = Math.max(0, resolveItemsJsonLineQty(c))
     if (childQty <= 0) continue
     const qty = parentQty * childQty
     if (qty <= 0) continue
-    out.push({
-      menuId: str(c.menuId ?? c.menu_id),
-      optionId: str(c.optionId ?? c.option_id),
-      menuName: str(c.menuName ?? c.menu_name),
-      optionName: str(c.optionName ?? c.option_name),
-      qty,
-    })
+    let menuId = str(c.menuId ?? c.menu_id)
+    const optionId = str(c.optionId ?? c.option_id)
+    const menuName = str(c.menuName ?? c.menu_name)
+    const optionName = str(c.optionName ?? c.option_name)
+    if (!menuId && menuName) menuId = lookupMenuIdByName(menuName, ctx)
+    out.push({ menuId, optionId, menuName, optionName, qty })
   }
   return out
 }
 
 /** 주문 줄 → BOM lookup 단위(세트 promoItems·반반 menuId2 펼침) */
-export function expandOrderLineToCostLines(row: Record<string, unknown>): TheoreticalCostLookupLine[] {
+export function expandOrderLineToCostLines(
+  row: Record<string, unknown>,
+  ctx?: TheoreticalCostResolveContext
+): TheoreticalCostLookupLine[] {
+  if (isGrabSetChildRow(row)) return []
+
   const parentQty = Math.max(0, resolveItemsJsonLineQty(row))
   if (parentQty <= 0) return []
 
-  const promoChildren = promoChildCostLines(row, parentQty)
+  const promoRows = effectivePromoItemRows(row, ctx)
+  const promoChildren = promoChildCostLines(promoRows, parentQty, ctx)
   if (promoChildren.length > 0) return promoChildren
 
-  const menuId = resolveLineMenuId(row)
-  const menuId2 = resolveLineMenuId2(row)
   const menuName = resolveLineMenuName(row)
   const optionName = resolveLineOptionName(row)
+  const { menuId, optionId } = resolveMenuAndOptionForCostLine(row, ctx)
+  const menuId2 = resolveLineMenuId2(row)
 
   if (menuId && menuId2) {
     const halfQty = parentQty * 0.5
     return [
       {
         menuId,
-        optionId: resolveLineOptionId(row),
+        optionId,
         menuName,
         optionName,
         qty: halfQty,
@@ -167,7 +292,7 @@ export function expandOrderLineToCostLines(row: Record<string, unknown>): Theore
   return [
     {
       menuId,
-      optionId: resolveLineOptionId(row),
+      optionId,
       menuName,
       optionName,
       qty: parentQty,
@@ -188,6 +313,7 @@ function lookupCostEntry(
 export function collectTheoreticalCostUnmatchedLines(params: {
   orderRows: { order_type?: string; items_json?: string }[]
   costIndex: Map<string, PosMenuCostIndexEntry>
+  resolveContext?: TheoreticalCostResolveContext
 }): TheoreticalCostUnmatchedLine[] {
   const bucket = new Map<string, TheoreticalCostUnmatchedLine>()
 
@@ -209,7 +335,7 @@ export function collectTheoreticalCostUnmatchedLines(params: {
   for (const order of params.orderRows) {
     for (const row of parseOrderItems(order.items_json)) {
       if (isLineCancelled(row)) continue
-      for (const line of expandOrderLineToCostLines(row)) {
+      for (const line of expandOrderLineToCostLines(row, params.resolveContext)) {
         const { menuId, optionId, menuName, optionName, qty } = line
         if (qty <= 0) continue
         if (!menuId) {
@@ -257,6 +383,7 @@ export function aggregateTheoreticalCostFromOrders(params: {
   orderRows: { order_type?: string; items_json?: string }[]
   costIndex: Map<string, PosMenuCostIndexEntry>
   miseRatePercent?: number
+  resolveContext?: TheoreticalCostResolveContext
 }): TheoreticalCostAgg {
   const miseMult = 1 + (params.miseRatePercent ?? MANAGEMENT_MARGIN_MISE_RATE) / 100
   let foodCost = 0
@@ -268,7 +395,7 @@ export function aggregateTheoreticalCostFromOrders(params: {
     const isDelivery = isDeliveryChannelOrderType(order.order_type)
     for (const row of parseOrderItems(order.items_json)) {
       if (isLineCancelled(row)) continue
-      for (const line of expandOrderLineToCostLines(row)) {
+      for (const line of expandOrderLineToCostLines(row, params.resolveContext)) {
         const { menuId, optionId, qty } = line
         if (qty <= 0) continue
         if (!menuId) {

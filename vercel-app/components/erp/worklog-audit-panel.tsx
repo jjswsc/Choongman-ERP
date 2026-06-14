@@ -86,11 +86,6 @@ export function WorklogAuditPanel() {
     void loadData()
   }
 
-  React.useEffect(() => {
-    setHasSearched(true)
-    void loadData()
-  }, [loadData])
-
   const actionLabel = (type?: string) => {
     const key = type ? ACTION_KEYS[type] : undefined
     return key ? t(key) : type || "-"

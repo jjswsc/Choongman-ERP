@@ -21,10 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   const joinStore = String(req.nextUrl.searchParams.get('joinStore') || '').trim()
-  if (!joinStore) {
-    return NextResponse.redirect(new URL('/m?error=missing_store', req.url))
-  }
-  if (!(await isAllowedMemberSignupStoreCode(joinStore))) {
+  if (joinStore && !(await isAllowedMemberSignupStoreCode(joinStore))) {
     return NextResponse.redirect(new URL('/m?error=invalid_store', req.url))
   }
 
@@ -34,6 +31,8 @@ export async function GET(req: NextRequest) {
   const secure = isProdLike()
   const res = NextResponse.redirect(url)
   res.headers.append('Set-Cookie', buildLineOAuthStateCookie(state, secure))
-  res.headers.append('Set-Cookie', buildLineJoinStoreCookie(joinStore, secure))
+  if (joinStore) {
+    res.headers.append('Set-Cookie', buildLineJoinStoreCookie(joinStore, secure))
+  }
   return res
 }

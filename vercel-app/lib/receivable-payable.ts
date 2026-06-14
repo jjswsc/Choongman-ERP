@@ -9,7 +9,7 @@ import {
   supabaseUpdate,
   supabaseDeleteByFilter,
 } from './supabase-server'
-import { isPosChannelSettlementMemo } from './bank-import-deposit-category'
+import { shouldCreateFranchiseReceivableSubledgerFromBankReceive } from './franchise-receivable-subledger-gate'
 import { storeHasPosCompletedOrders } from './bank-settlement-guards'
 import { formatReceivableInvoiceNo } from './receivable-invoice-format'
 import {
@@ -375,7 +375,7 @@ export async function upsertPayableFromBankPurchasePayment(params: {
 
 /**
  * 통장 `receivable_receive` 저장 시 본사 B2B 미수금 보조원장(Receive) 생성 여부.
- * POS 매장의 카드·배달·QR 정산 입금은 1130 분개만 하고 보조원장에는 넣지 않는다.
+ * POS 매장의 매출 수령(카드·배달·QR·현금 통장 입금)은 1130 분개만 하고 보조원장에는 넣지 않는다.
  * @see docs/ACCOUNTING_LEDGER_SOP.md §2–3
  */
 export async function shouldUpsertFranchiseReceivableSubledger(params: {
@@ -386,6 +386,7 @@ export async function shouldUpsertFranchiseReceivableSubledger(params: {
   const store = String(params.storeName || '').trim()
   if (!store) return false
 
+  let linkedToChannelSettlement = false
   const bankTransactionId = Number(params.bankTransactionId || 0)
   if (bankTransactionId > 0) {
     const linked = (await supabaseSelectFilter(
@@ -393,15 +394,13 @@ export async function shouldUpsertFranchiseReceivableSubledger(params: {
       `bank_transaction_id=eq.${bankTransactionId}`,
       { select: 'id', limit: 1 }
     )) as { id?: number }[] | null
-    if (linked?.length) return false
+    linkedToChannelSettlement = Boolean(linked?.length)
   }
 
-  const memo = String(params.memo || '').trim()
-  if ((await storeHasPosCompletedOrders(store)) && isPosChannelSettlementMemo(memo)) {
-    return false
-  }
-
-  return true
+  return shouldCreateFranchiseReceivableSubledgerFromBankReceive({
+    linkedToChannelSettlement,
+    hasPosCompletedOrders: await storeHasPosCompletedOrders(store),
+  })
 }
 
 /**

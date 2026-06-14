@@ -4,7 +4,12 @@ import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
 import {
   assertCanAssignMain,
   demoteOtherMainDevices,
+  listStoreDevicesForRoleLimits,
 } from '@/lib/pos-device-role-limits-server'
+import {
+  assertSaasPosDeviceRegistrationAllowed,
+  resolveSaasPosDeviceNewForTenant,
+} from '@/lib/saas/saas-pos-device-limit-server'
 
 /** 관리자: 해당 기기를 해당 매장 메인 포스로 지정 */
 export async function POST(req: NextRequest) {
@@ -31,6 +36,25 @@ export async function POST(req: NextRequest) {
     if (!exists) {
       return NextResponse.json(
         { success: false, message: '해당 매장 POS 설정이 없습니다.' },
+        { headers }
+      )
+    }
+
+    const rows = await listStoreDevicesForRoleLimits(storeCode)
+    const storeTokens = rows.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
+    const isNewForTenant = await resolveSaasPosDeviceNewForTenant({
+      storeCode,
+      deviceToken,
+      storeDeviceTokens: storeTokens,
+    })
+    const saasLimit = await assertSaasPosDeviceRegistrationAllowed({
+      storeCode,
+      deviceToken,
+      isNewDeviceForTenant: isNewForTenant,
+    })
+    if (!saasLimit.ok) {
+      return NextResponse.json(
+        { success: false, message: saasLimit.message, code: saasLimit.code },
         { headers }
       )
     }

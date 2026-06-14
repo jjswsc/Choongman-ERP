@@ -129,208 +129,47 @@ import {
   type ReceiptDeliveryChannelContext,
 } from '@/lib/pos-delivery-platform'
 import { Separator } from '@/components/ui/separator'
+import {
+  type CartPanelAddItemPayload,
+  type CartPanelBeforePaymentReceiptPayload,
+  type CartPanelHandle,
+  type CartPanelOrderCompleteResult,
+  type CartPanelOrderLinePayload,
+  type CartPanelPaymentPayload,
+  type CartPanelSplitReceiptPayload,
+  type CartDeliveryApp,
+  type CartOrderType,
+} from '@/components/pos/cart-panel-types'
+import { clonePosCartItems, peekPosCartItemsCache, readPosCartItemsCache, replacePosCartItemsCache, writePosCartItemsCache } from '@/lib/pos-cart-items-cache'
 
-export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
-export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
+export type {
+  CartPanelAddItemPayload,
+  CartPanelBeforePaymentReceiptPayload,
+  CartPanelHandle,
+  CartPanelOrderCompleteResult,
+  CartPanelOrderLinePayload,
+  CartPanelPaymentPayload,
+  CartPanelSplitReceiptPayload,
+  CartDeliveryApp,
+  CartOrderType,
+} from '@/components/pos/cart-panel-types'
+export { readPosCartItemsCache, writePosCartItemsCache } from '@/lib/pos-cart-items-cache'
+import { cartPanelDeliveryChannelContext, deliveryAppBrandClasses } from '@/components/pos/cart-panel-delivery-brand'
+import {
+  PosPaymentModalAmountCard,
+  type CartPanelMenuLineDiscountMode,
+} from '@/components/pos/cart-panel-payment-modal-amount-card'
+import {
+  buildPaymentPayloadForOrderSubmit,
+  mergeCartPanelPaymentSnapshots,
+  paymentTabTourTarget,
+  sumCartPanelPaymentSnapshot,
+  type CartPanelPaymentMethodTab,
+} from '@/lib/cart-panel-payment-utils'
 
-/** Grab 녹색 · 라인맨 하늘색 · 쇼피 주황 — 장바구니 칩/뱃지 */
-function deliveryAppBrandClasses(app: string | undefined) {
-  switch (app) {
-    case 'grab':
-      return {
-        bike: 'text-emerald-700 dark:text-emerald-300',
-        chip: cn(
-          'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
-          'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
-          'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
-        ),
-        badge:
-          'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
-      }
-    case 'lineman':
-      return {
-        bike: 'text-sky-600 dark:text-sky-300',
-        chip: cn(
-          'border-sky-600/40 bg-gradient-to-b from-sky-50 to-sky-100/90 text-sky-950',
-          'dark:border-sky-500/35 dark:from-sky-950/50 dark:to-sky-900/60 dark:text-sky-50',
-          'shadow-sm ring-1 ring-sky-700/10 dark:ring-sky-400/15'
-        ),
-        badge:
-          'border-sky-600/35 bg-sky-50 text-sky-900 hover:bg-sky-100/90 dark:border-sky-500/40 dark:bg-sky-950/55 dark:text-sky-50 dark:hover:bg-sky-950/70',
-      }
-    case 'shopee':
-      return {
-        bike: 'text-orange-600 dark:text-orange-400',
-        chip: cn(
-          'border-orange-500/45 bg-gradient-to-b from-orange-50 to-orange-100/90 text-orange-950',
-          'dark:border-orange-500/40 dark:from-orange-950/50 dark:to-orange-900/55 dark:text-orange-50',
-          'shadow-sm ring-1 ring-orange-600/15 dark:ring-orange-400/20'
-        ),
-        badge:
-          'border-orange-500/40 bg-orange-50 text-orange-950 hover:bg-orange-100/90 dark:border-orange-500/40 dark:bg-orange-950/55 dark:text-orange-50 dark:hover:bg-orange-950/70',
-      }
-    default:
-      return {
-        bike: 'text-emerald-700 dark:text-emerald-300',
-        chip: cn(
-          'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
-          'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
-          'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
-        ),
-        badge:
-          'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
-      }
-  }
-}
+type PaymentMethodTab = CartPanelPaymentMethodTab
+type MenuLineDiscountMode = CartPanelMenuLineDiscountMode
 
-function cartPanelDeliveryChannelContext(params: {
-  deliveryAppProp?: string
-  deliveryOrderNoProp?: string
-  paymentTableNameOverride?: string | null
-  customerMemo?: string
-  deliveryPaymentChannel?: string
-}): ReceiptDeliveryChannelContext {
-  const fallbackLabel = [
-    params.deliveryAppProp,
-    params.deliveryOrderNoProp?.trim() ? `#${params.deliveryOrderNoProp.trim()}` : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-  return {
-    deliveryAppCode: params.deliveryAppProp,
-    deliveryPaymentChannel: params.deliveryPaymentChannel,
-    tableName: params.paymentTableNameOverride ?? fallbackLabel,
-    memo: String(params.customerMemo ?? '').trim(),
-  }
-}
-
-type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'
-type MenuLineDiscountMode = 'none' | 'discount' | 'service' | 'cancel'
-
-function paymentTabTourTarget(tab: PaymentMethodTab): string {
-  switch (tab) {
-    case 'cash':
-      return 'pos-tour-payment-tab-cash'
-    case 'card':
-      return 'pos-tour-payment-tab-card'
-    case 'qr':
-      return 'pos-tour-payment-tab-qr'
-    case 'delivery_app':
-      return 'pos-tour-payment-tab-delivery-app'
-    case 'other':
-      return 'pos-tour-payment-tab-other'
-    default:
-      return 'pos-tour-payment-tab-cash'
-  }
-}
-
-/** printReceiptNow 첫 인자와 동일 스냅샷 (결제 모달 직전 홀 주문서 자동 인쇄 등) */
-export type CartPanelBeforePaymentReceiptPayload = {
-  orderNo: string
-  storeCode: string
-  orderType: string
-  tableName?: string
-  memo?: string
-  items: { id: string; name: string; price: number; qty: number; note?: string; isAddon?: boolean }[]
-  subtotal: number
-  discountAmt: number
-  total: number
-  vatFeeAmt?: number
-  vatFeeMode?: 'included' | 'separate'
-  receiptExclusiveSubtotalDisplay?: number
-  receiptVatDisplayAmt?: number
-  receiptTaxableGrossForDisplay?: number
-  serviceFeeAmt?: number
-  serviceFeeMode?: 'included' | 'separate'
-  cardFeeAmt?: number
-  cardFeeMode?: 'included' | 'separate'
-  otherFeeAmt?: number
-  otherFeeMode?: 'included' | 'separate'
-  /** 홀 결제 직전 영수증 스냅샷용 */
-  guestCount?: number
-}
-
-export type CartPanelPaymentPayload = {
-  paymentCash: number
-  paymentCard: number
-  paymentQr: number
-  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
-  paymentOther: number
-  /** payment_other 합과 일치하는 세부(저장·검색·결산용) */
-  paymentOtherBreakdown?: PosPaymentOtherBreakdown
-  paymentDeliveryApp?: number
-  deliveryPaymentChannel?: string | null
-  /** 현금 받은 금액(영수증·재인쇄용) */
-  paymentCashTendered?: number
-}
-
-function sumCartPanelPaymentSnapshot(snap: CartPanelPaymentPayload) {
-  return (
-    (snap.paymentCash || 0) +
-    (snap.paymentCard || 0) +
-    (snap.paymentQr || 0) +
-    (snap.paymentOther || 0) +
-    (snap.paymentDeliveryApp ?? 0)
-  )
-}
-
-function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[]): CartPanelPaymentPayload {
-  const merged: CartPanelPaymentPayload = {
-    paymentCash: 0,
-    paymentCard: 0,
-    paymentQr: 0,
-    paymentQrType: 'THAI_QR',
-    paymentOther: 0,
-    paymentDeliveryApp: 0,
-    deliveryPaymentChannel: null,
-    paymentCashTendered: 0,
-  }
-  for (const snap of snaps) {
-    merged.paymentCash += snap.paymentCash || 0
-    merged.paymentCard += snap.paymentCard || 0
-    merged.paymentQr += snap.paymentQr || 0
-    if (snap.paymentQrType) merged.paymentQrType = snap.paymentQrType
-    merged.paymentOther += snap.paymentOther || 0
-    merged.paymentDeliveryApp = (merged.paymentDeliveryApp || 0) + (snap.paymentDeliveryApp ?? 0)
-    if (snap.deliveryPaymentChannel) merged.deliveryPaymentChannel = snap.deliveryPaymentChannel
-    merged.paymentCashTendered = (merged.paymentCashTendered || 0) + (snap.paymentCashTendered || 0)
-  }
-  return merged
-}
-
-function buildPaymentPayloadForOrderSubmit(params: {
-  base: CartPanelPaymentPayload
-  paymentOther: number
-  paymentOtherBreakdown?: PosPaymentOtherBreakdown
-  deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'>
-}): CartPanelPaymentPayload {
-  return {
-    ...params.base,
-    paymentOther: params.paymentOther,
-    ...(params.paymentOtherBreakdown ? { paymentOtherBreakdown: params.paymentOtherBreakdown } : {}),
-    ...params.deliveryPayPart,
-  }
-}
-
-export type CartPanelOrderLinePayload = {
-  id: string
-  name: string
-  price: number
-  quantity: number
-  note?: string
-  menuId?: string
-  optionId?: string
-}
-export type CartPanelSplitReceiptPayload = {
-  key: string
-  label: string
-  items: CartPanelOrderLinePayload[]
-  subtotal: number
-  discountAmt: number
-  total: number
-  /** 해당 인원 결제 시점에 입력한 수단(분할 영수증 인쇄용) */
-  payment?: CartPanelPaymentPayload
-}
 type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 type TaxInvoiceProfile = {
   type: 'individual' | 'corporate'
@@ -368,50 +207,6 @@ function rowToTaxProfile(row: PosTaxInvoiceRecipientRow): TaxInvoiceProfile {
     email: row.email || '',
     address: row.address || '',
   }
-}
-
-export type CartPanelAddItemPayload = {
-  id: string
-  name: string
-  price: number
-  note?: string
-  /** 카탈로그 메뉴 id — items_json·주방 라우팅에 전달 */
-  menuId?: string
-  optionId?: string | null
-  optionCode?: string | null
-  promoId?: string
-  promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number; optionName?: string | null }[]
-}
-
-export type CartPanelOrderCompleteResult = boolean | Promise<boolean>
-
-export interface CartPanelHandle {
-  addItem: (item: CartPanelAddItemPayload) => void
-  clearCart: () => void
-  openDineInPaymentFromOrder: (payload: {
-    tableName: string
-    orderNo?: string
-    /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
-    existingOrderId?: number | null
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
-    /** DB·플랫폼에 저장된 할인·합계 — 결제 시 0으로 초기화하지 않음 */
-    orderDiscount?: PosExistingOrderCheckoutDiscount
-  }) => void
-  openTakeoutPaymentFromOrder: (payload: {
-    orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
-    /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
-    existingOrderId?: number | null
-    orderDiscount?: PosExistingOrderCheckoutDiscount
-  }) => void
-  openDeliveryPaymentFromOrder: (payload: {
-    orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
-    /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
-    existingOrderId?: number | null
-    orderDiscount?: PosExistingOrderCheckoutDiscount
-  }) => void
 }
 
 function normalizeExistingPosOrderId(raw: unknown): number | null {
@@ -652,255 +447,6 @@ interface CartPanelProps {
 
 type CartItem = OrderItem
 
-const CART_ITEMS_CACHE = new Map<string, CartItem[]>()
-
-/** 터미널 탭 전환 시 홀/포장 장바구니 스냅샷 (배달 알림으로 탭이 바뀌어도 복원) */
-export function readPosCartItemsCache(key: string): CartItem[] {
-  return cloneCartItems(CART_ITEMS_CACHE.get(key) ?? [])
-}
-export function writePosCartItemsCache(key: string, items: CartItem[]): void {
-  CART_ITEMS_CACHE.set(key, cloneCartItems(items))
-}
-
-const cloneCartItems = (items: CartItem[]): CartItem[] =>
-  items.map((i) => ({
-    ...i,
-    promoItems: i.promoItems ? i.promoItems.map((p) => ({ ...p })) : undefined,
-  }))
-
-/** POS 결제 모달 — 금액 요약(소계·할인·수수료·합계) */
-function PosPaymentModalAmountCard({
-  subtotal,
-  discount,
-  pricing,
-  total,
-  totalLabelKey,
-  cartItems,
-  lineDiscountModeByItemId,
-  onLineDiscountModeChange,
-  onDiscountLineSelected,
-  t,
-}: {
-  subtotal: number
-  discount: number
-  pricing: PosPricingResult
-  total: number
-  /** i18n 키 (없으면 posPaymentTotalLabel) */
-  totalLabelKey?: string
-  cartItems?: CartItem[]
-  lineDiscountModeByItemId?: Record<string, MenuLineDiscountMode>
-  onLineDiscountModeChange?: (itemId: string, nextMode: MenuLineDiscountMode) => void
-  onDiscountLineSelected?: () => void
-  t: (key: string) => string
-}) {
-  const [showLineDiscountPicker, setShowLineDiscountPicker] = useState(false)
-  const tr = (key: string, fallback: string) => {
-    const v = t(key)
-    return !v || v === key ? fallback : v
-  }
-  const totalLineLabel = totalLabelKey ? t(totalLabelKey) : (t('posPaymentTotalLabel') || '결제 금액')
-  const hasLineDiscountPicker = !!onLineDiscountModeChange && !!cartItems?.length
-  const subtotalDisplay = resolveReceiptSubtotalPrintAmount({
-    subtotal,
-    vatFeeMode: pricing.vatFeeMode,
-    receiptExclusiveSubtotalDisplay: pricing.receiptExclusiveSubtotalDisplay,
-    receiptTaxableGrossForDisplay: pricing.baseTotal,
-  })
-  const vatDisplay = resolveReceiptVatPrintAmount({
-    vatFeeAmt: pricing.vatFeeAmt,
-    receiptVatDisplayAmt: pricing.receiptVatDisplayAmt,
-  })
-  const feeRows: { show: boolean; label: ReactNode; value: string; valueClass?: string }[] = [
-    {
-      show: vatDisplay > 0,
-      label: (
-        <span className="text-muted-foreground">
-          {t('posVatLabel') || '부가세'}{' '}
-          <span className="text-[11px] opacity-80">
-            ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
-          </span>
-        </span>
-      ),
-      value: `${pricing.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatDisplay)} ฿`,
-    },
-    {
-      show: pricing.serviceFeeAmt > 0,
-      label: (
-        <span className="text-muted-foreground">
-          {t('posServiceFee') || '서비스비'}{' '}
-          <span className="text-[11px] opacity-80">
-            ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
-          </span>
-        </span>
-      ),
-      value: `${pricing.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.serviceFeeAmt)} ฿`,
-    },
-    {
-      show: pricing.cardFeeAmt > 0,
-      label: (
-        <span className="text-muted-foreground">
-          {t('posCardFee') || '카드비'}{' '}
-          <span className="text-[11px] opacity-80">
-            ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
-          </span>
-        </span>
-      ),
-      value: `${pricing.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.cardFeeAmt)} ฿`,
-    },
-    {
-      show: pricing.otherFeeAmt > 0,
-      label: (
-        <span className="text-muted-foreground">
-          {t('posOtherFee') || '기타'}{' '}
-          <span className="text-[11px] opacity-80">
-            ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
-          </span>
-        </span>
-      ),
-      value: `${pricing.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.otherFeeAmt)} ฿`,
-    },
-  ]
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-muted/45 via-muted/25 to-background/95 p-3 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]">
-      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-      <div className="flex gap-2.5">
-        <div className="flex w-9 shrink-0 flex-col items-center pt-0.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/12 text-primary shadow-inner">
-            <Receipt className="h-[1.05rem] w-[1.05rem]" strokeWidth={2.25} />
-          </div>
-        </div>
-        <div className="min-w-0 flex-1 space-y-0">
-          <div className="flex items-baseline justify-between gap-2 border-b border-border/50 pb-1 text-sm leading-tight">
-            <span className="text-muted-foreground">{t('posSubtotal')}</span>
-            <span className="shrink-0 tabular-nums font-semibold text-foreground">{formatBahtNum(subtotalDisplay)} ฿</span>
-          </div>
-          {hasLineDiscountPicker && (
-            <Collapsible open={showLineDiscountPicker} onOpenChange={setShowLineDiscountPicker}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="mt-1 h-8 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  <span className="mr-1">{tr('posMenuLineDiscountToggle', '메뉴별 할인/서비스/취소')}</span>
-                  {showLineDiscountPicker ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-1">
-                <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
-                  {cartItems?.map((item) => {
-                    const mode = lineDiscountModeByItemId?.[item.id] ?? 'none'
-                    const lineTotal = Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
-                    return (
-                      <div key={item.id} className="rounded-xl border border-border/60 bg-background/70 p-2">
-                        <div className="mb-1 flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium">{item.name}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {t('qty') || '수량'} {formatBahtNum(item.quantity)} · {formatBahtNum(lineTotal)} ฿
-                            </p>
-                          </div>
-                          {mode !== 'none' ? (
-                            <Badge variant="secondary" className="shrink-0 text-[10px]">
-                              {mode === 'service'
-                                ? tr('posServiceHandled', '서비스처리')
-                                : mode === 'cancel'
-                                  ? tr('posLineCancelledShort', '취소처리')
-                                  : tr('posDiscountApplied', '할인적용')}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={mode === 'discount' ? 'default' : 'outline'}
-                            className="h-7 rounded-lg text-[11px]"
-                            onClick={() => {
-                              const nextMode: MenuLineDiscountMode = mode === 'discount' ? 'none' : 'discount'
-                              onLineDiscountModeChange?.(item.id, nextMode)
-                              if (nextMode === 'discount') onDiscountLineSelected?.()
-                            }}
-                          >
-                            {tr('posDiscountApplied', '할인적용')}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={mode === 'service' ? 'default' : 'outline'}
-                            className={cn(
-                              'h-7 rounded-lg text-[11px]',
-                              mode === 'service'
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/30'
-                            )}
-                            onClick={() => onLineDiscountModeChange?.(item.id, mode === 'service' ? 'none' : 'service')}
-                          >
-                            {tr('posServiceHandled', '서비스처리')}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={mode === 'cancel' ? 'destructive' : 'outline'}
-                            className={cn(
-                              'h-7 rounded-lg text-[11px]',
-                              mode === 'cancel'
-                                ? ''
-                                : 'border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-950/30'
-                            )}
-                            onClick={() => onLineDiscountModeChange?.(item.id, mode === 'cancel' ? 'none' : 'cancel')}
-                          >
-                            {tr('posLineCancelledShort', '취소처리')}
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-          {discount > 0 && (
-            <div className="flex items-baseline justify-between gap-2 py-1 text-[13px] leading-tight">
-              <span className="flex min-w-0 items-center gap-1 text-emerald-700 dark:text-emerald-400">
-                <Sparkles className="h-3 w-3 shrink-0 opacity-80" />
-                {t('posDiscount')}
-              </span>
-              <span className="shrink-0 tabular-nums font-medium text-emerald-700 dark:text-emerald-400">
-                −{formatBahtNum(discount)} ฿
-              </span>
-            </div>
-          )}
-          {feeRows.some((r) => r.show) && (
-            <>
-              <Separator className="my-1 bg-border/60" />
-              <div className="space-y-0">
-                {feeRows
-                  .filter((r) => r.show)
-                  .map((row, i) => (
-                    <div key={i} className="flex items-baseline justify-between gap-2 py-1 text-[12px] leading-tight">
-                      <div className="min-w-0">{row.label}</div>
-                      <span className="shrink-0 tabular-nums text-foreground/90">{row.value}</span>
-                    </div>
-                  ))}
-              </div>
-            </>
-          )}
-          <Separator className="my-1.5 bg-border/70" />
-          <div className="flex items-baseline justify-between gap-2 rounded-lg bg-primary/8 px-2 py-2 dark:bg-primary/15">
-            <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight text-foreground">
-              <CircleDollarSign className="h-3.5 w-3.5 shrink-0 text-primary" />
-              {totalLineLabel}
-            </span>
-            <span className="shrink-0 text-base font-bold tabular-nums tracking-tight text-primary">{formatBahtNum(total)} ฿</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function resolveDineInTableNameForStorage(
   table: Pick<Table, 'name' | 'floor'> | null | undefined,
   fallbackName: string,
@@ -990,7 +536,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [isExistingOrderCheckout, setIsExistingOrderCheckout] = useState(false)
   const [internalCartItems, setInternalCartItems] = useState<CartItem[]>(() => {
     if (cartItemsProp !== undefined && setCartItemsProp !== undefined) return []
-    return cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? [])
+    return clonePosCartItems(peekPosCartItemsCache(cartItemsCacheKey) ?? [])
   })
   const cartItems = isCartControlled ? cartItemsProp! : internalCartItems
   const setCartItems = isCartControlled ? setCartItemsProp! : setInternalCartItems
@@ -1171,23 +717,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (isCartControlled) return
     const key = cartItemsCacheKey
     return () => {
-      CART_ITEMS_CACHE.set(key, cloneCartItems(cartItemsRef.current))
+      replacePosCartItemsCache(key, clonePosCartItems(cartItemsRef.current))
     }
   }, [cartItemsCacheKey, isCartControlled])
 
   useEffect(() => {
     if (isCartControlled) return
     if (orderType !== 'dine-in') {
-      setCartItems(cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? []))
+      setCartItems(clonePosCartItems(peekPosCartItemsCache(cartItemsCacheKey) ?? []))
       return
     }
-    const fromNew = cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? [])
+    const fromNew = clonePosCartItems(peekPosCartItemsCache(cartItemsCacheKey) ?? [])
     if (fromNew.length > 0) {
       setCartItems(fromNew)
       return
     }
     const dineInWithTakeoutTail = `${currentStoreId}|dine-in|${tableIdForCartSessionKey}|||${takeoutLabelProp ?? ''}`
-    const fromTakeoutTail = cloneCartItems(CART_ITEMS_CACHE.get(dineInWithTakeoutTail) ?? [])
+    const fromTakeoutTail = clonePosCartItems(peekPosCartItemsCache(dineInWithTakeoutTail) ?? [])
     if (fromTakeoutTail.length > 0) {
       setCartItems(fromTakeoutTail)
       return
@@ -1197,7 +743,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setCartItems(fromNew)
       return
     }
-    setCartItems(cloneCartItems(CART_ITEMS_CACHE.get(legacyKey) ?? []))
+    setCartItems(clonePosCartItems(peekPosCartItemsCache(legacyKey) ?? []))
   }, [
     cartItemsCacheKey,
     orderType,
@@ -1211,7 +757,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   useEffect(() => {
     if (isCartControlled) return
-    CART_ITEMS_CACHE.set(cartItemsCacheKey, cloneCartItems(cartItems))
+    replacePosCartItemsCache(cartItemsCacheKey, clonePosCartItems(cartItems))
   }, [cartItemsCacheKey, cartItems, isCartControlled])
 
   useEffect(() => {

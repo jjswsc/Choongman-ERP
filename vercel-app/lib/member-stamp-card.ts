@@ -53,6 +53,8 @@ export type MemberStampMilestoneInput = Omit<MemberStampMilestone, 'id'> & { id?
 
 export type MemberStampCardStatus = {
   enabled: boolean
+  /** 정책 OFF·DB 미적용 등으로 아직 운영 전일 때 true (회원앱 안내용) */
+  preparing?: boolean
   cardSlots: number
   earnMode: MemberStampEarnMode
   resetAfterComplete: boolean
@@ -907,12 +909,31 @@ export async function listMemberStampHistory(memberId: number, limit = 20): Prom
   }
 }
 
+export function buildMemberStampPreparingStatus(): MemberStampCardStatus {
+  return {
+    enabled: false,
+    preparing: true,
+    cardSlots: DEFAULT_MEMBER_STAMP_POLICY.cardSlots,
+    earnMode: DEFAULT_MEMBER_STAMP_POLICY.earnMode,
+    resetAfterComplete: DEFAULT_MEMBER_STAMP_POLICY.resetAfterComplete,
+    minOrderAmt: 0,
+    cardExpiryDays: 0,
+    cardExpiresAt: null,
+    currentStamps: 0,
+    cardSequence: 1,
+    totalEarned: 0,
+    progressPercent: 0,
+    milestones: [],
+    nextMilestone: null,
+  }
+}
+
 export async function getMemberStampCardStatus(
   memberId: number,
   lang: 'ko' | 'en' | 'th' = 'ko'
 ): Promise<MemberStampCardStatus | null> {
   const globalPolicy = await loadMemberStampPolicy()
-  if (!globalPolicy.enabled) return null
+  if (!globalPolicy.enabled) return buildMemberStampPreparingStatus()
 
   try {
     const policy = globalPolicy
@@ -965,7 +986,7 @@ export async function getMemberStampCardStatus(
       nextMilestone: next,
     }
   } catch (e) {
-    if (isMissingTableError(e)) return null
+    if (isMissingTableError(e)) return buildMemberStampPreparingStatus()
     throw e
   }
 }
