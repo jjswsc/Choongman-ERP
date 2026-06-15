@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveHeadOfficeFromVendorRow } from '@/lib/head-office-defaults'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { fetchSalesTypesVendorsForInvoice } from '@/lib/invoice-vendor-clients'
 
@@ -19,23 +20,9 @@ export async function GET() {
     if (!companyRows || companyRows.length === 0) {
       companyRows = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as typeof companyRows
     }
-    const company = (companyRows && companyRows.length > 0)
-      ? {
-          companyName: String(companyRows[0].name || 'บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)').trim(),
-          address: String(companyRows[0].addr || '').trim() || '-',
-          taxId: String((companyRows[0] as { tax_id?: string }).tax_id || '0105566137147').trim(),
-          phone: String(companyRows[0].phone || '091-072-6252').trim(),
-          bankInfo: String(companyRows[0].memo || 'ธนาคารกสิกรไทย เลขที่ 166-2-97079-0 ชื่อบัญชี บจก. เอสแอนด์เจ โกลบอล').trim(),
-          projectName: 'CM True Digital Park',
-        }
-      : {
-          companyName: 'บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)',
-          address: '-',
-          taxId: '0105566137147',
-          phone: '091-072-6252',
-          bankInfo: 'ธนาคารกสิกรไทย เลขที่ 166-2-97079-0 ชื่อบัญชี บจก. เอสแอนด์เจ โกลบอล',
-          projectName: 'CM True Digital Park',
-        }
+    const company = resolveHeadOfficeFromVendorRow(
+      companyRows && companyRows.length > 0 ? companyRows[0] : null
+    )
 
     // 매출처 (type=매출처 또는 Sales, both) - name(회사명)과 gps_name(매장명) 모두 키로 등록
     const clients: Record<string, { companyName: string; address: string; taxId: string; phone: string }> = {}

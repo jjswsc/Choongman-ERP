@@ -99,11 +99,21 @@ export function setRuntimeIngredients(items: Array<{ code: number; name: string;
 /** setRuntimeIngredients 대신 기존 품목·배합 맵을 유지하며 breakdown 폴백만 추가 */
 export function mergeRuntimeIngredients(items: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode?: string }>) {
   for (const i of items) {
+    const prev = runtimeIngredientMap.get(i.code)
+    const ic = String(i.itemCode ?? "").trim()
+    const name =
+      i.name && i.name !== ic
+        ? i.name
+        : prev?.name && prev.name !== ic
+          ? prev.name
+          : i.name
+    const bahtPerUnit =
+      i.bahtPerUnit > 0 ? i.bahtPerUnit : prev && prev.bahtPerUnit > 0 ? prev.bahtPerUnit : i.bahtPerUnit
     runtimeIngredientMap.set(i.code, {
-      name: i.name,
-      bahtPerUnit: i.bahtPerUnit,
+      name,
+      bahtPerUnit,
       category: i.category,
-      itemCode: i.itemCode,
+      itemCode: i.itemCode ?? prev?.itemCode,
     })
   }
 }
@@ -150,6 +160,58 @@ export function seedRuntimeFromBreakdownRow(params: {
   return code
 }
 
+/** breakdown/API 불일치 시 이름·단가 보강 (품목·배합 공통) */
+export function enrichRuntimeFromBreakdown(params: {
+  itemCode: string
+  itemName?: string
+  costPerUnit?: number
+  ingredientType?: "food" | "packaging"
+}): void {
+  const itemCode = String(params.itemCode ?? "").trim()
+  if (!itemCode) return
+  const name = String(params.itemName ?? "").trim()
+  const bahtPerUnit = Number(params.costPerUnit) || 0
+  if (/^S\d+/i.test(itemCode)) {
+    const sauceCode = getIngredientCodeByItemCode(itemCode)
+    if (sauceCode == null || !runtimeSauceMap.has(sauceCode)) {
+      registerRuntimeSauceIfAbsent({
+        itemCode,
+        name: name || itemCode,
+        bahtPerUnit,
+        usageKind: "for_sale",
+      })
+      return
+    }
+  }
+  const resolved = getIngredientCodeByItemCode(itemCode)
+  if (resolved != null && runtimeSauceMap.has(resolved)) {
+    const usageKind = runtimeSauceMap.get(resolved)?.usageKind ?? "for_sale"
+    registerRuntimeSauceIfAbsent({
+      itemCode,
+      name: name || itemCode,
+      bahtPerUnit,
+      usageKind,
+    })
+    return
+  }
+  const cat = params.ingredientType === "packaging" ? "packaging" : "food"
+  const code = resolved ?? seedRuntimeFromBreakdownRow({
+    itemCode,
+    itemName: name,
+    costPerUnit: bahtPerUnit,
+    ingredientType: cat,
+  })
+  mergeRuntimeIngredients([
+    {
+      code,
+      name: name || itemCode,
+      bahtPerUnit,
+      category: cat,
+      itemCode,
+    },
+  ])
+}
+
 /** savedItemCode 기준으로 ingredientCode 재매핑 (런타임 API 로드 후) */
 export function reResolveRecipeItems(items: RecipeItem[]): RecipeItem[] {
   return items.map((item) => {
@@ -188,13 +250,12 @@ function runtimeSauceUsageKind(s: RuntimeSauceInput): 'for_sale' | 'store_use' {
   return raw === 'store_use' ? 'store_use' : 'for_sale'
 }
 
-/** mode calculator: 매장용 배합은 제외(원가 계산기에서 품목만 선택). full: 배합 원가 탭 레시피 편집용 전체 */
+/**
+ * mode calculator: 매장용 배합도 맵에는 포함(BOM 조회·원가 계산). 선택 UI에서는 ingredientPickerHideSauceUsageKinds로 숨김.
+ * full: 배합 원가 탭 레시피 편집용 전체
+ */
 export function setRuntimeSauces(sauces: RuntimeSauceInput[], opts?: { mode?: 'full' | 'calculator' }) {
-  const mode = opts?.mode ?? 'full'
-  const list =
-    mode === 'calculator'
-      ? sauces.filter((s) => runtimeSauceUsageKind(s) !== 'store_use')
-      : sauces
+  const list = sauces
   runtimeSauceMap = new Map(
     list.map((s, idx) => {
       const code = SAUCE_CODE_OFFSET + idx + 1
@@ -236,8 +297,21 @@ export function registerRuntimeSauceIfAbsent(entry: {
     })
     return code
   }
-  for (const [c, v] of runtimeSauceMap) {
-    if (v.itemCode === ic) return c
+  for (const key of itemCodeLookupKeys(ic)) {
+    for (const [c, v] of runtimeSauceMap) {
+      if (v.itemCode === key) {
+        const nextName =
+          entry.name && entry.name !== ic && (v.name === key || v.name === ic || !String(v.name ?? "").trim())
+            ? entry.name
+            : v.name
+        const nextBaht =
+          Number(entry.bahtPerUnit) > 0 && v.bahtPerUnit <= 0 ? Number(entry.bahtPerUnit) : v.bahtPerUnit
+        if (nextName !== v.name || nextBaht !== v.bahtPerUnit) {
+          runtimeSauceMap.set(c, { ...v, name: nextName, bahtPerUnit: nextBaht })
+        }
+        return c
+      }
+    }
   }
   const code = nextFreeSauceNumericCode()
   runtimeSauceMap.set(code, {
@@ -388,17 +462,29 @@ export function getIngredientItemCode(code: number): string | undefined {
   return undefined
 }
 
+function itemCodeLookupKeys(raw: string): string[] {
+  const t = String(raw ?? "").trim()
+  if (!t) return []
+  const asciiDigits = t.replace(/[\uFF10-\uFF19]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 48)
+  )
+  const variants = new Set<string>([t, asciiDigits, t.toUpperCase(), t.toLowerCase(), asciiDigits.toUpperCase(), asciiDigits.toLowerCase()])
+  return [...variants].filter(Boolean)
+}
+
 /** item_code(string) → ingredientCode(number). API/소스 로드 후 사용 */
 export function getIngredientCodeByItemCode(itemCode: string): number | undefined {
-  const code = String(itemCode ?? "").trim()
-  if (!code) return undefined
-  for (const [c, v] of runtimeApiItemsMap) {
-    if (v.itemCode === code) return c
+  const keys = itemCodeLookupKeys(itemCode)
+  if (!keys.length) return undefined
+  for (const key of keys) {
+    for (const [c, v] of runtimeApiItemsMap) {
+      if (v.itemCode === key) return c
+    }
+    for (const [c, v] of runtimeSauceMap) {
+      if (v.itemCode === key) return c
+    }
   }
-  for (const [c, v] of runtimeSauceMap) {
-    if (v.itemCode === code) return c
-  }
-  const codeLower = code.toLowerCase()
+  const codeLower = keys[0]!.toLowerCase()
   for (const [c, v] of runtimeApiItemsMap) {
     if (String(v.name ?? "").trim().toLowerCase() === codeLower) return c
   }

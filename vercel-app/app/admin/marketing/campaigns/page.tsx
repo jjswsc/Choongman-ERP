@@ -886,11 +886,28 @@ export default function MarketingCampaignsPage() {
   const campaignListForDisplay = listFilterBypass ? list : filteredList
 
   const handleCopyCampaign = (c: MarketingCampaign) => {
+    setHubTab("form")
+    const p = new URLSearchParams(searchParams.toString())
+    p.delete("view")
+    p.delete("openCampaign")
+    p.delete("tab")
+    const qs = p.toString()
+    router.replace(qs ? `/admin/marketing/campaigns?${qs}` : "/admin/marketing/campaigns")
+    setEditingId(null)
+    setActiveTab("influencers")
+    setMatForm({ ...defaultMatForm })
+    setMaterialGifts([])
+    setExpandedGiftMatId(null)
+    setEditingGiftId(null)
+    setGiftAddDraft({ ...defaultGiftDraft })
+
     getMarketingCampaign(c.id).then((detail) => {
-      if (!detail) return
+      if (!detail) {
+        void appAlert(tr("캠페인 정보를 불러올 수 없습니다.", "Could not load campaign.", "ไม่สามารถโหลดแคมเปญได้"))
+        return
+      }
       const parsedFormat = parseCampaignFormat(detail.format ?? "")
       const parsedCampaignType = toCampaignTypeFormState(detail.campaignType)
-      setEditingId(null)
       setForm({
         campaignNo: "",
         topic: (detail.topic ?? "") + ` (${tr("복사", "Copy", "คัดลอก")})`,
@@ -934,6 +951,8 @@ export default function MarketingCampaignsPage() {
       }))
       setCustomCampaignType(parsedCampaignType.custom)
       setChannelState(parsedFormat)
+    }).catch(() => {
+      void appAlert(tr("캠페인 정보를 불러올 수 없습니다.", "Could not load campaign.", "ไม่สามารถโหลดแคมเปญได้"))
     })
   }
 

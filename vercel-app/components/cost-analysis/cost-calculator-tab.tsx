@@ -16,11 +16,12 @@ import {
   emptyFoodRecipe,
   emptyPackagingRecipe,
   calculateSubTotal,
+  enrichRuntimeFromBreakdown,
   mergeRuntimeIngredients,
   clearRuntimeIngredients,
+  getIngredient,
   getIngredientItemCode,
   getIngredientCodeByItemCode,
-  getIngredient,
   getIngredientStandardUnits,
   getQuantityFactorToStore,
   MISE_DEFAULT,
@@ -57,7 +58,12 @@ interface CostCalculatorTabProps {
 function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem[]; packaging: RecipeItem[] } {
   const food: RecipeItem[] = []
   const packaging: RecipeItem[] = []
-  const runtimeFallbacks: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
+  const runtimeFallbacks: Array<{
+    itemCode: string
+    itemName: string
+    costPerUnit: number
+    ingredientType: "food" | "packaging"
+  }> = []
 
   const breakdown = Array.isArray(row.breakdown) ? row.breakdown : []
   breakdown.forEach((b, idx) => {
@@ -71,13 +77,21 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
       fallbackIndex: idx,
     })
     const resolved = getIngredientCodeByItemCode(itemCode)
-    if (!resolved) {
+    const breakdownName = String(b.itemName ?? "").trim()
+    const breakdownCost = Number(b.costPerUnit) || 0
+    const resolvedMeta = resolved != null ? getIngredient(resolved) : undefined
+    const needsFallback =
+      !resolved ||
+      (breakdownName &&
+        breakdownName !== itemCode &&
+        (!resolvedMeta?.name || resolvedMeta.name === itemCode)) ||
+      (breakdownCost > 0 && Number(resolvedMeta?.bahtPerUnit ?? 0) <= 0)
+    if (needsFallback) {
       runtimeFallbacks.push({
-        code,
-        name: String(b.itemName ?? itemCode).trim() || itemCode,
-        bahtPerUnit: Number(b.costPerUnit) || 0,
-        category: cat,
         itemCode,
+        itemName: breakdownName || itemCode,
+        costPerUnit: breakdownCost,
+        ingredientType: cat,
       })
     }
     if (itemCode.startsWith("MENU:")) {
@@ -107,7 +121,9 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
     else food.push(item)
   })
 
-  if (runtimeFallbacks.length > 0) mergeRuntimeIngredients(runtimeFallbacks)
+  for (const fb of runtimeFallbacks) {
+    enrichRuntimeFromBreakdown(fb)
+  }
   return { food, packaging }
 }
 

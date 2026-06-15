@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateEtaxXml, type EtaxInvoiceInput } from '@/lib/etax-xml'
 import { signEtaxXml } from '@/lib/etax-sign'
+import { resolveHeadOfficeFromVendorRow } from '@/lib/head-office-defaults'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { fetchSalesTypesVendorsForInvoice } from '@/lib/invoice-vendor-clients'
 
@@ -40,19 +41,13 @@ async function getInvoiceData(): Promise<{
   if (!companyRows?.length) {
     companyRows = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as typeof companyRows
   }
-  const company = companyRows?.[0]
-    ? {
-        companyName: String(companyRows[0].name || '').trim() || 'บริษัท เอสแอนด์เจ โกลบอล จำกัด',
-        address: String(companyRows[0].addr || '').trim() || '-',
-        taxId: String((companyRows[0] as { tax_id?: string }).tax_id || '0105566137147').trim(),
-        phone: String(companyRows[0].phone || '').trim() || '-',
-      }
-    : {
-        companyName: 'บริษัท เอสแอนด์เจ โกลบอล จำกัด',
-        address: '-',
-        taxId: '0105566137147',
-        phone: '-',
-      }
+  const resolved = resolveHeadOfficeFromVendorRow(companyRows?.[0])
+  const company = {
+    companyName: resolved.companyName,
+    address: resolved.address,
+    taxId: resolved.taxId,
+    phone: resolved.phone,
+  }
 
   const clients: Record<string, InvoiceDataClient> = {}
   const clientRows = await fetchSalesTypesVendorsForInvoice()

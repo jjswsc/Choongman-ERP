@@ -1,6 +1,7 @@
 import type { InvoiceData } from "@/components/invoice"
 import type { InvoiceDataClient, InvoiceDataCompany } from "@/lib/api-client"
 import type { OrderInvoiceTotals } from "@/lib/api-client"
+import { HEAD_OFFICE_DEFAULTS } from "@/lib/head-office-defaults"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 
 export type ThaiSalesInvoiceLineInput = {
@@ -54,7 +55,7 @@ export function buildThaiSalesInvoiceData(params: {
     termsAndConditions = []
   }
 
-  const rawCompanyName = company?.companyName || "S&J Global Co., Ltd"
+  const rawCompanyName = company?.companyName || HEAD_OFFICE_DEFAULTS.companyName
   const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
   const stampBase = typeof window !== "undefined" && window.location?.origin ? window.location.origin : ""
   const rawClientName = (client as { companyName?: string }).companyName || "-"
