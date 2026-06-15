@@ -999,6 +999,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseFloat(payPromptPay) || 0) +
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
     (parseFloat(payDeliveryApp) || 0)
+  const SPLIT_AMOUNT_EPS = 0.02
+  const paymentTotalsReconcile = (entered: number, due: number) =>
+    Math.abs(round2(entered) - round2(due)) <= SPLIT_AMOUNT_EPS ||
+    Math.round(entered) === Math.round(due)
   /** 더치페이: 일부 결제로 확정된 인원 합 + 현재 입력란 */
   const splitCapturedPaymentSum = useMemo(() => {
     if (!showSplit) return 0
@@ -1022,11 +1026,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const cashTenderedNum = parseFloat(cashTendered) || 0
   const _cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
   const _cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
-  const SPLIT_AMOUNT_EPS = 0.02
   const paymentEnteredSum = showSplit ? displayPaymentSum : paymentSum
-  const paymentTotalsReconcile = (entered: number, due: number) =>
-    Math.abs(round2(entered) - round2(due)) <= SPLIT_AMOUNT_EPS ||
-    Math.round(entered) === Math.round(due)
   const paymentSumMatch = paymentTotalsReconcile(paymentEnteredSum, total)
 
   const buildPaymentOtherBreakdownSnapshot = useCallback((): PosPaymentOtherBreakdown | undefined => {
