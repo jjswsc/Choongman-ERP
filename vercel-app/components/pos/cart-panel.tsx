@@ -66,6 +66,7 @@ import {
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum, formatBahtWhole, formatPosQtyCompact } from '@/lib/utils'
+import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from '@/lib/baht-input-format'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
@@ -527,6 +528,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [taxEmail, setTaxEmail] = useState('')
   const [taxAddress, setTaxAddress] = useState('')
   const [splitCount, setSplitCount] = useState(2)
+  const [splitCountDraft, setSplitCountDraft] = useState<string | null>(null)
   const [splitPaidSteps, setSplitPaidSteps] = useState(0)
   const [showSplit, setShowSplit] = useState(false)
   const [splitMode, setSplitMode] = useState<'amount' | 'menu'>('amount')
@@ -1023,7 +1025,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
     (parseFloat(payDeliveryApp) || 0)
   const cashRequiredAmount = Math.max(0, total - nonCashPaymentSum)
-  const cashTenderedNum = parseFloat(cashTendered) || 0
+  const cashTenderedNum = parseBahtAmount(cashTendered)
   const _cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
   const _cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
   const paymentEnteredSum = showSplit ? displayPaymentSum : paymentSum
@@ -1103,7 +1105,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const ob = buildPaymentOtherBreakdownSnapshot()
     const cashPay = parseFloat(payCash) || 0
     const tenderedRaw =
-      parseFloat(cashTenderedRef.current) || parseFloat(cashTendered) || 0
+      parseBahtAmount(cashTenderedRef.current) || parseBahtAmount(cashTendered)
     const nonCashPay =
       (parseFloat(payCard) || 0) +
       (parseFloat(payPromptPay) || 0) +
@@ -1409,7 +1411,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const showPostCashChangeForSplitStepIfNeeded = useCallback(() => {
     const cashPay = parseFloat(payCash) || 0
     if (cashPay <= 0.001) return
-    const tenderedRaw = parseFloat(cashTenderedRef.current) || parseFloat(cashTendered) || 0
+    const tenderedRaw = parseBahtAmount(cashTenderedRef.current) || parseBahtAmount(cashTendered)
     if (tenderedRaw <= 0.001) return
     const change = round2(Math.max(0, tenderedRaw - cashRequiredForTendered))
     if (change > 0.001) {
@@ -4240,32 +4242,32 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           )}
 
           <Dialog open={guestDirectOpen} onOpenChange={setGuestDirectOpen}>
-                  <DialogContent className="sm:max-w-xs">
-                    <DialogHeader>
-                      <DialogTitle>{t('posGuestDirectInput') || '직접 입력'}</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-2 py-2">
-                      <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={99}
-                        className="tabular-nums"
-                        value={guestDirectValue}
-                        onChange={(e) => setGuestDirectValue(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmGuestDirect())}
-                      />
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" size="sm" onClick={() => setGuestDirectOpen(false)}>
-                        {t('posCancel') ?? t('cancel') ?? '취소'}
-                      </Button>
-                      <Button size="sm" onClick={confirmGuestDirect}>
-                        {t('posConfirm') || '확인'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+            <DialogContent className="sm:max-w-xs">
+              <DialogHeader>
+                <DialogTitle>{t('posGuestDirectInput') || '직접 입력'}</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col gap-2 py-2">
+                <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={99}
+                  className="tabular-nums"
+                  value={guestDirectValue}
+                  onChange={(e) => setGuestDirectValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmGuestDirect())}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => setGuestDirectOpen(false)}>
+                  {t('posCancel') ?? t('cancel') ?? '취소'}
+                </Button>
+                <Button size="sm" onClick={confirmGuestDirect}>
+                  {t('posConfirm') || '확인'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Options - 쿠폰/할인은 결제 페이지에서 입력. 손님 메모는 내용 있을 때만 표시 */}
@@ -4870,11 +4872,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </div>
                     <div className="flex items-center gap-2 sm:max-w-[14rem] sm:flex-1">
                   <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
                     value={value}
-                    onChange={e => set(e.target.value)}
+                    onChange={(e) => set(formatBahtInputDisplay(e.target.value))}
                     className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                   />
                   <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
@@ -4923,11 +4925,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           </Label>
                           <div className="flex items-center gap-2">
                             <Input
-                              type="number"
-                              min={0}
-                              step="0.01"
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
                               value={cashTendered}
-                              onChange={(e) => setCashTendered(e.target.value)}
+                              onChange={(e) => setCashTendered(formatBahtInputDisplay(e.target.value))}
                               className="h-10 rounded-lg border-sky-300/70 bg-sky-50/60 text-right tabular-nums text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100"
                               placeholder="0"
                             />
@@ -4965,7 +4967,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             variant="outline"
                             size="sm"
                             className="h-8 rounded-md px-3 text-sm font-semibold tabular-nums justify-center"
-                            onClick={() => setCashTendered(String(amount))}
+                            onClick={() => setCashTendered(formatBahtAmountForField(amount))}
                           >
                             {amount}฿
                           </Button>
@@ -5035,11 +5037,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       </div>
                       <div className="flex items-center gap-2">
                         <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
                           value={payDeliveryApp}
-                          onChange={(e) => setPayDeliveryApp(e.target.value)}
+                          onChange={(e) => setPayDeliveryApp(formatBahtInputDisplay(e.target.value))}
                           className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                         />
                         <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
@@ -5132,14 +5134,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               </div>
                               <div className="flex items-center gap-2 sm:max-w-[12rem]">
                                 <Input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
                                   value={payAdminLineAmounts[item.id] ?? '0'}
                                   onChange={(e) =>
                                     setPayAdminLineAmounts((prev) => ({
                                       ...prev,
-                                      [item.id]: e.target.value,
+                                      [item.id]: formatBahtInputDisplay(e.target.value),
                                     }))
                                   }
                                   className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
@@ -5192,11 +5194,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           </div>
                           <div className="flex items-center gap-2 sm:max-w-[12rem]">
                             <Input
-                              type="number"
-                              min={0}
-                              step="0.01"
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
                               value={value}
-                              onChange={(e) => set(e.target.value)}
+                              onChange={(e) => set(formatBahtInputDisplay(e.target.value))}
                               className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
                             />
                             <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
@@ -5305,10 +5307,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         {tr('posSplitPeople', '인원')}
                       </span>
                       <Input
-                        type="number"
-                        min={1}
-                        value={splitCount}
-                        onChange={(e) => setSplitCount(Math.max(1, Number(e.target.value || 1)))}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={splitCountDraft ?? String(splitCount)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, '').slice(0, 2)
+                          setSplitCountDraft(raw)
+                          if (raw !== '') {
+                            setSplitCount(Math.max(1, Math.min(99, parseInt(raw, 10))))
+                          }
+                        }}
+                        onBlur={() => {
+                          const raw = splitCountDraft ?? String(splitCount)
+                          const n =
+                            raw === '' ? 1 : Math.max(1, Math.min(99, parseInt(raw, 10) || 1))
+                          setSplitCount(n)
+                          setSplitCountDraft(null)
+                        }}
                         className="h-9 w-14 rounded-lg border-violet-400/50 bg-background text-center text-base font-bold tabular-nums shrink-0 dark:border-violet-600/50"
                         data-tour="pos-tour-dutch-split-count"
                       />
