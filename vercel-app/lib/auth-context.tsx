@@ -16,10 +16,13 @@ export interface AuthState {
   employeeCode?: string
   /** 가맹점주 복수 매장 허용 목록(로그인 응답·JWT와 동기) */
   allowedStores?: string[]
+  /** employees.can_manage_office_payroll — 오피스 급여 조회·계산·확정 */
+  canManageOfficePayroll?: boolean
 }
 
 const LAST_LOGIN_SNAPSHOT_KEY = 'cm_last_login_snapshot'
 const CM_ALLOWED_STORES_KEY = 'cm_allowed_stores'
+const CM_OFFICE_PAYROLL_KEY = 'cm_office_payroll_mgr'
 
 function resolveLoginPathByCurrentRoute(): string {
   if (typeof window === 'undefined') return '/login'
@@ -87,6 +90,10 @@ function loadAuth(): AuthState | null {
         const codeStr = sessionStorage.getItem('cm_employee_code')
         if (codeStr) employeeCode = String(codeStr).trim() || undefined
       } catch {}
+      let canManageOfficePayroll = false
+      try {
+        canManageOfficePayroll = sessionStorage.getItem(CM_OFFICE_PAYROLL_KEY) === '1'
+      } catch {}
       return {
         ...(sessionStorage.getItem('cm_company') ? { company: sessionStorage.getItem('cm_company') || undefined } : {}),
         ...(sessionStorage.getItem('cm_tenant_id')
@@ -99,6 +106,7 @@ function loadAuth(): AuthState | null {
         ...(employeeId != null ? { employeeId } : {}),
         ...(employeeCode ? { employeeCode } : {}),
         allowedStores,
+        ...(canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
       }
     }
   } catch {}
@@ -125,6 +133,7 @@ export function loadOfflineResumeAuth(): AuthState | null {
       employeeId?: number
       employeeCode?: string
       allowedStores?: string[]
+      canManageOfficePayroll?: boolean
     }
     const store = String(o.store ?? '').trim()
     const user = String(o.user ?? '').trim()
@@ -150,6 +159,7 @@ export function loadOfflineResumeAuth(): AuthState | null {
       ...(snapEid > 0 ? { employeeId: snapEid } : {}),
       ...(snapCode ? { employeeCode: snapCode } : {}),
       allowedStores,
+      ...(o.canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
     }
   } catch {
     return null
@@ -234,6 +244,11 @@ function saveAuth(auth: AuthState) {
     } else {
       sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
     }
+    if (auth.canManageOfficePayroll) {
+      sessionStorage.setItem(CM_OFFICE_PAYROLL_KEY, '1')
+    } else {
+      sessionStorage.removeItem(CM_OFFICE_PAYROLL_KEY)
+    }
     localStorage.setItem(
       LAST_LOGIN_SNAPSHOT_KEY,
       JSON.stringify({
@@ -245,6 +260,7 @@ function saveAuth(auth: AuthState) {
         ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
         ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
         ...(auth.allowedStores && auth.allowedStores.length > 0 ? { allowedStores: auth.allowedStores } : {}),
+        ...(auth.canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
       })
     )
   } catch {}
@@ -265,6 +281,7 @@ function clearAuth() {
     sessionStorage.removeItem('cm_employee_id')
     sessionStorage.removeItem('cm_employee_code')
     sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
+    sessionStorage.removeItem(CM_OFFICE_PAYROLL_KEY)
     try {
       localStorage.removeItem(LAST_LOGIN_SNAPSHOT_KEY)
     } catch {}

@@ -15,6 +15,7 @@ import {
   pickBestEmployeeStoreMatch,
 } from '@/lib/erp-store-master'
 import { loginCheckFailureFromError } from '@/lib/login-check-error'
+import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
       job?: string
       resign_date?: string | null
       extra_stores?: unknown
+      can_manage_office_payroll?: boolean | null
     }
     const byName = (await supabaseSelectFilterEmployeesByNameForLogin(name)) as EmpLoginRow[]
     const masters = await fetchErpStoresMaster()
@@ -101,9 +103,11 @@ export async function POST(req: NextRequest) {
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
+    const canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(row.can_manage_office_payroll)
     const tokenPayload: Parameters<typeof signToken>[0] = { store: storeName, name: userName, role: finalRole }
     if (empIdRaw > 0) tokenPayload.employeeId = empIdRaw
     if (empCodeRaw) tokenPayload.employeeCode = empCodeRaw
+    if (canManageOfficePayroll) tokenPayload.canManageOfficePayroll = true
     if (companyName) tokenPayload.company = companyName
     if (tenantId) tokenPayload.tenantId = tenantId
     const attachAllowedStores =
@@ -127,6 +131,7 @@ export async function POST(req: NextRequest) {
         ...(tenantId ? { tenantId } : {}),
         ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
         ...(empCodeRaw ? { employeeCode: empCodeRaw } : {}),
+        ...(canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
         ...(attachAllowedStores ? { allowedStores } : {}),
       },
       { headers }

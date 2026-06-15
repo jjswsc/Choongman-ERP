@@ -43,9 +43,11 @@ import {
   downloadCsv,
   exportPosCostListCsv,
   rowMatchesIssueFilter,
+  rowMatchesSaleFilter,
   summarizePosCostRows,
   type PosCostIssueFilter,
   type PosCostListSettings,
+  type PosCostSaleFilter,
 } from "@/lib/pos-cost-analysis-shared"
 import { PosCostListKpi } from "@/components/cost-analysis/pos-cost-list-kpi"
 import { getMenuCost } from "@/lib/api-client"
@@ -102,6 +104,7 @@ export function PosCostListPanel({
   const { lang } = useLang()
   const t = useT(lang)
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [saleFilter, setSaleFilter] = React.useState<PosCostSaleFilter>("active")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
   const [issueFilter, setIssueFilter] = React.useState<PosCostIssueFilter>("all")
@@ -152,9 +155,10 @@ export function PosCostListPanel({
       const matchMainCat =
         mainCategoryFilter === "all" || mainCategoryMatches(mainCategoryFilter, r.categoryMain, r.menuCode)
       const matchIssue = rowMatchesIssueFilter(r, issueFilter, settings.misePercent, settings.costRatioCautionMax)
-      return matchTerm && matchCat && matchMainCat && matchIssue
+      const matchSale = rowMatchesSaleFilter(r, saleFilter)
+      return matchTerm && matchCat && matchMainCat && matchIssue && matchSale
     })
-  }, [rows, searchTerm, categoryFilter, mainCategoryFilter, issueFilter, settings.misePercent])
+  }, [rows, searchTerm, saleFilter, categoryFilter, mainCategoryFilter, issueFilter, settings.misePercent])
 
   const flatList = React.useMemo((): RowWithDisplayCode[] => {
     const order = [...new Set(filtered.map((r) => costAnalysisMenuIdKey(r.menuId)))]
@@ -365,6 +369,16 @@ export function PosCostListPanel({
                 {c}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={saleFilter} onValueChange={(v) => setSaleFilter(v as PosCostSaleFilter)}>
+          <SelectTrigger className="h-9 w-32 text-xs">
+            <SelectValue placeholder={t("posCostSaleFilter")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">{t("posCostSaleActive")}</SelectItem>
+            <SelectItem value="all">{t("posCostSaleAll")}</SelectItem>
+            <SelectItem value="inactive">{t("posCostSaleInactive")}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={issueFilter} onValueChange={(v) => setIssueFilter(v as PosCostIssueFilter)}>

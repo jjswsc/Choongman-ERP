@@ -151,7 +151,8 @@ import {
 } from '@/components/pos/cart-panel-payment-modal-amount-card'
 import {
   buildPaymentPayloadForOrderSubmit,
-  mergeCartPanelPaymentSnapshots,
+  capCartPanelPaymentSnapshot,
+  mergeSplitOrderPaymentForSubmit,
   paymentTabTourTarget,
   sumCartPanelPaymentSnapshot,
   type CartPanelPaymentMethodTab,
@@ -1008,7 +1009,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return Math.round(sum * 100) / 100
   }, [showSplit, splitPaidSteps, splitCaptureTick, paymentSum])
   const displayPaymentSum = showSplit
-    ? Math.round((splitCapturedPaymentSum + paymentSum) * 100) / 100
+    ? paymentTotalsReconcile(splitCapturedPaymentSum, total)
+      ? splitCapturedPaymentSum
+      : Math.round((splitCapturedPaymentSum + paymentSum) * 100) / 100
     : paymentSum
   const nonCashPaymentSum =
     (parseFloat(payCard) || 0) +
@@ -1148,9 +1151,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const captureSplitPaymentForPerson = useCallback(
-    (personIdx: number) => {
-      const snap = buildPaymentSnapshot()
+    (personIdx: number, maxAmount?: number) => {
+      let snap = buildPaymentSnapshot()
       if (!paymentSnapshotHasAmount(snap)) return
+      if (maxAmount != null && maxAmount > 0.005) {
+        snap = capCartPanelPaymentSnapshot(snap, maxAmount)
+      }
       const arr = [...splitPaymentsByPersonRef.current]
       while (arr.length <= personIdx) arr.push(undefined)
       arr[personIdx] = snap
@@ -1164,14 +1170,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
 
   const buildOrderPaymentFromSplit = useCallback((): CartPanelPaymentPayload => {
-    const snaps: CartPanelPaymentPayload[] = []
+    const captures: CartPanelPaymentPayload[] = []
     for (const snap of splitPaymentsByPersonRef.current) {
-      if (snap && paymentSnapshotHasAmount(snap)) snaps.push(snap)
+      if (snap && paymentSnapshotHasAmount(snap)) captures.push(snap)
     }
-    const cur = buildPaymentSnapshot()
-    if (paymentSnapshotHasAmount(cur)) snaps.push(cur)
-    return snaps.length > 0 ? mergeCartPanelPaymentSnapshots(snaps) : cur
-  }, [buildPaymentSnapshot])
+    return mergeSplitOrderPaymentForSubmit({
+      captures,
+      current: buildPaymentSnapshot(),
+      orderTotal: total,
+    })
+  }, [buildPaymentSnapshot, total])
 
   const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
     if (!showPaymentModal) return null
@@ -1426,8 +1434,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const snapSum = round2(sumCartPanelPaymentSnapshot(snap))
     if (snapSum < remaining - SPLIT_AMOUNT_EPS) return false
     const paidThisStep = round2(Math.min(remaining, snapSum))
-    captureSplitPaymentForPerson(idx)
+    captureSplitPaymentForPerson(idx, paidThisStep)
     showPostCashChangeForSplitStepIfNeeded()
+    resetPaymentInputs()
+    splitDraftAssignedRef.current = null
     if (splitMode === 'menu') {
       setMenuSplitPaidByPerson((prev) => {
         const next = Array.from({ length: count }, (_, i) => Math.max(0, Number(prev[i] || 0)))
@@ -2310,7 +2320,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         const due = Math.max(0, Number(menuSplitDueByPerson[idx] || 0))
         if (due <= 0.009 || paymentSum < remaining - 0.009) return
         const paidThisStep = round2(Math.min(remaining, paymentSum))
-        captureSplitPaymentForPerson(idx)
+        captureSplitPaymentForPerson(idx, paidThisStep)
         showPostCashChangeForSplitStepIfNeeded()
         let nextFillIdx = -1
         let nextFillAmount = 0
@@ -2358,7 +2368,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
       if (paymentSum < remaining - 0.009) return
       const paidThisStep = round2(Math.min(remaining, paymentSum))
-      captureSplitPaymentForPerson(completedIdx)
+      captureSplitPaymentForPerson(completedIdx, paidThisStep)
       showPostCashChangeForSplitStepIfNeeded()
       let nextFillIdx = -1
       let nextFillAmount = 0
@@ -2412,7 +2422,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const snapSum = round2(sumCartPanelPaymentSnapshot(snap))
     if (snapSum <= SPLIT_AMOUNT_EPS) return false
     const paidThisStep = round2(Math.min(remaining, snapSum))
-    captureSplitPaymentForPerson(safeIdx)
+    captureSplitPaymentForPerson(safeIdx, paidThisStep)
     if (splitMode === 'menu') {
       setMenuSplitPaidByPerson((prev) => {
         const next = Array.from({ length: count }, (_, i) => Math.max(0, Number(prev[i] || 0)))
@@ -2835,7 +2845,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       .join(' ')
     const selectedMemberNo = memberMap[selectedMemberId]?.memberNo || ''
     if (withPayment) finalizeSplitPaymentsForReceipt()
+    if (withPayment && showSplit) {
+      resetPaymentInputs()
+      splitDraftAssignedRef.current = null
+    }
     const splitReceipts = withPayment ? buildSplitReceiptPayloads() : undefined
+    const paymentBase = withPayment
+      ? showSplit
+        ? buildOrderPaymentFromSplit()
+        : buildPaymentSnapshot()
+      : null
     const result = await onNonDineOrderComplete({
       orderType,
       orderLabel: orderType === 'delivery'
@@ -2855,8 +2874,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       pointUsed: pointUsedNum || undefined,
       payment: withPayment
         ? buildPaymentPayloadForOrderSubmit({
-            base: buildPaymentSnapshot(),
-            paymentOther: paymentOtherSum,
+            base: paymentBase!,
+            paymentOther: paymentBase!.paymentOther || paymentOtherSum,
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             deliveryPayPart,
           })
@@ -2883,9 +2902,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       dineInMultiFloorLayout
     )
     finalizeSplitPaymentsForReceipt()
+    if (showSplit) {
+      resetPaymentInputs()
+      splitDraftAssignedRef.current = null
+    }
     const resolvedPayment = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
     const finalPaySum = round2(sumCartPanelPaymentSnapshot(resolvedPayment))
-    if (!showSplit && total > 0.005 && !paymentTotalsReconcile(finalPaySum, total)) {
+    if (total > 0.005 && !paymentTotalsReconcile(finalPaySum, total)) {
       scrollToPaymentMethods()
       return
     }

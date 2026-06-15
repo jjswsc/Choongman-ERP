@@ -29,6 +29,11 @@ import {
 } from '@/lib/attendance-adjustment-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import {
+  canManageOfficePayroll,
+  filterPayrollRowsHidingOffice,
+  isOfficePayrollStoreFilter,
+} from '@/lib/office-payroll-access'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   bangkokDateRangeToUtc,
@@ -749,8 +754,8 @@ export async function GET(request: NextRequest) {
 
   const normMonth = monthStr.slice(0, 7)
   const isAll = !storeFilter || storeFilter === 'All' || storeFilter === '전체'
-  const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사'
-  const canSeeOffice = userRole.includes('director') || userRole.includes('secretary') || userRole.includes('ceo') || userRole.includes('hr')
+  const isOffice = isOfficePayrollStoreFilter(storeFilter)
+  const canSeeOffice = canManageOfficePayroll(auth)
 
   if (isOffice && !canSeeOffice) {
     return NextResponse.json({ success: true, list: [] }, { headers })

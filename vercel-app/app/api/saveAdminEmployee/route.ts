@@ -26,6 +26,7 @@ import {
   sanitizeEmployeeAuditRow,
   writeEmployeeAudit,
 } from '@/lib/employee-audit'
+import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
@@ -351,6 +352,24 @@ export async function POST(req: NextRequest) {
     }
     const employmentStatus = normalizeEmploymentStatus((d as { employmentStatus?: unknown }).employmentStatus, payload.resign_date)
     payload.employment_status = employmentStatus
+    {
+      let officePayrollFlag = false
+      if (canAssignEmployeeDirectorRole(actorRole)) {
+        officePayrollFlag = !!(d as { canManageOfficePayroll?: unknown }).canManageOfficePayroll
+      } else if (rowIdForRole > 0) {
+        try {
+          const prevRows = (await supabaseSelectFilter('employees', `id=eq.${rowIdForRole}`, {
+            limit: 1,
+            select: 'can_manage_office_payroll',
+          })) as { can_manage_office_payroll?: unknown }[]
+          officePayrollFlag = isEmployeeOfficePayrollManagerFlag(prevRows?.[0]?.can_manage_office_payroll)
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!/can_manage_office_payroll|42703|column/i.test(em)) throw e
+        }
+      }
+      payload.can_manage_office_payroll = officePayrollFlag
+    }
     if (employmentStatus === 'resigned') {
       if (!payload.resign_date) payload.resign_date = bangkokTodayDateStr()
     }

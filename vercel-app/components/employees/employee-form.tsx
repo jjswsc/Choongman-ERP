@@ -180,6 +180,8 @@ export interface EmployeeFormData {
   ssoNumber: string
   /** 급여 계산 시 SSO 공제 제외 + PND3용 3% 원천세 대상 */
   ssoExempt: boolean
+  /** 오피스(본사) 급여 조회·계산·확정 담당 */
+  canManageOfficePayroll: boolean
   address: string
   bankName: string
   accountNumber: string
@@ -217,6 +219,7 @@ const emptyForm: EmployeeFormData = {
   taxId: "",
   ssoNumber: "",
   ssoExempt: false,
+  canManageOfficePayroll: false,
   address: "",
   bankName: "",
   accountNumber: "",
@@ -246,6 +249,8 @@ interface EmployeeFormProps {
   canAssignOfficerRole?: boolean
   /** false면 Director 선택 불가(단, 이미 Director인 직원은 유지·하향만 가능) */
   canAssignDirectorRole?: boolean
+  /** false면 오피스 급여 담당 체크 불가 */
+  canAssignOfficePayrollManager?: boolean
   /** 시스템 설정: 가맹점주 복수 매장 사용 */
   franchiseeMultiEnabled?: boolean
   /** 본사 등 추가 매장 편집 가능 */
@@ -272,6 +277,7 @@ export function EmployeeForm({
   roleDisabled = false,
   canAssignOfficerRole = false,
   canAssignDirectorRole = false,
+  canAssignOfficePayrollManager = false,
   franchiseeMultiEnabled = false,
   canEditFranchiseeExtraStores = false,
   allStoresForFranchiseePick = [],
@@ -727,6 +733,20 @@ export function EmployeeForm({
                         <span className="text-muted-foreground">{t("emp_sso_exempt_hint")}</span>
                       </label>
                     </div>
+                    {canAssignOfficePayrollManager ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-emerald-200/60 bg-emerald-50/30 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/15 sm:col-span-2">
+                        <Checkbox
+                          id="emp-office-payroll-mgr"
+                          checked={form.canManageOfficePayroll}
+                          onCheckedChange={(c) => update("canManageOfficePayroll", c === true)}
+                          className="mt-0.5"
+                        />
+                        <label htmlFor="emp-office-payroll-mgr" className="cursor-pointer text-sm leading-snug">
+                          <span className="block font-semibold">{t("emp_can_manage_office_payroll_label")}</span>
+                          <span className="text-muted-foreground">{t("emp_can_manage_office_payroll_hint")}</span>
+                        </label>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </AccordionContent>

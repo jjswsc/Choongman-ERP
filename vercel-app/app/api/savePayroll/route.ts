@@ -12,8 +12,9 @@ import {
 } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { canManageOfficePayroll } from '@/lib/office-payroll-access'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 
 const CHUNK = 50
@@ -245,6 +246,14 @@ export async function POST(request: NextRequest) {
         const rowStore = String(r.store || '').trim()
         return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
       })
+    }
+    const officePayrollAllowed = canManageOfficePayroll(auth)
+    const officeRows = list.filter((r) => isOfficeStore(String(r.store || '')))
+    if (officeRows.length > 0 && !officePayrollAllowed) {
+      return NextResponse.json(
+        { success: false, msg: '오피스(본사) 급여 저장 권한이 없습니다.' },
+        { status: 403, headers }
+      )
     }
 
     const rows: Record<string, unknown>[] = list.map((r) => ({

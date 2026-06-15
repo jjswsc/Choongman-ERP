@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { isOfficeStore } from '@/lib/permissions'
+import { canManageOfficePayroll, filterPayrollRowsHidingOffice } from '@/lib/office-payroll-access'
 
 export interface PayrollRecordRow {
   month: string
@@ -47,6 +49,16 @@ export async function GET(request: NextRequest) {
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const userStore = (auth.store || '').trim()
   const userRole = (auth.role || '').toLowerCase()
+  const officePayrollAllowed = canManageOfficePayroll(auth)
+  if (
+    storeFilter &&
+    storeFilter !== 'All' &&
+    storeFilter !== '전체' &&
+    isOfficeStore(storeFilter) &&
+    !officePayrollAllowed
+  ) {
+    return NextResponse.json({ success: true, list: [] }, { headers })
+  }
   if (userRole.includes('manager') && userStore) storeFilter = userStore
 
   if (!monthStr || monthStr.length < 7) {
@@ -104,7 +116,9 @@ export async function GET(request: NextRequest) {
       status: String(r.status || ''),
     }))
 
-    return NextResponse.json({ success: true, list }, { headers })
+    const filtered = filterPayrollRowsHidingOffice(list, auth)
+
+    return NextResponse.json({ success: true, list: filtered }, { headers })
   } catch (e) {
     console.error('getPayrollRecords:', e)
     return NextResponse.json(

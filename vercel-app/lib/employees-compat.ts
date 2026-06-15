@@ -69,21 +69,36 @@ const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY =
   'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY =
   'id,employee_code,store,name,password,role,job,resign_date,extra_stores' as const
+const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL =
+  'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
+const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL =
+  'id,employee_code,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
+
+function isMissingEmployeesOfficePayrollColumn(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err)
+  return /42703|can_manage_office_payroll|column.*does not exist/i.test(m)
+}
 
 export async function supabaseSelectFilterEmployeesByNameForLogin(name: string): Promise<unknown> {
   const nameFilter = `name=eq.${encodeURIComponent(name)}`
-  try {
-    return await supabaseSelectFilter('employees', nameFilter, {
-      limit: 120,
-      select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY,
-    })
-  } catch (e) {
-    if (isMissingEmployeesCompanyColumn(e)) {
+  const attempts: { select: string }[] = [
+    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL },
+    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY },
+    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL },
+    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY },
+  ]
+  let lastErr: unknown = null
+  for (const { select } of attempts) {
+    try {
       return await supabaseSelectFilter('employees', nameFilter, {
         limit: 120,
-        select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY,
+        select,
       })
+    } catch (e) {
+      lastErr = e
+      if (isMissingEmployeesCompanyColumn(e) || isMissingEmployeesOfficePayrollColumn(e)) continue
+      throw e
     }
-    throw e
   }
+  throw lastErr
 }

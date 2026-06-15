@@ -213,6 +213,18 @@ export function summarizePosCostRows(
 
 export type PosCostIssueFilter = "all" | "zero_cost" | "no_bom" | "high_ratio"
 
+/** 목록 판매 상태 필터 — 기본값 active(판매중) */
+export type PosCostSaleFilter = "active" | "all" | "inactive"
+
+export function rowMatchesSaleFilter(
+  row: Pick<PosMenuCostAnalysisRow, "isActive">,
+  filter: PosCostSaleFilter
+): boolean {
+  if (filter === "all") return true
+  const active = row.isActive !== false
+  return filter === "active" ? active : !active
+}
+
 export function rowMatchesIssueFilter(
   r: PosMenuCostAnalysisRow,
   filter: PosCostIssueFilter,

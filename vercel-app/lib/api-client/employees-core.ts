@@ -34,6 +34,8 @@ export interface AdminEmployeeItem {
   ssoNumber: string
   /** true면 급여 SSO 공제 0 + PND3용 3% 원천세 대상 */
   ssoExempt?: boolean
+  /** 오피스(본사) 급여 조회·계산·확정 담당 */
+  canManageOfficePayroll?: boolean
   address: string
   bankName: string
   accountNumber: string

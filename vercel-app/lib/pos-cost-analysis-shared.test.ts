@@ -3,6 +3,7 @@ import {
   computePosCostRowMetrics,
   costRatioTier,
   countMenusUsingItemCode,
+  rowMatchesSaleFilter,
   simulateItemPriceDelta,
   simulateRecipeLineCostDelta,
 } from "@/lib/pos-cost-analysis-shared"
@@ -65,5 +66,13 @@ describe("pos-cost-analysis-shared", () => {
   it("레시피 라인 단가 변동 증분을 계산한다", () => {
     const delta = simulateRecipeLineCostDelta([{ itemCode: "A", lineCost: 100 }], "A", 10)
     expect(delta).toBeCloseTo(10)
+  })
+
+  it("판매 상태 필터를 판정한다", () => {
+    expect(rowMatchesSaleFilter({ isActive: true }, "active")).toBe(true)
+    expect(rowMatchesSaleFilter({ isActive: false }, "active")).toBe(false)
+    expect(rowMatchesSaleFilter({ isActive: false }, "inactive")).toBe(true)
+    expect(rowMatchesSaleFilter({ isActive: true }, "all")).toBe(true)
+    expect(rowMatchesSaleFilter({}, "active")).toBe(true)
   })
 })

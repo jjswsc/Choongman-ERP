@@ -20,6 +20,7 @@ export const EMPLOYEE_AUDIT_FIELD_I18N: Record<string, string> = {
   tax_id: 'emp_tax_id',
   sso_number: 'emp_sso_number',
   sso_exempt: 'emp_sso_exempt_label',
+  can_manage_office_payroll: 'emp_can_manage_office_payroll_label',
   address: 'emp_address',
   bank_name: 'emp_bank_name',
   account_number: 'emp_account_number',

@@ -17,6 +17,10 @@ import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-setti
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  canManageOfficePayroll,
+  isOfficePayrollStoreFilter,
+} from '@/lib/office-payroll-access'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -313,8 +317,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const isDirector = userRole.includes('director') || userRole.includes('secretary') || userRole.includes('ceo') || userRole.includes('hr')
-  const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사' || storeFilter.toLowerCase() === 'office'
+  const isDirector = canManageOfficePayroll(auth)
+  const isOffice = isOfficePayrollStoreFilter(storeFilter)
   if (isOffice && !isDirector) {
     return NextResponse.json({ success: true, list: [] }, { headers })
   }

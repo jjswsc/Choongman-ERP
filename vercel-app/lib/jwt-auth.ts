@@ -16,6 +16,8 @@ export interface JwtPayload {
   employeeCode?: string
   /** 가맹점주 복수 매장 시 JWT에 허용 매장(대표+추가), 없으면 store만 사용 */
   allowedStores?: string[]
+  /** employees.can_manage_office_payroll — 오피스 급여 조회·계산·확정 */
+  canManageOfficePayroll?: boolean
   iat?: number
   exp?: number
 }
@@ -72,6 +74,9 @@ export async function signToken(payload: JwtPayload): Promise<string> {
   if (Array.isArray(payload.allowedStores) && payload.allowedStores.length > 0) {
     body.allowedStores = payload.allowedStores
   }
+  if (payload.canManageOfficePayroll === true) {
+    body.canManageOfficePayroll = true
+  }
   return new jose.SignJWT(body)
     .setProtectedHeader({ alg: ALG })
     .setIssuedAt()
@@ -93,6 +98,7 @@ export async function verifyToken(token: string): Promise<JwtPayload | null> {
     const eid = payload.employeeId
     const eidNum = eid != null && Number.isFinite(Number(eid)) ? Math.floor(Number(eid)) : undefined
     const ecode = payload.employeeCode != null ? String(payload.employeeCode).trim() : ''
+    const officePayrollFlag = payload.canManageOfficePayroll === true
     return {
       ...(payload.tenantId ? { tenantId: String(payload.tenantId) } : {}),
       ...(payload.company ? { company: String(payload.company) } : {}),
@@ -102,6 +108,7 @@ export async function verifyToken(token: string): Promise<JwtPayload | null> {
       ...(eidNum != null && eidNum > 0 ? { employeeId: eidNum } : {}),
       ...(ecode ? { employeeCode: ecode } : {}),
       ...(allowedStores ? { allowedStores } : {}),
+      ...(officePayrollFlag ? { canManageOfficePayroll: true } : {}),
     }
   } catch {
     return null

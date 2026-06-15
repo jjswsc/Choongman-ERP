@@ -175,6 +175,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     taxId: e.taxId || "",
     ssoNumber: e.ssoNumber || "",
     ssoExempt: !!(e as AdminEmployeeItem).ssoExempt,
+    canManageOfficePayroll: !!(e as AdminEmployeeItem).canManageOfficePayroll,
     address: e.address || "",
     bankName: e.bankName || "",
     accountNumber: e.accountNumber || "",
@@ -722,6 +723,7 @@ export default function EmployeesPage() {
                     roleDisabled={isManager || isFranchiseeRole(userRole)}
                     canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
                     canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
+                    canAssignOfficePayrollManager={canAssignEmployeeDirectorRole(userRole)}
                     franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
                     canEditFranchiseeExtraStores={isOffice}
                     allStoresForFranchiseePick={storesForFilter}

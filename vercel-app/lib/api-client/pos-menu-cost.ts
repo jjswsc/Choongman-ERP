@@ -132,6 +132,8 @@ export interface PosMenuCostAnalysisRow {
   cookingTimeMin?: number | null
   /** 배달앱 수수료(%) — null이면 UI 기본 20% */
   deliveryAppFeePercent?: number | null
+  /** pos_menus.is_active — false면 미판매(비활성) */
+  isActive?: boolean
   breakdown: {
     itemCode: string
     itemName: string

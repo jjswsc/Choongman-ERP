@@ -451,11 +451,13 @@ export async function GET(request: NextRequest) {
       breakdown: BreakdownRow[]
       cookingTimeMin?: number | null
       deliveryAppFeePercent?: number | null
+      /** pos_menus.is_active — false면 미판매(비활성) */
+      isActive: boolean
     }
 
     const result: MenuCostRow[] = []
 
-    for (const menu of activeMenuRows || []) {
+    for (const menu of menuRows || []) {
       const mid = parseMenuIdNum(menu.id)
       if (!Number.isFinite(mid) || mid <= 0) continue
       const priceHall = Number(menu.price ?? 0)
@@ -676,6 +678,7 @@ export async function GET(request: NextRequest) {
         menu.delivery_app_fee_percent != null && Number.isFinite(Number(menu.delivery_app_fee_percent))
           ? Number(menu.delivery_app_fee_percent)
           : null
+      const isActive = menu.is_active !== false
       result.push({
         menuId: String(menu.id ?? ''),
         menuCode: String(menu.code ?? ''),
@@ -694,6 +697,7 @@ export async function GET(request: NextRequest) {
         costDelivery: Math.round((baseDisplay.costDelivery + rollupAddFood + rollupAddPkg) * 10) / 10,
         breakdown: [...baseDisplay.breakdown, ...rollupIncBreakdown],
         cookingTimeMin,
+        isActive,
       })
 
       for (const opt of optsToShow) {
@@ -729,6 +733,7 @@ export async function GET(request: NextRequest) {
             costDelivery: Math.round((baseCost + addFood + basePkg + addPkg) * 10) / 10,
             breakdown: addBreakdown,
             cookingTimeMin,
+            isActive,
           })
         } else {
           /**
@@ -757,6 +762,7 @@ export async function GET(request: NextRequest) {
             costDelivery: computed.costDelivery,
             breakdown: computed.breakdown,
             cookingTimeMin,
+            isActive,
           })
         }
       }

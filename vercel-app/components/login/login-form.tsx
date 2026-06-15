@@ -607,6 +607,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           ...(Array.isArray(res.allowedStores) && res.allowedStores.length > 0
             ? { allowedStores: res.allowedStores }
             : {}),
+          ...(res.canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
         })
         replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       } else {

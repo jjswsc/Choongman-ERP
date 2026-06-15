@@ -9,7 +9,7 @@ const AUDIT_EXCLUDED_KEYS = new Set(['password'])
 
 /** employees_audit before/after 스냅샷 조회용 (password 제외) */
 export const EMPLOYEE_AUDIT_SELECT =
-  'id,store,name,name_title,nick,phone,job,birth,nation,join_date,resign_date,employment_status,sal_type,sal_amt,role,email,employee_code,id_number,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,id_card_photo,extra_stores,deleted_at,deleted_by,delete_reason'
+  'id,store,name,name_title,nick,phone,job,birth,nation,join_date,resign_date,employment_status,sal_type,sal_amt,role,email,employee_code,id_number,tax_id,sso_number,sso_exempt,can_manage_office_payroll,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,id_card_photo,extra_stores,deleted_at,deleted_by,delete_reason'
 
 /** 구 DB(일부 컬럼 없음)용 축소 select */
 export const EMPLOYEE_AUDIT_SELECT_FALLBACK =

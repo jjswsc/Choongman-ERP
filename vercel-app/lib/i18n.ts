@@ -1673,6 +1673,8 @@ export const i18n = {
     emp_sso_number: 'SSO 번호 (사회보험)',
     emp_sso_exempt_label: 'SSO 제외 + PND3 3% 공제',
     emp_sso_exempt_hint: '미가입·프리랜서·서류 미비 시 체크. 급여 계산에서 SSO를 0으로 하고 원천세 3%를 공제해 PND3 대상에 넣습니다.',
+    emp_can_manage_office_payroll_label: '오피스 급여 담당',
+    emp_can_manage_office_payroll_hint: '체크한 직원만 본사(오피스) 급여 조회·계산·확정이 가능합니다. Director는 항상 접근·지정할 수 있습니다.',
     emp_section_basic: '기본 정보',
     emp_section_id_card: 'ID·신분증',
     emp_section_accounting: '회계·급여',
@@ -6530,7 +6532,7 @@ export const i18n = {
     helpSum_admin_pos_cost_analysis:
       'POS 메뉴별 홀·배달 판매가와 원가·원가율·마진을 조회하고, 판매 연동 분석·What-if·재료 구성·배합 단가·원가 계산기로 검토하는 화면입니다. (본사 오피스만 저장·수정)',
     helpHow_admin_pos_cost_analysis:
-      '① 목록: 대분류·카테고리·상태 필터·검색어를 정한 뒤「조회」로 불러옵니다. 상단 KPI 카드에서 평균 원가율·마진·문제 메뉴 수를 확인하고, CSV 내보내기를 사용할 수 있습니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다(요약 조회 후 펼치면 BOM을 lazy 로드). 행을 누르면「원가 계산기」탭으로 이동합니다.\n② 분석: 판매 가중 원가율(최근 30일), 대분류별 목표 대비 원가율, 품목 단가 What-if 시뮬레이션을 제공합니다(가맹·매니저는 조회만).\n③ 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다.\n④ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 조회합니다. 추가·수정·재계산은 본사 오피스만 가능합니다.\n⑤ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 원가를 확인합니다. 저장·BOM 수정은 본사 오피스만 가능합니다.\n⑥ 수정 이력: 기간과 검색어를 정한 뒤「조회」— update 행은 변경 전·후 수량·로스 diff를 표시합니다.',
+      '① 목록: 대분류·카테고리·판매 상태(기본 판매중)·상태 필터·검색어를 정한 뒤「조회」로 불러옵니다. 상단 KPI 카드에서 평균 원가율·마진·문제 메뉴 수를 확인하고, CSV 내보내기를 사용할 수 있습니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다(요약 조회 후 펼치면 BOM을 lazy 로드). 행을 누르면「원가 계산기」탭으로 이동합니다.\n② 분석: 판매 가중 원가율(최근 30일), 대분류별 목표 대비 원가율, 품목 단가 What-if 시뮬레이션을 제공합니다(가맹·매니저는 조회만).\n③ 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다.\n④ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 조회합니다. 추가·수정·재계산은 본사 오피스만 가능합니다.\n⑤ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 원가를 확인합니다. 저장·BOM 수정은 본사 오피스만 가능합니다.\n⑥ 수정 이력: 기간과 검색어를 정한 뒤「조회」— update 행은 변경 전·후 수량·로스 diff를 표시합니다.',
     helpSum_admin_total_sales:
       '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
@@ -8694,6 +8696,8 @@ Only matters the employee must handle personally on a working day:
     emp_sso_number: 'SSO No. (Social Security)',
     emp_sso_exempt_label: 'No SSO + 3% PND3 withholding',
     emp_sso_exempt_hint: 'Check for not-yet-registered, freelance, or document-pending staff. Payroll sets SSO to 0, withholds 3%, and includes the row in PND3.',
+    emp_can_manage_office_payroll_label: 'Office payroll manager',
+    emp_can_manage_office_payroll_hint: 'Only checked staff can view, calculate, and confirm HQ (office) payroll. Directors can always access and assign this.',
     emp_section_basic: 'Basic Info',
     emp_section_id_card: 'ID & Documents',
     emp_section_accounting: 'Accounting & Payroll',
@@ -13553,7 +13557,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_cost_analysis:
       'Review POS menu hall vs delivery prices, costs, cost ratios, and margins; use sales-linked analysis, What-if, BOM, blend costs, and the cost calculator. (Head office only for save/edit)',
     helpHow_admin_pos_cost_analysis:
-      '① List: set filters and press Query. KPI cards, CSV export, sort columns, expand rows for BOM (lazy-loaded). Click a row to open Cost calculator.\n② Insights: weighted cost ratio (last 30 days), category targets, item What-if (managers/franchisees: view only).\n③ Costs include default mise (3%).\n④ Blend costs: view sauce recipes and unit costs; add/edit/recalculate is head office only.\n⑤ Cost calculator: pick menu/option and review ingredients; save/BOM edit is head office only.\n⑥ Audit: set period and keyword, then Query — update rows show before/after quantity and loss diff.',
+      '① List: set filters including sale status (default Active), then press Query. KPI cards, CSV export, sort columns, expand rows for BOM (lazy-loaded). Click a row to open Cost calculator.\n② Insights: weighted cost ratio (last 30 days), category targets, item What-if (managers/franchisees: view only).\n③ Costs include default mise (3%).\n④ Blend costs: view sauce recipes and unit costs; add/edit/recalculate is head office only.\n⑤ Cost calculator: pick menu/option and review ingredients; save/BOM edit is head office only.\n⑥ Audit: set period and keyword, then Query — update rows show before/after quantity and loss diff.',
     helpSum_admin_total_sales:
       'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:
@@ -15583,6 +15587,8 @@ orderItemQty: 'จำนวน',
     emp_sso_number: 'เลขประกันสังคม',
     emp_sso_exempt_label: 'ยกเว้น SSO + หัก PND3 3%',
     emp_sso_exempt_hint: 'ติ๊กสำหรับผู้ที่ยังไม่สมัคร ฟรีแลนซ์ หรือเอกสารยังไม่ครบ ระบบจะคิด SSO เป็น 0 หักภาษี ณ ที่จ่าย 3% และเข้า PND3 อัตโนมัติ',
+    emp_can_manage_office_payroll_label: 'ผู้ดูแลเงินเดือนสำนักงาน',
+    emp_can_manage_office_payroll_hint: 'เฉพาะพนักงานที่ติ๊กเท่านั้นที่ดู คำนวณ และยืนยันเงินเดือนสำนักงานใหญ่ได้ Director เข้าถึงและกำหนดสิทธิ์นี้ได้เสมอ',
     emp_section_basic: 'ข้อมูลพื้นฐาน',
     emp_section_id_card: 'บัตร/เอกสาร',
     emp_section_accounting: 'บัญชีและเงินเดือน',

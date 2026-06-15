@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     const scopeAllowedList = employeeScopeAllowedStoresFromJwt(jwt)
 
     const empSelectFull =
-      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code,employment_status,deleted_at'
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,can_manage_office_payroll,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code,employment_status,deleted_at'
     const empSelectFullNoStatus = empSelectFull.replace(',employment_status,deleted_at', '')
     const empSelectFallback =
       'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo,employee_code'
@@ -98,12 +98,14 @@ export async function GET(req: NextRequest) {
     let rows: Record<string, unknown>[] | null = null
     const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
     const empSelectFullNoSsoExempt = empSelectFull.replace(',sso_exempt', '')
+    const empSelectFullNoOfficePayroll = empSelectFull.replace(',can_manage_office_payroll', '')
     const empSelectFullNoExtraNoSsoExempt = empSelectFullNoExtra.replace(',sso_exempt', '')
     const empSelectFullNoStatusNoSsoExempt = empSelectFullNoStatus.replace(',sso_exempt', '')
     const empSelectFullNoStatusNoExtra = empSelectFullNoStatus.replace(',extra_stores', '')
     const empSelectCandidates = [
       empSelectFull,
       empSelectFullNoStatus,
+      empSelectFullNoOfficePayroll,
       empSelectFullNoSsoExempt,
       empSelectFullNoExtra,
       empSelectFullNoExtraNoSsoExempt,
@@ -180,6 +182,10 @@ export async function GET(req: NextRequest) {
         taxId: r.tax_id != null ? String(r.tax_id).trim() : '',
         ssoNumber: r.sso_number != null ? String(r.sso_number).trim() : '',
         ssoExempt: r.sso_exempt === true || r.sso_exempt === 'true' || r.sso_exempt === 1,
+        canManageOfficePayroll:
+          r.can_manage_office_payroll === true ||
+          r.can_manage_office_payroll === 'true' ||
+          r.can_manage_office_payroll === 1,
         address: r.address != null ? String(r.address).trim() : '',
         bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
         accountNumber: r.account_number != null ? String(r.account_number).trim() : '',
