@@ -86,6 +86,33 @@ function applySavedWorkLogIds(
   })
 }
 
+function WorklogSection({
+  tone,
+  icon,
+  title,
+  headerExtra,
+  children,
+}: {
+  tone: "success" | "warning" | "primary"
+  icon: React.ReactNode
+  title: string
+  headerExtra?: React.ReactNode
+  children: React.ReactNode
+}) {
+  const headerBg =
+    tone === "success" ? "bg-success/5" : tone === "warning" ? "bg-warning/5" : "bg-primary/5"
+  return (
+    <div className="flex min-h-0 flex-col rounded-xl border bg-card shadow-sm overflow-hidden">
+      <div className={cn("flex items-center gap-2.5 border-b px-4 py-3", headerBg)}>
+        {icon}
+        <h3 className="text-sm font-bold text-foreground">{title}</h3>
+        {headerExtra}
+      </div>
+      <div className="min-h-[120px] flex-1 overflow-y-auto p-4 space-y-3">{children}</div>
+    </div>
+  )
+}
+
 interface WorklogMyProps {
   userName: string
   employeeId?: number
@@ -491,10 +518,21 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     scheduleAutoSaveProgress({ todayOnly })
   }
 
-  const handleTodayProgressChange = (index: number, progress: number) => {
+  const handleContinueProgressChange = (id: string, progress: number) => {
+    setLocalContinue((prev) => {
+      const next = prev.map((it) =>
+        it.id === id ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status } : it
+      )
+      localContinueRef.current = next
+      return next
+    })
+    scheduleAutoSaveProgress({ todayOnly: false })
+  }
+
+  const handleTodayProgressChange = (id: string, progress: number) => {
     setLocalToday((prev) => {
-      const next = prev.map((it, i) =>
-        i === index ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status } : it
+      const next = prev.map((it) =>
+        it.id === id ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status } : it
       )
       localTodayRef.current = next
       return next
@@ -502,7 +540,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     scheduleAutoSaveProgress({ todayOnly: true })
   }
 
-  const handleDeleteOwn = async (id: string | undefined, list: "continue" | "today", index?: number) => {
+  const handleDeleteOwn = async (id: string | undefined, list: "continue" | "today") => {
     if (!id) return
     if (!(await appConfirm(t("workLogDeleteConfirm")))) return
     if (!id.startsWith("_temp_")) {
@@ -519,8 +557,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     }
     if (list === "continue") {
       setLocalContinue((prev) => prev.filter((it) => it.id !== id))
-    } else if (typeof index === "number") {
-      setLocalToday((prev) => prev.filter((_, i) => i !== index))
+    } else {
+      setLocalToday((prev) => prev.filter((it) => it.id !== id))
     }
     void loadData({ quiet: true })
   }
@@ -570,35 +608,6 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     const row = staffList.find((s) => s.name === selectedStaff || s.displayName === selectedStaff)
     return row ? formatWorkLogStaffSelectLabel(row) : selectedStaff || userName
   })()
-
-  const WorklogSection = ({
-    tone,
-    icon,
-    title,
-    headerExtra,
-    children,
-  }: {
-    tone: "success" | "warning" | "primary"
-    icon: React.ReactNode
-    title: string
-    headerExtra?: React.ReactNode
-    children: React.ReactNode
-  }) => {
-    const headerBg =
-      tone === "success" ? "bg-success/5" : tone === "warning" ? "bg-warning/5" : "bg-primary/5"
-    return (
-      <div className="flex min-h-0 flex-col rounded-xl border bg-card shadow-sm overflow-hidden">
-        <div className={cn("flex items-center gap-2.5 border-b px-4 py-3", headerBg)}>
-          {icon}
-          <h3 className="text-sm font-bold text-foreground">{title}</h3>
-          {headerExtra}
-        </div>
-        <div className="min-h-[120px] flex-1 overflow-y-auto p-4 space-y-3">
-          {children}
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="relative flex flex-col gap-6 pb-20">
@@ -821,9 +830,10 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                         </Button>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {Number(it.progress) || 0}% · {t("workLogProgressHint")}
-                    </p>
+                    <WorklogProgressBar
+                      value={it.progress}
+                      onChange={(v) => handleContinueProgressChange(it.id, v)}
+                    />
                     {it.managerComment?.startsWith("⚡") && (
                       <p className="mt-1 text-[10px] text-muted-foreground">
                         {formatManagerComment(it.managerComment)}
@@ -870,12 +880,12 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
               {localToday.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("workLogNoToday")}</p>
               ) : (
-                localToday.map((it, idx) => (
-                  <div key={it.id || `new-${idx}`} className="rounded-lg border bg-background p-3">
+                localToday.map((it) => (
+                  <div key={it.id} className="rounded-lg border bg-background p-3">
                     <div className="flex items-start gap-2 mb-2">
                       <Textarea
                         value={it.content}
-                        onChange={(e) => updateContent(setLocalToday, idx, e.target.value, true)}
+                        onChange={(e) => updateContent(setLocalToday, it.id, e.target.value, true)}
                         placeholder={t("workLogTaskPlaceholder")}
                         className="min-h-[5.5rem] text-sm flex-1 resize-y"
                         rows={4}
@@ -883,7 +893,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                       <div className="flex shrink-0 flex-col gap-1">
                         <Select
                           value={it.priority || ""}
-                          onValueChange={(v) => updatePriority(setLocalToday, idx, v, true)}
+                          onValueChange={(v) => updatePriority(setLocalToday, it.id, v, true)}
                         >
                           <SelectTrigger className="h-8 w-20 text-xs">
                             <SelectValue placeholder={t("workLogPriority")} />
@@ -900,14 +910,14 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
                           size="sm"
                           variant="ghost"
                           className="h-7 px-1 text-destructive"
-                          onClick={() => void handleDeleteOwn(it.id, "today", idx)}
+                          onClick={() => void handleDeleteOwn(it.id, "today")}
                           title={t("workLogDeleteOwn")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </div>
-                    <WorklogProgressBar value={it.progress} onChange={(v) => handleTodayProgressChange(idx, v)} />
+                    <WorklogProgressBar value={it.progress} onChange={(v) => handleTodayProgressChange(it.id, v)} />
                     <WorklogManagerFeedback item={it} getTransComment={getTransComment} t={t} />
                   </div>
                 ))
