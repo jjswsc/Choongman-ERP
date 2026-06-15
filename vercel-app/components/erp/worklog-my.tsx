@@ -43,7 +43,11 @@ import {
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
-import { normalizeWorkLogContent, workLogContentKey } from "@/lib/work-log-dedupe"
+import {
+  isEphemeralWorkLogId,
+  normalizeWorkLogContent,
+  workLogContentKey,
+} from "@/lib/work-log-dedupe"
 import { WORK_LOG_PRIORITIES } from "@/lib/work-log-shared"
 import {
   WorklogKpiCard,
@@ -54,6 +58,33 @@ import {
 import { WorklogPeriodPanel } from "./worklog-period-panel"
 
 const PROGRESS_AUTO_SAVE_MS = 700
+
+function mergeEphemeralDrafts(serverItems: WorkLogItem[], localItems: WorkLogItem[]): WorkLogItem[] {
+  const drafts = localItems.filter((it) => isEphemeralWorkLogId(it.id))
+  if (drafts.length === 0) return serverItems
+  const serverKeys = new Set(
+    serverItems.map((it) => workLogContentKey(it.content)).filter(Boolean)
+  )
+  const extra = drafts.filter((it) => {
+    const key = workLogContentKey(it.content)
+    return !key || !serverKeys.has(key)
+  })
+  return [...serverItems, ...extra]
+}
+
+function applySavedWorkLogIds(
+  items: WorkLogItem[],
+  savedIds: { id: string; content: string }[]
+): WorkLogItem[] {
+  if (savedIds.length === 0) return items
+  return items.map((it) => {
+    if (!isEphemeralWorkLogId(it.id)) return it
+    const key = workLogContentKey(it.content)
+    if (!key) return it
+    const hit = savedIds.find((s) => workLogContentKey(s.content) === key)
+    return hit ? { ...it, id: hit.id } : it
+  })
+}
 
 interface WorklogMyProps {
   userName: string
@@ -172,8 +203,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         })
         setData(res)
         setLocalFinish(res.finish || [])
-        setLocalContinue(res.continueItems || [])
-        setLocalToday(res.todayItems || [])
+        setLocalContinue(mergeEphemeralDrafts(res.continueItems || [], localContinueRef.current))
+        setLocalToday(mergeEphemeralDrafts(res.todayItems || [], localTodayRef.current))
       } catch {
         setData(null)
         setLocalFinish([])
@@ -235,6 +266,11 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
           ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
         })
         if (res.success) {
+          const savedIds = (res as { savedIds?: { id: string; content: string }[] }).savedIds
+          if (savedIds?.length) {
+            setLocalContinue((prev) => applySavedWorkLogIds(prev, savedIds))
+            setLocalToday((prev) => applySavedWorkLogIds(prev, savedIds))
+          }
           if (reload) await loadData({ quiet: silent })
           return true
         }
@@ -291,7 +327,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
           setAutoSaveStatus("saving")
           const ok = await persistWorkLogProgress({
             silent: true,
-            reload: true,
+            reload: false,
             todayOnly: opts?.todayOnly ?? false,
           })
           if (gen !== autoSaveGenRef.current) return
@@ -379,7 +415,6 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         priority: "중",
       },
     ])
-    scheduleAutoSaveProgress({ todayOnly: false })
   }
 
   const addNewToday = () => {
@@ -393,7 +428,6 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         priority: "중",
       },
     ])
-    scheduleAutoSaveProgress({ todayOnly: true })
   }
 
   const toggleSelectContinue = (id: string) => {

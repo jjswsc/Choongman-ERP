@@ -24,27 +24,36 @@ export function WorklogProgressBar({
   className?: string
 }) {
   const pct = Math.max(0, Math.min(100, Number(value) || 0))
+  const interactive = Boolean(onChange) && !disabled
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn("h-full rounded-full transition-all", workLogProgressBarClass(pct))}
-          style={{ width: `${pct}%` }}
-        />
-        {onChange && (
+      <div
+        className={cn(
+          "relative flex-1",
+          interactive ? "h-8 touch-pan-x" : "h-2"
+        )}
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn("h-full rounded-full transition-all", workLogProgressBarClass(pct))}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {interactive && (
           <input
             type="range"
             min={0}
             max={100}
+            step={1}
             value={pct}
             disabled={disabled}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            onChange={(e) => onChange!(Number(e.target.value))}
+            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
             aria-label="progress"
           />
         )}
       </div>
-      <span className="w-9 text-right text-xs font-bold tabular-nums text-foreground">{pct}%</span>
+      <span className="w-9 shrink-0 text-right text-xs font-bold tabular-nums text-foreground">{pct}%</span>
     </div>
   )
 }
