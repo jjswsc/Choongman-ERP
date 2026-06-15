@@ -10,6 +10,7 @@ import {
   type PosExistingOrderCheckoutDiscount,
 } from '@/lib/pos-existing-order-checkout-discount'
 import type { PosPricingAdjustments } from '@/lib/pos-pricing'
+import { formatBahtAmountForField } from '@/lib/baht-input-format'
 
 export function normalizeExistingPosOrderId(raw: unknown): number | null {
   const n = typeof raw === 'number' ? raw : Number(raw)
@@ -20,24 +21,24 @@ export function normalizeExistingPosOrderId(raw: unknown): number | null {
 
 export function resetCheckoutDiscountUiState(setters: {
   setDiscountType: (v: 'percent' | 'fixed') => void
-  setDiscountValue: (v: number) => void
+  setDiscountValueInput: (v: string) => void
   setDiscountReason: (v: string) => void
   setAppliedCollabId: (v: string | null) => void
   setCouponCode: (v: string) => void
   setAppliedCoupons: (v: PosAppliedCoupon[]) => void
-  setCouponQuantity: (v: number) => void
+  setCouponQuantityInput: (v: string) => void
   setCouponMessage: (v: string) => void
   setPointUsed: (v: string) => void
 }) {
   setters.setDiscountType('percent')
-  setters.setDiscountValue(0)
+  setters.setDiscountValueInput('')
   setters.setDiscountReason('')
   setters.setAppliedCollabId(null)
   setters.setCouponCode('')
   setters.setAppliedCoupons([])
-  setters.setCouponQuantity(1)
+  setters.setCouponQuantityInput('1')
   setters.setCouponMessage('')
-  setters.setPointUsed('0')
+  setters.setPointUsed('')
 }
 
 export function seedCheckoutDiscountFromExistingOrder(
@@ -46,7 +47,7 @@ export function seedCheckoutDiscountFromExistingOrder(
   pricingAdjustments: PosPricingAdjustments | undefined,
   setters: {
     setDiscountType: (v: 'percent' | 'fixed') => void
-    setDiscountValue: (v: number) => void
+    setDiscountValueInput: (v: string) => void
     setDiscountReason: (v: string) => void
   }
 ): number {
@@ -58,12 +59,12 @@ export function seedCheckoutDiscountFromExistingOrder(
   })
   if (seed.discountValue > 0.0001) {
     setters.setDiscountType('fixed')
-    setters.setDiscountValue(seed.discountValue)
+    setters.setDiscountValueInput(formatBahtAmountForField(seed.discountValue))
     setters.setDiscountReason(seed.discountReason)
     return seed.discountValue
   }
   setters.setDiscountType('percent')
-  setters.setDiscountValue(0)
+  setters.setDiscountValueInput('')
   setters.setDiscountReason(seed.discountReason)
   return 0
 }

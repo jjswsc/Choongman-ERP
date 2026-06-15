@@ -66,7 +66,7 @@ import {
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum, formatBahtWhole, formatPosQtyCompact } from '@/lib/utils'
-import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from '@/lib/baht-input-format'
+import { formatBahtAmountForField, formatBahtInputDisplay, formatIntegerInputDisplay, parseBahtAmount, parseIntegerInput, parsePosDiscountValueInput } from '@/lib/baht-input-format'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
@@ -457,13 +457,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [customerMemo, setCustomerMemo] = useState('')
   const [couponCode, setCouponCode] = useState('')
-  const [couponQuantity, setCouponQuantity] = useState(1)
+  const [couponQuantityInput, setCouponQuantityInput] = useState('1')
+  const couponQuantity = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
   const [couponQrScannerOpen, setCouponQrScannerOpen] = useState(false)
-  const [pointUsed, setPointUsed] = useState('0')
+  const [pointUsed, setPointUsed] = useState('')
   const [couponMessage, setCouponMessage] = useState('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
-  const [discountValue, setDiscountValue] = useState(0)
+  const [discountValueInput, setDiscountValueInput] = useState('')
+  const discountValue = parsePosDiscountValueInput(discountValueInput, discountType)
   const [discountReason, setDiscountReason] = useState('')
   const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
@@ -910,11 +912,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (selectedServiceLineCount <= 0) return ''
     return `${tr('posServiceHandled', '서비스처리')} ${selectedServiceLineCount}${tr('posMenuLineUnit', '건')}`
   }, [selectedServiceLineCount, t])
-  const pointUsedNum = Math.max(0, Math.trunc(Number(pointUsed || 0)))
+  const pointUsedNum = Math.max(0, parseIntegerInput(pointUsed, 0))
   const pricing = computePosPricing({
     subtotal,
     discountAmt: discount + pointUsedNum,
-    cardPaymentAmount: parseFloat(payCard) || 0,
+    cardPaymentAmount: parseBahtAmount(payCard) || 0,
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
@@ -978,29 +980,29 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [])
 
   const confirmGuestDirect = () => {
-    const v = parseInt(guestDirectValue, 10)
-    if (!Number.isNaN(v)) setGuestCount(Math.max(1, Math.min(99, v)))
+    const v = parseIntegerInput(guestDirectValue, 0)
+    if (v > 0) setGuestCount(Math.max(1, Math.min(99, v)))
     setGuestDirectOpen(false)
   }
 
   const legacyWalletPaymentSum =
-    (parseFloat(payTrueMoney) || 0) +
-    (parseFloat(payWeChat) || 0) +
-    (parseFloat(payAlipay) || 0) +
-    (parseFloat(payUnionPay) || 0) +
-    (parseFloat(payLinePay) || 0) +
-    (parseFloat(payShopeePay) || 0) +
-    (parseFloat(payOther) || 0)
+    (parseBahtAmount(payTrueMoney) || 0) +
+    (parseBahtAmount(payWeChat) || 0) +
+    (parseBahtAmount(payAlipay) || 0) +
+    (parseBahtAmount(payUnionPay) || 0) +
+    (parseBahtAmount(payLinePay) || 0) +
+    (parseBahtAmount(payShopeePay) || 0) +
+    (parseBahtAmount(payOther) || 0)
   const adminConfiguredWalletSum = adminPaymentLines.reduce(
-    (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
+    (s, i) => s + (parseBahtAmount(payAdminLineAmounts[i.id] || '0') || 0),
     0
   )
   const paymentSum =
-    (parseFloat(payCash) || 0) +
-    (parseFloat(payCard) || 0) +
-    (parseFloat(payPromptPay) || 0) +
+    (parseBahtAmount(payCash) || 0) +
+    (parseBahtAmount(payCard) || 0) +
+    (parseBahtAmount(payPromptPay) || 0) +
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-    (parseFloat(payDeliveryApp) || 0)
+    (parseBahtAmount(payDeliveryApp) || 0)
   const SPLIT_AMOUNT_EPS = 0.02
   const paymentTotalsReconcile = (entered: number, due: number) =>
     Math.abs(round2(entered) - round2(due)) <= SPLIT_AMOUNT_EPS ||
@@ -1020,10 +1022,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       : Math.round((splitCapturedPaymentSum + paymentSum) * 100) / 100
     : paymentSum
   const nonCashPaymentSum =
-    (parseFloat(payCard) || 0) +
-    (parseFloat(payPromptPay) || 0) +
+    (parseBahtAmount(payCard) || 0) +
+    (parseBahtAmount(payPromptPay) || 0) +
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-    (parseFloat(payDeliveryApp) || 0)
+    (parseBahtAmount(payDeliveryApp) || 0)
   const cashRequiredAmount = Math.max(0, total - nonCashPaymentSum)
   const cashTenderedNum = parseBahtAmount(cashTendered)
   const _cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
@@ -1036,20 +1038,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (useAdminPaymentLines) {
       const admin: Record<string, number> = {}
       for (const line of adminPaymentLines) {
-        const v = r2(parseFloat(payAdminLineAmounts[line.id] || '0') || 0)
+        const v = r2(parseBahtAmount(payAdminLineAmounts[line.id] || '0') || 0)
         if (v > 0.005) admin[String(line.id)] = v
       }
       if (Object.keys(admin).length === 0) return undefined
       return { admin }
     }
     const out: PosPaymentOtherBreakdown = {}
-    const tm = r2(parseFloat(payTrueMoney) || 0)
-    const wc = r2(parseFloat(payWeChat) || 0)
-    const ap = r2(parseFloat(payAlipay) || 0)
-    const up = r2(parseFloat(payUnionPay) || 0)
-    const lp = r2(parseFloat(payLinePay) || 0)
-    const sp = r2(parseFloat(payShopeePay) || 0)
-    const misc = r2(parseFloat(payOther) || 0)
+    const tm = r2(parseBahtAmount(payTrueMoney) || 0)
+    const wc = r2(parseBahtAmount(payWeChat) || 0)
+    const ap = r2(parseBahtAmount(payAlipay) || 0)
+    const up = r2(parseBahtAmount(payUnionPay) || 0)
+    const lp = r2(parseBahtAmount(payLinePay) || 0)
+    const sp = r2(parseBahtAmount(payShopeePay) || 0)
+    const misc = r2(parseBahtAmount(payOther) || 0)
     if (tm > 0.005) out.trueMoney = tm
     if (wc > 0.005) out.weChat = wc
     if (ap > 0.005) out.alipay = ap
@@ -1083,7 +1085,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   ])
 
   const buildPaymentSnapshot = useCallback((): CartPanelPaymentPayload => {
-    const payDel = parseFloat(payDeliveryApp) || 0
+    const payDel = parseBahtAmount(payDeliveryApp) || 0
     const channelCtx = cartPanelDeliveryChannelContext({
       deliveryAppProp,
       deliveryOrderNoProp,
@@ -1103,20 +1105,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
     const ob = buildPaymentOtherBreakdownSnapshot()
-    const cashPay = parseFloat(payCash) || 0
+    const cashPay = parseBahtAmount(payCash) || 0
     const tenderedRaw =
       parseBahtAmount(cashTenderedRef.current) || parseBahtAmount(cashTendered)
     const nonCashPay =
-      (parseFloat(payCard) || 0) +
-      (parseFloat(payPromptPay) || 0) +
+      (parseBahtAmount(payCard) || 0) +
+      (parseBahtAmount(payPromptPay) || 0) +
       (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-      (parseFloat(payDeliveryApp) || 0)
+      (parseBahtAmount(payDeliveryApp) || 0)
     const cashOnlyPay = nonCashPay <= 0.005 && cashPay > 0.005
     const effectiveTendered = tenderedRaw > 0.005 ? tenderedRaw : cashOnlyPay ? cashPay : 0
     return {
       paymentCash: cashPay,
-      paymentCard: parseFloat(payCard) || 0,
-      paymentQr: parseFloat(payPromptPay) || 0,
+      paymentCard: parseBahtAmount(payCard) || 0,
+      paymentQr: parseBahtAmount(payPromptPay) || 0,
       paymentQrType: payQrType,
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
@@ -1409,7 +1411,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const cashShortAmountForTendered = Math.max(0, cashRequiredForTendered - cashTenderedNum)
   /** 더치·일부 결제 단계: 현금 확정 직후 거스름 안내(최종 결제 완료와 동일 UX) */
   const showPostCashChangeForSplitStepIfNeeded = useCallback(() => {
-    const cashPay = parseFloat(payCash) || 0
+    const cashPay = parseBahtAmount(payCash) || 0
     if (cashPay <= 0.001) return
     const tenderedRaw = parseBahtAmount(cashTenderedRef.current) || parseBahtAmount(cashTendered)
     if (tenderedRaw <= 0.001) return
@@ -1810,11 +1812,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [cashTendered])
 
   const resetPaymentInputs = () => {
-    setPayCash('0')
+    setPayCash('')
     cashTenderedRef.current = ''
     setCashTendered('')
-    setPayCard('0')
-    setPayPromptPay('0')
+    setPayCard('')
+    setPayPromptPay('')
     setPayQrType('THAI_QR')
     setPayTrueMoney('0')
     setPayWeChat('0')
@@ -1917,15 +1919,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       const firstOther = lines.find((li) => li.category === 'other')
       const targetLine = target === 'other' && firstOther ? firstOther : lines[0]
       setPayAdminLineAmounts(
-        Object.fromEntries(lines.map((li) => [li.id, li.id === targetLine?.id ? String(amount) : '0']))
+        Object.fromEntries(lines.map((li) => [li.id, li.id === targetLine?.id ? formatBahtAmountForField(amount) : '0']))
       )
       return
     }
-    if (target === 'cash') setPayCash(String(amount))
-    if (target === 'card') setPayCard(String(amount))
-    if (target === 'qr') setPayPromptPay(String(amount))
+    if (target === 'cash') setPayCash(formatBahtAmountForField(amount))
+    if (target === 'card') setPayCard(formatBahtAmountForField(amount))
+    if (target === 'qr') setPayPromptPay(formatBahtAmountForField(amount))
     if (target === 'delivery_app') {
-      setPayDeliveryApp(String(amount))
+      setPayDeliveryApp(formatBahtAmountForField(amount))
       setDeliveryPaymentChannel(
         resolveDefaultDeliveryPaymentChannel(
           cartPanelDeliveryChannelContext({
@@ -1937,13 +1939,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         )
       )
     }
-    if (target === 'other') setPayOther(String(amount))
-    if (target === 'truemoney') setPayTrueMoney(String(amount))
-    if (target === 'wechat') setPayWeChat(String(amount))
-    if (target === 'alipay') setPayAlipay(String(amount))
-    if (target === 'unionpay') setPayUnionPay(String(amount))
-    if (target === 'linepay') setPayLinePay(String(amount))
-    if (target === 'shopeepay') setPayShopeePay(String(amount))
+    if (target === 'other') setPayOther(formatBahtAmountForField(amount))
+    if (target === 'truemoney') setPayTrueMoney(formatBahtAmountForField(amount))
+    if (target === 'wechat') setPayWeChat(formatBahtAmountForField(amount))
+    if (target === 'alipay') setPayAlipay(formatBahtAmountForField(amount))
+    if (target === 'unionpay') setPayUnionPay(formatBahtAmountForField(amount))
+    if (target === 'linepay') setPayLinePay(formatBahtAmountForField(amount))
+    if (target === 'shopeepay') setPayShopeePay(formatBahtAmountForField(amount))
   }
 
   type MoveTarget =
@@ -2017,9 +2019,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       })
       return
     }
-    if (target === 'cash') setPayCash((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
-    if (target === 'card') setPayCard((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
-    if (target === 'qr') setPayPromptPay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
+    if (target === 'cash') setPayCash((p) => formatBahtAmountForField(Math.max(0, parseBahtAmount(p) + delta)))
+    if (target === 'card') setPayCard((p) => formatBahtAmountForField(Math.max(0, parseBahtAmount(p) + delta)))
+    if (target === 'qr') setPayPromptPay((p) => formatBahtAmountForField(Math.max(0, parseBahtAmount(p) + delta)))
     if (target === 'delivery_app') setPayDeliveryApp((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
     if (target === 'other') {
       setShowOtherPayments(true)
@@ -2073,23 +2075,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     }
     const adminLineSum = adminPaymentLines.reduce(
-      (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
+      (s, i) => s + (parseBahtAmount(payAdminLineAmounts[i.id] || '0') || 0),
       0
     )
     const legacyWalletSum =
-      (parseFloat(payTrueMoney) || 0) +
-      (parseFloat(payWeChat) || 0) +
-      (parseFloat(payAlipay) || 0) +
-      (parseFloat(payUnionPay) || 0) +
-      (parseFloat(payLinePay) || 0) +
-      (parseFloat(payShopeePay) || 0) +
-      (parseFloat(payOther) || 0)
+      (parseBahtAmount(payTrueMoney) || 0) +
+      (parseBahtAmount(payWeChat) || 0) +
+      (parseBahtAmount(payAlipay) || 0) +
+      (parseBahtAmount(payUnionPay) || 0) +
+      (parseBahtAmount(payLinePay) || 0) +
+      (parseBahtAmount(payShopeePay) || 0) +
+      (parseBahtAmount(payOther) || 0)
     const paymentFieldSum =
-      (parseFloat(payCash) || 0) +
-      (parseFloat(payCard) || 0) +
-      (parseFloat(payPromptPay) || 0) +
+      (parseBahtAmount(payCash) || 0) +
+      (parseBahtAmount(payCard) || 0) +
+      (parseBahtAmount(payPromptPay) || 0) +
       (useAdminPaymentLines ? adminLineSum : legacyWalletSum) +
-      (parseFloat(payDeliveryApp) || 0)
+      (parseBahtAmount(payDeliveryApp) || 0)
     const draftRemoved =
       replaceCurrentDraft && prevDraft && prevDraft.amount > 0 ? prevDraft.amount : 0
     const remain = Math.max(0, total - Math.max(0, paymentFieldSum - draftRemoved))
@@ -2125,7 +2127,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const amount = Math.max(0, round2(total))
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
-    setPayAdminLineAmounts(Object.fromEntries(lines.map((li) => [li.id, li.id === lineId ? String(amount) : '0'])))
+    setPayAdminLineAmounts(Object.fromEntries(lines.map((li) => [li.id, li.id === lineId ? formatBahtAmountForField(amount) : '0'])))
   }
 
   const addDutchAmountToAdminLine = (lineId: string) => {
@@ -2137,23 +2139,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           ? Math.max(0, Number(amountSplitRemainingByPerson[amountSplitTargetPersonIndex] || 0))
           : currentSplitTargetAmount
     const adminLineSum = adminPaymentLines.reduce(
-      (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
+      (s, i) => s + (parseBahtAmount(payAdminLineAmounts[i.id] || '0') || 0),
       0
     )
     const legacyWalletSum =
-      (parseFloat(payTrueMoney) || 0) +
-      (parseFloat(payWeChat) || 0) +
-      (parseFloat(payAlipay) || 0) +
-      (parseFloat(payUnionPay) || 0) +
-      (parseFloat(payLinePay) || 0) +
-      (parseFloat(payShopeePay) || 0) +
-      (parseFloat(payOther) || 0)
+      (parseBahtAmount(payTrueMoney) || 0) +
+      (parseBahtAmount(payWeChat) || 0) +
+      (parseBahtAmount(payAlipay) || 0) +
+      (parseBahtAmount(payUnionPay) || 0) +
+      (parseBahtAmount(payLinePay) || 0) +
+      (parseBahtAmount(payShopeePay) || 0) +
+      (parseBahtAmount(payOther) || 0)
     const currentSum =
-      (parseFloat(payCash) || 0) +
-      (parseFloat(payCard) || 0) +
-      (parseFloat(payPromptPay) || 0) +
+      (parseBahtAmount(payCash) || 0) +
+      (parseBahtAmount(payCard) || 0) +
+      (parseBahtAmount(payPromptPay) || 0) +
       (useAdminPaymentLines ? adminLineSum : legacyWalletSum) +
-      (parseFloat(payDeliveryApp) || 0)
+      (parseBahtAmount(payDeliveryApp) || 0)
     const remain = Math.max(0, total - currentSum)
     const addAmount =
       showSplit && (splitMode === 'menu' || splitMode === 'amount')
@@ -2568,19 +2570,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const newTotal = round2(total)
     resetPaymentInputs()
     if (activePaymentTab === 'cash') {
-      setPayCash(String(newTotal))
+      setPayCash(formatBahtAmountForField(newTotal))
       return
     }
     if (activePaymentTab === 'card') {
-      setPayCard(String(newTotal))
+      setPayCard(formatBahtAmountForField(newTotal))
       return
     }
     if (activePaymentTab === 'qr') {
-      setPayPromptPay(String(newTotal))
+      setPayPromptPay(formatBahtAmountForField(newTotal))
       return
     }
     if (activePaymentTab === 'delivery_app') {
-      setPayDeliveryApp(String(newTotal))
+      setPayDeliveryApp(formatBahtAmountForField(newTotal))
       return
     }
     if (useAdminPaymentLines) {
@@ -2588,17 +2590,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (firstLineId) {
         setPayAdminLineAmounts({
           ...Object.fromEntries(adminPaymentLinesRef.current.map((line) => [line.id, '0'])),
-          [firstLineId]: String(newTotal),
+          [firstLineId]: formatBahtAmountForField(newTotal),
         })
         return
       }
     }
-    setPayOther(String(newTotal))
+    setPayOther(formatBahtAmountForField(newTotal))
   }, [
     showPaymentModal,
     total,
     discount,
-    discountValue,
+    discountValueInput,
     discountType,
     pointUsedNum,
     collabDiscountAmt,
@@ -2814,7 +2816,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const submitNonDineOrder = async (withPayment: boolean): Promise<boolean> => {
     if (orderType === 'dine-in') return false
     if (!onNonDineOrderComplete) return false
-    const payDel = parseFloat(payDeliveryApp) || 0
+    const payDel = parseBahtAmount(payDeliveryApp) || 0
     const channelCtx = cartPanelDeliveryChannelContext({
       deliveryAppProp,
       deliveryOrderNoProp,
@@ -2834,13 +2836,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines
       ? adminConfiguredWalletSum
-      : (parseFloat(payTrueMoney) || 0) +
-        (parseFloat(payWeChat) || 0) +
-        (parseFloat(payAlipay) || 0) +
-        (parseFloat(payUnionPay) || 0) +
-        (parseFloat(payLinePay) || 0) +
-        (parseFloat(payShopeePay) || 0) +
-        (parseFloat(payOther) || 0)
+      : (parseBahtAmount(payTrueMoney) || 0) +
+        (parseBahtAmount(payWeChat) || 0) +
+        (parseBahtAmount(payAlipay) || 0) +
+        (parseBahtAmount(payUnionPay) || 0) +
+        (parseBahtAmount(payLinePay) || 0) +
+        (parseBahtAmount(payShopeePay) || 0) +
+        (parseBahtAmount(payOther) || 0)
     const payOtherBreakdown = buildPaymentOtherBreakdownSnapshot()
     const deliveryLabel = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
       .filter(Boolean)
@@ -3158,7 +3160,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         }
         setAppliedCoupons(res.appliedCoupons)
         setCouponCode('')
-        setCouponQuantity(1)
+        setCouponQuantityInput('1')
         setCouponMessage(
           params.successNote || i18nTr(t, 'posCouponAppliedSuccess', { code: code.toUpperCase() })
         )
@@ -3286,12 +3288,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }))
     resetCheckoutDiscountUiState({
       setDiscountType,
-      setDiscountValue,
+      setDiscountValueInput,
       setDiscountReason,
       setAppliedCollabId,
       setCouponCode,
       setAppliedCoupons,
-      setCouponQuantity,
+      setCouponQuantityInput,
       setCouponMessage,
       setPointUsed,
     })
@@ -3299,7 +3301,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       payload.orderDiscount,
       normalized,
       pricingAdjustments,
-      { setDiscountType, setDiscountValue, setDiscountReason }
+      { setDiscountType, setDiscountValueInput, setDiscountReason }
     )
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
@@ -3332,12 +3334,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }))
     resetCheckoutDiscountUiState({
       setDiscountType,
-      setDiscountValue,
+      setDiscountValueInput,
       setDiscountReason,
       setAppliedCollabId,
       setCouponCode,
       setAppliedCoupons,
-      setCouponQuantity,
+      setCouponQuantityInput,
       setCouponMessage,
       setPointUsed,
     })
@@ -3345,7 +3347,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       payload.orderDiscount,
       normalized,
       pricingAdjustments,
-      { setDiscountType, setDiscountValue, setDiscountReason }
+      { setDiscountType, setDiscountValueInput, setDiscountReason }
     )
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
@@ -3376,12 +3378,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }))
     resetCheckoutDiscountUiState({
       setDiscountType,
-      setDiscountValue,
+      setDiscountValueInput,
       setDiscountReason,
       setAppliedCollabId,
       setCouponCode,
       setAppliedCoupons,
-      setCouponQuantity,
+      setCouponQuantityInput,
       setCouponMessage,
       setPointUsed,
     })
@@ -3389,7 +3391,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       payload.orderDiscount,
       normalized,
       pricingAdjustments,
-      { setDiscountType, setDiscountValue, setDiscountReason }
+      { setDiscountType, setDiscountValueInput, setDiscountReason }
     )
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
@@ -3454,10 +3456,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setCustomerMemo('')
     setCouponCode('')
     setAppliedCoupons([])
-    setCouponQuantity(1)
-    setPointUsed('0')
+    setCouponQuantityInput('1')
+    setPointUsed('')
     setCouponMessage('')
-    setDiscountValue(0)
+    setDiscountValueInput('')
     setDiscountReason('')
     setAppliedCollabId(null)
     setPaymentTableNameOverride(null)
@@ -3643,7 +3645,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
               onClick={() => {
                 setDiscountType('percent')
-                setDiscountValue(pct)
+                setDiscountValueInput(String(pct))
               }}
             >
               {pct}%
@@ -3658,7 +3660,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             className="h-12 px-3 text-sm font-semibold rounded-xl border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
             onClick={() => {
               setDiscountType('percent')
-              setDiscountValue(0)
+              setDiscountValueInput('')
             }}
           >
             {tr('reset', '초기화')}
@@ -3676,16 +3678,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </SelectContent>
           </Select>
           <Input
-            type="number"
-            min={0}
-            step={discountType === 'percent' ? 1 : 0.01}
+            type="text"
+            inputMode={discountType === 'percent' ? 'numeric' : 'decimal'}
+            autoComplete="off"
             placeholder={
               discountType === 'percent'
                 ? (t('posDiscount') || '할인') + ' %'
                 : (t('posDiscount') || '할인') + ' ฿'
             }
-            value={discountValue}
-            onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
+            value={discountValueInput}
+            onChange={(e) =>
+              setDiscountValueInput(
+                discountType === 'percent'
+                  ? formatIntegerInputDisplay(e.target.value, 3)
+                  : formatBahtInputDisplay(e.target.value)
+              )
+            }
             className="h-11 text-sm rounded-xl px-2.5"
           />
           <Input
@@ -4249,12 +4257,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <div className="flex flex-col gap-2 py-2">
                 <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
                   min={1}
                   max={99}
                   className="tabular-nums"
                   value={guestDirectValue}
-                  onChange={(e) => setGuestDirectValue(e.target.value)}
+                  onChange={(e) => setGuestDirectValue(formatIntegerInputDisplay(e.target.value, 2))}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmGuestDirect())}
                 />
               </div>
@@ -4682,14 +4692,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs"
                     />
                     <Input
-                      type="number"
-                      min={1}
-                      max={99}
-                      step={1}
-                      value={couponQuantity}
-                      onChange={(e) =>
-                        setCouponQuantity(Math.max(1, Math.min(99, Math.trunc(Number(e.target.value || 1)))))
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={couponQuantityInput}
+                      onChange={(e) => setCouponQuantityInput(formatIntegerInputDisplay(e.target.value, 2))}
+                      onBlur={() => {
+                        const n = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
+                        setCouponQuantityInput(String(n))
+                      }}
                       className="h-10 w-16 shrink-0 text-sm rounded-xl"
                       title={tr('posCouponQuantity', '수량')}
                     />
@@ -4769,11 +4780,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     <p className="text-sm font-semibold leading-tight">{t('posPaymentSectionPoints')}</p>
                   </div>
                   <Input
-                    type="number"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
                     value={pointUsed}
-                    onChange={(e) => setPointUsed(String(Math.max(0, Math.trunc(Number(e.target.value || 0)))))}
+                    onChange={(e) => setPointUsed(formatIntegerInputDisplay(e.target.value))}
                     className="h-10 w-full max-w-[12rem] text-sm rounded-xl sm:w-auto"
                   />
                 </div>

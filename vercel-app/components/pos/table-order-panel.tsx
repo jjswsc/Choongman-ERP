@@ -23,6 +23,7 @@ import {
   type PosOrderStatusUpdateResult,
   updatePosOrderStatus,
 } from '@/lib/api-client'
+import { formatIntegerInputDisplay, parseIntegerInput } from '@/lib/baht-input-format'
 import { cn } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { Label } from '@/components/ui/label'
@@ -624,8 +625,8 @@ export function TableOrderPanel({
   }
 
   const confirmGuestDirectInput = () => {
-    const v = parseInt(guestDirectValue, 10)
-    if (!Number.isNaN(v)) void persistGuestCount(Math.max(0, Math.min(99, v)))
+    const v = parseIntegerInput(guestDirectValue, 0)
+    if (v >= 0) void persistGuestCount(Math.max(0, Math.min(99, v)))
     setGuestDirectOpen(false)
   }
 
@@ -1295,12 +1296,12 @@ export function TableOrderPanel({
           <div className="flex flex-col gap-2 py-2">
             <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
             <Input
-              type="number"
-              min={0}
-              max={99}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
               className="tabular-nums"
               value={guestDirectValue}
-              onChange={(e) => setGuestDirectValue(e.target.value)}
+              onChange={(e) => setGuestDirectValue(formatIntegerInputDisplay(e.target.value, 2))}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmGuestDirectInput())}
             />
           </div>

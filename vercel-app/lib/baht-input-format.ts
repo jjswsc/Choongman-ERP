@@ -60,3 +60,34 @@ export function mapBreakdownStringsToBahtDisplay(rec: Record<string, string>): R
     })
   )
 }
+
+/** 정수 입력(포인트·쿠폰 수량·손님 수 직접입력 등): 타이핑 중 빈 칸 허용 */
+export function formatIntegerInputDisplay(raw: string, maxDigits = 6): string {
+  return String(raw || '').replace(/\D/g, '').slice(0, maxDigits)
+}
+
+export function parseIntegerInput(raw: string | undefined | null, fallback = 0): number {
+  const digits = String(raw || '').replace(/\D/g, '')
+  if (digits === '') return fallback
+  const n = parseInt(digits, 10)
+  return Number.isFinite(n) ? n : fallback
+}
+
+export function parsePosDiscountValueInput(
+  raw: string,
+  discountType: 'percent' | 'fixed'
+): number {
+  if (discountType === 'percent') {
+    return Math.min(100, Math.max(0, parseIntegerInput(raw, 0)))
+  }
+  return Math.max(0, parseBahtAmount(raw))
+}
+
+export function formatPosDiscountValueInput(
+  value: number,
+  discountType: 'percent' | 'fixed'
+): string {
+  if (!Number.isFinite(value) || value <= 0) return ''
+  if (discountType === 'percent') return String(Math.trunc(value))
+  return formatBahtAmountForField(value)
+}
