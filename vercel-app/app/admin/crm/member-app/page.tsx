@@ -755,7 +755,11 @@ export default function CrmMemberAppContentPage() {
           </AdminTabsBarWithHelp>
 
           <TabsContent value="design" className={cn(adminTabsContentCn, "space-y-4")}>
-            <CrmMemberAppPreview reloadKey={previewReloadKey} />
+            <CrmMemberAppPreview
+              reloadKey={previewReloadKey}
+              loginBackgroundUrl={loginBackgroundUrl}
+              appBackgroundUrl={appBackgroundUrl}
+            />
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_designTitle")}</CardTitle>

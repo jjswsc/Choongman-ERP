@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { readSystemSettingString, writeSystemSettingString } from '@/lib/system-settings-value'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     for (const row of rows || []) {
       const key = String(row.key || '').trim()
       if (!key) continue
-      map.set(key, String(row.value_json || '').trim())
+      map.set(key, readSystemSettingString(row.value_json))
     }
 
     return NextResponse.json({
@@ -53,12 +54,12 @@ export async function POST(req: NextRequest) {
       [
         {
           key: KEY_LOGIN_BG,
-          value_json: asHttpUrl(body.loginBackgroundUrl),
+          value_json: writeSystemSettingString(asHttpUrl(body.loginBackgroundUrl)),
           updated_at: getBangkokDateTimeString(),
         },
         {
           key: KEY_APP_BG,
-          value_json: asHttpUrl(body.appBackgroundUrl),
+          value_json: writeSystemSettingString(asHttpUrl(body.appBackgroundUrl)),
           updated_at: getBangkokDateTimeString(),
         },
       ],

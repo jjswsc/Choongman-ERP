@@ -501,6 +501,8 @@ export function EmployeeHeadcountTab({
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [displayListLoaded, setDisplayListLoaded] = React.useState(false)
+  const listLoadSeqRef = React.useRef(0)
   const [empList, setEmpList] = React.useState<AdminEmployeeItem[]>([])
   const [stores, setStores] = React.useState<string[]>([])
   const [jobOptions, setJobOptions] = React.useState<string[]>([])
@@ -519,12 +521,14 @@ export function EmployeeHeadcountTab({
   const resignWindowEndYmd = React.useMemo(() => addDaysToYmd(todayBkk, 30), [todayBkk])
 
   const loadAll = React.useCallback(async () => {
+    const seq = ++listLoadSeqRef.current
     setLoading(true)
     try {
       const [empRes, hcRes] = await Promise.all([
         getAdminEmployeeList({ userStore, userRole }),
         getStoreJobHeadcount(),
       ])
+      if (seq !== listLoadSeqRef.current) return
       setEmpList(empRes.list || [])
       setStores(empRes.stores || [])
       setJobOptions(
@@ -534,9 +538,18 @@ export function EmployeeHeadcountTab({
       if (hcRes._note === "table_missing") setTableMissing(true)
       else setTableMissing(false)
     } finally {
-      setLoading(false)
+      if (seq === listLoadSeqRef.current) {
+        setDisplayListLoaded(true)
+        setLoading(false)
+      }
     }
   }, [userStore, userRole])
+
+  const beginListSearch = React.useCallback(() => {
+    setHasSearched(true)
+    setDisplayListLoaded(false)
+    void loadAll()
+  }, [loadAll])
 
   React.useEffect(() => {
     if (hasSearched) return
@@ -766,7 +779,9 @@ export function EmployeeHeadcountTab({
     return <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-800 dark:text-emerald-200">{t("emp_hc_ok")}</span>
   }
 
-  if (loading && hasSearched && empList.length === 0) {
+  const listPending = hasSearched && !displayListLoaded
+
+  if (listPending) {
     return (
       <div className="flex justify-center py-16 text-sm text-muted-foreground">{t("loading")}</div>
     )
@@ -810,10 +825,7 @@ export function EmployeeHeadcountTab({
                   </select>
                   <button
                     type="button"
-                    onClick={() => {
-                      setHasSearched(true)
-                      void loadAll()
-                    }}
+                    onClick={beginListSearch}
                     disabled={loading}
                     className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted/50 disabled:opacity-50"
                   >
@@ -1019,10 +1031,7 @@ export function EmployeeHeadcountTab({
         </div>
         <button
           type="button"
-          onClick={() => {
-            setHasSearched(true)
-            void loadAll()
-          }}
+          onClick={beginListSearch}
           disabled={loading}
           className="h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
         >
@@ -1056,10 +1065,7 @@ export function EmployeeHeadcountTab({
         </select>
         <button
           type="button"
-          onClick={() => {
-            setHasSearched(true)
-            void loadAll()
-          }}
+          onClick={beginListSearch}
           disabled={loading}
           className="h-8 rounded-md border border-input bg-background px-2 text-xs disabled:opacity-50"
         >

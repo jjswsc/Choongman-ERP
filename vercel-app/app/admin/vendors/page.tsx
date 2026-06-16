@@ -40,6 +40,7 @@ export default function VendorsPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<VendorTypeFilter>("all")
   const [profilesByStore, setProfilesByStore] = React.useState<Record<string, { storeCode: string; vendorCode?: string }>>({})
+  const reloadSeqRef = React.useRef(0)
   const { stores: storeList, storeLabels, legacyToCanonical } = useStoreList()
 
   const storeCodes = React.useMemo(
@@ -51,9 +52,11 @@ export default function VendorsPage() {
   )
 
   const reloadVendors = React.useCallback(() => {
+    const seq = ++reloadSeqRef.current
     setLoading(true)
     return Promise.all([getAdminVendors(), getStoreTaxFilingProfiles()])
       .then(([list, profRes]) => {
+        if (seq !== reloadSeqRef.current) return
         setVendors(list)
         const map: Record<string, { storeCode: string; vendorCode?: string }> = {}
         for (const p of profRes.profiles || []) {
@@ -63,10 +66,13 @@ export default function VendorsPage() {
         setProfilesByStore(map)
       })
       .catch(() => {
+        if (seq !== reloadSeqRef.current) return
         setVendors([])
         setProfilesByStore({})
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (seq === reloadSeqRef.current) setLoading(false)
+      })
   }, [])
 
   React.useEffect(() => {
@@ -277,6 +283,7 @@ export default function VendorsPage() {
           <VendorTable
             vendors={filteredVendors}
             hasSearched={hasSearched}
+            loading={loading}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             typeFilter={typeFilter}

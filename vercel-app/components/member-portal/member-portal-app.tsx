@@ -139,7 +139,11 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 
 export function MemberPortalApp() {
   const brand = useAppBrandConfig()
-  const embedPreview = useMemberPortalEmbedPreview()
+  const {
+    isEmbedPreview: embedPreview,
+    previewLoginBackgroundUrl,
+    previewAppBackgroundUrl,
+  } = useMemberPortalEmbedPreview()
   const { lang, t } = useMemberPortalLang()
   const { tiers: portalTiers } = useMemberPortalTiers()
   const dateLocale = memberPortalDateLocale(lang)
@@ -305,7 +309,52 @@ export function MemberPortalApp() {
     return true
   }, [loadFavoriteStorePreference, loadMemberContent, loadMemberStores, reloadStampStatus])
 
+  React.useLayoutEffect(() => {
+    if (!embedPreview) return
+    setDesignBackgrounds((prev) => ({
+      ...prev,
+      loginBackgroundUrl: previewLoginBackgroundUrl || prev.loginBackgroundUrl,
+      appBackgroundUrl: previewAppBackgroundUrl || prev.appBackgroundUrl,
+    }))
+    setLoading(false)
+  }, [embedPreview, previewAppBackgroundUrl, previewLoginBackgroundUrl])
+
   React.useEffect(() => {
+    if (embedPreview) {
+      getJson<{
+        success: boolean
+        facebookUrl?: string
+        instagramUrl?: string
+        lineOfficialUrl?: string
+        loginBackgroundUrl?: string
+        appBackgroundUrl?: string
+        heroFoodImageUrl?: string
+        signupWelcomeCouponEnabled?: boolean
+      }>("/api/member-portal/public-config")
+        .then((r) => {
+          setContactUrls({
+            facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
+            instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
+            lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
+          })
+          setDesignBackgrounds({
+            loginBackgroundUrl:
+              previewLoginBackgroundUrl || String(r.loginBackgroundUrl || "").trim(),
+            appBackgroundUrl: previewAppBackgroundUrl || String(r.appBackgroundUrl || "").trim(),
+            heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
+          })
+          setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
+        })
+        .catch(() => {
+          setContactUrls({
+            facebookUrl: brand.memberContactFacebookUrl,
+            instagramUrl: brand.memberContactInstagramUrl,
+            lineOfficialUrl: brand.memberContactLineOfficialUrl,
+          })
+        })
+      return
+    }
+
     ;(async () => {
       setLoading(true)
       try {
@@ -327,21 +376,19 @@ export function MemberPortalApp() {
       heroFoodImageUrl?: string
       signupWelcomeCouponEnabled?: boolean
     }>("/api/member-portal/public-config")
-      .then((r) =>
-        {
-          setContactUrls({
-            facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
-            instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
-            lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
-          })
-          setDesignBackgrounds({
-            loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
-            appBackgroundUrl: String(r.appBackgroundUrl || "").trim(),
-            heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
-          })
-          setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
-        }
-      )
+      .then((r) => {
+        setContactUrls({
+          facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
+          instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
+          lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
+        })
+        setDesignBackgrounds({
+          loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
+          appBackgroundUrl: String(r.appBackgroundUrl || "").trim(),
+          heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
+        })
+        setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
+      })
       .catch(() => {
         setContactUrls({
           facebookUrl: brand.memberContactFacebookUrl,
@@ -365,7 +412,16 @@ export function MemberPortalApp() {
         setSignupStoreOptions(Array.isArray(r.stores) ? r.stores : [])
       })
       .catch(() => {})
-  }, [brand.memberContactFacebookUrl, brand.memberContactInstagramUrl, brand.memberContactLineOfficialUrl, lang, loadSession])
+  }, [
+    brand.memberContactFacebookUrl,
+    brand.memberContactInstagramUrl,
+    brand.memberContactLineOfficialUrl,
+    embedPreview,
+    lang,
+    loadSession,
+    previewAppBackgroundUrl,
+    previewLoginBackgroundUrl,
+  ])
 
   React.useEffect(() => {
     setFavoriteStoreCodes(readFavoriteStoreCodesFromLocalStorage())

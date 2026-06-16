@@ -48,6 +48,7 @@ export type VendorLinkedStore = {
 export interface VendorTableProps {
   vendors: Vendor[]
   hasSearched: boolean
+  loading?: boolean
   searchTerm: string
   setSearchTerm: (v: string) => void
   typeFilter: VendorTypeFilter
@@ -61,6 +62,7 @@ export interface VendorTableProps {
 export function VendorTable({
   vendors,
   hasSearched,
+  loading = false,
   searchTerm,
   setSearchTerm,
   typeFilter,
@@ -134,6 +136,12 @@ export function VendorTable({
                     title={t("vendorSearchHint")}
                     className="border-0 bg-transparent py-10"
                   />
+                </td>
+              </tr>
+            ) : loading ? (
+              <tr>
+                <td colSpan={7} className="p-0">
+                  <div className="py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
                 </td>
               </tr>
             ) : vendors.length === 0 ? (

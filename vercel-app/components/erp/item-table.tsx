@@ -46,6 +46,7 @@ export interface ItemTableProps {
   categories: string[]
   outboundOptions: string[]
   hasSearched: boolean
+  loading?: boolean
   searchTerm: string
   setSearchTerm: (v: string) => void
   categoryFilter: string
@@ -63,6 +64,7 @@ export function ItemTable({
   categories,
   outboundOptions,
   hasSearched,
+  loading = false,
   searchTerm,
   setSearchTerm,
   categoryFilter,
@@ -158,6 +160,12 @@ export function ItemTable({
                     title={t("itemsSearchHint")}
                     className="border-0 bg-transparent py-10"
                   />
+                </td>
+              </tr>
+            ) : loading ? (
+              <tr>
+                <td colSpan={6} className="p-0">
+                  <div className="py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
                 </td>
               </tr>
             ) : products.length === 0 ? (

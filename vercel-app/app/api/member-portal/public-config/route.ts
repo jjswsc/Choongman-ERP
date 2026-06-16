@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getSignupWelcomeCouponCode } from '@/lib/member-portal-signup-welcome-coupon'
+import { readSystemSettingString } from '@/lib/system-settings-value'
 import {
   loadMemberPortalPrepayConfig,
   MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
@@ -26,7 +27,7 @@ export async function GET() {
     const map = new Map<string, string>()
     for (const row of rows || []) {
       const key = String(row.key || '').trim()
-      const value = String(row.value_json || '').trim()
+      const value = readSystemSettingString(row.value_json)
       if (!key || !value) continue
       map.set(key, value)
     }

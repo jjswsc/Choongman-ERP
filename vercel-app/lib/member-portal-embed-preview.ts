@@ -3,10 +3,18 @@
 import * as React from 'react'
 import { useSearchParams } from 'next/navigation'
 
-/** CRM 관리자 iframe 미리보기 (`/m?preview=1`) */
-export function useMemberPortalEmbedPreview(): boolean {
+export type MemberPortalEmbedPreviewState = {
+  isEmbedPreview: boolean
+  previewLoginBackgroundUrl: string
+  previewAppBackgroundUrl: string
+}
+
+/** CRM 관리자 iframe 미리보기 (`/m?preview=1&loginBg=...&appBg=...`) */
+export function useMemberPortalEmbedPreview(): MemberPortalEmbedPreviewState {
   const searchParams = useSearchParams()
   const isEmbedPreview = searchParams.get('preview') === '1'
+  const previewLoginBackgroundUrl = isEmbedPreview ? String(searchParams.get('loginBg') || '').trim() : ''
+  const previewAppBackgroundUrl = isEmbedPreview ? String(searchParams.get('appBg') || '').trim() : ''
 
   React.useEffect(() => {
     if (!isEmbedPreview || typeof document === 'undefined') return
@@ -21,5 +29,5 @@ export function useMemberPortalEmbedPreview(): boolean {
     }
   }, [isEmbedPreview])
 
-  return isEmbedPreview
+  return { isEmbedPreview, previewLoginBackgroundUrl, previewAppBackgroundUrl }
 }

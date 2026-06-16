@@ -48,9 +48,11 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [editRow, setEditRow] = React.useState<PosTaxInvoiceRecipientRow | null>(null)
   const [saving, setSaving] = React.useState(false)
+  const loadSeqRef = React.useRef(0)
 
   const load = React.useCallback(async () => {
     if (!auth?.store || !auth?.role) return
+    const seq = ++loadSeqRef.current
     setLoading(true)
     setHasSearched(true)
     try {
@@ -62,15 +64,17 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
         by,
         limit: 100,
       })
+      if (seq !== loadSeqRef.current) return
       if (res.success && res.rows) setRows(res.rows)
       else {
         setRows([])
         if (res.message) await appAlert(res.message)
       }
     } catch {
+      if (seq !== loadSeqRef.current) return
       setRows([])
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current) setLoading(false)
     }
   }, [auth?.store, auth?.role, q, by])
 
@@ -174,6 +178,12 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
                 <tr>
                   <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                     {t("itemsSearchHint") || "검색 버튼을 눌러 주세요."}
+                  </td>
+                </tr>
+              ) : loading ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                    {t("loading")}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (

@@ -82,6 +82,7 @@ export default function ItemsPage() {
   const [itemsTab, setItemsTab] = React.useState<"list" | "priceHistory">("list")
   const [priceManageTab, setPriceManageTab] = React.useState<"history" | "schedule">("history")
   const excelInputRef = React.useRef<HTMLInputElement>(null)
+  const reloadSeqRef = React.useRef(0)
 
   const loadOutboundLocations = React.useCallback(async () => {
     try {
@@ -93,19 +94,24 @@ export default function ItemsPage() {
   }, [])
 
   const reloadCatalog = React.useCallback(() => {
+    const seq = ++reloadSeqRef.current
     setLoading(true)
     return Promise.all([getAdminItems(), getItemCategories(), getWarehouseLocations()])
       .then(([list, { categories }, locs]) => {
+        if (seq !== reloadSeqRef.current) return
         setProducts(list || [])
         setAllCategories(categories || [])
         setOutboundLocations((locs || []).map((l) => ({ location_code: l.location_code, name: l.name })))
       })
       .catch(() => {
+        if (seq !== reloadSeqRef.current) return
         setProducts([])
         setAllCategories([])
         setOutboundLocations([])
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (seq === reloadSeqRef.current) setLoading(false)
+      })
   }, [])
 
   React.useEffect(() => {
@@ -614,6 +620,7 @@ export default function ItemsPage() {
             categories={categories}
             outboundOptions={outboundOptions}
             hasSearched={hasSearched}
+            loading={loading}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             categoryFilter={categoryFilter}

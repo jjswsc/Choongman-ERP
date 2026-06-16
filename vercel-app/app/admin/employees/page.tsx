@@ -211,6 +211,8 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = React.useState("active")
   const [searchText, setSearchText] = React.useState("")
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [displayListLoaded, setDisplayListLoaded] = React.useState(false)
+  const displayLoadSeqRef = React.useRef(0)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
   const [formSheetOpen, setFormSheetOpen] = React.useState(false)
   const fullListRef = React.useRef<EmployeeTableRow[]>([])
@@ -276,8 +278,12 @@ export default function EmployeesPage() {
 
   const loadEmployeeList = React.useCallback(
     async (opts?: { updateDisplay?: boolean }, callback?: () => void) => {
-      setLoading(true)
-      setLoadError(null)
+      const updateDisplay = opts?.updateDisplay !== false
+      const seq = updateDisplay ? ++displayLoadSeqRef.current : 0
+      if (updateDisplay) {
+        setLoading(true)
+        setLoadError(null)
+      }
       try {
         const [listRes, gradesRes] = await Promise.all([
           getAdminEmployeeList({ userStore, userRole }),
@@ -287,23 +293,27 @@ export default function EmployeesPage() {
         const storeList = (listRes as { stores?: string[] }).stores || []
         const jobOpts = (listRes as { jobOptions?: string[] }).jobOptions || []
         const debug = (listRes as { _debug?: Record<string, unknown> })._debug
-        setStores(storeList)
-        setApiJobOptions(jobOpts)
+        if (updateDisplay) {
+          setStores(storeList)
+          setApiJobOptions(jobOpts)
 
-        if (list.length === 0 && debug) {
-          const samples = debug.sampleStores
-            ? t("emp_list_debug_sample_stores").replace(
-                "{stores}",
-                JSON.stringify(debug.sampleStores)
-              )
-            : ""
-          const extra = debug.hint ? ` ${String(debug.hint)}` : ""
-          setLoadError(
-            `${t("emp_list_debug_prefix")} userStore="${String(debug.userStore ?? "")}" userRole="${String(debug.userRole ?? "")}" role="${String(debug.role ?? "")}" ` +
-              t("emp_list_debug_db_rows").replace("{rows}", String(debug.totalRowsFromDb ?? 0)) +
-              samples +
-              extra
-          )
+          if (list.length === 0 && debug) {
+            const samples = debug.sampleStores
+              ? t("emp_list_debug_sample_stores").replace(
+                  "{stores}",
+                  JSON.stringify(debug.sampleStores)
+                )
+              : ""
+            const extra = debug.hint ? ` ${String(debug.hint)}` : ""
+            setLoadError(
+              `${t("emp_list_debug_prefix")} userStore="${String(debug.userStore ?? "")}" userRole="${String(debug.userRole ?? "")}" role="${String(debug.role ?? "")}" ` +
+                t("emp_list_debug_db_rows").replace("{rows}", String(debug.totalRowsFromDb ?? 0)) +
+                samples +
+                extra
+            )
+          }
+        } else {
+          setApiJobOptions(jobOpts)
         }
 
         const merged: EmployeeTableRow[] = list.map((e) => {
@@ -355,7 +365,10 @@ export default function EmployeesPage() {
           setLoadError(t("emp_list_load_failed").replace("{msg}", msg))
         }
       } finally {
-        setLoading(false)
+        if (updateDisplay && seq === displayLoadSeqRef.current) {
+          setDisplayListLoaded(true)
+          setLoading(false)
+        }
       }
     },
     [userStore, userRole, t]
@@ -467,6 +480,7 @@ export default function EmployeesPage() {
 
   const handleSearch = () => {
     setHasSearched(true)
+    setDisplayListLoaded(false)
     loadEmployeeList({ updateDisplay: true })
   }
 
@@ -681,7 +695,7 @@ export default function EmployeesPage() {
               ) : (
                 <EmployeeTable
                   rows={filteredRows}
-                  loading={loading}
+                  loading={loading || (hasSearched && !displayListLoaded)}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   t={t}
