@@ -34,7 +34,11 @@ import {
   validateMemberPortalImageByRule,
   memberPortalImageUploadCatchMessage,
 } from "@/lib/member-portal-content-image-rules"
-import { uploadMemberPortalContentImageToStorage } from "@/lib/member-portal-image-upload"
+import {
+  uploadMemberPortalContentImageToStorage,
+  verifyMemberPortalImagePublicUrl,
+  withMemberPortalImageCacheBust,
+} from "@/lib/member-portal-image-upload"
 
 export default function CrmMemberAppContentPage() {
   const { auth } = useAuth()
@@ -107,6 +111,8 @@ export default function CrmMemberAppContentPage() {
   const [pickupSaving, setPickupSaving] = React.useState(false)
   const [designSaving, setDesignSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
+  const [previewReloadKey, setPreviewReloadKey] = React.useState(0)
+  const [imagePreviewNonce, setImagePreviewNonce] = React.useState(0)
   const [notice, setNotice] = React.useState("")
   const [error, setError] = React.useState("")
 
@@ -576,33 +582,42 @@ export default function CrmMemberAppContentPage() {
     }
   }, [loadPrepaySettings, pickupLineNotifyEnabled, pickupMinLeadMinutes, pickupStoreMinLead, t])
 
+  const persistDesignSettings = React.useCallback(
+    async (urls: { loginBackgroundUrl: string; appBackgroundUrl: string }) => {
+      const res = await apiFetch("/api/member-portal/admin/settings/design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(urls),
+      })
+      const data = (await res.json()) as { success: boolean; message?: string }
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || t("mpAdmin_errDesignSave"))
+      }
+    },
+    [t]
+  )
+
   const saveDesignSettings = React.useCallback(async () => {
     setDesignSaving(true)
     setError("")
     setNotice("")
     try {
-      const res = await apiFetch("/api/member-portal/admin/settings/design", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loginBackgroundUrl, appBackgroundUrl }),
-      })
-      const data = (await res.json()) as { success: boolean; message?: string }
-      if (!res.ok || !data.success) {
-        setError(data.message || t("mpAdmin_errDesignSave"))
-        return
-      }
+      await persistDesignSettings({ loginBackgroundUrl, appBackgroundUrl })
       setNotice(t("mpAdmin_noticeDesignSaved"))
       await loadDesignSettings()
-    } catch {
-      setError(t("mpAdmin_errDesignSaveGeneric"))
+      setPreviewReloadKey((k) => k + 1)
+      setImagePreviewNonce((n) => n + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("mpAdmin_errDesignSaveGeneric"))
     } finally {
       setDesignSaving(false)
     }
-  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl, t])
+  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl, persistDesignSettings, t])
 
   const uploadDesignImage = React.useCallback(async (file: File, target: "login" | "app") => {
     setUploading(true)
     setError("")
+    setNotice("")
     try {
       const size = await readMemberPortalImageSize(file)
       const ruleKey = target === "login" ? "login" : "app"
@@ -613,26 +628,48 @@ export default function CrmMemberAppContentPage() {
         return
       }
 
-      const presignRes = await uploadMemberPortalContentImageToStorage(file)
-      if (!presignRes.ok) {
+      const uploaded = await uploadMemberPortalContentImageToStorage(file)
+      if (!uploaded.ok) {
         setError(
-          presignRes.message === "UPLOAD_PRESIGN_FAIL"
+          uploaded.message === "UPLOAD_PRESIGN_FAIL"
             ? t("mpAdmin_errImagePresign")
-            : presignRes.message.startsWith("STORAGE_PUT_FAIL_")
+            : uploaded.message.startsWith("STORAGE_PUT_FAIL_")
               ? t("mpAdmin_errImageUpload")
-              : presignRes.message || t("mpAdmin_errImageUpload")
+              : uploaded.message || t("mpAdmin_errImageUpload")
         )
         return
       }
-      if (target === "login") setLoginBackgroundUrl(presignRes.publicUrl || "")
-      if (target === "app") setAppBackgroundUrl(presignRes.publicUrl || "")
-      setNotice(t("mpAdmin_noticeImageUploadedSave"))
+
+      const newUrl = uploaded.publicUrl || ""
+      const readable = await verifyMemberPortalImagePublicUrl(newUrl)
+      if (!readable) {
+        setError(t("mpAdmin_errImageNotPublic"))
+        return
+      }
+
+      const nextLogin = target === "login" ? newUrl : loginBackgroundUrl
+      const nextApp = target === "app" ? newUrl : appBackgroundUrl
+      if (target === "login") setLoginBackgroundUrl(newUrl)
+      if (target === "app") setAppBackgroundUrl(newUrl)
+
+      await persistDesignSettings({
+        loginBackgroundUrl: nextLogin,
+        appBackgroundUrl: nextApp,
+      })
+      setImagePreviewNonce((n) => n + 1)
+      setPreviewReloadKey((k) => k + 1)
+      setNotice(
+        tr(t, "mpAdmin_noticeDesignBgUploadedAndSaved", {
+          target: target === "login" ? t("mpAdmin_loginBgUrl") : t("mpAdmin_appBgUrl"),
+        })
+      )
+      await loadDesignSettings()
     } catch (e) {
-      setError(memberPortalImageUploadCatchMessage(t, e))
+      setError(e instanceof Error ? e.message : memberPortalImageUploadCatchMessage(t, e))
     } finally {
       setUploading(false)
     }
-  }, [t])
+  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl, persistDesignSettings, t])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -718,7 +755,7 @@ export default function CrmMemberAppContentPage() {
           </AdminTabsBarWithHelp>
 
           <TabsContent value="design" className={cn(adminTabsContentCn, "space-y-4")}>
-            <CrmMemberAppPreview />
+            <CrmMemberAppPreview reloadKey={previewReloadKey} />
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_designTitle")}</CardTitle>
@@ -737,12 +774,16 @@ export default function CrmMemberAppContentPage() {
                     <CrmImageUploadField
                       disabled={!canEdit}
                       uploading={uploading}
-                      previewUrl={loginBackgroundUrl}
+                      previewUrl={withMemberPortalImageCacheBust(loginBackgroundUrl, imagePreviewNonce)}
                       alt={t("mpAdmin_loginBgAlt")}
                       onFile={(file) => void uploadDesignImage(file, "login")}
                     />
                     {loginBackgroundUrl ? (
-                      <img src={loginBackgroundUrl} alt={t("mpAdmin_loginBgAlt")} className="h-28 w-full rounded object-cover" />
+                      <img
+                        src={withMemberPortalImageCacheBust(loginBackgroundUrl, imagePreviewNonce)}
+                        alt={t("mpAdmin_loginBgAlt")}
+                        className="h-28 w-full rounded object-cover"
+                      />
                     ) : null}
                   </div>
                   <div className="space-y-2 rounded-lg border p-3">
@@ -755,12 +796,16 @@ export default function CrmMemberAppContentPage() {
                     <CrmImageUploadField
                       disabled={!canEdit}
                       uploading={uploading}
-                      previewUrl={appBackgroundUrl}
+                      previewUrl={withMemberPortalImageCacheBust(appBackgroundUrl, imagePreviewNonce)}
                       alt={t("mpAdmin_appBgAlt")}
                       onFile={(file) => void uploadDesignImage(file, "app")}
                     />
                     {appBackgroundUrl ? (
-                      <img src={appBackgroundUrl} alt={t("mpAdmin_appBgAlt")} className="h-28 w-full rounded object-cover" />
+                      <img
+                        src={withMemberPortalImageCacheBust(appBackgroundUrl, imagePreviewNonce)}
+                        alt={t("mpAdmin_appBgAlt")}
+                        className="h-28 w-full rounded object-cover"
+                      />
                     ) : null}
                   </div>
                 </div>

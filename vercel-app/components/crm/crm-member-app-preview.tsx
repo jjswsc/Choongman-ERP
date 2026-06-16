@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-export function CrmMemberAppPreview() {
+export function CrmMemberAppPreview({ reloadKey = 0 }: { reloadKey?: number }) {
   const { lang } = useLang()
   const t = useT(lang)
-  const src = `/m?preview=1&lang=${encodeURIComponent(lang)}`
+  const src = `/m?preview=1&lang=${encodeURIComponent(lang)}&v=${reloadKey}`
   return (
     <div className="rounded-xl border bg-muted/20 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -29,6 +29,7 @@ export function CrmMemberAppPreview() {
         style={{ aspectRatio: "390 / 844", maxHeight: "min(72vh, 640px)" }}
       >
         <iframe
+          key={reloadKey}
           title={t("crmMemberAppPreview")}
           src={src}
           className="absolute inset-0 h-full w-full border-0"

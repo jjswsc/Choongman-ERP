@@ -88,3 +88,30 @@ export async function uploadMemberPortalContentImageToStorage(
 
   return { ok: true, publicUrl: presign.publicUrl }
 }
+
+/** 업로드 직후 public URL 로딩 가능 여부 확인 (버킷 공개·CORS 문제 조기 발견) */
+export function verifyMemberPortalImagePublicUrl(url: string, timeoutMs = 15000): Promise<boolean> {
+  const trimmed = String(url || '').trim()
+  if (!trimmed || typeof window === 'undefined') return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const img = new window.Image()
+    const timer = window.setTimeout(() => resolve(false), timeoutMs)
+    img.onload = () => {
+      window.clearTimeout(timer)
+      resolve(true)
+    }
+    img.onerror = () => {
+      window.clearTimeout(timer)
+      resolve(false)
+    }
+    const sep = trimmed.includes('?') ? '&' : '?'
+    img.src = `${trimmed}${sep}verify=${Date.now()}`
+  })
+}
+
+export function withMemberPortalImageCacheBust(url: string, nonce: number): string {
+  const trimmed = String(url || '').trim()
+  if (!trimmed || nonce <= 0) return trimmed
+  const sep = trimmed.includes('?') ? '&' : '?'
+  return `${trimmed}${sep}v=${nonce}`
+}

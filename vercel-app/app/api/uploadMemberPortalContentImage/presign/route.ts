@@ -3,6 +3,7 @@ import {
   MEMBER_PORTAL_IMAGE_MIME_TYPES,
   normalizeMemberPortalImageContentType,
 } from '@/lib/member-portal-image-upload'
+import { getMemberPortalContentStorageBucket } from '@/lib/member-portal-storage-bucket'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 import { randomStorageObjectBasename } from '@/lib/storage-filename-safe'
 import {
@@ -12,7 +13,7 @@ import {
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 
-const BUCKET = 'member-portal-content'
+const BUCKET = getMemberPortalContentStorageBucket()
 const MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED_MIME = new Set<string>(MEMBER_PORTAL_IMAGE_MIME_TYPES)
 
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            'Supabase Storage 버킷 "member-portal-content"를 확인하세요. (Supabase 대시보드 > Storage)',
+            `Supabase Storage 버킷 "${BUCKET}"를 확인하세요. (Supabase 대시보드 > Storage)`,
         },
         { status: 400 }
       )
