@@ -9,6 +9,7 @@ import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { ErpNavigationProvider } from "@/lib/erp-navigation"
 import { ErpKeepAliveDebug } from "@/components/erp/erp-keep-alive-debug"
+import { AdminDashboardStatsProvider } from "@/lib/use-admin-dashboard-stats"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -18,19 +19,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <StoreViewProvider>
-      <ErpNavigationProvider>
-        <SidebarProvider>
-          <ErpSidebar />
-          <SidebarInset>
-            <ErpHeader />
-            <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
-            <Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
-              <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>
-            </Suspense>
-            <ErpKeepAliveDebug />
-          </SidebarInset>
-        </SidebarProvider>
-      </ErpNavigationProvider>
+      <AdminDashboardStatsProvider>
+        <ErpNavigationProvider>
+          <SidebarProvider>
+            <ErpSidebar />
+            <SidebarInset>
+              <ErpHeader />
+              <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
+              <Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
+                <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>
+              </Suspense>
+              <ErpKeepAliveDebug />
+            </SidebarInset>
+          </SidebarProvider>
+        </ErpNavigationProvider>
+      </AdminDashboardStatsProvider>
     </StoreViewProvider>
   )
 }

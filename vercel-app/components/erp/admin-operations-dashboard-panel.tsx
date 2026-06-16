@@ -23,7 +23,7 @@ export function AdminOperationsDashboardPanel() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stats } = useAdminDashboardStats({ poll: true })
+  const { stats } = useAdminDashboardStats()
 
   return (
     <>

@@ -5,6 +5,7 @@ import {
   buildKitchenCartLinesFromSnapshotDelta,
   collectDineInSnapshotIncreasedKeys,
   filterKitchenCartLinesForDineInAdd,
+  kitchenSlipSourceItemsForAddOrderReceipt,
   resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
@@ -184,5 +185,30 @@ describe('buildDineInAddKitchenPrintDedupeSuffix', () => {
     expect(buildDineInAddKitchenAutoPrintDedupeKey(58, lines)).toBe(
       'order:58:kitchen:add:m:44@1:'
     )
+  })
+})
+
+describe('kitchenSlipSourceItemsForAddOrderReceipt', () => {
+  it('returns all items for order context', () => {
+    const items = [
+      { id: '1', name: 'A', isAddon: false },
+      { id: '2', name: 'B', isAddon: true },
+    ]
+    expect(kitchenSlipSourceItemsForAddOrderReceipt(items, 'order')).toEqual(items)
+  })
+
+  it('returns only isAddon lines for add_order context', () => {
+    const items = [
+      { id: '1', name: 'A', isAddon: false },
+      { id: '2', name: 'B', isAddon: true },
+    ]
+    expect(kitchenSlipSourceItemsForAddOrderReceipt(items, 'add_order')).toEqual([
+      { id: '2', name: 'B', isAddon: true },
+    ])
+  })
+
+  it('returns empty for add_order when no isAddon flags', () => {
+    const items = [{ id: '1', name: 'A' }]
+    expect(kitchenSlipSourceItemsForAddOrderReceipt(items, 'add_order')).toEqual([])
   })
 })

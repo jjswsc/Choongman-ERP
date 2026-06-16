@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { getAdminDashboardStats, type AdminDashboardStats } from "@/lib/api-client"
 import { useErpPolling } from "@/lib/erp-page-visibility"
@@ -15,7 +16,15 @@ const EMPTY_STATS: AdminDashboardStats = {
 /** 사이드바 배지용 — 120s 간격, keep-alive 숨김·백그라운드 탭에서는 폴링 중지 */
 const REFRESH_MS = 120_000
 
-export function useAdminDashboardStats(options?: { poll?: boolean }) {
+type AdminDashboardStatsContextValue = {
+  stats: AdminDashboardStats
+  refetch: () => Promise<void>
+}
+
+const AdminDashboardStatsContext = React.createContext<AdminDashboardStatsContextValue | null>(null)
+
+/** 관리자 셸에서 1회만 폴링 — 사이드바·대시보드·실시간 매출이 공유 */
+export function AdminDashboardStatsProvider({ children }: { children: React.ReactNode }) {
   const [stats, setStats] = useState<AdminDashboardStats>(EMPTY_STATS)
 
   const load = useCallback(() => {
@@ -30,8 +39,8 @@ export function useAdminDashboardStats(options?: { poll?: boolean }) {
   }, [load])
 
   useErpPolling(load, REFRESH_MS, {
-    enabled: options?.poll,
-    refetchOnActivate: options?.poll,
+    enabled: true,
+    refetchOnActivate: true,
   })
 
   const refetch = useCallback(() => {
@@ -40,5 +49,31 @@ export function useAdminDashboardStats(options?: { poll?: boolean }) {
       .catch(() => {})
   }, [])
 
-  return { stats, refetch }
+  const value = React.useMemo(() => ({ stats, refetch }), [stats, refetch])
+
+  return React.createElement(AdminDashboardStatsContext.Provider, { value }, children)
+}
+
+/**
+ * @param options.poll — deprecated, 무시됨. 폴링은 AdminDashboardStatsProvider 단일 인스턴스만 수행.
+ */
+export function useAdminDashboardStats(_options?: { poll?: boolean }) {
+  const ctx = React.useContext(AdminDashboardStatsContext)
+  const [fallbackStats, setFallbackStats] = useState<AdminDashboardStats>(EMPTY_STATS)
+
+  useEffect(() => {
+    if (ctx) return
+    getAdminDashboardStats()
+      .then(setFallbackStats)
+      .catch(() => {})
+  }, [ctx])
+
+  const fallbackRefetch = useCallback(() => {
+    return getAdminDashboardStats()
+      .then(setFallbackStats)
+      .catch(() => {})
+  }, [])
+
+  if (ctx) return ctx
+  return { stats: fallbackStats, refetch: fallbackRefetch }
 }

@@ -9301,6 +9301,12 @@ export default function PosTerminalPage() {
                     existingItemsBeforeAdd,
                     incomingItems
                   )
+                  if (isMainPosDevice) {
+                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                      existingTakeoutId,
+                      Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
+                    )
+                  }
                   const updateRes = await updatePosOrder({
                     id: existingTakeoutId,
                     terminalStoreCode: currentStoreId,

@@ -52,7 +52,7 @@ export default function AdminLiveStoreSalesPage() {
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(role) || isOfficeStore(auth?.store || ""))
 
-  const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
+  const { stats: dashboardStats } = useAdminDashboardStats()
 
   const canFranchiseeAll = canFranchiseeAggregateAllowedStores(
     auth?.role,

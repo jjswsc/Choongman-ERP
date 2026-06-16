@@ -267,3 +267,15 @@ export function resolveDineInKitchenLinesForAddSubmit<T extends KitchenComparabl
 ): T[] {
   return filterKitchenCartLinesForDineInAdd(incomingLines, existingOrderItems, opts)
 }
+
+/**
+ * 영수증 모달·수동 주방 인쇄 — 추가 주문(`add_order`) 맥락에서는 `isAddon` 줄만 주방에 보낸다.
+ * 플래그가 없으면 추가분을 구분할 수 없어 빈 배열(인쇄 생략).
+ */
+export function kitchenSlipSourceItemsForAddOrderReceipt<T extends { isAddon?: boolean }>(
+  items: T[],
+  receiptAutoPrintContext?: string | null
+): T[] {
+  if (String(receiptAutoPrintContext ?? '').trim() !== 'add_order') return items
+  return items.filter((it) => it.isAddon === true)
+}

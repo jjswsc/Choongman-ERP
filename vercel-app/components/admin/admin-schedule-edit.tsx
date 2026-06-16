@@ -711,7 +711,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {timeOptions.slice(16, 48).map((tm) => (
+                {timeOptions.slice(12, 48).map((tm) => (
                   <SelectItem key={tm} value={tm}>{tm}</SelectItem>
                 ))}
               </SelectContent>

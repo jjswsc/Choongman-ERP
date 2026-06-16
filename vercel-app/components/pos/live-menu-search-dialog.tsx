@@ -35,6 +35,8 @@ import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
 import { CheckCircle2 } from 'lucide-react'
 
+const ORDERS_POLL_MS = 60_000
+
 interface LiveMenuSearchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -235,6 +237,8 @@ export function LiveMenuSearchDialog({
   const [servingMap, setServingMap] = React.useState<Record<string, boolean>>({})
   const [servingBusyMap, setServingBusyMap] = React.useState<Record<string, boolean>>({})
   const [demoSeeded, setDemoSeeded] = React.useState(false)
+  const menusRef = React.useRef<PosMenu[]>([])
+  menusRef.current = menus
 
   const getTypeLabel = React.useCallback((orderType: string) => {
     if (orderType === 'dine_in') return t('posOrderTypeDineIn') || 'Dine In'
@@ -247,6 +251,33 @@ export function LiveMenuSearchDialog({
   const cookingLabel = t('posTableStatusPreparing') || 'Preparing'
   const servedLabel = t('posTableStatusServed') || 'Served'
   const serveActionLabel = t('posServeAction') || 'Serve'
+
+  const applyOrderList = React.useCallback(
+    (orderList: PosOrder[] | null | undefined, activeMenusForDemo: PosMenu[]) => {
+      const realOrders = (orderList || []).filter((o) => o.status !== 'cancelled')
+      if (isDemo) {
+        const seeded = buildDemoSampleOrders(activeMenusForDemo, storeCode)
+        if (seeded.length > 0) {
+          setOrders(seeded)
+          setDemoSeeded(true)
+          const initialMenuId = pickInitialMenuIdForRows(activeMenusForDemo, seeded) || DEMO_TRAINING_MENU_ID
+          if (initialMenuId) {
+            setSelectedMenuId((prev) => {
+              if (prev && activeMenusForDemo.some((m) => String(m.id) === String(prev))) return prev
+              return initialMenuId
+            })
+          }
+        } else {
+          setOrders(realOrders)
+          setDemoSeeded(false)
+        }
+      } else {
+        setOrders(realOrders)
+        setDemoSeeded(false)
+      }
+    },
+    [isDemo, storeCode]
+  )
 
   const loadAll = React.useCallback(async () => {
     if (!storeCode) return
@@ -275,31 +306,31 @@ export function LiveMenuSearchDialog({
       }
       setMenus(activeMenus)
       setMainCategories(mains)
-      const realOrders = (orderList || []).filter((o) => o.status !== 'cancelled')
-      if (isDemo) {
-        const seeded = buildDemoSampleOrders(activeMenus, storeCode)
-        if (seeded.length > 0) {
-          setOrders(seeded)
-          setDemoSeeded(true)
-          const initialMenuId = pickInitialMenuIdForRows(activeMenus, seeded) || DEMO_TRAINING_MENU_ID
-          if (initialMenuId) {
-            setSelectedMenuId((prev) => {
-              if (prev && activeMenus.some((m) => String(m.id) === String(prev))) return prev
-              return initialMenuId
-            })
-          }
-        } else {
-          setOrders(realOrders)
-          setDemoSeeded(false)
-        }
-      } else {
-        setOrders(realOrders)
-        setDemoSeeded(false)
-      }
+      applyOrderList(orderList, activeMenus)
     } finally {
       setLoading(false)
     }
-  }, [isDemo, storeCode])
+  }, [applyOrderList, isDemo, storeCode])
+
+  const loadOrdersOnly = React.useCallback(async () => {
+    if (!storeCode) return
+    const activeMenus = menusRef.current
+    if (!activeMenus.length) return
+    try {
+      const today = getPosBusinessDateStr()
+      const orderList = await getPosOrders({
+        storeCode,
+        startStr: today,
+        endStr: today,
+        posBizDayScope: true,
+        pollMinimal: true,
+        limit: 500,
+      })
+      applyOrderList(orderList, activeMenus)
+    } catch {
+      /* ignore poll errors */
+    }
+  }, [storeCode, applyOrderList])
 
   React.useEffect(() => {
     if (!open) return
@@ -309,10 +340,10 @@ export function LiveMenuSearchDialog({
   React.useEffect(() => {
     if (!open) return
     const timer = window.setInterval(() => {
-      void loadAll()
-    }, 15000)
+      void loadOrdersOnly()
+    }, ORDERS_POLL_MS)
     return () => window.clearInterval(timer)
-  }, [open, loadAll])
+  }, [open, loadOrdersOnly])
 
   const categoriesForMain = React.useMemo(() => {
     if (!selectedMain) return []

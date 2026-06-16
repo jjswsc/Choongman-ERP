@@ -32,7 +32,7 @@ export function AdminHomeDashboard() {
   const tr = (key: string, fallback: string) => tOr(t, key, fallback)
   const role = auth?.role || ""
   const isLogisticsHome = prefersLogisticsOperationsDashboard(role)
-  const { stats: dashboardStats } = useAdminDashboardStats({ poll: isLogisticsHome })
+  const { stats: dashboardStats } = useAdminDashboardStats()
   const showMobileSales = Boolean(auth) && canViewMobileStoreSales(role)
 
   const quickLinks: QuickLink[] = [

@@ -36,6 +36,8 @@ export async function GET() {
 
     const thisMonthOutbound = outboundCount + forceOutboundCount
 
+    headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=120')
+
     return NextResponse.json(
       {
         unapprovedOrders,

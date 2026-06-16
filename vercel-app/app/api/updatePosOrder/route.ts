@@ -550,10 +550,7 @@ export async function POST(req: NextRequest) {
       payload: {
         action: 'update_order',
         status,
-        ...(String(current?.order_type ?? '').trim().toLowerCase() === 'dine_in' &&
-        kitchenDeltaLines.length > 0
-          ? { kitchenLines: kitchenDeltaLines }
-          : {}),
+        ...(kitchenDeltaLines.length > 0 ? { kitchenLines: kitchenDeltaLines } : {}),
       },
     })
 

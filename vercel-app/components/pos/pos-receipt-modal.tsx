@@ -23,6 +23,7 @@ import {
 } from '@/lib/pos-kitchen-slip-routing'
 import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
+import { kitchenSlipSourceItemsForAddOrderReceipt } from '@/lib/pos-kitchen-dine-in-delta'
 import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
@@ -370,6 +371,14 @@ export function PosReceiptModal({
 
   const handlePrintKitchenSlip = async (preferSystemPrintDialog = false) => {
     if (!receiptData || !receiptData.storeCode) return
+    const kitchenReceiptItems = kitchenSlipSourceItemsForAddOrderReceipt(
+      receiptData.items,
+      receiptData.receiptAutoPrintContext
+    )
+    if (kitchenReceiptItems.length === 0) {
+      await appAlert(t('posKitchenNoItemsToPrint') || '주방으로 출력할 품목이 없습니다.')
+      return
+    }
     try {
       const settings =
         printerSettingsRef?.current ??
@@ -378,7 +387,7 @@ export function PosReceiptModal({
       // 세트/프로모 구성품 메뉴는 매장 판매목록(스코프)에 없을 수 있어 #ID 로 찍힌다.
       // 구성품 menuId 를 모아 매장 스코프 → 전역(스코프 없음) 카탈로그로 이름을 보강한다.
       const preparedForIds = preparePosOrderItemsForKitchenSlip(
-        receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        kitchenReceiptItems as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
         { ...kitchenPromoLineEnrich, menus }
       )
       const neededMenuIds = new Set<string>()
@@ -418,7 +427,7 @@ export function PosReceiptModal({
         }
       }
       const itemsForKitchen = preparePosOrderItemsForKitchenSlip(
-        receiptData.items as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
+        kitchenReceiptItems as unknown as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
         { ...kitchenPromoLineEnrich, menus: menusForPrint }
       ) as ReceiptModalData['items']
       const slips = buildKitchenSlipGroups(

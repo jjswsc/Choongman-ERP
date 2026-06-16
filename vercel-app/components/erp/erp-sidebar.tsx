@@ -337,7 +337,7 @@ export function ErpSidebar() {
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
   const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
   const [storeOpsTotals, setStoreOpsTotals] = React.useState<StoreOpsAlertSummary | null>(null)
-  const { stats: dashboardStats } = useAdminDashboardStats({ poll: true })
+  const { stats: dashboardStats } = useAdminDashboardStats()
   const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
   const aiModuleEnabled = useAiCenterModuleEnabled()
   const saasModules = useSaasEnabledModules()
