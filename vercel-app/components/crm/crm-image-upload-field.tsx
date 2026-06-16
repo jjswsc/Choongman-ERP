@@ -34,6 +34,7 @@ export function CrmImageUploadField({
         disabled={disabled || uploading}
         onChange={(e) => {
           const file = e.target.files?.[0]
+          e.target.value = ""
           if (file) onFile(file)
         }}
       />

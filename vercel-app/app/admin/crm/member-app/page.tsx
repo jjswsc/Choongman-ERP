@@ -28,13 +28,13 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
 import { canEditMemberPortalAdmin, hasOfficeStaffScope } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
-import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 import {
   MEMBER_PORTAL_CONTENT_IMAGE_RULES,
   readMemberPortalImageSize,
   validateMemberPortalImageByRule,
   memberPortalImageUploadCatchMessage,
 } from "@/lib/member-portal-content-image-rules"
+import { uploadMemberPortalContentImageToStorage } from "@/lib/member-portal-image-upload"
 
 export default function CrmMemberAppContentPage() {
   const { auth } = useAuth()
@@ -613,32 +613,19 @@ export default function CrmMemberAppContentPage() {
         return
       }
 
-      const presignRes = await apiFetch("/api/uploadMemberPortalContentImage/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type || "image/jpeg",
-          fileSize: file.size,
-        }),
-      })
-      const presign = (await presignRes.json()) as {
-        success: boolean
-        message?: string
-        signedUrl?: string
-        publicUrl?: string
-      }
-      if (!presignRes.ok || !presign.success || !presign.signedUrl || !presign.publicUrl) {
-        setError(presign.message || t("mpAdmin_errImagePresign"))
+      const presignRes = await uploadMemberPortalContentImageToStorage(file)
+      if (!presignRes.ok) {
+        setError(
+          presignRes.message === "UPLOAD_PRESIGN_FAIL"
+            ? t("mpAdmin_errImagePresign")
+            : presignRes.message.startsWith("STORAGE_PUT_FAIL_")
+              ? t("mpAdmin_errImageUpload")
+              : presignRes.message || t("mpAdmin_errImageUpload")
+        )
         return
       }
-      const putRes = await putFileToSupabaseSignedUploadUrl(presign.signedUrl, file, { timeoutMs: 180000 })
-      if (!putRes.ok) {
-        setError(t("mpAdmin_errImageUpload"))
-        return
-      }
-      if (target === "login") setLoginBackgroundUrl(presign.publicUrl || "")
-      if (target === "app") setAppBackgroundUrl(presign.publicUrl || "")
+      if (target === "login") setLoginBackgroundUrl(presignRes.publicUrl || "")
+      if (target === "app") setAppBackgroundUrl(presignRes.publicUrl || "")
       setNotice(t("mpAdmin_noticeImageUploadedSave"))
     } catch (e) {
       setError(memberPortalImageUploadCatchMessage(t, e))

@@ -17,7 +17,6 @@ import {
 } from "@/lib/member-portal-content-admin"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
-import { putFileToSupabaseSignedUploadUrl } from "@/lib/storage-client-upload"
 import {
   formatMemberPortalContentImageHint,
   memberPortalImageUploadCatchMessage,
@@ -25,6 +24,7 @@ import {
   resolveMemberPortalContentImageRule,
   validateMemberPortalImageByRule,
 } from "@/lib/member-portal-content-image-rules"
+import { uploadMemberPortalContentImageToStorage } from "@/lib/member-portal-image-upload"
 
 type ContentType = "popup" | "info" | "store_photo"
 
@@ -321,31 +321,18 @@ export function MemberPortalContentAdminPanel({
           return
         }
 
-        const presignRes = await apiFetch("/api/uploadMemberPortalContentImage/presign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileName: file.name,
-            contentType: file.type || "image/jpeg",
-            fileSize: file.size,
-          }),
-        })
-        const presign = (await presignRes.json()) as {
-          success: boolean
-          message?: string
-          signedUrl?: string
-          publicUrl?: string
-        }
-        if (!presignRes.ok || !presign.success || !presign.signedUrl || !presign.publicUrl) {
-          onError(presign.message || t("mpAdmin_errImagePresign"))
+        const uploaded = await uploadMemberPortalContentImageToStorage(file)
+        if (!uploaded.ok) {
+          onError(
+            uploaded.message === "UPLOAD_PRESIGN_FAIL"
+              ? t("mpAdmin_errImagePresign")
+              : uploaded.message.startsWith("STORAGE_PUT_FAIL_")
+                ? t("mpAdmin_errImageUpload")
+                : uploaded.message || t("mpAdmin_errImageUpload")
+          )
           return
         }
-        const putRes = await putFileToSupabaseSignedUploadUrl(presign.signedUrl, file, { timeoutMs: 180000 })
-        if (!putRes.ok) {
-          onError(t("mpAdmin_errImageUpload"))
-          return
-        }
-        setForm((prev) => ({ ...prev, imageUrl: presign.publicUrl || "" }))
+        setForm((prev) => ({ ...prev, imageUrl: uploaded.publicUrl || "" }))
         onNotice(t("mpAdmin_noticeImageUploaded"))
       } catch (e) {
         onError(memberPortalImageUploadCatchMessage(t, e))
@@ -454,7 +441,7 @@ export function MemberPortalContentAdminPanel({
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   className="sr-only"
-                  disabled={uploading}
+                  disabled={!canEdit || uploading}
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) void onUploadImage(file)
