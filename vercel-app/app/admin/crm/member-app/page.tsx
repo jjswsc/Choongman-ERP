@@ -182,7 +182,7 @@ export default function CrmMemberAppContentPage() {
 
   const loadDesignSettings = React.useCallback(async () => {
     try {
-      const res = await apiFetch("/api/member-portal/admin/settings/design", { cache: "no-store" })
+      const res = await apiFetch(`/api/member-portal/admin/settings/design?_=${Date.now()}`, { cache: "no-store" })
       const data = (await res.json()) as {
         success: boolean
         loginBackgroundUrl?: string
@@ -589,9 +589,18 @@ export default function CrmMemberAppContentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(urls),
       })
-      const data = (await res.json()) as { success: boolean; message?: string }
+      const data = (await res.json()) as {
+        success: boolean
+        message?: string
+        loginBackgroundUrl?: string
+        appBackgroundUrl?: string
+      }
       if (!res.ok || !data.success) {
         throw new Error(data.message || t("mpAdmin_errDesignSave"))
+      }
+      return {
+        loginBackgroundUrl: String(data.loginBackgroundUrl ?? urls.loginBackgroundUrl ?? ""),
+        appBackgroundUrl: String(data.appBackgroundUrl ?? urls.appBackgroundUrl ?? ""),
       }
     },
     [t]
@@ -602,9 +611,10 @@ export default function CrmMemberAppContentPage() {
     setError("")
     setNotice("")
     try {
-      await persistDesignSettings({ loginBackgroundUrl, appBackgroundUrl })
+      const saved = await persistDesignSettings({ loginBackgroundUrl, appBackgroundUrl })
+      setLoginBackgroundUrl(saved.loginBackgroundUrl)
+      setAppBackgroundUrl(saved.appBackgroundUrl)
       setNotice(t("mpAdmin_noticeDesignSaved"))
-      await loadDesignSettings()
       setPreviewReloadKey((k) => k + 1)
       setImagePreviewNonce((n) => n + 1)
     } catch (e) {
@@ -612,7 +622,7 @@ export default function CrmMemberAppContentPage() {
     } finally {
       setDesignSaving(false)
     }
-  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl, persistDesignSettings, t])
+  }, [appBackgroundUrl, loginBackgroundUrl, persistDesignSettings, t])
 
   const uploadDesignImage = React.useCallback(async (file: File, target: "login" | "app") => {
     setUploading(true)
@@ -648,10 +658,12 @@ export default function CrmMemberAppContentPage() {
       if (target === "login") setLoginBackgroundUrl(newUrl)
       if (target === "app") setAppBackgroundUrl(newUrl)
 
-      await persistDesignSettings({
+      const saved = await persistDesignSettings({
         loginBackgroundUrl: nextLogin,
         appBackgroundUrl: nextApp,
       })
+      setLoginBackgroundUrl(saved.loginBackgroundUrl)
+      setAppBackgroundUrl(saved.appBackgroundUrl)
       setImagePreviewNonce((n) => n + 1)
       setPreviewReloadKey((k) => k + 1)
       setNotice(
@@ -663,13 +675,12 @@ export default function CrmMemberAppContentPage() {
               target: target === "login" ? t("mpAdmin_loginBgUrl") : t("mpAdmin_appBgUrl"),
             })
       )
-      await loadDesignSettings()
     } catch (e) {
       setError(e instanceof Error ? e.message : memberPortalImageUploadCatchMessage(t, e))
     } finally {
       setUploading(false)
     }
-  }, [appBackgroundUrl, loadDesignSettings, loginBackgroundUrl, persistDesignSettings, t])
+  }, [appBackgroundUrl, loginBackgroundUrl, persistDesignSettings, t])
 
   return (
     <div className="flex-1 overflow-auto">

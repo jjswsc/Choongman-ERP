@@ -54,9 +54,10 @@ export function MemberPortalLoungeBackdrop({
     return (
       <div className={`pointer-events-none absolute inset-0 z-0 ${className}`}>
         <div
+          key={customFull}
           className="absolute inset-0 scale-105"
           style={{
-            backgroundImage: `url(${customFull})`,
+            backgroundImage: `url("${customFull.replace(/"/g, '\\"')}")`,
             ...MEMBER_PORTAL_BG_STYLE,
           }}
         />

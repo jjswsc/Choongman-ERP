@@ -1047,6 +1047,17 @@ export function ReceivablePayableTab() {
       ? t("recColCumulativeBalance") || tt("recColCumulativeBalance", "누적 잔액")
       : t("payColCumulativeBalance") || tt("payColCumulativeBalance", "누적 잔액")
 
+  const formatPriorBalanceHint = React.useCallback(
+    (prior: number | undefined) => {
+      if (prior == null || Math.abs(prior) <= 0.01) return null
+      const template = startStr
+        ? tt("ledgerPriorBalanceBeforeStart", "조회 시작({date}) 이전 ฿{amount}")
+        : tt("ledgerPriorBalanceBeforePeriod", "조회 기간 이전 ฿{amount}")
+      return template.replace("{date}", startStr).replace("{amount}", prior.toLocaleString())
+    },
+    [startStr, tt]
+  )
+
   const transactionLineRowKey = (
     mode: "pay" | "rec",
     row: { id?: number; ref_type?: string; ref_id?: number }
@@ -1476,9 +1487,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     </Button>
                     {hasSearchedList && !loading ? (
                       <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100%,420px)]">
+                        <span className="text-sm font-bold text-primary tabular-nums text-right">
+                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
+                        </span>
                         {listSearchTotals.count > 0 ? (
                           <>
-                            <span className="text-sm font-bold text-primary tabular-nums text-right">
+                            <span className="text-sm font-semibold tabular-nums text-right">
                               {t("recSearchTotalRemaining") || tt("recSearchTotalRemaining", "조회 기간 합계 (순잔액)")}: ฿
                               {listSearchTotals.balanceSum.toLocaleString()}
                             </span>
@@ -1488,9 +1502,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             </span>
                           </>
                         ) : null}
-                        <span className="text-sm font-semibold tabular-nums text-right">
-                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
-                        </span>
                       </div>
                     ) : null}
                   </div>
@@ -1549,10 +1560,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           {(t("recColRemainingReceivable") || "기간 순잔액")}
                         </div>
                         <div
-                          className="text-center tabular-nums"
+                          className="text-center tabular-nums text-primary"
                           title={tt(
                             "recCumulativeColHint",
-                            "출고처별 종료일 누적 미수잔액입니다. 아래 행을 더하는 합계가 아닙니다."
+                            "출고처별 종료일까지 전체 이력 합계입니다. 조회 시작일 이전 거래도 포함하며, 아래 기간 내역 합과 다를 수 있습니다."
                           )}
                         >
                           {cumulativeColLabel}
@@ -1567,6 +1578,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
+                          const priorBalanceHint = formatPriorBalanceHint(priorBal)
                           return (
                           <AccordionItem key={item.storeName!} value={item.storeName!}>
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
@@ -1582,17 +1594,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   </div>
                                   <div className="text-center tabular-nums">฿{period.salesSum.toLocaleString()}</div>
                                   <div className="text-center tabular-nums">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-bold text-primary">฿{period.periodNet.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-semibold">
+                                  <div className="text-center tabular-nums">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-bold text-primary">
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
-                                        {priorBal != null && priorBal > 0.01 ? (
+                                        {priorBalanceHint ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
-                                            {tt("recPriorBalanceSub", "이전 ฿{amount}").replace(
-                                              "{amount}",
-                                              priorBal.toLocaleString()
-                                            )}
+                                            {priorBalanceHint}
                                           </span>
                                         ) : null}
                                       </div>
@@ -2039,10 +2048,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
-                          <div className="text-center tabular-nums font-bold text-primary">
+                          <div className="text-center tabular-nums font-semibold">
                             ฿{listSearchTotals.balanceSum.toLocaleString()}
                           </div>
-                          <div className="text-center tabular-nums font-semibold">
+                          <div className="text-center tabular-nums font-bold text-primary">
                             ฿{(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount).toLocaleString()}
                           </div>
                         </div>
@@ -2128,9 +2137,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     </Button>
                     {hasSearchedList && !loading ? (
                       <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100%,420px)]">
+                        <span className="text-sm font-bold text-primary tabular-nums text-right">
+                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
+                        </span>
                         {listSearchTotals.count > 0 ? (
                           <>
-                            <span className="text-sm font-bold text-primary tabular-nums text-right">
+                            <span className="text-sm font-semibold tabular-nums text-right">
                               {t("paySearchTotalRemaining") || tt("paySearchTotalRemaining", "조회 기간 합계 (순잔액)")}: ฿
                               {listSearchTotals.balanceSum.toLocaleString()}
                             </span>
@@ -2140,9 +2152,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             </span>
                           </>
                         ) : null}
-                        <span className="text-sm font-semibold tabular-nums text-right">
-                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
-                        </span>
                       </div>
                     ) : null}
                   </div>
@@ -2168,10 +2177,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           {(t("payColRemainingPayable") || "기간 순잔액")}
                         </div>
                         <div
-                          className="text-center tabular-nums"
+                          className="text-center tabular-nums text-primary"
                           title={tt(
                             "payCumulativeColHint",
-                            "매입처별 종료일 누적 미지급잔액입니다. 아래 행을 더하는 합계가 아닙니다."
+                            "매입처별 종료일까지 전체 이력 합계입니다. 조회 시작일 이전 거래도 포함하며, 아래 기간 내역 합과 다를 수 있습니다."
                           )}
                         >
                           {cumulativeColLabel}
@@ -2186,6 +2195,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
+                          const priorBalanceHint = formatPriorBalanceHint(priorBal)
                           return (
                           <AccordionItem key={item.vendorCode!} value={item.vendorCode!}>
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
@@ -2196,17 +2206,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   </div>
                                   <div className="text-center tabular-nums">฿{period.salesSum.toLocaleString()}</div>
                                   <div className="text-center tabular-nums">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-bold text-primary">฿{period.periodNet.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-semibold">
+                                  <div className="text-center tabular-nums">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-bold text-primary">
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
-                                        {priorBal != null && priorBal > 0.01 ? (
+                                        {formatPriorBalanceHint(priorBal) ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
-                                            {tt("payPriorBalanceSub", "이전 ฿{amount}").replace(
-                                              "{amount}",
-                                              priorBal.toLocaleString()
-                                            )}
+                                            {formatPriorBalanceHint(priorBal)}
                                           </span>
                                         ) : null}
                                       </div>
@@ -2444,10 +2451,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
-                          <div className="text-center tabular-nums font-bold text-primary">
+                          <div className="text-center tabular-nums font-semibold">
                             ฿{listSearchTotals.balanceSum.toLocaleString()}
                           </div>
-                          <div className="text-center tabular-nums font-semibold">
+                          <div className="text-center tabular-nums font-bold text-primary">
                             ฿{(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount).toLocaleString()}
                           </div>
                         </div>

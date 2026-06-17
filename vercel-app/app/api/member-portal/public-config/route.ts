@@ -1,6 +1,10 @@
-import { NextResponse } from 'next/server'
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getSignupWelcomeCouponCode } from '@/lib/member-portal-signup-welcome-coupon'
+import {
+  MEMBER_PORTAL_SETTINGS_ROUTE_DYNAMIC,
+  MEMBER_PORTAL_SETTINGS_ROUTE_REVALIDATE,
+  memberPortalSettingsJsonResponse,
+} from '@/lib/member-portal-settings-route'
 import { readSystemSettingString } from '@/lib/system-settings-value'
 import {
   loadMemberPortalPrepayConfig,
@@ -8,6 +12,9 @@ import {
 } from '@/lib/member-portal-prepay-config'
 import { resolveMemberPortalPickupMinLeadMinutes } from '@/lib/member-portal-pickup-settings'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+
+export const dynamic = MEMBER_PORTAL_SETTINGS_ROUTE_DYNAMIC
+export const revalidate = MEMBER_PORTAL_SETTINGS_ROUTE_REVALIDATE
 
 const KEY_FACEBOOK = 'member_portal_contact_facebook_url'
 const KEY_INSTAGRAM = 'member_portal_contact_instagram_url'
@@ -35,7 +42,7 @@ export async function GET() {
     const prepayConfig = await loadMemberPortalPrepayConfig()
     const pickupMinLeadMinutes = await resolveMemberPortalPickupMinLeadMinutes()
 
-    return NextResponse.json({
+    return memberPortalSettingsJsonResponse({
       success: true,
       facebookUrl: map.get(KEY_FACEBOOK) || brand.memberContactFacebookUrl,
       instagramUrl: map.get(KEY_INSTAGRAM) || brand.memberContactInstagramUrl,
@@ -49,7 +56,7 @@ export async function GET() {
       pickupMinLeadMinutes,
     })
   } catch {
-    return NextResponse.json({
+    return memberPortalSettingsJsonResponse({
       success: true,
       facebookUrl: brand.memberContactFacebookUrl,
       instagramUrl: brand.memberContactInstagramUrl,
@@ -64,4 +71,3 @@ export async function GET() {
     })
   }
 }
-

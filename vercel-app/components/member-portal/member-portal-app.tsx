@@ -98,6 +98,50 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+function publicConfigUrl(): string {
+  return `/api/member-portal/public-config?_=${Date.now()}`
+}
+
+type PublicConfigResponse = {
+  success: boolean
+  facebookUrl?: string
+  instagramUrl?: string
+  lineOfficialUrl?: string
+  loginBackgroundUrl?: string
+  appBackgroundUrl?: string
+  heroFoodImageUrl?: string
+  signupWelcomeCouponEnabled?: boolean
+}
+
+function applyPublicConfigToState(
+  r: PublicConfigResponse,
+  brand: {
+    memberContactFacebookUrl: string
+    memberContactInstagramUrl: string
+    memberContactLineOfficialUrl: string
+  },
+  opts?: {
+    previewLoginBackgroundUrl?: string
+    previewAppBackgroundUrl?: string
+  }
+) {
+  const previewLogin = String(opts?.previewLoginBackgroundUrl || "").trim()
+  const previewApp = String(opts?.previewAppBackgroundUrl || "").trim()
+  return {
+    contactUrls: {
+      facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
+      instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
+      lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
+    },
+    designBackgrounds: {
+      loginBackgroundUrl: previewLogin || String(r.loginBackgroundUrl || "").trim(),
+      appBackgroundUrl: previewApp || String(r.appBackgroundUrl || "").trim(),
+      heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
+    },
+    signupWelcomeCouponEnabled: Boolean(r.signupWelcomeCouponEnabled),
+  }
+}
+
 function LineLogo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className ?? "h-12 w-12"} aria-hidden>
@@ -320,30 +364,39 @@ export function MemberPortalApp() {
   }, [embedPreview, previewAppBackgroundUrl, previewLoginBackgroundUrl])
 
   React.useEffect(() => {
-    if (embedPreview) {
-      getJson<{
-        success: boolean
-        facebookUrl?: string
-        instagramUrl?: string
-        lineOfficialUrl?: string
-        loginBackgroundUrl?: string
-        appBackgroundUrl?: string
-        heroFoodImageUrl?: string
-        signupWelcomeCouponEnabled?: boolean
-      }>("/api/member-portal/public-config")
+    const reloadDesignFromPublicConfig = () => {
+      getJson<PublicConfigResponse>(publicConfigUrl())
         .then((r) => {
-          setContactUrls({
-            facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
-            instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
-            lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
+          const applied = applyPublicConfigToState(r, brand, {
+            previewLoginBackgroundUrl: embedPreview ? previewLoginBackgroundUrl : "",
+            previewAppBackgroundUrl: embedPreview ? previewAppBackgroundUrl : "",
           })
-          setDesignBackgrounds({
-            loginBackgroundUrl:
-              previewLoginBackgroundUrl || String(r.loginBackgroundUrl || "").trim(),
-            appBackgroundUrl: previewAppBackgroundUrl || String(r.appBackgroundUrl || "").trim(),
-            heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
+          setContactUrls(applied.contactUrls)
+          setDesignBackgrounds(applied.designBackgrounds)
+          setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
+        })
+        .catch(() => {})
+    }
+
+    if (embedPreview) {
+      getJson<PublicConfigResponse>(publicConfigUrl())
+        .then((r) => {
+          const applied = applyPublicConfigToState(r, brand, {
+            previewLoginBackgroundUrl,
+            previewAppBackgroundUrl,
           })
-          setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
+          setContactUrls(applied.contactUrls)
+          if (previewLoginBackgroundUrl || previewAppBackgroundUrl) {
+            setDesignBackgrounds((prev) => ({
+              ...prev,
+              loginBackgroundUrl: previewLoginBackgroundUrl || prev.loginBackgroundUrl,
+              appBackgroundUrl: previewAppBackgroundUrl || prev.appBackgroundUrl,
+              heroFoodImageUrl: applied.designBackgrounds.heroFoodImageUrl,
+            }))
+          } else {
+            setDesignBackgrounds(applied.designBackgrounds)
+          }
+          setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
         })
         .catch(() => {
           setContactUrls({
@@ -366,41 +419,7 @@ export function MemberPortalApp() {
     getJson<{ lineLoginEnabled?: boolean }>("/api/member-portal/auth/phone-birth")
       .then((r) => setLineLoginEnabled(Boolean(r.lineLoginEnabled)))
       .catch(() => {})
-    getJson<{
-      success: boolean
-      facebookUrl?: string
-      instagramUrl?: string
-      lineOfficialUrl?: string
-      loginBackgroundUrl?: string
-      appBackgroundUrl?: string
-      heroFoodImageUrl?: string
-      signupWelcomeCouponEnabled?: boolean
-    }>("/api/member-portal/public-config")
-      .then((r) => {
-        setContactUrls({
-          facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
-          instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
-          lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
-        })
-        setDesignBackgrounds({
-          loginBackgroundUrl: String(r.loginBackgroundUrl || "").trim(),
-          appBackgroundUrl: String(r.appBackgroundUrl || "").trim(),
-          heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
-        })
-        setSignupWelcomeCouponEnabled(Boolean(r.signupWelcomeCouponEnabled))
-      })
-      .catch(() => {
-        setContactUrls({
-          facebookUrl: brand.memberContactFacebookUrl,
-          instagramUrl: brand.memberContactInstagramUrl,
-          lineOfficialUrl: brand.memberContactLineOfficialUrl,
-        })
-        setDesignBackgrounds({
-          loginBackgroundUrl: "",
-          appBackgroundUrl: "",
-          heroFoodImageUrl: "",
-        })
-      })
+    reloadDesignFromPublicConfig()
     getJson<{
       success: boolean
       officeStoreCode?: string
@@ -412,6 +431,12 @@ export function MemberPortalApp() {
         setSignupStoreOptions(Array.isArray(r.stores) ? r.stores : [])
       })
       .catch(() => {})
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reloadDesignFromPublicConfig()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
   }, [
     brand.memberContactFacebookUrl,
     brand.memberContactInstagramUrl,
