@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAccrualStoreByVendorDate,
+  buildPayableListWithCumulative,
+  filterPurchasePayableLedgerRows,
+  isPurchasePayableLedgerRow,
   resolvePayableAttributedStore,
   type PayableAttributionMaps,
   type PayableTransactionRow,
@@ -77,5 +80,72 @@ describe('buildAccrualStoreByVendorDate', () => {
     ]
     const index = buildAccrualStoreByVendorDate(rows, base)
     expect(index.get('1002|2026-06-04')).toBe('CM Office')
+  })
+})
+
+describe('buildPayableListWithCumulative', () => {
+  it('includes cumulative-only vendors outside the search period', () => {
+    const cumulativeByVendor = { V001: 50000 }
+    const list = buildPayableListWithCumulative({
+      cumulativeByVendor,
+      periodByVendor: {},
+    })
+    expect(list).toHaveLength(1)
+    expect(list[0].vendorCode).toBe('V001')
+    expect(list[0].balance).toBe(0)
+    expect(list[0].cumulativeBalance).toBe(50000)
+    expect(list[0].items).toHaveLength(0)
+  })
+})
+
+describe('isPurchasePayableLedgerRow', () => {
+  it('excludes payroll expense accruals', () => {
+    expect(
+      isPurchasePayableLedgerRow({
+        vendor_code: 'EMPID:42',
+        amount: 147375,
+        ref_type: 'Expense',
+        expense_accrual_id: 99,
+        trans_date: '2026-05-01',
+      })
+    ).toBe(false)
+  })
+
+  it('includes PO and purchase payments', () => {
+    expect(
+      isPurchasePayableLedgerRow({
+        vendor_code: '1002',
+        amount: 62916,
+        ref_type: 'PO',
+        ref_id: 7,
+        trans_date: '2026-06-04',
+      })
+    ).toBe(true)
+    expect(
+      isPurchasePayableLedgerRow({
+        vendor_code: '1002',
+        amount: 12000,
+        ref_type: 'Inbound',
+        ref_id: 55,
+        trans_date: '2026-06-05',
+      })
+    ).toBe(true)
+    expect(
+      isPurchasePayableLedgerRow({
+        vendor_code: '1002',
+        amount: -62916,
+        ref_type: 'Payment',
+        trans_date: '2026-06-10',
+      })
+    ).toBe(true)
+  })
+
+  it('filterPurchasePayableLedgerRows drops expense rows only', () => {
+    const rows = [
+      { vendor_code: '1002', amount: 1000, ref_type: 'PO', trans_date: '2026-06-01' },
+      { vendor_code: 'EMPID:1', amount: 5000, ref_type: 'Expense', expense_accrual_id: 1, trans_date: '2026-06-01' },
+    ]
+    expect(filterPurchasePayableLedgerRows(rows)).toHaveLength(1)
+    expect(filterPurchasePayableLedgerRows(rows)[0].ref_type).toBe('PO')
   })
 })

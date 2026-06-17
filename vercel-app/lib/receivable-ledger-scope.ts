@@ -226,6 +226,7 @@ export function groupReceivableRowsByStore(
   balance: number
   cumulativeBalance: number
   items: ReceivableTransactionRow[]
+  groupKey: string
 }[] {
   const byStore: Record<string, { displayName: string; total: number; items: ReceivableTransactionRow[] }> = {}
   for (const r of rows) {
@@ -247,8 +248,72 @@ export function groupReceivableRowsByStore(
       balance: v.total,
       cumulativeBalance: cumulativeByStoreGroup[groupKey] ?? v.total,
       items: v.items.sort((a, b) => String(b.trans_date || '').localeCompare(String(a.trans_date || ''))),
+      groupKey,
     }
   })
+}
+
+function storeDisplayNamesByGroupKey(
+  rows: ReceivableTransactionRow[],
+  attributionMaps: ReceivableAttributionMaps
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const r of rows) {
+    const sn = resolveReceivableAttributedStore(r, attributionMaps)
+    if (!sn) continue
+    const groupKey = receivableStoreGroupKey(sn)
+    out[groupKey] = pickReceivableDisplayStoreName(out[groupKey] || '', sn)
+  }
+  return out
+}
+
+const LEDGER_BALANCE_EPS = 0.01
+
+/** 누적 잔액 있는 모든 출고처 + 기간 내 거래처 (기간만 있고 누적 0 포함) */
+export function buildReceivableListWithCumulative(params: {
+  periodRows: ReceivableTransactionRow[]
+  scopedRows: ReceivableTransactionRow[]
+  vendorMaps: ReceivableVendorMaps
+  attributionMaps: ReceivableAttributionMaps
+  cumulativeByStoreGroup: Record<string, number>
+}): {
+  storeName: string
+  vendorCode?: string
+  vendorName?: string
+  balance: number
+  cumulativeBalance: number
+  items: ReceivableTransactionRow[]
+}[] {
+  const { periodRows, scopedRows, vendorMaps, attributionMaps, cumulativeByStoreGroup } = params
+  const periodGrouped = groupReceivableRowsByStore(
+    periodRows,
+    vendorMaps,
+    attributionMaps,
+    cumulativeByStoreGroup
+  )
+  const periodByKey = new Map(periodGrouped.map((g) => [g.groupKey ?? receivableStoreGroupKey(g.storeName), g]))
+  const displayNames = storeDisplayNamesByGroupKey(scopedRows, attributionMaps)
+  const groupKeys = new Set<string>([
+    ...Object.keys(cumulativeByStoreGroup).filter(
+      (gk) => Math.abs(cumulativeByStoreGroup[gk] ?? 0) > LEDGER_BALANCE_EPS
+    ),
+    ...periodByKey.keys(),
+  ])
+  return Array.from(groupKeys)
+    .map((groupKey) => {
+      const period = periodByKey.get(groupKey)
+      const storeName = period?.storeName || displayNames[groupKey] || groupKey
+      const vendor = vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
+      return {
+        storeName,
+        vendorCode: period?.vendorCode ?? vendor?.code,
+        vendorName: period?.vendorName ?? vendor?.name,
+        balance: period?.balance ?? 0,
+        cumulativeBalance: cumulativeByStoreGroup[groupKey] ?? 0,
+        items: period?.items ?? [],
+      }
+    })
+    .sort((a, b) => Math.abs(b.cumulativeBalance) - Math.abs(a.cumulativeBalance))
 }
 
 export function mergeReceivableSummaryRows(

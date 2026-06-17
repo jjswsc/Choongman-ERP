@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
+import {
+  resolveSaasPartnerLoginCompany,
+  resolveSaasPartnerLoginStore,
+} from "@/lib/saas-partner-login-defaults"
 
 type PartnerRow = {
   id: string
@@ -26,18 +30,27 @@ type PartnerRow = {
   userCount?: number
 }
 
+type CreatedLoginAccount = {
+  company: string
+  store: string
+  name: string
+  employeeId: number
+}
+
 export default function SaasPartnersPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const scope = useSaasScope()
+  const loginCompany = useMemo(() => resolveSaasPartnerLoginCompany(), [])
+  const loginStore = useMemo(() => resolveSaasPartnerLoginStore(), [])
   const [partners, setPartners] = useState<PartnerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [newId, setNewId] = useState("")
-  const [newName, setNewName] = useState("")
-  const [newMargin, setNewMargin] = useState("15")
-  const [linkPartnerId, setLinkPartnerId] = useState("")
-  const [linkEmployeeId, setLinkEmployeeId] = useState("")
+  const [partnerId, setPartnerId] = useState("")
+  const [partnerName, setPartnerName] = useState("")
+  const [margin, setMargin] = useState("15")
+  const [loginName, setLoginName] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -61,10 +74,20 @@ export default function SaasPartnersPage() {
   }, [load])
 
   const savePartner = async () => {
-    const id = newId.trim().toLowerCase()
-    const name = newName.trim()
+    const id = partnerId.trim().toLowerCase()
+    const name = partnerName.trim()
+    const adminName = loginName.trim()
+    const adminPassword = loginPassword.trim()
     if (!id || !name) {
       await appAlert(t("saasAdminPartners_errRequired"))
+      return
+    }
+    if (!adminName || !adminPassword) {
+      await appAlert(t("saasAdminPartners_errLoginRequired"))
+      return
+    }
+    if (adminPassword.length < 4) {
+      await appAlert(t("saasAdminPartners_errPasswordMin"))
       return
     }
     setSaving(true)
@@ -76,49 +99,41 @@ export default function SaasPartnersPage() {
           partner: {
             id,
             name,
-            defaultMarginPct: Math.max(0, Number(newMargin || 0)),
+            defaultMarginPct: Math.max(0, Number(margin || 0)),
             isActive: true,
+            loginAccount: {
+              name: adminName,
+              password: adminPassword,
+            },
           },
         }),
       })
-      const json = (await res.json()) as { success?: boolean; message?: string }
+      const json = (await res.json()) as {
+        success?: boolean
+        message?: string
+        loginAccount?: CreatedLoginAccount | null
+      }
       if (!res.ok || json.success !== true) {
         await appAlert(json.message || t("saasAdminPartners_errSave"))
         return
       }
-      setNewId("")
-      setNewName("")
+      setPartnerId("")
+      setPartnerName("")
+      setLoginName("")
+      setLoginPassword("")
       await load()
-      await appAlert(t("saasAdminPartners_saved"))
-    } catch (e) {
-      await appAlert(String(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const linkUser = async () => {
-    const partnerId = linkPartnerId.trim()
-    const employeeId = Math.floor(Number(linkEmployeeId || 0))
-    if (!partnerId || employeeId <= 0) {
-      await appAlert(t("saasAdminPartners_errLink"))
-      return
-    }
-    setSaving(true)
-    try {
-      const res = await apiFetch("/api/saasAdminPartners", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ linkUser: { partnerId, employeeId } }),
-      })
-      const json = (await res.json()) as { success?: boolean; message?: string }
-      if (!res.ok || json.success !== true) {
-        await appAlert(json.message || t("saasAdminPartners_errSave"))
-        return
+      const creds = json.loginAccount
+      if (creds) {
+        await appAlert(
+          tr(t, "saasAdminPartners_savedWithLogin", {
+            company: creds.company,
+            store: creds.store,
+            name: creds.name,
+          })
+        )
+      } else {
+        await appAlert(t("saasAdminPartners_saved"))
       }
-      setLinkEmployeeId("")
-      await load()
-      await appAlert(t("saasAdminPartners_linked"))
     } catch (e) {
       await appAlert(String(e))
     } finally {
@@ -199,50 +214,60 @@ export default function SaasPartnersPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">{t("saasAdminPartners_createTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+      <Card className="max-w-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("saasAdminPartners_createTitle")}</CardTitle>
+          <CardDescription>{t("saasAdminPartners_createDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-3">
             <div className="space-y-2">
               <Label>{t("saasAdminPartners_idLabel")}</Label>
-              <Input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder="partner-bkk-001" />
+              <Input
+                value={partnerId}
+                onChange={(e) => setPartnerId(e.target.value)}
+                placeholder="partner-bkk-001"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">{t("saasAdminPartners_idHint")}</p>
             </div>
             <div className="space-y-2">
               <Label>{t("saasAdminPartners_nameLabel")}</Label>
-              <Input value={newName} onChange={(e) => setNewName(e.target.value)} />
+              <Input value={partnerName} onChange={(e) => setPartnerName(e.target.value)} autoComplete="off" />
             </div>
             <div className="space-y-2">
               <Label>{t("saasAdminPartners_marginLabel")}</Label>
-              <Input type="number" min={0} value={newMargin} onChange={(e) => setNewMargin(e.target.value)} />
+              <Input type="number" min={0} value={margin} onChange={(e) => setMargin(e.target.value)} />
             </div>
-            <Button type="button" disabled={saving} onClick={() => void savePartner()}>
-              {t("saasAdminPartners_createBtn")}
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">{t("saasAdminPartners_linkTitle")}</CardTitle>
-            <CardDescription>{t("saasAdminPartners_linkDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Label>{t("saasAdminPartners_linkPartner")}</Label>
-              <Input value={linkPartnerId} onChange={(e) => setLinkPartnerId(e.target.value)} placeholder="partner-bkk-001" />
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <p className="text-sm font-medium">{t("saasAdminPartners_loginSectionTitle")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tr(t, "saasAdminPartners_loginSectionDesc", { company: loginCompany, store: loginStore })}
+              </p>
             </div>
             <div className="space-y-2">
-              <Label>{t("saasAdminPartners_linkEmployeeId")}</Label>
-              <Input type="number" min={1} value={linkEmployeeId} onChange={(e) => setLinkEmployeeId(e.target.value)} />
+              <Label>{t("saasAdminPartners_loginNameLabel")}</Label>
+              <Input value={loginName} onChange={(e) => setLoginName(e.target.value)} autoComplete="off" />
             </div>
-            <Button type="button" variant="secondary" disabled={saving} onClick={() => void linkUser()}>
-              {t("saasAdminPartners_linkBtn")}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="space-y-2">
+              <Label>{t("saasAdminPartners_loginPasswordLabel")}</Label>
+              <Input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
+          <Button type="button" disabled={saving} onClick={() => void savePartner()}>
+            {t("saasAdminPartners_createBtn")}
+          </Button>
+        </CardContent>
+      </Card>
     </main>
   )
 }

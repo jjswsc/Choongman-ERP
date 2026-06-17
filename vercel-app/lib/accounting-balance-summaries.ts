@@ -1,4 +1,5 @@
 import {
+  filterPurchasePayableLedgerRows,
   isPayableStoreFilterActive,
   loadPayableTransactionsToEnd,
   scopePayableLedgerRows,
@@ -54,7 +55,7 @@ export async function sumReceivablesBalance(params: {
   return { total, source: 'select' }
 }
 
-/** 미지급금 잔액 — 전체는 RPC, 매장 스코프는 귀속 매장(ref·통장·지출 등) 필터 후 합산 */
+/** 미지급금(매입) 잔액 — PO·입고·매입 지급만. 급여·지출발생 제외 */
 export async function sumPayablesBalance(params: {
   endStr: string
   storeFilter: string
@@ -63,20 +64,7 @@ export async function sumPayablesBalance(params: {
   const { endStr, storeFilter, isHQ } = params
   const useStoreScoped = !isHQ && isPayableStoreFilterActive(storeFilter)
 
-  if (!useStoreScoped) {
-    try {
-      const rows = (await supabaseRpc<{ balance: number }[]>('get_payable_summary', {
-        p_vendor_filter: null,
-        p_end_str: endStr || null,
-      })) as { balance?: number }[] | null
-      const total = (rows || []).reduce((sum, r) => sum + (Number(r.balance) || 0), 0)
-      return { total, source: 'rpc' }
-    } catch (e) {
-      if (!isMissingBalanceRpcError(e)) throw e
-    }
-  }
-
-  const rows = await loadPayableTransactionsToEnd({ endStr })
+  const rows = filterPurchasePayableLedgerRows(await loadPayableTransactionsToEnd({ endStr }))
   const scoped = useStoreScoped
     ? (await scopePayableLedgerRows(rows, storeFilter)).scopedRows
     : rows

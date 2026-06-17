@@ -2,9 +2,9 @@
  * 미수금/미지급금 목록 조회
  * - type: receivable | payable
  * - storeFilter / vendorFilter (선택)
- * - startStr, endStr (trans_date 범위 — 목록·그룹 합계 모두 조회 기간 내 거래만)
+ * - startStr, endStr — 기간 열·상세 내역은 startStr~endStr, 누적 잔액·목록 거래처는 종료일까지 전체 이력 기준
  * - receivable: store_name으로 vendors 매칭 → vendorCode, vendorName 포함
- * - payable: storeFilter 시 입고(location)·발주(relatedStore/location)·지출(store_name)·통장(store)·패티(store)로 귀속 매장 필터
+ * - payable: PO·입고·매입 지급만 (급여·지출발생 Expense 제외)
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
@@ -12,7 +12,9 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
+  buildPayableListWithCumulative,
   cumulativeBalanceByVendor,
+  filterPurchasePayableLedgerRows,
   loadPayableTransactionsToEnd,
   payableRowsOnOrAfterStart,
   resolvePayableAttributedStore,
@@ -20,7 +22,7 @@ import {
   type PayableTransactionRow,
 } from '@/lib/payable-attributed-store'
 import {
-  groupReceivableRowsByStore,
+  buildReceivableListWithCumulative,
   scopeReceivableLedger,
   type ReceivableTransactionRow,
 } from '@/lib/receivable-ledger-scope'
@@ -74,10 +76,12 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'payable') {
-      const ledgerRows = await loadPayableTransactionsToEnd({
-        vendorFilter: vendorFilter || undefined,
-        endStr: endStr || '',
-      })
+      const ledgerRows = filterPurchasePayableLedgerRows(
+        await loadPayableTransactionsToEnd({
+          vendorFilter: vendorFilter || undefined,
+          endStr: endStr || '',
+        })
+      )
       const { maps: attributionMaps, scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
       const cumulativeByVendor = cumulativeBalanceByVendor(scopedRows)
       const rows = payableRowsOnOrAfterStart(scopedRows, startStr || undefined)
@@ -154,12 +158,7 @@ export async function GET(request: NextRequest) {
         byVendor[vc].total += Number(r.amount ?? 0)
       }
 
-      const list = Object.entries(byVendor).map(([vendorCode, v]) => ({
-        vendorCode,
-        balance: v.total,
-        cumulativeBalance: cumulativeByVendor[vendorCode] ?? 0,
-        items: v.items.sort((a, b) => (String(b.trans_date || '').localeCompare(String(a.trans_date || '')))),
-      }))
+      const list = buildPayableListWithCumulative({ cumulativeByVendor, periodByVendor: byVendor })
 
       return NextResponse.json({ type: 'payable', list, cumulativeByVendor }, { headers })
     }
@@ -171,14 +170,14 @@ export async function GET(request: NextRequest) {
       storeFilter: isReceivableStoreFilterActive(storeFilter) ? storeFilter : undefined,
       filterByVendorLink: canSelectStores,
     })
-    const rows = receivableScoped.periodRows
 
-    const list = groupReceivableRowsByStore(
-      rows,
-      receivableScoped.vendorMaps,
-      receivableScoped.attributionMaps,
-      receivableScoped.cumulativeByStoreGroup
-    )
+    const list = buildReceivableListWithCumulative({
+      periodRows: receivableScoped.periodRows,
+      scopedRows: receivableScoped.scopedRows,
+      vendorMaps: receivableScoped.vendorMaps,
+      attributionMaps: receivableScoped.attributionMaps,
+      cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
+    })
 
     return NextResponse.json({ type: 'receivable', list }, { headers })
   } catch (e) {

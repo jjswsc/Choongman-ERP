@@ -5,16 +5,15 @@
  * - receivable: store_name으로 vendors 매칭(gps_name/name) → vendorCode, vendorName 포함
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   aggregatePayableBalancesByVendor,
+  filterPurchasePayableLedgerRows,
   isPayableStoreFilterActive,
   loadPayableTransactionsToEnd,
   scopePayableLedgerRows,
-  type PayableTransactionRow,
 } from '@/lib/payable-attributed-store'
 import { groupReceivableRowsByStore, scopeReceivableLedger } from '@/lib/receivable-ledger-scope'
 
@@ -55,16 +54,18 @@ async function buildReceivableSummaryList(params: {
   return { list, totalAmount }
 }
 
-async function getPayableSummaryWithStoreFilter(params: {
+async function getPayableSummary(params: {
   vendorFilter: string
   endStr: string
-  storeFilter: string
+  storeFilter?: string
 }): Promise<{ list: { vendorCode: string; balance: number; count: number }[]; totalAmount: number }> {
   const { vendorFilter, endStr, storeFilter } = params
-  const ledgerRows = await loadPayableTransactionsToEnd({
-    vendorFilter: vendorFilter || undefined,
-    endStr,
-  })
+  const ledgerRows = filterPurchasePayableLedgerRows(
+    await loadPayableTransactionsToEnd({
+      vendorFilter: vendorFilter || undefined,
+      endStr,
+    })
+  )
   const { scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
   const list = aggregatePayableBalancesByVendor(scopedRows)
   const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
@@ -103,33 +104,12 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'payable') {
-      if (payableStoreFilterActive) {
-        const scoped = await getPayableSummaryWithStoreFilter({
-          vendorFilter,
-          endStr,
-          storeFilter: requestedStoreFilter,
-        })
-        return NextResponse.json({ type: 'payable', list: scoped.list, totalAmount: scoped.totalAmount }, { headers })
-      }
-
-      const rows = (await supabaseRpc<{ vendor_code: string; balance: number; item_count: number }[]>(
-        'get_payable_summary',
-        {
-          p_vendor_filter: vendorFilter || null,
-          p_end_str: endStr || null,
-        }
-      )) as { vendor_code?: string; balance?: number; item_count?: number }[] | null
-
-      const list = (rows || [])
-        .map((r) => ({
-          vendorCode: String(r.vendor_code ?? '').trim(),
-          balance: Number(r.balance ?? 0),
-          count: Number(r.item_count ?? 0),
-        }))
-        .filter((x) => x.vendorCode)
-        .sort((a, b) => b.balance - a.balance)
-      const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
-      return NextResponse.json({ type: 'payable', list, totalAmount }, { headers })
+      const scoped = await getPayableSummary({
+        vendorFilter,
+        endStr,
+        storeFilter: payableStoreFilterActive ? requestedStoreFilter : undefined,
+      })
+      return NextResponse.json({ type: 'payable', list: scoped.list, totalAmount: scoped.totalAmount }, { headers })
     }
 
     // receivable — 목록 API와 동일 scope·Receive 귀속 규칙
@@ -156,21 +136,12 @@ export async function GET(request: NextRequest) {
   } catch (_rpcErr) {
     try {
       if (type === 'payable') {
-        const pParts: string[] = []
-        if (vendorFilter) pParts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
-        if (endStr) pParts.push(`trans_date=lte.${endStr}`)
-        const pFilter = pParts.length ? pParts.join('&') : 'id=gt.0'
-        let payableRows = (await supabaseSelectFilter('payable_transactions', pFilter, {
-          order: 'trans_date.desc',
-          limit: 20000,
-        })) as PayableTransactionRow[]
-        if (payableStoreFilterActive) {
-          const scoped = await scopePayableLedgerRows(payableRows, requestedStoreFilter)
-          payableRows = scoped.scopedRows
-        }
-        const list = aggregatePayableBalancesByVendor(payableRows)
-        const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
-        return NextResponse.json({ type: 'payable', list, totalAmount }, { headers })
+        const scoped = await getPayableSummary({
+          vendorFilter,
+          endStr,
+          storeFilter: payableStoreFilterActive ? requestedStoreFilter : undefined,
+        })
+        return NextResponse.json({ type: 'payable', list: scoped.list, totalAmount: scoped.totalAmount }, { headers })
       }
 
       let fallbackStoreFilter = requestedStoreFilter

@@ -13,7 +13,7 @@ export const AGING_BUCKET_ORDER: AgingBucketKey[] = [
 ]
 
 const RECEIVABLE_ACCRUAL_REF = new Set(["Opening", "Order", "AccountingPO", "ForceOutbound"])
-const PAYABLE_ACCRUAL_REF = new Set(["Opening", "PO"])
+const PAYABLE_ACCRUAL_REF = new Set(["Opening", "PO", "Inbound"])
 
 /** 방콕 달력 기준 일수 차이 (asOf − transDate) */
 export function agingDaysBetween(asOfYmd: string, transYmd: string): number {

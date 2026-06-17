@@ -11,6 +11,7 @@ import {
   supabaseSelectFilterStrippingUnknownColumns,
   supabaseUpsertMergeWithPgrst204Fallback,
 } from "@/lib/supabase-pgrst204-retry"
+import { createSaasPartnerAdminEmployee } from "@/lib/saas-partner-admin-account-server"
 import {
   supabaseSelectFilter,
   supabaseSelectFilterRange,
@@ -306,6 +307,10 @@ type SavePartnerBody = {
     contactEmail?: string
     billingCompany?: Partial<SaasBillingCompanyInfo>
     isActive?: boolean
+    loginAccount?: {
+      name: string
+      password: string
+    }
   }
   linkUser?: {
     partnerId: string
@@ -345,6 +350,8 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as SavePartnerBody
     const nowIso = new Date().toISOString()
 
+    let createdLoginAccount: { company: string; store: string; name: string; employeeId: number } | null = null
+
     if (body.partner) {
       const id = String(body.partner.id || "")
         .trim()
@@ -373,6 +380,37 @@ export async function POST(req: NextRequest) {
         },
         "saasAdminPartners save partner"
       )
+
+      const login = body.partner.loginAccount
+      const loginName = String(login?.name || "").trim()
+      const loginPassword = String(login?.password || "").trim()
+      if (loginName || loginPassword) {
+        if (!loginName || !loginPassword) {
+          return NextResponse.json(
+            { success: false, message: "로그인 이름과 비밀번호를 모두 입력해 주세요." },
+            { status: 400, headers }
+          )
+        }
+        const account = await createSaasPartnerAdminEmployee({ name: loginName, password: loginPassword })
+        await supabaseUpsert(
+          "saas_partner_users",
+          [
+            {
+              partner_id: id,
+              employee_id: account.employeeId,
+              role: "partner_admin",
+              is_active: true,
+            },
+          ],
+          "employee_id"
+        )
+        createdLoginAccount = {
+          company: account.company,
+          store: account.store,
+          name: account.name,
+          employeeId: account.employeeId,
+        }
+      }
     }
 
     if (body.catalogRepricePolicy) {
@@ -472,7 +510,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true }, { headers })
+    return NextResponse.json(
+      { success: true, loginAccount: createdLoginAccount },
+      { headers }
+    )
   } catch (error) {
     console.error("saasAdminPartners POST:", error)
     return NextResponse.json({ success: false, message: String(error) }, { status: 500, headers })

@@ -45,6 +45,20 @@ function isPurchasePaymentRow(r: PayableTransactionRow): boolean {
   return false
 }
 
+/** 미지급금(매입) 원장 — PO·입고·매입 지급만. 급여·지출발생(expense_accrual) 제외 */
+export function isPurchasePayableLedgerRow(r: PayableTransactionRow): boolean {
+  const refType = String(r.ref_type || '').trim()
+  if (refType === 'Expense' || refType === 'InteriorExpense') return false
+  if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) return false
+  if (refType === 'Opening' || refType === 'PO' || refType === 'Inbound') return true
+  if (refType === 'Payment') return true
+  return isPurchasePaymentRow(r)
+}
+
+export function filterPurchasePayableLedgerRows(rows: PayableTransactionRow[]): PayableTransactionRow[] {
+  return rows.filter(isPurchasePayableLedgerRow)
+}
+
 function vendorAmountStoreKey(vendorCode: string, amountAbs: number): string {
   const vc = String(vendorCode || '').trim().toLowerCase()
   return `${vc}|${roundMoney(Math.abs(amountAbs))}`
@@ -295,6 +309,34 @@ export function cumulativeBalanceByVendor(rows: PayableTransactionRow[]): Record
     byVendor[vc] = (byVendor[vc] || 0) + Number(r.amount ?? 0)
   }
   return byVendor
+}
+
+const LEDGER_BALANCE_EPS = 0.01
+
+export function buildPayableListWithCumulative(params: {
+  cumulativeByVendor: Record<string, number>
+  periodByVendor: Record<string, { total: number; items: PayableTransactionRow[] }>
+}): {
+  vendorCode: string
+  balance: number
+  cumulativeBalance: number
+  items: PayableTransactionRow[]
+}[] {
+  const { cumulativeByVendor, periodByVendor } = params
+  const vendorCodes = new Set<string>([
+    ...Object.keys(cumulativeByVendor).filter((vc) => Math.abs(cumulativeByVendor[vc] ?? 0) > LEDGER_BALANCE_EPS),
+    ...Object.keys(periodByVendor),
+  ])
+  return Array.from(vendorCodes)
+    .map((vendorCode) => ({
+      vendorCode,
+      balance: periodByVendor[vendorCode]?.total ?? 0,
+      cumulativeBalance: cumulativeByVendor[vendorCode] ?? 0,
+      items: (periodByVendor[vendorCode]?.items ?? []).sort((a, b) =>
+        String(b.trans_date || '').localeCompare(String(a.trans_date || ''))
+      ),
+    }))
+    .sort((a, b) => Math.abs(b.cumulativeBalance) - Math.abs(a.cumulativeBalance))
 }
 
 export function filterPayableRowsByStore(

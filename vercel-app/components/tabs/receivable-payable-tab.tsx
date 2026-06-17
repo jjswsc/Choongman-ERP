@@ -991,7 +991,7 @@ export function ReceivablePayableTab() {
           r.ref_type === "AccountingPO" ||
           r.ref_type === "ForceOutbound"
       )
-    return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
+    return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO" || r.ref_type === "Inbound")
   }
 
   const getCumulativeBalanceForItem = React.useCallback(
@@ -1016,9 +1016,6 @@ export function ReceivablePayableTab() {
     let count = 0
     for (const item of listData) {
       const allItems = item.items ?? []
-      const displayItems = filterItemsByUnpaid(item.items, isRecTab)
-      const tableItems = displayItems.length > 0 ? displayItems : allItems
-      if (tableItems.length === 0) continue
       const period = sumReceivablePayablePeriodAmounts(allItems)
       accrualSum += period.salesSum
       settlementSum += period.receiveSum
@@ -1028,7 +1025,12 @@ export function ReceivablePayableTab() {
       count += 1
     }
     return { accrualSum, settlementSum, balanceSum, cumulativeSum, count }
-  }, [listData, tab, filterUnpaidOnly, getCumulativeBalanceForItem])
+  }, [listData, tab, getCumulativeBalanceForItem])
+
+  const ledgerNoPeriodRowsHint = tt(
+    "ledgerNoPeriodRows",
+    "조회 기간 내 거래 내역이 없습니다. 누적 잔액은 종료일까지 전체 이력 기준입니다."
+  )
 
   const ledgerAging = React.useMemo(
     () => computeLedgerAging(listData, tab, endStr),
@@ -1036,6 +1038,9 @@ export function ReceivablePayableTab() {
   )
 
   const amountGridCols = "grid grid-cols-[minmax(0,1fr)_110px_110px_110px_110px] gap-2 items-center"
+  const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
+  /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
+  const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
 
   const cumulativeBalanceLabel = React.useMemo(() => {
     const base =
@@ -1545,9 +1550,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       ) : null}
                     </div>
                   ) : (
-                    <div className="w-full">
+                    <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[640px]")}>
                         <div className="text-center">{(t("outColStore") || "출고처")}</div>
                         <div className="text-center tabular-nums">{(t("recColSalesAmount") || "매출금액")}</div>
                         <div
@@ -1577,7 +1582,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const allItems = item.items ?? []
                           const displayItems = filterItemsByUnpaid(item.items, true)
                           const tableItems = displayItems.length > 0 ? displayItems : allItems
-                          if (tableItems.length === 0) return null
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
@@ -1616,7 +1620,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-4">
-                              <table className="w-full text-sm border-collapse table-fixed">
+                              {tableItems.length === 0 ? (
+                                <p className="text-sm text-muted-foreground py-4 text-center">{ledgerNoPeriodRowsHint}</p>
+                              ) : (
+                              <div className={ledgerDetailTableWrapCn}>
+                              <table className={ledgerDetailTableCn}>
                                 <thead>
                                   <tr className="border-b bg-muted/50">
                                     <th className="text-center py-2 px-2 w-[35px] font-semibold" aria-hidden />
@@ -2041,13 +2049,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   })}
                                 </tbody>
                               </table>
+                              </div>
+                              )}
                             </AccordionContent>
                           </AccordionItem>
                           )
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[640px]")}>
                           <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
@@ -2164,12 +2174,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : listData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
-                  ) : !listData.some((item) => filterItemsByUnpaid(item.items, false).length > 0) ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("payFilterUnpaidOnlyEmpty") || "미지급만 필터 적용 시 해당하는 내역이 없습니다."}</p>
                   ) : (
-                    <div className="w-full">
+                    <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[640px]")}>
                         <div className="text-center">{(t("vendor") || "매입처")}</div>
                         <div className="text-center tabular-nums">{(t("payColPurchaseAmount") || "매입금액")}</div>
                         <div className="text-center tabular-nums">{(t("payColPaymentAmount") || "지급금액")}</div>
@@ -2194,7 +2202,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const allItems = item.items ?? []
                           const displayItems = filterItemsByUnpaid(item.items, false)
                           const tableItems = displayItems.length > 0 ? displayItems : allItems
-                          if (tableItems.length === 0) return null
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
@@ -2228,7 +2235,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-4">
-                              <table className="w-full text-sm border-collapse table-fixed">
+                              {tableItems.length === 0 ? (
+                                <p className="text-sm text-muted-foreground py-4 text-center">{ledgerNoPeriodRowsHint}</p>
+                              ) : (
+                              <div className={ledgerDetailTableWrapCn}>
+                              <table className={ledgerDetailTableCn}>
                                 <thead>
                                   <tr className="border-b bg-muted/50">
                                     <th className="text-center py-2 px-4 w-[35px] font-semibold"></th>
@@ -2444,13 +2455,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   })}
                                 </tbody>
                               </table>
+                              </div>
+                              )}
                             </AccordionContent>
                           </AccordionItem>
                           )
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[640px]")}>
                           <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
