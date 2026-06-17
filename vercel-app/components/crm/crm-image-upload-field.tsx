@@ -49,7 +49,15 @@ export function CrmImageUploadField({
         {uploading ? t("loading") : t("crmMemberAppUpload")}
       </Button>
       {previewUrl ? (
-        <img src={previewUrl} alt={alt || ""} className="h-28 w-full rounded-lg border object-cover" />
+        <img
+          src={previewUrl}
+          alt={alt || ""}
+          referrerPolicy="no-referrer"
+          className="h-28 w-full rounded-lg border object-cover"
+          onError={(e) => {
+            e.currentTarget.classList.add("opacity-40")
+          }}
+        />
       ) : null}
     </div>
   )

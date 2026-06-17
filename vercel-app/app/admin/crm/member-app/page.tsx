@@ -642,10 +642,6 @@ export default function CrmMemberAppContentPage() {
 
       const newUrl = uploaded.publicUrl || ""
       const readable = await verifyMemberPortalImagePublicUrl(newUrl)
-      if (!readable) {
-        setError(t("mpAdmin_errImageNotPublic"))
-        return
-      }
 
       const nextLogin = target === "login" ? newUrl : loginBackgroundUrl
       const nextApp = target === "app" ? newUrl : appBackgroundUrl
@@ -659,9 +655,13 @@ export default function CrmMemberAppContentPage() {
       setImagePreviewNonce((n) => n + 1)
       setPreviewReloadKey((k) => k + 1)
       setNotice(
-        tr(t, "mpAdmin_noticeDesignBgUploadedAndSaved", {
-          target: target === "login" ? t("mpAdmin_loginBgUrl") : t("mpAdmin_appBgUrl"),
-        })
+        readable
+          ? tr(t, "mpAdmin_noticeDesignBgUploadedAndSaved", {
+              target: target === "login" ? t("mpAdmin_loginBgUrl") : t("mpAdmin_appBgUrl"),
+            })
+          : tr(t, "mpAdmin_noticeDesignBgSavedVerifyWarn", {
+              target: target === "login" ? t("mpAdmin_loginBgUrl") : t("mpAdmin_appBgUrl"),
+            })
       )
       await loadDesignSettings()
     } catch (e) {
@@ -786,6 +786,7 @@ export default function CrmMemberAppContentPage() {
                       <img
                         src={withMemberPortalImageCacheBust(loginBackgroundUrl, imagePreviewNonce)}
                         alt={t("mpAdmin_loginBgAlt")}
+                        referrerPolicy="no-referrer"
                         className="h-28 w-full rounded object-cover"
                       />
                     ) : null}
@@ -808,6 +809,7 @@ export default function CrmMemberAppContentPage() {
                       <img
                         src={withMemberPortalImageCacheBust(appBackgroundUrl, imagePreviewNonce)}
                         alt={t("mpAdmin_appBgAlt")}
+                        referrerPolicy="no-referrer"
                         className="h-28 w-full rounded object-cover"
                       />
                     ) : null}

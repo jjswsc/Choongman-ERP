@@ -89,10 +89,19 @@ export async function uploadMemberPortalContentImageToStorage(
   return { ok: true, publicUrl: presign.publicUrl }
 }
 
-/** 업로드 직후 public URL 로딩 가능 여부 확인 (버킷 공개·CORS 문제 조기 발견) */
-export function verifyMemberPortalImagePublicUrl(url: string, timeoutMs = 15000): Promise<boolean> {
+/** 업로드 직후 public URL 로딩 가능 여부 확인 — 실패해도 업로드 자체는 유효할 수 있음 */
+export async function verifyMemberPortalImagePublicUrl(url: string, timeoutMs = 12000): Promise<boolean> {
   const trimmed = String(url || '').trim()
-  if (!trimmed || typeof window === 'undefined') return Promise.resolve(false)
+  if (!trimmed) return false
+  if (typeof window === 'undefined') return true
+
+  try {
+    const head = await fetch(trimmed, { method: 'HEAD', cache: 'no-store' })
+    if (head.ok) return true
+  } catch {
+    /* HEAD CORS 실패 시 img 로드로 재시도 */
+  }
+
   return new Promise((resolve) => {
     const img = new window.Image()
     const timer = window.setTimeout(() => resolve(false), timeoutMs)
@@ -104,6 +113,7 @@ export function verifyMemberPortalImagePublicUrl(url: string, timeoutMs = 15000)
       window.clearTimeout(timer)
       resolve(false)
     }
+    img.referrerPolicy = 'no-referrer'
     const sep = trimmed.includes('?') ? '&' : '?'
     img.src = `${trimmed}${sep}verify=${Date.now()}`
   })

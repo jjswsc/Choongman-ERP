@@ -198,6 +198,8 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_errImageUpload: '이미지 업로드에 실패했습니다.',
   mpAdmin_noticeImageUploadedSave: '이미지를 업로드했습니다. 저장 버튼을 눌러 반영하세요.',
   mpAdmin_noticeDesignBgUploadedAndSaved: '{target} 이미지를 업로드하고 저장했습니다. 회원앱에서 새로고침 후 확인하세요.',
+  mpAdmin_noticeDesignBgSavedVerifyWarn:
+    '{target} URL을 저장했습니다. 미리보기가 안 보이면 /m 을 새로고침하거나 URL을 브라우저에서 직접 열어 보세요.',
   mpAdmin_errImageNotPublic:
     '이미지는 업로드됐지만 공개 URL로 열리지 않습니다. Supabase Storage 버킷(membership) 공개 설정을 확인하세요.',
   mpAdmin_errImageUploadGeneric: '이미지 업로드 중 오류가 발생했습니다.',
@@ -553,6 +555,8 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_errImageUpload: 'Image upload failed.',
   mpAdmin_noticeImageUploadedSave: 'Image uploaded. Click Save to apply.',
   mpAdmin_noticeDesignBgUploadedAndSaved: '{target} uploaded and saved. Refresh the member app to verify.',
+  mpAdmin_noticeDesignBgSavedVerifyWarn:
+    '{target} URL saved. If preview is blank, refresh /m or open the URL in a new browser tab.',
   mpAdmin_errImageNotPublic:
     'Image uploaded but the public URL is not reachable. Check Supabase Storage bucket (membership) public access.',
   mpAdmin_errImageUploadGeneric: 'An error occurred during image upload.',
@@ -907,6 +911,8 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_errImageUpload: 'อัปโหลดรูปไม่สำเร็จ',
   mpAdmin_noticeImageUploadedSave: 'อัปโหลดรูปแล้ว กดบันทึกเพื่อใช้งาน',
   mpAdmin_noticeDesignBgUploadedAndSaved: 'อัปโหลดและบันทึก {target} แล้ว รีเฟรชแอปสมาชิกเพื่อตรวจสอบ',
+  mpAdmin_noticeDesignBgSavedVerifyWarn:
+    'บันทึก URL {target} แล้ว ถ้าไม่เห็นรูป ให้รีเฟรช /m หรือเปิดลิงก์ในแท็บใหม่',
   mpAdmin_errImageNotPublic:
     'อัปโหลดแล้วแต่เปิด URL สาธารณะไม่ได้ ตรวจสอบว่า Supabase Storage bucket (membership) ตั้งเป็นสาธารณะ',
   mpAdmin_errImageUploadGeneric: 'เกิดข้อผิดพลาดขณะอัปโหลดรูป',

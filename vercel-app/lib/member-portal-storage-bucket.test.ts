@@ -5,7 +5,7 @@ describe('member-portal-storage-bucket', () => {
   it('defaults to membership bucket', () => {
     const prev = process.env.MEMBER_PORTAL_CONTENT_BUCKET
     delete process.env.MEMBER_PORTAL_CONTENT_BUCKET
-    expect(getMemberPortalContentStorageBucket()).toBe('membership')
+    expect(getMemberPortalContentStorageBucket()).toBe('member-portal-content')
     if (prev) process.env.MEMBER_PORTAL_CONTENT_BUCKET = prev
   })
 })

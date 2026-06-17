@@ -61,11 +61,14 @@ export function MemberPortalLoungeBackdrop({
           }}
         />
         {variant === "login" ? (
-          <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/68 via-[#faf7f2]/78 to-[#f3ebe0]/92" />
+          <>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/35" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/10 via-transparent to-[#f3ebe0]/20" />
+          </>
         ) : (
           <>
-            <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/45 via-[#faf7f2]/62 to-[#f3ebe0]/90" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(212,175,55,0.12),transparent_55%)]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/25" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/8 via-transparent to-[#f3ebe0]/18" />
           </>
         )}
       </div>
