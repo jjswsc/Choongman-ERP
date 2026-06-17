@@ -83,6 +83,7 @@ import {
   MP_CARD_TEXT_SECONDARY,
   MP_CARD_TEXT_SUBTLE,
   mpCardSearchInputClass,
+  memberPortalGreetingKey,
 } from "@/lib/member-portal-design"
 import { DEFAULT_MEMBER_PORTAL_UI_THEME, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
@@ -1044,7 +1045,10 @@ export function MemberPortalApp() {
       <MemberPortalShell embedPreview={embedPreview}>
         {tab === "home" ? (
           <MemberPortalHomeTopBar
-            wordmark={t("memberLounge")}
+            greeting={t(memberPortalGreetingKey())}
+            displayName={member.fullName || member.name || "Member"}
+            tierName={activeDashboard.tierProgress.currentTierName || tier.label}
+            tierGem={tier.gem}
             logoSrc={brand.logoSymbolSrc}
             logoAlt={brand.logoAlt}
             langSelect={<MemberPortalLangSelect />}

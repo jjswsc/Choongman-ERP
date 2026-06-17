@@ -9,8 +9,8 @@ export const MP_HOME_SECTION_GAP = 'space-y-5'
 /** 카드 모서리 (시안 ≈18px) */
 export const MP_HOME_CARD_RADIUS = 'rounded-[18px]'
 
-/** 멤버십 카드 가로:세로 (시안 — 넓고 낮은 카드) */
-export const MP_HOME_MEMBERSHIP_ASPECT = 100 / 56
+/** 멤버십 카드 가로:세로 (시안 — 헤더·스탯·다음등급 진행바가 모두 들어가는 높이) */
+export const MP_HOME_MEMBERSHIP_ASPECT = 100 / 66
 
 /** 프로모 배너 높이 (시안 — 16:9보다 낮음) */
 export const MP_HOME_HERO_HEIGHT = 'h-[9.5rem]'

@@ -38,20 +38,12 @@ function AmbienceOverlays({ variant }: { variant: "login" | "app" }) {
   )
 }
 
-function AppCleanBackground({ lounge }: { lounge: string }) {
+function AppCleanBackground({ lounge: _lounge }: { lounge: string }) {
   return (
     <>
-      <div className="absolute inset-0 bg-[#faf7f2]" />
-      <div
-        className="absolute inset-x-0 bottom-0 h-[38%] opacity-[0.22]"
-        style={{
-          backgroundImage: `url(${lounge})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center bottom",
-          backgroundRepeat: "no-repeat",
-        }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2] via-[#faf7f2]/98 to-[#f5f0e8]/94" />
+      <div className="absolute inset-0 bg-[#f6f3ee]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[40%] bg-[radial-gradient(ellipse_90%_60%_at_50%_0%,rgba(212,175,55,0.08),transparent_70%)]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#faf8f4] via-[#f6f3ee] to-[#f1ece3]" />
     </>
   )
 }
@@ -67,6 +59,34 @@ export function MemberPortalLoungeBackdrop({
   const hero = resolveMemberPortalHeroFoodUrl(heroFoodImageUrl)
   const isolatedPlate = isMemberPortalIsolatedPlateHero(hero)
 
+  // 앱(로그인 후) 화면.
+  // - 관리자가 「접속 후 배경」을 비워 두면 참고 시안처럼 깨끗한 라이트 배경(기본).
+  // - 이미지를 올리면 그 배경을 쓰되, 콘텐츠 가독성을 위해 밝은 막을 덧씌운다.
+  if (variant === "app") {
+    if (!customFull) {
+      return (
+        <div className={`pointer-events-none absolute inset-0 z-0 overflow-hidden ${className}`}>
+          <AppCleanBackground lounge={lounge} />
+        </div>
+      )
+    }
+    return (
+      <div className={`pointer-events-none absolute inset-0 z-0 overflow-hidden ${className}`}>
+        <div
+          key={customFull}
+          className="absolute inset-0 scale-105"
+          style={{
+            backgroundImage: `url("${customFull.replace(/"/g, '\\"')}")`,
+            ...MEMBER_PORTAL_BG_STYLE,
+          }}
+        />
+        {/* 사진 위에 밝은 막 — 참고 시안 톤을 유지하면서 본문 가독성 확보 */}
+        <div className="absolute inset-0 bg-[#f6f3ee]/78" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#faf8f4]/85 via-[#f6f3ee]/72 to-[#f1ece3]/90" />
+      </div>
+    )
+  }
+
   if (customFull) {
     return (
       <div className={`pointer-events-none absolute inset-0 z-0 ${className}`}>
@@ -78,25 +98,8 @@ export function MemberPortalLoungeBackdrop({
             ...MEMBER_PORTAL_BG_STYLE,
           }}
         />
-        {variant === "login" ? (
-          <>
-            <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/35" />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/10 via-transparent to-[#f3ebe0]/20" />
-          </>
-        ) : (
-          <>
-            <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/25" />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/8 via-transparent to-[#f3ebe0]/18" />
-          </>
-        )}
-      </div>
-    )
-  }
-
-  if (variant === "app") {
-    return (
-      <div className={`pointer-events-none absolute inset-0 z-0 overflow-hidden ${className}`}>
-        <AppCleanBackground lounge={lounge} />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/35" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/10 via-transparent to-[#f3ebe0]/20" />
       </div>
     )
   }
