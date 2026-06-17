@@ -7,7 +7,20 @@ export type MemberPortalContentImageRule = {
   minHeight: number
   aspectW: number
   aspectH: number
+  /**
+   * 비율 허용 오차(0~1). 미지정 시 기본값(아래 DEFAULT_ASPECT_TOLERANCE_PCT) 사용.
+   * 사람이 준비한 이미지는 정확히 맞추기 어려우므로 너무 작게 두면 업로드가 계속 거부된다.
+   */
+  aspectTolerancePct?: number
+  /**
+   * 전체화면 `cover` 배경처럼 비율이 의미 없는 경우 비율 검증 자체를 건너뛴다.
+   * (요즘 폰은 19.5:9 등 9:16과 다른 비율이라 엄격히 막으면 스크린샷·사진을 못 올린다.)
+   */
+  skipAspectCheck?: boolean
 }
+
+/** 비율 허용 오차 기본값 — 2%는 사람이 준비한 이미지엔 비현실적이라 8%로 완화 */
+const DEFAULT_ASPECT_TOLERANCE_PCT = 0.08
 
 export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
   /** 홈 팝업 배너 — 회원앱 홈 카드 */
@@ -43,17 +56,19 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
   },
   login: {
     label: '로그인 배경',
-    minWidth: 1080,
-    minHeight: 1920,
+    minWidth: 720,
+    minHeight: 1080,
     aspectW: 9,
     aspectH: 16,
+    skipAspectCheck: true,
   },
   app: {
     label: '접속 후 배경',
-    minWidth: 1080,
-    minHeight: 1920,
+    minWidth: 720,
+    minHeight: 1080,
     aspectW: 9,
     aspectH: 16,
+    skipAspectCheck: true,
   },
   store_photo: {
     label: '매장 사진',
@@ -136,10 +151,14 @@ export function validateMemberPortalImageByRule(
     msg = msg.split('{height}').join(String(height))
     return { ok: false, message: msg }
   }
+  if (rule.skipAspectCheck) {
+    return { ok: true }
+  }
   const actual = width / height
   const expected = rule.aspectW / rule.aspectH
   const ratioDiff = Math.abs(actual - expected)
-  if (ratioDiff > expected * 0.02) {
+  const tolerancePct = rule.aspectTolerancePct ?? DEFAULT_ASPECT_TOLERANCE_PCT
+  if (ratioDiff > expected * tolerancePct) {
     let msg = t('mpAdmin_imageBadRatio')
     msg = msg.split('{label}').join(label)
     msg = msg.split('{aspectW}').join(String(rule.aspectW))

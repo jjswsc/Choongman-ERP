@@ -18,7 +18,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
 
   mpAdmin_designTitle: '배경화면 디자인 관리',
   mpAdmin_designDesc:
-    '로그인 화면 / 접속 후 메인 화면 배경을 업로드합니다. 권장 포맷: JPG/PNG, 1080x1920(px) 세로형.',
+    '로그인 화면 / 접속 후 메인 화면 배경을 업로드합니다. 화면에 꽉 차게 표시되므로 비율은 자유이며, 권장은 1080×1920(px) 세로형(JPG/PNG)입니다.',
   mpAdmin_loginBgUrl: '로그인 배경 URL',
   mpAdmin_appBgUrl: '접속 후 배경 URL',
   mpAdmin_designSave: '디자인 저장',
@@ -375,7 +375,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
 
   mpAdmin_designTitle: 'Background design',
   mpAdmin_designDesc:
-    'Upload login and main screen backgrounds. Recommended: JPG/PNG, 1080×1920 px portrait.',
+    'Upload login and main screen backgrounds. The image is shown full-screen (any aspect ratio works); 1080×1920 px portrait (JPG/PNG) is recommended.',
   mpAdmin_loginBgUrl: 'Login background URL',
   mpAdmin_appBgUrl: 'App background URL',
   mpAdmin_designSave: 'Save design',
@@ -731,7 +731,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
 
   mpAdmin_designTitle: 'จัดการพื้นหลัง',
   mpAdmin_designDesc:
-    'อัปโหลดพื้นหลังหน้าเข้าสู่ระบบและหน้าหลักหลังเข้าใช้ แนะนำ JPG/PNG ขนาด 1080×1920 px แนวตั้ง',
+    'อัปโหลดพื้นหลังหน้าเข้าสู่ระบบและหน้าหลักหลังเข้าใช้ รูปจะแสดงเต็มหน้าจอ (อัตราส่วนใดก็ได้) แนะนำ 1080×1920 px แนวตั้ง (JPG/PNG)',
   mpAdmin_loginBgUrl: 'URL พื้นหลังเข้าสู่ระบบ',
   mpAdmin_appBgUrl: 'URL พื้นหลังหลังเข้าใช้',
   mpAdmin_designSave: 'บันทึกดีไซน์',
