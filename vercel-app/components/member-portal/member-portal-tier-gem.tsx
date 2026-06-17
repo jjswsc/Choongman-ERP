@@ -22,20 +22,27 @@ export function MemberPortalTierGem({ tier, label, size = "md", className }: Mem
   return (
     <div className={cn("flex flex-col items-center", className)}>
       <div className={cn("relative flex items-center justify-center", s.box)} aria-hidden>
+        {/* 바닥 그림자 — 떠 있는 느낌 */}
+        <div className="absolute -bottom-0.5 h-1.5 w-1/2 rounded-[50%] bg-black/30 blur-[3px]" />
+        {/* 보석 본체 */}
         <div
           className={cn(
-            "absolute rotate-45 rounded-md bg-gradient-to-br",
+            "absolute rotate-45 rounded-md border border-white/25 bg-gradient-to-br",
             s.gem,
             tier.gem,
             tier.gemGlow
           )}
         />
+        {/* 윗면 컷(밝은 삼각 면) */}
         <div
           className={cn(
-            "absolute rotate-45 rounded-sm bg-gradient-to-br from-white/55 to-transparent",
+            "absolute rotate-45 rounded-[3px] bg-gradient-to-br from-white/70 via-white/25 to-transparent",
             s.shine
           )}
+          style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
         />
+        {/* 반짝 포인트 */}
+        <div className="absolute left-[30%] top-[28%] h-1 w-1 rounded-full bg-white/90 blur-[0.5px]" />
       </div>
       <span
         className={cn(

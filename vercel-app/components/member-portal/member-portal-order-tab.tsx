@@ -47,8 +47,10 @@ import {
 } from "@/lib/pos-option-selection-groups"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
-import { MemberPortalHomeHeroBanner } from "@/components/member-portal/member-portal-home-hero-banner"
-import { MemberPortalHomeNewMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
+import {
+  MemberPortalHomeHeroBanner,
+  MemberPortalHomeNewMenuHeroes,
+} from "@/components/member-portal/member-portal-home-hero-banner"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { MemberPortalCheckoutSheet } from "@/components/member-portal/member-portal-checkout-sheet"
 import { MemberPortalQrPayDialog } from "@/components/member-portal/member-portal-qr-pay-dialog"
@@ -994,10 +996,10 @@ export function MemberPortalOrderTab({
               onSelectItem={onSelectContentItem}
               showOrderButton
             />
-            <MemberPortalHomeNewMenus
+            <MemberPortalHomeNewMenuHeroes
               contentItems={contentItems}
-              lang={lang}
               t={t}
+              onOrder={() => setView("pickup")}
               onSelectItem={onSelectContentItem}
             />
           </>

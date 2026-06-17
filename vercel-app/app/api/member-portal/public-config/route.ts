@@ -9,6 +9,9 @@ import {
 } from '@/lib/member-portal-theme'
 import { readSystemSettingString } from '@/lib/system-settings-value'
 import {
+  loadMemberPortalHomePrivilegesConfig,
+} from '@/lib/member-portal-home-privileges-config'
+import {
   loadMemberPortalPrepayConfig,
   MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
 } from '@/lib/member-portal-prepay-config'
@@ -54,6 +57,7 @@ export async function GET() {
     const prepayConfig = await loadMemberPortalPrepayConfig()
     const pickupMinLeadMinutes = await resolveMemberPortalPickupMinLeadMinutes()
     const theme = parseMemberPortalUiThemeFromMap(map)
+    const homePrivileges = await loadMemberPortalHomePrivilegesConfig()
 
     return memberPortalSettingsJsonResponse({
       success: true,
@@ -70,9 +74,11 @@ export async function GET() {
       prepayEnabled: prepayConfig.enabled,
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
       pickupMinLeadMinutes,
+      homePrivileges,
     })
   } catch {
     const theme = parseMemberPortalUiThemeFromMap(new Map())
+    const homePrivileges = await loadMemberPortalHomePrivilegesConfig()
     return memberPortalSettingsJsonResponse({
       success: true,
       facebookUrl: brand.memberContactFacebookUrl,
@@ -88,6 +94,7 @@ export async function GET() {
       prepayEnabled: String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1',
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
       pickupMinLeadMinutes: 30,
+      homePrivileges,
     })
   }
 }

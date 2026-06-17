@@ -29,7 +29,8 @@ function MembershipCardTierProgressSection({
   const { t } = useMemberPortalLang()
 
   return (
-    <div className="relative shrink-0 border-t border-white/10 pt-2.5">
+    <div className="relative shrink-0 pt-2.5">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">{t("tierNext")}</p>
       <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/65">{subtitle}</p>
       <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-white/8">
@@ -144,59 +145,22 @@ export function MemberPortalMembershipCard({
     tier.border,
     tier.gradient,
     tier.glow,
-    "shadow-[0_16px_48px_rgba(0,0,0,0.45)]"
+    "shadow-[0_18px_50px_-12px_rgba(0,0,0,0.6)]"
   )
 
   return (
-    <div className="relative w-full" style={{ perspective: "1200px" }}>
-      <div
-        className="relative w-full transition-transform duration-700 ease-[cubic-bezier(0.4,0.2,0.2,1)]"
-        style={{
-          aspectRatio: MP_HOME_MEMBERSHIP_ASPECT,
-          transformStyle: "preserve-3d",
-          transform: showQr ? "rotateY(180deg)" : "rotateY(0deg)",
-        }}
-      >
-        <div className={cardShell} style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          <CardFaceTexture tier={tier} />
-          <div className="relative flex h-full min-h-0 flex-col p-4">
-            <MembershipCardHeader
-              displayName={displayName}
-              tier={tier}
-              tierName={tierName}
-              subtitle={maskPhone(member.phone)}
-              showQr={false}
-              qrReady={Boolean(qrDataUrl)}
-              onToggleQr={onToggleQr}
-            />
+    <div
+      className="relative w-full"
+      style={{ aspectRatio: MP_HOME_MEMBERSHIP_ASPECT }}
+    >
+      <div className={cardShell}>
+        <CardFaceTexture tier={tier} />
+        {/* 상단 글로스 하이라이트 — 입체감 */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/[0.14] to-transparent" />
+        <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10" />
 
-            <div className="relative mt-1.5 grid min-h-0 flex-1 grid-cols-2 content-center gap-2">
-              <div className={cn("rounded-[14px] border px-3 py-2 backdrop-blur-md", tier.statPanel)}>
-                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("points")}</p>
-                <p className="mt-0.5 text-[1.15rem] font-bold leading-none tracking-tight text-white">
-                  {formatPoints(member.pointBalance || 0)}
-                </p>
-              </div>
-              <div className={cn("rounded-[14px] border px-3 py-2 backdrop-blur-md", tier.statPanel)}>
-                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("memberNoShort")}</p>
-                <p className="mt-0.5 text-sm font-bold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
-              </div>
-            </div>
-
-            {tierProgress ? <MembershipCardTierProgressSection {...tierProgress} tier={tier} /> : null}
-          </div>
-        </div>
-
-        <div
-          className={cardShell}
-          style={{
-            backfaceVisibility: "hidden",
-            WebkitBackfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
-          }}
-        >
-          <CardFaceTexture tier={tier} />
-          <div className="relative flex h-full min-h-0 flex-col p-4">
+        {showQr ? (
+          <div key="qr" className="relative flex h-full min-h-0 animate-in fade-in zoom-in-95 flex-col p-4 duration-300">
             <MembershipCardHeader
               displayName={displayName}
               tier={tier}
@@ -205,7 +169,6 @@ export function MemberPortalMembershipCard({
               qrReady={Boolean(qrDataUrl)}
               onToggleQr={onToggleQr}
             />
-
             <div className="relative flex min-h-0 flex-1 items-center justify-center pt-1">
               {qrDataUrl ? (
                 <div className="flex aspect-square h-full max-h-full w-full max-w-full flex-col rounded-2xl border border-white/15 bg-white p-[clamp(0.45rem,2.5vw,0.75rem)] shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
@@ -221,7 +184,46 @@ export function MemberPortalMembershipCard({
               )}
             </div>
           </div>
-        </div>
+        ) : (
+          <div key="front" className="relative flex h-full min-h-0 animate-in fade-in flex-col p-4 duration-300">
+            <MembershipCardHeader
+              displayName={displayName}
+              tier={tier}
+              tierName={tierName}
+              subtitle={maskPhone(member.phone)}
+              showQr={false}
+              qrReady={Boolean(qrDataUrl)}
+              onToggleQr={onToggleQr}
+            />
+
+            <div className="relative mt-1.5 grid min-h-0 flex-1 grid-cols-2 content-center gap-2.5">
+              <div
+                className={cn(
+                  "relative overflow-hidden rounded-[14px] border px-3 py-2 backdrop-blur-md",
+                  tier.statPanel
+                )}
+              >
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/[0.06] to-transparent" />
+                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("points")}</p>
+                <p className="mt-0.5 text-[1.15rem] font-bold leading-none tracking-tight text-white">
+                  {formatPoints(member.pointBalance || 0)}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "relative overflow-hidden rounded-[14px] border px-3 py-2 backdrop-blur-md",
+                  tier.statPanel
+                )}
+              >
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/[0.06] to-transparent" />
+                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("memberNoShort")}</p>
+                <p className="mt-0.5 text-sm font-bold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
+              </div>
+            </div>
+
+            {tierProgress ? <MembershipCardTierProgressSection {...tierProgress} tier={tier} /> : null}
+          </div>
+        )}
       </div>
     </div>
   )

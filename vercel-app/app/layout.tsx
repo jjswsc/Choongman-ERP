@@ -22,7 +22,7 @@ const pretendard = localFont({
   src: "../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
   variable: "--font-pretendard",
   display: "swap",
-  preload: false,
+  preload: true,
 })
 const notoSansThai = Noto_Sans_Thai({
   subsets: ["latin", "thai"],

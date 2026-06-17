@@ -108,10 +108,49 @@ function MemberPortalStampPreparingPlaceholder({
   variant: "home" | "card"
 }) {
   const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
-  const body = (
-    <>
+
+  if (variant === "home") {
+    return (
+      <div
+        className={`relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-emerald-200/70 bg-gradient-to-br from-[#e8f7ee] via-[#edf8f1] to-[#dff3e6] px-4 pb-4 pt-3.5 shadow-[0_8px_24px_-10px_rgba(16,185,129,0.35),inset_0_1px_0_rgba(255,255,255,0.7)]`}
+        aria-live="polite"
+      >
+        <div className="relative z-[1] pr-[5.5rem]">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-[0_4px_10px_-2px_rgba(16,185,129,0.6)]">
+              <Stamp className="h-4 w-4" aria-hidden />
+            </span>
+            <p className="text-sm font-bold text-emerald-950">{t("stampPreparingTitle")}</p>
+          </div>
+          <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-relaxed text-emerald-800/80">
+            {t("stampPreparingDesc")}
+          </p>
+          <div className="mt-2.5 flex flex-nowrap gap-1.5 overflow-hidden">
+            {Array.from({ length: 10 }, (_, i) => (
+              <span
+                key={i}
+                className={`flex ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 items-center justify-center rounded-full border border-dashed border-emerald-300/70 bg-white/55 text-[11px] text-emerald-700/25 shadow-inner`}
+              >
+                🍗
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className={`pointer-events-none absolute -bottom-1 right-0 z-[2] ${MP_HOME_STAMP_FOOD_SIZE} opacity-90`}>
+          <img
+            src="/member-portal/snow-onion-hero.png"
+            alt=""
+            className="h-full w-full object-contain object-bottom drop-shadow-[0_12px_20px_rgba(0,0,0,0.18)] grayscale-[0.15]"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <GlassCard soft className="px-4 py-4" aria-live="polite">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-amber-50 text-amber-700">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
           <Stamp className="h-5 w-5" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
@@ -120,31 +159,15 @@ function MemberPortalStampPreparingPlaceholder({
         </div>
       </div>
       <div className="mt-3 flex gap-1.5">
-        {Array.from({ length: 5 }, (_, i) => (
-          <div
+        {Array.from({ length: 10 }, (_, i) => (
+          <span
             key={i}
-            className="h-2 flex-1 rounded-full bg-stone-200/80"
-            style={{ opacity: 1 - i * 0.12 }}
-          />
+            className="flex h-7 flex-1 items-center justify-center rounded-full border border-dashed border-emerald-200 bg-emerald-50/60 text-[11px] text-emerald-600/25"
+          >
+            🍗
+          </span>
         ))}
       </div>
-    </>
-  )
-
-  if (variant === "home") {
-    return (
-      <div
-        className="mb-4 w-full rounded-[24px] border border-stone-200/80 bg-white/90 p-4 shadow-sm"
-        aria-live="polite"
-      >
-        {body}
-      </div>
-    )
-  }
-
-  return (
-    <GlassCard soft className="px-4 py-4" aria-live="polite">
-      {body}
     </GlassCard>
   )
 }
@@ -174,8 +197,9 @@ export function MemberPortalStampHomeWidget({
     <button
       type="button"
       onClick={onOpenPrivilege}
-      className={`relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-emerald-200/70 bg-gradient-to-br from-[#e8f7ee] via-[#edf8f1] to-[#dff3e6] px-4 pb-4 pt-3.5 text-left shadow-[0_4px_18px_rgba(16,185,129,0.08)] transition hover:border-emerald-300 active:scale-[0.99]`}
+      className={`group relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-emerald-200/70 bg-gradient-to-br from-[#e8f7ee] via-[#edf8f1] to-[#dff3e6] px-4 pb-4 pt-3.5 text-left shadow-[0_10px_28px_-12px_rgba(16,185,129,0.5),inset_0_1px_0_rgba(255,255,255,0.7)] transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-[0_18px_36px_-14px_rgba(16,185,129,0.6)] active:translate-y-0`}
     >
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/60 to-transparent" />
       <div className="relative z-[1] pr-[5.5rem]">
         <p className="text-sm font-bold text-emerald-950">{t("stampCardTitle")}</p>
         <p className="mt-0.5 text-[11px] font-medium text-emerald-800/80">
@@ -187,13 +211,20 @@ export function MemberPortalStampHomeWidget({
             return (
               <span
                 key={i}
-                className={`flex ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 items-center justify-center rounded-full border ${
+                className={`relative flex ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 items-center justify-center rounded-full border ${
                   isFilled
-                    ? "border-amber-300 bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] text-white shadow-sm"
-                    : "border-emerald-300/60 bg-white/80 text-[10px] text-emerald-700/30"
+                    ? "border-amber-300 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 text-[11px] text-white shadow-[0_3px_8px_-2px_rgba(180,83,9,0.6)] ring-1 ring-white/40"
+                    : "border-dashed border-emerald-300/70 bg-white/70 text-[10px] text-emerald-700/25 shadow-inner"
                 }`}
               >
-                {isFilled ? "🍗" : ""}
+                {isFilled ? (
+                  <>
+                    <span className="pointer-events-none absolute inset-x-0.5 top-0.5 h-1/2 rounded-full bg-gradient-to-b from-white/55 to-transparent" />
+                    <span className="relative">🍗</span>
+                  </>
+                ) : (
+                  "🍗"
+                )}
               </span>
             )
           })}
@@ -205,11 +236,11 @@ export function MemberPortalStampHomeWidget({
               .replace("{label}", status.nextMilestone.label)}
           </p>
         ) : null}
-        <span className="mt-3 inline-flex h-9 items-center rounded-full bg-emerald-600 px-4 text-[11px] font-semibold text-white shadow-sm">
+        <span className="mt-3 inline-flex h-9 items-center rounded-full bg-gradient-to-b from-emerald-500 to-emerald-700 px-4 text-[11px] font-semibold text-white shadow-[0_6px_14px_-4px_rgba(5,150,105,0.7)] ring-1 ring-white/25 transition group-hover:from-emerald-500 group-hover:to-emerald-600">
           {t("stampViewCard")}
         </span>
       </div>
-      <div className={`pointer-events-none absolute -bottom-1 right-0 z-[2] ${MP_HOME_STAMP_FOOD_SIZE}`}>
+      <div className={`pointer-events-none absolute -bottom-1 right-0 z-[2] ${MP_HOME_STAMP_FOOD_SIZE} transition-transform duration-300 group-hover:scale-105`}>
         <img
           src="/member-portal/snow-onion-hero.png"
           alt=""

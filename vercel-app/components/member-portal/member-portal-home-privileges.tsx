@@ -1,27 +1,54 @@
 "use client"
 
-import { Cake, ChevronRight, Crown, Percent, Ticket } from "lucide-react"
-import type { PortalCouponRow } from "@/components/member-portal/portal-ui"
+import { Cake, ChevronRight, Crown, Gift, Percent, Stamp, Ticket, type LucideIcon } from "lucide-react"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
-import { resolveCouponBenefitDisplay } from "@/lib/member-portal-coupon-display"
+import type {
+  MemberPortalHomePrivilegeIcon,
+  MemberPortalHomePrivilegeLinkTab,
+  MemberPortalHomePrivilegeResolved,
+} from "@/lib/member-portal-home-privileges-config"
 import { MP_HOME_CARD_RADIUS } from "@/lib/member-portal-home-layout"
 import { MP_TEXT_PRIMARY, MP_TEXT_SECONDARY } from "@/lib/member-portal-design"
+import type { PortalTab } from "@/components/member-portal/portal-ui"
 
 type MemberPortalHomePrivilegesProps = {
-  coupons: PortalCouponRow[]
+  items: MemberPortalHomePrivilegeResolved[]
   t: (key: MemberPortalKey) => string
   onViewAll: () => void
+  onNavigateTab?: (tab: PortalTab) => void
 }
 
-const PRIVILEGE_ICONS = [Percent, Cake, Crown, Ticket]
-
-function privilegeIcon(index: number) {
-  return PRIVILEGE_ICONS[index % PRIVILEGE_ICONS.length]
+const PRIVILEGE_ICON_MAP: Record<MemberPortalHomePrivilegeIcon, LucideIcon> = {
+  percent: Percent,
+  cake: Cake,
+  crown: Crown,
+  ticket: Ticket,
+  gift: Gift,
+  stamp: Stamp,
 }
 
-export function MemberPortalHomePrivileges({ coupons, t, onViewAll }: MemberPortalHomePrivilegesProps) {
-  const issued = coupons.filter((c) => c.status === "issued").slice(0, 3)
-  if (!issued.length) return null
+function linkTabToPortalTab(linkTab: MemberPortalHomePrivilegeLinkTab): PortalTab | null {
+  if (linkTab === 'none') return null
+  return linkTab
+}
+
+export function MemberPortalHomePrivileges({
+  items,
+  t,
+  onViewAll,
+  onNavigateTab,
+}: MemberPortalHomePrivilegesProps) {
+  const visible = items.slice(0, 3)
+  if (!visible.length) return null
+
+  const handleCardClick = (linkTab: MemberPortalHomePrivilegeLinkTab) => {
+    const tab = linkTabToPortalTab(linkTab)
+    if (tab && onNavigateTab) {
+      onNavigateTab(tab)
+      return
+    }
+    onViewAll()
+  }
 
   return (
     <section>
@@ -37,27 +64,25 @@ export function MemberPortalHomePrivileges({ coupons, t, onViewAll }: MemberPort
         </button>
       </div>
       <div className="grid grid-cols-3 gap-2.5">
-        {issued.map((coupon, index) => {
-          const Icon = privilegeIcon(index)
-          const benefit = resolveCouponBenefitDisplay(coupon)
-          const title =
-            coupon.couponName && coupon.couponName !== coupon.couponCode ? coupon.couponName : benefit.summary
-          const subtitle = title === benefit.summary ? coupon.couponCode : benefit.summary
+        {visible.map((item) => {
+          const Icon = PRIVILEGE_ICON_MAP[item.icon] || Percent
 
           return (
             <button
-              key={coupon.id}
+              key={item.id}
               type="button"
-              onClick={onViewAll}
-              className={`flex flex-col items-center ${MP_HOME_CARD_RADIUS} border border-amber-100 bg-[#fff7ed] px-2 py-4 text-center shadow-[0_2px_12px_rgba(42,31,13,0.05)] transition hover:border-amber-200 hover:bg-[#fffaf2] active:scale-[0.98]`}
+              onClick={() => handleCardClick(item.linkTab)}
+              className={`group relative flex flex-col items-center overflow-hidden ${MP_HOME_CARD_RADIUS} border border-amber-100/90 bg-gradient-to-b from-white to-[#fff4e3] px-2 py-4 text-center shadow-[0_6px_18px_-6px_rgba(180,120,30,0.28),inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-200 hover:-translate-y-1 hover:border-amber-200 hover:shadow-[0_14px_28px_-8px_rgba(180,120,30,0.4)] active:translate-y-0`}
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100/70 text-amber-600">
-                <Icon className="h-[1.3rem] w-[1.3rem]" strokeWidth={1.9} />
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/70 to-transparent" />
+              <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_6px_14px_-3px_rgba(217,119,6,0.55)] ring-1 ring-white/40 transition-transform duration-200 group-hover:scale-105">
+                <span className="pointer-events-none absolute inset-x-1 top-1 h-1/2 rounded-full bg-gradient-to-b from-white/55 to-transparent" />
+                <Icon className="relative h-[1.35rem] w-[1.35rem]" strokeWidth={2.1} />
               </span>
-              <p className={`mt-2.5 line-clamp-2 min-h-[2.25rem] text-[11px] font-bold leading-snug ${MP_TEXT_PRIMARY}`}>
-                {title}
+              <p className={`relative mt-2.5 line-clamp-2 min-h-[2.25rem] text-[11px] font-bold leading-snug ${MP_TEXT_PRIMARY}`}>
+                {item.title}
               </p>
-              <p className={`mt-1 line-clamp-2 text-[10px] leading-snug ${MP_TEXT_SECONDARY}`}>{subtitle}</p>
+              <p className={`relative mt-1 line-clamp-2 text-[10px] leading-snug ${MP_TEXT_SECONDARY}`}>{item.subtitle}</p>
             </button>
           )
         })}

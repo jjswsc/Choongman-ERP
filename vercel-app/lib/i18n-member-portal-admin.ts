@@ -214,6 +214,30 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_saving: '저장 중...',
   mpAdmin_reload: '다시 불러오기',
 
+  mpAdmin_homePrivilegesTitle: '홈 · 나를 위한 특별 혜택',
+  mpAdmin_homePrivilegesDesc:
+    '회원앱 홈에 항상 3칸으로 표시되는 멤버십 주요 혜택입니다. 회원별 보유 쿠폰과 무관하게 포인트·생일·등급 등 핵심 혜택을 안내하세요. 탭하면 지정한 화면으로 이동합니다.',
+  mpAdmin_homePrivilegesSlot: '슬롯',
+  mpAdmin_homePrivilegesEnabled: '노출',
+  mpAdmin_homePrivilegesIcon: '아이콘',
+  mpAdmin_homePrivilegesLinkTab: '탭 시 이동',
+  mpAdmin_homePrivilegesTitleLabel: '제목',
+  mpAdmin_homePrivilegesSubtitleLabel: '부제',
+  mpAdmin_homePrivilegesSave: '홈 혜택 저장',
+  mpAdmin_homePrivilegesSaved: '홈 특별 혜택 설정을 저장했습니다.',
+  mpAdmin_errHomePrivilegesSave: '홈 특별 혜택 설정 저장에 실패했습니다.',
+  mpAdmin_homePrivilegesIcon_percent: '퍼센트(포인트)',
+  mpAdmin_homePrivilegesIcon_cake: '케이크(생일)',
+  mpAdmin_homePrivilegesIcon_crown: '왕관(등급)',
+  mpAdmin_homePrivilegesIcon_ticket: '티켓(쿠폰)',
+  mpAdmin_homePrivilegesIcon_gift: '선물',
+  mpAdmin_homePrivilegesIcon_stamp: '스탬프',
+  mpAdmin_homePrivilegesLink_privilege: '혜택 탭',
+  mpAdmin_homePrivilegesLink_order: '주문 탭',
+  mpAdmin_homePrivilegesLink_location: '매장 탭',
+  mpAdmin_homePrivilegesLink_me: '내정보 탭',
+  mpAdmin_homePrivilegesLink_none: '혜택 탭(기본)',
+
   mpAdmin_popupTitle: '팝업',
   mpAdmin_popupDesc:
     '로그인 후 홈에 뜨는 팝업 배너입니다. 목록에서 노출 상태·기간·미리보기를 확인하고 바로 편집할 수 있습니다.',
@@ -232,7 +256,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
     '매장(หน้าร้าน)은 홈 히어로 배너, 배달(Delivery)은 주문 탭 상단 배너에 노출됩니다. 정렬순서가 작을수록 해당 채널에서 먼저 표시됩니다.',
   mpAdmin_newMenuTitle: '신메뉴',
   mpAdmin_newMenuDesc:
-    '회원앱 주문 탭 상단 「신메뉴」 가로 목록(정사각 카드)에 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
+    '회원앱 홈(프로모 배너 아래)과 주문 탭에 프로모션과 동일한 가로형 큰 배너로 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
   mpAdmin_newMenuEmpty: '등록된 신메뉴 콘텐츠가 없습니다.',
   mpAdmin_newMenuNew: '새 신메뉴',
   mpAdmin_infoTitle: '정보·공지',
@@ -310,7 +334,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_placementHomePromo: '홈 · 매장 프로모 배너',
   mpAdmin_placementHomePromoDine: '홈 · 매장 프로모 배너',
   mpAdmin_placementHomePromoDelivery: '주문 탭 · 배달 프로모 배너',
-  mpAdmin_placementHomeNewMenu: '주문 탭 · 신메뉴',
+  mpAdmin_placementHomeNewMenu: '홈·주문 탭 · 신메뉴 배너',
   mpAdmin_placementHomeNotice: '홈 · 공지',
   mpAdmin_placementLocation: '매장 탭',
   mpAdmin_placementPopup: '팝업',
@@ -330,7 +354,8 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_imageCompositionPromo:
     '구도: 왼쪽은 어두운 그라데이션·제목·본문 영역, 오른쪽에 음식 사진을 배치하세요. 회원앱에서 좌측 58%는 텍스트로 가려집니다.',
   mpAdmin_imageCompositionPopup: '팝업 시트 상단에 세로형(4:5)으로 표시됩니다.',
-  mpAdmin_imageCompositionNewMenu: '주문 탭 신메뉴 정사각 카드에 잘림 없이 표시됩니다.',
+  mpAdmin_imageCompositionNewMenu:
+    '구도: 프로모션과 동일한 가로형(12:5) 큰 배너로 홈·주문 탭에 표시됩니다. 왼쪽은 어두운 그라데이션·제목 영역, 오른쪽에 음식 사진을 배치하세요.',
   mpAdmin_imageReadSizeFail: '이미지 크기를 읽을 수 없습니다.',
   mpAdmin_imageTooSmall:
     '{label} 이미지는 최소 {minW}×{minH}px 이상이어야 합니다. (현재 {width}×{height}px)',
@@ -592,6 +617,30 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_saving: 'Saving...',
   mpAdmin_reload: 'Reload',
 
+  mpAdmin_homePrivilegesTitle: 'Home · Special privileges',
+  mpAdmin_homePrivilegesDesc:
+    'Three featured membership benefits always shown on the home screen. Independent of each member’s coupons — highlight points, birthday, tiers, etc. Tap opens the selected tab.',
+  mpAdmin_homePrivilegesSlot: 'Slot',
+  mpAdmin_homePrivilegesEnabled: 'Show',
+  mpAdmin_homePrivilegesIcon: 'Icon',
+  mpAdmin_homePrivilegesLinkTab: 'On tap',
+  mpAdmin_homePrivilegesTitleLabel: 'Title',
+  mpAdmin_homePrivilegesSubtitleLabel: 'Subtitle',
+  mpAdmin_homePrivilegesSave: 'Save home privileges',
+  mpAdmin_homePrivilegesSaved: 'Home privilege settings saved.',
+  mpAdmin_errHomePrivilegesSave: 'Failed to save home privilege settings.',
+  mpAdmin_homePrivilegesIcon_percent: 'Percent (points)',
+  mpAdmin_homePrivilegesIcon_cake: 'Cake (birthday)',
+  mpAdmin_homePrivilegesIcon_crown: 'Crown (tier)',
+  mpAdmin_homePrivilegesIcon_ticket: 'Ticket (coupon)',
+  mpAdmin_homePrivilegesIcon_gift: 'Gift',
+  mpAdmin_homePrivilegesIcon_stamp: 'Stamp',
+  mpAdmin_homePrivilegesLink_privilege: 'Benefits tab',
+  mpAdmin_homePrivilegesLink_order: 'Order tab',
+  mpAdmin_homePrivilegesLink_location: 'Stores tab',
+  mpAdmin_homePrivilegesLink_me: 'Profile tab',
+  mpAdmin_homePrivilegesLink_none: 'Benefits tab (default)',
+
   mpAdmin_popupTitle: 'Popups',
   mpAdmin_popupDesc:
     'Popup banners on the home screen after login. Review status, schedule, and preview from the list.',
@@ -610,7 +659,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
     'Dine-in (หน้าร้าน) shows on the home hero; delivery shows on the Order tab hero. Lower sort order appears first in each channel.',
   mpAdmin_newMenuTitle: 'New menu',
   mpAdmin_newMenuDesc:
-    'Square cards in the horizontal “New menu” row at the top of the Order tab. Same monthly Bangkok date filter as promos.',
+    'Large landscape banners on Home (below promos) and the Order tab, same as promos. Same monthly Bangkok date filter as promos.',
   mpAdmin_newMenuEmpty: 'No new menu content yet.',
   mpAdmin_newMenuNew: 'New menu item',
   mpAdmin_infoTitle: 'Info & notices',
@@ -688,7 +737,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_placementHomePromo: 'Home · dine-in promo banner',
   mpAdmin_placementHomePromoDine: 'Home · dine-in promo banner',
   mpAdmin_placementHomePromoDelivery: 'Order tab · delivery promo banner',
-  mpAdmin_placementHomeNewMenu: 'Order tab · new menu',
+  mpAdmin_placementHomeNewMenu: 'Home & Order tab · new menu banner',
   mpAdmin_placementHomeNotice: 'Home · notice',
   mpAdmin_placementLocation: 'Stores tab',
   mpAdmin_placementPopup: 'Popup',
@@ -708,7 +757,8 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_imageCompositionPromo:
     'Layout: dark gradient and text on the left, food photo on the right. The member app covers the left 58% with text.',
   mpAdmin_imageCompositionPopup: 'Shown at the top of the popup sheet in portrait (4:5).',
-  mpAdmin_imageCompositionNewMenu: 'Shown as square cards in the Order tab new-menu row.',
+  mpAdmin_imageCompositionNewMenu:
+    'Layout: shown as a large landscape banner (12:5), same as promos. Dark gradient and title on the left, food photo on the right.',
   mpAdmin_imageReadSizeFail: 'Could not read image dimensions.',
   mpAdmin_imageTooSmall: '{label} must be at least {minW}×{minH}px (current {width}×{height}px).',
   mpAdmin_imageBadRatio: '{label} aspect ratio must be {aspectW}:{aspectH} (current {width}×{height}px).',
@@ -969,6 +1019,30 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_saving: 'กำลังบันทึก...',
   mpAdmin_reload: 'โหลดใหม่',
 
+  mpAdmin_homePrivilegesTitle: 'หน้าแรก · สิทธิพิเศษสำหรับคุณ',
+  mpAdmin_homePrivilegesDesc:
+    'สิทธิหลัก 3 ช่องบนหน้าแรก ไม่ขึ้นกับคูปองของแต่ละสมาชิก — แนะนำพอยท์ วันเกิด ระดับสมาชิก แตะแล้วไปแท็บที่กำหนด',
+  mpAdmin_homePrivilegesSlot: 'ช่อง',
+  mpAdmin_homePrivilegesEnabled: 'แสดง',
+  mpAdmin_homePrivilegesIcon: 'ไอคอน',
+  mpAdmin_homePrivilegesLinkTab: 'เมื่อแตะ',
+  mpAdmin_homePrivilegesTitleLabel: 'หัวข้อ',
+  mpAdmin_homePrivilegesSubtitleLabel: 'คำบรรยาย',
+  mpAdmin_homePrivilegesSave: 'บันทึกสิทธิหน้าแรก',
+  mpAdmin_homePrivilegesSaved: 'บันทึกการตั้งค่าสิทธิหน้าแรกแล้ว',
+  mpAdmin_errHomePrivilegesSave: 'บันทึกการตั้งค่าสิทธิหน้าแรกไม่สำเร็จ',
+  mpAdmin_homePrivilegesIcon_percent: 'เปอร์เซ็นต์ (พอยท์)',
+  mpAdmin_homePrivilegesIcon_cake: 'เค้ก (วันเกิด)',
+  mpAdmin_homePrivilegesIcon_crown: 'มงกุฎ (ระดับ)',
+  mpAdmin_homePrivilegesIcon_ticket: 'ตั๋ว (คูปอง)',
+  mpAdmin_homePrivilegesIcon_gift: 'ของขวัญ',
+  mpAdmin_homePrivilegesIcon_stamp: 'สแตมป์',
+  mpAdmin_homePrivilegesLink_privilege: 'แท็บสิทธิประโยชน์',
+  mpAdmin_homePrivilegesLink_order: 'แท็บสั่งอาหาร',
+  mpAdmin_homePrivilegesLink_location: 'แท็บสาขา',
+  mpAdmin_homePrivilegesLink_me: 'แท็บโปรไฟล์',
+  mpAdmin_homePrivilegesLink_none: 'แท็บสิทธิประโยชน์ (ค่าเริ่มต้น)',
+
   mpAdmin_popupTitle: 'ป๊อปอัป',
   mpAdmin_popupDesc:
     'แบนเนอร์ป๊อปอัปบนหน้าแรกหลังเข้าสู่ระบบ ดูสถานะ ช่วงเวลา และตัวอย่างจากรายการ แก้ไขได้ทันที',
@@ -987,7 +1061,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
     'หน้าร้านแสดงบนแบนเนอร์หน้าแรก Delivery แสดงบนแบนเนอร์แท็บสั่งอาหาร ลำดับน้อยจะแสดงก่อนในแต่ละช่องทาง',
   mpAdmin_newMenuTitle: 'เมนูใหม่',
   mpAdmin_newMenuDesc:
-    'การ์ดสี่เหลี่ยมในแถว 「เมนูใหม่」 ด้านบนแท็บสั่งอาหาร ใช้การกรองเดือนแบบเดียวกับโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
+    'แบนเนอร์แนวนอนขนาดใหญ่บนหน้าแรก (ใต้โปรโมชัน) และแท็บสั่งอาหาร เหมือนโปรโมชัน ใช้การกรองเดือนแบบเดียวกับโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
   mpAdmin_newMenuEmpty: 'ยังไม่มีเนื้อหาเมนูใหม่',
   mpAdmin_newMenuNew: 'เมนูใหม่',
   mpAdmin_infoTitle: 'ข้อมูล·ประกาศ',
@@ -1065,7 +1139,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_placementHomePromo: 'หน้าแรก · แบนเนอร์โปรโมชันหน้าร้าน',
   mpAdmin_placementHomePromoDine: 'หน้าแรก · แบนเนอร์โปรโมชันหน้าร้าน',
   mpAdmin_placementHomePromoDelivery: 'แท็บสั่งอาหาร · แบนเนอร์ Delivery',
-  mpAdmin_placementHomeNewMenu: 'แท็บสั่งอาหาร · เมนูใหม่',
+  mpAdmin_placementHomeNewMenu: 'หน้าแรกและแท็บสั่งอาหาร · แบนเนอร์เมนูใหม่',
   mpAdmin_placementHomeNotice: 'หน้าแรก · ประกาศ',
   mpAdmin_placementLocation: 'แท็บสาขา',
   mpAdmin_placementPopup: 'ป๊อปอัป',
@@ -1085,7 +1159,8 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_imageCompositionPromo:
     'จัดวาง: ไล่สีมืดและข้อความทางซ้าย รูปอาหารทางขวา แอปจะทับข้อความทับซ้าย 58%',
   mpAdmin_imageCompositionPopup: 'แสดงด้านบนชีตป๊อปอัปแนวตั้ง (4:5)',
-  mpAdmin_imageCompositionNewMenu: 'แสดงเป็นการ์ดสี่เหลี่ยมในแถวเมนูใหม่บนแท็บสั่งอาหาร',
+  mpAdmin_imageCompositionNewMenu:
+    'จัดวาง: แสดงเป็นแบนเนอร์แนวนอนขนาดใหญ่ (12:5) เหมือนโปรโมชัน ไล่สีมืดและหัวข้อทางซ้าย รูปอาหารทางขวา',
   mpAdmin_imageReadSizeFail: 'อ่านขนาดรูปไม่ได้',
   mpAdmin_imageTooSmall:
     'รูป {label} ต้องไม่น้อยกว่า {minW}×{minH}px (ปัจจุบัน {width}×{height}px)',

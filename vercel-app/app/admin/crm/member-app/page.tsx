@@ -17,6 +17,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
+import { MemberPortalHomePrivilegesAdminPanel } from "@/components/admin/member-portal-home-privileges-admin-panel"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
 import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
@@ -999,6 +1000,24 @@ export default function CrmMemberAppContentPage() {
                   </Button>
                 </div>
                 </fieldset>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_homePrivilegesTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MemberPortalHomePrivilegesAdminPanel
+                  canEdit={canEdit}
+                  onNotice={(message) => {
+                    setError("")
+                    setNotice(message)
+                  }}
+                  onError={(message) => {
+                    setNotice("")
+                    setError(message)
+                  }}
+                />
               </CardContent>
             </Card>
             <Card>

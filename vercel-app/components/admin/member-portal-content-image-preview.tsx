@@ -25,7 +25,7 @@ export function MemberPortalContentImagePreview({
 }: MemberPortalContentImagePreviewProps) {
   if (!imageUrl) return null
 
-  if (category === "promo") {
+  if (category === "promo" || category === "new_menu") {
     return (
       <div
         className={`relative w-full overflow-hidden bg-[#261c12] shadow-sm ${MP_HOME_CARD_RADIUS} ${className}`}
@@ -64,27 +64,6 @@ export function MemberPortalContentImagePreview({
           }}
         />
         {title ? <p className="px-3 pb-2 text-sm font-semibold text-white">{title}</p> : null}
-      </div>
-    )
-  }
-
-  if (category === "new_menu") {
-    return (
-      <div className={`inline-block w-full max-w-[9.5rem] ${className}`}>
-        <div className="overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
-          <img
-            src={imageUrl}
-            alt={alt || title || ""}
-            referrerPolicy="no-referrer"
-            className="aspect-square w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.classList.add("opacity-40")
-            }}
-          />
-          {title ? (
-            <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-medium leading-snug text-stone-800">{title}</p>
-          ) : null}
-        </div>
       </div>
     )
   }

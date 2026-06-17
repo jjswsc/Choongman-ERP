@@ -34,9 +34,14 @@ import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { pickMemberPortalHomePopup } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import { MemberPortalHomeTopBar } from "@/components/member-portal/member-portal-home-top-bar"
-import { MemberPortalHomeHeroBanner } from "@/components/member-portal/member-portal-home-hero-banner"
+import { MemberPortalHomeHeroBanner, MemberPortalHomeNewMenuHeroes } from "@/components/member-portal/member-portal-home-hero-banner"
 import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
 import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
+import {
+  DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
+  resolveMemberPortalHomePrivilegesForLang,
+  type MemberPortalHomePrivilegeItem,
+} from "@/lib/member-portal-home-privileges-config"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -124,6 +129,7 @@ type PublicConfigResponse = {
   textPrimaryColor?: string
   textSecondaryColor?: string
   fontScalePct?: number
+  homePrivileges?: MemberPortalHomePrivilegeItem[]
 }
 
 function applyPublicConfigToState(
@@ -157,6 +163,7 @@ function applyPublicConfigToState(
       fontScalePct: Number(r.fontScalePct) || DEFAULT_MEMBER_PORTAL_UI_THEME.fontScalePct,
     },
     signupWelcomeCouponEnabled: Boolean(r.signupWelcomeCouponEnabled),
+    homePrivileges: Array.isArray(r.homePrivileges) ? r.homePrivileges : DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
   }
 }
 
@@ -241,6 +248,9 @@ export function MemberPortalApp() {
   })
   const [uiTheme, setUiTheme] = React.useState<MemberPortalUiTheme>(DEFAULT_MEMBER_PORTAL_UI_THEME)
   const [signupWelcomeCouponEnabled, setSignupWelcomeCouponEnabled] = React.useState(false)
+  const [homePrivileges, setHomePrivileges] = React.useState<MemberPortalHomePrivilegeItem[]>(
+    DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES
+  )
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
   const [visits, setVisits] = React.useState<PortalVisitRow[]>([])
@@ -372,6 +382,7 @@ export function MemberPortalApp() {
           setDesignBackgrounds(applied.designBackgrounds)
           setUiTheme(applied.uiTheme)
           setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
+          setHomePrivileges(applied.homePrivileges)
         })
         .catch(() => {})
     }
@@ -396,6 +407,7 @@ export function MemberPortalApp() {
           }
           setUiTheme(applied.uiTheme)
           setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
+          setHomePrivileges(applied.homePrivileges)
         })
         .catch(() => {
           setContactUrls({
@@ -625,6 +637,10 @@ export function MemberPortalApp() {
 
   const homePopup = React.useMemo(() => pickMemberPortalHomePopup(contentItems), [contentItems])
   const homePopupContentKey = homePopup?.contentKey || ""
+  const homePrivilegeCards = React.useMemo(
+    () => resolveMemberPortalHomePrivilegesForLang(homePrivileges, lang),
+    [homePrivileges, lang]
+  )
 
   React.useEffect(() => {
     if (!member || tab !== "home" || !homePopupContentKey) {
@@ -1123,7 +1139,23 @@ export function MemberPortalApp() {
               }}
             />
 
-            <MemberPortalHomePrivileges coupons={coupons} t={t} onViewAll={() => changeTab("privilege")} />
+            <MemberPortalHomeNewMenuHeroes
+              contentItems={contentItems}
+              t={t}
+              onOrder={() => changeTab("order")}
+              onSelectItem={(item) => {
+                setHomePopupOpen(false)
+                setSelectedHomePromo(item)
+                setHomePromoOpen(true)
+              }}
+            />
+
+            <MemberPortalHomePrivileges
+              items={homePrivilegeCards}
+              t={t}
+              onViewAll={() => changeTab("privilege")}
+              onNavigateTab={changeTab}
+            />
 
             <MemberPortalStampHomeWidget
               lang={lang}
