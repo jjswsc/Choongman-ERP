@@ -1,5 +1,8 @@
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+
+const PAYABLE_LEDGER_SELECT =
+  'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id'
 
 export type PayableTransactionRow = {
   id?: number
@@ -21,6 +24,68 @@ export type PayableAttributionMaps = {
   storeByAccrualId: Map<number, string>
   storeByPettyId: Map<number, string>
   storeByBankId: Map<number, string>
+  /** 같은 거래처·거래일 PO/입고 발생 매장 — 매입 지급(Payment) 귀속 보조 */
+  accrualStoreByVendorDate: Map<string, string>
+  /** 같은 거래처·금액 PO/입고 발생 매장 — 지급일≠발생일 폴백 */
+  accrualStoreByVendorAmount: Map<string, string>
+}
+
+function vendorDateStoreKey(vendorCode: string, transDate: string): string {
+  const vc = String(vendorCode || '').trim().toLowerCase()
+  const dt = String(transDate || '').trim().slice(0, 10)
+  return `${vc}|${dt}`
+}
+
+function isPurchasePaymentRow(r: PayableTransactionRow): boolean {
+  if (String(r.ref_type || '') === 'Payment') return true
+  if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) return false
+  if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
+    return Number(r.amount ?? 0) < 0
+  }
+  return false
+}
+
+function vendorAmountStoreKey(vendorCode: string, amountAbs: number): string {
+  const vc = String(vendorCode || '').trim().toLowerCase()
+  return `${vc}|${roundMoney(Math.abs(amountAbs))}`
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+export function buildPayableAccrualStoreIndexes(
+  rows: PayableTransactionRow[],
+  maps: Pick<PayableAttributionMaps, 'locationByInboundId' | 'storeByPoId'>
+): Pick<PayableAttributionMaps, 'accrualStoreByVendorDate' | 'accrualStoreByVendorAmount'> {
+  const accrualStoreByVendorDate = new Map<string, string>()
+  const accrualStoreByVendorAmount = new Map<string, string>()
+  for (const r of rows || []) {
+    let store: string | null = null
+    if (r.ref_type === 'PO' && r.ref_id != null) {
+      store = maps.storeByPoId.get(Number(r.ref_id)) || null
+    } else if (r.ref_type === 'Inbound' && r.ref_id != null) {
+      store = maps.locationByInboundId.get(Number(r.ref_id)) || null
+    }
+    if (!store) continue
+    const vc = String(r.vendor_code || '').trim().toLowerCase()
+    const dt = String(r.trans_date || '').trim().slice(0, 10)
+    const amountAbs = Math.abs(Number(r.amount ?? 0))
+    if (!vc || dt.length !== 10) continue
+    accrualStoreByVendorDate.set(`${vc}|${dt}`, store)
+    if (amountAbs > 0) {
+      accrualStoreByVendorAmount.set(vendorAmountStoreKey(vc, amountAbs), store)
+    }
+  }
+  return { accrualStoreByVendorDate, accrualStoreByVendorAmount }
+}
+
+/** @deprecated use buildPayableAccrualStoreIndexes */
+export function buildAccrualStoreByVendorDate(
+  rows: PayableTransactionRow[],
+  maps: Pick<PayableAttributionMaps, 'locationByInboundId' | 'storeByPoId'>
+): Map<string, string> {
+  return buildPayableAccrualStoreIndexes(rows, maps).accrualStoreByVendorDate
 }
 
 export function matchesPayableStoreNorm(resolved: string | null | undefined, storeFilter: string): boolean {
@@ -61,11 +126,22 @@ export function resolvePayableAttributedStore(
   if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) {
     return maps.storeByAccrualId.get(Number(r.expense_accrual_id)) || null
   }
-  if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
-    return maps.storeByBankId.get(Number(r.bank_transaction_id)) || null
-  }
   if (r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0) {
     return maps.storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
+  }
+  if (isPurchasePaymentRow(r)) {
+    const vc = String(r.vendor_code || '').trim().toLowerCase()
+    const dt = String(r.trans_date || '').trim().slice(0, 10)
+    const amountAbs = Math.abs(Number(r.amount ?? 0))
+    const byDate = maps.accrualStoreByVendorDate.get(vendorDateStoreKey(vc, dt))
+    if (byDate) return byDate
+    if (amountAbs > 0) {
+      const byAmount = maps.accrualStoreByVendorAmount.get(vendorAmountStoreKey(vc, amountAbs))
+      if (byAmount) return byAmount
+    }
+  }
+  if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
+    return maps.storeByBankId.get(Number(r.bank_transaction_id)) || null
   }
   return null
 }
@@ -161,7 +237,64 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
     }
   }
 
-  return { locationByInboundId, storeByPoId, storeByAccrualId, storeByPettyId, storeByBankId }
+  const { accrualStoreByVendorDate, accrualStoreByVendorAmount } = buildPayableAccrualStoreIndexes(rows, {
+    locationByInboundId,
+    storeByPoId,
+  })
+
+  return {
+    locationByInboundId,
+    storeByPoId,
+    storeByAccrualId,
+    storeByPettyId,
+    storeByBankId,
+    accrualStoreByVendorDate,
+    accrualStoreByVendorAmount,
+  }
+}
+
+export async function loadPayableTransactionsToEnd(params: {
+  vendorFilter?: string
+  endStr: string
+}): Promise<PayableTransactionRow[]> {
+  const parts: string[] = []
+  if (params.vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(params.vendorFilter)}`)
+  if (params.endStr) parts.push(`trans_date=lte.${params.endStr}`)
+  const filter = parts.length ? parts.join('&') : 'id=gt.0'
+  return (await supabaseSelectFilterAllPages('payable_transactions', filter, {
+    select: PAYABLE_LEDGER_SELECT,
+    pageSize: 8000,
+    maxRows: 2_000_000,
+  })) as PayableTransactionRow[]
+}
+
+export async function scopePayableLedgerRows(
+  rows: PayableTransactionRow[],
+  storeFilter?: string
+): Promise<{ maps: PayableAttributionMaps; scopedRows: PayableTransactionRow[] }> {
+  const maps = await buildPayableAttributionMaps(rows)
+  const scopedRows = isPayableStoreFilterActive(storeFilter)
+    ? filterPayableRowsByStore(rows, storeFilter!, maps)
+    : rows
+  return { maps, scopedRows }
+}
+
+export function payableRowsOnOrAfterStart(
+  rows: PayableTransactionRow[],
+  startStr: string | undefined
+): PayableTransactionRow[] {
+  if (!startStr) return rows
+  return rows.filter((r) => String(r.trans_date || '').slice(0, 10) >= startStr)
+}
+
+export function cumulativeBalanceByVendor(rows: PayableTransactionRow[]): Record<string, number> {
+  const byVendor: Record<string, number> = {}
+  for (const r of rows) {
+    const vc = String(r.vendor_code || '').trim()
+    if (!vc) continue
+    byVendor[vc] = (byVendor[vc] || 0) + Number(r.amount ?? 0)
+  }
+  return byVendor
 }
 
 export function filterPayableRowsByStore(

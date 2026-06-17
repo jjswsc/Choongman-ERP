@@ -7,106 +7,29 @@
  * - payable: storeFilter 시 입고(location)·발주(relatedStore/location)·지출(store_name)·통장(store)·패티(store)로 귀속 매장 필터
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
-  buildPayableAttributionMaps,
-  filterPayableRowsByStore,
-  isPayableStoreFilterActive,
+  cumulativeBalanceByVendor,
+  loadPayableTransactionsToEnd,
+  payableRowsOnOrAfterStart,
   resolvePayableAttributedStore,
+  scopePayableLedgerRows,
   type PayableTransactionRow,
 } from '@/lib/payable-attributed-store'
 import {
-  normalizeReceivableStoreKey,
-  pickReceivableDisplayStoreName,
-  receivableStoreGroupKey,
-} from '@/lib/receivable-store-key'
+  groupReceivableRowsByStore,
+  scopeReceivableLedger,
+  type ReceivableTransactionRow,
+} from '@/lib/receivable-ledger-scope'
 
-type ReceivableVendorEntry = { code: string; name: string }
-type ReceivableVendorMaps = {
-  storeToVendor: Map<string, ReceivableVendorEntry>
-  vendorCodeToStores: Map<string, Set<string>>
-}
-
-function isAllFilterToken(v: string): boolean {
-  const n = normalizeReceivableStoreKey(v)
-  return !n || n === 'all'
-}
-
-function normalizeVendorCode(v: string): string {
-  return String(v || '').trim().toLowerCase()
-}
-
-function matchesReceivableStoreNorm(storeName: string | null | undefined, storeFilter: string): boolean {
-  const filterNorm = normalizeReceivableStoreKey(storeFilter)
-  if (isAllFilterToken(filterNorm)) return true
-  const storeNorm = normalizeReceivableStoreKey(storeName || '')
-  if (!storeNorm) return false
-  return storeNorm === filterNorm
-}
-
-function addVendorStoreAlias(
-  storeToVendor: Map<string, ReceivableVendorEntry>,
-  vendorCodeToStores: Map<string, Set<string>>,
-  aliasRaw: string,
-  entry: ReceivableVendorEntry
-): void {
-  const alias = normalizeReceivableStoreKey(aliasRaw)
-  if (!alias) return
-  storeToVendor.set(alias, entry)
-  const byCode = vendorCodeToStores.get(entry.code) || new Set<string>()
-  byCode.add(alias)
-  vendorCodeToStores.set(entry.code, byCode)
-}
-
-function matchesReceivableStoreByVendorLink(
-  storeName: string | null | undefined,
-  vendorCodeFilter: string,
-  maps: ReceivableVendorMaps
-): boolean {
-  const vendorCode = normalizeVendorCode(vendorCodeFilter)
-  if (isAllFilterToken(vendorCode)) return true
-  const storeNorm = normalizeReceivableStoreKey(storeName || '')
-  if (!storeNorm) return false
-
-  const aliasesByCode = maps.vendorCodeToStores.get(vendorCode)
-  if (!aliasesByCode || aliasesByCode.size === 0) return false
-  return aliasesByCode.has(storeNorm)
-}
-
-async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
-  const vendors = (await supabaseSelect('vendors', {
-    select: 'code,name,gps_name,sales_outlet',
-    limit: 5000,
-  })) as { code?: string; name?: string; gps_name?: string; sales_outlet?: string }[] | null
-  const storeToVendor = new Map<string, ReceivableVendorEntry>()
-  const vendorCodeToStores = new Map<string, Set<string>>()
-  for (const v of vendors || []) {
-    const code = String(v.code || '').trim().toLowerCase()
-    const name = String(v.name || '').trim() || String(v.code || '').trim()
-    const gpsName = String(v.gps_name || '').trim()
-    const salesOutlet = String(v.sales_outlet || '').trim()
-    if (!code) continue
-    const entry = { code, name }
-    if (salesOutlet) addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet, entry)
-    if (gpsName) addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName, entry)
-    if (name) addVendorStoreAlias(storeToVendor, vendorCodeToStores, name, entry)
-    if (salesOutlet && salesOutlet.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet.slice(3).trim(), entry)
-    }
-    if (salesOutlet && !salesOutlet.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, `CM ${salesOutlet}`, entry)
-    }
-    if (gpsName && gpsName.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName.slice(3).trim(), entry)
-    }
-    if (gpsName && !gpsName.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, `CM ${gpsName}`, entry)
-    }
-  }
-  return { storeToVendor, vendorCodeToStores }
+function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
+  const s = String(storeFilter || '').trim()
+  if (!s) return false
+  const lower = s.toLowerCase()
+  return lower !== 'all' && lower !== '전체'
 }
 
 export async function GET(request: NextRequest) {
@@ -151,22 +74,13 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'payable') {
-      const parts: string[] = []
-      if (vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
-      if (startStr) parts.push(`trans_date=gte.${startStr}`)
-      if (endStr) parts.push(`trans_date=lte.${endStr}`)
-      const filter = parts.length ? parts.join('&') : 'id=gt.0'
-      const rawRows = (await supabaseSelectFilter(
-        'payable_transactions',
-        filter,
-        { order: 'trans_date.desc', limit: 20000 }
-      )) as PayableTransactionRow[]
-
-      const attributionMaps = await buildPayableAttributionMaps(rawRows || [])
-      let rows: PayableTransactionRow[] = rawRows || []
-      if (isPayableStoreFilterActive(storeFilter)) {
-        rows = filterPayableRowsByStore(rows, storeFilter, attributionMaps)
-      }
+      const ledgerRows = await loadPayableTransactionsToEnd({
+        vendorFilter: vendorFilter || undefined,
+        endStr: endStr || '',
+      })
+      const { maps: attributionMaps, scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
+      const cumulativeByVendor = cumulativeBalanceByVendor(scopedRows)
+      const rows = payableRowsOnOrAfterStart(scopedRows, startStr || undefined)
 
       // 인보이스 여부: Inbound→inbound_batches, PO→purchase_orders, bank_transaction_id→bank_transactions (마이그레이션 미적용 시 스킵)
       const invoiceByInbound: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
@@ -243,66 +157,28 @@ export async function GET(request: NextRequest) {
       const list = Object.entries(byVendor).map(([vendorCode, v]) => ({
         vendorCode,
         balance: v.total,
+        cumulativeBalance: cumulativeByVendor[vendorCode] ?? 0,
         items: v.items.sort((a, b) => (String(b.trans_date || '').localeCompare(String(a.trans_date || '')))),
       }))
 
-      return NextResponse.json({ type: 'payable', list }, { headers })
+      return NextResponse.json({ type: 'payable', list, cumulativeByVendor }, { headers })
     }
 
-    // receivable
-    const parts: string[] = []
-    if (startStr) parts.push(`trans_date=gte.${startStr}`)
-    if (endStr) parts.push(`trans_date=lte.${endStr}`)
-    const filter = parts.length ? parts.join('&') : 'id=gt.0'
-    let rows = (await supabaseSelectFilter(
-      'receivable_transactions',
-      filter,
-      { order: 'trans_date.desc', limit: 20000 }
-    )) as {
-      id?: number
-      store_name?: string
-      amount?: number
-      ref_type?: string
-      ref_id?: number
-      trans_date?: string
-      memo?: string
-      invoice_no?: string
-      created_at?: string
-      receive_checked?: boolean
-    }[]
-
-    const receivableVendorMaps = await getReceivableVendorMaps()
-    const storeFilterActive = Boolean(storeFilter?.trim()) && !isAllFilterToken(storeFilter)
-    if (storeFilterActive) {
-      rows = rows.filter((r) =>
-        canSelectStores
-          ? matchesReceivableStoreByVendorLink(r.store_name, storeFilter, receivableVendorMaps)
-          : matchesReceivableStoreNorm(r.store_name, storeFilter)
-      )
-    }
-
-    const byStore: Record<string, { displayName: string; total: number; items: typeof rows }> = {}
-    for (const r of rows || []) {
-      const sn = String(r.store_name || '').trim()
-      if (!sn) continue
-      const groupKey = receivableStoreGroupKey(sn)
-      if (!byStore[groupKey]) byStore[groupKey] = { displayName: sn, total: 0, items: [] }
-      byStore[groupKey].displayName = pickReceivableDisplayStoreName(byStore[groupKey].displayName, sn)
-      byStore[groupKey].items.push(r)
-      byStore[groupKey].total += Number(r.amount ?? 0)
-    }
-
-    const list = Object.entries(byStore).map(([, v]) => {
-      const storeName = v.displayName
-      const vendor = receivableVendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
-      return {
-        storeName,
-        vendorCode: vendor?.code,
-        vendorName: vendor?.name,
-        balance: v.total,
-        items: v.items.sort((a, b) => (String(b.trans_date || '').localeCompare(String(a.trans_date || '')))),
-      }
+    // receivable — 종료일까지 단일 집계 후 기간 분리(목록·누적 일치)
+    const receivableScoped = await scopeReceivableLedger({
+      endStr,
+      startStr,
+      storeFilter: isReceivableStoreFilterActive(storeFilter) ? storeFilter : undefined,
+      filterByVendorLink: canSelectStores,
     })
+    const rows = receivableScoped.periodRows
+
+    const list = groupReceivableRowsByStore(
+      rows,
+      receivableScoped.vendorMaps,
+      receivableScoped.attributionMaps,
+      receivableScoped.cumulativeByStoreGroup
+    )
 
     return NextResponse.json({ type: 'receivable', list }, { headers })
   } catch (e) {

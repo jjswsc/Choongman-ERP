@@ -1,8 +1,7 @@
 import {
-  buildPayableAttributionMaps,
-  filterPayableRowsByStore,
   isPayableStoreFilterActive,
-  type PayableTransactionRow,
+  loadPayableTransactionsToEnd,
+  scopePayableLedgerRows,
 } from '@/lib/payable-attributed-store'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
@@ -77,18 +76,10 @@ export async function sumPayablesBalance(params: {
     }
   }
 
-  const filter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
-  const rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
-    select: 'amount,ref_type,ref_id,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id',
-    pageSize: 8000,
-    maxRows: ACCOUNTING_FALLBACK_MAX_ROWS,
-  })) as PayableTransactionRow[]
-
-  let scoped = rows
-  if (useStoreScoped) {
-    const maps = await buildPayableAttributionMaps(rows)
-    scoped = filterPayableRowsByStore(rows, storeFilter, maps)
-  }
+  const rows = await loadPayableTransactionsToEnd({ endStr })
+  const scoped = useStoreScoped
+    ? (await scopePayableLedgerRows(rows, storeFilter)).scopedRows
+    : rows
 
   const total = scoped.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
   return { total, source: 'select' }

@@ -1,16 +1,12 @@
 import { NextRequest } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
-import {
-  MEMBER_PORTAL_SETTINGS_ROUTE_DYNAMIC,
-  MEMBER_PORTAL_SETTINGS_ROUTE_REVALIDATE,
-  memberPortalSettingsJsonResponse,
-} from '@/lib/member-portal-settings-route'
+import { memberPortalSettingsJsonResponse } from '@/lib/member-portal-settings-route'
 import { readSystemSettingString, writeSystemSettingString } from '@/lib/system-settings-value'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
-export const dynamic = MEMBER_PORTAL_SETTINGS_ROUTE_DYNAMIC
-export const revalidate = MEMBER_PORTAL_SETTINGS_ROUTE_REVALIDATE
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const KEY_LOGIN_BG = 'member_portal_login_background_url'
 const KEY_APP_BG = 'member_portal_app_background_url'

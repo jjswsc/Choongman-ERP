@@ -996,6 +996,9 @@ export function ReceivablePayableTab() {
 
   const getCumulativeBalanceForItem = React.useCallback(
     (item: ReceivablePayableItem) => {
+      if (item.cumulativeBalance != null && Number.isFinite(item.cumulativeBalance)) {
+        return item.cumulativeBalance
+      }
       const key = cumulativeBalanceKey(tab, item)
       if (!key) return undefined
       const balance = cumulativeSummary.byKey[key]
@@ -2211,9 +2214,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
-                                        {formatPriorBalanceHint(priorBal) ? (
+                                        {priorBalanceHint ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
-                                            {formatPriorBalanceHint(priorBal)}
+                                            {priorBalanceHint}
                                           </span>
                                         ) : null}
                                       </div>

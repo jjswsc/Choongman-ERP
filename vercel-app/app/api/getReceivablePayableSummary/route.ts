@@ -5,128 +5,54 @@
  * - receivable: store_name으로 vendors 매칭(gps_name/name) → vendorCode, vendorName 포함
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   aggregatePayableBalancesByVendor,
-  buildPayableAttributionMaps,
-  filterPayableRowsByStore,
   isPayableStoreFilterActive,
+  loadPayableTransactionsToEnd,
+  scopePayableLedgerRows,
   type PayableTransactionRow,
 } from '@/lib/payable-attributed-store'
-import {
-  normalizeReceivableStoreKey,
-  pickReceivableDisplayStoreName,
-  receivableStoreGroupKey,
-} from '@/lib/receivable-store-key'
+import { groupReceivableRowsByStore, scopeReceivableLedger } from '@/lib/receivable-ledger-scope'
 
-type ReceivableVendorEntry = { code: string; name: string }
-type ReceivableVendorMaps = {
-  storeToVendor: Map<string, ReceivableVendorEntry>
-  vendorCodeToStores: Map<string, Set<string>>
+function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
+  const s = String(storeFilter || '').trim()
+  if (!s) return false
+  const lower = s.toLowerCase()
+  return lower !== 'all' && lower !== '전체'
 }
 
-function isAllFilterToken(v: string): boolean {
-  const n = normalizeReceivableStoreKey(v)
-  return !n || n === 'all'
-}
-
-function normalizeVendorCode(v: string): string {
-  return String(v || '').trim().toLowerCase()
-}
-
-function matchesReceivableStoreNorm(storeName: string | null | undefined, storeFilter: string): boolean {
-  const filterNorm = normalizeReceivableStoreKey(storeFilter)
-  if (isAllFilterToken(filterNorm)) return true
-  const storeNorm = normalizeReceivableStoreKey(storeName || '')
-  if (!storeNorm) return false
-  return storeNorm === filterNorm
-}
-
-function addVendorStoreAlias(
-  storeToVendor: Map<string, ReceivableVendorEntry>,
-  vendorCodeToStores: Map<string, Set<string>>,
-  aliasRaw: string,
-  entry: ReceivableVendorEntry
-): void {
-  const alias = normalizeReceivableStoreKey(aliasRaw)
-  if (!alias) return
-  storeToVendor.set(alias, entry)
-  const byCode = vendorCodeToStores.get(entry.code) || new Set<string>()
-  byCode.add(alias)
-  vendorCodeToStores.set(entry.code, byCode)
-}
-
-function matchesReceivableStoreByVendorLink(
-  storeName: string | null | undefined,
-  vendorCodeFilter: string,
-  maps: ReceivableVendorMaps
-): boolean {
-  const vendorCode = normalizeVendorCode(vendorCodeFilter)
-  if (isAllFilterToken(vendorCode)) return true
-  const storeNorm = normalizeReceivableStoreKey(storeName || '')
-  if (!storeNorm) return false
-
-  const aliasesByCode = maps.vendorCodeToStores.get(vendorCode)
-  if (!aliasesByCode || aliasesByCode.size === 0) return false
-  return aliasesByCode.has(storeNorm)
-}
-
-async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
-  const vendors = (await supabaseSelect('vendors', {
-    select: 'code,name,gps_name,sales_outlet',
-    limit: 10000,
-  })) as { code?: string; name?: string; gps_name?: string; sales_outlet?: string }[] | null
-  const storeToVendor = new Map<string, ReceivableVendorEntry>()
-  const vendorCodeToStores = new Map<string, Set<string>>()
-  for (const v of vendors || []) {
-    const code = String(v.code || '').trim().toLowerCase()
-    const name = String(v.name || '').trim() || String(v.code || '').trim()
-    const gpsName = String(v.gps_name || '').trim()
-    const salesOutlet = String(v.sales_outlet || '').trim()
-    if (!code) continue
-    const entry = { code, name }
-    if (salesOutlet) addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet, entry)
-    if (gpsName) addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName, entry)
-    if (name) addVendorStoreAlias(storeToVendor, vendorCodeToStores, name, entry)
-    if (salesOutlet && salesOutlet.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet.slice(3).trim(), entry)
-    }
-    if (salesOutlet && !salesOutlet.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, `CM ${salesOutlet}`, entry)
-    }
-    if (gpsName && gpsName.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName.slice(3).trim(), entry)
-    }
-    if (gpsName && !gpsName.startsWith('CM ')) {
-      addVendorStoreAlias(storeToVendor, vendorCodeToStores, `CM ${gpsName}`, entry)
-    }
-  }
-  return { storeToVendor, vendorCodeToStores }
-}
-
-function mergeReceivableSummaryRows(
-  rows: { store_name?: string; balance?: number; item_count?: number }[]
-): { storeName: string; balance: number; count: number }[] {
-  const merged = new Map<string, { storeName: string; balance: number; count: number }>()
-  for (const r of rows || []) {
-    const storeName = String(r.store_name ?? '').trim()
-    if (!storeName) continue
-    const groupKey = receivableStoreGroupKey(storeName)
-    const prev = merged.get(groupKey)
-    const balance = Number(r.balance ?? 0)
-    const count = Number(r.item_count ?? 0)
-    if (prev) {
-      prev.storeName = pickReceivableDisplayStoreName(prev.storeName, storeName)
-      prev.balance += balance
-      prev.count += count
-    } else {
-      merged.set(groupKey, { storeName, balance, count })
-    }
-  }
-  return Array.from(merged.values()).sort((a, b) => b.balance - a.balance)
+async function buildReceivableSummaryList(params: {
+  endStr: string
+  storeFilter?: string
+  filterByVendorLink: boolean
+}) {
+  const scoped = await scopeReceivableLedger({
+    endStr: params.endStr,
+    storeFilter: params.storeFilter,
+    filterByVendorLink: params.filterByVendorLink,
+  })
+  const grouped = groupReceivableRowsByStore(
+    scoped.scopedRows,
+    scoped.vendorMaps,
+    scoped.attributionMaps,
+    scoped.cumulativeByStoreGroup
+  )
+  const list = grouped
+    .map((g) => ({
+      storeName: g.storeName,
+      vendorCode: g.vendorCode,
+      vendorName: g.vendorName,
+      balance: g.cumulativeBalance,
+      count: g.items.length,
+    }))
+    .filter((x) => x.storeName)
+    .sort((a, b) => b.balance - a.balance)
+  const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
+  return { list, totalAmount }
 }
 
 async function getPayableSummaryWithStoreFilter(params: {
@@ -135,18 +61,12 @@ async function getPayableSummaryWithStoreFilter(params: {
   storeFilter: string
 }): Promise<{ list: { vendorCode: string; balance: number; count: number }[]; totalAmount: number }> {
   const { vendorFilter, endStr, storeFilter } = params
-  const parts: string[] = []
-  if (vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
-  if (endStr) parts.push(`trans_date=lte.${endStr}`)
-  const filter = parts.length ? parts.join('&') : 'id=gt.0'
-  const rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
-    select: 'vendor_code,amount,ref_type,ref_id,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id',
-    pageSize: 8000,
-    maxRows: 2_000_000,
-  })) as PayableTransactionRow[]
-  const attributionMaps = await buildPayableAttributionMaps(rows)
-  const filtered = filterPayableRowsByStore(rows, storeFilter, attributionMaps)
-  const list = aggregatePayableBalancesByVendor(filtered)
+  const ledgerRows = await loadPayableTransactionsToEnd({
+    vendorFilter: vendorFilter || undefined,
+    endStr,
+  })
+  const { scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
+  const list = aggregatePayableBalancesByVendor(scopedRows)
   const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
   return { list, totalAmount }
 }
@@ -212,8 +132,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ type: 'payable', list, totalAmount }, { headers })
     }
 
-    // receivable
-    const receivableVendorMaps = await getReceivableVendorMaps()
+    // receivable — 목록 API와 동일 scope·Receive 귀속 규칙
     let storeFilterVal = requestedStoreFilter
     if (!canSelectStores) {
       if (!requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체') {
@@ -225,110 +144,51 @@ export async function GET(request: NextRequest) {
         }
       }
     }
-    let rows = (await supabaseRpc<{ store_name: string; balance: number; item_count: number }[]>(
-      'get_receivable_summary',
-      {
-        p_store_filter: null,
-        p_end_str: endStr || null,
-      }
-    )) as { store_name?: string; balance?: number; item_count?: number }[] | null
-    if (storeFilterVal) {
-      rows = (rows || []).filter((r) =>
-        canSelectStores
-          ? matchesReceivableStoreByVendorLink(r.store_name, storeFilterVal, receivableVendorMaps)
-          : matchesReceivableStoreNorm(r.store_name, storeFilterVal)
-      )
-    }
-
-    const merged = mergeReceivableSummaryRows(rows || [])
-    const list = merged
-      .map((r) => {
-        const vendor = receivableVendorMaps.storeToVendor.get(normalizeReceivableStoreKey(r.storeName))
-        return {
-          storeName: r.storeName,
-          vendorCode: vendor?.code,
-          vendorName: vendor?.name,
-          balance: r.balance,
-          count: r.count,
-        }
-      })
-      .filter((x) => x.storeName)
-    const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
-    return NextResponse.json({ type: 'receivable', list, totalAmount }, { headers })
+    const receivableSummary = await buildReceivableSummaryList({
+      endStr,
+      storeFilter: isReceivableStoreFilterActive(storeFilterVal) ? storeFilterVal : undefined,
+      filterByVendorLink: canSelectStores,
+    })
+    return NextResponse.json(
+      { type: 'receivable', list: receivableSummary.list, totalAmount: receivableSummary.totalAmount },
+      { headers }
+    )
   } catch (_rpcErr) {
     try {
-      // RPC 미배포 시 fallback: 기존 select + JS 집계
-      const pParts: string[] = []
-      if (vendorFilter) pParts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
-      if (endStr) pParts.push(`trans_date=lte.${endStr}`)
-      const pFilter = pParts.length ? pParts.join('&') : 'id=gt.0'
-
-      const rParts: string[] = []
-      const receivableVendorMaps = await getReceivableVendorMaps()
-      let fallbackStoreFilter = requestedStoreFilter
-      if (!canSelectStores) {
-        fallbackStoreFilter = (!requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체')
-          ? String(allowedStores[0] || '').trim()
-          : requestedStoreFilter
-      }
-      if (endStr) rParts.push(`trans_date=lte.${endStr}`)
-      const rFilter = rParts.length ? rParts.join('&') : 'id=gt.0'
-
-      const rows =
-        type === 'payable'
-          ? ((await supabaseSelectFilter('payable_transactions', pFilter, {
-              order: 'trans_date.desc',
-              limit: 20000,
-            })) as { vendor_code?: string; amount?: number }[])
-          : ((await supabaseSelectFilter('receivable_transactions', rFilter, {
-              order: 'trans_date.desc',
-              limit: 20000,
-            })) as { store_name?: string; amount?: number }[])
-
       if (type === 'payable') {
-        let payableRows = (rows || []) as PayableTransactionRow[]
+        const pParts: string[] = []
+        if (vendorFilter) pParts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
+        if (endStr) pParts.push(`trans_date=lte.${endStr}`)
+        const pFilter = pParts.length ? pParts.join('&') : 'id=gt.0'
+        let payableRows = (await supabaseSelectFilter('payable_transactions', pFilter, {
+          order: 'trans_date.desc',
+          limit: 20000,
+        })) as PayableTransactionRow[]
         if (payableStoreFilterActive) {
-          const attributionMaps = await buildPayableAttributionMaps(payableRows)
-          payableRows = filterPayableRowsByStore(payableRows, requestedStoreFilter, attributionMaps)
+          const scoped = await scopePayableLedgerRows(payableRows, requestedStoreFilter)
+          payableRows = scoped.scopedRows
         }
         const list = aggregatePayableBalancesByVendor(payableRows)
         const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
         return NextResponse.json({ type: 'payable', list, totalAmount }, { headers })
       }
 
-      const byStore: Record<string, { displayName: string; balance: number; count: number }> = {}
-      let receivableRows = (rows || []) as { store_name?: string; amount?: number }[]
-      if (fallbackStoreFilter) {
-        receivableRows = receivableRows.filter((r) =>
-          canSelectStores
-            ? matchesReceivableStoreByVendorLink(r.store_name, fallbackStoreFilter, receivableVendorMaps)
-            : matchesReceivableStoreNorm(r.store_name, fallbackStoreFilter)
-        )
+      let fallbackStoreFilter = requestedStoreFilter
+      if (!canSelectStores) {
+        fallbackStoreFilter =
+          !requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체'
+            ? String(allowedStores[0] || '').trim()
+            : requestedStoreFilter
       }
-      for (const r of receivableRows) {
-        const sn = String(r.store_name || '').trim()
-        if (!sn) continue
-        const groupKey = receivableStoreGroupKey(sn)
-        if (!byStore[groupKey]) byStore[groupKey] = { displayName: sn, balance: 0, count: 0 }
-        byStore[groupKey].displayName = pickReceivableDisplayStoreName(byStore[groupKey].displayName, sn)
-        byStore[groupKey].balance += Number(r.amount ?? 0)
-        byStore[groupKey].count += 1
-      }
-      const list = Object.entries(byStore)
-        .map(([, v]) => {
-          const storeName = v.displayName
-          const vendor = receivableVendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
-          return {
-            storeName,
-            vendorCode: vendor?.code,
-            vendorName: vendor?.name,
-            balance: v.balance,
-            count: v.count,
-          }
-        })
-        .sort((a, b) => b.balance - a.balance)
-      const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
-      return NextResponse.json({ type: 'receivable', list, totalAmount }, { headers })
+      const receivableSummary = await buildReceivableSummaryList({
+        endStr,
+        storeFilter: isReceivableStoreFilterActive(fallbackStoreFilter) ? fallbackStoreFilter : undefined,
+        filterByVendorLink: canSelectStores,
+      })
+      return NextResponse.json(
+        { type: 'receivable', list: receivableSummary.list, totalAmount: receivableSummary.totalAmount },
+        { headers }
+      )
     } catch (e) {
       console.error('getReceivablePayableSummary:', e)
       return NextResponse.json(

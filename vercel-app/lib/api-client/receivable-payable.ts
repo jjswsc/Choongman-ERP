@@ -9,6 +9,8 @@ export interface ReceivablePayableItem {
   vendorCode?: string
   vendorName?: string
   balance: number
+  /** 종료일까지 누적 잔액 (목록 API와 동일 집계) */
+  cumulativeBalance?: number
   items: {
     id?: number
     trans_date?: string
