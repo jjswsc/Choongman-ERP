@@ -981,6 +981,23 @@ export function ReceivablePayableTab() {
     return name === vendorCode ? name : `${name} (${vendorCode})`
   }
 
+  const formatPayableRefTypeLabel = (refType?: string) => {
+    if (refType === "Opening") return t("recTypeOpening") || "기초이월"
+    if (refType === "PO") return t("payTypePO") || "발주"
+    if (refType === "Inbound") return t("payTypeInbound") || tt("payTypeInbound", "입고")
+    if (refType === "Payment") return t("payTypePayment") || "지급"
+    return refType || "—"
+  }
+
+  const filterRowsByLedgerPeriod = <T extends { trans_date?: string }>(items: T[]): T[] =>
+    items.filter((r) => {
+      const d = String(r.trans_date || "").slice(0, 10)
+      if (!d) return false
+      if (startStr && d < startStr) return false
+      if (endStr && d > endStr) return false
+      return true
+    })
+
   const filterItemsByUnpaid = <T extends { ref_type?: string }>(items: T[] | undefined, isRec: boolean): T[] => {
     if (!filterUnpaidOnly || !items?.length) return items ?? []
     if (isRec)
@@ -1133,6 +1150,7 @@ export function ReceivablePayableTab() {
     const isRec = tab === "receivable"
     const entityCol = isRec ? (t("outColStore") || "Customer") : (t("vendor") || "Vendor")
     const typeOrder = isRec ? (t("recTypeOrder") || "Order") : (t("payTypePO") || "PO")
+    const typeInbound = t("payTypeInbound") || tt("payTypeInbound", "Inbound")
     const typeAccountingPo = tt("recTypeAccountingPO", "Accounting PO")
     const typeForceOutbound = tt("recTypeForceOutbound", "Forced Outbound")
     const typeReceive = isRec ? (t("recTypeReceive") || "Receive") : (t("payTypePayment") || "Payment")
@@ -1163,6 +1181,8 @@ export function ReceivablePayableTab() {
             ? typeAccountingPo
             : ref === "ForceOutbound"
               ? typeForceOutbound
+              : ref === "Inbound"
+                ? typeInbound
               : ref === (isRec ? "Order" : "PO")
                 ? typeOrder
                 : typeReceive
@@ -1238,6 +1258,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         ? (t("recTypeAccountingPO") || "Accounting PO")
         : ref === "ForceOutbound"
           ? (t("recTypeForceOutbound") || "Forced Outbound")
+          : ref === "Inbound"
+            ? (t("payTypeInbound") || tt("payTypeInbound", "Inbound"))
           : ref === (isRec ? "Order" : "PO")
             ? isRec
               ? (t("recTypeOrder") || "Order")
@@ -1581,7 +1603,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         {listData.map((item) => {
                           const allItems = item.items ?? []
                           const displayItems = filterItemsByUnpaid(item.items, true)
-                          const tableItems = displayItems.length > 0 ? displayItems : allItems
+                          const tableItems = filterRowsByLedgerPeriod(
+                            displayItems.length > 0 ? displayItems : allItems
+                          )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
@@ -2201,7 +2225,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         {listData.map((item) => {
                           const allItems = item.items ?? []
                           const displayItems = filterItemsByUnpaid(item.items, false)
-                          const tableItems = displayItems.length > 0 ? displayItems : allItems
+                          const tableItems = filterRowsByLedgerPeriod(
+                            displayItems.length > 0 ? displayItems : allItems
+                          )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
@@ -2310,7 +2336,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               </span>
                                             ) : null}
                                           </td>
-                                          <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "PO" ? (t("payTypePO") || "발주") : (t("payTypePayment") || "지급")}</td>
+                                          <td className="py-1.5 px-4 w-[95px]">{formatPayableRefTypeLabel(row.ref_type)}</td>
                                           <td
                                             className={cn(
                                               "py-1.5 px-4 w-[100px] text-center",
