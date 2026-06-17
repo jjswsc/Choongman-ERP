@@ -18,7 +18,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
 
   mpAdmin_designTitle: '배경화면 디자인 관리',
   mpAdmin_designDesc:
-    '로그인 화면 / 접속 후 메인 화면 배경을 업로드합니다. 화면에 꽉 차게 표시되므로 비율은 자유이며, 권장은 1080×1920(px) 세로형(JPG/PNG)입니다.',
+    '로그인 화면 / 접속 후 메인 화면 배경을 업로드합니다. 「접속 후 배경」을 비워 두면 참고 디자인처럼 깨끗한 라이트 배경으로 표시됩니다(권장). 이미지를 올리면 본문 가독성을 위해 밝은 막을 덧씌워 표시합니다. 권장 1080×1920(px) 세로형(JPG/PNG).',
   mpAdmin_themeTitle: '글씨 색·크기',
   mpAdmin_themeDesc: '흰 카드 위 본문 글씨 색과 전체 글자 크기(%)를 조정합니다. 배포 후 /m 새로고침으로 확인하세요.',
   mpAdmin_themeTextPrimary: '본문 글씨 색',
@@ -396,7 +396,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
 
   mpAdmin_designTitle: 'Background design',
   mpAdmin_designDesc:
-    'Upload login and main screen backgrounds. The image is shown full-screen (any aspect ratio works); 1080×1920 px portrait (JPG/PNG) is recommended.',
+    'Upload login and main screen backgrounds. Leave the app background empty for a clean light background like the reference design (recommended). If you upload one, a light wash is applied for readability. 1080×1920 px portrait (JPG/PNG) is recommended.',
   mpAdmin_themeTitle: 'Text color & size',
   mpAdmin_themeDesc: 'Adjust body text on white cards and overall font scale (%). Refresh /m after saving.',
   mpAdmin_themeTextPrimary: 'Primary text color',
@@ -773,7 +773,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
 
   mpAdmin_designTitle: 'จัดการพื้นหลัง',
   mpAdmin_designDesc:
-    'อัปโหลดพื้นหลังหน้าเข้าสู่ระบบและหน้าหลักหลังเข้าใช้ รูปจะแสดงเต็มหน้าจอ (อัตราส่วนใดก็ได้) แนะนำ 1080×1920 px แนวตั้ง (JPG/PNG)',
+    'อัปโหลดพื้นหลังหน้าเข้าสู่ระบบและหน้าหลัก เว้นว่าง 「พื้นหลังหลังเข้าใช้」 เพื่อใช้พื้นหลังสว่างสะอาดตามดีไซน์อ้างอิง (แนะนำ) หากอัปโหลดรูป ระบบจะเคลือบฝ้าสว่างเพื่อให้อ่านง่าย แนะนำ 1080×1920 px แนวตั้ง (JPG/PNG)',
   mpAdmin_themeTitle: 'สีและขนาดตัวอักษร',
   mpAdmin_themeDesc: 'ปรับสีตัวอักษรบนการ์ดสีขาวและขนาดตัวอักษรทั้งหมด (%) บันทึกแล้วรีเฟรช /m',
   mpAdmin_themeTextPrimary: 'สีตัวอักษรหลัก',
