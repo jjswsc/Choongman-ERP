@@ -4,13 +4,11 @@ import * as React from "react"
 import Image from "next/image"
 import QRCode from "qrcode"
 import {
-  Copy,
   Gift,
   Home,
   Loader2,
   MapPin,
   Search,
-  Share2,
   ShoppingCart,
   Sparkles,
   Ticket,
@@ -33,9 +31,12 @@ import {
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
-import { pickMemberPortalHomePopup, isMemberPortalHomePromoItem, isMemberPortalHomeNewMenuItem } from "@/lib/member-portal-content"
+import { pickMemberPortalHomePopup } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
-import { MemberPortalHomePromosAndMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
+import { MemberPortalHomeTopBar } from "@/components/member-portal/member-portal-home-top-bar"
+import { MemberPortalHomeHeroBanner } from "@/components/member-portal/member-portal-home-hero-banner"
+import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
+import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -171,29 +172,6 @@ function LineLogo({ className }: { className?: string }) {
         fill="#06C755"
       />
     </svg>
-  )
-}
-
-function CopyButton({ text, label }: { text: string; label?: string }) {
-  const { t } = useMemberPortalLang()
-  const [copied, setCopied] = React.useState(false)
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1 text-xs text-stone-700 shadow-sm transition hover:bg-stone-50"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text)
-          setCopied(true)
-          window.setTimeout(() => setCopied(false), 1500)
-        } catch {
-          /* ignore */
-        }
-      }}
-    >
-      <Copy className="h-3.5 w-3.5" />
-      {copied ? t("copied") : label || t("copy")}
-    </button>
   )
 }
 
@@ -666,20 +644,6 @@ export function MemberPortalApp() {
     setHomePopupOpen(true)
   }, [member, tab, homePopupContentKey, embedPreview])
 
-  const homeInfoItems = React.useMemo(
-    () =>
-      contentItems
-        .filter(
-          (x) =>
-            x.contentType === "info" &&
-            !isMemberPortalHomeNewMenuItem(x) &&
-            !isMemberPortalHomePromoItem(x) &&
-            (!x.targetTab || x.targetTab === "home")
-        )
-        .slice(0, 4),
-    [contentItems]
-  )
-
   const storePhotoMap = React.useMemo(() => {
     const map = new Map<string, string>()
     for (const item of contentItems) {
@@ -789,14 +753,14 @@ export function MemberPortalApp() {
                 </span>
               </Button>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setAuthPanel((prev) => (prev === "signup" ? null : "signup"))
                     setError("")
                   }}
-                  className={`h-[50px] rounded-2xl px-3 text-sm font-semibold transition ${
+                  className={`h-[50px] w-full rounded-2xl px-3 text-sm font-semibold transition ${
                     authPanel === "signup"
                       ? "bg-gradient-to-br from-[#ef233c] to-[#c1121f] text-white shadow-[0_8px_24px_rgba(239,35,60,0.25)]"
                       : "border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100"
@@ -810,9 +774,9 @@ export function MemberPortalApp() {
                     setAuthPanel((prev) => (prev === "login" ? null : "login"))
                     setError("")
                   }}
-                  className={`h-[50px] rounded-2xl px-3 text-sm font-semibold transition ${
+                  className={`h-[50px] w-full rounded-2xl px-3 text-sm font-semibold transition ${
                     authPanel === "login"
-                      ? "border border-amber-400/40 bg-amber-400/10 text-amber-100"
+                      ? "border border-amber-400/40 bg-amber-50 text-amber-900"
                       : "border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100"
                   }`}
                 >
@@ -1078,16 +1042,27 @@ export function MemberPortalApp() {
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
       <MemberPortalShell embedPreview={embedPreview}>
-        <PremiumAppHeader
-          wordmark={t("memberLounge")}
-          displayName={member.fullName || member.name || "Member"}
-          tierLabel={activeDashboard.tierProgress.currentTierName || tier.label}
-          logoSrc={brand.logoSymbolSrc}
-          logoAlt={brand.logoAlt}
-          langSelect={<MemberPortalLangSelect />}
-          onLogout={logout}
-          logoutLabel={t("logout")}
-        />
+        {tab === "home" ? (
+          <MemberPortalHomeTopBar
+            wordmark={t("memberLounge")}
+            logoSrc={brand.logoSymbolSrc}
+            logoAlt={brand.logoAlt}
+            langSelect={<MemberPortalLangSelect />}
+            onLogout={logout}
+            logoutLabel={t("logout")}
+          />
+        ) : (
+          <PremiumAppHeader
+            wordmark={t("memberLounge")}
+            displayName={member.fullName || member.name || "Member"}
+            tierLabel={activeDashboard.tierProgress.currentTierName || tier.label}
+            logoSrc={brand.logoSymbolSrc}
+            logoAlt={brand.logoAlt}
+            langSelect={<MemberPortalLangSelect />}
+            onLogout={logout}
+            logoutLabel={t("logout")}
+          />
+        )}
 
         {!!notice && (
           <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -1106,7 +1081,7 @@ export function MemberPortalApp() {
         </div>
 
         {tab === "home" && (
-          <div className="space-y-4">
+          <div className={MP_HOME_SECTION_GAP}>
             <MemberPortalMembershipCard
               member={member}
               dashboard={activeDashboard}
@@ -1127,23 +1102,16 @@ export function MemberPortalApp() {
                         })
                     : t("tierMax"),
                 progressPercent: activeDashboard.tierProgress.progressPercent,
-                pointRateLabel: `${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}% · ${activeDashboard.tierProgress.progressPercent}%`,
+                pointRateLabel: `${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}%`,
                 actionLabel: portalTiers.length > 0 ? t("tierBenefitsViewBtn") : undefined,
                 onAction: portalTiers.length > 0 ? () => setTierBenefitsOpen(true) : undefined,
               }}
             />
 
-            <MemberPortalStampHomeWidget
-              lang={lang}
-              status={stampStatus}
-              loading={stampLoading}
-              onOpenPrivilege={() => changeTab("privilege")}
-            />
-
-            <MemberPortalHomePromosAndMenus
+            <MemberPortalHomeHeroBanner
               contentItems={contentItems}
-              lang={lang}
               t={t}
+              onOrder={() => changeTab("order")}
               onSelectItem={(item) => {
                 setHomePopupOpen(false)
                 setSelectedHomePromo(item)
@@ -1151,54 +1119,14 @@ export function MemberPortalApp() {
               }}
             />
 
-            {homePopup ? (
-              <GlassCard className="border-fuchsia-300/40 bg-gradient-to-br from-fuchsia-50 to-white">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{homePopup.title || t("memberLounge")}</p>
-                    {homePopup.body ? (
-                      <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>{homePopup.body}</p>
-                    ) : null}
-                  </div>
-                  <Sparkles className="h-5 w-5 shrink-0 text-fuchsia-600" />
-                </div>
-                {homePopup.imageUrl ? (
-                  <img src={homePopup.imageUrl} alt={homePopup.title || "popup"} className="mt-3 h-36 w-full rounded-2xl object-cover" />
-                ) : null}
-              </GlassCard>
-            ) : null}
+            <MemberPortalHomePrivileges coupons={coupons} t={t} onViewAll={() => changeTab("privilege")} />
 
-            <GlassCard className="border-amber-200/80 bg-gradient-to-br from-amber-50 to-white">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-stone-900">{t("referTitle")}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-stone-500">{t("referDesc")}</p>
-                  <p className="mt-3 font-mono text-xl tracking-[0.2em] text-amber-700">{activeDashboard.referralCode}</p>
-                </div>
-                <Share2 className="h-5 w-5 shrink-0 text-amber-600" />
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <CopyButton text={activeDashboard.referralCode} label={t("copyCode")} />
-                <CopyButton
-                  text={`Join Choongman Chicken membership with my code ${activeDashboard.referralCode}`}
-                  label={t("shareText")}
-                />
-              </div>
-            </GlassCard>
-
-            {homeInfoItems.length > 0 ? (
-              <GlassCard soft>
-                <p className="mb-3 text-sm font-semibold">Updates</p>
-                <div className="space-y-2">
-                  {homeInfoItems.map((item) => (
-                    <div key={item.contentKey} className="rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
-                      <p className="text-sm text-white/90">{item.title || "—"}</p>
-                      {item.body ? <p className="mt-0.5 text-xs leading-relaxed text-white/55">{item.body}</p> : null}
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            ) : null}
+            <MemberPortalStampHomeWidget
+              lang={lang}
+              status={stampStatus}
+              loading={stampLoading}
+              onOpenPrivilege={() => changeTab("privilege")}
+            />
           </div>
         )}
 
@@ -1209,6 +1137,12 @@ export function MemberPortalApp() {
             member={member}
             stores={stores}
             favoriteStoreCodes={favoriteStoreCodes}
+            contentItems={contentItems}
+            onSelectContentItem={(item) => {
+              setHomePopupOpen(false)
+              setSelectedHomePromo(item)
+              setHomePromoOpen(true)
+            }}
           />
         ) : null}
 

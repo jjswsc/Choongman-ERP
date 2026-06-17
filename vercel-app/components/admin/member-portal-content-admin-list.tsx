@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Copy, Eye, ImageIcon, Loader2, Pencil, Power, Search, Trash2 } from "lucide-react"
+import { MemberPortalContentImagePreview } from "@/components/admin/member-portal-content-image-preview"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -386,10 +387,11 @@ export function MemberPortalContentAdminList({
               </DialogHeader>
               <div className="space-y-3">
                 {previewItem.imageUrl ? (
-                  <img
-                    src={previewItem.imageUrl}
-                    alt=""
-                    className="max-h-56 w-full rounded-lg border object-cover"
+                  <MemberPortalContentImagePreview
+                    category={memberPortalContentAdminCategory(previewItem)}
+                    imageUrl={previewItem.imageUrl}
+                    title={previewItem.title}
+                    body={previewItem.body}
                   />
                 ) : null}
                 <div className="flex flex-wrap gap-2">

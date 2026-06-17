@@ -7,7 +7,6 @@ import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import {
-  upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
@@ -15,6 +14,7 @@ import {
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
+import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -136,11 +136,18 @@ export async function POST(request: NextRequest) {
 
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
-    const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
     let validCategory = transType === 'deposit'
       ? (depositCategories.includes(category) ? category : depositCategories[0])
       : (withdrawCategories.includes(category) ? category : 'expense')
     if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
+
+    if (transType === 'withdraw') {
+      const purchaseGuard = assertPurchasePaymentViaExpenseOnly(category)
+      if (!purchaseGuard.ok) {
+        return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
+      }
+    }
 
     if (transType === 'deposit' && validCategory !== 'receivable_receive') {
       try {
@@ -208,7 +215,6 @@ export async function POST(request: NextRequest) {
       const ed = String(expenseDate).slice(0, 10)
       if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
     }
-    if (validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
     if (validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
     if (refType) row.ref_type = refType
     if (refId != null && !isNaN(Number(refId))) row.ref_id = Number(refId)
@@ -230,15 +236,6 @@ export async function POST(request: NextRequest) {
     }
     const bankId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
 
-    if (bankId && validCategory === 'purchase_payment' && vendorCode) {
-      await upsertPayableFromBankPurchasePayment({
-        bankTransactionId: bankId,
-        vendorCode,
-        amountAbs: Math.abs(amount),
-        transDate,
-        memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
-      })
-    }
     if (bankId && validCategory === 'receivable_receive' && storeNameForReceivable) {
       await upsertReceivableFromBankReceive({
         bankTransactionId: bankId,

@@ -47,6 +47,9 @@ import {
 } from "@/lib/pos-option-selection-groups"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
+import { MemberPortalHomeHeroBanner } from "@/components/member-portal/member-portal-home-hero-banner"
+import { MemberPortalHomeNewMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
+import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { MemberPortalCheckoutSheet } from "@/components/member-portal/member-portal-checkout-sheet"
 import { MemberPortalQrPayDialog } from "@/components/member-portal/member-portal-qr-pay-dialog"
 import { readMemberPortalCheckoutDraft } from "@/lib/member-portal-checkout-draft-storage"
@@ -391,6 +394,8 @@ type MemberPortalOrderTabProps = {
   member: MemberSummary
   stores: StoreRow[]
   favoriteStoreCodes: string[]
+  contentItems?: MemberPortalContentItem[]
+  onSelectContentItem?: (item: MemberPortalContentItem) => void
 }
 
 async function postMemberOrder(body: Record<string, unknown>) {
@@ -403,7 +408,15 @@ async function postMemberOrder(body: Record<string, unknown>) {
   return res.json() as Promise<{ success: boolean; message?: string; orderNo?: string }>
 }
 
-export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCodes }: MemberPortalOrderTabProps) {
+export function MemberPortalOrderTab({
+  lang,
+  t,
+  member,
+  stores,
+  favoriteStoreCodes,
+  contentItems = [],
+  onSelectContentItem,
+}: MemberPortalOrderTabProps) {
   const primaryFavoriteStoreCode = favoriteStoreCodes[0] || ""
   const [view, setView] = React.useState<OrderView>("hub")
   const [deliveryLinks, setDeliveryLinks] = React.useState<DeliveryLinks | null>(null)
@@ -970,6 +983,24 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
               store: readyPickupStoreLabel,
             })}
           </div>
+        ) : null}
+        {contentItems.length > 0 && onSelectContentItem ? (
+          <>
+            <MemberPortalHomeHeroBanner
+              contentItems={contentItems}
+              channel="delivery"
+              t={t}
+              onOrder={() => setView("delivery")}
+              onSelectItem={onSelectContentItem}
+              showOrderButton
+            />
+            <MemberPortalHomeNewMenus
+              contentItems={contentItems}
+              lang={lang}
+              t={t}
+              onSelectItem={onSelectContentItem}
+            />
+          </>
         ) : null}
         <div className={`${mpGlassCardSoft} p-4`}>
           <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderMyOrdersTitle")}</h3>

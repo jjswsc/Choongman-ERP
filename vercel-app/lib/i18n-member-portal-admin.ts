@@ -221,17 +221,18 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_popupNew: '새 팝업',
   mpAdmin_promoTitle: '월별 프로모션',
   mpAdmin_promoDesc:
-    '회원앱 홈 「이달의 프로모션」에 노출됩니다. 매장(หน้าร้าน)·배달(Delivery)을 구분해 등록하세요. 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
+    '회원앱 홈 멤버십 카드 아래 가로형 히어로 배너(매장)와 주문 탭 상단 배너(배달)에 노출됩니다. 이미지는 12:5 가로형·오른쪽 음식 사진 구도를 권장합니다. 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
   mpAdmin_promoEmpty: '등록된 월별 프로모션이 없습니다.',
   mpAdmin_promoNew: '새 프로모션',
   mpAdmin_promoNewDine: '매장 프로모션',
   mpAdmin_promoNewDelivery: '배달 프로모션',
   mpAdmin_promoChannelDine: '매장',
   mpAdmin_promoChannelDelivery: '배달',
-  mpAdmin_promoChannelHint: '매장(หน้าร้าน) 또는 배달(Delivery) 중 하나로 등록됩니다.',
+  mpAdmin_promoChannelHint:
+    '매장(หน้าร้าน)은 홈 히어로 배너, 배달(Delivery)은 주문 탭 상단 배너에 노출됩니다. 정렬순서가 작을수록 해당 채널에서 먼저 표시됩니다.',
   mpAdmin_newMenuTitle: '신메뉴',
   mpAdmin_newMenuDesc:
-    '회원앱 홈 「신메뉴」 가로 목록에 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
+    '회원앱 주문 탭 상단 「신메뉴」 가로 목록(정사각 카드)에 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
   mpAdmin_newMenuEmpty: '등록된 신메뉴 콘텐츠가 없습니다.',
   mpAdmin_newMenuNew: '새 신메뉴',
   mpAdmin_infoTitle: '정보·공지',
@@ -306,10 +307,10 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_keyLabel: '키',
   mpAdmin_sortInline: '정렬 {order}',
 
-  mpAdmin_placementHomePromo: '홈 · 월별 프로모션',
-  mpAdmin_placementHomePromoDine: '홈 · 매장 프로모션',
-  mpAdmin_placementHomePromoDelivery: '홈 · 배달 프로모션',
-  mpAdmin_placementHomeNewMenu: '홈 · 신메뉴',
+  mpAdmin_placementHomePromo: '홈 · 매장 프로모 배너',
+  mpAdmin_placementHomePromoDine: '홈 · 매장 프로모 배너',
+  mpAdmin_placementHomePromoDelivery: '주문 탭 · 배달 프로모 배너',
+  mpAdmin_placementHomeNewMenu: '주문 탭 · 신메뉴',
   mpAdmin_placementHomeNotice: '홈 · 공지',
   mpAdmin_placementLocation: '매장 탭',
   mpAdmin_placementPopup: '팝업',
@@ -325,6 +326,11 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_catOther: '기타',
 
   mpAdmin_imageHint: '권장 {minW}×{minH}px ({aspectW}:{aspectH}) · JPG/PNG/WebP/GIF · 5MB 이하',
+  mpAdmin_previewMemberApp: '회원앱 미리보기',
+  mpAdmin_imageCompositionPromo:
+    '구도: 왼쪽은 어두운 그라데이션·제목·본문 영역, 오른쪽에 음식 사진을 배치하세요. 회원앱에서 좌측 58%는 텍스트로 가려집니다.',
+  mpAdmin_imageCompositionPopup: '팝업 시트 상단에 세로형(4:5)으로 표시됩니다.',
+  mpAdmin_imageCompositionNewMenu: '주문 탭 신메뉴 정사각 카드에 잘림 없이 표시됩니다.',
   mpAdmin_imageReadSizeFail: '이미지 크기를 읽을 수 없습니다.',
   mpAdmin_imageTooSmall:
     '{label} 이미지는 최소 {minW}×{minH}px 이상이어야 합니다. (현재 {width}×{height}px)',
@@ -593,17 +599,18 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_popupNew: 'New popup',
   mpAdmin_promoTitle: 'Monthly promos',
   mpAdmin_promoDesc:
-    'Shown in the member app home “Monthly promotions” carousel. Register dine-in (หน้าร้าน) and delivery separately. Bangkok start/end dates filter by month.',
+    'Wide hero banner on home (dine-in) and at the top of the Order tab (delivery). Use a 12:5 landscape image with food on the right. Bangkok start/end dates filter by month.',
   mpAdmin_promoEmpty: 'No monthly promos yet.',
   mpAdmin_promoNew: 'New promo',
   mpAdmin_promoNewDine: 'Dine-in promo',
   mpAdmin_promoNewDelivery: 'Delivery promo',
   mpAdmin_promoChannelDine: 'Dine-in',
   mpAdmin_promoChannelDelivery: 'Delivery',
-  mpAdmin_promoChannelHint: 'Registered as dine-in (หน้าร้าน) or delivery.',
+  mpAdmin_promoChannelHint:
+    'Dine-in (หน้าร้าน) shows on the home hero; delivery shows on the Order tab hero. Lower sort order appears first in each channel.',
   mpAdmin_newMenuTitle: 'New menu',
   mpAdmin_newMenuDesc:
-    'Shown in the member app home “New menu” carousel. Same monthly Bangkok date filter as promos.',
+    'Square cards in the horizontal “New menu” row at the top of the Order tab. Same monthly Bangkok date filter as promos.',
   mpAdmin_newMenuEmpty: 'No new menu content yet.',
   mpAdmin_newMenuNew: 'New menu item',
   mpAdmin_infoTitle: 'Info & notices',
@@ -678,10 +685,10 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_keyLabel: 'Key',
   mpAdmin_sortInline: 'Sort {order}',
 
-  mpAdmin_placementHomePromo: 'Home · monthly promo',
-  mpAdmin_placementHomePromoDine: 'Home · dine-in promo',
-  mpAdmin_placementHomePromoDelivery: 'Home · delivery promo',
-  mpAdmin_placementHomeNewMenu: 'Home · new menu',
+  mpAdmin_placementHomePromo: 'Home · dine-in promo banner',
+  mpAdmin_placementHomePromoDine: 'Home · dine-in promo banner',
+  mpAdmin_placementHomePromoDelivery: 'Order tab · delivery promo banner',
+  mpAdmin_placementHomeNewMenu: 'Order tab · new menu',
   mpAdmin_placementHomeNotice: 'Home · notice',
   mpAdmin_placementLocation: 'Stores tab',
   mpAdmin_placementPopup: 'Popup',
@@ -697,6 +704,11 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_catOther: 'Other',
 
   mpAdmin_imageHint: 'Recommended {minW}×{minH}px ({aspectW}:{aspectH}) · JPG/PNG/WebP/GIF · max 5MB',
+  mpAdmin_previewMemberApp: 'Member app preview',
+  mpAdmin_imageCompositionPromo:
+    'Layout: dark gradient and text on the left, food photo on the right. The member app covers the left 58% with text.',
+  mpAdmin_imageCompositionPopup: 'Shown at the top of the popup sheet in portrait (4:5).',
+  mpAdmin_imageCompositionNewMenu: 'Shown as square cards in the Order tab new-menu row.',
   mpAdmin_imageReadSizeFail: 'Could not read image dimensions.',
   mpAdmin_imageTooSmall: '{label} must be at least {minW}×{minH}px (current {width}×{height}px).',
   mpAdmin_imageBadRatio: '{label} aspect ratio must be {aspectW}:{aspectH} (current {width}×{height}px).',
@@ -964,17 +976,18 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_popupNew: 'ป๊อปอัปใหม่',
   mpAdmin_promoTitle: 'โปรโมชันประจำเดือน',
   mpAdmin_promoDesc:
-    'แสดงใน 「โปรโมชันประจำเดือน」 บนหน้าแรกแอปสมาชิก แยกหน้าร้านและ Delivery กรองตามเดือนด้วยวันเริ่ม·สิ้นสุด (เวลากรุงเทพ)',
+    'แบนเนอร์แนวนอนบนหน้าแรก (หน้าร้าน) และด้านบนแท็บสั่งอาหาร (Delivery) แนะนำรูปแนวนอน 12:5 วางอาหารทางขวา กรองตามเดือนด้วยวันเริ่ม·สิ้นสุด (เวลากรุงเทพ)',
   mpAdmin_promoEmpty: 'ยังไม่มีโปรโมชันประจำเดือน',
   mpAdmin_promoNew: 'โปรโมชันใหม่',
   mpAdmin_promoNewDine: 'โปรโมชันหน้าร้าน',
   mpAdmin_promoNewDelivery: 'โปรโมชัน Delivery',
   mpAdmin_promoChannelDine: 'หน้าร้าน',
   mpAdmin_promoChannelDelivery: 'Delivery',
-  mpAdmin_promoChannelHint: 'ลงทะเบียนเป็นหน้าร้านหรือ Delivery อย่างใดอย่างหนึ่ง',
+  mpAdmin_promoChannelHint:
+    'หน้าร้านแสดงบนแบนเนอร์หน้าแรก Delivery แสดงบนแบนเนอร์แท็บสั่งอาหาร ลำดับน้อยจะแสดงก่อนในแต่ละช่องทาง',
   mpAdmin_newMenuTitle: 'เมนูใหม่',
   mpAdmin_newMenuDesc:
-    'แสดงในแถว 「เมนูใหม่」 บนหน้าแรก ใช้การกรองเดือนแบบเดียวกับโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
+    'การ์ดสี่เหลี่ยมในแถว 「เมนูใหม่」 ด้านบนแท็บสั่งอาหาร ใช้การกรองเดือนแบบเดียวกับโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
   mpAdmin_newMenuEmpty: 'ยังไม่มีเนื้อหาเมนูใหม่',
   mpAdmin_newMenuNew: 'เมนูใหม่',
   mpAdmin_infoTitle: 'ข้อมูล·ประกาศ',
@@ -1049,10 +1062,10 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_keyLabel: 'คีย์',
   mpAdmin_sortInline: 'ลำดับ {order}',
 
-  mpAdmin_placementHomePromo: 'หน้าแรก · โปรโมชันประจำเดือน',
-  mpAdmin_placementHomePromoDine: 'หน้าแรก · โปรโมชันหน้าร้าน',
-  mpAdmin_placementHomePromoDelivery: 'หน้าแรก · โปรโมชัน Delivery',
-  mpAdmin_placementHomeNewMenu: 'หน้าแรก · เมนูใหม่',
+  mpAdmin_placementHomePromo: 'หน้าแรก · แบนเนอร์โปรโมชันหน้าร้าน',
+  mpAdmin_placementHomePromoDine: 'หน้าแรก · แบนเนอร์โปรโมชันหน้าร้าน',
+  mpAdmin_placementHomePromoDelivery: 'แท็บสั่งอาหาร · แบนเนอร์ Delivery',
+  mpAdmin_placementHomeNewMenu: 'แท็บสั่งอาหาร · เมนูใหม่',
   mpAdmin_placementHomeNotice: 'หน้าแรก · ประกาศ',
   mpAdmin_placementLocation: 'แท็บสาขา',
   mpAdmin_placementPopup: 'ป๊อปอัป',
@@ -1068,6 +1081,11 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_catOther: 'อื่นๆ',
 
   mpAdmin_imageHint: 'แนะนำ {minW}×{minH}px ({aspectW}:{aspectH}) · JPG/PNG/WebP/GIF · ไม่เกิน 5MB',
+  mpAdmin_previewMemberApp: 'ตัวอย่างบนแอปสมาชิก',
+  mpAdmin_imageCompositionPromo:
+    'จัดวาง: ไล่สีมืดและข้อความทางซ้าย รูปอาหารทางขวา แอปจะทับข้อความทับซ้าย 58%',
+  mpAdmin_imageCompositionPopup: 'แสดงด้านบนชีตป๊อปอัปแนวตั้ง (4:5)',
+  mpAdmin_imageCompositionNewMenu: 'แสดงเป็นการ์ดสี่เหลี่ยมในแถวเมนูใหม่บนแท็บสั่งอาหาร',
   mpAdmin_imageReadSizeFail: 'อ่านขนาดรูปไม่ได้',
   mpAdmin_imageTooSmall:
     'รูป {label} ต้องไม่น้อยกว่า {minW}×{minH}px (ปัจจุบัน {width}×{height}px)',

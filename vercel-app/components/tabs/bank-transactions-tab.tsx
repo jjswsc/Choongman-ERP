@@ -36,7 +36,6 @@ import {
   getBankTransactions,
   addBankTransactionsBulk,
   registerExpenseFromBankTransaction,
-  registerPurchaseFromBankTransaction,
   saveBankAccount,
   deleteBankAccount,
   getAccountSubjects,
@@ -75,6 +74,10 @@ import {
   stripWithdrawalCategoryMetaFromNote,
 } from "@/lib/bank-transaction-note-meta"
 import {
+  isDirectBankPurchasePaymentCategory,
+  PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE,
+} from "@/lib/bank-purchase-payment-via-expense"
+import {
   BANK_QUICK_MEMO_DEFAULTS,
   loadBankQuickMemos,
   resetBankQuickMemosStorage,
@@ -85,11 +88,9 @@ import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlem
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
-import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import {
   AccountingDataTable,
   AccountingTbodyRow,
-  AccountingTd,
   AccountingTh,
   AccountingTheadRow,
 } from "@/components/erp/accounting-data-table"
@@ -335,14 +336,10 @@ export function BankTransactionsTab() {
   const [querySavingId, setQuerySavingId] = React.useState<number | null>(null)
   const [deletingBankTxId, setDeletingBankTxId] = React.useState<number | null>(null)
   const [registerExpenseRow, setRegisterExpenseRow] = React.useState<(typeof list)[0] | null>(null)
-  const [registerPurchaseRow, setRegisterPurchaseRow] = React.useState<(typeof list)[0] | null>(null)
   const [registerEditMode, setRegisterEditMode] = React.useState(false)
   const [registerPayeeCode, setRegisterPayeeCode] = React.useState("")
   const [registerPayeeName, setRegisterPayeeName] = React.useState("")
   const [registerPayeeManual, setRegisterPayeeManual] = React.useState(false)
-  const [registerVendorCode, setRegisterVendorCode] = React.useState("")
-  const [registerVendorManual, setRegisterVendorManual] = React.useState(false)
-  const [registerPurchaseLinkedOrderId, setRegisterPurchaseLinkedOrderId] = React.useState("")
   const [registerAccountSubjectId, setRegisterAccountSubjectId] = React.useState<string>("")
   const [registerSaving, setRegisterSaving] = React.useState(false)
   const [registerActionRow, setRegisterActionRow] = React.useState<(typeof list)[0] | null>(null)
@@ -478,6 +475,11 @@ export function BankTransactionsTab() {
     if (!r.id) return
     const edits = overrideEdits ?? queryRowEdits[r.id]
     if (!edits || Object.keys(edits).length === 0) return
+    const nextCategory = edits.category !== undefined ? edits.category : r.category
+    if (isDirectBankPurchasePaymentCategory(nextCategory)) {
+      await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
+      return
+    }
     setQuerySavingId(r.id)
     try {
       const payload: Parameters<typeof updateBankTransaction>[0] = { bankTransactionId: r.id }
@@ -1723,7 +1725,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
     if (!importPreview || !accountId) return
     const acc = accounts.find((a) => String(a.id) === accountId)
     const depositCats = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"] as const
-    const withdrawCats = ["transfer", "expense", "purchase_payment", "correction", "loan", "advance", "unclassified"] as const
+    const withdrawCats = ["transfer", "expense", "correction", "loan", "advance", "unclassified"] as const
     const items = importPreview.rows.map((r, idx) => {
       const edit = importRowEdits[idx]
       const rawWithdrawCat =
@@ -1757,7 +1759,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       let accountSubjectId: number | undefined
       if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
-      } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(category)) {
+      } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
       }
 
@@ -1770,7 +1772,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         r.transType === "withdraw" && category === "expense"
           ? edit?.expenseDate || r.transDate
           : undefined
-      const vendorCode = r.transType === "withdraw" && category === "purchase_payment" ? edit?.vendorCode?.trim() || undefined : undefined
+      const vendorCode = undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -2293,6 +2295,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className="p-2 align-middle">
                                 {r.transType === "withdraw" ? (
+                                  cat === "purchase_payment" || cat === "purchase_advance" ? (
+                                    <span className="text-xs text-muted-foreground" title={tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE)}>
+                                      {t("bankCategoryPurchasePayment") || "매입 대금"}
+                                    </span>
+                                  ) : (
                                   <Select value={cat} onValueChange={(v) => r.id && setQueryRowEdit(r.id, "category", v)}>
                                     <SelectTrigger className="h-8 text-xs">
                                       <SelectValue />
@@ -2300,13 +2307,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     <SelectContent>
                                       <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                                       <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                                      <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
                                       <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                       <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                       <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                       <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                  )
                                 ) : (
                                   <Select
                                     value={cat}
@@ -2501,7 +2508,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     className={ADMIN_BTN_XS_CN}
                                     onClick={() => setRegisterActionRow(r)}
                                   >
-                                    {t("bankRegisterLink") || "지출등록"}
+                                    {t("bankRegisterLinkExpenseMgmt") || tt("bankRegisterLinkExpenseMgmt", "지출관리 연결")}
                                   </Button>
                                 ) : r.transType === "withdraw" && r.isLinked ? (
                                   <Button
@@ -2831,7 +2838,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 <SelectContent>
                                   <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                                   <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                                  <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
                                   <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                   <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                   <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
@@ -3584,10 +3590,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       <Dialog open={!!registerActionRow} onOpenChange={(open) => !open && setRegisterActionRow(null)}>
         <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
-            <DialogTitle>{t("bankRegisterLabel") || "지출 등록"}</DialogTitle>
+            <DialogTitle>{tt("bankRegisterLinkExpenseMgmt", "지출관리 연결")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {registerActionRow ? `${registerActionRow.transDate} · ฿${Math.abs(registerActionRow.amount || 0).toLocaleString()}` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE)}
           </p>
           <div className="grid grid-cols-1 gap-2 pt-2">
             <Button
@@ -3843,87 +3852,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   if (res.success) {
                     setRegisterExpenseRow(null)
                     setRegisterEditMode(false)
-                    loadData()
-                    await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
-                  } else {
-                    await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-                  }
-                } finally {
-                  setRegisterSaving(false)
-                }
-              }}
-            >
-              {registerSaving ? "..." : (t("btnSave") || "저장")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!registerPurchaseRow}
-        onOpenChange={(open) =>
-          !open && (setRegisterPurchaseRow(null), setRegisterEditMode(false), setRegisterPurchaseLinkedOrderId(""))
-        }
-      >
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{t("bankRegisterPurchase") || "매입 발생으로 등록"}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">
-            {registerPurchaseRow ? `${registerPurchaseRow.transDate} · ฿${Math.abs(registerPurchaseRow.amount || 0).toLocaleString()}` : ""}
-          </p>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("vendor") || "거래처"}</label>
-              <Select value={registerVendorManual ? "__manual__" : (registerVendorCode || "__none__")} onValueChange={(v) => { setRegisterVendorManual(v === "__manual__"); if (v === "__manual__") setRegisterVendorCode(""); else if (v !== "__none__") setRegisterVendorCode(v) }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("vendor") || "거래처 선택 또는 직접 입력"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__manual__">{t("bankRegisterPayeeManual") || "직접 입력"}</SelectItem>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {vendorOptions.map((v) => (
-                    <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {registerVendorManual && (
-                <Input placeholder={t("vendor") || "거래처 코드"} value={registerVendorCode} onChange={(e) => setRegisterVendorCode(e.target.value)} className="mt-2" />
-              )}
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("bankRegisterLinkedOrderId")}</label>
-              <Input
-                inputMode="numeric"
-                placeholder={t("bankRegisterLinkedOrderIdPlaceholder")}
-                value={registerPurchaseLinkedOrderId}
-                onChange={(e) => setRegisterPurchaseLinkedOrderId(e.target.value.replace(/\D/g, ""))}
-                className="font-mono"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setRegisterPurchaseRow(null)}>{t("cancel")}</Button>
-            <Button
-              disabled={registerSaving || !registerVendorCode.trim()}
-              onClick={async () => {
-                if (!registerPurchaseRow?.id) return
-                setRegisterSaving(true)
-                try {
-                  const oid = registerPurchaseLinkedOrderId.trim()
-                  const linkedOrderId = oid ? Number(oid) : undefined
-                  const res = await registerPurchaseFromBankTransaction({
-                    bankTransactionId: registerPurchaseRow.id,
-                    vendorCode: registerVendorCode.trim() || "",
-                    linkedOrderId: linkedOrderId != null && !isNaN(linkedOrderId) && linkedOrderId > 0 ? linkedOrderId : undefined,
-                    userName: auth?.user,
-                    userRole: auth?.role,
-                    updateExisting: registerEditMode,
-                  })
-                  if (res.success) {
-                    setRegisterPurchaseRow(null)
-                    setRegisterEditMode(false)
-                    setRegisterPurchaseLinkedOrderId("")
                     loadData()
                     await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
                   } else {

@@ -4,6 +4,11 @@ export type PromoLineLike = {
   quantity?: number
 }
 
+export type PromoEconomicsLineInput = PromoLineLike & {
+  choiceGroup?: string | null
+  choicePickCount?: number | null
+}
+
 export type PromoMenuLike = {
   id: string
   /** POS 메뉴명 — 주문 스냅샷에 menuId 없을 때 역매칭 */
@@ -141,6 +146,93 @@ export function buildCostAnalysisCostMap(rows: Iterable<unknown>): Record<string
   return buildCostAnalysisLookups(rows).byMenuKey
 }
 
+function lineRegularUnitPrice(params: {
+  menuId: string
+  optionId?: string | null
+  menus: PromoMenuLike[]
+  optionsByMenuId: Record<string, PromoOptionLike[]>
+  channel: RegularPriceChannel
+}): number {
+  const menu = params.menus.find((m) => String(m.id) === String(params.menuId))
+  const options = params.optionsByMenuId[params.menuId] || []
+  const opt = params.optionId
+    ? options.find((o) => String(o.id) === String(params.optionId))
+    : null
+  const hallMenu = menu?.price ?? 0
+  const menuUnit =
+    params.channel === 'delivery'
+      ? menu != null && menu.priceDelivery != null && Number.isFinite(Number(menu.priceDelivery))
+        ? Number(menu.priceDelivery)
+        : hallMenu
+      : hallMenu
+  const hallMod = opt?.priceModifier ?? 0
+  const optMod =
+    params.channel === 'delivery'
+      ? opt != null && opt.priceModifierDelivery != null && Number.isFinite(Number(opt.priceModifierDelivery))
+        ? Number(opt.priceModifierDelivery)
+        : hallMod
+      : hallMod
+  return menuUnit + optMod
+}
+
+/**
+ * 같은 선택 그룹(choiceGroup)은 pickCount만큼 상위(최대) 라인만 합산.
+ * 고정 라인(그룹 없음)은 수량 그대로 합산.
+ */
+export function aggregatePromoChoiceAwareTotals<T extends PromoEconomicsLineInput>(
+  lines: T[],
+  getLineTotal: (line: T) => number
+): number {
+  if (lines.length === 0) return 0
+
+  let sum = 0
+  const groupsMap = new Map<string, { pickCount: number; lines: T[] }>()
+
+  for (const ln of lines) {
+    const key = String(ln.choiceGroup ?? '').trim()
+    if (!key) {
+      sum += getLineTotal(ln)
+      continue
+    }
+    const pick = Math.max(1, Math.floor(Number(ln.choicePickCount) || 1))
+    const hit = groupsMap.get(key)
+    if (hit) {
+      hit.lines.push(ln)
+      hit.pickCount = Math.max(hit.pickCount, pick)
+    } else {
+      groupsMap.set(key, { pickCount: pick, lines: [ln] })
+    }
+  }
+
+  for (const g of groupsMap.values()) {
+    const pickCount = Math.min(g.pickCount, g.lines.length)
+    const sorted = g.lines.map((ln) => getLineTotal(ln)).sort((a, b) => b - a)
+    for (let i = 0; i < pickCount; i++) {
+      sum += sorted[i] ?? 0
+    }
+  }
+
+  return sum
+}
+
+/** 가격분석·마진용 유효 구성 단위 수(고정 줄 + 선택 그룹 수) */
+export function countPromoChoiceEffectiveUnits(lines: PromoEconomicsLineInput[]): number {
+  let count = 0
+  const seenGroups = new Set<string>()
+  for (const ln of lines) {
+    const key = String(ln.choiceGroup ?? '').trim()
+    if (!key) {
+      count += 1
+      continue
+    }
+    if (!seenGroups.has(key)) {
+      seenGroups.add(key)
+      count += 1
+    }
+  }
+  return count
+}
+
 export function calcRegularPriceSum(params: {
   items: PromoLineLike[]
   menus: PromoMenuLike[]
@@ -151,28 +243,36 @@ export function calcRegularPriceSum(params: {
   const channel = params.channel ?? 'hall'
   let sum = 0
   for (const it of params.items) {
-    const menu = params.menus.find((m) => String(m.id) === String(it.menuId))
-    const options = params.optionsByMenuId[it.menuId] || []
-    const opt = it.optionId
-      ? options.find((o) => String(o.id) === String(it.optionId))
-      : null
-    const hallMenu = menu?.price ?? 0
-    const menuUnit =
-      channel === 'delivery'
-        ? menu != null && menu.priceDelivery != null && Number.isFinite(Number(menu.priceDelivery))
-          ? Number(menu.priceDelivery)
-          : hallMenu
-        : hallMenu
-    const hallMod = opt?.priceModifier ?? 0
-    const optMod =
-      channel === 'delivery'
-        ? opt != null && opt.priceModifierDelivery != null && Number.isFinite(Number(opt.priceModifierDelivery))
-          ? Number(opt.priceModifierDelivery)
-          : hallMod
-        : hallMod
-    sum += (menuUnit + optMod) * (it.quantity ?? 1)
+    sum +=
+      lineRegularUnitPrice({
+        menuId: it.menuId,
+        optionId: it.optionId,
+        menus: params.menus,
+        optionsByMenuId: params.optionsByMenuId,
+        channel,
+      }) * (it.quantity ?? 1)
   }
   return sum
+}
+
+export function calcRegularPriceSumWithChoices(params: {
+  items: PromoEconomicsLineInput[]
+  menus: PromoMenuLike[]
+  optionsByMenuId: Record<string, PromoOptionLike[]>
+  channel?: RegularPriceChannel
+}) {
+  const channel = params.channel ?? 'hall'
+  return aggregatePromoChoiceAwareTotals(params.items, (it) => {
+    return (
+      lineRegularUnitPrice({
+        menuId: it.menuId,
+        optionId: it.optionId,
+        menus: params.menus,
+        optionsByMenuId: params.optionsByMenuId,
+        channel,
+      }) * (it.quantity ?? 1)
+    )
+  })
 }
 
 export function calcCostTotal(items: PromoLineLike[], costMap: Record<string, number>) {

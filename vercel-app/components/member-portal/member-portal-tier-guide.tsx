@@ -5,6 +5,7 @@ import { ChevronRight, Star } from "lucide-react"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
 import { MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE, MP_MAX_WIDTH } from "@/lib/member-portal-design"
 import { tierVisual } from "@/components/member-portal/portal-ui"
+import { MemberPortalTierGem } from "@/components/member-portal/member-portal-tier-gem"
 import { normalizeMemberTierCode, type MemberTierPublic } from "@/lib/member-tier-public"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 
@@ -27,14 +28,10 @@ const TierGuideCard = React.memo(function TierGuideCard({
   return (
     <GlassCard
       soft
-      className={`px-4 py-3 ${isCurrent ? `ring-1 ring-amber-300/40 ${visual.glow}` : ""}`}
+      className={`px-4 py-3 ${isCurrent ? `ring-1 ${visual.border} ${visual.glow}` : ""}`}
     >
       <div className="flex items-start gap-3">
-        <div
-          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-black/25 ${visual.chip}`}
-        >
-          <Star className={`h-4 w-4 ${visual.accent}`} fill="currentColor" />
-        </div>
+        <MemberPortalTierGem tier={visual} label={tier.name} size="sm" className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{tier.name}</p>
@@ -109,14 +106,10 @@ const TierBenefitCard = React.memo(function TierBenefitCard({
   return (
     <GlassCard
       soft
-      className={`px-4 py-3 ${isCurrent ? `ring-1 ring-amber-300/40 ${visual.glow}` : ""}`}
+      className={`px-4 py-3 ${isCurrent ? `ring-1 ${visual.border} ${visual.glow}` : ""}`}
     >
       <div className="flex items-start gap-3">
-        <div
-          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-black/25 ${visual.chip}`}
-        >
-          <Star className={`h-4 w-4 ${visual.accent}`} fill="currentColor" />
-        </div>
+        <MemberPortalTierGem tier={visual} label={tier.name} size="sm" className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{tier.name}</p>

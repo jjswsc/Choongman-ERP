@@ -15,7 +15,8 @@ const DEGRADE_FAIL_THRESHOLD = 1
 
 /** 프로브·성공한 fetch 이후 이 시간 안이면 navigator 가 false 여도 온라인으로 간주 */
 const REACHABILITY_STALE_MS = 45_000
-const OFFLINE_PROBE_INTERVAL_MS = 10_000
+/** navigator.onLine=false(하이브리드 POS)여도 최근 API 성공이면 probe 생략 — 간격 90s */
+const OFFLINE_PROBE_INTERVAL_MS = 90_000
 const PROBE_TIMEOUT_MS = 3_000
 
 export const REACHABILITY_EVENT = 'cm-reachability'
@@ -146,21 +147,21 @@ export function useOnlineStatus(callback?: (online: boolean) => void): boolean {
     }
     const sync = () => push(isBrowserOnline())
 
+    const probeIfStillOffline = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      if (isBrowserOnline()) return
+      void runReachabilityProbe().then(sync)
+    }
+
     const onOnline = () => push(true)
     const onOffline = () => {
       sync()
-      void runReachabilityProbe().then(sync)
+      probeIfStillOffline()
     }
     const onReachability = () => sync()
-    const onFocus = () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        void runReachabilityProbe().then(sync)
-      }
-    }
+    const onFocus = () => probeIfStillOffline()
     const onVis = () => {
-      if (document.visibilityState === 'visible' && typeof navigator !== 'undefined' && !navigator.onLine) {
-        void runReachabilityProbe().then(sync)
-      }
+      if (document.visibilityState === 'visible') probeIfStillOffline()
     }
 
     window.addEventListener('online', onOnline)
@@ -169,13 +170,9 @@ export function useOnlineStatus(callback?: (online: boolean) => void): boolean {
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVis)
 
-    void runReachabilityProbe().then(sync)
+    probeIfStillOffline()
 
-    const interval = window.setInterval(() => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        void runReachabilityProbe().then(sync)
-      }
-    }, OFFLINE_PROBE_INTERVAL_MS)
+    const interval = window.setInterval(probeIfStillOffline, OFFLINE_PROBE_INTERVAL_MS)
 
     return () => {
       window.removeEventListener('online', onOnline)

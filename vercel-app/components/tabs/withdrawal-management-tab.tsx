@@ -30,7 +30,6 @@ import {
   addExpenseAccrual,
   executeWithdrawal,
   registerExpenseFromBankTransaction,
-  registerPurchaseFromBankTransaction,
   updateExpenseRegisterItem,
   updateExpenseAccrual,
   getAccountSubjects,
@@ -48,6 +47,7 @@ import {
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { stripWithdrawalCategoryMetaFromNote } from "@/lib/bank-transaction-note-meta"
+import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
 import { compressImageForUpload } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -292,6 +292,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const endStrParam = searchParams.get("endStr")
   const returnTabParam = searchParams.get("returnTab")
   const returnOpenRegisterTxIdParam = searchParams.get("openRegisterTxId")
+
+  React.useEffect(() => {
+    if (categoryMain === "purchase") setExpensePayMode("later")
+  }, [categoryMain])
 
   const mapCategoryToMainSub = React.useCallback((catRaw: string): { main: string; sub: string } => {
     const c = String(catRaw || "").trim().toLowerCase()
@@ -903,6 +907,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await handleRegisterAccrual()
       return
     }
+    if (categoryMain === "purchase") {
+      await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
+      return
+    }
     const amt = Number(String(amount).replace(/,/g, ""))
     if (!amt || amt <= 0) {
       await appAlert(tt("pettyAlertAmount", "Please enter amount."))
@@ -1427,29 +1435,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }
 
     if (categoryMain === "purchase") {
-      const vendor = vendorCode.trim()
-      if (!vendor) {
-        await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
-        return
-      }
-      setSaving(true)
-      try {
-        const res = await registerPurchaseFromBankTransaction({
-          bankTransactionId: bankTxId,
-          vendorCode: vendor,
-          userName: auth?.user,
-          userRole: auth?.role,
-          updateExisting: updateExistingParam,
-        })
-        if (!res.success) {
-          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-          return
-        }
-        await appAlert(res.message || t("success"))
-        redirectAfterBankLinkSuccess()
-      } finally {
-        setSaving(false)
-      }
+      await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
+      const q = new URLSearchParams({ tab: "plan" })
+      q.set("bankTransactionId", String(bankTxId))
+      if (accountId) q.set("accountId", accountId)
+      if (transDate) q.set("transDate", transDate)
+      if (startStrParam) q.set("startStr", startStrParam)
+      if (endStrParam) q.set("endStr", endStrParam)
+      if (returnTabParam) q.set("returnTab", returnTabParam)
+      if (returnOpenRegisterTxIdParam) q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
+      router.push(`/admin/expense-management?${q.toString()}`)
       return
     }
 
@@ -1612,6 +1607,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             <div className="flex items-end gap-2">
               <Label className="pb-2.5 shrink-0">{tt("wm_payMode", "Payment Mode")}</Label>
               <div className="flex gap-2">
+                {categoryMain !== "purchase" ? (
                 <Button
                   type="button"
                   variant={expensePayMode === "immediate" ? "default" : "outline"}
@@ -1621,6 +1617,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 >
                   {tt("wm_payImmediate", "Pay Now")}
                 </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant={expensePayMode === "later" ? "default" : "outline"}

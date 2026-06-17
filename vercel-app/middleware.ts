@@ -31,6 +31,6 @@ export const config = {
      * 이미지 프록시는 Set-Cookie 없이 응답해야 Vercel CDN이 Cache-Control(s-maxage)를 적용한다.
      * (미들웨어가 쿠키를 붙이면 Fast Data Transfer가 매 요청마다 원본 스트리밍으로 잡힌다.)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/posMenuImageProxy|api/imageProxy|login(?:/|$)|admin/login(?:/|$)|saas-admin/login(?:/|$)|pos/login(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/online-probe|api/posMenuImageProxy|api/imageProxy|login(?:/|$)|admin/login(?:/|$)|saas-admin/login(?:/|$)|pos/login(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot)$).*)",
   ],
 }

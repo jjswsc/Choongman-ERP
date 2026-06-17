@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Plus } from "lucide-react"
 import { MemberPortalContentAdminList } from "@/components/admin/member-portal-content-admin-list"
+import { MemberPortalContentImagePreview } from "@/components/admin/member-portal-content-image-preview"
 import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +28,7 @@ import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import {
   formatMemberPortalContentImageHint,
+  formatMemberPortalContentImageCompositionHint,
   memberPortalImageUploadCatchMessage,
   readMemberPortalImageSize,
   resolveMemberPortalContentImageRule,
@@ -215,6 +217,9 @@ export function MemberPortalContentAdminPanel({
   const formMeta = variantMetaFor(t, formVariant)
   const imageRule = React.useMemo(() => resolveMemberPortalContentImageRule(formVariant), [formVariant])
   const imageHint = formatMemberPortalContentImageHint(imageRule, t)
+  const imageCompositionHint = formatMemberPortalContentImageCompositionHint(imageRule, t)
+  const imagePreviewCategory =
+    formVariant === "info" ? "info" : (formVariant as "popup" | "promo" | "new_menu")
 
   const openNew = React.useCallback(
     (
@@ -536,10 +541,26 @@ export function MemberPortalContentAdminPanel({
                 buttonLabel={t("mpAdmin_selectImage")}
                 hint={imageHint}
                 error={imageUploadError}
-                previewUrl={form.imageUrl || undefined}
                 alt={form.title || t("mpAdmin_fieldImage")}
                 onFile={(file) => void onUploadImage(file)}
+                previewSlot={
+                  form.imageUrl ? (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-medium text-muted-foreground">{t("mpAdmin_previewMemberApp")}</p>
+                      <MemberPortalContentImagePreview
+                        category={imagePreviewCategory}
+                        imageUrl={form.imageUrl}
+                        title={form.title}
+                        body={form.body}
+                        alt={form.title || t("mpAdmin_fieldImage")}
+                      />
+                    </div>
+                  ) : undefined
+                }
               />
+              {imageCompositionHint ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">{imageCompositionHint}</p>
+              ) : null}
               {imageUploadNotice ? (
                 <p className="text-xs leading-relaxed text-emerald-700">{imageUploadNotice}</p>
               ) : null}

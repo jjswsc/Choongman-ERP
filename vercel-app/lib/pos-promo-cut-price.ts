@@ -1,6 +1,6 @@
 import {
-  calcRegularPriceSum,
-  type PromoLineLike,
+  calcRegularPriceSumWithChoices,
+  type PromoEconomicsLineInput,
   type PromoMenuLike,
   type PromoOptionLike,
   type RegularPriceChannel,
@@ -27,13 +27,13 @@ export function resolvePromoCutPrice(params: {
 }
 
 export function calcPromoRegularPriceForChannel(params: {
-  items: PromoLineLike[]
+  items: PromoEconomicsLineInput[]
   menus: PromoMenuLike[]
   optionsByMenuId: Record<string, PromoOptionLike[]>
   channel?: RegularPriceChannel
 }): number {
   if (!params.items.length) return 0
-  return calcRegularPriceSum({
+  return calcRegularPriceSumWithChoices({
     items: params.items,
     menus: params.menus,
     optionsByMenuId: params.optionsByMenuId,
@@ -46,7 +46,7 @@ export function calcPromoRegularPriceForChannel(params: {
  * 홀·배달 구성 정가 중 큰 값을 쓴다 (다른 매장과 동일한 `<Promotion>` 표시).
  */
 export function calcPromoRegularPriceForGrabCut(params: {
-  items: PromoLineLike[]
+  items: PromoEconomicsLineInput[]
   menus: PromoMenuLike[]
   optionsByMenuId: Record<string, PromoOptionLike[]>
 }): number {
@@ -63,16 +63,27 @@ export function promoItemsToPricingLines(
     optionId?: string | number | null
     option_id?: string | number | null
     quantity?: number | null
+    choiceGroup?: string | null
+    choice_group?: string | null
+    choicePickCount?: number | null
+    choice_pick_count?: number | null
   }>
-): PromoLineLike[] {
+): PromoEconomicsLineInput[] {
   return items
     .map((it) => {
       const menuId = String(it.menuId ?? it.menu_id ?? '').trim()
       const optionRaw = it.optionId ?? it.option_id
+      const choiceGroup = String(it.choiceGroup ?? it.choice_group ?? '').trim() || null
+      const choicePickRaw = it.choicePickCount ?? it.choice_pick_count
       return {
         menuId,
         optionId: optionRaw != null ? String(optionRaw).trim() || null : null,
         quantity: Math.max(1, Number(it.quantity) || 1),
+        choiceGroup,
+        choicePickCount:
+          choiceGroup && choicePickRaw != null && Number.isFinite(Number(choicePickRaw))
+            ? Math.max(1, Math.floor(Number(choicePickRaw)))
+            : null,
       }
     })
     .filter((it) => it.menuId)

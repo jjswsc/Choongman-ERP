@@ -313,17 +313,16 @@ export function PremiumAppHeader({
   logoutLabel: string
 }) {
   return (
-    <header className="mb-5 flex items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-200/80 bg-white p-1.5 shadow-sm">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-50 to-transparent" />
-          <Image src={logoSrc} alt={logoAlt} width={32} height={32} className="relative h-8 w-8 object-contain" />
+    <header className="mb-4 flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-stone-200/80 bg-white p-1 shadow-sm">
+          <Image src={logoSrc} alt={logoAlt} width={28} height={28} className="h-7 w-7 object-contain" />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-amber-700/70">{wordmark}</p>
-          <p className={`truncate text-base font-semibold tracking-tight ${MP_TEXT_PRIMARY}`}>{displayName}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700/80">{wordmark}</p>
+          <p className="truncate text-sm font-semibold text-stone-900">{displayName}</p>
           {tierLabel ? (
-            <span className="mt-0.5 inline-flex rounded-full border border-amber-300/60 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+            <span className="mt-0.5 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800">
               {tierLabel}
             </span>
           ) : null}
@@ -362,33 +361,29 @@ export function PremiumBottomNav({
 
   const nav = (
     <nav
-      className={`${embedPreview ? "absolute" : "fixed"} inset-x-0 bottom-0 z-[70] isolate pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2`}
+      className={`${embedPreview ? "absolute" : "fixed"} inset-x-0 bottom-0 z-[70] isolate border-t border-stone-200 bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-1px_0_rgba(0,0,0,0.06)]`}
       aria-label="Member portal navigation"
     >
-      <div className={`mx-auto w-full ${MP_MAX_WIDTH} px-4`}>
-        <div className="rounded-[1.35rem] border border-stone-200/90 bg-white/95 px-1 py-1.5 shadow-[0_-4px_24px_rgba(28,21,16,0.08)] ring-1 ring-stone-100 supports-[backdrop-filter]:backdrop-blur-md">
-          <div className="grid grid-cols-5">
-            {items.map(({ id, label, icon: Icon }) => {
-              const active = tab === id
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onChange(id)}
-                  className={`relative flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-medium transition ${
-                    active ? "text-amber-700" : `${MP_TEXT_MUTED} hover:text-stone-700`
-                  }`}
-                >
-                  {active ? (
-                    <span className="absolute inset-x-2 top-0 h-8 rounded-xl bg-gradient-to-b from-amber-100 to-transparent" />
-                  ) : null}
-                  <Icon className={`relative h-5 w-5 ${active ? "text-amber-600" : "text-stone-500"}`} />
-                  <span className="relative max-w-full truncate">{label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      <div className={`mx-auto grid w-full ${MP_MAX_WIDTH} grid-cols-5`}>
+        {items.map(({ id, label, icon: Icon }) => {
+          const active = tab === id
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChange(id)}
+              className={`relative flex w-full min-h-[3.25rem] flex-col items-center justify-center gap-1 px-0.5 py-0.5 text-[10px] font-medium transition ${
+                active ? "text-orange-600" : "text-stone-600"
+              }`}
+            >
+              <Icon
+                className={`h-6 w-6 ${active ? "text-orange-600" : "text-stone-700"}`}
+                strokeWidth={active ? 2.25 : 1.75}
+              />
+              <span className="max-w-full truncate leading-tight">{label}</span>
+            </button>
+          )
+        })}
       </div>
     </nav>
   )

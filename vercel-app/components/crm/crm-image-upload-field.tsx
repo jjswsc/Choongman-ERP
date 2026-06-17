@@ -12,6 +12,7 @@ export function CrmImageUploadField({
   uploading,
   onFile,
   previewUrl,
+  previewSlot,
   alt,
   buttonLabel,
   hint,
@@ -22,6 +23,7 @@ export function CrmImageUploadField({
   uploading?: boolean
   onFile: (file: File) => void
   previewUrl?: string
+  previewSlot?: React.ReactNode
   alt?: string
   buttonLabel?: string
   hint?: string
@@ -56,7 +58,9 @@ export function CrmImageUploadField({
       </Button>
       {hint ? <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
       {error ? <p className="text-xs leading-relaxed text-red-600">{error}</p> : null}
-      {previewUrl ? (
+      {previewSlot ? (
+        previewSlot
+      ) : previewUrl ? (
         <img
           src={previewUrl}
           alt={alt || ""}

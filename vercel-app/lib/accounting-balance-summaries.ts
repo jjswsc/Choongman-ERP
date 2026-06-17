@@ -1,5 +1,5 @@
 import {
-  filterPurchasePayableLedgerRows,
+  filterPurchasePayableLedgerRowsAsync,
   isPayableStoreFilterActive,
   loadPayableTransactionsToEnd,
   scopePayableLedgerRows,
@@ -64,7 +64,7 @@ export async function sumPayablesBalance(params: {
   const { endStr, storeFilter, isHQ } = params
   const useStoreScoped = !isHQ && isPayableStoreFilterActive(storeFilter)
 
-  const rows = filterPurchasePayableLedgerRows(await loadPayableTransactionsToEnd({ endStr }))
+  const rows = await filterPurchasePayableLedgerRowsAsync(await loadPayableTransactionsToEnd({ endStr }))
   const scoped = useStoreScoped
     ? (await scopePayableLedgerRows(rows, storeFilter)).scopedRows
     : rows

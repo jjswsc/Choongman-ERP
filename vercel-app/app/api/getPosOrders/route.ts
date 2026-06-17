@@ -752,7 +752,11 @@ export async function GET(request: NextRequest) {
     }
     if (pollMinimal && sinceId != null && sinceId > 0 && list.length === 0) {
       headers.set('X-Pos-Orders-Count', '0')
+      headers.set('Cache-Control', 'private, max-age=0, s-maxage=5, stale-while-revalidate=20')
       return new NextResponse(null, { status: 204, headers })
+    }
+    if (pollMinimal && sinceId != null && sinceId > 0) {
+      headers.set('Cache-Control', 'private, max-age=0, s-maxage=3, stale-while-revalidate=10')
     }
     headers.set('X-Pos-Orders-Count', String(list.length))
     return NextResponse.json(list, { headers })

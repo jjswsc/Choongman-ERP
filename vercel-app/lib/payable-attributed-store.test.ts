@@ -152,6 +152,34 @@ describe('isPurchasePayableLedgerRow', () => {
     ).toBe(true)
   })
 
+  it('includes purchase-payment accrual settlements but excludes general expense payments', () => {
+    const purchaseAccrualIds = new Set([42])
+    expect(
+      isPurchasePayableLedgerRow(
+        {
+          vendor_code: '1006',
+          amount: -231120,
+          ref_type: 'Payment',
+          expense_accrual_id: 42,
+          trans_date: '2026-05-27',
+        },
+        { purchaseAccrualIds }
+      )
+    ).toBe(true)
+    expect(
+      isPurchasePayableLedgerRow(
+        {
+          vendor_code: '1006',
+          amount: -5000,
+          ref_type: 'Payment',
+          expense_accrual_id: 99,
+          trans_date: '2026-05-27',
+        },
+        { purchaseAccrualIds }
+      )
+    ).toBe(false)
+  })
+
   it('filterPurchasePayableLedgerRows drops PO and expense rows', () => {
     const rows = [
       { vendor_code: '1002', amount: 1000, ref_type: 'Inbound', ref_id: 55, trans_date: '2026-06-01' },

@@ -1,3 +1,16 @@
+import {
+  MP_HOME_HERO_ASPECT_H,
+  MP_HOME_HERO_ASPECT_W,
+  MP_HOME_HERO_MIN_HEIGHT,
+  MP_HOME_HERO_MIN_WIDTH,
+  MP_HOME_NEW_MENU_ASPECT_H,
+  MP_HOME_NEW_MENU_ASPECT_W,
+  MP_HOME_NEW_MENU_MIN_SIZE,
+  MP_HOME_POPUP_ASPECT_H,
+  MP_HOME_POPUP_ASPECT_W,
+  MP_HOME_POPUP_MIN_HEIGHT,
+  MP_HOME_POPUP_MIN_WIDTH,
+} from '@/lib/member-portal-home-layout'
 import { MP_ADMIN_IMAGE_RULE_LABEL_KEYS } from '@/lib/i18n-member-portal-admin'
 import type { MemberPortalContentTranslator } from '@/lib/member-portal-content-admin'
 
@@ -9,46 +22,44 @@ export type MemberPortalContentImageRule = {
   aspectH: number
   /**
    * 비율 허용 오차(0~1). 미지정 시 기본값(아래 DEFAULT_ASPECT_TOLERANCE_PCT) 사용.
-   * 사람이 준비한 이미지는 정확히 맞추기 어려우므로 너무 작게 두면 업로드가 계속 거부된다.
    */
   aspectTolerancePct?: number
-  /**
-   * 전체화면 `cover` 배경처럼 비율이 의미 없는 경우 비율 검증 자체를 건너뛴다.
-   * (요즘 폰은 19.5:9 등 9:16과 다른 비율이라 엄격히 막으면 스크린샷·사진을 못 올린다.)
-   */
+  /** 전체화면 cover·폰 스크린샷 등 비율 검증 생략 */
   skipAspectCheck?: boolean
+  /** 관리자 업로드 안내용 구도 힌트 i18n 키 */
+  compositionHintKey?: string
 }
 
-/** 비율 허용 오차 기본값 — 2%는 사람이 준비한 이미지엔 비현실적이라 8%로 완화 */
 const DEFAULT_ASPECT_TOLERANCE_PCT = 0.08
+const PROMO_ASPECT_TOLERANCE_PCT = 0.12
 
 export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
-  /** 홈 팝업 배너 — 회원앱 홈 카드 */
   popup: {
     label: '팝업',
-    minWidth: 720,
-    minHeight: 900,
-    aspectW: 4,
-    aspectH: 5,
+    minWidth: MP_HOME_POPUP_MIN_WIDTH,
+    minHeight: MP_HOME_POPUP_MIN_HEIGHT,
+    aspectW: MP_HOME_POPUP_ASPECT_W,
+    aspectH: MP_HOME_POPUP_ASPECT_H,
     skipAspectCheck: true,
+    compositionHintKey: 'mpAdmin_imageCompositionPopup',
   },
-  /** 신메뉴 — 회원앱 홈 정사각 카드 */
   new_menu: {
     label: '신메뉴',
-    minWidth: 720,
-    minHeight: 720,
-    aspectW: 1,
-    aspectH: 1,
-    skipAspectCheck: true,
+    minWidth: MP_HOME_NEW_MENU_MIN_SIZE,
+    minHeight: MP_HOME_NEW_MENU_MIN_SIZE,
+    aspectW: MP_HOME_NEW_MENU_ASPECT_W,
+    aspectH: MP_HOME_NEW_MENU_ASPECT_H,
+    aspectTolerancePct: DEFAULT_ASPECT_TOLERANCE_PCT,
+    compositionHintKey: 'mpAdmin_imageCompositionNewMenu',
   },
-  /** 이달의 프로모션 — 회원앱 홈 정사각 카드 */
   promo: {
     label: '월별 프로모션',
-    minWidth: 720,
-    minHeight: 720,
-    aspectW: 1,
-    aspectH: 1,
-    skipAspectCheck: true,
+    minWidth: MP_HOME_HERO_MIN_WIDTH,
+    minHeight: MP_HOME_HERO_MIN_HEIGHT,
+    aspectW: MP_HOME_HERO_ASPECT_W,
+    aspectH: MP_HOME_HERO_ASPECT_H,
+    aspectTolerancePct: PROMO_ASPECT_TOLERANCE_PCT,
+    compositionHintKey: 'mpAdmin_imageCompositionPromo',
   },
   info: {
     label: '정보·공지',
@@ -105,6 +116,14 @@ export function formatMemberPortalContentImageHint(
   s = s.split('{aspectW}').join(String(rule.aspectW))
   s = s.split('{aspectH}').join(String(rule.aspectH))
   return s
+}
+
+export function formatMemberPortalContentImageCompositionHint(
+  rule: MemberPortalContentImageRule,
+  t: MemberPortalContentTranslator
+): string | null {
+  if (!rule.compositionHintKey) return null
+  return t(rule.compositionHintKey)
 }
 
 export function memberPortalImageRuleLabel(

@@ -1,5 +1,10 @@
 import type { PosPromoWithItems } from '@/lib/api-client'
-import { buildCostAnalysisLookups, calcPromoEconomics, resolveCostFromAnalysisMaps } from '@/lib/promo-economics'
+import {
+  aggregatePromoChoiceAwareTotals,
+  buildCostAnalysisLookups,
+  calcPromoEconomics,
+  resolveCostFromAnalysisMaps,
+} from '@/lib/promo-economics'
 
 const emptyMenuById: Record<string, { code?: string }> = {}
 
@@ -27,13 +32,18 @@ export function buildInquiryEconomicsByPromoId(
     let costHall = 0
     let costDel = 0
     let incomplete = false
-    for (const it of items) {
+    costHall = aggregatePromoChoiceAwareTotals(items, (it) => {
       const ce = resolveCostFromAnalysisMaps(byMenuKey, byCodeKey, emptyMenuById, it.menuId, it.optionId)
       if (ce == null) incomplete = true
       const q = Number(it.quantity) || 1
-      costHall += (ce?.hall ?? 0) * q
-      costDel += (ce?.del ?? 0) * q
-    }
+      return (ce?.hall ?? 0) * q
+    })
+    costDel = aggregatePromoChoiceAwareTotals(items, (it) => {
+      const ce = resolveCostFromAnalysisMaps(byMenuKey, byCodeKey, emptyMenuById, it.menuId, it.optionId)
+      if (ce == null) incomplete = true
+      const q = Number(it.quantity) || 1
+      return (ce?.del ?? 0) * q
+    })
 
     const saleHall = Number(p.price) || 0
     const pd = p.priceDelivery

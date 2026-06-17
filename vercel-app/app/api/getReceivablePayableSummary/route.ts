@@ -10,7 +10,7 @@ import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   aggregatePayableBalancesByVendor,
-  filterPurchasePayableLedgerRows,
+  filterPurchasePayableLedgerRowsAsync,
   isPayableStoreFilterActive,
   loadPayableTransactionsToEnd,
   scopePayableLedgerRows,
@@ -60,7 +60,7 @@ async function getPayableSummary(params: {
   storeFilter?: string
 }): Promise<{ list: { vendorCode: string; balance: number; count: number }[]; totalAmount: number }> {
   const { vendorFilter, endStr, storeFilter } = params
-  const ledgerRows = filterPurchasePayableLedgerRows(
+  const ledgerRows = await filterPurchasePayableLedgerRowsAsync(
     await loadPayableTransactionsToEnd({
       vendorFilter: vendorFilter || undefined,
       endStr,

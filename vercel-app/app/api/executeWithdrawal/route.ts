@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
-import { upsertPayableFromBankPurchasePayment } from '@/lib/receivable-payable'
+import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 import {
   postWithdrawalJournal,
   type WithdrawalCategory,
@@ -120,6 +120,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '출금 유형을 선택해 주세요.' }, { status: 400, headers })
     }
 
+    const purchaseGuard = assertPurchasePaymentViaExpenseOnly(category)
+    if (!purchaseGuard.ok) {
+      return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
+    }
+
     if (['purchase_payment', 'purchase_advance'].includes(category) && !vendorCode) {
       return NextResponse.json({ success: false, message: '거래처를 선택해 주세요.' }, { status: 400, headers })
     }
@@ -224,17 +229,7 @@ export async function POST(request: NextRequest) {
           bank_transaction_id: bankTransactionId,
         })
       }
-      // 매입 대금(통장): payable_transactions에 지급 기록 → 미지급금 차감, 지급 예정 반영
-      if (category === 'purchase_payment' && vendorCode && bankTransactionId) {
-        await upsertPayableFromBankPurchasePayment({
-          bankTransactionId,
-          vendorCode,
-          amountAbs: amount,
-          transDate,
-          memo: memo ? `통장 지급(매입): ${memo.slice(0, 200)}` : `통장 지급(매입): ${vendorCode}`,
-        })
-      }
-
+      // 매입 대금은 지출관리 → 지급예정 집행만 허용 (executeExpensePayment)
     } else {
       const pettyStore = store || '본사'
       const row: Record<string, unknown> = {

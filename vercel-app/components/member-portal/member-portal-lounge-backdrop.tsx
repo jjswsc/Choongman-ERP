@@ -33,8 +33,25 @@ function AmbienceOverlays({ variant }: { variant: "login" | "app" }) {
   return (
     <>
       <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2]/35 via-[#faf7f2]/55 to-[#f3ebe0]/82" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_18%,rgba(212,175,55,0.14),transparent_55%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(239,35,60,0.06),transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_18%,rgba(212,175,55,0.1),transparent_55%)]" />
+    </>
+  )
+}
+
+function AppCleanBackground({ lounge }: { lounge: string }) {
+  return (
+    <>
+      <div className="absolute inset-0 bg-[#faf7f2]" />
+      <div
+        className="absolute inset-x-0 bottom-0 h-[38%] opacity-[0.22]"
+        style={{
+          backgroundImage: `url(${lounge})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center bottom",
+          backgroundRepeat: "no-repeat",
+        }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#faf7f2] via-[#faf7f2]/98 to-[#f5f0e8]/94" />
     </>
   )
 }
@@ -79,52 +96,7 @@ export function MemberPortalLoungeBackdrop({
   if (variant === "app") {
     return (
       <div className={`pointer-events-none absolute inset-0 z-0 overflow-hidden ${className}`}>
-        <div
-          className="absolute inset-0 scale-[1.02]"
-          style={{
-            backgroundImage: `url(${lounge})`,
-            backgroundSize: "100% 200%",
-            backgroundPosition: "center bottom",
-            backgroundRepeat: "no-repeat",
-          }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{ perspective: `${MEMBER_PORTAL_FOOD_ON_TABLE.perspectivePx}px` }}
-        >
-          <div
-            className="absolute left-1/2 z-[1]"
-            style={{
-              top: "8%",
-              width: "min(58vw, 248px)",
-              transform: `translateX(-50%) rotateX(${MEMBER_PORTAL_FOOD_ON_TABLE.rotateXDeg}deg)`,
-              transformOrigin: "center bottom",
-              opacity: 0.92,
-            }}
-          >
-            <div className="relative">
-              <div
-                className="absolute -bottom-1 left-1/2 z-0 h-4 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/30 blur-md"
-                aria-hidden
-              />
-              <img
-                src={hero}
-                alt=""
-                draggable={false}
-                className={`relative z-[1] w-full select-none object-contain ${
-                  isolatedPlate ? "mix-blend-multiply" : "drop-shadow-[0_18px_28px_rgba(0,0,0,0.42)]"
-                }`}
-                style={
-                  isolatedPlate
-                    ? { filter: "contrast(1.06) saturate(1.1)" }
-                    : undefined
-                }
-              />
-            </div>
-          </div>
-        </div>
-        <div className="absolute inset-x-0 top-[36%] h-40 bg-gradient-to-b from-transparent via-[#faf7f2]/25 to-[#f3ebe0]/75" />
-        <AmbienceOverlays variant={variant} />
+        <AppCleanBackground lounge={lounge} />
       </div>
     )
   }

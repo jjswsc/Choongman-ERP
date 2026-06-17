@@ -193,6 +193,7 @@ export type MemberPortalKey =
   | 'stampCelebrateEarn'
   | 'stampCelebrateMilestone'
   | 'stampViewCoupons'
+  | 'stampViewCard'
   | 'stampHistoryBtn'
   | 'stampHistoryTitle'
   | 'stampHistoryRevoke'
@@ -258,9 +259,13 @@ export type MemberPortalKey =
   | 'greetingEvening'
   | 'homeWelcomeSub'
   | 'homeQuickOrder'
+  | 'homeQuickDelivery'
   | 'homeQuickStores'
   | 'homeQuickCoupons'
   | 'homeQuickProfile'
+  | 'homeSpecialPrivileges'
+  | 'homeViewAll'
+  | 'homePromoOrderNow'
   | 'err_line_not_configured'
   | 'err_line_bad_channel_id'
   | 'err_line_state_mismatch'
@@ -545,8 +550,8 @@ const MS: Record<MemberPortalKey, Dict> = {
   copied: { en: 'Copied!', th: 'Copied!', ko: '복사됨!' },
   recentPoints: { en: 'Recent points', th: 'ประวัติแต้มล่าสุด', ko: '최근 포인트' },
   noRecords: { en: 'No records yet', th: 'ยังไม่มีรายการ', ko: '내역 없음' },
-  tabHome: { en: 'Home', th: 'หน้าแรก', ko: '홈' },
-  tabOrder: { en: 'Order', th: 'สั่งซื้อ', ko: '주문' },
+  tabHome: { en: 'Home', th: 'หน้าหลัก', ko: '홈' },
+  tabOrder: { en: 'Order', th: 'สั่งอาหาร', ko: '주문' },
   tabLocation: { en: 'Location', th: 'สาขา', ko: '매장' },
   tabPrivilege: { en: 'Privilege', th: 'สิทธิพิเศษ', ko: '혜택' },
   tabMe: { en: 'Me', th: 'ฉัน', ko: '내정보' },
@@ -927,6 +932,11 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'ดูคูปองของฉัน',
     ko: '쿠폰함 보기',
   },
+  stampViewCard: {
+    en: 'View stamp card',
+    th: 'ดูบัตรสแตมป์',
+    ko: '스탬프 카드 보기',
+  },
   stampHistoryBtn: {
     en: 'History',
     th: 'ประวัติ',
@@ -1099,10 +1109,18 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'ประสบการณ์สมาชิกระดับพรีเมียม',
     ko: '프리미엄 멤버십을 경험해 보세요',
   },
-  homeQuickOrder: { en: 'Order', th: 'สั่ง', ko: '주문' },
+  homeQuickOrder: { en: 'Order', th: 'สั่งอาหาร', ko: '주문' },
+  homeQuickDelivery: { en: 'Delivery', th: 'เดลิเวอรี', ko: '배달' },
   homeQuickStores: { en: 'Stores', th: 'สาขา', ko: '매장' },
-  homeQuickCoupons: { en: 'Coupons', th: 'คูปอง', ko: '쿠폰' },
+  homeQuickCoupons: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
   homeQuickProfile: { en: 'Profile', th: 'โปรไฟล์', ko: '내정보' },
+  homeSpecialPrivileges: {
+    en: 'Special privileges for you',
+    th: 'สิทธิพิเศษสำหรับคุณ',
+    ko: '나를 위한 특별 혜택',
+  },
+  homeViewAll: { en: 'View all', th: 'ดูทั้งหมด', ko: '전체 보기' },
+  homePromoOrderNow: { en: 'Order now', th: 'สั่งเลย', ko: '지금 주문' },
   err_line_not_configured: {
     en: 'LINE Login is not ready. Please contact the store.',
     th: 'LINE Login ยังไม่พร้อมใช้งาน กรุณาติดต่อร้านค้า',

@@ -86,7 +86,7 @@ export function MemberPortalCouponCard({ coupon, memberNo, lang, dateLocale, t }
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-[1.35rem] border border-amber-900/[0.08] shadow-[0_12px_36px_rgba(42,31,13,0.14)] transition",
+        "relative overflow-hidden rounded-[18px] border border-amber-900/[0.08] shadow-[0_12px_36px_rgba(42,31,13,0.14)] transition",
         isActive ? "hover:shadow-[0_16px_44px_rgba(42,31,13,0.18)]" : "opacity-[0.78] saturate-[0.65]"
       )}
     >

@@ -3,9 +3,9 @@ import { supabaseUpdate, supabaseSelectFilter, supabaseDeleteByFilter } from '@/
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   deleteReceivableFromBankReceive,
-  upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
+import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   extractExpenseAccrualPrefix,
@@ -70,12 +70,17 @@ export async function POST(request: NextRequest) {
     const transDate = String(existing[0].trans_date || '').slice(0, 10)
     await assertAccountingDateOpen(transDate)
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
-    const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
     const prevCategory = String(existing[0].category || '').toLowerCase()
 
     const patch: Record<string, unknown> = {}
 
     if (category !== undefined) {
+      const requested = String(category).toLowerCase()
+      const purchaseGuard = assertPurchasePaymentViaExpenseOnly(requested)
+      if (!purchaseGuard.ok) {
+        return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
+      }
       let validCategory = transType === 'deposit'
         ? (depositCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
         : (withdrawCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
@@ -213,32 +218,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 매입 지급(미지급): 출금 용도 변경 시 통장 1건당 Payment 1행 유지
+    // 매입 지급(미지급): 레거시 purchase_payment → unclassified 변경 시 직접 Payment 행 정리
     if (transType === 'withdraw') {
-      const wAmount = Math.abs(Number(existing[0].amount) || 0)
-      const wMemo = String(existing[0].memo || '').trim()
-      const wTransDate = transDate
-      const finalVendor =
-        patch.vendor_code !== undefined
-          ? String(patch.vendor_code || '').trim() || null
-          : String(existing[0].vendor_code || '').trim() || null
       const wasPurchasePay = prevCategory === 'purchase_payment'
       const isPurchasePay = String(finalCategory || '').toLowerCase() === 'purchase_payment'
 
-      if (wasPurchasePay && (!isPurchasePay || !finalVendor)) {
+      if (wasPurchasePay && !isPurchasePay) {
         await supabaseDeleteByFilter(
           'payable_transactions',
           `bank_transaction_id=eq.${bankTxId}&ref_type=eq.Payment&expense_accrual_id=is.null`
         )
-      }
-      if (isPurchasePay && finalVendor) {
-        await upsertPayableFromBankPurchasePayment({
-          bankTransactionId: bankTxId,
-          vendorCode: finalVendor,
-          amountAbs: wAmount,
-          transDate: wTransDate,
-          memo: wMemo ? `통장 지급: ${wMemo.slice(0, 200)}` : '통장 지급',
-        })
       }
     }
 

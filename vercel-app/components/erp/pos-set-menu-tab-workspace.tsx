@@ -45,13 +45,15 @@ import {
 } from "@/lib/pos-promo-constants"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import {
+  aggregatePromoChoiceAwareTotals,
   buildCostAnalysisLookups,
   calcPromoEconomics,
-  calcRegularPriceSum,
+  calcRegularPriceSumWithChoices,
+  countPromoChoiceEffectiveUnits,
   promoCostKey,
   resolveBundleSalePriceThb,
   resolveCostFromAnalysisMaps,
-  type PromoLineLike,
+  type PromoEconomicsLineInput,
 } from "@/lib/promo-economics"
 import { getPromoChoiceSlotLabel } from "@/lib/pos-promo-choice"
 import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
@@ -407,8 +409,15 @@ export function PosSetMenuTabWorkspace({
     return r
   }, [menus])
 
-  const promoItemsLike: PromoLineLike[] = React.useMemo(
-    () => lines.map((ln) => ({ menuId: ln.menuId, optionId: ln.optionId, quantity: ln.qty })),
+  const promoItemsLike: PromoEconomicsLineInput[] = React.useMemo(
+    () =>
+      lines.map((ln) => ({
+        menuId: ln.menuId,
+        optionId: ln.optionId,
+        quantity: ln.qty,
+        choiceGroup: ln.choiceGroup,
+        choicePickCount: ln.choicePickCount,
+      })),
     [lines]
   )
 
@@ -419,7 +428,7 @@ export function PosSetMenuTabWorkspace({
 
   const regularSum = React.useMemo(
     () =>
-      calcRegularPriceSum({
+      calcRegularPriceSumWithChoices({
         items: promoItemsLike,
         menus: menuRowsForPricing,
         optionsByMenuId,
@@ -430,7 +439,7 @@ export function PosSetMenuTabWorkspace({
 
   const regularSumDelivery = React.useMemo(
     () =>
-      calcRegularPriceSum({
+      calcRegularPriceSumWithChoices({
         items: promoItemsLike,
         menus: menuRowsForPricing,
         optionsByMenuId,
@@ -481,27 +490,23 @@ export function PosSetMenuTabWorkspace({
   }, [missingCostKeys, lines])
 
   const costHallTotal = React.useMemo(() => {
-    let s = 0
-    for (const ln of lines) {
+    return aggregatePromoChoiceAwareTotals(lines, (ln) => {
       const k = promoCostKey(ln.menuId, ln.optionId)
       const c =
         resolveCostFromAnalysisMaps(costAnalysisMap, costAnalysisCodeMap, menuById, ln.menuId, ln.optionId) ??
         costMap[k]
-      s += (c?.hall ?? 0) * ln.qty
-    }
-    return s
+      return (c?.hall ?? 0) * ln.qty
+    })
   }, [lines, costMap, costAnalysisMap, costAnalysisCodeMap, menuById])
 
   const costDelTotal = React.useMemo(() => {
-    let s = 0
-    for (const ln of lines) {
+    return aggregatePromoChoiceAwareTotals(lines, (ln) => {
       const k = promoCostKey(ln.menuId, ln.optionId)
       const c =
         resolveCostFromAnalysisMaps(costAnalysisMap, costAnalysisCodeMap, menuById, ln.menuId, ln.optionId) ??
         costMap[k]
-      s += (c?.del ?? 0) * ln.qty
-    }
-    return s
+      return (c?.del ?? 0) * ln.qty
+    })
   }, [lines, costMap, costAnalysisMap, costAnalysisCodeMap, menuById])
 
   const costsReady =
@@ -654,32 +659,24 @@ export function PosSetMenuTabWorkspace({
 
   const lineAverages = React.useMemo(() => {
     if (lines.length === 0) return null
-    let discount = 0
-    let sale = 0
-    for (const ln of lines) {
-      const row = lineEconomicsMap[ln.key]
-      if (!row) continue
-      discount += row.discountPct
-      sale += row.sale
-    }
+    const effectiveCount = countPromoChoiceEffectiveUnits(lines)
+    if (effectiveCount <= 0) return null
+    const discount = aggregatePromoChoiceAwareTotals(lines, (ln) => lineEconomicsMap[ln.key]?.discountPct ?? 0)
+    const sale = aggregatePromoChoiceAwareTotals(lines, (ln) => lineEconomicsMap[ln.key]?.sale ?? 0)
     return {
-      discountPctAvg: discount / lines.length,
-      saleAvg: sale / lines.length,
+      discountPctAvg: discount / effectiveCount,
+      saleAvg: sale / effectiveCount,
     }
   }, [lineEconomicsMap, lines])
 
   const lineSummary = React.useMemo(() => {
     if (lines.length === 0) return null
-    let discount = 0
-    let saleTotal = 0
-    for (const ln of lines) {
-      const row = lineEconomicsMap[ln.key]
-      if (!row) continue
-      discount += row.discountPct
-      saleTotal += row.sale
-    }
+    const effectiveCount = countPromoChoiceEffectiveUnits(lines)
+    if (effectiveCount <= 0) return null
+    const discount = aggregatePromoChoiceAwareTotals(lines, (ln) => lineEconomicsMap[ln.key]?.discountPct ?? 0)
+    const saleTotal = aggregatePromoChoiceAwareTotals(lines, (ln) => lineEconomicsMap[ln.key]?.sale ?? 0)
     return {
-      discountPctAvg: discount / lines.length,
+      discountPctAvg: discount / effectiveCount,
       saleTotal,
     }
   }, [lineEconomicsMap, lines])

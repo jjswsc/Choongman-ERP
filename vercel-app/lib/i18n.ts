@@ -2496,6 +2496,12 @@ export const i18n = {
     recFilterUnpaidOnly: '미수만',
     payFilterUnpaidOnly: '미지급만',
     payFilterUnpaidOnlyEmpty: '미지급만 필터 적용 시 해당하는 내역이 없습니다.',
+    payLedgerHint:
+      '※ 매입채무는 입고 시 발생하고, 실제 지급은 「지급」 구분 행(통장 매입대금·지급예정 집행)으로 차감됩니다. 입고 행의 「지급여부」는 건별 정산이 아니라 유형 표시입니다. 인보이스 열은 ภ.พ.30(부가세) 참고용이며 지급 여부와 무관합니다.',
+    payColInvoiceVat: '인보이스(부가세)',
+    purchasePaymentViaExpenseOnly:
+      '매입 대금 지급은 「지출관리 → 지급예정」에서만 집행할 수 있습니다. 통장 거래 화면의 「지출관리 연결」으로 승인된 지급예정을 연결하세요.',
+    bankRegisterLinkExpenseMgmt: '지출관리 연결',
     addOpeningBalanceShort: '기초 이월',
     recFilterSalesOutlet: '매출처',
     recFilterSalesOutletAll: '전체 매출처',
@@ -9530,6 +9536,12 @@ Only matters the employee must handle personally on a working day:
     recFilterUnpaidOnly: 'Outstanding only',
     payFilterUnpaidOnly: 'Unpaid only',
     payFilterUnpaidOnlyEmpty: 'No items when unpaid-only filter is applied.',
+    payLedgerHint:
+      '※ Payables accrue on inbound; actual payments appear as “Payment” rows (bank purchase_payment or expense payment runs). “Paid” on inbound lines is a row type label, not per-line settlement. The invoice column is for VAT (PP30) only—not payment status.',
+    payColInvoiceVat: 'Invoice (VAT)',
+    purchasePaymentViaExpenseOnly:
+      'Purchase payments can only be executed in Expense Management → Payment Plan. On Bank Transactions, use “Link expense mgmt” to connect an approved plan.',
+    bankRegisterLinkExpenseMgmt: 'Link expense mgmt',
     addOpeningBalanceShort: 'Opening balance',
     recFilterSalesOutlet: 'Sales outlet',
     recFilterSalesOutletAll: 'All outlets',

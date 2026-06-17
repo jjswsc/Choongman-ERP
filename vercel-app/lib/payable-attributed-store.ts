@@ -36,6 +36,19 @@ function vendorDateStoreKey(vendorCode: string, transDate: string): string {
   return `${vc}|${dt}`
 }
 
+function decodePayeeWithdrawalCategory(payeeCode: string | undefined | null): string {
+  const src = String(payeeCode || '').trim()
+  const marker = '::wm::'
+  const idx = src.lastIndexOf(marker)
+  if (idx < 0) return 'expense'
+  return src.slice(idx + marker.length).trim().toLowerCase() || 'expense'
+}
+
+export function isPurchaseWithdrawalCategory(category: string): boolean {
+  const c = String(category || '').trim().toLowerCase()
+  return c === 'purchase_payment' || c === 'purchase_advance'
+}
+
 function isPurchasePaymentRow(r: PayableTransactionRow): boolean {
   if (String(r.ref_type || '') === 'Payment') return true
   if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) return false
@@ -45,24 +58,73 @@ function isPurchasePaymentRow(r: PayableTransactionRow): boolean {
   return false
 }
 
+export type PurchasePayableLedgerFilterOptions = {
+  /** 지급예정(expense_accrual) 중 매입대금·매입선급 카테고리 id — filterPurchasePayableLedgerRowsAsync 로 채움 */
+  purchaseAccrualIds?: Set<number>
+}
+
 /**
  * 미지급금(매입) 원장 — 입고·매입 지급·기초이월만.
  * - 발주(PO)는 제외: 매입채무는 입고(검수 완료) 기준으로 확정한다(회계 규칙). 발주 미지급 행이 입고와
  *   같이 남으면 이중 계상되므로, 발주는 미지급금에 넣지 않는다(발주 예정은 발주 관리에서 확인).
- * - 급여·지출발생(expense_accrual)·인테리어 지출 제외.
+ * - 일반 경비·급여 지출발생(expense_accrual)은 제외. 매입대금 지급예정 경유 Payment 는 포함.
  */
-export function isPurchasePayableLedgerRow(r: PayableTransactionRow): boolean {
+export function isPurchasePayableLedgerRow(
+  r: PayableTransactionRow,
+  options?: PurchasePayableLedgerFilterOptions
+): boolean {
   const refType = String(r.ref_type || '').trim()
   if (refType === 'Expense' || refType === 'InteriorExpense') return false
   if (refType === 'PO') return false
-  if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) return false
+
+  const accrualId = r.expense_accrual_id != null ? Number(r.expense_accrual_id) : 0
+
+  if (refType === 'Payment') {
+    if (accrualId <= 0) return true
+    return options?.purchaseAccrualIds?.has(accrualId) ?? false
+  }
+
+  if (accrualId > 0) return false
   if (refType === 'Opening' || refType === 'Inbound') return true
-  if (refType === 'Payment') return true
   return isPurchasePaymentRow(r)
 }
 
+export async function loadPurchasePaymentAccrualIds(accrualIds: number[]): Promise<Set<number>> {
+  const unique = [...new Set(accrualIds.filter((id) => id > 0))]
+  if (!unique.length) return new Set()
+
+  const out = new Set<number>()
+  const chunkSize = 200
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize)
+    const rows = (await supabaseSelectFilter('expense_accruals', `id=in.(${chunk.join(',')})`, {
+      select: 'id,payee_code',
+      limit: chunk.length,
+    })) as { id?: number; payee_code?: string | null }[] | null
+    for (const row of rows || []) {
+      const id = Number(row.id || 0)
+      if (!id) continue
+      if (isPurchaseWithdrawalCategory(decodePayeeWithdrawalCategory(row.payee_code))) {
+        out.add(id)
+      }
+    }
+  }
+  return out
+}
+
+export async function filterPurchasePayableLedgerRowsAsync(
+  rows: PayableTransactionRow[]
+): Promise<PayableTransactionRow[]> {
+  const accrualIds = rows
+    .filter((r) => String(r.ref_type || '') === 'Payment' && Number(r.expense_accrual_id || 0) > 0)
+    .map((r) => Number(r.expense_accrual_id))
+  const purchaseAccrualIds = await loadPurchasePaymentAccrualIds(accrualIds)
+  return rows.filter((r) => isPurchasePayableLedgerRow(r, { purchaseAccrualIds }))
+}
+
+/** @deprecated 동기 필터 — 지급예정 매입 지급은 누락될 수 있음. API는 filterPurchasePayableLedgerRowsAsync 사용 */
 export function filterPurchasePayableLedgerRows(rows: PayableTransactionRow[]): PayableTransactionRow[] {
-  return rows.filter(isPurchasePayableLedgerRow)
+  return rows.filter((r) => isPurchasePayableLedgerRow(r))
 }
 
 function vendorAmountStoreKey(vendorCode: string, amountAbs: number): string {

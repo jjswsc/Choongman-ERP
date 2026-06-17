@@ -10,6 +10,11 @@ import {
   MP_CARD_TEXT_SECONDARY,
   MP_CARD_TEXT_SUBTLE,
 } from "@/lib/member-portal-design"
+import {
+  MP_HOME_CARD_RADIUS,
+  MP_HOME_STAMP_FOOD_SIZE,
+  MP_HOME_STAMP_SLOT_SIZE,
+} from "@/lib/member-portal-home-layout"
 import type { LangCode } from "@/lib/lang-context"
 import { memberPortalT } from "@/lib/member-portal-i18n"
 import type { MemberStampCardStatus, MemberStampHistoryRow } from "@/lib/member-stamp-card"
@@ -164,39 +169,51 @@ export function MemberPortalStampHomeWidget({
   if (!status.enabled) return null
   const slots = Math.max(1, status.cardSlots)
   const filled = status.currentStamps
+
   return (
     <button
       type="button"
       onClick={onOpenPrivilege}
-      className="mb-4 w-full rounded-[24px] border border-amber-200/80 bg-gradient-to-r from-amber-50 via-white to-white p-4 text-left shadow-sm transition hover:border-amber-300/70"
+      className={`relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-emerald-200/70 bg-gradient-to-br from-[#e8f7ee] via-[#edf8f1] to-[#dff3e6] px-4 pb-4 pt-3.5 text-left shadow-[0_4px_18px_rgba(16,185,129,0.08)] transition hover:border-emerald-300 active:scale-[0.99]`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <Stamp className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-stone-900">{t("stampCardTitle")}</p>
-            <p className="text-xs text-stone-500">
-              {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
-            </p>
-          </div>
+      <div className="relative z-[1] pr-[5.5rem]">
+        <p className="text-sm font-bold text-emerald-950">{t("stampCardTitle")}</p>
+        <p className="mt-0.5 text-[11px] font-medium text-emerald-800/80">
+          {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
+        </p>
+        <div className="mt-2.5 flex flex-nowrap gap-1.5 overflow-hidden">
+          {Array.from({ length: slots }, (_, i) => {
+            const isFilled = i < filled
+            return (
+              <span
+                key={i}
+                className={`flex ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 items-center justify-center rounded-full border ${
+                  isFilled
+                    ? "border-amber-300 bg-gradient-to-br from-amber-400 to-amber-600 text-[11px] text-white shadow-sm"
+                    : "border-emerald-300/60 bg-white/80 text-[10px] text-emerald-700/30"
+                }`}
+              >
+                {isFilled ? "🍗" : ""}
+              </span>
+            )
+          })}
         </div>
-        <div className="text-right">
-          <p className="text-lg font-semibold text-amber-200">{status.progressPercent}%</p>
-          {status.nextMilestone ? (
-            <p className="max-w-[140px] truncate text-[11px] text-white/45">
-              {t("stampNextReward")
-                .replace("{remaining}", String(status.nextMilestone.stampsRemaining))
-                .replace("{label}", status.nextMilestone.label)}
-            </p>
-          ) : null}
-        </div>
+        {status.nextMilestone ? (
+          <p className="mt-2 line-clamp-1 text-[10px] text-emerald-800/65">
+            {t("stampNextReward")
+              .replace("{remaining}", String(status.nextMilestone.stampsRemaining))
+              .replace("{label}", status.nextMilestone.label)}
+          </p>
+        ) : null}
+        <span className="mt-3 inline-flex h-9 items-center rounded-full bg-emerald-600 px-4 text-[11px] font-semibold text-white shadow-sm">
+          {t("stampViewCard")}
+        </span>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-500 transition-all duration-700"
-          style={{ width: `${status.progressPercent}%` }}
+      <div className={`pointer-events-none absolute -bottom-1 right-0 z-[2] ${MP_HOME_STAMP_FOOD_SIZE}`}>
+        <img
+          src="/member-portal/snow-onion-hero.png"
+          alt=""
+          className="h-full w-full object-contain object-bottom drop-shadow-[0_12px_20px_rgba(0,0,0,0.18)]"
         />
       </div>
     </button>

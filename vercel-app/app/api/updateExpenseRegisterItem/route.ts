@@ -3,6 +3,7 @@ import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseU
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 import { composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
+import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
@@ -120,8 +121,10 @@ export async function POST(request: NextRequest) {
     const category = mapToWithdrawalCategory(categoryMain, categorySub || 'normal')
     if (action !== 'delete') {
       if (!category) return NextResponse.json({ success: false, message: '출금 유형을 확인해 주세요.' }, { status: 400, headers })
-      if (['purchase_payment', 'purchase_advance'].includes(category) && !vendorCode) {
-        return NextResponse.json({ success: false, message: '매입처를 선택해 주세요.' }, { status: 400, headers })
+      const bankCat = mapToBankTransactionCategory(category)
+      const purchaseGuard = assertPurchasePaymentViaExpenseOnly(bankCat)
+      if (!purchaseGuard.ok) {
+        return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
       }
       if (['expense', 'expense_advance'].includes(category) && !accountSubjectId) {
         return NextResponse.json({ success: false, message: '계정과목을 선택해 주세요.' }, { status: 400, headers })
@@ -240,29 +243,6 @@ export async function POST(request: NextRequest) {
     patch.invoice_no = invoiceNo || null
     patch.invoice_photo_url = invoicePhotoUrl || null
     await supabaseUpdate('bank_transactions', bankTransactionId, patch)
-
-    if (category === 'purchase_payment' && vendorCode) {
-      if (linkedPayables?.length && linkedPayables[0].id) {
-        await supabaseUpdate('payable_transactions', linkedPayables[0].id, {
-          vendor_code: vendorCode,
-          amount: -amount,
-          trans_date: transDate,
-          memo: memo ? `통장 지급(매입): ${memo.slice(0, 200)}` : `통장 지급(매입): ${vendorCode}`,
-        })
-      } else {
-        await supabaseInsert('payable_transactions', {
-          vendor_code: vendorCode,
-          amount: -amount,
-          ref_type: 'Payment',
-          ref_id: null,
-          trans_date: transDate,
-          memo: memo ? `통장 지급(매입): ${memo.slice(0, 200)}` : `통장 지급(매입): ${vendorCode}`,
-          bank_transaction_id: bankTransactionId,
-        })
-      }
-    } else {
-      await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
-    }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {

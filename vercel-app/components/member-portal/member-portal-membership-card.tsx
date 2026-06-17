@@ -1,16 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, QrCode } from "lucide-react"
+import { Loader2, QrCode, ChevronRight } from "lucide-react"
 import type { MemberSummary } from "@/lib/members-server"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
-import {
-  formatPoints,
-  maskPhone,
-  tierVisual,
-  type PortalDashboard,
-} from "@/components/member-portal/portal-ui"
-import { MEMBERSHIP_CARD_GOLDEN_RATIO, mpGoldTextOnDark } from "@/lib/member-portal-design"
+import { formatPoints, maskPhone, tierVisual, type PortalDashboard } from "@/components/member-portal/portal-ui"
+import type { TierVisual } from "@/lib/member-portal-tier-visual"
+import { MemberPortalTierGem } from "@/components/member-portal/member-portal-tier-gem"
+import { MP_HOME_CARD_RADIUS, MP_HOME_MEMBERSHIP_ASPECT } from "@/lib/member-portal-home-layout"
+import { cn } from "@/lib/utils"
 
 type MembershipCardTierProgress = {
   subtitle: string
@@ -26,7 +24,8 @@ function MembershipCardTierProgressSection({
   pointRateLabel,
   actionLabel,
   onAction,
-}: MembershipCardTierProgress) {
+  tier,
+}: MembershipCardTierProgress & { tier: TierVisual }) {
   const { t } = useMemberPortalLang()
 
   return (
@@ -35,22 +34,29 @@ function MembershipCardTierProgressSection({
       <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/65">{subtitle}</p>
       <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-white/8">
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-[#f5e6b8] shadow-[0_0_10px_rgba(251,191,36,0.4)] transition-all duration-700"
+          className={cn(
+            "absolute inset-y-0 left-0 rounded-full bg-gradient-to-r shadow-[0_0_10px_rgba(255,255,255,0.12)] transition-all duration-700",
+            tier.progressBar
+          )}
           style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
         />
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-2">
         <p className="min-w-0 truncate text-[10px] font-medium tracking-wide text-white/40">{pointRateLabel}</p>
-        {actionLabel && onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-100 transition hover:bg-amber-400/15"
-          >
-            {actionLabel}
-          </button>
-        ) : null}
+        <p className={cn("shrink-0 text-[11px] font-bold tabular-nums", tier.progressPercent)}>
+          {progressPercent}%
+        </p>
       </div>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-2 flex w-full items-center justify-center gap-1 rounded-full border border-white/15 bg-white/8 py-1.5 text-[10px] font-semibold text-white/90 transition hover:bg-white/12"
+        >
+          {actionLabel}
+          <ChevronRight className="h-3 w-3" />
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -65,7 +71,7 @@ function MembershipCardHeader({
   onToggleQr,
 }: {
   displayName: string
-  tier: ReturnType<typeof tierVisual>
+  tier: TierVisual
   tierName: string
   subtitle?: string
   showQr: boolean
@@ -80,36 +86,34 @@ function MembershipCardHeader({
         <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/50">
           {showQr ? t("scanAtCounter") : t("membership")}
         </p>
-        <h2 className={`mt-0.5 truncate text-[1.2rem] font-bold leading-tight tracking-tight ${mpGoldTextOnDark}`}>
+        <h2 className={cn("mt-0.5 truncate text-[1.125rem] font-bold leading-tight tracking-tight", tier.titleClass)}>
           {displayName}
         </h2>
         {subtitle ? <p className="mt-0.5 text-xs text-white/60">{subtitle}</p> : null}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
-        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tier.chip}`}>
-          {tierName}
-        </span>
+      <div className="flex shrink-0 flex-col items-end">
+        <MemberPortalTierGem tier={tier} label={tierName} size="md" />
         <button
           type="button"
           onClick={onToggleQr}
           disabled={!qrReady && !showQr}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white backdrop-blur-md transition hover:border-amber-400/30 hover:bg-black/45 disabled:opacity-40"
+          className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/12 bg-black/25 text-white/70 transition hover:border-white/25 hover:text-white disabled:opacity-35"
           aria-label={showQr ? t("hideQr") : t("showQr")}
           aria-pressed={showQr}
         >
-          <QrCode className="h-5 w-5" />
+          <QrCode className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
   )
 }
 
-function CardFaceTexture() {
+function CardFaceTexture({ tier }: { tier: TierVisual }) {
   return (
     <>
       <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJnoiPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjkiIG51bU9jdGF2ZXM9IjQiLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InViciIgb3BhY2l0eT0iMC4wNCIvPjwvc3ZnPg==')] opacity-60" />
-      <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-300/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-12 -left-8 h-36 w-36 rounded-full bg-black/30 blur-2xl" />
+      <div className={cn("pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full blur-3xl", tier.ambientTop)} />
+      <div className={cn("pointer-events-none absolute -bottom-12 -left-8 h-36 w-36 rounded-full blur-2xl", tier.ambientBottom)} />
     </>
   )
 }
@@ -134,24 +138,27 @@ export function MemberPortalMembershipCard({
   const displayName = member.fullName || member.name || "Member"
   const tierName = dashboard.tierProgress.currentTierName || tier.label
 
-  const cardShell = `absolute inset-0 overflow-hidden rounded-[1.5rem] border border-amber-400/20 bg-gradient-to-br ${tier.gradient} shadow-[0_20px_60px_rgba(0,0,0,0.5)] ${tier.glow}`
+  const cardShell = cn(
+    "absolute inset-0 overflow-hidden bg-gradient-to-br",
+    MP_HOME_CARD_RADIUS,
+    tier.border,
+    tier.gradient,
+    tier.glow,
+    "shadow-[0_16px_48px_rgba(0,0,0,0.45)]"
+  )
 
   return (
     <div className="relative w-full" style={{ perspective: "1200px" }}>
       <div
         className="relative w-full transition-transform duration-700 ease-[cubic-bezier(0.4,0.2,0.2,1)]"
         style={{
-          aspectRatio: tierProgress ? 1.38 : MEMBERSHIP_CARD_GOLDEN_RATIO,
+          aspectRatio: MP_HOME_MEMBERSHIP_ASPECT,
           transformStyle: "preserve-3d",
           transform: showQr ? "rotateY(180deg)" : "rotateY(0deg)",
         }}
       >
-        {/* Front */}
-        <div
-          className={cardShell}
-          style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
-        >
-          <CardFaceTexture />
+        <div className={cardShell} style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
+          <CardFaceTexture tier={tier} />
           <div className="relative flex h-full min-h-0 flex-col p-4">
             <MembershipCardHeader
               displayName={displayName}
@@ -163,22 +170,23 @@ export function MemberPortalMembershipCard({
               onToggleQr={onToggleQr}
             />
 
-            <div className="relative mt-2 grid min-h-0 flex-1 grid-cols-2 content-center gap-2">
-              <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 backdrop-blur-md">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">{t("points")}</p>
-                <p className="mt-0.5 text-lg font-bold tracking-tight text-white">{formatPoints(member.pointBalance || 0)}</p>
+            <div className="relative mt-1.5 grid min-h-0 flex-1 grid-cols-2 content-center gap-2">
+              <div className={cn("rounded-[14px] border px-3 py-2 backdrop-blur-md", tier.statPanel)}>
+                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("points")}</p>
+                <p className="mt-0.5 text-[1.15rem] font-bold leading-none tracking-tight text-white">
+                  {formatPoints(member.pointBalance || 0)}
+                </p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5 backdrop-blur-md">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">{t("memberNoShort")}</p>
+              <div className={cn("rounded-[14px] border px-3 py-2 backdrop-blur-md", tier.statPanel)}>
+                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("memberNoShort")}</p>
                 <p className="mt-0.5 text-sm font-bold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
               </div>
             </div>
 
-            {tierProgress ? <MembershipCardTierProgressSection {...tierProgress} /> : null}
+            {tierProgress ? <MembershipCardTierProgressSection {...tierProgress} tier={tier} /> : null}
           </div>
         </div>
 
-        {/* Back — QR (same card slot, flipped) */}
         <div
           className={cardShell}
           style={{
@@ -187,7 +195,7 @@ export function MemberPortalMembershipCard({
             transform: "rotateY(180deg)",
           }}
         >
-          <CardFaceTexture />
+          <CardFaceTexture tier={tier} />
           <div className="relative flex h-full min-h-0 flex-col p-4">
             <MembershipCardHeader
               displayName={displayName}

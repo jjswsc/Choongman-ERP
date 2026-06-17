@@ -14,7 +14,7 @@ import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   buildPayableListWithCumulative,
   cumulativeBalanceByVendor,
-  filterPurchasePayableLedgerRows,
+  filterPurchasePayableLedgerRowsAsync,
   loadPayableTransactionsToEnd,
   payableRowsOnOrAfterStart,
   resolvePayableAttributedStore,
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'payable') {
-      const ledgerRows = filterPurchasePayableLedgerRows(
+      const ledgerRows = await filterPurchasePayableLedgerRowsAsync(
         await loadPayableTransactionsToEnd({
           vendorFilter: vendorFilter || undefined,
           endStr: endStr || '',

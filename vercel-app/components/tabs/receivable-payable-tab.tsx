@@ -1057,7 +1057,6 @@ export function ReceivablePayableTab() {
   )
 
   const listSearchTotals = React.useMemo(() => {
-    const isRecTab = tab === "receivable"
     let accrualSum = 0
     let settlementSum = 0
     let balanceSum = 0
@@ -1300,38 +1299,40 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
               ? (t("recTypeReceive") || "Receive")
               : (t("payTypePayment") || "Payment")
 
+  const ledgerSummaryMetrics =
+    hasSearchedList && !loading ? (
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 mb-4">
+        <MetricCard
+          size="sm"
+          variant="primary"
+          label={t("acct_kpi_cumulative_balance")}
+          value={`฿${cumulativeSummary.totalAmount.toLocaleString()}`}
+          subLabel={cumulativeBalanceLabel}
+        />
+        {listSearchTotals.count > 0 ? (
+          <>
+            <MetricCard
+              size="sm"
+              label={t("acct_kpi_period_net")}
+              value={`฿${listSearchTotals.balanceSum.toLocaleString()}`}
+            />
+            <MetricCard
+              size="sm"
+              label={t("acct_kpi_period_accrual")}
+              value={`฿${listSearchTotals.accrualSum.toLocaleString()}`}
+            />
+            <MetricCard
+              size="sm"
+              label={t("acct_kpi_period_settlement")}
+              value={`฿${listSearchTotals.settlementSum.toLocaleString()}`}
+            />
+          </>
+        ) : null}
+      </div>
+    ) : null
+
   return (
     <div className="space-y-4">
-      {hasSearchedList && !loading ? (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          <MetricCard
-            size="sm"
-            variant="primary"
-            label={t("acct_kpi_cumulative_balance")}
-            value={`฿${cumulativeSummary.totalAmount.toLocaleString()}`}
-            subLabel={cumulativeBalanceLabel}
-          />
-          {listSearchTotals.count > 0 ? (
-            <>
-              <MetricCard
-                size="sm"
-                label={t("acct_kpi_period_net")}
-                value={`฿${listSearchTotals.balanceSum.toLocaleString()}`}
-              />
-              <MetricCard
-                size="sm"
-                label={t("acct_kpi_period_accrual")}
-                value={`฿${listSearchTotals.accrualSum.toLocaleString()}`}
-              />
-              <MetricCard
-                size="sm"
-                label={t("acct_kpi_period_settlement")}
-                value={`฿${listSearchTotals.settlementSum.toLocaleString()}`}
-              />
-            </>
-          ) : null}
-        </div>
-      ) : null}
       {hasSearchedList && !loading && ledgerAging.openLineCount > 0 ? (
         <ReceivableAgingPanel
           ledger={tab}
@@ -1547,26 +1548,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
-                    {hasSearchedList && !loading ? (
-                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100%,420px)]">
-                        <span className="text-sm font-bold text-primary tabular-nums text-right">
-                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
-                        </span>
-                        {listSearchTotals.count > 0 ? (
-                          <>
-                            <span className="text-sm font-semibold tabular-nums text-right">
-                              {t("recSearchTotalRemaining") || tt("recSearchTotalRemaining", "조회 기간 합계 (순잔액)")}: ฿
-                              {listSearchTotals.balanceSum.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-muted-foreground tabular-nums text-right">
-                              {(t("recColSalesAmount") || "매출금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
-                              {(t("recColReceiveAmount") || "수령금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </div>
+                  {ledgerSummaryMetrics}
                   {canSelectStores ? (
                     <p className="text-xs text-amber-900 dark:text-amber-100/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-md px-3 py-2 mb-3 leading-snug">
                       {tt(
@@ -2228,26 +2211,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
-                    {hasSearchedList && !loading ? (
-                      <div className="ml-auto flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100%,420px)]">
-                        <span className="text-sm font-bold text-primary tabular-nums text-right">
-                          {cumulativeBalanceLabel}: ฿{cumulativeSummary.totalAmount.toLocaleString()}
-                        </span>
-                        {listSearchTotals.count > 0 ? (
-                          <>
-                            <span className="text-sm font-semibold tabular-nums text-right">
-                              {t("paySearchTotalRemaining") || tt("paySearchTotalRemaining", "조회 기간 합계 (순잔액)")}: ฿
-                              {listSearchTotals.balanceSum.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-muted-foreground tabular-nums text-right">
-                              {(t("payColPurchaseAmount") || "매입금액")} ฿{listSearchTotals.accrualSum.toLocaleString()} ·{" "}
-                              {(t("payColPaymentAmount") || "지급금액")} ฿{listSearchTotals.settlementSum.toLocaleString()}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </div>
+                  {ledgerSummaryMetrics}
+                  <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+                    {tt(
+                      "payLedgerHint",
+                      "※ 매입채무는 입고 시 발생하고, 실제 지급은 「지급」 구분 행(통장 매입대금·지급예정 집행)으로 차감됩니다. 인보이스 열은 부가세(ภ.พ.30) 참고용입니다."
+                    )}
+                  </p>
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
                   ) : !hasSearchedList ? (
@@ -2327,7 +2298,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 w-[35px] font-semibold"></th>
                                     <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
-                                    <th className="text-center py-2 px-4 w-[100px] font-semibold">{t("poInvoice") || "인보이스"}</th>
+                                    <th className="text-center py-2 px-4 w-[100px] font-semibold" title={tt("payColInvoiceVat", "인보이스(부가세)")}>
+                                      {tt("payColInvoiceVat", "인보이스(부가세)")}
+                                    </th>
                                     <th className="text-center py-2 px-4 w-[92px] font-semibold whitespace-nowrap">
                                       {tt("payColAttributedStore", "귀속 매장")}
                                     </th>
