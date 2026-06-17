@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAccrualStoreByVendorDate,
   buildPayableListWithCumulative,
+  filterPayableRowsByStore,
   filterPurchasePayableLedgerRows,
   isPurchasePayableLedgerRow,
   resolvePayableAttributedStore,
@@ -147,5 +148,28 @@ describe('isPurchasePayableLedgerRow', () => {
     ]
     expect(filterPurchasePayableLedgerRows(rows)).toHaveLength(1)
     expect(filterPurchasePayableLedgerRows(rows)[0].ref_type).toBe('PO')
+  })
+})
+
+describe('filterPayableRowsByStore', () => {
+  it('includes full vendor ledger when only payment matches store filter', () => {
+    const m = maps({
+      storeByPoId: new Map([[7, 'CM Bangna']]),
+      storeByBankId: new Map([[9, 'CM Office']]),
+    })
+    const rows: PayableTransactionRow[] = [
+      { vendor_code: '1002', ref_type: 'PO', ref_id: 7, trans_date: '2026-04-01', amount: 891124.04 },
+      {
+        vendor_code: '1002',
+        ref_type: 'Payment',
+        trans_date: '2026-04-20',
+        amount: -891124.04,
+        bank_transaction_id: 9,
+      },
+    ]
+    const scoped = filterPayableRowsByStore(rows, 'CM Office', m)
+    expect(scoped).toHaveLength(2)
+    expect(scoped.some((r) => r.ref_type === 'PO')).toBe(true)
+    expect(scoped.some((r) => r.ref_type === 'Payment')).toBe(true)
   })
 })
