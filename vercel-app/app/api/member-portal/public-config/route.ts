@@ -8,9 +8,7 @@ import {
   parseMemberPortalUiThemeFromMap,
 } from '@/lib/member-portal-theme'
 import { readSystemSettingString } from '@/lib/system-settings-value'
-import {
-  loadMemberPortalHomePrivilegesConfig,
-} from '@/lib/member-portal-home-privileges-config'
+import { loadMemberPortalHomePrivilegesConfig } from '@/lib/member-portal-home-privileges-config-server'
 import {
   loadMemberPortalPrepayConfig,
   MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,

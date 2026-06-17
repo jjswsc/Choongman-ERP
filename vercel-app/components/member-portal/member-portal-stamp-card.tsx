@@ -130,7 +130,7 @@ function MemberPortalStampPreparingPlaceholder({
           </div>
           <div className="relative h-24 w-24 shrink-0">
             <img
-              src="/member-portal/single-chicken.png"
+              src="/member-portal/single-chicken.webp"
               alt=""
               className="h-full w-full rounded-2xl object-cover"
             />
@@ -230,7 +230,7 @@ export function MemberPortalStampHomeWidget({
         </div>
         <div className="relative h-24 w-24 shrink-0 transition-transform duration-300 group-hover:scale-[1.03]">
           <img
-            src="/member-portal/single-chicken.png"
+            src="/member-portal/single-chicken.webp"
             alt=""
             className="h-full w-full rounded-2xl object-cover shadow-sm"
           />

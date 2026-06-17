@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
-  loadMemberPortalHomePrivilegesConfig,
   MEMBER_PORTAL_HOME_PRIVILEGES_KEY,
   normalizeMemberPortalHomePrivilegesInput,
 } from '@/lib/member-portal-home-privileges-config'
+import { loadMemberPortalHomePrivilegesConfig } from '@/lib/member-portal-home-privileges-config-server'
 import { supabaseUpsert } from '@/lib/supabase-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
