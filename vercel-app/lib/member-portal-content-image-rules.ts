@@ -32,22 +32,22 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
     aspectH: 5,
     skipAspectCheck: true,
   },
-  /** 신메뉴 가로 카드 — object-cover */
+  /** 신메뉴 — 회원앱 홈 정사각 카드 */
   new_menu: {
     label: '신메뉴',
     minWidth: 720,
-    minHeight: 450,
-    aspectW: 16,
-    aspectH: 10,
+    minHeight: 720,
+    aspectW: 1,
+    aspectH: 1,
     skipAspectCheck: true,
   },
-  /** 이달의 프로모션 가로 카드 */
+  /** 이달의 프로모션 — 회원앱 홈 정사각 카드 */
   promo: {
     label: '월별 프로모션',
     minWidth: 720,
-    minHeight: 450,
-    aspectW: 16,
-    aspectH: 10,
+    minHeight: 720,
+    aspectW: 1,
+    aspectH: 1,
     skipAspectCheck: true,
   },
   info: {

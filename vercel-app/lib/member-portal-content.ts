@@ -92,11 +92,45 @@ function contentDateYmd(raw: string): string {
   return ''
 }
 
+export const MEMBER_PORTAL_HOME_PROMO_DINE_TARGET_TAB = 'home_promo_dine'
+export const MEMBER_PORTAL_HOME_PROMO_DELIVERY_TARGET_TAB = 'home_promo_delivery'
+/** @deprecated 신규는 home_promo_dine — 레거시 home_promo 는 매장과 동일 취급 */
 export const MEMBER_PORTAL_HOME_PROMO_TARGET_TAB = 'home_promo'
 export const MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB = 'home_feature'
 
+export type MemberPortalHomePromoChannel = 'dine' | 'delivery'
+
+const HOME_PROMO_DINE_TABS = new Set([
+  MEMBER_PORTAL_HOME_PROMO_DINE_TARGET_TAB,
+  MEMBER_PORTAL_HOME_PROMO_TARGET_TAB,
+])
+
+export function normalizeMemberPortalHomePromoChannel(
+  targetTab: string
+): MemberPortalHomePromoChannel | null {
+  const tab = asText(targetTab)
+  if (tab === MEMBER_PORTAL_HOME_PROMO_DELIVERY_TARGET_TAB) return 'delivery'
+  if (HOME_PROMO_DINE_TABS.has(tab)) return 'dine'
+  return null
+}
+
+export function memberPortalHomePromoTargetTabForChannel(
+  channel: MemberPortalHomePromoChannel
+): string {
+  return channel === 'delivery'
+    ? MEMBER_PORTAL_HOME_PROMO_DELIVERY_TARGET_TAB
+    : MEMBER_PORTAL_HOME_PROMO_DINE_TARGET_TAB
+}
+
 export function isMemberPortalHomePromoItem(item: MemberPortalContentItem): boolean {
-  return item.contentType === 'info' && item.targetTab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB
+  return item.contentType === 'info' && normalizeMemberPortalHomePromoChannel(item.targetTab) !== null
+}
+
+export function isMemberPortalHomePromoItemForChannel(
+  item: MemberPortalContentItem,
+  channel: MemberPortalHomePromoChannel
+): boolean {
+  return normalizeMemberPortalHomePromoChannel(item.targetTab) === channel
 }
 
 export function isMemberPortalHomeNewMenuItem(item: MemberPortalContentItem): boolean {
@@ -122,6 +156,37 @@ export function memberPortalContentOverlapsBangkokMonthForTarget(
   const periodStart = startYmd || '1970-01-01'
   const periodEnd = endYmd || '2099-12-31'
   return periodStart <= monthRange.endStr && periodEnd >= monthRange.startStr
+}
+
+function memberPortalContentOverlapsBangkokMonthCore(
+  item: MemberPortalContentItem,
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string }
+): boolean {
+  const startYmd = contentDateYmd(item.startsAt)
+  const endYmd = contentDateYmd(item.endsAt)
+
+  if (!startYmd && !endYmd) {
+    return yearMonth === monthRange.startStr.slice(0, 7)
+  }
+
+  const periodStart = startYmd || '1970-01-01'
+  const periodEnd = endYmd || '2099-12-31'
+  return periodStart <= monthRange.endStr && periodEnd >= monthRange.startStr
+}
+
+/** 월별 프로모션 — 매장/배달 채널별 기간 겹침 */
+export function memberPortalContentOverlapsBangkokMonthForPromo(
+  item: MemberPortalContentItem,
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string },
+  channel?: MemberPortalHomePromoChannel
+): boolean {
+  if (!item.isActive || item.contentType !== 'info') return false
+  const itemChannel = normalizeMemberPortalHomePromoChannel(item.targetTab)
+  if (!itemChannel) return false
+  if (channel && itemChannel !== channel) return false
+  return memberPortalContentOverlapsBangkokMonthCore(item, yearMonth, monthRange)
 }
 
 /** @deprecated use memberPortalContentOverlapsBangkokMonthForTarget */
@@ -155,9 +220,15 @@ export function listMemberPortalHomeContentForMonth(
 export function listMemberPortalHomePromosForMonth(
   items: MemberPortalContentItem[],
   yearMonth: string,
-  monthRange: { startStr: string; endStr: string }
+  monthRange: { startStr: string; endStr: string },
+  channel?: MemberPortalHomePromoChannel
 ): MemberPortalContentItem[] {
-  return listMemberPortalHomeContentForMonth(items, MEMBER_PORTAL_HOME_PROMO_TARGET_TAB, yearMonth, monthRange)
+  return items
+    .filter((x) => memberPortalContentOverlapsBangkokMonthForPromo(x, yearMonth, monthRange, channel))
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
 }
 
 export function listMemberPortalHomeNewMenusForMonth(

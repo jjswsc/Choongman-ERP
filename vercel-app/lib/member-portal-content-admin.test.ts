@@ -47,8 +47,20 @@ describe('filterContentForAdminTab', () => {
 
   it('detects home promo and new menu', () => {
     expect(isHomePromoContent(item({ targetTab: 'home_promo' }))).toBe(true)
+    expect(isHomePromoContent(item({ targetTab: 'home_promo_dine' }))).toBe(true)
+    expect(isHomePromoContent(item({ targetTab: 'home_promo_delivery' }))).toBe(true)
     expect(isHomeNewMenuContent(item({ targetTab: 'home_feature' }))).toBe(true)
     expect(isHomePromoContent(item({ targetTab: 'home' }))).toBe(false)
+  })
+
+  it('filters promo tab by channel', () => {
+    const items = [
+      item({ contentKey: 'd', targetTab: 'home_promo_dine' }),
+      item({ contentKey: 'l', targetTab: 'home_promo' }),
+      item({ contentKey: 'v', targetTab: 'home_promo_delivery' }),
+    ]
+    expect(filterContentForAdminTab(items, 'promo', 'dine').map((x) => x.contentKey)).toEqual(['d', 'l'])
+    expect(filterContentForAdminTab(items, 'promo', 'delivery').map((x) => x.contentKey)).toEqual(['v'])
   })
 })
 

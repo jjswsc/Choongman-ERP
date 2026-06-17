@@ -47,6 +47,14 @@ export const mpCardGhostBtnActiveClass =
 export const MP_BOTTOM_NAV_CLEARANCE =
   'calc(5.25rem + env(safe-area-inset-bottom, 0px))'
 
+/** 하단 탭 위에 뜨는 시트·모달 — 탭 높이 + 여유 간격 */
+export const MP_SHEET_BOTTOM_OFFSET =
+  'calc(5.25rem + env(safe-area-inset-bottom, 0px) + 0.75rem)'
+
+export const MP_SHEET_MAX_HEIGHT_ABOVE_NAV =
+  'calc(100dvh - 5.25rem - env(safe-area-inset-bottom, 0px) - 1.25rem)'
+
+
 /** CRM iframe 미리보기 — 스크롤 없이 상단 홈 구역 노출 */
 export const MP_EMBED_PREVIEW_BOTTOM_CLEARANCE = 'calc(4.75rem + env(safe-area-inset-bottom, 0px))'
 

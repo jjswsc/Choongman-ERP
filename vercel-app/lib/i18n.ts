@@ -2554,6 +2554,16 @@ export const i18n = {
     recSyncOutboundBtnTitle: '출고 관리 합계에 맞춤 (출고 로그·수량 반영)',
     recSyncOutboundColHint: '출고 관리 화면과 동일한 줄 합계·VAT로 미수금 재설정',
     recSyncAlignColShort: '맞춤',
+    recStorePurchaseJournalColShort: '분개',
+    recStorePurchaseJournalBtnTitle: '매장 매입 분개 (store_purchase) 조회·삭제',
+    recStorePurchaseJournalDialogTitle: '매장 매입 분개',
+    recStorePurchaseJournalDialogDesc: '매장 수령 시 자동 생성된 store_purchase 분개입니다. 삭제 후 물류팀이 출고 이력에서 IV를 삭제할 수 있습니다.',
+    recStorePurchaseJournalNone: '이 주문에 연결된 store_purchase 분개가 없습니다.',
+    recStorePurchaseJournalDeleteConfirm:
+      '주문 #{orderId}의 매장 매입 분개 {count}건을 삭제할까요? 삭제 후 물류팀이 출고 이력에서 IV를 삭제할 수 있습니다.',
+    recStorePurchaseJournalDeleted: '분개가 삭제되었습니다. 물류팀에 출고 이력 삭제를 요청하세요.',
+    outDeleteJournalConflictHint:
+      '회계팀: 미수금 관리 → 해당 주문 행의 「분개」에서 store_purchase 분개를 삭제한 뒤 다시 시도하세요.',
     recClickOrderForLines: '클릭하면 주문 품목 목록을 펼칩니다.',
     payClickInvoiceForLines: '클릭하면 입고·발주 품목 목록을 펼칩니다.',
     balLineItemName: '품목명',
@@ -4537,6 +4547,9 @@ export const i18n = {
     recon_pendingChannelSettlementsHint: '분개 또는 통장 연결이 없는 정산 건입니다.',
     recon_recvSettleConflict: '매출 수령 + 채널 정산 충돌',
     recon_recvSettleConflictHint: '동일 통장 입금에 receivable_receive와 채널 정산이 함께 연결되어 있습니다. 하나만 남기세요.',
+    recon_b2bRecvBankGap: 'B2B 수금 미연동 (미수금 Receive 없음)',
+    recon_b2bRecvBankGapHint:
+      'POS 매장의 가맹 이체 수금(โอนเงินมัดจำ 등)인데 미수금에 반영되지 않았습니다. 통장 조회에서 해당 Bank ID 행의 매장을 다시 저장하세요. Grab·카드·QR 정산 입금은 여기 나오지 않는 것이 정상입니다.',
     recon_allClear: '이번 기간·범위에서 대사 이슈가 없습니다.',
     bs_total: '합계',
     bs_liabilities: '부채',
@@ -9575,6 +9588,17 @@ Only matters the employee must handle personally on a working day:
     recSyncOutboundBtnTitle: 'Match receivable to outbound totals (stock logs & qty)',
     recSyncOutboundColHint: 'Set receivable to the same line totals and VAT as Outbound Management',
     recSyncAlignColShort: 'Sync',
+    recStorePurchaseJournalColShort: 'JE',
+    recStorePurchaseJournalBtnTitle: 'View / delete store_purchase journal (store receive)',
+    recStorePurchaseJournalDialogTitle: 'Store purchase journal',
+    recStorePurchaseJournalDialogDesc:
+      'Auto-posted store_purchase journal from store receive. After deletion, logistics can delete the IV from outbound history.',
+    recStorePurchaseJournalNone: 'No store_purchase journal is linked to this order.',
+    recStorePurchaseJournalDeleteConfirm:
+      'Delete {count} store_purchase journal(s) for order #{orderId}? Logistics can then delete the IV from outbound history.',
+    recStorePurchaseJournalDeleted: 'Journal deleted. Ask logistics to delete the IV from outbound history.',
+    outDeleteJournalConflictHint:
+      'Accounting: open Receivable/Payable → use Journal on the order row to delete store_purchase, then retry.',
     recClickOrderForLines: 'Click to show order line items.',
     payClickInvoiceForLines: 'Click to show inbound / PO line items.',
     balLineItemName: 'Item',
@@ -11560,6 +11584,9 @@ Only matters the employee must handle personally on a working day:
     recon_pendingChannelSettlementsHint: 'Missing journal or bank link.',
     recon_recvSettleConflict: 'Sales collection + channel settlement conflict',
     recon_recvSettleConflictHint: 'Same bank deposit linked to both workflows — keep one only.',
+    recon_b2bRecvBankGap: 'B2B collection not linked (no receivable Receive)',
+    recon_b2bRecvBankGapHint:
+      'Franchise bank transfer (e.g. deposit to HQ) missing from receivables subledger. Re-save the bank row by store in Bank query. Grab/card/QR settlements should not appear here.',
     recon_allClear: 'No reconciliation issues for this scope.',
     bs_total: 'Total',
     bs_liabilities: 'Liabilities',
@@ -16361,6 +16388,17 @@ orderItemQty: 'จำนวน',
     recBulkSyncBtnTitle: 'คำนวณลูกหนี้ Order ทั้งหมด (รวมย้อนหลัง) ให้ตรงกับสต็อก/ชำระโดยตรง',
     recSyncOrderColHint: 'คำนวณลูกหนี้ HQ ใหม่ตามกฎส่งออกและชำระโดยตรง',
     recSyncOrderBtnTitle: 'ซิงค์ลูกหนี้ HQ (Jidubang / ชำระโดยตรง)',
+    recStorePurchaseJournalColShort: 'สมุด',
+    recStorePurchaseJournalBtnTitle: 'ดู/ลบสมุดรายวัน store_purchase (รับสินค้าที่สาขา)',
+    recStorePurchaseJournalDialogTitle: 'สมุดรายวันรับซื้อที่สาขา',
+    recStorePurchaseJournalDialogDesc:
+      'สมุด store_purchase ที่สร้างอัตโนมัติเมื่อสาขารับสินค้า หลังลบแล้วทีมโลจิสติกส์จึงจะลบ IV ที่ประวัติส่งออกได้',
+    recStorePurchaseJournalNone: 'ไม่มีสมุด store_purchase สำหรับออเดอร์นี้',
+    recStorePurchaseJournalDeleteConfirm:
+      'ลบสมุด store_purchase {count} รายการของออเดอร์ #{orderId}? หลังลบทีมโลจิสติกส์สามารถลบ IV ที่ประวัติส่งออกได้',
+    recStorePurchaseJournalDeleted: 'ลบสมุดแล้ว แจ้งทีมโลจิสติกส์ให้ลบ IV ที่ประวัติส่งออก',
+    outDeleteJournalConflictHint:
+      'ฝ่ายบัญชี: ไปที่ ลูกหนี้/เจ้าหนี้ → กดคอลัมน์「สมุด」ที่แถวออเดอร์ เพื่อลบ store_purchase แล้วลองใหม่',
     syncRecRemovedHqZero: 'ไม่มียอด HQ ที่ต้องชำระ ลบแถวลูกหนี้ Order แล้ว',
     syncRecUpdated: 'คำนวณลูกหนี้ใหม่และบันทึกแล้ว',
     syncRecOrphanRemoved: 'ลบลูกหนี้ของออเดอร์ที่ถูกลบแล้ว',

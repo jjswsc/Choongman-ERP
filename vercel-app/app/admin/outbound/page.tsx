@@ -1187,6 +1187,13 @@ export default function OutboundPage() {
       }
       if (allConflicts.length > 0) {
         summaryLines.push("", "삭제 충돌:", ...allConflicts)
+        if (allConflicts.some((c) => c.includes("store_purchase") || c.includes("회계 분개"))) {
+          summaryLines.push(
+            "",
+            t("outDeleteJournalConflictHint") ||
+              "회계팀: 미수금 관리 → 해당 주문 행의 「분개」에서 store_purchase 분개를 삭제한 뒤 다시 시도하세요."
+          )
+        }
         await appAlert(summaryLines.join("\n"))
         return
       }

@@ -5,7 +5,7 @@ import QRCode from "qrcode"
 import { QrCode, X } from "lucide-react"
 import { buildMemberCouponQrPayload } from "@/lib/member-coupon-qr"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
-import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
+import { MP_MAX_WIDTH } from "@/lib/member-portal-design"
 
 type MemberPortalCouponQrSheetProps = {
   open: boolean
@@ -39,53 +39,98 @@ export function MemberPortalCouponQrSheet({
       .catch(() => setQrDataUrl(""))
   }, [open, memberNo, couponCode, issueId])
 
+  React.useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [open, onClose])
+
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 p-4 sm:items-center">
-      <GlassCard className="relative w-full max-w-sm px-5 py-6">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        aria-label={t("hideQr")}
+        onClick={onClose}
+      />
+      <div
+        className={`relative mx-auto w-full ${MP_MAX_WIDTH} max-w-sm rounded-t-[1.75rem] border border-stone-200/90 bg-white px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 text-stone-900 shadow-2xl sm:rounded-[1.75rem]`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coupon-qr-sheet-title"
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-200 sm:hidden" />
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-full p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+          className="absolute right-3 top-3 rounded-full border border-stone-200 bg-white p-2 text-stone-500 shadow-sm transition hover:bg-stone-50 hover:text-stone-800"
           aria-label={t("hideQr")}
         >
           <X className="h-5 w-5" />
         </button>
-        <div className="flex items-center gap-2">
-          <QrCode className="h-5 w-5 text-amber-300" />
+
+        <div className="flex items-center gap-2 pr-10">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <QrCode className="h-5 w-5" />
+          </div>
           <div>
-            <p className="text-sm font-semibold text-white">{t("couponQrTitle")}</p>
-            <p className="text-xs text-white/55">{t("couponQrHint")}</p>
+            <p id="coupon-qr-sheet-title" className="text-sm font-semibold text-stone-900">
+              {t("couponQrTitle")}
+            </p>
+            <p className="text-xs text-stone-500">{t("couponQrHint")}</p>
           </div>
         </div>
-        <p className="mt-4 font-mono text-lg tracking-wide text-amber-200">{couponCode}</p>
+
+        <p className="mt-4 font-mono text-lg font-semibold tracking-wide text-amber-800">{couponCode}</p>
         {couponName && couponName !== couponCode ? (
-          <p className="mt-0.5 text-xs text-white/60">{couponName}</p>
+          <p className="mt-0.5 text-xs text-stone-500">{couponName}</p>
         ) : null}
-        <div className="mx-auto mt-4 flex h-[280px] w-[280px] items-center justify-center rounded-2xl bg-white p-3">
+
+        <div className="mx-auto mt-4 flex h-[280px] w-[280px] max-w-full items-center justify-center rounded-2xl border border-stone-100 bg-stone-50 p-3">
           {qrDataUrl ? (
             <img src={qrDataUrl} alt="" className="h-full w-full object-contain" />
           ) : (
-            <p className="text-center text-xs text-black/50">…</p>
+            <p className="text-center text-xs text-stone-400">…</p>
           )}
         </div>
-        <p className="mt-3 text-center text-[11px] text-white/45">{t("scanCouponAtStore")}</p>
-      </GlassCard>
+
+        <p className="mt-3 text-center text-[11px] text-stone-400">{t("scanCouponAtStore")}</p>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-2xl border border-stone-200 bg-stone-50 py-3 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"
+        >
+          {t("hideQr")}
+        </button>
+      </div>
     </div>
   )
 }
+
+const couponQrButtonClass = {
+  dark: "inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition hover:bg-amber-400/20",
+  light:
+    "inline-flex items-center gap-1.5 rounded-full border border-amber-900/12 bg-gradient-to-r from-amber-500 to-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-[0_4px_14px_rgba(180,120,20,0.28)] transition hover:from-amber-400 hover:to-amber-500",
+} as const
 
 export function MemberPortalCouponQrButton({
   memberNo,
   couponCode,
   couponName,
   issueId,
+  variant = "dark",
 }: {
   memberNo: string
   couponCode: string
   couponName?: string
   issueId: number
+  variant?: keyof typeof couponQrButtonClass
 }) {
   const { t } = useMemberPortalLang()
   const [open, setOpen] = React.useState(false)
@@ -95,7 +140,7 @@ export function MemberPortalCouponQrButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100 transition hover:bg-amber-400/20"
+        className={couponQrButtonClass[variant]}
       >
         <QrCode className="h-3.5 w-3.5" />
         {t("showCouponQr")}

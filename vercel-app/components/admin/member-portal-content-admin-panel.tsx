@@ -13,9 +13,16 @@ import { appConfirm } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
 import {
   filterContentForAdminTab,
+  isHomePromoContent,
   type MemberPortalContentAdminItem,
+  type MemberPortalContentAdminPromoChannelFilter,
   type MemberPortalContentAdminTab,
 } from "@/lib/member-portal-content-admin"
+import {
+  memberPortalHomePromoTargetTabForChannel,
+  normalizeMemberPortalHomePromoChannel,
+  type MemberPortalHomePromoChannel,
+} from "@/lib/member-portal-content"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import {
@@ -67,7 +74,7 @@ const VARIANT_META_KEYS: Record<
     descKey: "mpAdmin_promoDesc",
     emptyKey: "mpAdmin_promoEmpty",
     newKey: "mpAdmin_promoNew",
-    defaultTargetTab: "home_promo",
+    defaultTargetTab: "home_promo_dine",
     contentType: "info",
   },
   new_menu: {
@@ -105,8 +112,16 @@ const INFO_TARGET_OPTION_KEYS = [
   { value: "location", labelKey: "mpAdmin_targetLocation" },
 ] as const
 
-function emptyForm(variant: Exclude<MemberPortalContentAdminTab, "all">, t: (k: string) => string): FormState {
+function emptyForm(
+  variant: Exclude<MemberPortalContentAdminTab, "all">,
+  t: (k: string) => string,
+  promoChannel?: MemberPortalHomePromoChannel
+): FormState {
   const meta = variantMetaFor(t, variant)
+  const targetTab =
+    variant === "promo" && promoChannel
+      ? memberPortalHomePromoTargetTabForChannel(promoChannel)
+      : meta.defaultTargetTab
   return {
     contentKey: "",
     contentType: meta.contentType,
@@ -114,7 +129,7 @@ function emptyForm(variant: Exclude<MemberPortalContentAdminTab, "all">, t: (k: 
     title: "",
     body: "",
     imageUrl: "",
-    targetTab: meta.defaultTargetTab,
+    targetTab,
     isActive: true,
     sortOrder: 0,
     startsAt: "",
@@ -152,7 +167,7 @@ function resolveEditVariant(
 ): Exclude<MemberPortalContentAdminTab, "all"> {
   if (variant !== "all") return variant
   if (item.contentType === "popup") return "popup"
-  if (item.contentType === "info" && item.targetTab === "home_promo") return "promo"
+  if (isHomePromoContent(item)) return "promo"
   if (item.contentType === "info" && item.targetTab === "home_feature") return "new_menu"
   return "info"
 }
@@ -180,7 +195,12 @@ export function MemberPortalContentAdminPanel({
   const t = useT(lang)
   const panelVariant = variant === "all" ? "promo" : variant
   const meta = variantMetaFor(t, panelVariant)
-  const filtered = React.useMemo(() => filterContentForAdminTab(items, variant), [items, variant])
+  const [promoChannelFilter, setPromoChannelFilter] =
+    React.useState<MemberPortalContentAdminPromoChannelFilter>("all")
+  const filtered = React.useMemo(
+    () => filterContentForAdminTab(items, variant, promoChannelFilter),
+    [items, variant, promoChannelFilter]
+  )
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [formVariant, setFormVariant] = React.useState<Exclude<MemberPortalContentAdminTab, "all">>(panelVariant)
@@ -197,10 +217,13 @@ export function MemberPortalContentAdminPanel({
   const imageHint = formatMemberPortalContentImageHint(imageRule, t)
 
   const openNew = React.useCallback(
-    (targetVariant?: Exclude<MemberPortalContentAdminTab, "all">) => {
+    (
+      targetVariant?: Exclude<MemberPortalContentAdminTab, "all">,
+      promoChannel?: MemberPortalHomePromoChannel
+    ) => {
       const nextVariant = targetVariant || panelVariant
       setFormVariant(nextVariant)
-      setForm(emptyForm(nextVariant, t))
+      setForm(emptyForm(nextVariant, t, promoChannel))
       setImageUploadError("")
       setImageUploadNotice("")
       setSheetOpen(true)
@@ -381,9 +404,13 @@ export function MemberPortalContentAdminPanel({
           <div className="flex flex-wrap gap-2">
             {variant === "all" ? (
               <>
-                <Button type="button" variant="outline" onClick={() => openNew("promo")}>
+                <Button type="button" variant="outline" onClick={() => openNew("promo", "dine")}>
                   <Plus className="mr-1.5 h-4 w-4" />
-                  {t("mpAdmin_btnPromo")}
+                  {t("mpAdmin_promoNewDine")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => openNew("promo", "delivery")}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  {t("mpAdmin_promoNewDelivery")}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => openNew("popup")}>
                   <Plus className="mr-1.5 h-4 w-4" />
@@ -392,6 +419,21 @@ export function MemberPortalContentAdminPanel({
                 <Button type="button" onClick={() => openNew("info")} className="bg-[#06c755] hover:bg-[#05b34c]">
                   <Plus className="mr-1.5 h-4 w-4" />
                   {t("mpAdmin_btnNotice")}
+                </Button>
+              </>
+            ) : variant === "promo" ? (
+              <>
+                <Button
+                  type="button"
+                  onClick={() => openNew("promo", "dine")}
+                  className="shrink-0 bg-[#06c755] hover:bg-[#05b34c]"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  {t("mpAdmin_promoNewDine")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => openNew("promo", "delivery")}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  {t("mpAdmin_promoNewDelivery")}
                 </Button>
               </>
             ) : (
@@ -403,6 +445,31 @@ export function MemberPortalContentAdminPanel({
           </div>
         ) : null}
       </div>
+
+      {variant === "promo" ? (
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { id: "all", label: t("all") },
+              { id: "dine", label: t("mpAdmin_promoChannelDine") },
+              { id: "delivery", label: t("mpAdmin_promoChannelDelivery") },
+            ] as const
+          ).map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setPromoChannelFilter(chip.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                promoChannelFilter === chip.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-muted-foreground/20 text-muted-foreground hover:bg-muted/40"
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="rounded-lg border px-6 py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
@@ -492,12 +559,23 @@ export function MemberPortalContentAdminPanel({
             {formVariant !== "popup" ? (
               <div className="space-y-2">
                 <Label htmlFor="mp-content-target-tab">{t("mpAdmin_fieldTargetTab")}</Label>
-                {formVariant === "promo" || formVariant === "new_menu" ? (
+                {formVariant === "promo" ? (
+                  <>
+                    <Input
+                      id="mp-content-target-tab"
+                      value={
+                        normalizeMemberPortalHomePromoChannel(form.targetTab) === "delivery"
+                          ? t("mpAdmin_promoChannelDelivery")
+                          : t("mpAdmin_promoChannelDine")
+                      }
+                      readOnly
+                    />
+                    <p className="text-xs leading-relaxed text-muted-foreground">{t("mpAdmin_promoChannelHint")}</p>
+                  </>
+                ) : formVariant === "new_menu" ? (
                   <>
                     <Input id="mp-content-target-tab" value={form.targetTab} readOnly />
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {formVariant === "promo" ? t("mpAdmin_promoTargetFixed") : t("mpAdmin_newMenuTargetFixed")}
-                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{t("mpAdmin_newMenuTargetFixed")}</p>
                   </>
                 ) : (
                   <>

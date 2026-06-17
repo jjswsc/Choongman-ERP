@@ -64,6 +64,7 @@ import {
   canUpdateReceivableReceiveCheck,
   canMutateManualReceivableBalance,
   canMutateManualPayableBalance,
+  canDeleteStorePurchaseJournal,
 } from "@/lib/permissions"
 import {
   isManualPayableBalanceRow,
@@ -94,9 +95,11 @@ import {
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
 import { roundMoney2 } from "@/lib/invoice-vat-total"
 import { resolveInvoiceClientForTarget, resolveInvoiceClientFromBillToCandidates } from "@/lib/invoice-client-resolve"
+import type { PoInvoiceBillToVendor } from "@/lib/po-invoice-bill-to"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import type { InvoiceData } from "@/components/invoice"
 import type { InvoiceDataClient } from "@/lib/api-client"
+import { StorePurchaseJournalButton } from "@/components/erp/store-purchase-journal-dialog"
 
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
@@ -166,6 +169,32 @@ function isOfficeLikeLabel(label: string): boolean {
   )
 }
 
+function clientHasBillToAddress(client: InvoiceDataClient | { companyName: string }): boolean {
+  const address = (client as InvoiceDataClient).address
+  const trimmed = String(address || "").trim()
+  return Boolean(trimmed && trimmed !== "-")
+}
+
+/** 회계 PO Tax Invoice — 발주 인쇄와 동일하게 PO 거래처(Pepsi 등)를 BILL TO로 */
+function resolveTaxInvoiceClientFromPoBillTo(
+  poBillTo: PoInvoiceBillToVendor,
+  company: Parameters<typeof resolveInvoiceClientForTarget>[1],
+  clients: Parameters<typeof resolveInvoiceClientForTarget>[2]
+): InvoiceDataClient | { companyName: string } {
+  const vendorTarget = String(poBillTo.vendorName || "").trim()
+  const resolvedClient = resolveInvoiceClientForTarget(vendorTarget, company, clients)
+  if (clientHasBillToAddress(resolvedClient)) return resolvedClient
+  if (poBillTo.address || poBillTo.taxId) {
+    return {
+      companyName: vendorTarget || "-",
+      address: poBillTo.address || "-",
+      taxId: poBillTo.taxId || "-",
+      phone: poBillTo.phone || "-",
+    }
+  }
+  return resolvedClient
+}
+
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -185,6 +214,7 @@ export function ReceivablePayableTab() {
   const canSelectStores = canManageReceivablePayableAllStores(auth?.role || "")
   const showRecSyncBtn = canSyncOrderReceivable(auth?.role || "")
   const showBulkRecSyncBtn = canBulkReconcileOrderReceivables(auth?.role || "")
+  const showStorePurchaseJournalCol = canDeleteStorePurchaseJournal(auth?.role || "")
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
   // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
@@ -303,7 +333,7 @@ export function ReceivablePayableTab() {
       setTaxInvoiceLoadingKey(loadKey)
       try {
         const targetLabel = String(recItem.storeName || recItem.vendorName || "").trim()
-        const [{ items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate }, invoiceDataRes, invSettings, billToCandRes] =
+        const [{ items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate, poBillTo }, invoiceDataRes, invSettings, billToCandRes] =
           await Promise.all([
           getPayableTransactionItems({ refType, refId }),
           getInvoiceData(),
@@ -324,7 +354,9 @@ export function ReceivablePayableTab() {
             ? billToCandRes.taxInvoiceClientMap
             : {}
         let client: InvoiceDataClient | { companyName: string }
-        if (refType === "Order" && refId != null) {
+        if (refType === "PO" && poBillTo?.vendorName) {
+          client = resolveTaxInvoiceClientFromPoBillTo(poBillTo, company, clients)
+        } else if (refType === "Order" && refId != null) {
           const fromOrder = billToMap[String(refId)]
           const memoFromOrder = taxInvoiceClientMap[String(refId)]
           const memoFromRow = buildClientFromPosTaxMemo(row.memo, targetLabel)
@@ -1677,6 +1709,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         {tt("recSyncAlignColShort", "맞춤")}
                                       </th>
                                     )}
+                                    {showStorePurchaseJournalCol && (
+                                      <th
+                                        className="text-center py-2 px-1 w-[44px] text-xs font-semibold text-muted-foreground"
+                                        title={tt("recStorePurchaseJournalBtnTitle", "매장 매입 분개 (store_purchase) 조회·삭제")}
+                                      >
+                                        {tt("recStorePurchaseJournalColShort", "분개")}
+                                      </th>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1701,7 +1741,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recLineItems = recLineEntry?.items ?? []
                                     const recOrderTotals = recLineEntry?.orderInvoiceTotals
                                     const recLinesLoading = loadingItemsFor === recRowKey
-                                    const recLineColSpan = 9 + (showReceivableManualActions ? 1 : 0) + (showRecSyncBtn ? 1 : 0)
+                                    const recLineColSpan =
+                                      9 +
+                                      (showReceivableManualActions ? 1 : 0) +
+                                      (showRecSyncBtn ? 1 : 0) +
+                                      (showStorePurchaseJournalCol ? 1 : 0)
                                     const canEditManualRecRow =
                                       showReceivableManualActions &&
                                       isManualReceivableBalanceRow(row) &&
@@ -1964,6 +2008,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                 />
                                               </Button>
                                             </div>
+                                          ) : null}
+                                        </td>
+                                      )}
+                                      {showStorePurchaseJournalCol && (
+                                        <td className="py-1.5 px-1 w-[44px] text-center align-middle">
+                                          {row.ref_type === "Order" && rowOrderId != null ? (
+                                            <StorePurchaseJournalButton
+                                              orderId={rowOrderId}
+                                              invoiceLabel={orderNoDisplay !== "-" ? String(orderNoDisplay) : undefined}
+                                              t={t}
+                                              tt={tt}
+                                            />
                                           ) : null}
                                         </td>
                                       )}

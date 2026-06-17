@@ -470,6 +470,8 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/syncAllOrder", module: "accounting" },
   { prefix: "/api/syncExpense", module: "accounting" },
   { prefix: "/api/syncOrderReceivable", module: "accounting" },
+  { prefix: "/api/getStorePurchaseJournal", module: "accounting" },
+  { prefix: "/api/deleteStorePurchaseJournal", module: "accounting" },
   { prefix: "/api/syncPayroll", module: "attendance" },
   { prefix: "/api/syncPosMenu", module: "pos_base" },
   { prefix: "/api/updateBank", module: "accounting" },

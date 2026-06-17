@@ -6,8 +6,14 @@ import {
 import type { LangCode } from '@/lib/lang-context'
 import {
   MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB,
+  MEMBER_PORTAL_HOME_PROMO_DELIVERY_TARGET_TAB,
+  MEMBER_PORTAL_HOME_PROMO_DINE_TARGET_TAB,
   MEMBER_PORTAL_HOME_PROMO_TARGET_TAB,
+  normalizeMemberPortalHomePromoChannel,
+  type MemberPortalHomePromoChannel,
 } from '@/lib/member-portal-content'
+
+export type MemberPortalContentAdminPromoChannelFilter = 'all' | MemberPortalHomePromoChannel
 
 export type MemberPortalContentTranslator = (key: string) => string
 
@@ -75,7 +81,10 @@ export function memberPortalContentPlacementLabel(
   t: MemberPortalContentTranslator
 ): string {
   const tab = String(targetTab || '').trim()
-  if (tab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB) return t('mpAdmin_placementHomePromo')
+  if (tab === MEMBER_PORTAL_HOME_PROMO_DINE_TARGET_TAB || tab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB) {
+    return t('mpAdmin_placementHomePromoDine')
+  }
+  if (tab === MEMBER_PORTAL_HOME_PROMO_DELIVERY_TARGET_TAB) return t('mpAdmin_placementHomePromoDelivery')
   if (tab === MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB) return t('mpAdmin_placementHomeNewMenu')
   if (tab === 'home') return t('mpAdmin_placementHomeNotice')
   if (tab === 'location') return t('mpAdmin_placementLocation')
@@ -139,7 +148,14 @@ export function toDatetimeLocalValue(iso: string): string {
 }
 
 export function isHomePromoContent(item: MemberPortalContentAdminItem): boolean {
-  return item.contentType === 'info' && item.targetTab === MEMBER_PORTAL_HOME_PROMO_TARGET_TAB
+  return item.contentType === 'info' && normalizeMemberPortalHomePromoChannel(item.targetTab) !== null
+}
+
+export function isHomePromoContentForChannel(
+  item: MemberPortalContentAdminItem,
+  channel: MemberPortalHomePromoChannel
+): boolean {
+  return normalizeMemberPortalHomePromoChannel(item.targetTab) === channel
 }
 
 export function isHomeNewMenuContent(item: MemberPortalContentAdminItem): boolean {
@@ -188,13 +204,20 @@ export function memberPortalContentDisplayStatusLabel(
 
 export function filterContentForAdminTab(
   items: MemberPortalContentAdminItem[],
-  tab: MemberPortalContentAdminTab
+  tab: MemberPortalContentAdminTab,
+  promoChannel: MemberPortalContentAdminPromoChannelFilter = 'all'
 ): MemberPortalContentAdminItem[] {
   if (tab === 'all') {
     return items.filter((x) => x.contentType === 'popup' || x.contentType === 'info')
   }
   if (tab === 'popup') return items.filter((x) => x.contentType === 'popup')
-  if (tab === 'promo') return items.filter((x) => isHomePromoContent(x))
+  if (tab === 'promo') {
+    return items.filter((x) => {
+      if (!isHomePromoContent(x)) return false
+      if (promoChannel === 'all') return true
+      return isHomePromoContentForChannel(x, promoChannel)
+    })
+  }
   if (tab === 'new_menu') return items.filter((x) => isHomeNewMenuContent(x))
   return items.filter((x) => x.contentType === 'info' && !isHomePromoContent(x) && !isHomeNewMenuContent(x))
 }
@@ -271,7 +294,8 @@ export function summarizeContentAdminItems(
 
 export function countContentForAdminTab(
   items: MemberPortalContentAdminItem[],
-  tab: MemberPortalContentAdminTab
+  tab: MemberPortalContentAdminTab,
+  promoChannel: MemberPortalContentAdminPromoChannelFilter = 'all'
 ): number {
-  return filterContentForAdminTab(items, tab).length
+  return filterContentForAdminTab(items, tab, promoChannel).length
 }

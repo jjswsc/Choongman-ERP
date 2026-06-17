@@ -233,6 +233,14 @@ export type PayableTransactionItemsResponse = {
   orderInvoiceTotals?: OrderInvoiceTotals
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
+  /** 회계 PO(refType=PO) Tax Invoice BILL TO — 발주 인쇄와 동일 */
+  poBillTo?: {
+    vendorName: string
+    address?: string
+    taxId?: string
+    phone?: string
+    relatedStore?: string
+  }
 }
 
 export async function getPayableTransactionItems(params: {
@@ -240,4 +248,47 @@ export async function getPayableTransactionItems(params: {
   refId: number
 }): Promise<PayableTransactionItemsResponse> {
   return getPayableTransactionItemsWithCache(params)
+}
+
+export type StorePurchaseJournalLine = {
+  accountCode: string
+  accountName: string
+  side: string
+  amount: number
+}
+
+export type StorePurchaseJournalEntry = {
+  id: number
+  entryNo: string
+  accountingDate: string
+  storeName: string | null
+  memo: string | null
+  lines: StorePurchaseJournalLine[]
+}
+
+export async function getStorePurchaseJournal(params: { orderId: number }) {
+  const q = new URLSearchParams({ orderId: String(params.orderId) })
+  const res = await apiFetchWithOffline(`/api/getStorePurchaseJournal?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    orderId?: number
+    hasJournal?: boolean
+    entries?: StorePurchaseJournalEntry[]
+  }>
+}
+
+export async function deleteStorePurchaseJournal(params: { orderId: number }) {
+  const res = await apiFetchWithOffline('/api/deleteStorePurchaseJournal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId: params.orderId }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    orderId?: number
+    deletedCount?: number
+  }>
 }

@@ -85,6 +85,14 @@ export interface SubledgerGlReconciliationData {
     storeName: string | null
     settlementIds: number[]
   }[]
+  receivableBankSubledgerGaps: {
+    bankId: number
+    transDate: string
+    amount: number
+    storeName: string
+    memo: string | null
+    isPosStore: boolean
+  }[]
 }
 
 /** API 응답이 재무상태표 본문인지 검사 (오류 JSON·빈 객체 방지) */

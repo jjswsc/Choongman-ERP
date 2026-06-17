@@ -221,9 +221,14 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_popupNew: '새 팝업',
   mpAdmin_promoTitle: '월별 프로모션',
   mpAdmin_promoDesc:
-    '회원앱 홈 「이달의 프로모션」 가로 목록에 노출됩니다. 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
+    '회원앱 홈 「이달의 프로모션」에 노출됩니다. 매장(หน้าร้าน)·배달(Delivery)을 구분해 등록하세요. 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
   mpAdmin_promoEmpty: '등록된 월별 프로모션이 없습니다.',
   mpAdmin_promoNew: '새 프로모션',
+  mpAdmin_promoNewDine: '매장 프로모션',
+  mpAdmin_promoNewDelivery: '배달 프로모션',
+  mpAdmin_promoChannelDine: '매장',
+  mpAdmin_promoChannelDelivery: '배달',
+  mpAdmin_promoChannelHint: '매장(หน้าร้าน) 또는 배달(Delivery) 중 하나로 등록됩니다.',
   mpAdmin_newMenuTitle: '신메뉴',
   mpAdmin_newMenuDesc:
     '회원앱 홈 「신메뉴」 가로 목록에 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
@@ -302,6 +307,8 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_sortInline: '정렬 {order}',
 
   mpAdmin_placementHomePromo: '홈 · 월별 프로모션',
+  mpAdmin_placementHomePromoDine: '홈 · 매장 프로모션',
+  mpAdmin_placementHomePromoDelivery: '홈 · 배달 프로모션',
   mpAdmin_placementHomeNewMenu: '홈 · 신메뉴',
   mpAdmin_placementHomeNotice: '홈 · 공지',
   mpAdmin_placementLocation: '매장 탭',
@@ -586,9 +593,14 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_popupNew: 'New popup',
   mpAdmin_promoTitle: 'Monthly promos',
   mpAdmin_promoDesc:
-    'Shown in the member app home “This month’s promos” carousel. Monthly filter uses Bangkok start/end dates.',
+    'Shown in the member app home “Monthly promotions” carousel. Register dine-in (หน้าร้าน) and delivery separately. Bangkok start/end dates filter by month.',
   mpAdmin_promoEmpty: 'No monthly promos yet.',
   mpAdmin_promoNew: 'New promo',
+  mpAdmin_promoNewDine: 'Dine-in promo',
+  mpAdmin_promoNewDelivery: 'Delivery promo',
+  mpAdmin_promoChannelDine: 'Dine-in',
+  mpAdmin_promoChannelDelivery: 'Delivery',
+  mpAdmin_promoChannelHint: 'Registered as dine-in (หน้าร้าน) or delivery.',
   mpAdmin_newMenuTitle: 'New menu',
   mpAdmin_newMenuDesc:
     'Shown in the member app home “New menu” carousel. Same monthly Bangkok date filter as promos.',
@@ -667,6 +679,8 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_sortInline: 'Sort {order}',
 
   mpAdmin_placementHomePromo: 'Home · monthly promo',
+  mpAdmin_placementHomePromoDine: 'Home · dine-in promo',
+  mpAdmin_placementHomePromoDelivery: 'Home · delivery promo',
   mpAdmin_placementHomeNewMenu: 'Home · new menu',
   mpAdmin_placementHomeNotice: 'Home · notice',
   mpAdmin_placementLocation: 'Stores tab',
@@ -950,9 +964,14 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_popupNew: 'ป๊อปอัปใหม่',
   mpAdmin_promoTitle: 'โปรโมชันประจำเดือน',
   mpAdmin_promoDesc:
-    'แสดงในแถว 「โปรโมชันเดือนนี้」 บนหน้าแรกแอปสมาชิก กรองตามเดือนด้วยวันเริ่ม·สิ้นสุด (เวลากรุงเทพ)',
+    'แสดงใน 「โปรโมชันประจำเดือน」 บนหน้าแรกแอปสมาชิก แยกหน้าร้านและ Delivery กรองตามเดือนด้วยวันเริ่ม·สิ้นสุด (เวลากรุงเทพ)',
   mpAdmin_promoEmpty: 'ยังไม่มีโปรโมชันประจำเดือน',
   mpAdmin_promoNew: 'โปรโมชันใหม่',
+  mpAdmin_promoNewDine: 'โปรโมชันหน้าร้าน',
+  mpAdmin_promoNewDelivery: 'โปรโมชัน Delivery',
+  mpAdmin_promoChannelDine: 'หน้าร้าน',
+  mpAdmin_promoChannelDelivery: 'Delivery',
+  mpAdmin_promoChannelHint: 'ลงทะเบียนเป็นหน้าร้านหรือ Delivery อย่างใดอย่างหนึ่ง',
   mpAdmin_newMenuTitle: 'เมนูใหม่',
   mpAdmin_newMenuDesc:
     'แสดงในแถว 「เมนูใหม่」 บนหน้าแรก ใช้การกรองเดือนแบบเดียวกับโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
@@ -1031,6 +1050,8 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_sortInline: 'ลำดับ {order}',
 
   mpAdmin_placementHomePromo: 'หน้าแรก · โปรโมชันประจำเดือน',
+  mpAdmin_placementHomePromoDine: 'หน้าแรก · โปรโมชันหน้าร้าน',
+  mpAdmin_placementHomePromoDelivery: 'หน้าแรก · โปรโมชัน Delivery',
   mpAdmin_placementHomeNewMenu: 'หน้าแรก · เมนูใหม่',
   mpAdmin_placementHomeNotice: 'หน้าแรก · ประกาศ',
   mpAdmin_placementLocation: 'แท็บสาขา',

@@ -52,6 +52,10 @@ export type MemberPortalKey =
   | 'homePromoEmpty'
   | 'homePromoPrevMonth'
   | 'homePromoNextMonth'
+  | 'homePromoChannelDine'
+  | 'homePromoChannelDelivery'
+  | 'homeContentPrev'
+  | 'homeContentNext'
   | 'statVisits'
   | 'statAvgTicket'
   | 'statCoupons'
@@ -276,7 +280,6 @@ export type MemberPortalKey =
   | 'couponScope'
   | 'couponBenefit'
   | 'couponMinOrder'
-  | 'couponStackRule'
   | 'langLabel'
   | 'birthDayLabel'
   | 'birthMonthLabel'
@@ -505,6 +508,26 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Next month',
     th: 'เดือนถัดไป',
     ko: '다음 달',
+  },
+  homePromoChannelDine: {
+    en: 'Dine-in',
+    th: 'หน้าร้าน',
+    ko: '매장',
+  },
+  homePromoChannelDelivery: {
+    en: 'Delivery',
+    th: 'Delivery',
+    ko: '배달',
+  },
+  homeContentPrev: {
+    en: 'Previous',
+    th: 'ก่อนหน้า',
+    ko: '이전',
+  },
+  homeContentNext: {
+    en: 'Next',
+    th: 'ถัดไป',
+    ko: '다음',
   },
   statVisits: { en: 'Visits', th: 'จำนวนครั้งที่มา', ko: '방문 횟수' },
   statAvgTicket: { en: 'Avg.', th: 'เฉลี่ย', ko: '평균' },
@@ -1115,7 +1138,6 @@ const MS: Record<MemberPortalKey, Dict> = {
   couponScope: { en: 'Store scope', th: 'สาขาที่ใช้ได้', ko: '사용 가능 매장' },
   couponBenefit: { en: 'Benefit', th: 'สิทธิ์', ko: '혜택' },
   couponMinOrder: { en: 'Min order', th: 'ขั้นต่ำ', ko: '최소주문' },
-  couponStackRule: { en: 'Stack rule', th: 'กฎการซ้อน', ko: '중복규칙' },
   langLabel: { en: 'Language', th: 'ภาษา', ko: '언어' },
   birthDayLabel: { en: 'Day', th: 'วัน', ko: '일' },
   birthMonthLabel: { en: 'Month', th: 'เดือน', ko: '월' },

@@ -11,6 +11,8 @@ import {
   MP_EMBED_PREVIEW_BOTTOM_CLEARANCE,
   MP_MAX_WIDTH,
   MP_PAGE_BG_CLASS,
+  MP_SHEET_BOTTOM_OFFSET,
+  MP_SHEET_MAX_HEIGHT_ABOVE_NAV,
   MP_TEXT_MUTED,
   MP_TEXT_PRIMARY,
   MP_TEXT_SECONDARY,
@@ -231,7 +233,7 @@ export function MemberPortalContentSheet({
 }) {
   if (!open || !item) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center">
       <button
         type="button"
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -239,7 +241,8 @@ export function MemberPortalContentSheet({
         onClick={onClose}
       />
       <div
-        className={`relative mx-auto w-full ${MP_MAX_WIDTH} max-h-[88vh] overflow-y-auto rounded-t-[1.75rem] border border-white/10 bg-[#121214] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl`}
+        className={`relative mx-auto w-full ${MP_MAX_WIDTH} overflow-y-auto rounded-t-[1.75rem] border border-white/10 bg-[#121214] px-5 pb-6 pt-4 shadow-2xl`}
+        style={{ marginBottom: MP_SHEET_BOTTOM_OFFSET, maxHeight: MP_SHEET_MAX_HEIGHT_ABOVE_NAV }}
         role="dialog"
         aria-modal="true"
       >
@@ -253,12 +256,12 @@ export function MemberPortalContentSheet({
         ) : null}
         {item.title ? <h3 className="text-lg font-semibold text-white">{item.title}</h3> : null}
         {item.body ? (
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{item.body}</p>
+          <p className="mt-3 whitespace-pre-wrap pb-1 text-sm leading-relaxed text-white/70">{item.body}</p>
         ) : null}
         <button
           type="button"
           onClick={onClose}
-          className="mt-5 w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-medium text-white/90 hover:bg-white/10"
+          className="mt-6 w-full rounded-2xl border border-white/15 bg-white/5 py-3.5 text-sm font-medium text-white/90 hover:bg-white/10"
         >
           {closeLabel}
         </button>

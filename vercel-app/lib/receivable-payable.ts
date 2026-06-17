@@ -343,7 +343,7 @@ export async function upsertPayableFromBankPurchasePayment(params: {
 
 /**
  * 통장 `receivable_receive` 저장 시 본사 B2B 미수금 보조원장(Receive) 생성 여부.
- * POS 매장의 매출 수령(카드·배달·QR·현금 통장 입금)은 1130 분개만 하고 보조원장에는 넣지 않는다.
+ * POS 매장이라도 채널 정산 적요(Grab·카드·QR 등)가 아니면 B2B 수금으로 보조원장에 반영한다.
  * @see docs/ACCOUNTING_LEDGER_SOP.md §2–3
  */
 export async function shouldUpsertFranchiseReceivableSubledger(params: {
@@ -368,6 +368,7 @@ export async function shouldUpsertFranchiseReceivableSubledger(params: {
   return shouldCreateFranchiseReceivableSubledgerFromBankReceive({
     linkedToChannelSettlement,
     hasPosCompletedOrders: await storeHasPosCompletedOrders(store),
+    memo: params.memo,
   })
 }
 

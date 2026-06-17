@@ -2,6 +2,7 @@ import { sumPayablesBalance, sumReceivablesBalance } from '@/lib/accounting-bala
 import { getGlBalancesAsOf, glBalanceForCode } from '@/lib/gl-balance-as-of'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { resolveAccountingRollupStores } from '@/lib/accounting-store-scope'
+import { findReceivableBankSubledgerGaps, type ReceivableBankSubledgerGap } from '@/lib/receivable-b2b-bank-link-gap'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildStoreFieldOrIlikeFragment } from '@/lib/accounting-store-match'
 
@@ -54,6 +55,8 @@ export type SubledgerGlReconciliationReport = {
     storeName: string | null
     settlementIds: number[]
   }[]
+  /** B2B 수금으로 미수금 Receive가 있어야 하는데 없는 통장 입금 */
+  receivableBankSubledgerGaps: ReceivableBankSubledgerGap[]
 }
 
 function mergeSubledgerGlReconciliationReports(
@@ -83,6 +86,7 @@ function mergeSubledgerGlReconciliationReports(
       riskyRevenueDeposits: [],
       pendingChannelSettlements: [],
       receivableReceiveWithSettlementLink: [],
+      receivableBankSubledgerGaps: [],
     }
   }
   if (reports.length === 1) return { ...reports[0]!, storeFilter: 'All' }
@@ -115,6 +119,7 @@ function mergeSubledgerGlReconciliationReports(
     riskyRevenueDeposits: reports.flatMap((r) => r.riskyRevenueDeposits),
     pendingChannelSettlements: reports.flatMap((r) => r.pendingChannelSettlements),
     receivableReceiveWithSettlementLink: reports.flatMap((r) => r.receivableReceiveWithSettlementLink),
+    receivableBankSubledgerGaps: reports.flatMap((r) => r.receivableBankSubledgerGaps),
   }
 }
 
@@ -135,11 +140,18 @@ export async function computeSubledgerGlReconciliation(
     return mergeSubledgerGlReconciliationReports(perStore)
   }
   const { yearMonth, endStr, storeFilter, isHQ } = scope
+  const yearStart = `${yearMonth.slice(0, 4)}-01-01`
 
-  const [gl, recv, pay] = await Promise.all([
+  const [gl, recv, pay, receivableBankSubledgerGaps] = await Promise.all([
     getGlBalancesAsOf({ endStr, storeFilter, accountCodes: ['1010', '1130', '2110'] }),
     sumReceivablesBalance({ endStr, storeFilter, isHQ }),
     sumPayablesBalance({ endStr, storeFilter, isHQ }),
+    findReceivableBankSubledgerGaps({
+      endStr,
+      startStr: yearStart,
+      storeFilter,
+      limit: 2000,
+    }),
   ])
 
   const gl1130 = glBalanceForCode(gl.rows, '1130')
@@ -265,6 +277,7 @@ export async function computeSubledgerGlReconciliation(
     })),
     pendingChannelSettlements,
     receivableReceiveWithSettlementLink,
+    receivableBankSubledgerGaps,
   }
 }
 

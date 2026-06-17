@@ -25,9 +25,9 @@ describe('validateMemberPortalImageByRule', () => {
     expect(phone).toEqual({ ok: true })
   })
 
-  it('applies relaxed default aspect tolerance for promo cards', () => {
+  it('accepts square promo images', () => {
     const rule = MEMBER_PORTAL_CONTENT_IMAGE_RULES.promo
-    const slightlyOff = validateMemberPortalImageByRule(1280, 820, rule, t, 'promo')
-    expect(slightlyOff).toEqual({ ok: true })
+    const square = validateMemberPortalImageByRule(1080, 1080, rule, t, 'promo')
+    expect(square).toEqual({ ok: true })
   })
 })

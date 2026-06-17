@@ -44,4 +44,19 @@ describe('memberPortalContentOverlapsBangkokMonth', () => {
     const list = listMemberPortalHomePromosForMonth(items, '2026-06', june)
     expect(list.map((x) => x.contentKey)).toEqual(['b', 'a'])
   })
+
+  it('filters promos by dine and delivery channel', () => {
+    const items = [
+      promo({ contentKey: 'dine', targetTab: 'home_promo_dine' }),
+      promo({ contentKey: 'legacy', targetTab: 'home_promo' }),
+      promo({ contentKey: 'del', targetTab: 'home_promo_delivery' }),
+    ]
+    expect(listMemberPortalHomePromosForMonth(items, '2026-06', june, 'dine').map((x) => x.contentKey)).toEqual([
+      'dine',
+      'legacy',
+    ])
+    expect(listMemberPortalHomePromosForMonth(items, '2026-06', june, 'delivery').map((x) => x.contentKey)).toEqual([
+      'del',
+    ])
+  })
 })

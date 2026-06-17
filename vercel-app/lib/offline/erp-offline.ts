@@ -248,6 +248,13 @@ export type PayableTransactionItemsResponse = {
   orderInvoiceTotals?: OrderInvoiceTotals
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
+  poBillTo?: {
+    vendorName: string
+    address?: string
+    taxId?: string
+    phone?: string
+    relatedStore?: string
+  }
 }
 
 export async function getPayableTransactionItemsWithCache(params: {

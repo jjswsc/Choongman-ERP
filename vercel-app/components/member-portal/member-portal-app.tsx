@@ -27,20 +27,19 @@ import { MemberPortalLangSelect } from "@/components/member-portal/member-portal
 import type { MemberSummary } from "@/lib/members-server"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import {
-  memberPortalCouponStatusLabel,
   memberPortalDateLocale,
   memberPortalLoginError,
   memberPortalPointKindLabel,
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
-import { pickMemberPortalHomePopup } from "@/lib/member-portal-content"
+import { pickMemberPortalHomePopup, isMemberPortalHomePromoItem, isMemberPortalHomeNewMenuItem } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import { MemberPortalHomePromosAndMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
-import { MemberPortalCouponQrButton } from "@/components/member-portal/member-portal-coupon-qr-sheet"
+import { MemberPortalCouponCard } from "@/components/member-portal/member-portal-coupon-card"
 import {
   MemberPortalTierBenefitsSheet,
   MemberPortalTierEntryButton,
@@ -673,8 +672,8 @@ export function MemberPortalApp() {
         .filter(
           (x) =>
             x.contentType === "info" &&
-            x.targetTab !== "home_feature" &&
-            x.targetTab !== "home_promo" &&
+            !isMemberPortalHomeNewMenuItem(x) &&
+            !isMemberPortalHomePromoItem(x) &&
             (!x.targetTab || x.targetTab === "home")
         )
         .slice(0, 4),
@@ -1071,27 +1070,6 @@ export function MemberPortalApp() {
     { id: "me" as const, label: t("tabMe"), icon: UserRound },
   ]
 
-  const couponBenefitText = (coupon: PortalCouponRow): string => {
-    const discountType = String(coupon.discountType || "fixed").toLowerCase()
-    const discountValue = Number(coupon.discountValue || 0)
-    const maxDiscountAmt = Number(coupon.maxDiscountAmt || 0)
-    if (discountType === "bogo") return "1+1"
-    if (discountType === "set_fixed") return `Set ฿${Math.round(discountValue)}`
-    if (discountType === "item_fixed") return `฿${Math.round(discountValue)} / item`
-    if (discountType === "percent") {
-      if (maxDiscountAmt > 0) return `${discountValue}% (max ฿${Math.round(maxDiscountAmt)})`
-      return `${discountValue}%`
-    }
-    return `฿${Math.round(discountValue)}`
-  }
-
-  const couponStackRuleText = (coupon: PortalCouponRow): string => {
-    const mode = String(coupon.stackMode || "fixed_only")
-    if (mode === "any") return "any"
-    if (mode === "percent_only") return "percent_only"
-    return "fixed_only"
-  }
-
   return (
     <MemberPortalAmbienceBackground
       imageUrl={designBackgrounds.appBackgroundUrl}
@@ -1305,69 +1283,18 @@ export function MemberPortalApp() {
                 {t("noCoupons")}
               </GlassCard>
             ) : (
-              coupons.map((c) => (
-                <GlassCard key={c.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-mono text-lg tracking-wide text-amber-700">{c.couponCode}</p>
-                      {c.couponName && c.couponName !== c.couponCode ? (
-                        <p className={`mt-0.5 text-xs ${MP_CARD_TEXT_SECONDARY}`}>{c.couponName}</p>
-                      ) : null}
-                      <p className={`mt-1 text-xs ${MP_CARD_TEXT_MUTED}`}>
-                        {t("issuedAt")} {formatDateTime(c.issuedAt, dateLocale)}
-                      </p>
-                      {c.expiresAt || c.validTo ? (
-                        <p className={`mt-0.5 text-xs ${MP_CARD_TEXT_MUTED}`}>
-                          {t("couponExpiresAt")} {formatDateTime(c.expiresAt || c.validTo || "", dateLocale)}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        c.status === "issued"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-stone-100 text-stone-500"
-                      }`}
-                    >
-                      {memberPortalCouponStatusLabel(lang, c.status)}
-                    </span>
-                  </div>
-                  <div className={`mt-3 grid gap-1 text-xs ${MP_CARD_TEXT_SECONDARY}`}>
-                    <p>
-                      {t("couponBenefit")}: {couponBenefitText(c)}
-                    </p>
-                    {Number(c.minOrderAmt || 0) > 0 ? (
-                      <p>
-                        {t("couponMinOrder")}: ฿{Math.round(Number(c.minOrderAmt || 0))}
-                      </p>
-                    ) : null}
-                    <p>
-                      {t("couponStackRule")}: {couponStackRuleText(c)}
-                    </p>
-                    {c.campaignName ? (
-                      <p>
-                        {t("couponCampaign")}: {c.campaignName}
-                      </p>
-                    ) : null}
-                    {Array.isArray(c.issuedStoreScope) && c.issuedStoreScope.length > 0 ? (
-                      <p>
-                        {t("couponScope")}: {c.issuedStoreScope.join(", ")}
-                      </p>
-                    ) : null}
-                  </div>
-                  {c.status === "issued" ? (
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <MemberPortalCouponQrButton
-                        memberNo={member.memberNo}
-                        couponCode={c.couponCode}
-                        couponName={c.couponName}
-                        issueId={c.id}
-                      />
-                      <CopyButton text={c.couponCode} label={t("copyCode")} />
-                    </div>
-                  ) : null}
-                </GlassCard>
-              ))
+              <div className="space-y-4">
+                {coupons.map((c) => (
+                  <MemberPortalCouponCard
+                    key={c.id}
+                    coupon={c}
+                    memberNo={member.memberNo}
+                    lang={lang}
+                    dateLocale={dateLocale}
+                    t={t}
+                  />
+                ))}
+              </div>
             )}
             <SectionTitle title={t("historyTitle")} subtitle={t("historySub")} />
 

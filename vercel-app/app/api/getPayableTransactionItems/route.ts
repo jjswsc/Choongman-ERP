@@ -10,6 +10,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { computePurchaseOrderMoneyTotals, parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+import {
+  mapDbVendorRowToPoBillTo,
+  resolvePoInvoiceBillToVendor,
+  type PoInvoiceBillToVendor,
+} from '@/lib/po-invoice-bill-to'
 import { roundMoney2, thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import { getLineRemarksFromCartLine, type OrderCartLine, unitPriceFromOutboundLogSnapshot } from '@/lib/outbound-order-line-match'
 
@@ -42,6 +47,7 @@ export async function GET(request: NextRequest) {
     let orderInvoiceTotals: OrderInvoiceTotals | undefined
     let withholdingTaxAmount: number | undefined
     let withholdingTaxRate: number | undefined
+    let poBillTo: PoInvoiceBillToVendor | undefined
 
     if (refType === 'Order') {
       const orderRows = (await supabaseSelectFilter('orders', `id=eq.${refId}`, {
@@ -110,16 +116,60 @@ export async function GET(request: NextRequest) {
       }
     } else if (refType === 'PO') {
       const poRows = (await supabaseSelectFilter('purchase_orders', `id=eq.${refId}`, {
-        select: 'cart_json,withholding_tax_amount,withholding_tax_rate',
+        select: 'cart_json,withholding_tax_amount,withholding_tax_rate,vendor_code,vendor_name',
         limit: 1,
       })) as
         | {
             cart_json?: string
             withholding_tax_amount?: number | string | null
             withholding_tax_rate?: number | string | null
+            vendor_code?: string | null
+            vendor_name?: string | null
           }[]
         | null
       const poRow = poRows?.[0]
+      if (poRow) {
+        const vendorCode = String(poRow.vendor_code || '').trim()
+        const vendorName = String(poRow.vendor_name || '').trim()
+        let vendorRows: NonNullable<ReturnType<typeof mapDbVendorRowToPoBillTo>>[] = []
+        if (vendorCode) {
+          const rows = (await supabaseSelectFilter('vendors', `code=eq.${encodeURIComponent(vendorCode)}`, {
+            limit: 1,
+          })) as {
+            code?: string
+            name?: string
+            addr?: string
+            tax_id?: string
+            phone?: string
+            sales_outlet?: string
+            gps_name?: string
+          }[]
+          const mapped = mapDbVendorRowToPoBillTo(rows?.[0])
+          if (mapped) vendorRows = [mapped]
+        } else if (vendorName) {
+          const rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(vendorName)}`, {
+            limit: 1,
+          })) as {
+            code?: string
+            name?: string
+            addr?: string
+            tax_id?: string
+            phone?: string
+            sales_outlet?: string
+            gps_name?: string
+          }[]
+          const mapped = mapDbVendorRowToPoBillTo(rows?.[0])
+          if (mapped) vendorRows = [mapped]
+        }
+        poBillTo = resolvePoInvoiceBillToVendor(
+          {
+            cart_json: poRow.cart_json,
+            vendor_code: vendorCode || undefined,
+            vendor_name: vendorName || undefined,
+          },
+          vendorRows
+        )
+      }
       const cartJson = poRow?.cart_json
       const whtAmt = Math.max(0, Number(poRow?.withholding_tax_amount) || 0)
       const whtRate = Math.max(0, Number(poRow?.withholding_tax_rate) || 0)
@@ -207,6 +257,7 @@ export async function GET(request: NextRequest) {
       {
         items,
         orderInvoiceTotals,
+        ...(poBillTo ? { poBillTo } : {}),
         ...(withholdingTaxAmount != null && withholdingTaxAmount > 0
           ? {
               withholdingTaxAmount,

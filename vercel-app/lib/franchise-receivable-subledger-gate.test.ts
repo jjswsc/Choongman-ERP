@@ -11,13 +11,24 @@ describe('shouldCreateFranchiseReceivableSubledgerFromBankReceive', () => {
     ).toBe(false)
   })
 
-  it('skips POS stores (매출 수령 — 1130 only)', () => {
+  it('skips POS channel settlement memos (Grab·카드 — 1130 only)', () => {
     expect(
       shouldCreateFranchiseReceivableSubledgerFromBankReceive({
         linkedToChannelSettlement: false,
         hasPosCompletedOrders: true,
+        memo: 'Grab settlement NET 193415',
       })
     ).toBe(false)
+  })
+
+  it('creates subledger for POS store B2B transfer (non-channel memo)', () => {
+    expect(
+      shouldCreateFranchiseReceivableSubledgerFromBankReceive({
+        linkedToChannelSettlement: false,
+        hasPosCompletedOrders: true,
+        memo: 'โอนเงินมัดจำ | จาก X2781',
+      })
+    ).toBe(true)
   })
 
   it('creates subledger for non-POS franchise B2B collection', () => {

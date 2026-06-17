@@ -166,11 +166,35 @@ export function LedgerReconciliationTab({
         />
       ) : null}
 
+      {data.receivableBankSubledgerGaps?.length > 0 ? (
+        <IssueTable
+          title={t("recon_b2bRecvBankGap")}
+          hint={t("recon_b2bRecvBankGapHint")}
+          headers={[
+            "Bank ID",
+            t("bankDate") || "Date",
+            t("pL_store") || "Store",
+            t("bankAmount") || "Amount",
+            "POS",
+            t("bankMemo") || "Memo",
+          ]}
+          rows={data.receivableBankSubledgerGaps.map((r) => [
+            String(r.bankId),
+            r.transDate,
+            r.storeName,
+            formatBaht(r.amount),
+            r.isPosStore ? "Y" : "—",
+            (r.memo || "—").slice(0, 60),
+          ])}
+        />
+      ) : null}
+
       {recvOk &&
         payOk &&
         data.riskyRevenueDeposits.length === 0 &&
         data.pendingChannelSettlements.length === 0 &&
-        data.receivableReceiveWithSettlementLink.length === 0 && (
+        data.receivableReceiveWithSettlementLink.length === 0 &&
+        (data.receivableBankSubledgerGaps?.length ?? 0) === 0 && (
           <p className="text-sm text-emerald-800 dark:text-emerald-300">{t("recon_allClear")}</p>
         )}
     </div>
@@ -202,6 +226,7 @@ function Row({
 
 function IssueTable({
   title,
+  hint,
   headers,
   rows,
 }: {
@@ -213,6 +238,7 @@ function IssueTable({
   return (
     <div className="rounded-lg border border-amber-200/80 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2 shadow-sm">
       <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">{title}</p>
+      {hint ? <p className="text-xs text-amber-900/80 dark:text-amber-100/80">{hint}</p> : null}
       <AccountingTableShell>
         <AccountingTableHead>
           {headers.map((h) => (

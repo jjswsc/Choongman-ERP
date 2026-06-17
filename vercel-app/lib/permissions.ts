@@ -232,6 +232,11 @@ export function canBulkReconcileOrderReceivables(role: string): boolean {
   return canManageReceivablePayableAllStores(role)
 }
 
+/** 매장 수령 시 생성된 store_purchase 분개 조회·삭제 (출고 IV 삭제 선행 작업) */
+export function canDeleteStorePurchaseJournal(role: string): boolean {
+  return canManageReceivablePayableAllStores(role)
+}
+
 /** 출고(주문/강제) 소프트 삭제 */
 export function canDeleteOutbound(role: string): boolean {
   return isOfficeRole(role)

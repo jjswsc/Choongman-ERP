@@ -9,10 +9,9 @@ import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 import {
   listMemberPortalHomeNewMenusForMonth,
   listMemberPortalHomePromosForMonth,
-  MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB,
-  MEMBER_PORTAL_HOME_PROMO_TARGET_TAB,
   shiftBangkokYearMonth,
   type MemberPortalContentItem,
+  type MemberPortalHomePromoChannel,
 } from "@/lib/member-portal-content"
 
 type HomeContentAccent = "promo" | "newMenu"
@@ -35,24 +34,6 @@ const HOME_CONTENT_ACCENT: Record<
   },
 }
 
-type MemberPortalHomeContentMonthCarouselProps = {
-  contentItems: MemberPortalContentItem[]
-  lang: string
-  t: (key: MemberPortalKey) => string
-  onSelectItem: (item: MemberPortalContentItem) => void
-  targetTab: string
-  listForMonth: (
-    items: MemberPortalContentItem[],
-    yearMonth: string,
-    monthRange: { startStr: string; endStr: string }
-  ) => MemberPortalContentItem[]
-  titleKey: MemberPortalKey
-  emptyKey: MemberPortalKey
-  thisMonthKey: MemberPortalKey
-  headerIcon: LucideIcon
-  accent: HomeContentAccent
-}
-
 function formatCompactMonthLabel(yearMonth: string, lang: string): string {
   const [y, m] = yearMonth.split("-").map(Number)
   if (!y || !m) return yearMonth
@@ -69,26 +50,173 @@ function formatCompactMonthLabel(yearMonth: string, lang: string): string {
   }).format(date)
 }
 
+function HomeContentCard({
+  item,
+  titleKey,
+  accent,
+  t,
+  onSelectItem,
+  className = "",
+}: {
+  item: MemberPortalContentItem
+  titleKey: MemberPortalKey
+  accent: HomeContentAccent
+  t: (key: MemberPortalKey) => string
+  onSelectItem: (item: MemberPortalContentItem) => void
+  className?: string
+}) {
+  const accentStyle = HOME_CONTENT_ACCENT[accent]
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectItem(item)}
+      className={`w-full overflow-hidden rounded-xl border border-stone-200/80 bg-stone-50/90 text-left transition hover:bg-white ${accentStyle.cardHover} ${className}`}
+    >
+      {item.imageUrl ? (
+        <img
+          src={item.imageUrl}
+          alt={item.title || t(titleKey)}
+          className="aspect-square w-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <div className="flex aspect-square w-full items-center justify-center bg-gradient-to-br from-stone-100 to-stone-200/80 px-3">
+          <p className={`line-clamp-3 text-center text-xs font-semibold ${MP_CARD_TEXT_PRIMARY}`}>
+            {item.title || "—"}
+          </p>
+        </div>
+      )}
+      <div className="px-2.5 py-2">
+        <p className={`line-clamp-2 text-[13px] font-medium leading-snug ${MP_CARD_TEXT_PRIMARY}`}>
+          {item.title || "—"}
+        </p>
+        {item.body ? (
+          <p className={`mt-0.5 line-clamp-1 text-[11px] ${MP_CARD_TEXT_MUTED}`}>{item.body}</p>
+        ) : (
+          <p className={`mt-0.5 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>{t("homeFeatureTap")}</p>
+        )}
+      </div>
+    </button>
+  )
+}
+
+function HomeContentCarousel({
+  items,
+  titleKey,
+  emptyKey,
+  accent,
+  t,
+  onSelectItem,
+}: {
+  items: MemberPortalContentItem[]
+  titleKey: MemberPortalKey
+  emptyKey: MemberPortalKey
+  accent: HomeContentAccent
+  t: (key: MemberPortalKey) => string
+  onSelectItem: (item: MemberPortalContentItem) => void
+}) {
+  const [index, setIndex] = React.useState(0)
+  const itemKeys = React.useMemo(() => items.map((x) => x.contentKey).join("|"), [items])
+
+  React.useEffect(() => {
+    setIndex(0)
+  }, [itemKeys])
+
+  if (items.length === 0) {
+    return <p className={`px-3 pb-5 pt-1 text-center text-xs ${MP_CARD_TEXT_MUTED}`}>{t(emptyKey)}</p>
+  }
+
+  if (items.length === 1) {
+    return (
+      <div className="px-2.5 pb-2.5 pt-1">
+        <HomeContentCard item={items[0]} titleKey={titleKey} accent={accent} t={t} onSelectItem={onSelectItem} />
+      </div>
+    )
+  }
+
+  const safeIndex = Math.min(index, items.length - 1)
+  const item = items[safeIndex]
+
+  return (
+    <div className="px-2.5 pb-2.5 pt-1">
+      <div className="relative">
+        <HomeContentCard item={item} titleKey={titleKey} accent={accent} t={t} onSelectItem={onSelectItem} />
+        <button
+          type="button"
+          onClick={() => setIndex((i) => Math.max(0, i - 1))}
+          disabled={safeIndex <= 0}
+          className={`absolute left-1 top-[38%] inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-stone-200/90 bg-white/95 shadow-sm transition disabled:pointer-events-none disabled:opacity-30 ${MP_CARD_TEXT_SECONDARY} hover:bg-white`}
+          aria-label={t("homeContentPrev")}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setIndex((i) => Math.min(items.length - 1, i + 1))}
+          disabled={safeIndex >= items.length - 1}
+          className={`absolute right-1 top-[38%] inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-stone-200/90 bg-white/95 shadow-sm transition disabled:pointer-events-none disabled:opacity-30 ${MP_CARD_TEXT_SECONDARY} hover:bg-white`}
+          aria-label={t("homeContentNext")}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-1.5">
+        {items.map((row, dotIndex) => (
+          <button
+            key={row.contentKey}
+            type="button"
+            onClick={() => setIndex(dotIndex)}
+            className={`h-1.5 rounded-full transition ${
+              dotIndex === safeIndex ? "w-4 bg-amber-500" : "w-1.5 bg-stone-300"
+            }`}
+            aria-label={`${dotIndex + 1} / ${items.length}`}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+type MemberPortalHomeContentMonthCarouselProps = {
+  contentItems: MemberPortalContentItem[]
+  lang: string
+  t: (key: MemberPortalKey) => string
+  onSelectItem: (item: MemberPortalContentItem) => void
+  listForMonth: (
+    items: MemberPortalContentItem[],
+    yearMonth: string,
+    monthRange: { startStr: string; endStr: string },
+    channel?: MemberPortalHomePromoChannel
+  ) => MemberPortalContentItem[]
+  titleKey: MemberPortalKey
+  emptyKey: MemberPortalKey
+  thisMonthKey: MemberPortalKey
+  headerIcon: LucideIcon
+  accent: HomeContentAccent
+  promoChannel?: MemberPortalHomePromoChannel
+}
+
 export function MemberPortalHomeContentMonthCarousel({
   contentItems,
   lang,
   t,
   onSelectItem,
-  targetTab: _targetTab,
   listForMonth,
   titleKey,
   emptyKey,
   thisMonthKey,
   headerIcon: HeaderIcon,
   accent,
+  promoChannel,
 }: MemberPortalHomeContentMonthCarouselProps) {
   const [yearMonth, setYearMonth] = React.useState(() => getBangkokMonthRange().yearMonth)
   const accentStyle = HOME_CONTENT_ACCENT[accent]
 
   const monthRange = React.useMemo(() => getBangkokMonthRange(yearMonth), [yearMonth])
   const items = React.useMemo(
-    () => listForMonth(contentItems, yearMonth, monthRange),
-    [contentItems, yearMonth, monthRange, listForMonth]
+    () => listForMonth(contentItems, yearMonth, monthRange, promoChannel),
+    [contentItems, yearMonth, monthRange, listForMonth, promoChannel]
   )
 
   const monthLabel = formatCompactMonthLabel(yearMonth, lang)
@@ -109,28 +237,28 @@ export function MemberPortalHomeContentMonthCarousel({
           </span>
           <p className={`truncate text-[13px] font-semibold tracking-tight ${MP_CARD_TEXT_PRIMARY}`}>{t(titleKey)}</p>
         </div>
-        <div className="flex shrink-0 items-center rounded-full border border-white/[0.08] bg-white/[0.04] p-0.5">
+        <div className="flex shrink-0 items-center rounded-full border border-stone-200/80 bg-stone-50/90 p-0.5">
           <button
             type="button"
             onClick={() => setYearMonth((ym) => shiftBangkokYearMonth(ym, -1))}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+            className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${MP_CARD_TEXT_MUTED} transition hover:bg-stone-200/60 hover:text-[color:var(--mp-text-primary,#1c1917)]`}
             aria-label={t("homePromoPrevMonth")}
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <span
-            className="inline-flex min-w-[4.25rem] items-center justify-center gap-1 px-1.5 text-[11px] font-medium tabular-nums text-white/80"
+            className={`inline-flex min-w-[4.25rem] items-center justify-center gap-1 px-1.5 text-[11px] font-medium tabular-nums ${MP_CARD_TEXT_SECONDARY}`}
             title={isCurrentMonth ? t(thisMonthKey) : monthLabel}
           >
             {isCurrentMonth ? (
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.55)]" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.45)]" />
             ) : null}
             {monthLabel}
           </span>
           <button
             type="button"
             onClick={() => setYearMonth((ym) => shiftBangkokYearMonth(ym, 1))}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+            className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${MP_CARD_TEXT_MUTED} transition hover:bg-stone-200/60 hover:text-[color:var(--mp-text-primary,#1c1917)]`}
             aria-label={t("homePromoNextMonth")}
           >
             <ChevronRight className="h-3.5 w-3.5" />
@@ -138,56 +266,16 @@ export function MemberPortalHomeContentMonthCarousel({
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <p className="px-3 pb-5 pt-1 text-center text-xs text-white/45">{t(emptyKey)}</p>
-      ) : (
-        <div className="-mx-0 overflow-x-auto px-2.5 pb-2.5 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-2.5">
-            {items.map((item) => (
-              <button
-                key={item.contentKey}
-                type="button"
-                onClick={() => onSelectItem(item)}
-                className={`w-[min(84vw,16.5rem)] shrink-0 overflow-hidden rounded-xl border border-white/[0.09] bg-black/25 text-left transition hover:bg-black/35 ${accentStyle.cardHover}`}
-              >
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.title || t(titleKey)}
-                    className="aspect-[16/10] w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex aspect-[16/10] w-full items-center justify-center bg-gradient-to-br from-white/[0.06] to-black/50 px-3">
-                    <p className="line-clamp-3 text-center text-xs font-semibold text-white/85">
-                      {item.title || "—"}
-                    </p>
-                  </div>
-                )}
-                <div className="px-2.5 py-2">
-                  <p className="line-clamp-2 text-[13px] font-medium leading-snug text-white">
-                    {item.title || "—"}
-                  </p>
-                  {item.body ? (
-                    <p className="mt-0.5 line-clamp-1 text-[11px] text-white/45">{item.body}</p>
-                  ) : (
-                    <p className="mt-0.5 text-[11px] text-white/40">{t("homeFeatureTap")}</p>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <HomeContentCarousel
+        items={items}
+        titleKey={titleKey}
+        emptyKey={emptyKey}
+        accent={accent}
+        t={t}
+        onSelectItem={onSelectItem}
+      />
     </GlassCard>
   )
-}
-
-type MemberPortalHomeMonthlyPromosProps = {
-  contentItems: MemberPortalContentItem[]
-  lang: string
-  t: (key: MemberPortalKey) => string
-  onSelectPromo: (item: MemberPortalContentItem) => void
 }
 
 export function MemberPortalHomeMonthlyPromos({
@@ -195,14 +283,18 @@ export function MemberPortalHomeMonthlyPromos({
   lang,
   t,
   onSelectPromo,
-}: MemberPortalHomeMonthlyPromosProps) {
+}: {
+  contentItems: MemberPortalContentItem[]
+  lang: string
+  t: (key: MemberPortalKey) => string
+  onSelectPromo: (item: MemberPortalContentItem) => void
+}) {
   return (
     <MemberPortalHomeContentMonthCarousel
       contentItems={contentItems}
       lang={lang}
       t={t}
       onSelectItem={onSelectPromo}
-      targetTab={MEMBER_PORTAL_HOME_PROMO_TARGET_TAB}
       listForMonth={listMemberPortalHomePromosForMonth}
       titleKey="homePromoTitle"
       emptyKey="homePromoEmpty"
@@ -213,22 +305,26 @@ export function MemberPortalHomeMonthlyPromos({
   )
 }
 
-type MemberPortalHomeNewMenusProps = {
+export function MemberPortalHomeNewMenus({
+  contentItems,
+  lang,
+  t,
+  onSelectItem,
+}: {
   contentItems: MemberPortalContentItem[]
   lang: string
   t: (key: MemberPortalKey) => string
   onSelectItem: (item: MemberPortalContentItem) => void
-}
-
-export function MemberPortalHomeNewMenus({ contentItems, lang, t, onSelectItem }: MemberPortalHomeNewMenusProps) {
+}) {
   return (
     <MemberPortalHomeContentMonthCarousel
       contentItems={contentItems}
       lang={lang}
       t={t}
       onSelectItem={onSelectItem}
-      targetTab={MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB}
-      listForMonth={listMemberPortalHomeNewMenusForMonth}
+      listForMonth={(items, yearMonth, monthRange) =>
+        listMemberPortalHomeNewMenusForMonth(items, yearMonth, monthRange)
+      }
       titleKey="homeNewMenuTitle"
       emptyKey="homeNewMenuEmpty"
       thisMonthKey="homeNewMenuThisMonth"
@@ -265,73 +361,9 @@ const HOME_CONTENT_TAB_CONFIG: Record<
     thisMonthKey: "homeNewMenuThisMonth",
     headerIcon: UtensilsCrossed,
     accent: "newMenu",
-    listForMonth: listMemberPortalHomeNewMenusForMonth,
+    listForMonth: (items, yearMonth, monthRange) =>
+      listMemberPortalHomeNewMenusForMonth(items, yearMonth, monthRange),
   },
-}
-
-type MemberPortalHomePromosAndMenusProps = {
-  contentItems: MemberPortalContentItem[]
-  lang: string
-  t: (key: MemberPortalKey) => string
-  onSelectItem: (item: MemberPortalContentItem) => void
-}
-
-function HomeContentMonthItems({
-  items,
-  titleKey,
-  emptyKey,
-  accent,
-  t,
-  onSelectItem,
-}: {
-  items: MemberPortalContentItem[]
-  titleKey: MemberPortalKey
-  emptyKey: MemberPortalKey
-  accent: HomeContentAccent
-  t: (key: MemberPortalKey) => string
-  onSelectItem: (item: MemberPortalContentItem) => void
-}) {
-  const accentStyle = HOME_CONTENT_ACCENT[accent]
-
-  if (items.length === 0) {
-    return <p className="px-3 pb-5 pt-1 text-center text-xs text-white/45">{t(emptyKey)}</p>
-  }
-
-  return (
-    <div className="-mx-0 overflow-x-auto px-2.5 pb-2.5 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="flex gap-2.5">
-        {items.map((item) => (
-          <button
-            key={item.contentKey}
-            type="button"
-            onClick={() => onSelectItem(item)}
-            className={`w-[min(84vw,16.5rem)] shrink-0 overflow-hidden rounded-xl border border-white/[0.09] bg-black/25 text-left transition hover:bg-black/35 ${accentStyle.cardHover}`}
-          >
-            {item.imageUrl ? (
-              <img
-                src={item.imageUrl}
-                alt={item.title || t(titleKey)}
-                className="aspect-[16/10] w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="flex aspect-[16/10] w-full items-center justify-center bg-gradient-to-br from-white/[0.06] to-black/50 px-3">
-                <p className="line-clamp-3 text-center text-xs font-semibold text-white/85">{item.title || "—"}</p>
-              </div>
-            )}
-            <div className="px-2.5 py-2">
-              <p className="line-clamp-2 text-[13px] font-medium leading-snug text-white">{item.title || "—"}</p>
-              {item.body ? (
-                <p className="mt-0.5 line-clamp-1 text-[11px] text-white/45">{item.body}</p>
-              ) : (
-                <p className="mt-0.5 text-[11px] text-white/40">{t("homeFeatureTap")}</p>
-              )}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 export function MemberPortalHomePromosAndMenus({
@@ -339,17 +371,25 @@ export function MemberPortalHomePromosAndMenus({
   lang,
   t,
   onSelectItem,
-}: MemberPortalHomePromosAndMenusProps) {
+}: {
+  contentItems: MemberPortalContentItem[]
+  lang: string
+  t: (key: MemberPortalKey) => string
+  onSelectItem: (item: MemberPortalContentItem) => void
+}) {
   const [activeTab, setActiveTab] = React.useState<HomeContentTab>("promo")
+  const [promoChannel, setPromoChannel] = React.useState<MemberPortalHomePromoChannel>("dine")
   const [yearMonth, setYearMonth] = React.useState(() => getBangkokMonthRange().yearMonth)
 
   const tabConfig = HOME_CONTENT_TAB_CONFIG[activeTab]
   const accentStyle = HOME_CONTENT_ACCENT[tabConfig.accent]
   const monthRange = React.useMemo(() => getBangkokMonthRange(yearMonth), [yearMonth])
-  const items = React.useMemo(
-    () => tabConfig.listForMonth(contentItems, yearMonth, monthRange),
-    [contentItems, yearMonth, monthRange, tabConfig.listForMonth]
-  )
+  const items = React.useMemo(() => {
+    if (activeTab === "promo") {
+      return listMemberPortalHomePromosForMonth(contentItems, yearMonth, monthRange, promoChannel)
+    }
+    return tabConfig.listForMonth(contentItems, yearMonth, monthRange)
+  }, [activeTab, contentItems, yearMonth, monthRange, promoChannel, tabConfig.listForMonth])
 
   const monthLabel = formatCompactMonthLabel(yearMonth, lang)
   const isCurrentMonth = yearMonth === getBangkokMonthRange().yearMonth
@@ -415,7 +455,31 @@ export function MemberPortalHomePromosAndMenus({
         </div>
       </div>
 
-      <HomeContentMonthItems
+      {activeTab === "promo" ? (
+        <div className="flex gap-2 px-3 pb-1">
+          {(
+            [
+              { id: "dine" as const, labelKey: "homePromoChannelDine" as const },
+              { id: "delivery" as const, labelKey: "homePromoChannelDelivery" as const },
+            ] as const
+          ).map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setPromoChannel(chip.id)}
+              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                promoChannel === chip.id
+                  ? "border-amber-400/40 bg-amber-50 text-amber-900"
+                  : `border-transparent ${MP_CARD_TEXT_MUTED} hover:bg-stone-100/90`
+              }`}
+            >
+              {t(chip.labelKey)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <HomeContentCarousel
         items={items}
         titleKey={tabConfig.titleKey}
         emptyKey={tabConfig.emptyKey}
