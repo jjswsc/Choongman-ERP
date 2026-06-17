@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Gift, History, Stamp, X } from "lucide-react"
+import { Gift, History, Stamp, X, Drumstick } from "lucide-react"
 import { createPortal } from "react-dom"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
 import {
@@ -12,8 +12,6 @@ import {
 } from "@/lib/member-portal-design"
 import {
   MP_HOME_CARD_RADIUS,
-  MP_HOME_STAMP_FOOD_SIZE,
-  MP_HOME_STAMP_SLOT_SIZE,
 } from "@/lib/member-portal-home-layout"
 import type { LangCode } from "@/lib/lang-context"
 import { memberPortalT } from "@/lib/member-portal-i18n"
@@ -112,36 +110,31 @@ function MemberPortalStampPreparingPlaceholder({
   if (variant === "home") {
     return (
       <div
-        className={`relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-emerald-200/70 bg-gradient-to-br from-[#e8f7ee] via-[#edf8f1] to-[#dff3e6] px-4 pb-4 pt-3.5 shadow-[0_8px_24px_-10px_rgba(16,185,129,0.35),inset_0_1px_0_rgba(255,255,255,0.7)]`}
+        className={`relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-stone-200/90 bg-white shadow-[0_8px_24px_-12px_rgba(28,25,23,0.12)]`}
         aria-live="polite"
       >
-        <div className="relative z-[1] pr-[5.5rem]">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-[0_4px_10px_-2px_rgba(16,185,129,0.6)]">
-              <Stamp className="h-4 w-4" aria-hidden />
-            </span>
-            <p className="text-sm font-bold text-emerald-950">{t("stampPreparingTitle")}</p>
+        <div className="flex items-center gap-3 p-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-stone-900">{t("stampPreparingTitle")}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-stone-500">{t("stampPreparingDesc")}</p>
+            <div className="mt-3 grid grid-cols-5 gap-2">
+              {Array.from({ length: 10 }, (_, i) => (
+                <span
+                  key={i}
+                  className="grid aspect-square place-items-center rounded-full bg-stone-100 text-stone-300"
+                >
+                  <Drumstick className="h-4 w-4" />
+                </span>
+              ))}
+            </div>
           </div>
-          <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-relaxed text-emerald-800/80">
-            {t("stampPreparingDesc")}
-          </p>
-          <div className="mt-2.5 flex flex-nowrap gap-1.5 overflow-hidden">
-            {Array.from({ length: 10 }, (_, i) => (
-              <span
-                key={i}
-                className={`flex ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 items-center justify-center rounded-full border border-dashed border-emerald-300/70 bg-white/55 text-[11px] text-emerald-700/25 shadow-inner`}
-              >
-                🍗
-              </span>
-            ))}
+          <div className="relative h-24 w-24 shrink-0">
+            <img
+              src="/member-portal/single-chicken.png"
+              alt=""
+              className="h-full w-full rounded-2xl object-cover"
+            />
           </div>
-        </div>
-        <div className={`pointer-events-none absolute -bottom-1 right-0 z-[2] ${MP_HOME_STAMP_FOOD_SIZE} opacity-90`}>
-          <img
-            src="/member-portal/snow-onion-hero.png"
-            alt=""
-            className="h-full w-full object-contain object-bottom drop-shadow-[0_12px_20px_rgba(0,0,0,0.18)] grayscale-[0.15]"
-          />
         </div>
       </div>
     )
@@ -193,59 +186,63 @@ export function MemberPortalStampHomeWidget({
   const slots = Math.max(1, status.cardSlots)
   const filled = status.currentStamps
 
+  const stampGridCols = slots <= 5 ? slots : 5
+
   return (
     <button
       type="button"
       onClick={onOpenPrivilege}
-      className={`group relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-emerald-200/70 bg-gradient-to-br from-[#e8f7ee] via-[#edf8f1] to-[#dff3e6] px-4 pb-4 pt-3.5 text-left shadow-[0_10px_28px_-12px_rgba(16,185,129,0.5),inset_0_1px_0_rgba(255,255,255,0.7)] transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-[0_18px_36px_-14px_rgba(16,185,129,0.6)] active:translate-y-0`}
+      className={`group w-full overflow-hidden text-left ${MP_HOME_CARD_RADIUS} border border-stone-200/90 bg-white shadow-[0_10px_28px_-14px_rgba(28,25,23,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-14px_rgba(28,25,23,0.2)] active:translate-y-0`}
     >
-      <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/60 to-transparent" />
-      <div className="relative z-[1] pr-[5.5rem]">
-        <p className="text-sm font-bold text-emerald-950">{t("stampCardTitle")}</p>
-        <p className="mt-0.5 text-[11px] font-medium text-emerald-800/80">
-          {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
-        </p>
-        <div className="mt-2.5 flex flex-nowrap gap-1.5 overflow-hidden">
-          {Array.from({ length: slots }, (_, i) => {
-            const isFilled = i < filled
-            return (
-              <span
-                key={i}
-                className={`relative flex ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 items-center justify-center rounded-full border ${
-                  isFilled
-                    ? "border-amber-300 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 text-[11px] text-white shadow-[0_3px_8px_-2px_rgba(180,83,9,0.6)] ring-1 ring-white/40"
-                    : "border-dashed border-emerald-300/70 bg-white/70 text-[10px] text-emerald-700/25 shadow-inner"
-                }`}
-              >
-                {isFilled ? (
-                  <>
-                    <span className="pointer-events-none absolute inset-x-0.5 top-0.5 h-1/2 rounded-full bg-gradient-to-b from-white/55 to-transparent" />
-                    <span className="relative">🍗</span>
-                  </>
-                ) : (
-                  "🍗"
-                )}
-              </span>
-            )
-          })}
-        </div>
-        {status.nextMilestone ? (
-          <p className="mt-2 line-clamp-1 text-[10px] text-emerald-800/65">
-            {t("stampNextReward")
-              .replace("{remaining}", String(status.nextMilestone.stampsRemaining))
-              .replace("{label}", status.nextMilestone.label)}
+      <div className="flex items-center gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-stone-900">{t("stampCardTitle")}</p>
+          <p className="mt-0.5 text-[11px] text-stone-500">
+            {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
           </p>
-        ) : null}
-        <span className="mt-3 inline-flex h-9 items-center rounded-full bg-gradient-to-b from-emerald-500 to-emerald-700 px-4 text-[11px] font-semibold text-white shadow-[0_6px_14px_-4px_rgba(5,150,105,0.7)] ring-1 ring-white/25 transition group-hover:from-emerald-500 group-hover:to-emerald-600">
+          <div
+            className="mt-3 grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${stampGridCols}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: slots }, (_, i) => {
+              const isFilled = i < filled
+              return (
+                <span
+                  key={i}
+                  className={`grid aspect-square place-items-center rounded-full ${
+                    isFilled
+                      ? "bg-amber-500 text-white shadow-[0_3px_8px_-2px_rgba(217,119,6,0.55)]"
+                      : "bg-stone-100 text-stone-300"
+                  }`}
+                >
+                  <Drumstick className="h-4 w-4" />
+                </span>
+              )
+            })}
+          </div>
+          {status.nextMilestone ? (
+            <p className="mt-2 line-clamp-1 text-[10px] text-stone-500">
+              {t("stampNextReward")
+                .replace("{remaining}", String(status.nextMilestone.stampsRemaining))
+                .replace("{label}", status.nextMilestone.label)}
+            </p>
+          ) : null}
+        </div>
+        <div className="relative h-24 w-24 shrink-0 transition-transform duration-300 group-hover:scale-[1.03]">
+          <img
+            src="/member-portal/single-chicken.png"
+            alt=""
+            className="h-full w-full rounded-2xl object-cover shadow-sm"
+          />
+        </div>
+      </div>
+      <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3">
+        <span className="text-sm font-bold text-emerald-600">
+          {filled} / {slots}
+        </span>
+        <span className="rounded-full bg-emerald-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm">
           {t("stampViewCard")}
         </span>
-      </div>
-      <div className={`pointer-events-none absolute -bottom-1 right-0 z-[2] ${MP_HOME_STAMP_FOOD_SIZE} transition-transform duration-300 group-hover:scale-105`}>
-        <img
-          src="/member-portal/snow-onion-hero.png"
-          alt=""
-          className="h-full w-full object-contain object-bottom drop-shadow-[0_12px_20px_rgba(0,0,0,0.18)]"
-        />
       </div>
     </button>
   )

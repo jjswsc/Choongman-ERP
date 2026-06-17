@@ -244,6 +244,49 @@ export function MemberPortalTierGuideSheet({
   )
 }
 
+const TierSelectorRow = React.memo(function TierSelectorRow({
+  tiers,
+  activeTierCode,
+  onSelect,
+}: {
+  tiers: MemberTierPublic[]
+  activeTierCode: string
+  onSelect: (code: string) => void
+}) {
+  if (tiers.length <= 1) return null
+
+  return (
+    <div
+      className="mb-4 grid gap-2 rounded-3xl bg-white/5 p-2 ring-1 ring-white/10"
+      style={{ gridTemplateColumns: `repeat(${Math.min(tiers.length, 5)}, minmax(0, 1fr))` }}
+    >
+      {tiers.map((tier) => {
+        const isActive = normalizeMemberTierCode(tier.code) === normalizeMemberTierCode(activeTierCode)
+        const visual = tierVisual(tier.code)
+        return (
+          <button
+            key={tier.code}
+            type="button"
+            onClick={() => onSelect(tier.code)}
+            className={`flex flex-col items-center gap-1.5 rounded-2xl py-3 transition ${
+              isActive ? "bg-white/12 ring-1 ring-amber-400/50" : "hover:bg-white/6"
+            }`}
+          >
+            <MemberPortalTierGem tier={visual} label={tier.name} size="sm" showLabel={false} />
+            <span
+              className={`max-w-full truncate px-1 text-[9px] font-bold uppercase tracking-wide ${
+                isActive ? "text-white" : "text-white/45"
+              }`}
+            >
+              {tier.name}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+})
+
 export function MemberPortalTierBenefitsSheet({
   open,
   tiers,
@@ -256,8 +299,17 @@ export function MemberPortalTierBenefitsSheet({
   onClose: () => void
 }) {
   const { t } = useMemberPortalLang()
+  const [selectedTierCode, setSelectedTierCode] = React.useState(currentTierCode || "BRONZE")
+
+  React.useEffect(() => {
+    if (open) setSelectedTierCode(currentTierCode || "BRONZE")
+  }, [open, currentTierCode])
 
   if (!open || tiers.length === 0) return null
+
+  const selectedTier =
+    tiers.find((tier) => normalizeMemberTierCode(tier.code) === normalizeMemberTierCode(selectedTierCode)) ||
+    tiers[0]
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
@@ -279,7 +331,19 @@ export function MemberPortalTierBenefitsSheet({
         </h3>
         <p className="mt-1 text-xs leading-relaxed text-white/50">{t("tierBenefitsDesc")}</p>
         <div className="mt-4">
-          <TierBenefitsList tiers={tiers} currentTierCode={currentTierCode} />
+          <TierSelectorRow
+            tiers={tiers}
+            activeTierCode={selectedTierCode}
+            onSelect={setSelectedTierCode}
+          />
+          {selectedTier ? (
+            <TierBenefitCard
+              tier={selectedTier}
+              isCurrent={normalizeMemberTierCode(selectedTier.code) === normalizeMemberTierCode(currentTierCode || "BRONZE")}
+              earnRateLabel={t("tierEarnRate")}
+              benefitsEmptyLabel={t("tierBenefitsEmpty")}
+            />
+          ) : null}
         </div>
         <button
           type="button"

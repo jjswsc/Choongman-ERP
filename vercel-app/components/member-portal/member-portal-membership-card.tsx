@@ -7,13 +7,17 @@ import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import { formatPoints, maskPhone, tierVisual, type PortalDashboard } from "@/components/member-portal/portal-ui"
 import type { TierVisual } from "@/lib/member-portal-tier-visual"
 import { MemberPortalTierGem } from "@/components/member-portal/member-portal-tier-gem"
-import { MP_HOME_CARD_RADIUS, MP_HOME_MEMBERSHIP_ASPECT } from "@/lib/member-portal-home-layout"
+import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
+import { MP_HOME_CARD_RADIUS } from "@/lib/member-portal-home-layout"
 import { cn } from "@/lib/utils"
 
 type MembershipCardTierProgress = {
   subtitle: string
   progressPercent: number
   pointRateLabel: string
+  nextTierCode?: string | null
+  nextTierName?: string | null
+  progressSummary?: string
   actionLabel?: string
   onAction?: () => void
 }
@@ -22,18 +26,31 @@ function MembershipCardTierProgressSection({
   subtitle,
   progressPercent,
   pointRateLabel,
+  nextTierCode,
+  nextTierName,
+  progressSummary,
   actionLabel,
   onAction,
   tier,
 }: MembershipCardTierProgress & { tier: TierVisual }) {
   const { t } = useMemberPortalLang()
+  const nextFamily = nextTierCode ? tierVisual(nextTierCode).family : null
 
   return (
-    <div className="relative shrink-0 pt-2.5">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">{t("tierNext")}</p>
+    <div className="relative mt-4 shrink-0">
+      {nextTierName ? (
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+          <span>{t("tierNext")}</span>
+          <span className="text-white/75">{nextTierName}</span>
+          {nextFamily ? (
+            <TierFacetedGemIcon family={nextFamily} size={14} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">{t("tierNext")}</p>
+      )}
       <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/65">{subtitle}</p>
-      <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-white/8">
+      <div className="relative mt-2.5 h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className={cn(
             "absolute inset-y-0 left-0 rounded-full bg-gradient-to-r shadow-[0_0_10px_rgba(255,255,255,0.12)] transition-all duration-700",
@@ -42,22 +59,25 @@ function MembershipCardTierProgressSection({
           style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
         />
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-[10px] font-medium tracking-wide text-white/40">{pointRateLabel}</p>
-        <p className={cn("shrink-0 text-[11px] font-bold tabular-nums", tier.progressPercent)}>
-          {progressPercent}%
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-[10px] tabular-nums text-white/55">
+          {progressSummary || pointRateLabel}
         </p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-white/90 transition hover:bg-white/14"
+          >
+            {actionLabel}
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        ) : (
+          <p className={cn("shrink-0 text-[11px] font-bold tabular-nums", tier.progressPercent)}>
+            {progressPercent}%
+          </p>
+        )}
       </div>
-      {actionLabel && onAction ? (
-        <button
-          type="button"
-          onClick={onAction}
-          className="mt-2 flex w-full items-center justify-center gap-1 rounded-full border border-white/15 bg-white/8 py-1.5 text-[10px] font-semibold text-white/90 transition hover:bg-white/12"
-        >
-          {actionLabel}
-          <ChevronRight className="h-3 w-3" />
-        </button>
-      ) : null}
     </div>
   )
 }
@@ -87,13 +107,13 @@ function MembershipCardHeader({
         <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/50">
           {showQr ? t("scanAtCounter") : t("membership")}
         </p>
-        <h2 className={cn("mt-0.5 truncate text-[1.125rem] font-bold leading-tight tracking-tight", tier.titleClass)}>
+        <h2 className={cn("mt-1 truncate text-2xl font-bold leading-tight tracking-tight", tier.titleClass)}>
           {displayName}
         </h2>
         {subtitle ? <p className="mt-0.5 text-xs text-white/60">{subtitle}</p> : null}
       </div>
       <div className="flex shrink-0 flex-col items-end">
-        <MemberPortalTierGem tier={tier} label={tierName} size="md" />
+        <MemberPortalTierGem tier={tier} label={tierName} size="lg" />
         <button
           type="button"
           onClick={onToggleQr}
@@ -149,10 +169,7 @@ export function MemberPortalMembershipCard({
   )
 
   return (
-    <div
-      className="relative w-full"
-      style={{ aspectRatio: MP_HOME_MEMBERSHIP_ASPECT }}
-    >
+    <div className="relative w-full">
       <div className={cardShell}>
         <CardFaceTexture tier={tier} />
         {/* 상단 글로스 하이라이트 — 입체감 */}
@@ -185,7 +202,7 @@ export function MemberPortalMembershipCard({
             </div>
           </div>
         ) : (
-          <div key="front" className="relative flex h-full min-h-0 animate-in fade-in flex-col p-4 duration-300">
+          <div key="front" className="relative flex animate-in fade-in flex-col p-5 duration-300">
             <MembershipCardHeader
               displayName={displayName}
               tier={tier}
@@ -196,28 +213,19 @@ export function MemberPortalMembershipCard({
               onToggleQr={onToggleQr}
             />
 
-            <div className="relative mt-1.5 grid min-h-0 flex-1 grid-cols-2 content-center gap-2.5">
-              <div
-                className={cn(
-                  "relative overflow-hidden rounded-[14px] border px-3 py-2 backdrop-blur-md",
-                  tier.statPanel
-                )}
-              >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/[0.06] to-transparent" />
+            <div className="relative mt-4 flex items-stretch rounded-2xl bg-white/5 ring-1 ring-white/10">
+              <div className="flex flex-1 flex-col justify-center px-4 py-3">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("points")}</p>
-                <p className="mt-0.5 text-[1.15rem] font-bold leading-none tracking-tight text-white">
+                <p className="mt-0.5 text-xl font-bold leading-none tracking-tight text-white">
                   {formatPoints(member.pointBalance || 0)}
                 </p>
               </div>
-              <div
-                className={cn(
-                  "relative overflow-hidden rounded-[14px] border px-3 py-2 backdrop-blur-md",
-                  tier.statPanel
-                )}
-              >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/[0.06] to-transparent" />
+              <div className="my-3 w-px bg-white/10" />
+              <div className="flex flex-1 flex-col justify-center px-4 py-3">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/45">{t("memberNoShort")}</p>
-                <p className="mt-0.5 text-sm font-bold tracking-wide text-white">{member.memberNo || `#${member.id}`}</p>
+                <p className="mt-0.5 font-mono text-lg font-semibold tracking-wide text-white">
+                  {member.memberNo || `#${member.id}`}
+                </p>
               </div>
             </div>
 

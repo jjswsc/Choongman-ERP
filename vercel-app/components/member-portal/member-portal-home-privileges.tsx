@@ -72,7 +72,7 @@ export function MemberPortalHomePrivileges({
               key={item.id}
               type="button"
               onClick={() => handleCardClick(item.linkTab)}
-              className={`group relative flex flex-col items-center overflow-hidden ${MP_HOME_CARD_RADIUS} border border-amber-100/90 bg-gradient-to-b from-white to-[#fff4e3] px-2 py-4 text-center shadow-[0_6px_18px_-6px_rgba(180,120,30,0.28),inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-200 hover:-translate-y-1 hover:border-amber-200 hover:shadow-[0_14px_28px_-8px_rgba(180,120,30,0.4)] active:translate-y-0`}
+              className={`group relative flex flex-col items-center overflow-hidden ${MP_HOME_CARD_RADIUS} border border-stone-200/90 bg-white px-2 py-4 text-center shadow-[0_4px_16px_-8px_rgba(28,25,23,0.12)] ring-1 ring-stone-100 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(28,25,23,0.16)] active:translate-y-0`}
             >
               <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/70 to-transparent" />
               <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_6px_14px_-3px_rgba(217,119,6,0.55)] ring-1 ring-white/40 transition-transform duration-200 group-hover:scale-105">

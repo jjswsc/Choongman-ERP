@@ -3,14 +3,15 @@
 import * as React from "react"
 import Image from "next/image"
 import { Bell, Crown } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { resolveTierFamily } from "@/lib/member-portal-tier-visual"
+import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
 
 type MemberPortalHomeTopBarProps = {
   greeting: string
   displayName: string
   tierName: string
-  /** 등급별 젬 그라데이션 (tier.gem) */
-  tierGem: string
+  /** 등급 코드 (BRONZE, DIAMOND 등) — 3D 젬 아이콘용 */
+  tierCode: string
   logoSrc: string
   logoAlt: string
   langSelect: React.ReactNode
@@ -23,7 +24,7 @@ export function MemberPortalHomeTopBar({
   greeting,
   displayName,
   tierName,
-  tierGem,
+  tierCode,
   logoSrc,
   logoAlt,
   langSelect,
@@ -43,10 +44,10 @@ export function MemberPortalHomeTopBar({
             <p className="truncate text-[1.35rem] font-extrabold leading-tight tracking-tight text-stone-900">
               {displayName}
             </p>
-            <Crown className="h-4 w-4 shrink-0 text-amber-500" strokeWidth={2.25} aria-hidden />
+            <Crown className="h-4 w-4 shrink-0 text-amber-500" fill="currentColor" aria-hidden />
           </div>
-          <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-amber-50 px-2.5 py-0.5">
-            <span className={cn("h-2.5 w-2.5 rotate-45 rounded-[3px] bg-gradient-to-br", tierGem)} aria-hidden />
+          <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 pr-2.5">
+            <TierFacetedGemIcon family={resolveTierFamily(tierCode)} size={18} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]" />
             <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">{tierName}</span>
           </span>
         </div>

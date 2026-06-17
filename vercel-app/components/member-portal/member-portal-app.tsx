@@ -1064,7 +1064,7 @@ export function MemberPortalApp() {
             greeting={t(memberPortalGreetingKey())}
             displayName={member.fullName || member.name || "Member"}
             tierName={activeDashboard.tierProgress.currentTierName || tier.label}
-            tierGem={tier.gem}
+            tierCode={activeDashboard.tierProgress.currentTierCode}
             logoSrc={brand.logoSymbolSrc}
             logoAlt={brand.logoAlt}
             langSelect={<MemberPortalLangSelect />}
@@ -1123,6 +1123,13 @@ export function MemberPortalApp() {
                     : t("tierMax"),
                 progressPercent: activeDashboard.tierProgress.progressPercent,
                 pointRateLabel: `${(activeDashboard.tierProgress.pointRate * 100).toFixed(1)}%`,
+                nextTierCode: activeDashboard.tierProgress.nextTierCode,
+                nextTierName: activeDashboard.tierProgress.nextTierName,
+                progressSummary: activeDashboard.tierProgress.nextTierName
+                  ? activeDashboard.tierProgress.upgradeBasis === "points"
+                    ? `${Math.round(activeDashboard.tierProgress.qualificationValue || 0).toLocaleString()} / ${Math.round((activeDashboard.tierProgress.qualificationValue || 0) + activeDashboard.tierProgress.amountToNext).toLocaleString()} P (${activeDashboard.tierProgress.progressPercent}%)`
+                    : `${formatBaht(activeDashboard.tierProgress.qualificationValue || 0)} / ${formatBaht((activeDashboard.tierProgress.qualificationValue || 0) + activeDashboard.tierProgress.amountToNext)} (${activeDashboard.tierProgress.progressPercent}%)`
+                  : undefined,
                 actionLabel: portalTiers.length > 0 ? t("tierBenefitsViewBtn") : undefined,
                 onAction: portalTiers.length > 0 ? () => setTierBenefitsOpen(true) : undefined,
               }}
