@@ -3,7 +3,7 @@
 import * as React from "react"
 import { ChevronRight, Star } from "lucide-react"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
-import { MP_MAX_WIDTH } from "@/lib/member-portal-design"
+import { MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE, MP_MAX_WIDTH } from "@/lib/member-portal-design"
 import { tierVisual } from "@/components/member-portal/portal-ui"
 import { normalizeMemberTierCode, type MemberTierPublic } from "@/lib/member-tier-public"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
@@ -37,19 +37,19 @@ const TierGuideCard = React.memo(function TierGuideCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-white">{tier.name}</p>
+            <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{tier.name}</p>
             {isCurrent ? (
-              <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900">
                 {t("tierCurrentBadge")}
               </span>
             ) : null}
           </div>
-          <p className="mt-1 text-xs text-white/70">{tier.pointRangeLabel}</p>
-          <p className="mt-0.5 text-xs text-white/45">{tier.spendLabel}</p>
+          <p className={`mt-1 text-xs ${MP_CARD_TEXT_SECONDARY}`}>{tier.pointRangeLabel}</p>
+          <p className={`mt-0.5 text-xs ${MP_CARD_TEXT_MUTED}`}>{tier.spendLabel}</p>
           {tier.benefits ? (
-            <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-white/65">{tier.benefits}</p>
+            <p className={`mt-2 whitespace-pre-line text-xs leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>{tier.benefits}</p>
           ) : null}
-          <p className="mt-2 text-[11px] text-white/40">
+          <p className={`mt-2 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
             {earnRateLabel}: {(tier.pointRate * 100).toFixed(1)}%
           </p>
         </div>
@@ -85,8 +85,8 @@ export function MemberPortalTierGuide({ tiers, currentTierCode }: Props) {
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-white">{t("tierGuideTitle")}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-white/50">{t("tierGuideDesc")}</p>
+        <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("tierGuideTitle")}</h3>
+        <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("tierGuideDesc")}</p>
       </div>
       <TierGuideList tiers={tiers} currentTierCode={currentTierCode} />
     </div>
@@ -119,19 +119,19 @@ const TierBenefitCard = React.memo(function TierBenefitCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-white">{tier.name}</p>
+            <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{tier.name}</p>
             {isCurrent ? (
-              <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900">
                 {t("tierCurrentBadge")}
               </span>
             ) : null}
           </div>
           {tier.benefits ? (
-            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/80">{tier.benefits}</p>
+            <p className={`mt-2 whitespace-pre-line text-sm leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>{tier.benefits}</p>
           ) : (
-            <p className="mt-2 text-xs text-white/40">{benefitsEmptyLabel}</p>
+            <p className={`mt-2 text-xs ${MP_CARD_TEXT_SUBTLE}`}>{benefitsEmptyLabel}</p>
           )}
-          <p className="mt-2 text-[11px] text-white/40">
+          <p className={`mt-2 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
             {earnRateLabel}: {(tier.pointRate * 100).toFixed(1)}%
           </p>
         </div>
@@ -169,8 +169,8 @@ export function MemberPortalTierBenefits({ tiers, currentTierCode }: Props) {
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-white">{t("tierBenefitsTitle")}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-white/50">{t("tierBenefitsDesc")}</p>
+        <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("tierBenefitsTitle")}</h3>
+        <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("tierBenefitsDesc")}</p>
       </div>
       <TierBenefitsList tiers={tiers} currentTierCode={currentTierCode} />
     </div>
@@ -188,15 +188,15 @@ export function MemberPortalTierEntryButton({
 }) {
   return (
     <button type="button" onClick={onClick} className="w-full text-left">
-      <GlassCard soft className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/[0.06] active:scale-[0.99]">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-400/25 bg-amber-400/10">
-          <Star className="h-5 w-5 text-amber-300" fill="currentColor" />
+      <GlassCard soft className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-stone-50 active:scale-[0.99]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-300/40 bg-amber-50">
+          <Star className="h-5 w-5 text-amber-600" fill="currentColor" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-white">{title}</p>
-          {description ? <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-white/50">{description}</p> : null}
+          <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{title}</p>
+          {description ? <p className={`mt-0.5 line-clamp-2 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{description}</p> : null}
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-white/35" aria-hidden />
+        <ChevronRight className={`h-5 w-5 shrink-0 ${MP_CARD_TEXT_SUBTLE}`} aria-hidden />
       </GlassCard>
     </button>
   )

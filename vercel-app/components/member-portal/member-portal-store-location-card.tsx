@@ -2,6 +2,12 @@
 
 import { ExternalLink, MapPin, Star } from "lucide-react"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
+import {
+  MP_CARD_TEXT_PRIMARY,
+  MP_CARD_TEXT_SECONDARY,
+  mpCardGhostBtnActiveClass,
+  mpCardGhostBtnClass,
+} from "@/lib/member-portal-design"
 import { memberPortalGoogleMapsUrl, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 
@@ -47,10 +53,10 @@ export function MemberPortalStoreLocationCard({
 
       <div className="space-y-3 px-4 py-3.5">
         <div>
-          <h3 className="text-base font-semibold leading-snug text-white">{store.displayName}</h3>
+          <h3 className={`text-base font-semibold leading-snug ${MP_CARD_TEXT_PRIMARY}`}>{store.displayName}</h3>
           {store.address ? (
-            <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-white/70">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-300/85" aria-hidden />
+            <p className={`mt-2 flex items-start gap-2 text-sm leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-600/85" aria-hidden />
               <span>{store.address}</span>
             </p>
           ) : null}
@@ -68,13 +74,9 @@ export function MemberPortalStoreLocationCard({
           <button
             type="button"
             onClick={onToggleFavorite}
-            className={`inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition ${
-              isFavorite
-                ? "border-amber-300/40 bg-amber-300/12 text-amber-100"
-                : "border-white/12 bg-white/5 text-white/85 hover:bg-white/10"
-            }`}
+            className={isFavorite ? mpCardGhostBtnActiveClass : mpCardGhostBtnClass}
           >
-            <Star className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} aria-hidden />
+            <Star className={`h-4 w-4 ${isFavorite ? "fill-current text-amber-600" : ""}`} aria-hidden />
             {isFavorite ? t("locationFavorite") : t("locationFavoriteSet")}
           </button>
         </div>

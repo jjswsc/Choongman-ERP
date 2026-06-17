@@ -265,8 +265,10 @@ export default function SaasCustomersPage() {
   const [tenants, setTenants] = useState<TenantItem[]>([])
   const [selectedTenantId, setSelectedTenantId] = useState("")
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [loadNotice, setLoadNotice] = useState("")
-  const [search, setSearch] = useState("")
+  const [searchInput, setSearchInput] = useState("")
+  const [searchApplied, setSearchApplied] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | TenantItem["status"]>("all")
   const [openCreate, setOpenCreate] = useState(false)
   const [invoiceEmailOpen, setInvoiceEmailOpen] = useState(false)
@@ -296,7 +298,7 @@ export default function SaasCustomersPage() {
   )
 
   const filteredTenants = useMemo(() => {
-    const keyword = search.trim().toLowerCase()
+    const keyword = searchApplied.trim().toLowerCase()
     const rows = tenants.filter((tenant) => {
       if (statusFilter !== "all" && tenant.status !== statusFilter) return false
       if (scope.isPlatform && partnerFilter !== "all") {
@@ -322,7 +324,11 @@ export default function SaasCustomersPage() {
       })
     }
     return withExpiry
-  }, [expiryOnly, partnerFilter, scope.isPlatform, search, sortBy, statusFilter, t, tenants])
+  }, [expiryOnly, partnerFilter, scope.isPlatform, searchApplied, sortBy, statusFilter, t, tenants])
+
+  const applySearch = () => {
+    setSearchApplied(searchInput.trim())
+  }
 
   const stats = useMemo(() => {
     const active = tenants.filter((x) => x.status === "active").length
@@ -475,7 +481,7 @@ export default function SaasCustomersPage() {
 
   const saveTenantSettings = async () => {
     if (!selectedTenant) return
-    setLoading(true)
+    setSaving(true)
     try {
       await persistTenant(selectedTenant)
       await appAlert(tr(t, "saasAdminCust_saved", { name: selectedTenant.companyName }))
@@ -483,7 +489,7 @@ export default function SaasCustomersPage() {
     } catch (error) {
       await appAlert(tr(t, "saasAdminCust_saveFailed", { msg: String(error) }))
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -785,9 +791,6 @@ export default function SaasCustomersPage() {
           <Button type="button" variant="outline" onClick={() => setOpenCreate(true)} disabled={loading}>
             {t("saasAdminCust_addTenant")}
           </Button>
-          <Button type="button" onClick={saveTenantSettings} disabled={loading || tenants.length === 0}>
-            {t("saasAdminCust_saveSettings")}
-          </Button>
         </div>
       </div>
 
@@ -833,11 +836,20 @@ export default function SaasCustomersPage() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="space-y-2">
           <Label>{t("saasAdminCust_searchLabel")}</Label>
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("saasAdminCust_searchPh")}
-          />
+          <div className="flex gap-2">
+            <Input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") applySearch()
+              }}
+              placeholder={t("saasAdminCust_searchPh")}
+              className="min-w-0 flex-1"
+            />
+            <Button type="button" variant="secondary" onClick={applySearch} disabled={loading}>
+              {t("search")}
+            </Button>
+          </div>
         </div>
         <div className="space-y-2">
           <Label>{t("saasAdminCust_statusFilter")}</Label>
@@ -932,6 +944,7 @@ export default function SaasCustomersPage() {
             <CardTitle className="text-lg">{t("saasAdminCust_listTitle")}</CardTitle>
             <CardDescription>
               {tr(t, "saasAdminCust_listDesc", { n: String(filteredTenants.length) })}
+              {searchApplied ? t("saasAdminCust_searchMode") : ""}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1016,42 +1029,63 @@ export default function SaasCustomersPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
                 <CardTitle className="text-lg">{selectedTenant.companyName}</CardTitle>
                 <CardDescription>{tr(t, "saasAdminCust_tenantIdLine", { id: selectedTenant.id })}</CardDescription>
               </div>
-              <div className="flex flex-wrap items-center gap-1">
-                <Button asChild size="sm" variant="secondary">
-                  <Link href={selectedTenantLoginHref}>{t("saasAdminCust_loginLink")}</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={selectedTenantLoginHref} target="_blank" rel="noopener noreferrer">
-                    {t("saasAdminCust_loginNewTab")}
-                  </Link>
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setTenantStatus("active")}>
-                  {saasAdminStatusLabel("active", t)}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setTenantStatus("grace")}>
-                  {saasAdminStatusLabel("grace", t)}
-                </Button>
-                <Button size="sm" variant="destructive" onClick={() => setTenantStatus("suspended")}>
-                  {saasAdminStatusLabel("suspended", t)}
-                </Button>
-              </div>
+              <Button
+                type="button"
+                className="shrink-0"
+                onClick={() => void saveTenantSettings()}
+                disabled={loading || saving}
+              >
+                {saving ? t("saasAdminCust_saving") : t("save")}
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-1">
+              <Button asChild size="sm" variant="secondary">
+                <Link href={selectedTenantLoginHref}>{t("saasAdminCust_loginLink")}</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href={selectedTenantLoginHref} target="_blank" rel="noopener noreferrer">
+                  {t("saasAdminCust_loginNewTab")}
+                </Link>
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setTenantStatus("active")}>
+                {saasAdminStatusLabel("active", t)}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setTenantStatus("grace")}>
+                {saasAdminStatusLabel("grace", t)}
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => setTenantStatus("suspended")}>
+                {saasAdminStatusLabel("suspended", t)}
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
             <Tabs value={detailTab} onValueChange={onDetailTabChange} className="w-full">
-              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-                <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
-                <TabsTrigger value="company">{t("saasAdminCust_tabCompany")}</TabsTrigger>
-                <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
-                <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
-                <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
-                <TabsTrigger value="audit">{t("saasAdminCust_tabAudit")}</TabsTrigger>
-              </TabsList>
+              <div className="sticky top-0 z-10 -mx-1 space-y-2 bg-card pb-2">
+                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+                  <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
+                  <TabsTrigger value="company">{t("saasAdminCust_tabCompany")}</TabsTrigger>
+                  <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
+                  <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
+                  <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
+                  <TabsTrigger value="audit">{t("saasAdminCust_tabAudit")}</TabsTrigger>
+                </TabsList>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+                  <p className="text-sm text-muted-foreground">{t("saasAdminCust_savePanelHint")}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void saveTenantSettings()}
+                    disabled={loading || saving}
+                  >
+                    {saving ? t("saasAdminCust_saving") : t("save")}
+                  </Button>
+                </div>
+              </div>
 
               <TabsContent value="plan" className="space-y-4 pt-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 p-3">

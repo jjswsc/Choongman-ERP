@@ -243,8 +243,32 @@ function pickLimits(base: TenantLimits, override?: TenantLimitRow): TenantLimits
 async function selectSafe(table: string, options: { order?: string; limit?: number } = {}) {
   try {
     return (await supabaseSelect(table, options)) as unknown[]
-  } catch {
-    return []
+  } catch (e) {
+    if (isMissingTableError(e, table)) {
+      console.warn(`getSaasTenantSettings: table ${table} missing, using defaults`)
+      return []
+    }
+    throw e
+  }
+}
+
+function isMissingTableError(error: unknown, tableName: string): boolean {
+  const msg = error instanceof Error ? error.message : String(error || "")
+  return (
+    (msg.includes("PGRST205") || /Could not find the table/i.test(msg)) &&
+    msg.includes(tableName)
+  )
+}
+
+async function selectFilterSafe(table: string, filter: string, options: { limit?: number } = {}) {
+  try {
+    return (await supabaseSelectFilter(table, filter, options)) as unknown[]
+  } catch (e) {
+    if (isMissingTableError(e, table)) {
+      console.warn(`getSaasTenantSettings: table ${table} missing, using defaults`)
+      return []
+    }
+    throw e
   }
 }
 
@@ -303,7 +327,7 @@ export async function GET(req: NextRequest) {
       supabaseSelectFilter("tenant_policy_settings", tenantFilter, { limit: SAAS_TENANT_LIST_LIMIT }),
       supabaseSelect("saas_plan_features", { limit: 2000 }),
       supabaseSelectFilter("tenant_feature_overrides", tenantFilter, { limit: 8000 }),
-      supabaseSelectFilter("tenant_stage_price_overrides", tenantFilter, { limit: 5000 }),
+      selectFilterSafe("tenant_stage_price_overrides", tenantFilter, { limit: 5000 }),
       supabaseSelectFilter("tenant_module_pricing", tenantFilter, { limit: 10000 }),
       selectSafe("saas_module_price_catalog", { order: "sort_order.asc", limit: 100 }),
       loadTenantUsageBatch(

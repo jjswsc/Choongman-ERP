@@ -76,6 +76,14 @@ import {
   type PortalTab,
   type PortalVisitRow,
 } from "@/components/member-portal/portal-ui"
+import {
+  MP_CARD_TEXT_MUTED,
+  MP_CARD_TEXT_PRIMARY,
+  MP_CARD_TEXT_SECONDARY,
+  MP_CARD_TEXT_SUBTLE,
+  mpCardSearchInputClass,
+} from "@/lib/member-portal-design"
+import { DEFAULT_MEMBER_PORTAL_UI_THEME, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
 import { mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
@@ -111,6 +119,9 @@ type PublicConfigResponse = {
   appBackgroundUrl?: string
   heroFoodImageUrl?: string
   signupWelcomeCouponEnabled?: boolean
+  textPrimaryColor?: string
+  textSecondaryColor?: string
+  fontScalePct?: number
 }
 
 function applyPublicConfigToState(
@@ -137,6 +148,11 @@ function applyPublicConfigToState(
       loginBackgroundUrl: previewLogin || String(r.loginBackgroundUrl || "").trim(),
       appBackgroundUrl: previewApp || String(r.appBackgroundUrl || "").trim(),
       heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
+    },
+    uiTheme: {
+      textPrimaryColor: String(r.textPrimaryColor || DEFAULT_MEMBER_PORTAL_UI_THEME.textPrimaryColor),
+      textSecondaryColor: String(r.textSecondaryColor || DEFAULT_MEMBER_PORTAL_UI_THEME.textSecondaryColor),
+      fontScalePct: Number(r.fontScalePct) || DEFAULT_MEMBER_PORTAL_UI_THEME.fontScalePct,
     },
     signupWelcomeCouponEnabled: Boolean(r.signupWelcomeCouponEnabled),
   }
@@ -244,6 +260,7 @@ export function MemberPortalApp() {
     appBackgroundUrl: "",
     heroFoodImageUrl: "",
   })
+  const [uiTheme, setUiTheme] = React.useState<MemberPortalUiTheme>(DEFAULT_MEMBER_PORTAL_UI_THEME)
   const [signupWelcomeCouponEnabled, setSignupWelcomeCouponEnabled] = React.useState(false)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
@@ -373,6 +390,7 @@ export function MemberPortalApp() {
           })
           setContactUrls(applied.contactUrls)
           setDesignBackgrounds(applied.designBackgrounds)
+          setUiTheme(applied.uiTheme)
           setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
         })
         .catch(() => {})
@@ -396,6 +414,7 @@ export function MemberPortalApp() {
           } else {
             setDesignBackgrounds(applied.designBackgrounds)
           }
+          setUiTheme(applied.uiTheme)
           setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
         })
         .catch(() => {
@@ -1063,6 +1082,7 @@ export function MemberPortalApp() {
     <MemberPortalAmbienceBackground
       imageUrl={designBackgrounds.appBackgroundUrl}
       heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
+      uiTheme={uiTheme}
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
       <MemberPortalShell embedPreview={embedPreview}>
@@ -1202,20 +1222,20 @@ export function MemberPortalApp() {
             <SectionTitle title={t("locationTitle")} subtitle={t("locationDesc")} />
             <GlassCard soft className="px-3 py-2.5">
               <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-white/45" />
+                <Search className={`h-4 w-4 ${MP_CARD_TEXT_SUBTLE}`} />
                 <Input
                   value={locationSearch}
                   onChange={(e) => setLocationSearch(e.target.value)}
                   placeholder={t("locationSearchPh")}
-                  className="h-9 border-0 bg-transparent px-0 text-sm text-white placeholder:text-white/40 focus-visible:ring-0"
+                  className={mpCardSearchInputClass}
                 />
               </div>
             </GlassCard>
             <div className="space-y-3">
               {filteredStores.length === 0 ? (
                 <GlassCard soft className="px-5 py-14 text-center">
-                  <MapPin className="mx-auto mb-3 h-7 w-7 text-amber-300/80" />
-                  <p className="text-sm text-white/70">
+                  <MapPin className="mx-auto mb-3 h-7 w-7 text-amber-600/80" />
+                  <p className={`text-sm ${MP_CARD_TEXT_SECONDARY}`}>
                     {stores.length === 0 ? t("locationEmpty") : t("locationNoResult")}
                   </p>
                 </GlassCard>
@@ -1238,7 +1258,7 @@ export function MemberPortalApp() {
         {tab === "privilege" && (
           <div className="space-y-3">
             <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
-            <p className="-mt-1 text-xs text-white/40">
+            <p className={`-mt-1 text-xs ${MP_CARD_TEXT_SUBTLE}`}>
               {t("memberNo")} {member.memberNo}
             </p>
             <MemberPortalBenefitStatsGrid
@@ -1264,7 +1284,7 @@ export function MemberPortalApp() {
               />
             ) : null}
             {coupons.length === 0 ? (
-              <GlassCard soft className="px-5 py-12 text-center text-white/45">
+              <GlassCard soft className={`px-5 py-12 text-center ${MP_CARD_TEXT_MUTED}`}>
                 {t("noCoupons")}
               </GlassCard>
             ) : (
@@ -1272,15 +1292,15 @@ export function MemberPortalApp() {
                 <GlassCard key={c.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-mono text-lg tracking-wide text-amber-200">{c.couponCode}</p>
+                      <p className="font-mono text-lg tracking-wide text-amber-700">{c.couponCode}</p>
                       {c.couponName && c.couponName !== c.couponCode ? (
-                        <p className="mt-0.5 text-xs text-white/60">{c.couponName}</p>
+                        <p className={`mt-0.5 text-xs ${MP_CARD_TEXT_SECONDARY}`}>{c.couponName}</p>
                       ) : null}
-                      <p className="mt-1 text-xs text-white/45">
+                      <p className={`mt-1 text-xs ${MP_CARD_TEXT_MUTED}`}>
                         {t("issuedAt")} {formatDateTime(c.issuedAt, dateLocale)}
                       </p>
                       {c.expiresAt || c.validTo ? (
-                        <p className="mt-0.5 text-xs text-white/45">
+                        <p className={`mt-0.5 text-xs ${MP_CARD_TEXT_MUTED}`}>
                           {t("couponExpiresAt")} {formatDateTime(c.expiresAt || c.validTo || "", dateLocale)}
                         </p>
                       ) : null}
@@ -1288,14 +1308,14 @@ export function MemberPortalApp() {
                     <span
                       className={`rounded-full px-3 py-1 text-xs ${
                         c.status === "issued"
-                          ? "bg-emerald-400/15 text-emerald-200"
-                          : "bg-white/10 text-white/50"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-stone-100 text-stone-500"
                       }`}
                     >
                       {memberPortalCouponStatusLabel(lang, c.status)}
                     </span>
                   </div>
-                  <div className="mt-3 grid gap-1 text-xs text-white/65">
+                  <div className={`mt-3 grid gap-1 text-xs ${MP_CARD_TEXT_SECONDARY}`}>
                     <p>
                       {t("couponBenefit")}: {couponBenefitText(c)}
                     </p>
@@ -1335,10 +1355,10 @@ export function MemberPortalApp() {
             <SectionTitle title={t("historyTitle")} subtitle={t("historySub")} />
 
             <div>
-              <h3 className="mb-3 text-sm font-semibold text-white/70">{t("recentOrders")}</h3>
+              <h3 className={`mb-3 text-sm font-semibold ${MP_CARD_TEXT_SECONDARY}`}>{t("recentOrders")}</h3>
               <div className="space-y-2">
                 {visits.length === 0 ? (
-                  <GlassCard soft className="px-5 py-10 text-center text-white/45">
+                  <GlassCard soft className={`px-5 py-10 text-center ${MP_CARD_TEXT_MUTED}`}>
                     {t("noOrders")}
                   </GlassCard>
                 ) : (
@@ -1346,12 +1366,12 @@ export function MemberPortalApp() {
                     <GlassCard key={v.orderId} soft className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-medium">{formatBaht(v.total)}</p>
-                          <p className="text-xs text-white/45">
+                          <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{formatBaht(v.total)}</p>
+                          <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
                             {stores.find((s) => s.storeCode === v.storeCode)?.displayName || t("store")} · {v.orderNo || `#${v.orderId}`}
                           </p>
                         </div>
-                        <p className="text-xs text-white/45">{formatDateTime(v.visitedAt, dateLocale)}</p>
+                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>{formatDateTime(v.visitedAt, dateLocale)}</p>
                       </div>
                     </GlassCard>
                   ))
@@ -1360,10 +1380,10 @@ export function MemberPortalApp() {
             </div>
 
             <div>
-              <h3 className="mb-3 text-sm font-semibold text-white/70">{t("pointsHistory")}</h3>
+              <h3 className={`mb-3 text-sm font-semibold ${MP_CARD_TEXT_SECONDARY}`}>{t("pointsHistory")}</h3>
               <div className="space-y-2">
                 {points.length === 0 ? (
-                  <GlassCard soft className="px-5 py-10 text-center text-white/45">
+                  <GlassCard soft className={`px-5 py-10 text-center ${MP_CARD_TEXT_MUTED}`}>
                     {t("noPoints")}
                   </GlassCard>
                 ) : (
@@ -1371,15 +1391,15 @@ export function MemberPortalApp() {
                     <GlassCard key={p.id} soft className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className={`font-medium ${p.points >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                          <p className={`font-medium ${p.points >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                             {p.points >= 0 ? "+" : ""}
                             {formatPoints(p.points)}
                           </p>
-                          <p className="text-xs text-white/45">
+                          <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
                             {memberPortalPointKindLabel(lang, p.kind)} · {p.note || "-"}
                           </p>
                         </div>
-                        <p className="text-xs text-white/45">{formatDateTime(p.createdAt, dateLocale)}</p>
+                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>{formatDateTime(p.createdAt, dateLocale)}</p>
                       </div>
                     </GlassCard>
                   ))

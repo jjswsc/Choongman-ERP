@@ -35,6 +35,11 @@ import {
   memberPortalImageUploadCatchMessage,
 } from "@/lib/member-portal-content-image-rules"
 import {
+  DEFAULT_MEMBER_PORTAL_UI_THEME,
+  normalizeMemberPortalFontScalePct,
+  normalizeMemberPortalHexColor,
+} from "@/lib/member-portal-theme"
+import {
   uploadMemberPortalContentImageToStorage,
   verifyMemberPortalImagePublicUrl,
   withMemberPortalImageCacheBust,
@@ -59,6 +64,9 @@ export default function CrmMemberAppContentPage() {
   const [deliveryShopeeUrl, setDeliveryShopeeUrl] = React.useState("")
   const [loginBackgroundUrl, setLoginBackgroundUrl] = React.useState("")
   const [appBackgroundUrl, setAppBackgroundUrl] = React.useState("")
+  const [textPrimaryColor, setTextPrimaryColor] = React.useState(DEFAULT_MEMBER_PORTAL_UI_THEME.textPrimaryColor)
+  const [textSecondaryColor, setTextSecondaryColor] = React.useState(DEFAULT_MEMBER_PORTAL_UI_THEME.textSecondaryColor)
+  const [fontScalePct, setFontScalePct] = React.useState(DEFAULT_MEMBER_PORTAL_UI_THEME.fontScalePct)
   const [loading, setLoading] = React.useState(false)
   const [contactSaving, setContactSaving] = React.useState(false)
   const [signupBenefitsSaving, setSignupBenefitsSaving] = React.useState(false)
@@ -187,10 +195,20 @@ export default function CrmMemberAppContentPage() {
         success: boolean
         loginBackgroundUrl?: string
         appBackgroundUrl?: string
+        textPrimaryColor?: string
+        textSecondaryColor?: string
+        fontScalePct?: number
       }
       if (!res.ok || !data.success) return
       setLoginBackgroundUrl(String(data.loginBackgroundUrl || ""))
       setAppBackgroundUrl(String(data.appBackgroundUrl || ""))
+      setTextPrimaryColor(
+        normalizeMemberPortalHexColor(data.textPrimaryColor, DEFAULT_MEMBER_PORTAL_UI_THEME.textPrimaryColor)
+      )
+      setTextSecondaryColor(
+        normalizeMemberPortalHexColor(data.textSecondaryColor, DEFAULT_MEMBER_PORTAL_UI_THEME.textSecondaryColor)
+      )
+      setFontScalePct(normalizeMemberPortalFontScalePct(data.fontScalePct))
     } catch {
       /* ignore */
     }
@@ -583,27 +601,56 @@ export default function CrmMemberAppContentPage() {
   }, [loadPrepaySettings, pickupLineNotifyEnabled, pickupMinLeadMinutes, pickupStoreMinLead, t])
 
   const persistDesignSettings = React.useCallback(
-    async (urls: { loginBackgroundUrl: string; appBackgroundUrl: string }) => {
+    async (payload: {
+      loginBackgroundUrl: string
+      appBackgroundUrl: string
+      textPrimaryColor: string
+      textSecondaryColor: string
+      fontScalePct: number
+    }) => {
       const res = await apiFetch("/api/member-portal/admin/settings/design", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(urls),
+        body: JSON.stringify(payload),
       })
       const data = (await res.json()) as {
         success: boolean
         message?: string
         loginBackgroundUrl?: string
         appBackgroundUrl?: string
+        textPrimaryColor?: string
+        textSecondaryColor?: string
+        fontScalePct?: number
       }
       if (!res.ok || !data.success) {
         throw new Error(data.message || t("mpAdmin_errDesignSave"))
       }
       return {
-        loginBackgroundUrl: String(data.loginBackgroundUrl ?? urls.loginBackgroundUrl ?? ""),
-        appBackgroundUrl: String(data.appBackgroundUrl ?? urls.appBackgroundUrl ?? ""),
+        loginBackgroundUrl: String(data.loginBackgroundUrl ?? payload.loginBackgroundUrl ?? ""),
+        appBackgroundUrl: String(data.appBackgroundUrl ?? payload.appBackgroundUrl ?? ""),
+        textPrimaryColor: normalizeMemberPortalHexColor(
+          data.textPrimaryColor,
+          payload.textPrimaryColor
+        ),
+        textSecondaryColor: normalizeMemberPortalHexColor(
+          data.textSecondaryColor,
+          payload.textSecondaryColor
+        ),
+        fontScalePct: normalizeMemberPortalFontScalePct(data.fontScalePct ?? payload.fontScalePct),
       }
     },
     [t]
+  )
+
+  const currentDesignPayload = React.useCallback(
+    () => ({
+      loginBackgroundUrl,
+      appBackgroundUrl,
+      textPrimaryColor,
+      textSecondaryColor,
+      fontScalePct,
+    }),
+    [appBackgroundUrl, fontScalePct, loginBackgroundUrl, textPrimaryColor, textSecondaryColor]
   )
 
   const saveDesignSettings = React.useCallback(async () => {
@@ -611,9 +658,12 @@ export default function CrmMemberAppContentPage() {
     setError("")
     setNotice("")
     try {
-      const saved = await persistDesignSettings({ loginBackgroundUrl, appBackgroundUrl })
+      const saved = await persistDesignSettings(currentDesignPayload())
       setLoginBackgroundUrl(saved.loginBackgroundUrl)
       setAppBackgroundUrl(saved.appBackgroundUrl)
+      setTextPrimaryColor(saved.textPrimaryColor)
+      setTextSecondaryColor(saved.textSecondaryColor)
+      setFontScalePct(saved.fontScalePct)
       setNotice(t("mpAdmin_noticeDesignSaved"))
       setPreviewReloadKey((k) => k + 1)
       setImagePreviewNonce((n) => n + 1)
@@ -622,7 +672,7 @@ export default function CrmMemberAppContentPage() {
     } finally {
       setDesignSaving(false)
     }
-  }, [appBackgroundUrl, loginBackgroundUrl, persistDesignSettings, t])
+  }, [currentDesignPayload, persistDesignSettings, t])
 
   const uploadDesignImage = React.useCallback(async (file: File, target: "login" | "app") => {
     setUploading(true)
@@ -661,6 +711,9 @@ export default function CrmMemberAppContentPage() {
       const saved = await persistDesignSettings({
         loginBackgroundUrl: nextLogin,
         appBackgroundUrl: nextApp,
+        textPrimaryColor,
+        textSecondaryColor,
+        fontScalePct,
       })
       setLoginBackgroundUrl(saved.loginBackgroundUrl)
       setAppBackgroundUrl(saved.appBackgroundUrl)
@@ -680,7 +733,7 @@ export default function CrmMemberAppContentPage() {
     } finally {
       setUploading(false)
     }
-  }, [appBackgroundUrl, loginBackgroundUrl, persistDesignSettings, t])
+  }, [currentDesignPayload, persistDesignSettings, t])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -825,6 +878,70 @@ export default function CrmMemberAppContentPage() {
                       />
                     ) : null}
                   </div>
+                </div>
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm font-medium">{t("mpAdmin_themeTitle")}</p>
+                    <p className="text-xs text-muted-foreground">{t("mpAdmin_themeDesc")}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mp-text-primary">{t("mpAdmin_themeTextPrimary")}</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="mp-text-primary"
+                          type="color"
+                          value={textPrimaryColor}
+                          onChange={(e) => setTextPrimaryColor(normalizeMemberPortalHexColor(e.target.value, textPrimaryColor))}
+                          className="h-10 w-14 shrink-0 cursor-pointer p-1"
+                        />
+                        <Input
+                          value={textPrimaryColor}
+                          onChange={(e) => setTextPrimaryColor(normalizeMemberPortalHexColor(e.target.value, textPrimaryColor))}
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mp-text-secondary">{t("mpAdmin_themeTextSecondary")}</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="mp-text-secondary"
+                          type="color"
+                          value={textSecondaryColor}
+                          onChange={(e) => setTextSecondaryColor(normalizeMemberPortalHexColor(e.target.value, textSecondaryColor))}
+                          className="h-10 w-14 shrink-0 cursor-pointer p-1"
+                        />
+                        <Input
+                          value={textSecondaryColor}
+                          onChange={(e) => setTextSecondaryColor(normalizeMemberPortalHexColor(e.target.value, textSecondaryColor))}
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mp-font-scale">{t("mpAdmin_themeFontScale")}</Label>
+                      <Input
+                        id="mp-font-scale"
+                        type="number"
+                        min={90}
+                        max={130}
+                        step={5}
+                        value={fontScalePct}
+                        onChange={(e) => setFontScalePct(normalizeMemberPortalFontScalePct(e.target.value))}
+                      />
+                      <p className="text-xs text-muted-foreground">{t("mpAdmin_themeFontScaleHint")}</p>
+                    </div>
+                  </div>
+                  <p
+                    className="rounded-lg border bg-white px-3 py-2 text-sm"
+                    style={{ color: textPrimaryColor, fontSize: `${fontScalePct}%` }}
+                  >
+                    {t("mpAdmin_themePreviewSample")}
+                    <span className="block text-xs" style={{ color: textSecondaryColor }}>
+                      {t("mpAdmin_themePreviewSubSample")}
+                    </span>
+                  </p>
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => saveDesignSettings()} disabled={designSaving || uploading || !canEdit}>

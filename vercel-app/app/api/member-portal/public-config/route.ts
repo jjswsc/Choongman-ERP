@@ -1,6 +1,12 @@
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getSignupWelcomeCouponCode } from '@/lib/member-portal-signup-welcome-coupon'
 import { memberPortalSettingsJsonResponse } from '@/lib/member-portal-settings-route'
+import {
+  KEY_THEME_FONT_SCALE,
+  KEY_THEME_TEXT_PRIMARY,
+  KEY_THEME_TEXT_SECONDARY,
+  parseMemberPortalUiThemeFromMap,
+} from '@/lib/member-portal-theme'
 import { readSystemSettingString } from '@/lib/system-settings-value'
 import {
   loadMemberPortalPrepayConfig,
@@ -18,25 +24,36 @@ const KEY_LINE_OFFICIAL = 'member_portal_contact_line_official_url'
 const KEY_LOGIN_BG = 'member_portal_login_background_url'
 const KEY_APP_BG = 'member_portal_app_background_url'
 
+const CONFIG_KEYS = [
+  KEY_FACEBOOK,
+  KEY_INSTAGRAM,
+  KEY_LINE_OFFICIAL,
+  KEY_LOGIN_BG,
+  KEY_APP_BG,
+  KEY_THEME_TEXT_PRIMARY,
+  KEY_THEME_TEXT_SECONDARY,
+  KEY_THEME_FONT_SCALE,
+] as const
+
 export async function GET() {
   const brand = await getServerAppBrandConfig()
   try {
-    const filter = `or=(key.eq.${KEY_FACEBOOK},key.eq.${KEY_INSTAGRAM},key.eq.${KEY_LINE_OFFICIAL},key.eq.${KEY_LOGIN_BG},key.eq.${KEY_APP_BG})`
+    const filter = `or=(${CONFIG_KEYS.map((k) => `key.eq.${k}`).join(',')})`
     const rows = (await supabaseSelectFilter('system_settings', filter, {
-      limit: 10,
+      limit: 12,
       select: 'key,value_json',
     })) as { key?: string; value_json?: unknown }[]
 
     const map = new Map<string, string>()
     for (const row of rows || []) {
       const key = String(row.key || '').trim()
-      const value = readSystemSettingString(row.value_json)
-      if (!key || !value) continue
-      map.set(key, value)
+      if (!key) continue
+      map.set(key, readSystemSettingString(row.value_json))
     }
 
     const prepayConfig = await loadMemberPortalPrepayConfig()
     const pickupMinLeadMinutes = await resolveMemberPortalPickupMinLeadMinutes()
+    const theme = parseMemberPortalUiThemeFromMap(map)
 
     return memberPortalSettingsJsonResponse({
       success: true,
@@ -46,12 +63,16 @@ export async function GET() {
       loginBackgroundUrl: map.get(KEY_LOGIN_BG) || '',
       appBackgroundUrl: map.get(KEY_APP_BG) || '',
       heroFoodImageUrl: '',
+      textPrimaryColor: theme.textPrimaryColor,
+      textSecondaryColor: theme.textSecondaryColor,
+      fontScalePct: theme.fontScalePct,
       signupWelcomeCouponEnabled: Boolean(await getSignupWelcomeCouponCode()),
       prepayEnabled: prepayConfig.enabled,
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
       pickupMinLeadMinutes,
     })
   } catch {
+    const theme = parseMemberPortalUiThemeFromMap(new Map())
     return memberPortalSettingsJsonResponse({
       success: true,
       facebookUrl: brand.memberContactFacebookUrl,
@@ -60,6 +81,9 @@ export async function GET() {
       loginBackgroundUrl: '',
       appBackgroundUrl: '',
       heroFoodImageUrl: '',
+      textPrimaryColor: theme.textPrimaryColor,
+      textSecondaryColor: theme.textSecondaryColor,
+      fontScalePct: theme.fontScalePct,
       signupWelcomeCouponEnabled: false,
       prepayEnabled: String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1',
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,

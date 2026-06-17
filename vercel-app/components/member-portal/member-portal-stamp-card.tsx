@@ -4,6 +4,12 @@ import * as React from "react"
 import { Gift, History, Stamp, X } from "lucide-react"
 import { createPortal } from "react-dom"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
+import {
+  MP_CARD_TEXT_MUTED,
+  MP_CARD_TEXT_PRIMARY,
+  MP_CARD_TEXT_SECONDARY,
+  MP_CARD_TEXT_SUBTLE,
+} from "@/lib/member-portal-design"
 import type { LangCode } from "@/lib/lang-context"
 import { memberPortalT } from "@/lib/member-portal-i18n"
 import type { MemberStampCardStatus, MemberStampHistoryRow } from "@/lib/member-stamp-card"
@@ -259,7 +265,7 @@ export function MemberPortalStampCard({ lang, memberId, status, loading, compact
 
   if (loading) {
     return (
-      <GlassCard soft className="px-5 py-8 text-center text-sm text-white/45">
+      <GlassCard soft className={`px-5 py-8 text-center text-sm ${MP_CARD_TEXT_MUTED}`}>
         …
       </GlassCard>
     )
@@ -281,20 +287,20 @@ export function MemberPortalStampCard({ lang, memberId, status, loading, compact
     <>
       <GlassCard className={compact ? "p-4" : undefined}>
         <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-200">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
             <Stamp className="h-5 w-5" aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-white">{t("stampCardTitle")}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-white/50">{t("stampCardDesc")}</p>
+                <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("stampCardTitle")}</p>
+                <p className={`mt-0.5 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("stampCardDesc")}</p>
               </div>
               {!compact ? (
                 <button
                   type="button"
                   onClick={() => setHistoryOpen((v) => !v)}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60"
+                  className={`inline-flex items-center gap-1 rounded-full border border-stone-200 px-2.5 py-1 text-[11px] ${MP_CARD_TEXT_SECONDARY}`}
                 >
                   <History className="h-3.5 w-3.5" />
                   {t("stampHistoryBtn")}
@@ -302,31 +308,31 @@ export function MemberPortalStampCard({ lang, memberId, status, loading, compact
               ) : null}
             </div>
             {status.cardExpiresAt ? (
-              <p className="mt-1 text-[11px] text-amber-100/60">
+              <p className="mt-1 text-[11px] text-amber-800/70">
                 {t("stampExpiresAt").replace("{date}", status.cardExpiresAt)}
               </p>
             ) : null}
             {status.cardSequence > 1 ? (
-              <p className="mt-0.5 text-[11px] text-white/35">
+              <p className={`mt-0.5 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
                 {t("stampCardSequence").replace("{n}", String(status.cardSequence))}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div className="mb-2 h-2 overflow-hidden rounded-full bg-white/10">
+        <div className="mb-2 h-2 overflow-hidden rounded-full bg-stone-200/80">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-amber-300/80 to-amber-500 transition-all duration-700 ease-out"
+            className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-700 ease-out"
             style={{ width: `${status.progressPercent}%` }}
           />
         </div>
 
         <div className="mb-3 flex items-end justify-between gap-2">
-          <p className="text-sm text-white/70">
+          <p className={`text-sm ${MP_CARD_TEXT_SECONDARY}`}>
             {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
           </p>
           {status.totalEarned > 0 ? (
-            <p className="text-xs text-white/40">
+            <p className={`text-xs ${MP_CARD_TEXT_SUBTLE}`}>
               {t("stampTotalEarned").replace("{count}", String(status.totalEarned))}
             </p>
           ) : null}

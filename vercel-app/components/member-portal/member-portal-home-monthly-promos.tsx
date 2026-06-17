@@ -3,6 +3,7 @@
 import * as React from "react"
 import { ChevronLeft, ChevronRight, Sparkles, UtensilsCrossed, type LucideIcon } from "lucide-react"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
+import { MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE } from "@/lib/member-portal-design"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 import {
@@ -21,14 +22,14 @@ const HOME_CONTENT_ACCENT: Record<
   { icon: string; badge: string; stripe: string; cardHover: string }
 > = {
   promo: {
-    icon: "text-amber-200",
-    badge: "border-amber-400/20 bg-gradient-to-br from-amber-400/18 to-amber-600/5",
+    icon: "text-amber-700",
+    badge: "border-amber-400/30 bg-amber-50 text-amber-900",
     stripe: "from-amber-300/75 via-amber-400/35 to-transparent",
     cardHover: "hover:border-amber-300/30",
   },
   newMenu: {
-    icon: "text-emerald-200",
-    badge: "border-emerald-400/20 bg-gradient-to-br from-emerald-400/18 to-emerald-600/5",
+    icon: "text-emerald-700",
+    badge: "border-emerald-400/30 bg-emerald-50 text-emerald-900",
     stripe: "from-emerald-300/75 via-emerald-400/35 to-transparent",
     cardHover: "hover:border-emerald-300/30",
   },
@@ -106,7 +107,7 @@ export function MemberPortalHomeContentMonthCarousel({
           >
             <HeaderIcon className={`h-3 w-3 ${accentStyle.icon}`} aria-hidden />
           </span>
-          <p className="truncate text-[13px] font-semibold tracking-tight text-white">{t(titleKey)}</p>
+          <p className={`truncate text-[13px] font-semibold tracking-tight ${MP_CARD_TEXT_PRIMARY}`}>{t(titleKey)}</p>
         </div>
         <div className="flex shrink-0 items-center rounded-full border border-white/[0.08] bg-white/[0.04] p-0.5">
           <button
@@ -375,38 +376,38 @@ export function MemberPortalHomePromosAndMenus({
                 aria-pressed={isActive}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                   isActive
-                    ? `${tabAccent.badge} text-white`
-                    : "border-transparent bg-transparent text-white/50 hover:bg-white/[0.04] hover:text-white/75"
+                    ? `${tabAccent.badge}`
+                    : `border-transparent bg-transparent ${MP_CARD_TEXT_MUTED} hover:bg-stone-100/90 hover:text-[color:var(--mp-text-primary,#1c1917)]`
                 }`}
               >
-                <TabIcon className={`h-3 w-3 ${isActive ? tabAccent.icon : "text-white/45"}`} aria-hidden />
+                <TabIcon className={`h-3 w-3 ${isActive ? tabAccent.icon : MP_CARD_TEXT_SUBTLE}`} aria-hidden />
                 <span>{t(config.titleKey)}</span>
               </button>
             )
           })}
         </div>
-        <div className="flex shrink-0 items-center rounded-full border border-white/[0.08] bg-white/[0.04] p-0.5">
+        <div className="flex shrink-0 items-center rounded-full border border-stone-200/80 bg-stone-50/90 p-0.5">
           <button
             type="button"
             onClick={() => setYearMonth((ym) => shiftBangkokYearMonth(ym, -1))}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+            className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${MP_CARD_TEXT_MUTED} transition hover:bg-stone-200/60 hover:text-[color:var(--mp-text-primary,#1c1917)]`}
             aria-label={t("homePromoPrevMonth")}
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <span
-            className="inline-flex min-w-[4.25rem] items-center justify-center gap-1 px-1.5 text-[11px] font-medium tabular-nums text-white/80"
+            className={`inline-flex min-w-[4.25rem] items-center justify-center gap-1 px-1.5 text-[11px] font-medium tabular-nums ${MP_CARD_TEXT_SECONDARY}`}
             title={isCurrentMonth ? t(tabConfig.thisMonthKey) : monthLabel}
           >
             {isCurrentMonth ? (
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.55)]" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.45)]" />
             ) : null}
             {monthLabel}
           </span>
           <button
             type="button"
             onClick={() => setYearMonth((ym) => shiftBangkokYearMonth(ym, 1))}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+            className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${MP_CARD_TEXT_MUTED} transition hover:bg-stone-200/60 hover:text-[color:var(--mp-text-primary,#1c1917)]`}
             aria-label={t("homePromoNextMonth")}
           >
             <ChevronRight className="h-3.5 w-3.5" />

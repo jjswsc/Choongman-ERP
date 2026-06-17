@@ -19,22 +19,28 @@ import {
   mpGlassCardSoft,
   mpGlassInset,
 } from "@/lib/member-portal-design"
+import { memberPortalUiThemeStyle, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
 import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import type { PortalTab } from "@/components/member-portal/portal-ui"
 
 export function MemberPortalAmbienceBackground({
   imageUrl,
   heroFoodImageUrl,
+  uiTheme,
   children,
   className = "",
 }: {
   imageUrl?: string
   heroFoodImageUrl?: string
+  uiTheme?: Partial<MemberPortalUiTheme>
   children: React.ReactNode
   className?: string
 }) {
   return (
-    <div className={`relative min-h-[100dvh] overflow-x-hidden ${MP_PAGE_BG_CLASS} ${MP_TEXT_PRIMARY} ${className}`}>
+    <div
+      className={`relative min-h-[100dvh] overflow-x-hidden ${MP_PAGE_BG_CLASS} ${MP_TEXT_PRIMARY} ${className}`}
+      style={memberPortalUiThemeStyle(uiTheme || {})}
+    >
       <MemberPortalLoungeBackdrop
         className="fixed"
         customFullBackgroundUrl={imageUrl}

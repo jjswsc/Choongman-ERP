@@ -17,13 +17,31 @@ export const MEMBER_PORTAL_BG_STYLE = {
 
 export const MP_MAX_WIDTH = 'max-w-[430px]'
 
-/** 페이지 배경·본문 텍스트 — 화사한 웜 라이트 톤 */
+/** 페이지 배경·본문 텍스트 — 화사한 웜 라이트 톤 (관리자 CSS 변수로 오버라이드 가능) */
 export const MP_PAGE_BG = '#faf7f2'
 export const MP_PAGE_BG_CLASS = 'bg-[#faf7f2]'
-export const MP_TEXT_PRIMARY = 'text-stone-900'
-export const MP_TEXT_SECONDARY = 'text-stone-600'
+export const MP_TEXT_PRIMARY = 'text-[color:var(--mp-text-primary,#1c1917)]'
+export const MP_TEXT_SECONDARY = 'text-[color:var(--mp-text-secondary,#57534e)]'
 export const MP_TEXT_MUTED = 'text-stone-500'
 export const MP_TEXT_SUBTLE = 'text-stone-400'
+
+/** 밝은 GlassCard 위 본문 — 기존 text-white 대신 사용 (흰 카드 가독성) */
+export const MP_CARD_TEXT_PRIMARY = MP_TEXT_PRIMARY
+export const MP_CARD_TEXT_SECONDARY = MP_TEXT_SECONDARY
+export const MP_CARD_TEXT_MUTED = 'text-stone-500'
+export const MP_CARD_TEXT_SUBTLE = 'text-stone-400'
+
+export const mpCardSearchInputClass =
+  'h-9 border-0 bg-transparent px-0 text-sm text-[color:var(--mp-text-primary,#1c1917)] placeholder:text-stone-400 focus-visible:ring-0'
+
+export const mpCardListItemClass =
+  'rounded-2xl border border-stone-200/80 bg-stone-50/90 px-3 py-2.5 text-sm'
+
+export const mpCardGhostBtnClass =
+  'inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white text-sm font-medium text-[color:var(--mp-text-primary,#1c1917)] transition hover:bg-stone-50'
+
+export const mpCardGhostBtnActiveClass =
+  'inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-300/50 bg-amber-50 text-sm font-medium text-amber-900 transition'
 
 /** 하단 탭 네비 고정 시 본문·플로팅 버튼 여백 (safe-area 포함) */
 export const MP_BOTTOM_NAV_CLEARANCE =

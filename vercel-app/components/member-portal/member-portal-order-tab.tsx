@@ -30,7 +30,7 @@ import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { formatBaht, formatDateTime } from "@/components/member-portal/portal-ui"
 import { memberPortalOrderStatusLabelKey } from "@/lib/member-portal-orders-list-shared"
-import { mpGlassCard, mpGlassCardSoft } from "@/lib/member-portal-design"
+import { mpGlassCard, mpGlassCardSoft, MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE, mpCardListItemClass, mpCardSearchInputClass } from "@/lib/member-portal-design"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { isBanbanMenu } from "@/lib/pos-banban-utils"
@@ -953,8 +953,8 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
     return (
       <div className="space-y-4">
         <div>
-          <h2 className="text-lg font-semibold">{t("orderTitle")}</h2>
-          <p className="text-sm text-white/45">{t("orderDesc")}</p>
+          <h2 className={`text-lg font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderTitle")}</h2>
+          <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("orderDesc")}</p>
         </div>
         {!!orderMessage && (
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
@@ -970,11 +970,11 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
           </div>
         ) : null}
         <div className={`${mpGlassCardSoft} p-4`}>
-          <h3 className="text-sm font-semibold text-white/80">{t("orderMyOrdersTitle")}</h3>
+          <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderMyOrdersTitle")}</h3>
           {myOrdersLoading ? (
-            <p className="mt-3 text-sm text-white/45">{t("loginChecking")}</p>
+            <p className={`mt-3 text-sm ${MP_CARD_TEXT_MUTED}`}>{t("loginChecking")}</p>
           ) : myOrders.length === 0 ? (
-            <p className="mt-3 text-sm text-white/45">{t("orderMyOrdersEmpty")}</p>
+            <p className={`mt-3 text-sm ${MP_CARD_TEXT_MUTED}`}>{t("orderMyOrdersEmpty")}</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {myOrders.map((row) => {
@@ -982,24 +982,21 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
                 const storeLabel =
                   stores.find((s) => s.storeCode === row.storeCode)?.displayName || row.storeCode
                 return (
-                  <li
-                    key={row.orderId}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm"
-                  >
+                  <li key={row.orderId} className={mpCardListItemClass}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium text-white/90">{storeLabel}</p>
-                        <p className="text-xs text-white/45">
+                        <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{storeLabel}</p>
+                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
                           {row.orderNo}
                           {row.pickupHint ? ` · ${row.pickupHint}` : ""}
                         </p>
-                        <p className="text-[11px] text-white/35">
+                        <p className={`text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
                           {formatDateTime(row.createdAt, dateLocale)}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="font-semibold tabular-nums text-amber-200">{formatBaht(row.total)}</p>
-                        <p className="text-[11px] text-white/50">{t(statusKey)}</p>
+                        <p className="font-semibold tabular-nums text-amber-700">{formatBaht(row.total)}</p>
+                        <p className={`text-[11px] ${MP_CARD_TEXT_MUTED}`}>{t(statusKey)}</p>
                       </div>
                     </div>
                     {row.awaitingPayment ? (
@@ -1013,7 +1010,7 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
                     ) : row.paymentExpired ? (
                       <button
                         type="button"
-                        className="mt-2 w-full rounded-xl border border-white/20 py-2 text-xs font-semibold text-white/90"
+                        className={`mt-2 w-full rounded-xl border border-stone-300 py-2 text-xs font-semibold ${MP_CARD_TEXT_PRIMARY}`}
                         onClick={() => void handleReorder(row)}
                       >
                         {t("orderCheckoutRestoreCart")}
@@ -1021,7 +1018,7 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
                     ) : !row.awaitingPayment && row.status !== "cancelled" && row.status !== "canceled" ? (
                       <button
                         type="button"
-                        className="mt-2 w-full rounded-xl border border-white/15 py-2 text-xs font-medium text-white/70"
+                        className={`mt-2 w-full rounded-xl border border-stone-200 py-2 text-xs font-medium ${MP_CARD_TEXT_SECONDARY}`}
                         onClick={() => void handleReorder(row)}
                       >
                         {t("orderMyOrdersReorder")}
@@ -1043,27 +1040,27 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
             className="rounded-3xl border border-amber-400/25 bg-gradient-to-br from-amber-400/15 to-transparent p-5 text-left transition hover:border-amber-400/40"
           >
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-200">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-700">
                 <Store className="h-5 w-5" />
               </div>
               <div>
-                <p className="font-semibold text-amber-50">{t("orderPickupBtn")}</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/50">{t("orderPickupHubDesc")}</p>
+                <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderPickupBtn")}</p>
+                <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("orderPickupHubDesc")}</p>
               </div>
             </div>
           </button>
           <button
             type="button"
             onClick={() => setView("delivery")}
-            className={`${mpGlassCardSoft} p-5 text-left transition hover:border-white/15`}
+            className={`${mpGlassCardSoft} p-5 text-left transition hover:border-stone-300/80`}
           >
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-white/80">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-stone-700">
                 <ShoppingBag className="h-5 w-5" />
               </div>
               <div>
-                <p className="font-semibold">{t("orderDeliveryBtn")}</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/50">{t("orderDeliveryHubDesc")}</p>
+                <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderDeliveryBtn")}</p>
+                <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("orderDeliveryHubDesc")}</p>
               </div>
             </div>
           </button>
