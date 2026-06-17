@@ -12,9 +12,13 @@ function isMissingContentTableError(e: unknown): boolean {
 function normalizeBangkokDateTimeInput(raw: unknown): string | null {
   const v = String(raw || '').trim()
   if (!v) return null
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T00:00:00+07:00`
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) return `${v}:00+07:00`
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) return `${v}+07:00`
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v} 00:00:00`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) {
+    const [datePart, timePart] = v.split('T')
+    return `${datePart} ${timePart}:00`
+  }
+  const withTime = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+  if (withTime) return `${withTime[1]} ${withTime[2]}`
   return v
 }
 

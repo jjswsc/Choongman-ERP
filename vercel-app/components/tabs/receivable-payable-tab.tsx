@@ -1008,7 +1008,7 @@ export function ReceivablePayableTab() {
           r.ref_type === "AccountingPO" ||
           r.ref_type === "ForceOutbound"
       )
-    return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO" || r.ref_type === "Inbound")
+    return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "Inbound")
   }
 
   const getCumulativeBalanceForItem = React.useCallback(

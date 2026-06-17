@@ -1,4 +1,8 @@
-import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import {
+  getBangkokDateTimeString,
+  isBangkokDateTimeAfter,
+  isBangkokDateTimeBefore,
+} from '@/lib/bangkok-time'
 import type { LangCode } from '@/lib/lang-context'
 import {
   MEMBER_PORTAL_HOME_NEW_MENU_TARGET_TAB,
@@ -167,8 +171,8 @@ export function resolveMemberPortalContentDisplayStatus(
   nowIso = getBangkokDateTimeString()
 ): MemberPortalContentDisplayStatus {
   if (!item.isActive) return 'paused'
-  if (item.startsAt && item.startsAt > nowIso) return 'scheduled'
-  if (item.endsAt && item.endsAt < nowIso) return 'expired'
+  if (item.startsAt && isBangkokDateTimeAfter(item.startsAt, nowIso)) return 'scheduled'
+  if (item.endsAt && isBangkokDateTimeBefore(item.endsAt, nowIso)) return 'expired'
   return 'live'
 }
 

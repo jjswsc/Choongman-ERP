@@ -1,9 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Copy, Eye, ImageIcon, Loader2, Pencil, Search, Trash2 } from "lucide-react"
+import { Copy, Eye, ImageIcon, Loader2, Pencil, Power, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -61,6 +67,39 @@ type MemberPortalContentAdminListProps = {
 
 function formatUpdatedAt(raw: string, lang: LangCode): string {
   return formatMemberPortalAdminUpdatedAt(raw, lang)
+}
+
+function ActionIconButton({
+  label,
+  onClick,
+  disabled,
+  children,
+  className,
+}: {
+  label: string
+  onClick?: () => void
+  disabled?: boolean
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className={cn("h-8 w-8 shrink-0", className)}
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 export function MemberPortalContentAdminList({
@@ -148,7 +187,7 @@ export function MemberPortalContentAdminList({
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card">
-          <div className="hidden border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1.6fr)_5.5rem_6.5rem_9rem_3rem_5.5rem_7rem] lg:gap-3">
+          <div className="hidden border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1.05fr)_4.75rem_5.25rem_minmax(7rem,8.25rem)_2.25rem_minmax(4.25rem,4.75rem)_auto] lg:gap-2 xl:gap-3">
             <span>{t("mpAdmin_colContent")}</span>
             <span>{t("mpAdmin_colType")}</span>
             <span>{t("mpAdmin_colStatus")}</span>
@@ -157,6 +196,7 @@ export function MemberPortalContentAdminList({
             <span>{t("mpAdmin_colUpdated")}</span>
             <span className="text-right">{t("mpAdmin_colActions")}</span>
           </div>
+          <TooltipProvider delayDuration={200}>
           <ul className="divide-y">
             {filtered.map((item) => {
               const category = memberPortalContentAdminCategory(item)
@@ -169,15 +209,15 @@ export function MemberPortalContentAdminList({
               return (
                 <li
                   key={item.contentKey}
-                  className="flex flex-col gap-3 px-4 py-3 transition hover:bg-muted/20 lg:grid lg:grid-cols-[minmax(0,1.6fr)_5.5rem_6.5rem_9rem_3rem_5.5rem_7rem] lg:items-center lg:gap-3"
+                  className="flex flex-col gap-3 px-4 py-3 transition hover:bg-muted/20 lg:grid lg:grid-cols-[minmax(0,1.05fr)_4.75rem_5.25rem_minmax(7rem,8.25rem)_2.25rem_minmax(4.25rem,4.75rem)_auto] lg:items-center lg:gap-2 xl:gap-3"
                 >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-muted">
                       {item.imageUrl ? (
                         <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                          <ImageIcon className="h-5 w-5" />
+                          <ImageIcon className="h-4 w-4" />
                         </div>
                       )}
                     </div>
@@ -194,9 +234,9 @@ export function MemberPortalContentAdminList({
                         {item.title || t("mpAdmin_noTitle")}
                       </button>
                       {item.body ? (
-                        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.body}</p>
+                        <p className="mt-0.5 line-clamp-1 text-xs leading-relaxed text-muted-foreground lg:hidden">{item.body}</p>
                       ) : (
-                        <p className="mt-0.5 text-xs text-muted-foreground/70">{t("mpAdmin_noBody")}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground/70 lg:hidden">{t("mpAdmin_noBody")}</p>
                       )}
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 lg:hidden">
                         <span
@@ -255,73 +295,81 @@ export function MemberPortalContentAdminList({
                     {item.updatedBy ? <p className="mt-0.5 truncate text-[10px]">{item.updatedBy}</p> : null}
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-end gap-1.5">
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setPreviewItem(item)}>
-                      <Eye className="mr-1 h-3.5 w-3.5" />
-                      {t("mpAdmin_preview")}
-                    </Button>
+                  <div className="flex shrink-0 flex-nowrap items-center justify-end gap-0.5">
+                    <ActionIconButton label={t("mpAdmin_preview")} onClick={() => setPreviewItem(item)}>
+                      <Eye className="h-4 w-4" />
+                    </ActionIconButton>
                     {canEdit ? (
                       <>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => onEdit(item.contentKey)}>
-                          <Pencil className="mr-1 h-3.5 w-3.5" />
-                          {t("mpAdmin_edit")}
-                        </Button>
+                        <ActionIconButton label={t("mpAdmin_edit")} onClick={() => onEdit(item.contentKey)}>
+                          <Pencil className="h-4 w-4" />
+                        </ActionIconButton>
                         {onDuplicate ? (
-                          <Button type="button" size="sm" variant="ghost" onClick={() => onDuplicate(item.contentKey)}>
-                            <Copy className="mr-1 h-3.5 w-3.5" />
-                            {t("mpAdmin_duplicate")}
-                          </Button>
+                          <ActionIconButton label={t("mpAdmin_duplicate")} onClick={() => onDuplicate(item.contentKey)}>
+                            <Copy className="h-4 w-4" />
+                          </ActionIconButton>
                         ) : null}
-                        <button
-                          type="button"
-                          disabled={toggling}
-                          onClick={() => onToggleActive(item.contentKey)}
-                          className={cn(
-                            "inline-flex min-w-[4.75rem] items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
-                            item.isActive
-                              ? "border-[#06c755] bg-[#06c755]/10 text-[#06c755] hover:bg-[#06c755]/15"
-                              : "border-muted-foreground/30 bg-muted/40 text-muted-foreground hover:bg-muted"
-                          )}
-                        >
-                          {toggling ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : item.isActive ? (
-                            t("mpAdmin_active")
-                          ) : (
-                            t("mpAdmin_statusPaused")
-                          )}
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              disabled={toggling}
+                              onClick={() => onToggleActive(item.contentKey)}
+                              aria-label={item.isActive ? t("mpAdmin_active") : t("mpAdmin_statusPaused")}
+                              className={cn(
+                                "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition",
+                                item.isActive
+                                  ? "border-[#06c755] bg-[#06c755]/10 text-[#06c755] hover:bg-[#06c755]/15"
+                                  : "border-muted-foreground/30 bg-muted/40 text-muted-foreground hover:bg-muted"
+                              )}
+                            >
+                              {toggling ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Power className="h-4 w-4" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {item.isActive ? t("mpAdmin_active") : t("mpAdmin_statusPaused")}
+                          </TooltipContent>
+                        </Tooltip>
                         {onDelete ? (
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
+                          <ActionIconButton
+                            label={t("delete")}
                             disabled={deleting}
                             onClick={() => onDelete(item.contentKey)}
-                            aria-label={t("delete")}
+                            className="text-destructive hover:text-destructive"
                           >
                             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
+                          </ActionIconButton>
                         ) : null}
                       </>
                     ) : (
-                      <span
-                        className={cn(
-                          "inline-flex min-w-[4.75rem] items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-                          item.isActive
-                            ? "border-[#06c755]/30 bg-[#06c755]/5 text-[#06c755]"
-                            : "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
-                        )}
-                      >
-                        {item.isActive ? t("mpAdmin_active") : t("mpAdmin_statusPaused")}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            className={cn(
+                              "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border",
+                              item.isActive
+                                ? "border-[#06c755]/30 bg-[#06c755]/5 text-[#06c755]"
+                                : "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+                            )}
+                          >
+                            <Power className="h-4 w-4" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {item.isActive ? t("mpAdmin_active") : t("mpAdmin_statusPaused")}
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                   </div>
                 </li>
               )
             })}
           </ul>
+          </TooltipProvider>
         </div>
       )}
 

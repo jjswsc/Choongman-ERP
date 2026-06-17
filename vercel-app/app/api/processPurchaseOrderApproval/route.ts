@@ -1,7 +1,8 @@
 /**
  * 본사 발주(PO) 승인 API
  * - status: Draft → Approved
- * - 물류·일반 매입: 미지급(ref PO). 회계 전용 cart_json: 미수(ref AccountingPO), 미지급 없음
+ * - 물류·일반 매입: 미지급은 입고(Inbound) 시 생성. 발주 승인 시 PO 미지급 행은 만들지 않음(레거시 정리만).
+ * - 회계 전용 cart_json: 미수(ref AccountingPO), 미지급 없음
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'

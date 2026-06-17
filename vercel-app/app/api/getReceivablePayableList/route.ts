@@ -4,7 +4,7 @@
  * - storeFilter / vendorFilter (선택)
  * - startStr, endStr — 기간 열·상세 내역은 startStr~endStr, 누적 잔액·목록 거래처는 종료일까지 전체 이력 기준
  * - receivable: store_name으로 vendors 매칭 → vendorCode, vendorName 포함
- * - payable: PO·입고·매입 지급만 (급여·지출발생 Expense 제외)
+ * - payable: 입고·매입 지급·기초이월만 (발주 PO·급여·지출발생 Expense 제외 — 매입채무는 입고 기준)
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'

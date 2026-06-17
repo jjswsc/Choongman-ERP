@@ -34,6 +34,7 @@ import {
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
+import { pickMemberPortalHomePopup } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import { MemberPortalHomePromosAndMenus } from "@/components/member-portal/member-portal-home-monthly-promos"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
@@ -271,6 +272,7 @@ export function MemberPortalApp() {
   const [favoriteStoreCodes, setFavoriteStoreCodes] = React.useState<string[]>([])
   const [showQr, setShowQr] = React.useState(false)
   const [homePromoOpen, setHomePromoOpen] = React.useState(false)
+  const [homePopupOpen, setHomePopupOpen] = React.useState(false)
   const [tierBenefitsOpen, setTierBenefitsOpen] = React.useState(false)
   const [selectedHomePromo, setSelectedHomePromo] = React.useState<MemberPortalContentItem | null>(null)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
@@ -643,15 +645,23 @@ export function MemberPortalApp() {
     }
   }, [tab, member])
 
-  const homePopup = React.useMemo(
-    () =>
-      contentItems.find(
-        (x) =>
-          x.contentType === "popup" &&
-          (!x.targetTab || x.targetTab === "home")
-      ) || null,
-    [contentItems]
-  )
+  const homePopup = React.useMemo(() => pickMemberPortalHomePopup(contentItems), [contentItems])
+
+  React.useEffect(() => {
+    if (!member || tab !== "home" || !homePopup) {
+      setHomePopupOpen(false)
+      return
+    }
+    if (!embedPreview) {
+      try {
+        const dismissKey = `cm_mp_popup_dismiss_${homePopup.contentKey}`
+        if (sessionStorage.getItem(dismissKey) === "1") return
+      } catch {
+        /* ignore */
+      }
+    }
+    setHomePopupOpen(true)
+  }, [member, tab, homePopup, embedPreview])
 
   const homeInfoItems = React.useMemo(
     () =>
@@ -1159,13 +1169,15 @@ export function MemberPortalApp() {
             />
 
             {homePopup ? (
-              <GlassCard className="border-fuchsia-300/20 bg-fuchsia-500/10">
+              <GlassCard className="border-fuchsia-300/40 bg-gradient-to-br from-fuchsia-50 to-white">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-fuchsia-100">{homePopup.title || t("memberLounge")}</p>
-                    {homePopup.body ? <p className="mt-1 text-xs leading-relaxed text-fuchsia-50/85">{homePopup.body}</p> : null}
+                    <p className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{homePopup.title || t("memberLounge")}</p>
+                    {homePopup.body ? (
+                      <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>{homePopup.body}</p>
+                    ) : null}
                   </div>
-                  <Sparkles className="h-5 w-5 shrink-0 text-fuchsia-200" />
+                  <Sparkles className="h-5 w-5 shrink-0 text-fuchsia-600" />
                 </div>
                 {homePopup.imageUrl ? (
                   <img src={homePopup.imageUrl} alt={homePopup.title || "popup"} className="mt-3 h-36 w-full rounded-2xl object-cover" />
@@ -1529,6 +1541,21 @@ export function MemberPortalApp() {
         onClose={() => {
           setHomePromoOpen(false)
           setSelectedHomePromo(null)
+        }}
+      />
+      <MemberPortalContentSheet
+        open={homePopupOpen}
+        item={homePopup}
+        closeLabel={t("contactMenuClose")}
+        onClose={() => {
+          setHomePopupOpen(false)
+          if (homePopup?.contentKey) {
+            try {
+              sessionStorage.setItem(`cm_mp_popup_dismiss_${homePopup.contentKey}`, "1")
+            } catch {
+              /* ignore */
+            }
+          }
         }}
       />
       <MemberPortalTierBenefitsSheet

@@ -20,6 +20,7 @@ import {
 
 export { formatReceivableInvoiceNo }
 
+/** @deprecated 매입채무는 입고(Inbound) 기준. 신규 PO 미지급 행을 만들지 않는다. */
 export async function upsertPayableFromPO(params: {
   poId: number
   vendorCode: string
@@ -53,52 +54,19 @@ export async function upsertPayableFromPO(params: {
   }
 }
 
-/** 입고 등록 등으로 PO 기반 미지급을 대체할 때 동일 발주(ref PO) 행 제거 */
+/** 입고 등록·발주 취소·승인 재동기화 시 ref_type=PO 미지급 행 제거 */
 export async function deletePayableFromPO(poId: number): Promise<void> {
   if (!poId) return
   await supabaseDeleteByFilter('payable_transactions', `ref_type=eq.PO&ref_id=eq.${poId}`)
 }
 
 /**
- * 승인된 발주 → 미지급금(ref PO). 실지급액 = total − 원천징수, 거래일 = 발주일(방콕).
- * 금액이 0 이하면 해당 PO 미지급 행만 삭제.
+ * 발주 승인·재동기화 시 PO 미지급 행 정리.
+ * 매입채무는 입고 등록(Inbound) 시에만 생성한다 — 발주 승인으로 payable_transactions PO 행을 만들지 않는다.
  */
 export async function syncPayableFromApprovedPo(poId: number): Promise<void> {
   if (!poId) return
-  const rows = (await supabaseSelectFilter('purchase_orders', `id=eq.${poId}`, { limit: 1 })) as {
-    status?: string
-    vendor_code?: string
-    cart_json?: string
-    total?: number
-    withholding_tax_amount?: number | null
-    created_at?: string
-  }[]
-  if (!rows?.length) return
-  const po = rows[0]
-  if (po.status !== 'Approved') return
-
-  /** 물류·일반 매입 PO만 미지급. 회계 전용 PO는 미지급에 넣지 않음 */
-  if (isAccountingPurchaseOrderByCartJson(po.cart_json)) {
-    await deletePayableFromPO(poId)
-    return
-  }
-
-  const vendorCode = String(po.vendor_code || '').trim()
-  const total = Number(po.total) || 0
-  const wht = Math.max(0, Number(po.withholding_tax_amount) || 0)
-  const net = Math.round((total - wht) * 100) / 100
-
-  const transDate =
-    po.created_at && !isNaN(Date.parse(String(po.created_at)))
-      ? new Date(po.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
-      : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
-
-  if (!vendorCode || net <= 0) {
-    await deletePayableFromPO(poId)
-    return
-  }
-
-  await upsertPayableFromPO({ poId, vendorCode, total: net, transDate })
+  await deletePayableFromPO(poId)
 }
 
 export async function deleteReceivableFromAccountingPo(poId: number): Promise<void> {

@@ -45,12 +45,18 @@ function isPurchasePaymentRow(r: PayableTransactionRow): boolean {
   return false
 }
 
-/** 미지급금(매입) 원장 — PO·입고·매입 지급만. 급여·지출발생(expense_accrual) 제외 */
+/**
+ * 미지급금(매입) 원장 — 입고·매입 지급·기초이월만.
+ * - 발주(PO)는 제외: 매입채무는 입고(검수 완료) 기준으로 확정한다(회계 규칙). 발주 미지급 행이 입고와
+ *   같이 남으면 이중 계상되므로, 발주는 미지급금에 넣지 않는다(발주 예정은 발주 관리에서 확인).
+ * - 급여·지출발생(expense_accrual)·인테리어 지출 제외.
+ */
 export function isPurchasePayableLedgerRow(r: PayableTransactionRow): boolean {
   const refType = String(r.ref_type || '').trim()
   if (refType === 'Expense' || refType === 'InteriorExpense') return false
+  if (refType === 'PO') return false
   if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) return false
-  if (refType === 'Opening' || refType === 'PO' || refType === 'Inbound') return true
+  if (refType === 'Opening' || refType === 'Inbound') return true
   if (refType === 'Payment') return true
   return isPurchasePaymentRow(r)
 }

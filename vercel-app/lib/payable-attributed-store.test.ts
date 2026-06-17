@@ -112,7 +112,7 @@ describe('isPurchasePayableLedgerRow', () => {
     ).toBe(false)
   })
 
-  it('includes PO and purchase payments', () => {
+  it('excludes purchase orders (PO) — payable is recognized on inbound, not order', () => {
     expect(
       isPurchasePayableLedgerRow({
         vendor_code: '1002',
@@ -121,7 +121,10 @@ describe('isPurchasePayableLedgerRow', () => {
         ref_id: 7,
         trans_date: '2026-06-04',
       })
-    ).toBe(true)
+    ).toBe(false)
+  })
+
+  it('includes inbound, payment, and opening rows', () => {
     expect(
       isPurchasePayableLedgerRow({
         vendor_code: '1002',
@@ -139,26 +142,37 @@ describe('isPurchasePayableLedgerRow', () => {
         trans_date: '2026-06-10',
       })
     ).toBe(true)
+    expect(
+      isPurchasePayableLedgerRow({
+        vendor_code: '1002',
+        amount: 5000,
+        ref_type: 'Opening',
+        trans_date: '2026-01-01',
+      })
+    ).toBe(true)
   })
 
-  it('filterPurchasePayableLedgerRows drops expense rows only', () => {
+  it('filterPurchasePayableLedgerRows drops PO and expense rows', () => {
     const rows = [
-      { vendor_code: '1002', amount: 1000, ref_type: 'PO', trans_date: '2026-06-01' },
+      { vendor_code: '1002', amount: 1000, ref_type: 'Inbound', ref_id: 55, trans_date: '2026-06-01' },
+      { vendor_code: '1002', amount: 2712000, ref_type: 'PO', ref_id: 90, trans_date: '2026-05-15' },
       { vendor_code: 'EMPID:1', amount: 5000, ref_type: 'Expense', expense_accrual_id: 1, trans_date: '2026-06-01' },
+      { vendor_code: '1002', amount: -1000, ref_type: 'Payment', trans_date: '2026-06-10' },
     ]
-    expect(filterPurchasePayableLedgerRows(rows)).toHaveLength(1)
-    expect(filterPurchasePayableLedgerRows(rows)[0].ref_type).toBe('PO')
+    const kept = filterPurchasePayableLedgerRows(rows)
+    expect(kept).toHaveLength(2)
+    expect(kept.map((r) => r.ref_type).sort()).toEqual(['Inbound', 'Payment'])
   })
 })
 
 describe('filterPayableRowsByStore', () => {
   it('includes full vendor ledger when only payment matches store filter', () => {
     const m = maps({
-      storeByPoId: new Map([[7, 'CM Bangna']]),
+      locationByInboundId: new Map([[55, 'CM Bangna']]),
       storeByBankId: new Map([[9, 'CM Office']]),
     })
     const rows: PayableTransactionRow[] = [
-      { vendor_code: '1002', ref_type: 'PO', ref_id: 7, trans_date: '2026-04-01', amount: 891124.04 },
+      { vendor_code: '1002', ref_type: 'Inbound', ref_id: 55, trans_date: '2026-04-01', amount: 891124.04 },
       {
         vendor_code: '1002',
         ref_type: 'Payment',
@@ -169,7 +183,7 @@ describe('filterPayableRowsByStore', () => {
     ]
     const scoped = filterPayableRowsByStore(rows, 'CM Office', m)
     expect(scoped).toHaveLength(2)
-    expect(scoped.some((r) => r.ref_type === 'PO')).toBe(true)
+    expect(scoped.some((r) => r.ref_type === 'Inbound')).toBe(true)
     expect(scoped.some((r) => r.ref_type === 'Payment')).toBe(true)
   })
 })

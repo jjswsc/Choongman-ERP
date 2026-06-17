@@ -26,10 +26,11 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
   /** 홈 팝업 배너 — 회원앱 홈 카드 */
   popup: {
     label: '팝업',
-    minWidth: 1080,
-    minHeight: 1350,
+    minWidth: 720,
+    minHeight: 900,
     aspectW: 4,
     aspectH: 5,
+    skipAspectCheck: true,
   },
   /** 신메뉴 가로 카드 — aspect 16:10 (월별 프로모션과 동일) */
   new_menu: {

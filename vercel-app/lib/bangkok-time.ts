@@ -19,6 +19,27 @@ export function getBangkokDateTimeString(base: Date = new Date()): string {
   return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
 }
 
+/** `YYYY-MM-DD HH:mm:ss`·ISO(+07:00) 등 혼재 입력을 문자열 비교용 키로 통일 */
+export function normalizeBangkokDateTimeCompareKey(raw: string | null | undefined): string {
+  const v = String(raw || '').trim()
+  if (!v) return ''
+  const withTime = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+  if (withTime) return `${withTime[1]} ${withTime[2]}`
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v} 00:00:00`
+  return v
+}
+
+export function isBangkokDateTimeBefore(a: string, b: string): boolean {
+  const ka = normalizeBangkokDateTimeCompareKey(a)
+  const kb = normalizeBangkokDateTimeCompareKey(b)
+  if (!ka || !kb) return false
+  return ka < kb
+}
+
+export function isBangkokDateTimeAfter(a: string, b: string): boolean {
+  return isBangkokDateTimeBefore(b, a)
+}
+
 /** Kbank API `requestDt` — 방콕 벽시계 `YYYY-MM-DDTHH:mm:ss+07:00` */
 export function getBangkokRequestDtIso(base: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {

@@ -1,3 +1,8 @@
+import {
+  isBangkokDateTimeAfter,
+  isBangkokDateTimeBefore,
+} from '@/lib/bangkok-time'
+
 export type MemberPortalContentType = 'popup' | 'info' | 'store_photo'
 
 export type MemberPortalContentRow = {
@@ -65,9 +70,19 @@ export function mapMemberPortalContentRow(row: MemberPortalContentRow): MemberPo
 
 export function isMemberPortalContentVisibleNow(item: MemberPortalContentItem, nowIso: string): boolean {
   if (!item.isActive) return false
-  if (item.startsAt && item.startsAt > nowIso) return false
-  if (item.endsAt && item.endsAt < nowIso) return false
+  if (item.startsAt && isBangkokDateTimeAfter(item.startsAt, nowIso)) return false
+  if (item.endsAt && isBangkokDateTimeBefore(item.endsAt, nowIso)) return false
   return true
+}
+
+export function pickMemberPortalHomePopup(items: MemberPortalContentItem[]): MemberPortalContentItem | null {
+  const popups = items
+    .filter((x) => x.contentType === 'popup' && (!x.targetTab || x.targetTab === 'home'))
+    .sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
+  return popups[0] || null
 }
 
 function contentDateYmd(raw: string): string {

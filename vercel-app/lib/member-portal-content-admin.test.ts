@@ -68,6 +68,12 @@ describe('content admin helpers', () => {
       )
     ).toBe('expired')
     expect(resolveMemberPortalContentDisplayStatus(item({ isActive: true }), '2026-06-03 12:00:00')).toBe('live')
+    expect(
+      resolveMemberPortalContentDisplayStatus(
+        item({ isActive: true, startsAt: '2026-06-17T18:00:00+07:00' }),
+        '2026-06-17 13:00:00'
+      )
+    ).toBe('scheduled')
   })
 
   it('searches title and body', () => {
