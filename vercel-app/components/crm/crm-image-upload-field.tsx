@@ -13,6 +13,9 @@ export function CrmImageUploadField({
   onFile,
   previewUrl,
   alt,
+  buttonLabel,
+  hint,
+  error,
 }: {
   accept?: string
   disabled?: boolean
@@ -20,6 +23,9 @@ export function CrmImageUploadField({
   onFile: (file: File) => void
   previewUrl?: string
   alt?: string
+  buttonLabel?: string
+  hint?: string
+  error?: string
 }) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -46,8 +52,10 @@ export function CrmImageUploadField({
         onClick={() => inputRef.current?.click()}
       >
         <Upload className="mr-1.5 h-4 w-4" />
-        {uploading ? t("loading") : t("crmMemberAppUpload")}
+        {uploading ? t("loading") : buttonLabel || t("crmMemberAppUpload")}
       </Button>
+      {hint ? <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
+      {error ? <p className="text-xs leading-relaxed text-red-600">{error}</p> : null}
       {previewUrl ? (
         <img
           src={previewUrl}

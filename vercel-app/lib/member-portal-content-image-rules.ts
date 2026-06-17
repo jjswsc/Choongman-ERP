@@ -32,28 +32,31 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
     aspectH: 5,
     skipAspectCheck: true,
   },
-  /** 신메뉴 가로 카드 — aspect 16:10 (월별 프로모션과 동일) */
+  /** 신메뉴 가로 카드 — object-cover */
   new_menu: {
     label: '신메뉴',
-    minWidth: 1280,
-    minHeight: 800,
+    minWidth: 720,
+    minHeight: 450,
     aspectW: 16,
     aspectH: 10,
+    skipAspectCheck: true,
   },
-  /** 이달의 프로모션 가로 카드 — aspect 16:10 */
+  /** 이달의 프로모션 가로 카드 */
   promo: {
     label: '월별 프로모션',
-    minWidth: 1280,
-    minHeight: 800,
+    minWidth: 720,
+    minHeight: 450,
     aspectW: 16,
     aspectH: 10,
+    skipAspectCheck: true,
   },
   info: {
     label: '정보·공지',
-    minWidth: 1280,
-    minHeight: 800,
+    minWidth: 720,
+    minHeight: 450,
     aspectW: 16,
     aspectH: 10,
+    skipAspectCheck: true,
   },
   login: {
     label: '로그인 배경',
@@ -73,10 +76,11 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
   },
   store_photo: {
     label: '매장 사진',
-    minWidth: 1200,
-    minHeight: 800,
+    minWidth: 720,
+    minHeight: 480,
     aspectW: 3,
     aspectH: 2,
+    skipAspectCheck: true,
   },
 } as const satisfies Record<string, MemberPortalContentImageRule>
 

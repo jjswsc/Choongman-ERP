@@ -26,6 +26,7 @@ import {
 } from "@/lib/api-client"
 import type { MemberSummary } from "@/lib/members-server"
 import { formatBangkokDateTimeLocalInput } from "@/lib/member-portal-pickup-time"
+import { MEMBER_PORTAL_ORDERS_POLL_MS } from "@/lib/member-portal-prepay-constants"
 import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { formatBaht, formatDateTime } from "@/components/member-portal/portal-ui"
@@ -439,6 +440,7 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
   const dateLocale = lang === "ko" ? "ko-KR" : lang === "en" ? "en-US" : "th-TH"
 
   const loadMyOrders = React.useCallback(async () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return
     setMyOrdersLoading(true)
     try {
       const res = await fetch("/api/member-portal/orders?limit=10", { credentials: "same-origin" })
@@ -475,7 +477,7 @@ export function MemberPortalOrderTab({ lang, t, member, stores, favoriteStoreCod
   React.useEffect(() => {
     if (view !== "hub") return
     void loadMyOrders()
-    const id = window.setInterval(() => void loadMyOrders(), 30_000)
+    const id = window.setInterval(() => void loadMyOrders(), MEMBER_PORTAL_ORDERS_POLL_MS)
     return () => window.clearInterval(id)
   }, [loadMyOrders, view, orderMessage])
 

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Plus } from "lucide-react"
 import { MemberPortalContentAdminList } from "@/components/admin/member-portal-content-admin-list"
+import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -186,6 +187,8 @@ export function MemberPortalContentAdminPanel({
   const [form, setForm] = React.useState<FormState>(() => emptyForm(panelVariant, t))
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
+  const [imageUploadError, setImageUploadError] = React.useState("")
+  const [imageUploadNotice, setImageUploadNotice] = React.useState("")
   const [togglingKey, setTogglingKey] = React.useState<string | null>(null)
   const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
 
@@ -198,6 +201,8 @@ export function MemberPortalContentAdminPanel({
       const nextVariant = targetVariant || panelVariant
       setFormVariant(nextVariant)
       setForm(emptyForm(nextVariant, t))
+      setImageUploadError("")
+      setImageUploadNotice("")
       setSheetOpen(true)
     },
     [panelVariant, t]
@@ -210,6 +215,8 @@ export function MemberPortalContentAdminPanel({
       const editVariant = resolveEditVariant(variant, item)
       setFormVariant(editVariant)
       setForm(itemToForm(item))
+      setImageUploadError("")
+      setImageUploadNotice("")
       setSheetOpen(true)
     },
     [filtered, variant]
@@ -222,9 +229,20 @@ export function MemberPortalContentAdminPanel({
       const editVariant = resolveEditVariant(variant, item)
       setFormVariant(editVariant)
       setForm({ ...itemToForm(item), contentKey: "" })
+      setImageUploadError("")
+      setImageUploadNotice("")
       setSheetOpen(true)
     },
     [filtered, variant]
+  )
+
+  const reportUploadError = React.useCallback(
+    (msg: string) => {
+      setImageUploadNotice("")
+      setImageUploadError(msg)
+      onError(msg)
+    },
+    [onError]
   )
 
   const persist = React.useCallback(async (payload: FormState) => {
@@ -311,19 +329,21 @@ export function MemberPortalContentAdminPanel({
   const onUploadImage = React.useCallback(
     async (file: File) => {
       setUploading(true)
+      setImageUploadError("")
+      setImageUploadNotice("")
       onError("")
       try {
         const rule = resolveMemberPortalContentImageRule(formVariant)
         const size = await readMemberPortalImageSize(file)
         const validation = validateMemberPortalImageByRule(size.width, size.height, rule, t, formVariant)
         if (!validation.ok) {
-          onError(validation.message)
+          reportUploadError(validation.message)
           return
         }
 
         const uploaded = await uploadMemberPortalContentImageToStorage(file)
         if (!uploaded.ok) {
-          onError(
+          reportUploadError(
             uploaded.message === "UPLOAD_PRESIGN_FAIL"
               ? t("mpAdmin_errImagePresign")
               : uploaded.message.startsWith("STORAGE_PUT_FAIL_")
@@ -333,14 +353,17 @@ export function MemberPortalContentAdminPanel({
           return
         }
         setForm((prev) => ({ ...prev, imageUrl: uploaded.publicUrl || "" }))
-        onNotice(t("mpAdmin_noticeImageUploaded"))
+        setImageUploadError("")
+        const noticeMsg = t("mpAdmin_noticeImageUploaded")
+        setImageUploadNotice(noticeMsg)
+        onNotice(noticeMsg)
       } catch (e) {
-        onError(memberPortalImageUploadCatchMessage(t, e))
+        reportUploadError(memberPortalImageUploadCatchMessage(t, e))
       } finally {
         setUploading(false)
       }
     },
-    [formVariant, onError, onNotice, t]
+    [formVariant, onError, onNotice, reportUploadError, t]
   )
 
   const headerTitle = variant === "all" ? t("mpAdmin_allListTitle") : meta.title
@@ -398,7 +421,16 @@ export function MemberPortalContentAdminPanel({
         />
       )}
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet
+        open={sheetOpen}
+        onOpenChange={(open) => {
+          setSheetOpen(open)
+          if (!open) {
+            setImageUploadError("")
+            setImageUploadNotice("")
+          }
+        }}
+      >
         <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
           <SheetHeader className="shrink-0 border-b px-6 py-5 pr-14">
             <SheetTitle>
@@ -425,32 +457,24 @@ export function MemberPortalContentAdminPanel({
 
             <div className="space-y-2">
               <Label htmlFor="mp-content-image-url">{t("mpAdmin_fieldImage")}</Label>
-              <p className="text-xs leading-relaxed text-muted-foreground">{imageHint}</p>
               <Input
                 id="mp-content-image-url"
                 value={form.imageUrl}
                 onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
                 placeholder="https://..."
               />
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-center transition hover:bg-muted/35">
-                <span className="text-sm font-medium text-foreground">
-                  {uploading ? t("mpAdmin_uploading") : t("mpAdmin_selectImage")}
-                </span>
-                <span className="text-xs text-muted-foreground">{imageHint}</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="sr-only"
-                  disabled={!canEdit || uploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) void onUploadImage(file)
-                    e.target.value = ""
-                  }}
-                />
-              </label>
-              {form.imageUrl ? (
-                <img src={form.imageUrl} alt="" className="max-h-44 w-full rounded-lg border object-cover" />
+              <CrmImageUploadField
+                disabled={!canEdit}
+                uploading={uploading}
+                buttonLabel={t("mpAdmin_selectImage")}
+                hint={imageHint}
+                error={imageUploadError}
+                previewUrl={form.imageUrl || undefined}
+                alt={form.title || t("mpAdmin_fieldImage")}
+                onFile={(file) => void onUploadImage(file)}
+              />
+              {imageUploadNotice ? (
+                <p className="text-xs leading-relaxed text-emerald-700">{imageUploadNotice}</p>
               ) : null}
             </div>
 

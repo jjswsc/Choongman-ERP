@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { MemberPortalLineList } from "@/components/admin/member-portal-line-list"
+import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,7 +10,12 @@ import { Label } from "@/components/ui/label"
 import { apiFetch } from "@/lib/api/fetch"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
-import { memberPortalImageUploadCatchMessage } from "@/lib/member-portal-content-image-rules"
+import {
+  memberPortalImageUploadCatchMessage,
+  MEMBER_PORTAL_CONTENT_IMAGE_RULES,
+  readMemberPortalImageSize,
+  validateMemberPortalImageByRule,
+} from "@/lib/member-portal-content-image-rules"
 import { uploadMemberPortalContentImageToStorage } from "@/lib/member-portal-image-upload"
 
 type StoreRow = {
@@ -55,26 +61,7 @@ function emptyForm(): StoreForm {
   }
 }
 
-const STORE_PHOTO_RULE = {
-  minWidth: 1200,
-  minHeight: 800,
-  aspectW: 3,
-  aspectH: 2,
-}
-
-async function readImageSize(file: File): Promise<{ width: number; height: number }> {
-  const url = URL.createObjectURL(file)
-  try {
-    return await new Promise((resolve, reject) => {
-      const img = new window.Image()
-      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      img.onerror = () => reject(new Error("IMAGE_SIZE_READ_FAIL"))
-      img.src = url
-    })
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
+const STORE_PHOTO_RULE = MEMBER_PORTAL_CONTENT_IMAGE_RULES.store_photo
 
 type MemberPortalStoresPanelProps = {
   canEdit?: boolean
@@ -90,6 +77,7 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
+  const [photoUploadError, setPhotoUploadError] = React.useState("")
   const [editMode, setEditMode] = React.useState(false)
   const [togglingCode, setTogglingCode] = React.useState<string | null>(null)
 
@@ -157,33 +145,41 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
   const onUploadPhoto = React.useCallback(
     async (file: File) => {
       setUploading(true)
+      setPhotoUploadError("")
       onError("")
       try {
-        const size = await readImageSize(file)
-        if (size.width < STORE_PHOTO_RULE.minWidth || size.height < STORE_PHOTO_RULE.minHeight) {
-          onError(
-            tr(t, "mpAdmin_storePhotoTooSmall", {
-              minW: String(STORE_PHOTO_RULE.minWidth),
-              minH: String(STORE_PHOTO_RULE.minHeight),
-            })
-          )
+        const size = await readMemberPortalImageSize(file)
+        const validation = validateMemberPortalImageByRule(
+          size.width,
+          size.height,
+          STORE_PHOTO_RULE,
+          t,
+          "store_photo"
+        )
+        if (!validation.ok) {
+          setPhotoUploadError(validation.message)
+          onError(validation.message)
           return
         }
         const uploaded = await uploadMemberPortalContentImageToStorage(file)
         if (!uploaded.ok) {
-          onError(
+          const msg =
             uploaded.message === "UPLOAD_PRESIGN_FAIL"
               ? t("mpAdmin_errImagePresign")
               : uploaded.message.startsWith("STORAGE_PUT_FAIL_")
                 ? t("mpAdmin_errImageUpload")
                 : uploaded.message || t("mpAdmin_errImageUpload")
-          )
+          setPhotoUploadError(msg)
+          onError(msg)
           return
         }
         setForm((p) => ({ ...p, photoUrl: uploaded.publicUrl || "" }))
+        setPhotoUploadError("")
         onNotice(t("mpAdmin_noticeStorePhotoUploaded"))
       } catch (e) {
-        onError(memberPortalImageUploadCatchMessage(t, e))
+        const msg = memberPortalImageUploadCatchMessage(t, e)
+        setPhotoUploadError(msg)
+        onError(msg)
       } finally {
         setUploading(false)
       }
@@ -400,22 +396,15 @@ export function MemberPortalStoresPanel({ canEdit = true, onNotice, onError }: M
                 onChange={(e) => setForm((p) => ({ ...p, photoUrl: e.target.value }))}
                 placeholder="https://..."
               />
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  disabled={!canEdit || uploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    e.target.value = ""
-                    if (file) void onUploadPhoto(file)
-                  }}
-                />
-                {uploading ? <span className="text-xs text-muted-foreground">{t("mpAdmin_uploading")}</span> : null}
-              </div>
-              {form.photoUrl ? (
-                <img src={form.photoUrl} alt="store" className="mt-2 h-28 w-full max-w-md rounded object-cover" />
-              ) : null}
+              <CrmImageUploadField
+                disabled={!canEdit}
+                uploading={uploading}
+                buttonLabel={t("mpAdmin_selectImage")}
+                error={photoUploadError}
+                previewUrl={form.photoUrl || undefined}
+                alt={form.displayName || "store"}
+                onFile={(file) => void onUploadPhoto(file)}
+              />
             </div>
             <div className="flex h-10 items-center rounded-md border px-3 md:col-span-2">
               <input

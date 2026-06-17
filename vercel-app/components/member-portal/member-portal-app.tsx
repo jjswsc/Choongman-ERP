@@ -646,22 +646,26 @@ export function MemberPortalApp() {
   }, [tab, member])
 
   const homePopup = React.useMemo(() => pickMemberPortalHomePopup(contentItems), [contentItems])
+  const homePopupContentKey = homePopup?.contentKey || ""
 
   React.useEffect(() => {
-    if (!member || tab !== "home" || !homePopup) {
+    if (!member || tab !== "home" || !homePopupContentKey) {
       setHomePopupOpen(false)
       return
     }
     if (!embedPreview) {
       try {
-        const dismissKey = `cm_mp_popup_dismiss_${homePopup.contentKey}`
-        if (sessionStorage.getItem(dismissKey) === "1") return
+        const dismissKey = `cm_mp_popup_dismiss_${homePopupContentKey}`
+        if (sessionStorage.getItem(dismissKey) === "1") {
+          setHomePopupOpen(false)
+          return
+        }
       } catch {
         /* ignore */
       }
     }
     setHomePopupOpen(true)
-  }, [member, tab, homePopup, embedPreview])
+  }, [member, tab, homePopupContentKey, embedPreview])
 
   const homeInfoItems = React.useMemo(
     () =>
@@ -1163,6 +1167,7 @@ export function MemberPortalApp() {
               lang={lang}
               t={t}
               onSelectItem={(item) => {
+                setHomePopupOpen(false)
                 setSelectedHomePromo(item)
                 setHomePromoOpen(true)
               }}

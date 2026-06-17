@@ -5,10 +5,9 @@ import QRCode from "qrcode"
 import { Button } from "@/components/ui/button"
 import { formatBaht } from "@/components/member-portal/portal-ui"
 import { MemberPortalQrCountdown } from "@/components/member-portal/member-portal-qr-countdown"
-import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from "@/lib/member-portal-prepay-constants"
+import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS, MEMBER_PORTAL_QR_STATUS_POLL_MS } from "@/lib/member-portal-prepay-constants"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 
-const QR_POLL_MS = 3500
 
 type MemberPortalQrPayDialogProps = {
   open: boolean
@@ -124,7 +123,7 @@ export function MemberPortalQrPayDialog({
       }
     }
     void poll()
-    const id = window.setInterval(() => void poll(), QR_POLL_MS)
+    const id = window.setInterval(() => void poll(), MEMBER_PORTAL_QR_STATUS_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(id)

@@ -19,6 +19,12 @@ describe('validateMemberPortalImageByRule', () => {
     expect(tooSmall.ok).toBe(false)
   })
 
+  it('accepts typical phone photos for promo cards', () => {
+    const rule = MEMBER_PORTAL_CONTENT_IMAGE_RULES.promo
+    const phone = validateMemberPortalImageByRule(1170, 2532, rule, t, 'promo')
+    expect(phone).toEqual({ ok: true })
+  })
+
   it('applies relaxed default aspect tolerance for promo cards', () => {
     const rule = MEMBER_PORTAL_CONTENT_IMAGE_RULES.promo
     const slightlyOff = validateMemberPortalImageByRule(1280, 820, rule, t, 'promo')

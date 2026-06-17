@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MAIN_POS_POLL_INTERVAL_DEGRADED_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
+  isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
@@ -17,20 +18,38 @@ describe('pos-main-poll-interval', () => {
     ).toBe(MAIN_POS_POLL_INTERVAL_HEALTHY_MS)
   })
 
+  it('treats healthy when any insert channel is subscribed despite alias errors', () => {
+    const states = new Map<string, string>([
+      ['insert:CM Silom', 'SUBSCRIBED'],
+      ['insert-items:CM Silom', 'SUBSCRIBED'],
+      ['insert:1042', 'TIMED_OUT'],
+      ['insert-items:1042', 'CHANNEL_ERROR'],
+    ])
+    expect(isMainPosRealtimeInsertChannelHealthy(states)).toBe(true)
+  })
+
+  it('unhealthy when no insert channel subscribed', () => {
+    const states = new Map<string, string>([
+      ['insert:CM Silom', 'TIMED_OUT'],
+      ['insert-items:CM Silom', 'SUBSCRIBED'],
+    ])
+    expect(isMainPosRealtimeInsertChannelHealthy(states)).toBe(false)
+  })
+
+  it('uses healthy interval when channel ok even without recent order events', () => {
+    expect(
+      resolveMainPosPollIntervalMs({
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: false,
+      })
+    ).toBe(MAIN_POS_POLL_INTERVAL_HEALTHY_MS)
+  })
+
   it('uses degraded interval when channel unhealthy', () => {
     expect(
       resolveMainPosPollIntervalMs({
         realtimeChannelHealthy: false,
         realtimeRecentlyActive: true,
-      })
-    ).toBe(MAIN_POS_POLL_INTERVAL_DEGRADED_MS)
-  })
-
-  it('uses degraded interval when no recent realtime activity', () => {
-    expect(
-      resolveMainPosPollIntervalMs({
-        realtimeChannelHealthy: true,
-        realtimeRecentlyActive: false,
       })
     ).toBe(MAIN_POS_POLL_INTERVAL_DEGRADED_MS)
   })

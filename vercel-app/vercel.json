@@ -14,11 +14,11 @@
     },
     {
       "path": "/api/member-portal/cron/expire-pending-payments",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/member-portal/cron/reconcile-pending-payments",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/work-log-reminders",

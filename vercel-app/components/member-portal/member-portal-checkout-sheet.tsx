@@ -13,7 +13,7 @@ import {
   clearMemberPortalCheckoutDraft,
   saveMemberPortalCheckoutDraft,
 } from "@/lib/member-portal-checkout-draft-storage"
-import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from "@/lib/member-portal-prepay-constants"
+import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS, MEMBER_PORTAL_QR_STATUS_POLL_MS } from "@/lib/member-portal-prepay-constants"
 
 type CartLine = {
   menuId: string
@@ -58,7 +58,6 @@ type MemberPortalCheckoutSheetProps = {
   onRestoreCart?: () => void
 }
 
-const QR_POLL_MS = 3500
 
 export function MemberPortalCheckoutSheet({
   open,
@@ -193,7 +192,7 @@ export function MemberPortalCheckoutSheet({
       }
     }
     void poll()
-    const id = window.setInterval(() => void poll(), QR_POLL_MS)
+    const id = window.setInterval(() => void poll(), MEMBER_PORTAL_QR_STATUS_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(id)

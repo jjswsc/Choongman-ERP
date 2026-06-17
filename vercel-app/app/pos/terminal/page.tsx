@@ -255,7 +255,12 @@ import {
   type PosRealtimeSubscribeStatus,
 } from '@/lib/supabase-client'
 import {
+  isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
+  mainPosPrimaryInsertChannelKey,
+  MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS,
+  MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS,
+  MAIN_POS_TRIGGER_POLL_MIN_MS,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
@@ -2327,20 +2332,19 @@ export default function PosTerminalPage() {
     (channelKey: string) => (status: PosRealtimeSubscribeStatus, err?: Error) => {
       realtimeChannelStateRef.current.set(channelKey, status)
       recomputeRealtimeChannelHealthyRef.current()
-      if (status === 'SUBSCRIBED') {
-        lastRealtimeOrderEventAtRef.current = Date.now()
-      }
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         logPosPrintDebug('realtime_channel_degraded', {
           channelKey,
           status,
           message: err?.message,
         })
+        const primaryInsertKey = mainPosPrimaryInsertChannelKey(currentStoreId)
+        if (channelKey !== primaryInsertKey) return
         triggerMainPosPollNowRef.current?.()
         scheduleRealtimeResubscribeRef.current()
       }
     },
-    [logPosPrintDebug]
+    [currentStoreId, logPosPrintDebug]
   )
 
   const runAutoPrintForAcceptedDeliveryOrder = useCallback(
@@ -3300,26 +3304,26 @@ export default function PosTerminalPage() {
   const pendingEmptyItemsOrderIdsRef = useRef<Set<number>>(new Set())
   const mainPosPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const realtimeResubscribeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastRealtimeResubscribeAtRef = useRef(0)
+  const lastTriggerMainPosPollAtRef = useRef(0)
   const [realtimeResubscribeTick, setRealtimeResubscribeTick] = useState(0)
 
   const recomputeRealtimeChannelHealthy = useCallback(() => {
-    const states = [...realtimeChannelStateRef.current.values()]
-    if (!states.length) {
-      realtimeChannelHealthyRef.current = false
-      return
-    }
-    realtimeChannelHealthyRef.current =
-      states.some((s) => s === 'SUBSCRIBED') &&
-      !states.some((s) => s === 'CHANNEL_ERROR' || s === 'TIMED_OUT')
+    realtimeChannelHealthyRef.current = isMainPosRealtimeInsertChannelHealthy(
+      realtimeChannelStateRef.current
+    )
   }, [])
 
   const scheduleRealtimeResubscribe = useCallback(() => {
+    const now = Date.now()
+    if (now - lastRealtimeResubscribeAtRef.current < MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS) return
     if (realtimeResubscribeTimerRef.current) clearTimeout(realtimeResubscribeTimerRef.current)
     realtimeResubscribeTimerRef.current = setTimeout(() => {
+      lastRealtimeResubscribeAtRef.current = Date.now()
       realtimeChannelStateRef.current.clear()
       realtimeChannelHealthyRef.current = false
       setRealtimeResubscribeTick((n) => n + 1)
-    }, 3000)
+    }, MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS)
   }, [])
 
   useEffect(() => {
@@ -5604,6 +5608,10 @@ export default function PosTerminalPage() {
       }
     }
     triggerMainPosPollNowRef.current = () => {
+      const now = Date.now()
+      if (now - lastTriggerMainPosPollAtRef.current < MAIN_POS_TRIGGER_POLL_MIN_MS) return
+      if (mainPosPollInFlightRef.current) return
+      lastTriggerMainPosPollAtRef.current = now
       void poll()
     }
 
