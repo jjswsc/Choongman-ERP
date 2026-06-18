@@ -13,7 +13,14 @@ import {
   supabaseSelectPageCap,
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
+import { invalidateLoginDataCache } from "@/lib/login-data-cache-server"
+import { invalidateErpStoresMasterCache } from "@/lib/erp-store-master"
 import { loadErpStoreRowsForTenant } from "@/lib/saas-tenant-stores-server"
+
+function bustStoreListCaches(): void {
+  invalidateLoginDataCache()
+  invalidateErpStoresMasterCache()
+}
 
 export const dynamic = "force-dynamic"
 
@@ -242,6 +249,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     await supabaseUpdateByFilter("erp_stores", filter, { is_active: body.isActive })
+    bustStoreListCaches()
     return NextResponse.json({ success: true }, { headers })
   } catch (error) {
     console.error("saasAdminStores PATCH:", error)
@@ -325,6 +333,8 @@ export async function POST(req: NextRequest) {
         throw e
       }
     }
+
+    bustStoreListCaches()
 
     return NextResponse.json(
       {

@@ -1,6 +1,8 @@
 -- Omni (SaaS) → Choongman POS 스키마 브릿지
 -- 선행: saas_base_schema.sql 또는 saas_full_bootstrap_one_shot.sql
--- 다음: supabase_migration_consolidated.sql → supabase_one_paste_all_in_one.sql → phase2
+--
+-- ✅ 권장: POS 호환 전체는 omni_pos_choongman_parity.sql 한 파일로 실행
+-- 다음(장기): supabase_migration_consolidated.sql → supabase_one_paste_all_in_one.sql → phase2
 --
 -- ⚠️ Omni Supabase에는 supabase_schema.sql 을 돌리지 마세요 (SaaS 테이블과 충돌)
 

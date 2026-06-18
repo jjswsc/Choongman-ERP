@@ -34,6 +34,7 @@ import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
+import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
@@ -387,7 +388,8 @@ export async function POST(req: NextRequest) {
     const allocateStartMs = Date.now()
     const orderNo = await allocateNextPosOrderNo(storeCode)
     allocateOrderNoMs = Date.now() - allocateStartMs
-    const row = {
+    const row = enrichPosOrderRowForSaaS(
+      {
       order_no: orderNo,
       store_code: storeCode,
       order_type: orderType,
@@ -446,7 +448,9 @@ export async function POST(req: NextRequest) {
       linkpos_responded_at: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
       idempotency_key_hash: idempotencyKeyHash,
       ...(paidAtStamp ? { paid_at: paidAtStamp } : {}),
-    }
+    },
+      { tenantId: auth?.tenantId }
+    )
     let inserted: { id?: number }[] = []
     try {
       inserted = (await supabaseInsertWithPgrst204Fallback(

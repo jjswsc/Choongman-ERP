@@ -14,7 +14,11 @@ import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { verifyBearerWithSaasGate } from '@/lib/saas/bearer-saas-gate'
 import { isOfficeRole } from '@/lib/permissions'
-import { addPosStoreCodeVariants, resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
+import {
+  addPosStoreCodeVariants,
+  resolveCanonicalPosStoreCode,
+  resolvePosStoreFilterCandidates,
+} from '@/lib/pos-store-filter-candidates'
 import { normStoreKey } from '@/lib/store-list-keys'
 import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
@@ -291,6 +295,9 @@ export async function GET(request: NextRequest) {
         })
       }
     }
+  }
+  if (effectiveStoreCode && effectiveStoreCode.toLowerCase() !== 'all') {
+    effectiveStoreCode = await resolveCanonicalPosStoreCode(effectiveStoreCode)
   }
   const status = String(searchParams.get('status') || '').trim()
   const sinceIdRaw = searchParams.get('sinceId')?.trim()

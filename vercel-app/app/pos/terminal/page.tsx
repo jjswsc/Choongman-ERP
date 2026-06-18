@@ -5096,6 +5096,7 @@ export default function PosTerminalPage() {
     const today = getPosBusinessDateStr()
     const poll = async () => {
       if (mainPosPollInFlightRef.current) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       mainPosPollInFlightRef.current = true
       try {
         const runPaymentReceiptScan = async () => {

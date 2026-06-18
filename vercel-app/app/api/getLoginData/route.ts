@@ -4,6 +4,10 @@ import { supabaseSelectEmployeesForLoginList } from '@/lib/employees-compat'
 import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { legacyEmployeeStoreToCanonicalWithMap } from '@/lib/erp-store-master-shared'
+import {
+  isLoginDataCacheValid,
+  markLoginDataCacheValid,
+} from '@/lib/login-data-cache-server'
 import { loadSaasLoginStoreEntries } from '@/lib/saas-tenant-stores-server'
 import { isLoginExcludedStoreKey } from '@/lib/pos-sales-test-office'
 
@@ -18,7 +22,7 @@ type LoginDataPayload = {
 }
 
 /** Supabase 응답이 느린 경우 5분 캐시로 반복 요청 부하 감소 */
-let _loginDataCache: { data: LoginDataPayload; until: number } | null = null
+let _loginDataCache: LoginDataPayload | null = null
 const CACHE_TTL_MS = 5 * 60 * 1000
 
 async function getLoginDataHandler(): Promise<LoginDataPayload> {
@@ -135,12 +139,12 @@ export async function GET() {
   }
 
   try {
-    const now = Date.now()
-    if (_loginDataCache && _loginDataCache.until > now) {
-      return NextResponse.json(_loginDataCache.data, { headers })
+    if (isLoginDataCacheValid() && _loginDataCache) {
+      return NextResponse.json(_loginDataCache, { headers })
     }
     const data = await getLoginDataHandler()
-    _loginDataCache = { data, until: now + CACHE_TTL_MS }
+    _loginDataCache = data
+    markLoginDataCacheValid(CACHE_TTL_MS)
     return NextResponse.json(data, { headers })
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e))

@@ -6,7 +6,9 @@
  * - DEGRADED(15s): Realtime 미연결·전 INSERT 채널 실패 시만.
  * - `realtimeRecentlyActive`는 폴링 간격이 아니라 limit=800 풀 스캔 폴백(`shouldUseMainPosHeavyOrderScanFallback`)에만 사용.
  */
-export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 90_000
+export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
+/** Realtime 정상 + 최근 이벤트 있음 → HTTP 폴링은 안전망만 (Edge Request 절감) */
+export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 300_000
 export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 15_000
 /** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded 로 간주 */
 export const MAIN_POS_REALTIME_STALE_MS = 90_000
@@ -24,8 +26,8 @@ export function resolveMainPosPollIntervalMs(opts: {
   realtimeChannelHealthy: boolean
   realtimeRecentlyActive: boolean
 }): number {
-  void opts.realtimeRecentlyActive
   if (!opts.realtimeChannelHealthy) return MAIN_POS_POLL_INTERVAL_DEGRADED_MS
+  if (opts.realtimeRecentlyActive) return MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS
   return MAIN_POS_POLL_INTERVAL_HEALTHY_MS
 }
 

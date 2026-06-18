@@ -9010,6 +9010,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posOrderTabGrabIntegration: 'Grab integration',
     posOrderTabLinkposFailed: 'LINKPOS failures',
     posOrderTypeHall: 'Hall',
+    posCostSaleActive: 'Active',
+    posCostSaleAll: 'All',
+    posCostSaleFilter: 'Sale status',
+    posCostSaleInactive: 'Inactive',
 }
 export const I18N_POS_MM: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -11779,6 +11783,10 @@ export const I18N_POS_MM: Record<string, string> = {
     posOrderTabGrabIntegration: 'Grab integration',
     posOrderTabLinkposFailed: 'LINKPOS failures',
     posOrderTypeHall: 'Hall',
+    posCostSaleActive: 'Active',
+    posCostSaleAll: 'All',
+    posCostSaleFilter: 'Sale status',
+    posCostSaleInactive: 'Inactive',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -14533,6 +14541,10 @@ export const I18N_POS_LA: Record<string, string> = {
     posOrderTabGrabIntegration: 'Grab integration',
     posOrderTabLinkposFailed: 'LINKPOS failures',
     posOrderTypeHall: 'Hall',
+    posCostSaleActive: 'Active',
+    posCostSaleAll: 'All',
+    posCostSaleFilter: 'Sale status',
+    posCostSaleInactive: 'Inactive',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -17315,6 +17327,10 @@ export const I18N_POS_KH: Record<string, string> = {
     posOrderTabGrabIntegration: 'Grab integration',
     posOrderTabLinkposFailed: 'LINKPOS failures',
     posOrderTypeHall: 'Hall',
+    posCostSaleActive: 'Active',
+    posCostSaleAll: 'All',
+    posCostSaleFilter: 'Sale status',
+    posCostSaleInactive: 'Inactive',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -20071,6 +20087,10 @@ export const I18N_POS_VI: Record<string, string> = {
     posOrderTabGrabIntegration: 'Grab integration',
     posOrderTabLinkposFailed: 'LINKPOS failures',
     posOrderTypeHall: 'Hall',
+    posCostSaleActive: 'Active',
+    posCostSaleAll: 'All',
+    posCostSaleFilter: 'Sale status',
+    posCostSaleInactive: 'Inactive',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -22831,4 +22851,8 @@ export const I18N_POS_MS: Record<string, string> = {
     posOrderTabGrabIntegration: 'Grab integration',
     posOrderTabLinkposFailed: 'LINKPOS failures',
     posOrderTypeHall: 'Hall',
+    posCostSaleActive: 'Active',
+    posCostSaleAll: 'All',
+    posCostSaleFilter: 'Sale status',
+    posCostSaleInactive: 'Inactive',
 }

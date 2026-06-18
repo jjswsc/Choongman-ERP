@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalHomePrivilegesAdminPanel } from "@/components/admin/member-portal-home-privileges-admin-panel"
 import { MemberPortalStampFoodImageAdminPanel } from "@/components/admin/member-portal-stamp-food-image-admin-panel"
+import { MemberPortalTierGemCompareAdminPanel } from "@/components/admin/member-portal-tier-gem-compare-admin-panel"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
 import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
@@ -1038,6 +1039,14 @@ export default function CrmMemberAppContentPage() {
                     setError(message)
                   }}
                 />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_tierGemCompareTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MemberPortalTierGemCompareAdminPanel />
               </CardContent>
             </Card>
             <Card>

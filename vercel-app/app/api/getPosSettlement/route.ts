@@ -180,11 +180,7 @@ export async function GET(request: NextRequest) {
       `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
       `&store_code=ilike.${encodeURIComponent(storeCode)}`
 
-    const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
-      limit: 20000,
-      select:
-        'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
-    })) as {
+    type PosOrderSettlementRow = {
       subtotal?: number
       vat?: number
       total?: number
@@ -203,7 +199,20 @@ export async function GET(request: NextRequest) {
       linkpos_response_code?: string
       linkpos_requested_amount?: number
       linkpos_approved_amount?: number
-    }[] | null
+    }
+
+    /** Omni 등 pos_orders 컬럼 미배포 시에도 시재(cash_actual)는 반환 — 영업 시작 게이트가 막히지 않게 */
+    let orders: PosOrderSettlementRow[] | null = null
+    try {
+      orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
+        limit: 20000,
+        select:
+          'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+      })) as PosOrderSettlementRow[] | null
+    } catch (orderErr) {
+      console.warn('getPosSettlement pos_orders (settlement-only fallback):', orderErr)
+      orders = []
+    }
 
     let systemTotal = 0
     let systemSubtotal = 0
@@ -278,21 +287,29 @@ export async function GET(request: NextRequest) {
       'tx_code=eq.20',
       'response_code=eq.00',
     ].join('&')
-    const attempts = (await supabaseSelectFilter('pos_payment_attempts', attemptsFilter, {
-      limit: 20000,
-      select:
-        'order_id,bank_id,request_amount,approved_amount,response_text,response_raw,response_code,status,pos_orders(store_code)',
-    })) as {
-      order_id?: number | null
-      bank_id?: string
-      request_amount?: number
-      approved_amount?: number
-      response_text?: string
-      response_raw?: string
-      response_code?: string
-      status?: string
-      pos_orders?: { store_code?: string } | { store_code?: string }[] | null
-    }[] | null
+    let attempts:
+      | {
+          order_id?: number | null
+          bank_id?: string
+          request_amount?: number
+          approved_amount?: number
+          response_text?: string
+          response_raw?: string
+          response_code?: string
+          status?: string
+          pos_orders?: { store_code?: string } | { store_code?: string }[] | null
+        }[]
+      | null = null
+    try {
+      attempts = (await supabaseSelectFilter('pos_payment_attempts', attemptsFilter, {
+        limit: 20000,
+        select:
+          'order_id,bank_id,request_amount,approved_amount,response_text,response_raw,response_code,status,pos_orders(store_code)',
+      })) as typeof attempts
+    } catch (attemptErr) {
+      console.warn('getPosSettlement pos_payment_attempts skipped:', attemptErr)
+      attempts = []
+    }
 
     const autoCardBreakdown: Record<string, number> = {}
     const autoQrBreakdown: Record<string, number> = {}
@@ -346,7 +363,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const storeFilter = `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${settleDate}`
+    const storeFilter = `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${encodeURIComponent(settleYmd)}`
 
     const settlements = (await supabaseSelectFilter('pos_settlements', storeFilter, {
       limit: 500,

@@ -23,6 +23,7 @@ import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
+import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { resolveMemberPortalCheckoutCoupons } from '@/lib/member-portal-checkout-coupons'
 import { persistPosOrderCouponRedemptions } from '@/lib/pos-coupon-server'
@@ -495,7 +496,8 @@ export async function createMemberPickupOrderWithPrepay(params: {
   const orderType = coercePosOrderTypeForDb('takeout')
   const paidByPointsOnly = prepayEnabled && !preview.requiresQr && preview.finalTotal <= 0.0001
 
-  const row = {
+  const row = enrichPosOrderRowForSaaS(
+    {
     order_no: orderNo,
     store_code: storeCode,
     order_type: orderType,
@@ -524,7 +526,9 @@ export async function createMemberPickupOrderWithPrepay(params: {
     guest_count: 0,
     created_by: `member_portal:${member.id}`,
     ...(paidByPointsOnly ? { paid_at: getBangkokDateTimeString() } : {}),
-  }
+  },
+    { tenantId: await resolveTenantIdForStoreCode(storeCode) }
+  )
 
   const inserted = (await supabaseInsertWithPgrst204Fallback(
     'pos_orders',

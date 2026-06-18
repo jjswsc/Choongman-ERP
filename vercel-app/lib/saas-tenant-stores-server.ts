@@ -144,6 +144,25 @@ export type SaasLoginStoreEntry = {
   storeCode: string
 }
 
+/** legacy insert(store_code={tenant}_{store}) 후 tenant_id 누락 시 로그인 목록 보강 */
+function inferTenantIdForLoginRow(
+  row: Record<string, unknown>,
+  companyByTenant: Map<string, string>
+): string {
+  const direct = String(row.tenant_id ?? "")
+    .trim()
+    .toLowerCase()
+  if (direct) return direct
+
+  const code = String(row.store_code ?? "")
+    .trim()
+    .toLowerCase()
+  if (!code.includes("_")) return ""
+  const prefix = code.split("_")[0]
+  if (prefix && companyByTenant.has(prefix)) return prefix
+  return ""
+}
+
 /** ERP 로그인 매장 셀렉트 — erp_stores(SaaS) + tenants.company_name */
 export async function loadSaasLoginStoreEntries(): Promise<SaasLoginStoreEntry[]> {
   const companyByTenant = new Map<string, string>()
@@ -165,24 +184,36 @@ export async function loadSaasLoginStoreEntries(): Promise<SaasLoginStoreEntry[]
   let storeRows: Record<string, unknown>[] = []
   try {
     storeRows = (await supabaseSelect("erp_stores", {
-      select: "tenant_id,store_name,store_code,is_active",
+      select: "tenant_id,store_name,store_code,is_active,display_name",
       limit: 5000,
       order: "store_name.asc",
     })) as Record<string, unknown>[]
   } catch {
     try {
-      storeRows = await loadAllErpStoreRows()
+      storeRows = (await supabaseSelect("erp_stores", {
+        select: "tenant_id,store_name,store_code,is_active",
+        limit: 5000,
+        order: "store_name.asc",
+      })) as Record<string, unknown>[]
     } catch {
-      return []
+      try {
+        storeRows = await loadAllErpStoreRows()
+      } catch {
+        return []
+      }
     }
   }
 
+  const seen = new Set<string>()
   const out: SaasLoginStoreEntry[] = []
   for (const row of storeRows) {
     if (row.is_active === false) continue
-    const tenantId = String(row.tenant_id ?? "").trim().toLowerCase()
+    const tenantId = inferTenantIdForLoginRow(row, companyByTenant)
     const storeName = String(row.store_name ?? row.display_name ?? "").trim()
     if (!tenantId || !storeName) continue
+    const dedupeKey = `${tenantId}\0${storeName}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
     out.push({
       companyName: companyByTenant.get(tenantId) || tenantId,
       storeName,

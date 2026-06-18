@@ -13,10 +13,10 @@ const HEALTH_WINDOW_MS = 30_000
 /** 한 번의 실패만으로도 짧은 구간 내 캐시·하드 네비 우선 (라이파이·서버 무응답 대응) */
 const DEGRADE_FAIL_THRESHOLD = 1
 
-/** 프로브·성공한 fetch 이후 이 시간 안이면 navigator 가 false 여도 온라인으로 간주 */
-const REACHABILITY_STALE_MS = 45_000
-/** navigator.onLine=false(하이브리드 POS)여도 최근 API 성공이면 probe 생략 — 간격 90s */
-const OFFLINE_PROBE_INTERVAL_MS = 90_000
+/** 프로브·성공한 fetch 이후 이 시간 안이면 navigator 가 false 여도 온라인으로 간주 (POS 폴링 간격보다 길게) */
+const REACHABILITY_STALE_MS = 120_000
+/** navigator.onLine=false(하이브리드 POS)여도 최근 API 성공이면 probe 생략 */
+const OFFLINE_PROBE_INTERVAL_MS = 180_000
 const PROBE_TIMEOUT_MS = 3_000
 
 export const REACHABILITY_EVENT = 'cm-reachability'

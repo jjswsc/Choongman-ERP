@@ -15,6 +15,7 @@ create table if not exists public.tenants (
 alter table if exists public.employees add column if not exists tenant_id text;
 alter table if exists public.employees add column if not exists company text;
 alter table if exists public.erp_stores add column if not exists tenant_id text;
+alter table if exists public.erp_stores add column if not exists store_name text;
 alter table if exists public.vendors add column if not exists tenant_id text;
 alter table if exists public.pos_orders add column if not exists tenant_id text;
 alter table if exists public.employees add column if not exists nick text;
@@ -43,6 +44,7 @@ with cfg as (
     'omnifoodtech-demo'::text as tenant_id,
     'OmniFoodTech'::text as company_name,
     '본사'::text as store_name,
+    'HQ'::text as pos_store_code,
     'admin'::text as admin_name,
     '1234'::text as admin_password
 )
@@ -71,20 +73,21 @@ with cfg as (
     'omnifoodtech-demo'::text as tenant_id,
     'OmniFoodTech'::text as company_name,
     '본사'::text as store_name,
+    'HQ'::text as pos_store_code,
     'admin'::text as admin_name
 )
 delete from public.employees e
 using cfg
 where coalesce(e.tenant_id, '') = cfg.tenant_id
   and coalesce(e.company, '') = cfg.company_name
-  and e.store = cfg.store_name
+  and e.store in (cfg.store_name, cfg.pos_store_code)
   and e.name = cfg.admin_name;
 
 with cfg as (
   select
     'omnifoodtech-demo'::text as tenant_id,
     'OmniFoodTech'::text as company_name,
-    '본사'::text as store_name,
+    'HQ'::text as pos_store_code,
     'admin'::text as admin_name,
     '1234'::text as admin_password
 )
@@ -93,7 +96,7 @@ insert into public.employees
 select
   tenant_id,
   company_name,
-  store_name,
+  pos_store_code,
   admin_name,
   admin_password,
   'officer',

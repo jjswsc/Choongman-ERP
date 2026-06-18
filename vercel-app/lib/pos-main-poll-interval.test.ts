@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAIN_POS_POLL_INTERVAL_DEGRADED_MS,
+  MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
   isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
@@ -9,13 +10,13 @@ import {
 } from '@/lib/pos-main-poll-interval'
 
 describe('pos-main-poll-interval', () => {
-  it('uses healthy interval when channel ok and recent events', () => {
+  it('uses longer interval when channel ok and recent events (realtime primary)', () => {
     expect(
       resolveMainPosPollIntervalMs({
         realtimeChannelHealthy: true,
         realtimeRecentlyActive: true,
       })
-    ).toBe(MAIN_POS_POLL_INTERVAL_HEALTHY_MS)
+    ).toBe(MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS)
   })
 
   it('treats healthy when any insert channel is subscribed despite alias errors', () => {

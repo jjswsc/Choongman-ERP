@@ -105,6 +105,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/getPosMenu", module: "pos_base" },
   { prefix: "/api/importPosMenus", module: "pos_base" },
   { prefix: "/api/savePosOrder", module: "pos_base" },
+  { prefix: "/api/getPosOrders", module: "pos_base" },
   { prefix: "/api/getPosOrder", module: "pos_base" },
   { prefix: "/api/updatePosOrder", module: "pos_base" },
   { prefix: "/api/posClose", module: "pos_base" },

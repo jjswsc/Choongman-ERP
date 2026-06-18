@@ -231,13 +231,19 @@ Supabase SQL Editor → **아래 순서대로 파일 전체를 각각 Run** (재
 | 8 | [`saas_billing_company_profiles.sql`](./saas_billing_company_profiles.sql) | 청구서 회사 프로필 |
 | 9 | [`saas_tenant_onboarding.sql`](./saas_tenant_onboarding.sql) | 온보딩·연동 메타 |
 | 10 | [`work_log_agg_rpc.sql`](./work_log_agg_rpc.sql) | 업무일지 주간·검토 RPC (ERP 공통, 미배포 시 JS fallback) |
+| 11 | [`omni_pos_choongman_parity.sql`](./omni_pos_choongman_parity.sql) | **POS 필수** — `pos_orders`·`pos_settlements`·RLS·매장 alias |
 
-**1번 one-shot**을 쓰면 2~4는 중복이므로 **5~10만** 이어서 실행하면 됩니다.
+**1번 one-shot**을 쓰면 2~4는 중복이므로 **5~11**만 이어서 실행하면 됩니다.
+
+**Omni POS(터미널·시재·주문)** 를 쓰려면 **11번 `omni_pos_choongman_parity.sql`을 반드시 실행**하세요.  
+장기(메뉴·프린터·Grab·회계 RPC): [`supabase_migration_consolidated.sql`](../../supabase_migration_consolidated.sql) → [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql) → [`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql) (충만과 동일 체인, Omni 전용 Supabase에만).
 
 배포 후 확인:
 
 - SaaS Admin `/saas-admin` → 고객사 목록·usage·한도 표시
 - JWT `tenantId` 있는 테스트 계정 → 모듈 게이트 동작
 - `select * from v_tenant_admin_settings limit 5;`
+- POS: `getPosSettlement?storeCode=HQ&settleDate=<오늘>` → `settlement.cashActual` 존재
+- POS: 신규 주문 저장 성공 (`store_name` NOT NULL 오류 없음)
 
 관련 앱 코드: `lib/saas/` · `docs/SAAS-HYBRID-ONBOARDING.md`

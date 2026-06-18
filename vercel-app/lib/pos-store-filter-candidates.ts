@@ -43,6 +43,29 @@ function masterRowMatchesScopeKeys(
   })
 }
 
+/** JWT·직원 store(표시명) → erp_stores.store_code (POS 터미널 코드) */
+export async function resolveCanonicalPosStoreCode(rawStore: string): Promise<string> {
+  const base = String(rawStore || '').trim()
+  if (!base || base.toLowerCase() === 'all') return base
+  try {
+    const masters = await fetchErpStoresMaster()
+    if (masters.length === 0) return base
+    const legacyToCanonical = buildLegacyToCanonicalMap(masters)
+    const canonical = String(legacyToCanonical[normStoreKey(base)] || '').trim()
+    if (canonical) return canonical
+    const baseKey = normStoreKey(base)
+    for (const row of masters) {
+      if (masterRowMatchesScopeKeys(row, baseKey, '')) {
+        const sc = String(row.store_code || '').trim()
+        if (sc) return sc
+      }
+    }
+  } catch {
+    // erp_stores 미배포 시 입력값 그대로
+  }
+  return base
+}
+
 /** 단일 매장 키 → pos_orders.store_code 후보 (erp_stores·Grab 연동 포함) */
 export async function resolvePosStoreFilterCandidates(rawStore: string): Promise<string[]> {
   const base = String(rawStore || '').trim()

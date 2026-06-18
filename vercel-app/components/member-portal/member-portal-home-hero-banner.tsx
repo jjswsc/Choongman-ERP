@@ -16,7 +16,6 @@ type HeroBannerCardProps = {
   item: MemberPortalContentItem
   fallbackTitle: string
   ctaLabel?: string
-  badgeLabel?: string
   onSelect: () => void
   onCta?: () => void
   /** 캐러셀 안에서는 하단 dots 여백 */
@@ -31,13 +30,12 @@ export function MemberPortalHeroBannerCard({
   item,
   fallbackTitle,
   ctaLabel,
-  badgeLabel,
   onSelect,
   onCta,
   showDotsPadding = false,
 }: HeroBannerCardProps) {
-  const title = item.title || fallbackTitle
-  const hasOverlayText = Boolean(title || item.body)
+  const ariaTitle = item.title || fallbackTitle
+  const showCta = Boolean(ctaLabel && onCta)
 
   return (
     <div
@@ -47,7 +45,7 @@ export function MemberPortalHeroBannerCard({
         type="button"
         onClick={onSelect}
         className="absolute inset-0 z-[1]"
-        aria-label={title}
+        aria-label={ariaTitle}
       />
       {item.imageUrl ? (
         <img
@@ -59,45 +57,29 @@ export function MemberPortalHeroBannerCard({
         <div className={`${MP_HOME_HERO_HEIGHT} w-full bg-gradient-to-br from-[#3d2a14] to-[#261c12]`} />
       )}
 
-      {/* 하단만 읽기용 그라데이션 — 좌측 검은 벽 제거 */}
-      {hasOverlayText || ctaLabel ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[55%] bg-gradient-to-t from-black/72 via-black/28 to-transparent" />
-      ) : null}
-
-      <div
-        className={`pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex max-w-[78%] flex-col px-4 ${
-          showDotsPadding ? "pb-9 pt-2" : "pb-3 pt-2"
-        }`}
-      >
-        {badgeLabel ? (
-          <span className="mb-1 inline-flex w-fit items-center rounded-full bg-amber-500/90 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-white shadow-sm">
-            {badgeLabel}
-          </span>
-        ) : null}
-        {title ? (
-          <p className="line-clamp-1 text-[15px] font-black leading-tight text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.65)]">
-            {title}
-          </p>
-        ) : null}
-        {item.body ? (
-          <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-snug text-white/95 drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
-            {item.body}
-          </p>
-        ) : null}
-        {ctaLabel && onCta ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onCta()
-            }}
-            className="pointer-events-auto mt-1.5 inline-flex w-fit items-center gap-0.5 rounded-full bg-gradient-to-r from-[#ff9824] to-[#ef5513] px-3 py-1 text-[10px] font-extrabold text-white shadow-[0_7px_14px_rgba(239,85,19,0.35)] transition hover:brightness-105 active:scale-95"
+      {/* 배너 이미지에 문구 포함 — 앱 UI는 CTA만 */}
+      {showCta ? (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-16 bg-gradient-to-t from-black/45 to-transparent" />
+          <div
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end px-4 ${
+              showDotsPadding ? "pb-9" : "pb-3"
+            }`}
           >
-            {ctaLabel}
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-      </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCta?.()
+              }}
+              className="pointer-events-auto inline-flex w-fit items-center gap-0.5 rounded-full bg-gradient-to-r from-[#ff9824] to-[#ef5513] px-3.5 py-1.5 text-[10px] font-extrabold text-white shadow-[0_7px_14px_rgba(239,85,19,0.4)] transition hover:brightness-105 active:scale-95"
+            >
+              {ctaLabel}
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -106,14 +88,12 @@ function MemberPortalHeroCarousel({
   items,
   fallbackTitle,
   ctaLabel,
-  badgeLabel,
   onSelectItem,
   onCta,
 }: {
   items: MemberPortalContentItem[]
   fallbackTitle: string
   ctaLabel?: string
-  badgeLabel?: string
   onSelectItem: (item: MemberPortalContentItem) => void
   onCta?: () => void
 }) {
@@ -148,7 +128,6 @@ function MemberPortalHeroCarousel({
         item={items[0]}
         fallbackTitle={fallbackTitle}
         ctaLabel={ctaLabel}
-        badgeLabel={badgeLabel}
         onSelect={() => onSelectItem(items[0])}
         onCta={onCta}
       />
@@ -169,7 +148,6 @@ function MemberPortalHeroCarousel({
               item={item}
               fallbackTitle={fallbackTitle}
               ctaLabel={ctaLabel}
-              badgeLabel={badgeLabel}
               showDotsPadding
               onSelect={() => onSelectItem(item)}
               onCta={onCta}
@@ -259,7 +237,6 @@ export function MemberPortalHomeNewMenuHeroes({
       <MemberPortalHeroBannerCard
         item={items[0]}
         fallbackTitle={t("homeNewMenuTitle")}
-        badgeLabel={t("homeNewMenuTitle")}
         ctaLabel={t("homePromoOrderNow")}
         onSelect={() => onSelectItem(items[0])}
         onCta={onOrder}
@@ -274,7 +251,6 @@ export function MemberPortalHomeNewMenuHeroes({
           key={item.contentKey}
           item={item}
           fallbackTitle={t("homeNewMenuTitle")}
-          badgeLabel={t("homeNewMenuTitle")}
           ctaLabel={t("homePromoOrderNow")}
           onSelect={() => onSelectItem(item)}
           onCta={onOrder}
