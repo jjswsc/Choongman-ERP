@@ -5,6 +5,7 @@ import Image from "next/image"
 import { Bell } from "lucide-react"
 import { resolveTierFamily } from "@/lib/member-portal-tier-visual"
 import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
+import { MP_HOME_TIER_PILL_GEM_SIZE } from "@/lib/member-portal-home-layout"
 
 const CROWN_MARK = "♛"
 
@@ -51,7 +52,7 @@ export function MemberPortalHomeTopBar({
             </span>
           </div>
           <span className="mt-0.5 inline-flex w-max items-center gap-0.5 rounded-full bg-[#fff0e5] px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-[#66331a]">
-            <TierFacetedGemIcon family={resolveTierFamily(tierCode)} size={16} />
+            <TierFacetedGemIcon family={resolveTierFamily(tierCode)} size={MP_HOME_TIER_PILL_GEM_SIZE} />
             <span className="uppercase">{tierName}</span>
           </span>
         </div>

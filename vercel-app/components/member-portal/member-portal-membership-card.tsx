@@ -6,6 +6,7 @@ import type { MemberSummary } from "@/lib/members-server"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import { formatPoints, maskPhone, tierVisual, type PortalDashboard } from "@/components/member-portal/portal-ui"
 import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
+import { MP_HOME_CARD_GEM_SIZE } from "@/lib/member-portal-home-layout"
 import { cn } from "@/lib/utils"
 
 type MembershipCardTierProgress = {
@@ -86,8 +87,8 @@ export function MemberPortalMembershipCard({
         }}
       />
 
-      <div className="pointer-events-none absolute right-6 top-[18px] z-[2]">
-        <TierFacetedGemIcon family={tier.family} size={54} variant="cardHero" onDark />
+      <div className="pointer-events-none absolute right-5 top-4 z-[2]">
+        <TierFacetedGemIcon family={tier.family} size={MP_HOME_CARD_GEM_SIZE} variant="cardHero" />
       </div>
 
       <button
@@ -134,7 +135,7 @@ export function MemberPortalMembershipCard({
               <div className="flex flex-wrap items-center gap-1">
                 <span>{t("tierNext")} :</span>
                 <b className="text-[10px] tracking-wide text-white">{tierProgress.nextTierName}</b>
-                {nextFamily ? <TierFacetedGemIcon family={nextFamily} size={14} onDark /> : null}
+                {nextFamily ? <TierFacetedGemIcon family={nextFamily} size={16} /> : null}
               </div>
             ) : null}
             <p className="mt-0.5 text-[9px] leading-snug">{tierProgress.subtitle}</p>

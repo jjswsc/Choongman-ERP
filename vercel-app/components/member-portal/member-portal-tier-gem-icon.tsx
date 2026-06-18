@@ -2,184 +2,103 @@
 
 import * as React from "react"
 import type { TierFamily } from "@/lib/member-portal-tier-visual"
-import { tierGemAssetUrl } from "@/lib/member-portal-tier-gem-assets"
 import { cn } from "@/lib/utils"
 
 type TierFacetedGemIconProps = {
   family: TierFamily
   size?: number
   className?: string
-  /** 카드 우측 상단 등 — 원본 시안 drop-shadow */
+  /** 카드 우측 상단 — choongman_member_home_only.html .card-gem */
   variant?: "default" | "cardHero"
-  /** 다크 멤버 카드 위 — 흰 배경 제거 블렌드 */
-  onDark?: boolean
 }
 
 type GemPalette = {
-  highlight: string
-  light: string
-  mid: string
-  deep: string
-  shadow: string
-  glow: string
+  top: string
+  left: string
+  right: string
+  bottom: string
+  edge: string
 }
 
+/** 원본 시안(💎) — 등급별 색만 다르고 단순 플랫 보석 */
 const GEM_PALETTES: Record<TierFamily, GemPalette> = {
-  bronze: {
-    highlight: "#fff0dc",
-    light: "#f0c89a",
-    mid: "#cd7f32",
-    deep: "#8b5a2b",
-    shadow: "#4a2f18",
-    glow: "rgba(205,127,50,0.55)",
-  },
-  silver: {
-    highlight: "#ffffff",
-    light: "#e8edf3",
-    mid: "#b8c4d4",
-    deep: "#6b7a8f",
-    shadow: "#3d4654",
-    glow: "rgba(148,163,184,0.5)",
-  },
-  gold: {
-    highlight: "#fff9e8",
-    light: "#fde68a",
-    mid: "#f59e0b",
-    deep: "#b45309",
-    shadow: "#78350f",
-    glow: "rgba(245,158,11,0.55)",
-  },
-  platinum: {
-    highlight: "#ffffff",
-    light: "#dbeafe",
-    mid: "#94a3b8",
-    deep: "#475569",
-    shadow: "#1e293b",
-    glow: "rgba(125,211,252,0.45)",
-  },
-  diamond: {
-    highlight: "#faf5ff",
-    light: "#ddd6fe",
-    mid: "#8b5cf6",
-    deep: "#5b21b6",
-    shadow: "#3b0764",
-    glow: "rgba(139,92,246,0.6)",
-  },
-  vip: {
-    highlight: "#fff1f2",
-    light: "#fda4af",
-    mid: "#f43f5e",
-    deep: "#be123c",
-    shadow: "#881337",
-    glow: "rgba(244,63,94,0.55)",
-  },
-  default: {
-    highlight: "#fff7e6",
-    light: "#fde68a",
-    mid: "#d97706",
-    deep: "#92400e",
-    shadow: "#78350f",
-    glow: "rgba(217,119,6,0.5)",
-  },
+  bronze: { top: "#f5d5a8", left: "#cd7f32", right: "#e8a862", bottom: "#8b5a2b", edge: "#6b4423" },
+  silver: { top: "#f8fafc", left: "#94a3b8", right: "#cbd5e1", bottom: "#64748b", edge: "#475569" },
+  gold: { top: "#fef3c7", left: "#f59e0b", right: "#fcd34d", bottom: "#b45309", edge: "#92400e" },
+  platinum: { top: "#f0f9ff", left: "#7dd3fc", right: "#bae6fd", bottom: "#475569", edge: "#334155" },
+  diamond: { top: "#ede9fe", left: "#8b5cf6", right: "#c4b5fd", bottom: "#5b21b6", edge: "#4c1d95" },
+  vip: { top: "#ffe4e6", left: "#f43f5e", right: "#fda4af", bottom: "#be123c", edge: "#9f1239" },
+  default: { top: "#fef3c7", left: "#d97706", right: "#fbbf24", bottom: "#92400e", edge: "#78350f" },
 }
 
-function TierFacetedGemSvgFallback({ family, size, className }: TierFacetedGemIconProps) {
-  const uid = React.useId().replace(/:/g, "")
-  const p = GEM_PALETTES[family] || GEM_PALETTES.default
-  const id = (name: string) => `tier-gem-${uid}-${name}`
-
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 72"
-      className={cn("drop-shadow-[0_8px_14px_var(--tier-gem-glow)]", className)}
-      style={{ ["--tier-gem-glow" as string]: p.glow }}
-      aria-hidden
-    >
-      <defs>
-        <filter id={id("glass")} x="-20%" y="-20%" width="140%" height="150%">
-          <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="blur" />
-          <feSpecularLighting
-            in="blur"
-            surfaceScale="3"
-            specularConstant="1.1"
-            specularExponent="22"
-            lightingColor="#ffffff"
-            result="spec"
-          >
-            <fePointLight x="18" y="8" z="48" />
-          </feSpecularLighting>
-          <feComposite in="spec" in2="SourceAlpha" operator="in" result="specOut" />
-          <feComposite in="SourceGraphic" in2="specOut" operator="arithmetic" k1="0" k2="1" k3="0.85" k4="0" />
-        </filter>
-        <linearGradient id={id("table")} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={p.highlight} />
-          <stop offset="55%" stopColor={p.light} />
-          <stop offset="100%" stopColor={p.mid} />
-        </linearGradient>
-        <linearGradient id={id("pavilion")} x1="50%" y1="0%" x2="50%" y2="100%">
-          <stop offset="0%" stopColor={p.mid} />
-          <stop offset="100%" stopColor={p.shadow} />
-        </linearGradient>
-        <linearGradient id={id("crown-l")} x1="100%" y1="20%" x2="0%" y2="80%">
-          <stop offset="0%" stopColor={p.light} />
-          <stop offset="100%" stopColor={p.deep} />
-        </linearGradient>
-        <linearGradient id={id("crown-r")} x1="0%" y1="20%" x2="100%" y2="80%">
-          <stop offset="0%" stopColor={p.highlight} />
-          <stop offset="100%" stopColor={p.mid} />
-        </linearGradient>
-      </defs>
-      <g filter={`url(#${id("glass")})`}>
-        <ellipse cx="32" cy="67" rx="17" ry="3.2" fill="rgba(0,0,0,0.28)" />
-        <polygon points="32,66 14,36 50,36" fill={`url(#${id("pavilion")})`} />
-        <polygon points="14,36 22,24 32,30" fill={`url(#${id("crown-l")})`} />
-        <polygon points="50,36 42,24 32,30" fill={`url(#${id("crown-r")})`} />
-        <polygon points="32,12 22,24 32,30 42,24" fill={`url(#${id("table")})`} />
-        <polygon points="32,12 26,20 32,22 38,20" fill="white" opacity="0.62" />
-        <circle cx="27" cy="18" r="1.8" fill="white" opacity="0.95" />
-      </g>
-    </svg>
-  )
-}
-
-/** 고해상도 3D 젬 PNG(WebP) + SVG 폴백 */
+/**
+ * choongman_member_home_only.html .card-gem 스타일
+ * — 투명 SVG, 실사 PNG 없음, 💎 이모지와 같은 단순 입체감
+ */
 export function TierFacetedGemIcon({
   family,
   size = 48,
   className,
   variant = "default",
-  onDark = false,
 }: TierFacetedGemIconProps) {
-  const [useFallback, setUseFallback] = React.useState(false)
-  const src = tierGemAssetUrl(family)
+  const uid = React.useId().replace(/:/g, "")
+  const p = GEM_PALETTES[family] || GEM_PALETTES.default
+  const id = (name: string) => `tier-gem-${uid}-${name}`
 
   const shadowClass =
     variant === "cardHero"
       ? "drop-shadow-[0_8px_10px_rgba(255,255,255,0.18)]"
-      : "drop-shadow-[0_8px_16px_rgba(0,0,0,0.28)]"
-
-  if (useFallback) {
-    return <TierFacetedGemSvgFallback family={family} size={size} className={cn(shadowClass, className)} />
-  }
+      : "drop-shadow-[0_4px_8px_rgba(0,0,0,0.22)]"
 
   return (
-    <img
-      src={src}
+    <svg
       width={size}
       height={size}
-      alt=""
+      viewBox="0 0 64 64"
+      className={cn("shrink-0", shadowClass, className)}
       aria-hidden
-      decoding="async"
-      className={cn(
-        "pointer-events-none max-w-none object-contain",
-        onDark && "mix-blend-lighten",
-        shadowClass,
-        className
-      )}
-      style={{ width: size, height: size }}
-      onError={() => setUseFallback(true)}
-    />
+    >
+      <defs>
+        <linearGradient id={id("top")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor={p.top} />
+          <stop offset="100%" stopColor={p.right} />
+        </linearGradient>
+        <linearGradient id={id("left")} x1="100%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={p.left} />
+          <stop offset="100%" stopColor={p.bottom} />
+        </linearGradient>
+        <linearGradient id={id("right")} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={p.right} />
+          <stop offset="100%" stopColor={p.left} />
+        </linearGradient>
+        <linearGradient id={id("bottom")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor={p.left} />
+          <stop offset="100%" stopColor={p.bottom} />
+        </linearGradient>
+      </defs>
+
+      {/* 상단 크라운(💎 윗면) */}
+      <polygon points="32,6 14,28 32,34 50,28" fill={`url(#${id("top")})`} />
+      {/* 좌측 면 */}
+      <polygon points="14,28 32,34 32,58 14,28" fill={`url(#${id("left")})`} />
+      {/* 우측 면 */}
+      <polygon points="50,28 32,34 32,58 50,28" fill={`url(#${id("right")})`} />
+      {/* 하단 팬션 */}
+      <polygon points="32,34 22,58 32,58 42,58" fill={`url(#${id("bottom")})`} />
+
+      {/* 외곽선 — 이모지처럼 단순 */}
+      <polygon
+        points="32,6 14,28 32,58 50,28"
+        fill="none"
+        stroke={p.edge}
+        strokeWidth="0.8"
+        strokeLinejoin="round"
+        opacity="0.35"
+      />
+
+      {/* 하이라이트 */}
+      <polygon points="32,10 24,24 32,28 40,24" fill="white" opacity="0.45" />
+      <circle cx="26" cy="18" r="2" fill="white" opacity="0.7" />
+    </svg>
   )
 }

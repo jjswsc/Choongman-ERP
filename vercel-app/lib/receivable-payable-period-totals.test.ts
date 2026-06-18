@@ -57,4 +57,13 @@ describe('pairReceivableLedgerDates', () => {
     ])
     expect(pairs.get(3)).toEqual({ salesDate: '2026-05-10' })
   })
+
+  it('pairs receive rows linked by ref_id to accrual id', () => {
+    const pairs = pairReceivableLedgerDates([
+      { id: 10, ref_type: 'Order', amount: 50000, trans_date: '2026-04-01' },
+      { id: 11, ref_type: 'Receive', ref_id: 10, amount: -50000, trans_date: '2026-04-20' },
+    ])
+    expect(pairs.get(10)).toEqual({ salesDate: '2026-04-01', receiveDate: '2026-04-20' })
+    expect(pairs.get(11)).toEqual({ salesDate: '2026-04-01', receiveDate: '2026-04-20' })
+  })
 })

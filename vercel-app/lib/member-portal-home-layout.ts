@@ -39,6 +39,12 @@ export const MP_HOME_POPUP_ASPECT_H = 5
 export const MP_HOME_POPUP_MIN_WIDTH = 720
 export const MP_HOME_POPUP_MIN_HEIGHT = 900
 
+/** 멤버 카드 우측 젬 — 원본 .card-gem 54px → 약간 확대 */
+export const MP_HOME_CARD_GEM_SIZE = 62
+
+/** tier-pill 젬 */
+export const MP_HOME_TIER_PILL_GEM_SIZE = 18
+
 /** 주문 탭 신메뉴 정사각 카드 */
 export const MP_HOME_NEW_MENU_ASPECT_W = 1
 export const MP_HOME_NEW_MENU_ASPECT_H = 1

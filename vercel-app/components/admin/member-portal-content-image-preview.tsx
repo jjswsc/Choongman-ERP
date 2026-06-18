@@ -1,8 +1,8 @@
 "use client"
 
 import {
-  MP_HOME_CARD_RADIUS,
   MP_HOME_HERO_HEIGHT,
+  MP_HOME_PROMO_RADIUS,
 } from "@/lib/member-portal-home-layout"
 import type { MemberPortalContentAdminCategory } from "@/lib/member-portal-content-admin"
 
@@ -28,23 +28,23 @@ export function MemberPortalContentImagePreview({
   if (category === "promo" || category === "new_menu") {
     return (
       <div
-        className={`relative w-full overflow-hidden bg-[#261c12] shadow-sm ${MP_HOME_CARD_RADIUS} ${className}`}
+        className={`relative w-full overflow-hidden bg-[#261c12] shadow-sm ${MP_HOME_PROMO_RADIUS} ${className}`}
       >
         <img
           src={imageUrl}
           alt={alt || title || ""}
           referrerPolicy="no-referrer"
-          className={`${MP_HOME_HERO_HEIGHT} w-full object-cover object-right`}
+          className={`${MP_HOME_HERO_HEIGHT} w-full object-cover object-center`}
           onError={(e) => {
             e.currentTarget.classList.add("opacity-40")
           }}
         />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#261c12]/95 via-[#261c12]/55 to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] flex max-w-[58%] flex-col justify-center px-3 py-2.5">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/72 via-black/28 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] flex max-w-[78%] flex-col px-3 pb-3 pt-2">
           {title ? (
-            <p className="line-clamp-2 text-sm font-bold leading-tight text-white">{title}</p>
+            <p className="line-clamp-1 text-sm font-bold leading-tight text-white">{title}</p>
           ) : null}
-          {body ? <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-white/75">{body}</p> : null}
+          {body ? <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-white/90">{body}</p> : null}
         </div>
       </div>
     )

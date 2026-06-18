@@ -72,15 +72,34 @@ function isReceivableSettlementRow(refType: string | undefined, amount: number):
   return amount < 0
 }
 
-/** 같은 매출처 그룹 내 매출·입금 행을 금액으로 1:1 짝지어 양쪽 날짜를 표시 */
+/** 같은 매출처 그룹 내 매출·입금 행을 ref_id·금액으로 짝지어 양쪽 날짜를 표시 */
 export function pairReceivableLedgerDates(
-  items: { id?: number; ref_type?: string; amount?: number; trans_date?: string }[] | undefined
+  items:
+    | { id?: number; ref_type?: string; ref_id?: number; amount?: number; trans_date?: string }[]
+    | undefined
 ): Map<number, ReceivableLedgerDatePair> {
   const out = new Map<number, ReceivableLedgerDatePair>()
   const rows = items ?? []
+  const byId = new Map<number, (typeof rows)[number]>()
+  for (const r of rows) {
+    if (r.id != null) byId.set(r.id, r)
+  }
+
+  for (const recv of rows) {
+    if (String(recv.ref_type || '') !== 'Receive' || recv.ref_id == null || recv.id == null) continue
+    const parent = byId.get(Number(recv.ref_id))
+    if (!parent) continue
+    const pair: ReceivableLedgerDatePair = {
+      salesDate: sliceYmd(parent.trans_date),
+      receiveDate: sliceYmd(recv.trans_date),
+    }
+    out.set(Number(recv.ref_id), pair)
+    out.set(recv.id, pair)
+  }
 
   const receivePool = new Map<number, { id?: number; trans_date?: string }[]>()
   for (const r of rows) {
+    if (r.id != null && out.has(r.id)) continue
     const amount = Number(r.amount ?? 0)
     if (!isReceivableSettlementRow(r.ref_type, amount)) continue
     const amt = roundMoney(Math.abs(amount))
@@ -97,6 +116,7 @@ export function pairReceivableLedgerDates(
     .sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
 
   for (const acc of accruals) {
+    if (acc.id != null && out.has(acc.id)) continue
     const salesDate = sliceYmd(acc.trans_date)
     const amt = roundMoney(Math.abs(Number(acc.amount ?? 0)))
     const pool = receivePool.get(amt)

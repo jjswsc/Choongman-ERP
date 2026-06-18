@@ -2,7 +2,12 @@
  * 미수금 receivable_transactions (주문·강제출고 등 매출 행) 수금 확인 플래그
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelectFilter,
+  supabaseUpdate,
+} from '@/lib/supabase-server'
 import { canUpdateReceivableReceiveCheck } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -26,6 +31,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const id = Number(body.id ?? body.receivableId ?? 0)
     const receiveChecked = Boolean(body.receiveChecked ?? body.receive_checked)
+    const receiveDate = String(body.receiveDate ?? body.receive_date ?? '').trim().slice(0, 10)
     const userStore = String(auth.store || '').trim()
     const userRole = String(auth.role || '').toLowerCase()
     const allowedStores =
@@ -40,7 +46,16 @@ export async function POST(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter(`receivable_transactions`, `id=eq.${id}`, {
       limit: 1,
-    })) as { id?: number; store_name?: string; ref_type?: string }[] | null
+      select: 'id,store_name,ref_type,amount,invoice_no,memo,receive_checked',
+    })) as {
+      id?: number
+      store_name?: string
+      ref_type?: string
+      amount?: number
+      invoice_no?: string
+      memo?: string
+      receive_checked?: boolean
+    }[] | null
     const row = rows?.[0]
     if (!row?.id) {
       return NextResponse.json({ success: false, message: '해당 미수금 내역을 찾을 수 없습니다.' }, { headers })
@@ -61,8 +76,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { headers })
     }
 
-    await supabaseUpdate('receivable_transactions', id, { receive_checked: receiveChecked })
-    return NextResponse.json({ success: true, id, receiveChecked }, { headers })
+    const linkedFilter = `ref_type=eq.Receive&ref_id=eq.${id}&bank_transaction_id=is.null`
+
+    if (receiveChecked) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(receiveDate)) {
+        return NextResponse.json(
+          { success: false, message: '입금(수령)일을 입력해 주세요.' },
+          { headers }
+        )
+      }
+      const amountAbs = Math.abs(Number(row.amount ?? 0))
+      if (amountAbs <= 0) {
+        return NextResponse.json({ success: false, message: '매출 금액이 없습니다.' }, { headers })
+      }
+      const label = String(row.invoice_no || row.memo || '').trim()
+      const memo = label ? `수금확인 ${label}` : '수금확인'
+      const linked = (await supabaseSelectFilter('receivable_transactions', linkedFilter, {
+        limit: 1,
+        select: 'id',
+      })) as { id?: number }[] | null
+      if (linked?.[0]?.id) {
+        await supabaseUpdate('receivable_transactions', linked[0].id, {
+          trans_date: receiveDate,
+          amount: -amountAbs,
+          memo,
+        })
+      } else {
+        await supabaseInsert('receivable_transactions', {
+          store_name: storeName,
+          amount: -amountAbs,
+          ref_type: 'Receive',
+          ref_id: id,
+          trans_date: receiveDate,
+          memo,
+          receive_checked: false,
+        })
+      }
+      await supabaseUpdate('receivable_transactions', id, { receive_checked: true })
+    } else {
+      await supabaseDeleteByFilter('receivable_transactions', linkedFilter)
+      await supabaseUpdate('receivable_transactions', id, { receive_checked: false })
+    }
+
+    return NextResponse.json({ success: true, id, receiveChecked, receiveDate: receiveChecked ? receiveDate : undefined }, { headers })
   } catch (e) {
     console.error('updateReceivableReceiveCheck:', e)
     return NextResponse.json(

@@ -100,6 +100,7 @@ import { StorePurchaseJournalButton } from "@/components/erp/store-purchase-jour
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
 import { receivableStoreGroupKey } from "@/lib/receivable-store-key"
+import { INBOUND_HQ_LOCATION } from "@/lib/stock-location-patterns"
 
 /** 방콕 달력 날짜 (YYYY-MM-DD). 로컬 PC 타임존/UTC와 어긋나면 종료일 필터로 행이 잘릴 수 있음. */
 function bangkokTodayStr() {
@@ -224,6 +225,18 @@ export function ReceivablePayableTab() {
   }, [t])
   const { auth } = useAuth()
   const { posStores: storeList, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const formatAttributedStoreLabel = React.useCallback(
+    (raw: string | undefined | null) => {
+      const v = String(raw || "").trim()
+      if (!v) return "—"
+      if (v === INBOUND_HQ_LOCATION) {
+        return t("inLocationHQ") || tt("inLocationHQ", "입고등록(본사)")
+      }
+      const resolved = formatStoreLabel(resolveStoreKey(v))
+      return resolved || v
+    },
+    [formatStoreLabel, resolveStoreKey, t, tt]
+  )
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
 
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
@@ -267,6 +280,12 @@ export function ReceivablePayableTab() {
   const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, LineItemsCacheEntry>>({})
   const [loadingItemsFor, setLoadingItemsFor] = React.useState<string | null>(null)
   const [updatingReceiveCheckId, setUpdatingReceiveCheckId] = React.useState<number | null>(null)
+  const [receiveCheckDialog, setReceiveCheckDialog] = React.useState<{
+    receivableId: number
+    outletStoreName: string
+    receiveDate: string
+    invoiceLabel: string
+  } | null>(null)
   const [taxInvoiceLoadingKey, setTaxInvoiceLoadingKey] = React.useState<string | null>(null)
   const [manualEdit, setManualEdit] = React.useState<{
     ledger: "receivable" | "payable"
@@ -320,7 +339,7 @@ export function ReceivablePayableTab() {
       } else if (row.ref_type === "ForceOutbound") {
         const sid = Number(row.ref_id)
         if (!Number.isFinite(sid) || sid <= 0) {
-          await appAlert(tt("recTaxInvoiceNoForceLog", "Cannot identify forced outbound log."))
+          await appAlert(t("recTaxInvoiceNoForceLog") || tt("recTaxInvoiceNoForceLog", "Cannot identify forced outbound log."))
           return
         }
         refType = "ForceOutbound"
@@ -328,7 +347,7 @@ export function ReceivablePayableTab() {
       } else if (row.ref_type === "AccountingPO") {
         const poId = Number(row.ref_id)
         if (!Number.isFinite(poId) || poId <= 0) {
-          await appAlert(tt("recTaxInvoiceNoPoId", "Cannot identify accounting PO."))
+          await appAlert(t("recTaxInvoiceNoPoId") || tt("recTaxInvoiceNoPoId", "Cannot identify accounting PO."))
           return
         }
         refType = "PO"
@@ -709,35 +728,40 @@ export function ReceivablePayableTab() {
     loadList()
   }, [loadList])
 
-  const patchListReceiveChecked = React.useCallback((receivableId: number, receiveChecked: boolean) => {
-    setListData((prev) =>
-      prev.map((grp) => ({
-        ...grp,
-        items: (grp.items || []).map((r) =>
-          r.id === receivableId ? { ...r, receive_checked: receiveChecked } : r
-        ),
-      }))
-    )
-  }, [])
-
   const handleReceiveCheckChange = React.useCallback(
     async (params: {
       receivableId: number
       receiveChecked: boolean
       outletStoreName: string
+      receiveDate?: string
     }) => {
-      const { receivableId, receiveChecked, outletStoreName } = params
+      const { receivableId, receiveChecked, outletStoreName, receiveDate } = params
       if (!canUpdateReceivableReceiveCheck(auth?.role || "", auth?.store || "", outletStoreName)) return
+      if (receiveChecked && !receiveDate) {
+        await appAlert(tt("recReceiveCheckDateRequired", "입금(수령)일을 입력해 주세요."))
+        return
+      }
+      if (!receiveChecked) {
+        const ok = await appConfirm(
+          tt(
+            "recReceiveCheckUncheckConfirm",
+            "수금 완료를 취소하면 연결된 입금 내역도 함께 제거됩니다. 계속하시겠습니까?"
+          )
+        )
+        if (!ok) return
+      }
       setUpdatingReceiveCheckId(receivableId)
       try {
         const res = await updateReceivableReceiveCheck({
           id: receivableId,
           receiveChecked,
+          receiveDate,
           userStore: auth?.store,
           userRole: auth?.role,
         })
         if (res.success) {
-          patchListReceiveChecked(receivableId, res.receiveChecked ?? receiveChecked)
+          setReceiveCheckDialog(null)
+          loadList()
         } else {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "Failed")
         }
@@ -747,7 +771,17 @@ export function ReceivablePayableTab() {
         setUpdatingReceiveCheckId(null)
       }
     },
-    [auth?.role, auth?.store, patchListReceiveChecked, t]
+    [auth?.role, auth?.store, loadList, t, tt]
+  )
+
+  const openReceiveCheckDialog = React.useCallback(
+    (params: { receivableId: number; outletStoreName: string; invoiceLabel: string }) => {
+      setReceiveCheckDialog({
+        ...params,
+        receiveDate: bangkokTodayStr(),
+      })
+    },
+    []
   )
 
   React.useEffect(() => {
@@ -871,10 +905,12 @@ export function ReceivablePayableTab() {
     return { accrualSum, settlementSum, balanceSum, cumulativeSum, count }
   }, [listData, tab, getCumulativeBalanceForItem])
 
-  const ledgerNoPeriodRowsHint = tt(
-    "ledgerNoPeriodRows",
-    "조회 기간 내 거래 내역이 없습니다. 누적 잔액은 종료일까지 전체 이력 기준입니다."
-  )
+  const ledgerNoPeriodRowsHint =
+    t("ledgerNoPeriodRows") ||
+    tt(
+      "ledgerNoPeriodRows",
+      "조회 기간 내 거래 내역이 없습니다. 누적 잔액은 종료일까지 전체 이력 기준입니다."
+    )
 
   const ledgerAging = React.useMemo(
     () => computeLedgerAging(listData, tab, endStr),
@@ -882,7 +918,7 @@ export function ReceivablePayableTab() {
   )
 
   const amountGridCols =
-    "grid grid-cols-[minmax(150px,220px)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(165px,1.2fr)] gap-x-5 gap-y-1 items-center min-w-[920px]"
+    "grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(6rem,max-content))_minmax(6.5rem,max-content)] gap-x-2 sm:gap-x-3 gap-y-1 items-center w-full min-w-0"
   const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
   const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
@@ -904,11 +940,11 @@ export function ReceivablePayableTab() {
     (prior: number | undefined) => {
       if (prior == null || Math.abs(prior) <= 0.01) return null
       const template = startStr
-        ? tt("ledgerPriorBalanceBeforeStart", "조회 시작({date}) 이전 ฿{amount}")
-        : tt("ledgerPriorBalanceBeforePeriod", "조회 기간 이전 ฿{amount}")
+        ? t("ledgerPriorBalanceBeforeStart") || tt("ledgerPriorBalanceBeforeStart", "조회 시작({date}) 이전 ฿{amount}")
+        : t("ledgerPriorBalanceBeforePeriod") || tt("ledgerPriorBalanceBeforePeriod", "조회 기간 이전 ฿{amount}")
       return template.replace("{date}", startStr).replace("{amount}", prior.toLocaleString())
     },
-    [startStr, tt]
+    [startStr, t, tt]
   )
 
   const transactionLineRowKey = (
@@ -992,7 +1028,7 @@ export function ReceivablePayableTab() {
           t("date") || "Date",
           t("type") || "Type",
           t("poInvoice") || "Invoice",
-          tt("payColAttributedStore", "Attributed Store"),
+          t("payColAttributedStore") || tt("payColAttributedStore", "Attributed Store"),
           t("payColPaymentStatus") || "Payment Status",
           t("amount") || "Amount",
           t("memo") || "Memo",
@@ -1050,7 +1086,7 @@ export function ReceivablePayableTab() {
                 row.trans_date || "-",
                 typeLabel(row.ref_type || ""),
                 invPayable,
-                (row as { attributed_store?: string }).attributed_store || "",
+                formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store),
                 statusPay(row),
                 String(row.amount ?? 0),
                 getMemo(row.memo) || "",
@@ -1144,7 +1180,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         <h1 className="text-lg font-bold mb-2">{printTitle}</h1>
         <p className="text-sm text-muted-foreground mb-4">
           {startStr} ~ {endStr}
-          {storeFilter !== "All" && (isRec ? ` · ${t("outColStore")}: ${storeFilter}` : ` · ${tt("payColAttributedStore", "Attributed Store")}: ${storeFilter}`)}
+          {storeFilter !== "All" && (isRec ? ` · ${t("outColStore")}: ${storeFilter}` : ` · ${t("payColAttributedStore") || tt("payColAttributedStore", "Attributed Store")}: ${formatAttributedStoreLabel(storeFilter)}`)}
           {!isRec && vendorFilter !== "All" && ` · ${t("vendor")}: ${vendorFilter}`}
         </p>
         {listData.length > 0 && (
@@ -1171,7 +1207,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "Invoice"}</th>}
                         {!isRec && (
                           <th className="text-center py-1 px-2 w-[100px] whitespace-nowrap">
-                            {tt("payColAttributedStore", "Attributed Store")}
+                            {t("payColAttributedStore") || tt("payColAttributedStore", "Attributed Store")}
                           </th>
                         )}
                         <th className="text-center py-1 px-2 w-[95px]">{isRec ? (t("recColReceiveStatus") || "Receive Status") : (t("payColPaymentStatus") || "Payment Status")}</th>
@@ -1213,7 +1249,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
                           {!isRec && (
                             <td className="py-1 px-2 text-center text-muted-foreground text-[11px] whitespace-nowrap">
-                              {(row as { attributed_store?: string }).attributed_store || "—"}
+                              {formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store)}
                             </td>
                           )}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
@@ -1348,23 +1384,23 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : (
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[920px]")}>
-                        <div className="text-center">{(t("outColStore") || "출고처")}</div>
-                        <div className="text-center tabular-nums">{(t("recColSalesAmount") || "매출금액")}</div>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
+                        <div className="text-left min-w-0 pr-2">{(t("outColStore") || "출고처")}</div>
+                        <div className="text-right tabular-nums text-xs sm:text-sm leading-tight">{(t("recColSalesAmount") || "매출금액")}</div>
                         <div
-                          className="text-center tabular-nums"
+                          className="text-right tabular-nums text-xs sm:text-sm leading-tight"
                           title={tt("recReceiveAmountHint", "조회 기간 내 수령·통장 분개(음수) 합계. 수금확인 체크와 별도입니다.")}
                         >
                           {(t("recColReceiveAmount") || "수령금액")}
                         </div>
                         <div
-                          className="text-center tabular-nums"
+                          className="text-right tabular-nums text-xs sm:text-sm leading-tight"
                           title={tt("recPeriodNetHint", "매출금액 − 수령금액 (조회 기간 내 순증감)")}
                         >
                           {(t("recColRemainingReceivable") || "기간 순잔액")}
                         </div>
                         <div
-                          className="text-center tabular-nums text-primary"
+                          className="text-right tabular-nums text-primary text-xs sm:text-sm leading-tight"
                           title={tt(
                             "recCumulativeColHint",
                             "출고처별 종료일까지 전체 이력 합계입니다. 조회 시작일 이전 거래도 포함하며, 아래 기간 내역 합과 다를 수 있습니다."
@@ -1391,22 +1427,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const priorBalanceHint = formatPriorBalanceHint(priorBal)
                           return (
                           <AccordionItem key={item.storeName!} value={item.storeName!}>
-                            <AccordionTrigger className="hover:no-underline px-4 py-3 overflow-x-auto [&>svg]:ml-3 [&>svg]:shrink-0">
-                              <div className={cn(amountGridCols, "w-full pr-2")}>
-                                  <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
-                                    <span className="font-semibold truncate">{item.storeName}</span>
+                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:ml-2 [&>svg]:shrink-0">
+                              <div className={cn(amountGridCols, "flex-1 min-w-0 w-full pr-1")}>
+                                  <div className="flex flex-col items-start gap-0.5 min-w-0 text-left pr-2">
+                                    <span className="font-semibold break-words leading-snug">{item.storeName}</span>
                                     {item.vendorCode && (
                                       <span className="text-xs text-muted-foreground">
                                         {t("vendor") || "거래처"}: {item.vendorName === item.vendorCode ? item.vendorCode : `${item.vendorName} (${item.vendorCode})`}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.salesSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.periodNet.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-bold text-primary whitespace-nowrap px-0.5">
+                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.salesSum.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.receiveSum.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums font-bold text-primary whitespace-nowrap">
                                     {cumulativeBal != null ? (
-                                      <div className="flex flex-col items-center gap-0.5">
+                                      <div className="flex flex-col items-end gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
                                         {priorBalanceHint ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
@@ -1579,7 +1615,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         title={
                                           canExpandRecLines
                                             ? row.ref_type === "ForceOutbound"
-                                              ? tt("recClickForceForLines", "클릭하면 강제출고 품목을 펼칩니다.")
+                                              ? t("recClickForceForLines") || tt("recClickForceForLines", "클릭하면 강제출고 품목을 펼칩니다.")
                                               : tt("recClickOrderForLines", "클릭하면 주문 품목 목록을 펼칩니다.")
                                             : undefined
                                         }
@@ -1608,7 +1644,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </td>
                                       <td className="py-1.5 px-2 w-[108px] text-center align-middle">
                                         {(row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO") && row.id != null ? (
-                                          <div className="flex flex-col items-center gap-0.5">
+                                          <div className="flex flex-col items-end gap-0.5">
                                             <Checkbox
                                               checked={!!row.receive_checked}
                                               disabled={!canEditReceiveCheck || updatingReceiveCheckId === row.id}
@@ -1619,9 +1655,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               }
                                               onCheckedChange={(v) => {
                                                 if (!canEditReceiveCheck || row.id == null) return
+                                                if (v) {
+                                                  openReceiveCheckDialog({
+                                                    receivableId: row.id,
+                                                    outletStoreName: item.storeName || "",
+                                                    invoiceLabel:
+                                                      orderNoDisplay !== "-"
+                                                        ? String(orderNoDisplay)
+                                                        : String(row.invoice_no || row.memo || ""),
+                                                  })
+                                                  return
+                                                }
                                                 void handleReceiveCheckChange({
                                                   receivableId: row.id,
-                                                  receiveChecked: !!v,
+                                                  receiveChecked: false,
                                                   outletStoreName: item.storeName || "",
                                                 })
                                               }}
@@ -1836,14 +1883,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[920px]")}>
-                          <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
-                          <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
-                          <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
-                          <div className="text-center tabular-nums font-semibold">
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
+                          <div className="text-right">{t("recSearchTotalLabel") || tt("recSearchTotalLabel", "합계")}</div>
+                          <div className="text-right tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
+                          <div className="text-right tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
+                          <div className="text-right tabular-nums font-semibold">
                             ฿{listSearchTotals.balanceSum.toLocaleString()}
                           </div>
-                          <div className="text-center tabular-nums font-bold text-primary">
+                          <div className="text-right tabular-nums font-bold text-primary">
                             ฿{(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount).toLocaleString()}
                           </div>
                         </div>
@@ -1944,18 +1991,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : (
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[920px]")}>
-                        <div className="text-center">{(t("vendor") || "매입처")}</div>
-                        <div className="text-center tabular-nums">{(t("payColPurchaseAmount") || "매입금액")}</div>
-                        <div className="text-center tabular-nums">{(t("payColPaymentAmount") || "지급금액")}</div>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
+                        <div className="text-left min-w-0 pr-2">{(t("vendor") || "매입처")}</div>
+                        <div className="text-right tabular-nums text-xs sm:text-sm leading-tight">{(t("payColPurchaseAmount") || "매입금액")}</div>
+                        <div className="text-right tabular-nums text-xs sm:text-sm leading-tight">{(t("payColPaymentAmount") || "지급금액")}</div>
                         <div
-                          className="text-center tabular-nums"
+                          className="text-right tabular-nums text-xs sm:text-sm leading-tight"
                           title={tt("payPeriodNetHint", "매입금액 − 지급금액 (조회 기간 내 순증감)")}
                         >
                           {(t("payColRemainingPayable") || "기간 순잔액")}
                         </div>
                         <div
-                          className="text-center tabular-nums text-primary"
+                          className="text-right tabular-nums text-primary text-xs sm:text-sm leading-tight"
                           title={tt(
                             "payCumulativeColHint",
                             "매입처별 종료일까지 전체 이력 합계입니다. 조회 시작일 이전 거래도 포함하며, 아래 기간 내역 합과 다를 수 있습니다."
@@ -1977,17 +2024,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const priorBalanceHint = formatPriorBalanceHint(priorBal)
                           return (
                           <AccordionItem key={item.vendorCode!} value={item.vendorCode!}>
-                            <AccordionTrigger className="hover:no-underline px-4 py-3 overflow-x-auto [&>svg]:ml-3 [&>svg]:shrink-0">
-                              <div className={cn(amountGridCols, "w-full pr-2")}>
-                                  <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
-                                    <span className="font-semibold truncate">{formatVendorDisplay(item.vendorCode)}</span>
+                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:ml-2 [&>svg]:shrink-0">
+                              <div className={cn(amountGridCols, "flex-1 min-w-0 w-full pr-1")}>
+                                  <div className="flex flex-col items-start gap-0.5 min-w-0 text-left pr-2">
+                                    <span className="font-semibold break-words leading-snug">{formatVendorDisplay(item.vendorCode)}</span>
                                   </div>
-                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.salesSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.periodNet.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-bold text-primary whitespace-nowrap px-0.5">
+                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.salesSum.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.receiveSum.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums font-bold text-primary whitespace-nowrap">
                                     {cumulativeBal != null ? (
-                                      <div className="flex flex-col items-center gap-0.5">
+                                      <div className="flex flex-col items-end gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
                                         {priorBalanceHint ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
@@ -2012,11 +2059,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 w-[35px] font-semibold"></th>
                                     <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
-                                    <th className="text-center py-2 px-4 w-[100px] font-semibold" title={tt("payColInvoiceVat", "인보이스(부가세)")}>
-                                      {tt("payColInvoiceVat", "인보이스(부가세)")}
+                                    <th className="text-center py-2 px-4 w-[100px] font-semibold" title={t("payColInvoiceVat") || tt("payColInvoiceVat", "인보이스(부가세)")}>
+                                      {t("payColInvoiceVat") || tt("payColInvoiceVat", "인보이스(부가세)")}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[92px] font-semibold whitespace-nowrap">
-                                      {tt("payColAttributedStore", "귀속 매장")}
+                                      {t("payColAttributedStore") || tt("payColAttributedStore", "귀속 매장")}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("payColPaymentStatus") || "지급여부"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
@@ -2087,7 +2134,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             )}
                                             title={
                                               canExpand
-                                                ? tt("payClickInvoiceForLines", "클릭하면 입고·발주 품목 목록을 펼칩니다.")
+                                                ? t("payClickInvoiceForLines") || tt("payClickInvoiceForLines", "클릭하면 입고·발주 품목 목록을 펼칩니다.")
                                                 : row.invoice_no || undefined
                                             }
                                             onClick={() => {
@@ -2114,7 +2161,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             ) : "-"}
                                           </td>
                                           <td className="py-1.5 px-4 w-[92px] text-center text-muted-foreground text-xs whitespace-nowrap">
-                                            {(row as { attributed_store?: string }).attributed_store || "—"}
+                                            {formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store)}
                                           </td>
                                           <td className="py-1.5 px-4 w-[95px] text-center">
                                             <span className={cn(
@@ -2232,14 +2279,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[920px]")}>
-                          <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
-                          <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
-                          <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
-                          <div className="text-center tabular-nums font-semibold">
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
+                          <div className="text-right">{t("paySearchTotalLabel") || tt("paySearchTotalLabel", "합계")}</div>
+                          <div className="text-right tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
+                          <div className="text-right tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
+                          <div className="text-right tabular-nums font-semibold">
                             ฿{listSearchTotals.balanceSum.toLocaleString()}
                           </div>
-                          <div className="text-center tabular-nums font-bold text-primary">
+                          <div className="text-right tabular-nums font-bold text-primary">
                             ฿{(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount).toLocaleString()}
                           </div>
                         </div>
@@ -2326,6 +2373,66 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={receiveCheckDialog != null} onOpenChange={(open) => { if (!open && !updatingReceiveCheckId) setReceiveCheckDialog(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("recReceiveCheckDialogTitle") || tt("recReceiveCheckDialogTitle", "수금 완료 — 입금일")}</DialogTitle>
+            <DialogDescription>
+              {t("recReceiveCheckDialogHint") ||
+                tt(
+                  "recReceiveCheckDialogHint",
+                  "매출(발생)일과 별도로 실제 입금(수령)일을 입력합니다. 저장하면 입금 행이 생성되어 매출·입금 2줄로 표시됩니다."
+                )}
+            </DialogDescription>
+          </DialogHeader>
+          {receiveCheckDialog ? (
+            <div className="space-y-3 py-1">
+              {receiveCheckDialog.invoiceLabel ? (
+                <p className="text-sm text-muted-foreground truncate">{receiveCheckDialog.invoiceLabel}</p>
+              ) : null}
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  {t("recLedgerReceiveDateShort") || tt("recLedgerReceiveDateShort", "입금일")}
+                </label>
+                <Input
+                  type="date"
+                  value={receiveCheckDialog.receiveDate}
+                  onChange={(e) =>
+                    setReceiveCheckDialog((prev) => (prev ? { ...prev, receiveDate: e.target.value } : null))
+                  }
+                  className="h-9"
+                />
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!updatingReceiveCheckId}
+              onClick={() => setReceiveCheckDialog(null)}
+            >
+              {t("btnClose") || "닫기"}
+            </Button>
+            <Button
+              type="button"
+              disabled={!!updatingReceiveCheckId || !receiveCheckDialog?.receiveDate}
+              onClick={() => {
+                if (!receiveCheckDialog) return
+                void handleReceiveCheckChange({
+                  receivableId: receiveCheckDialog.receivableId,
+                  receiveChecked: true,
+                  outletStoreName: receiveCheckDialog.outletStoreName,
+                  receiveDate: receiveCheckDialog.receiveDate,
+                })
+              }}
+            >
+              {updatingReceiveCheckId ? t("loading") : t("btnSave") || "저장"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={manualEdit != null} onOpenChange={(open) => { if (!open && !manualEditSaving) setManualEdit(null) }}>
         <DialogContent className="sm:max-w-md">

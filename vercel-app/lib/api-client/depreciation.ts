@@ -148,6 +148,7 @@ export async function deleteManualBalanceTransaction(params: {
 export async function updateReceivableReceiveCheck(params: {
   id: number
   receiveChecked: boolean
+  receiveDate?: string
   userStore?: string
   userRole?: string
 }) {
