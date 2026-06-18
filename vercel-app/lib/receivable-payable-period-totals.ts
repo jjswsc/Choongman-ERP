@@ -139,3 +139,72 @@ export function pairReceivableLedgerDates(
 
   return out
 }
+
+export type PayableLedgerDatePair = {
+  purchaseDate?: string
+  paymentDate?: string
+}
+
+function isPayableAccrualRow(refType: string | undefined, amount: number): boolean {
+  const t = String(refType || '')
+  if (t === 'Inbound' || t === 'PO') return amount > 0
+  if (t === 'Opening') return amount > 0
+  return false
+}
+
+function isPayableSettlementRow(refType: string | undefined, amount: number): boolean {
+  if (String(refType || '') === 'Payment') return true
+  return amount < 0
+}
+
+/** 같은 매입처 그룹 내 매입·지급 행을 금액으로 짝지어 양쪽 날짜를 표시 */
+export function pairPayableLedgerDates(
+  items:
+    | { id?: number; ref_type?: string; ref_id?: number; amount?: number; trans_date?: string }[]
+    | undefined
+): Map<number, PayableLedgerDatePair> {
+  const out = new Map<number, PayableLedgerDatePair>()
+  const rows = items ?? []
+
+  const paymentPool = new Map<number, { id?: number; trans_date?: string }[]>()
+  for (const r of rows) {
+    if (r.id != null && out.has(r.id)) continue
+    const amount = Number(r.amount ?? 0)
+    if (!isPayableSettlementRow(r.ref_type, amount)) continue
+    const amt = roundMoney(Math.abs(amount))
+    if (amt <= 0) continue
+    if (!paymentPool.has(amt)) paymentPool.set(amt, [])
+    paymentPool.get(amt)!.push(r)
+  }
+  for (const pool of paymentPool.values()) {
+    pool.sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+  }
+
+  const accruals = rows
+    .filter((r) => isPayableAccrualRow(r.ref_type, Number(r.amount ?? 0)))
+    .sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+
+  for (const acc of accruals) {
+    if (acc.id != null && out.has(acc.id)) continue
+    const purchaseDate = sliceYmd(acc.trans_date)
+    const amt = roundMoney(Math.abs(Number(acc.amount ?? 0)))
+    const pool = paymentPool.get(amt)
+    const pay = pool?.shift()
+    const paymentDate = pay ? sliceYmd(pay.trans_date) : undefined
+    const pair: PayableLedgerDatePair = { purchaseDate, paymentDate }
+    if (acc.id != null) out.set(acc.id, pair)
+    if (pay?.id != null) out.set(pay.id, pair)
+  }
+
+  for (const r of rows) {
+    if (r.id == null || out.has(r.id)) continue
+    const amount = Number(r.amount ?? 0)
+    if (isPayableSettlementRow(r.ref_type, amount)) {
+      out.set(r.id, { paymentDate: sliceYmd(r.trans_date) })
+    } else if (isPayableAccrualRow(r.ref_type, amount)) {
+      out.set(r.id, { purchaseDate: sliceYmd(r.trans_date) })
+    }
+  }
+
+  return out
+}

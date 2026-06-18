@@ -50,7 +50,9 @@ import {
   priorCumulativeBalance,
   sumReceivablePayablePeriodAmounts,
   pairReceivableLedgerDates,
+  pairPayableLedgerDates,
   type ReceivableLedgerDatePair,
+  type PayableLedgerDatePair,
 } from "@/lib/receivable-payable-period-totals"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -213,6 +215,29 @@ function renderReceivableLedgerDateCell(
     )
   }
   return <span className="tabular-nums">{salesDate || receiveDate || fallback || "-"}</span>
+}
+
+function renderPayableLedgerDateCell(
+  row: { ref_type?: string; trans_date?: string; amount?: number },
+  pair: PayableLedgerDatePair | undefined,
+  labels: { purchase: string; payment: string }
+) {
+  const fallback = String(row.trans_date || "").trim().slice(0, 10)
+  const purchaseDate = pair?.purchaseDate || fallback
+  const paymentDate = pair?.paymentDate
+  if (purchaseDate && paymentDate && purchaseDate !== paymentDate) {
+    return (
+      <div className="flex flex-col items-start gap-0.5 leading-tight">
+        <span className="tabular-nums text-xs whitespace-nowrap">
+          <span className="text-muted-foreground">{labels.purchase}</span> {purchaseDate}
+        </span>
+        <span className="tabular-nums text-xs whitespace-nowrap">
+          <span className="text-muted-foreground">{labels.payment}</span> {paymentDate}
+        </span>
+      </div>
+    )
+  }
+  return <span className="tabular-nums">{purchaseDate || paymentDate || fallback || "-"}</span>
 }
 
 export function ReceivablePayableTab() {
@@ -2020,6 +2045,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             displayItems.length > 0 ? displayItems : allItems
                           )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
+                          const payableDatePairs = pairPayableLedgerDates(allItems)
+                          const payableDateLabels = {
+                            purchase: t("payLedgerPurchaseDateShort") || tt("payLedgerPurchaseDateShort", "매입"),
+                            payment: t("payLedgerPaymentDateShort") || tt("payLedgerPaymentDateShort", "지급"),
+                          }
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
                           const priorBalanceHint = formatPriorBalanceHint(priorBal)
@@ -2058,7 +2088,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                 <thead>
                                   <tr className="border-b bg-muted/50">
                                     <th className="text-center py-2 px-4 w-[35px] font-semibold"></th>
-                                    <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
+                                    <th
+                                      className="text-center py-2 px-4 w-[128px] min-w-[128px] font-semibold"
+                                      title={tt("payLedgerDateColHint", "위: 매입(발생)일, 아래: 지급일")}
+                                    >
+                                      {t("payLedgerDateCol") || tt("payLedgerDateCol", "매입·지급일")}
+                                    </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
                                     <th className="text-center py-2 px-4 w-[100px] font-semibold" title={t("payColInvoiceVat") || tt("payColInvoiceVat", "인보이스(부가세)")}>
                                       {t("payColInvoiceVat") || tt("payColInvoiceVat", "인보이스(부가세)")}
@@ -2119,10 +2154,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               )
                                             ) : null}
                                           </td>
-                                          <td className="py-1.5 px-4 w-[115px]">
-                                            <span>{row.trans_date || "-"}</span>
+                                          <td className="py-1.5 px-4 w-[128px] min-w-[128px] align-top">
+                                            {renderPayableLedgerDateCell(
+                                              row,
+                                              row.id != null ? payableDatePairs.get(row.id) : undefined,
+                                              payableDateLabels
+                                            )}
                                             {payRowAgeDays > 30 ? (
-                                              <span className="ml-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+                                              <span className="mt-0.5 block text-[10px] font-medium text-amber-800 dark:text-amber-200">
                                                 {t("acct_aging_days_badge").replace("{n}", String(payRowAgeDays))}
                                               </span>
                                             ) : null}

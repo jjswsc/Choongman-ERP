@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { MemberPortalHomePrivilegesAdminPanel } from "@/components/admin/member-portal-home-privileges-admin-panel"
 import { MemberPortalStampFoodImageAdminPanel } from "@/components/admin/member-portal-stamp-food-image-admin-panel"
-import { MemberPortalTierGemCompareAdminPanel } from "@/components/admin/member-portal-tier-gem-compare-admin-panel"
 import { MemberPortalContentAdminPanel } from "@/components/admin/member-portal-content-admin-panel"
 import { MemberPortalStoresPanel } from "@/components/admin/member-portal-stores-panel"
 import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
@@ -957,6 +956,26 @@ export default function CrmMemberAppContentPage() {
                 </fieldset>
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("mpAdmin_stampFoodImageTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MemberPortalStampFoodImageAdminPanel
+                  canEdit={canEdit}
+                  onNotice={(message) => {
+                    setError("")
+                    setNotice(message)
+                    setPreviewReloadKey((k) => k + 1)
+                  }}
+                  onError={(message) => {
+                    setNotice("")
+                    setError(message)
+                  }}
+                  onSaved={() => setPreviewReloadKey((k) => k + 1)}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="contact" className={cn(adminTabsContentCn, "space-y-4")}>
@@ -1020,33 +1039,6 @@ export default function CrmMemberAppContentPage() {
                     setError(message)
                   }}
                 />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("mpAdmin_stampFoodImageTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MemberPortalStampFoodImageAdminPanel
-                  canEdit={canEdit}
-                  onNotice={(message) => {
-                    setError("")
-                    setNotice(message)
-                    setPreviewReloadKey((k) => k + 1)
-                  }}
-                  onError={(message) => {
-                    setNotice("")
-                    setError(message)
-                  }}
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("mpAdmin_tierGemCompareTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MemberPortalTierGemCompareAdminPanel />
               </CardContent>
             </Card>
             <Card>

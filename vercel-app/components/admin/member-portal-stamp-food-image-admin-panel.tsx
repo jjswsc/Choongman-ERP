@@ -8,26 +8,51 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { apiFetch } from "@/lib/api/fetch"
 import { DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL } from "@/lib/member-portal-stamp-food-image"
-import { uploadMemberPortalContentImageToStorage } from "@/lib/member-portal-image-upload"
+import {
+  uploadMemberPortalContentImageToStorage,
+  verifyMemberPortalImagePublicUrl,
+  withMemberPortalImageCacheBust,
+} from "@/lib/member-portal-image-upload"
 import { MP_HOME_STAMP_FOOD_H, MP_HOME_STAMP_FOOD_W } from "@/lib/member-portal-home-layout"
 
 type Props = {
   canEdit?: boolean
   onNotice?: (message: string) => void
   onError?: (message: string) => void
+  onSaved?: () => void
 }
 
 export function MemberPortalStampFoodImageAdminPanel({
   canEdit = true,
   onNotice,
   onError,
+  onSaved,
 }: Props) {
   const { lang } = useLang()
   const t = useT(lang)
   const [imageUrl, setImageUrl] = React.useState(DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL)
+  const [previewNonce, setPreviewNonce] = React.useState(0)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
+
+  const persistImageUrl = React.useCallback(
+    async (url: string) => {
+      const res = await apiFetch("/api/member-portal/admin/settings/stamp-food-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: url }),
+      })
+      const data = (await res.json()) as { success: boolean; imageUrl?: string; message?: string }
+      if (!data.success) throw new Error(data.message || t("mpAdmin_errSave"))
+      const saved = String(data.imageUrl || url)
+      setImageUrl(saved)
+      setPreviewNonce((n) => n + 1)
+      onSaved?.()
+      return saved
+    },
+    [onSaved, t]
+  )
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -36,6 +61,7 @@ export function MemberPortalStampFoodImageAdminPanel({
       const data = (await res.json()) as { success: boolean; imageUrl?: string; message?: string }
       if (!data.success) throw new Error(data.message || t("mpAdmin_errLoadContent"))
       setImageUrl(String(data.imageUrl || DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL))
+      setPreviewNonce((n) => n + 1)
     } catch (e) {
       onError?.(e instanceof Error ? e.message : t("mpAdmin_errLoadContent"))
     } finally {
@@ -50,14 +76,7 @@ export function MemberPortalStampFoodImageAdminPanel({
   const save = async () => {
     setSaving(true)
     try {
-      const res = await apiFetch("/api/member-portal/admin/settings/stamp-food-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl }),
-      })
-      const data = (await res.json()) as { success: boolean; imageUrl?: string; message?: string }
-      if (!data.success) throw new Error(data.message || t("mpAdmin_errSave"))
-      setImageUrl(String(data.imageUrl || imageUrl))
+      await persistImageUrl(imageUrl)
       onNotice?.(t("mpAdmin_stampFoodImageSaved"))
     } catch (e) {
       onError?.(e instanceof Error ? e.message : t("mpAdmin_errSaveGeneric"))
@@ -71,8 +90,11 @@ export function MemberPortalStampFoodImageAdminPanel({
     try {
       const result = await uploadMemberPortalContentImageToStorage(file)
       if (!result.ok) throw new Error(result.message)
-      setImageUrl(result.publicUrl)
-      onNotice?.(t("mpAdmin_noticeImageUploaded"))
+      const readable = await verifyMemberPortalImagePublicUrl(result.publicUrl)
+      await persistImageUrl(result.publicUrl)
+      onNotice?.(
+        readable ? t("mpAdmin_stampFoodImageUploadedAndSaved") : t("mpAdmin_stampFoodImageUploadedSaveWarn")
+      )
     } catch (e) {
       onError?.(e instanceof Error ? e.message : t("mpAdmin_errImageUploadGeneric"))
     } finally {
@@ -80,12 +102,11 @@ export function MemberPortalStampFoodImageAdminPanel({
     }
   }
 
+  const previewSrc = withMemberPortalImageCacheBust(imageUrl, previewNonce)
+
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm font-medium">{t("mpAdmin_stampFoodImageTitle")}</p>
-        <p className="text-xs text-muted-foreground">{t("mpAdmin_stampFoodImageDesc")}</p>
-      </div>
+      <p className="text-sm text-muted-foreground">{t("mpAdmin_stampFoodImageDesc")}</p>
       <fieldset disabled={!canEdit || loading} className="space-y-3 disabled:opacity-60">
         <div className="space-y-1.5">
           <Label>{t("mpAdmin_stampFoodImageUrl")}</Label>
@@ -119,7 +140,12 @@ export function MemberPortalStampFoodImageAdminPanel({
           <div className="relative inline-block overflow-hidden rounded-xl border bg-gradient-to-r from-[#f2faeb] to-[#fff8eb] p-4">
             <p className="mb-2 text-xs text-muted-foreground">{t("mpAdmin_stampFoodImagePreview")}</p>
             <div className={`relative ${MP_HOME_STAMP_FOOD_W} ${MP_HOME_STAMP_FOOD_H}`}>
-              <img src={imageUrl} alt="" className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+              <img
+                src={previewSrc}
+                alt=""
+                className="h-full w-full object-contain"
+                referrerPolicy="no-referrer"
+              />
             </div>
           </div>
         ) : null}

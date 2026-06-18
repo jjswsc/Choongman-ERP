@@ -5,6 +5,7 @@ import { startTransition } from "react"
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   ExternalLink,
   Minus,
   Plus,
@@ -450,9 +451,15 @@ export function MemberPortalOrderTab({
   const [storePrepayEnabled, setStorePrepayEnabled] = React.useState(false)
   const [myOrders, setMyOrders] = React.useState<MemberOrderRow[]>([])
   const [myOrdersLoading, setMyOrdersLoading] = React.useState(false)
+  const [myOrdersOpen, setMyOrdersOpen] = React.useState(false)
   const [resumePayOrder, setResumePayOrder] = React.useState<MemberOrderRow | null>(null)
+  const myOrdersAwaitingCountRef = React.useRef<number | null>(null)
 
   const dateLocale = lang === "ko" ? "ko-KR" : lang === "en" ? "en-US" : "th-TH"
+  const myOrdersAwaitingCount = React.useMemo(
+    () => myOrders.filter((row) => row.awaitingPayment).length,
+    [myOrders],
+  )
 
   const loadMyOrders = React.useCallback(async () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return
@@ -495,6 +502,21 @@ export function MemberPortalOrderTab({
     const id = window.setInterval(() => void loadMyOrders(), MEMBER_PORTAL_ORDERS_POLL_MS)
     return () => window.clearInterval(id)
   }, [loadMyOrders, view, orderMessage])
+
+  React.useEffect(() => {
+    if (view !== "hub") {
+      myOrdersAwaitingCountRef.current = null
+      return
+    }
+    if (myOrdersLoading) return
+    const prev = myOrdersAwaitingCountRef.current
+    if (prev === null) {
+      if (myOrdersAwaitingCount > 0) setMyOrdersOpen(true)
+    } else if (myOrdersAwaitingCount > prev) {
+      setMyOrdersOpen(true)
+    }
+    myOrdersAwaitingCountRef.current = myOrdersAwaitingCount
+  }, [view, myOrdersLoading, myOrdersAwaitingCount])
 
   const todayStr = React.useMemo(() => getBangkokTodayDateString(), [])
 
@@ -986,85 +1008,6 @@ export function MemberPortalOrderTab({
             })}
           </div>
         ) : null}
-        {contentItems.length > 0 && onSelectContentItem ? (
-          <>
-            <MemberPortalHomeHeroBanner
-              contentItems={contentItems}
-              channel="delivery"
-              t={t}
-              onOrder={() => setView("delivery")}
-              onSelectItem={onSelectContentItem}
-              showOrderButton
-            />
-            <MemberPortalHomeNewMenuHeroes
-              contentItems={contentItems}
-              t={t}
-              onOrder={() => setView("pickup")}
-              onSelectItem={onSelectContentItem}
-            />
-          </>
-        ) : null}
-        <div className={`${mpGlassCardSoft} p-4`}>
-          <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderMyOrdersTitle")}</h3>
-          {myOrdersLoading ? (
-            <p className={`mt-3 text-sm ${MP_CARD_TEXT_MUTED}`}>{t("loginChecking")}</p>
-          ) : myOrders.length === 0 ? (
-            <p className={`mt-3 text-sm ${MP_CARD_TEXT_MUTED}`}>{t("orderMyOrdersEmpty")}</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {myOrders.map((row) => {
-                const statusKey = memberPortalOrderStatusLabelKey(row)
-                const storeLabel =
-                  stores.find((s) => s.storeCode === row.storeCode)?.displayName || row.storeCode
-                return (
-                  <li key={row.orderId} className={mpCardListItemClass}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{storeLabel}</p>
-                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
-                          {row.orderNo}
-                          {row.pickupHint ? ` · ${row.pickupHint}` : ""}
-                        </p>
-                        <p className={`text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
-                          {formatDateTime(row.createdAt, dateLocale)}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-semibold tabular-nums text-amber-700">{formatBaht(row.total)}</p>
-                        <p className={`text-[11px] ${MP_CARD_TEXT_MUTED}`}>{t(statusKey)}</p>
-                      </div>
-                    </div>
-                    {row.awaitingPayment ? (
-                      <button
-                        type="button"
-                        className="mt-2 w-full rounded-xl bg-amber-400 py-2 text-xs font-semibold text-black"
-                        onClick={() => setResumePayOrder(row)}
-                      >
-                        {t("orderMyOrdersResumePay")}
-                      </button>
-                    ) : row.paymentExpired ? (
-                      <button
-                        type="button"
-                        className={`mt-2 w-full rounded-xl border border-stone-300 py-2 text-xs font-semibold ${MP_CARD_TEXT_PRIMARY}`}
-                        onClick={() => void handleReorder(row)}
-                      >
-                        {t("orderCheckoutRestoreCart")}
-                      </button>
-                    ) : !row.awaitingPayment && row.status !== "cancelled" && row.status !== "canceled" ? (
-                      <button
-                        type="button"
-                        className={`mt-2 w-full rounded-xl border border-stone-200 py-2 text-xs font-medium ${MP_CARD_TEXT_SECONDARY}`}
-                        onClick={() => void handleReorder(row)}
-                      >
-                        {t("orderMyOrdersReorder")}
-                      </button>
-                    ) : null}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
         <div className="grid gap-3">
           <button
             type="button"
@@ -1099,6 +1042,111 @@ export function MemberPortalOrderTab({
               </div>
             </div>
           </button>
+        </div>
+        {contentItems.length > 0 && onSelectContentItem ? (
+          <>
+            <MemberPortalHomeHeroBanner
+              contentItems={contentItems}
+              channel="delivery"
+              t={t}
+              onOrder={() => setView("delivery")}
+              onSelectItem={onSelectContentItem}
+              showOrderButton
+            />
+            <MemberPortalHomeNewMenuHeroes
+              contentItems={contentItems}
+              t={t}
+              onOrder={() => setView("pickup")}
+              onSelectItem={onSelectContentItem}
+            />
+          </>
+        ) : null}
+        <div className={`${mpGlassCardSoft} overflow-hidden`}>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 p-4 text-left"
+            aria-expanded={myOrdersOpen}
+            onClick={() => setMyOrdersOpen((open) => !open)}
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderMyOrdersTitle")}</h3>
+              {!myOrdersOpen && !myOrdersLoading && myOrders.length > 0 ? (
+                <span
+                  className={`inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+                    myOrdersAwaitingCount > 0 ? "bg-amber-400 text-black" : "bg-stone-200 text-stone-700"
+                  }`}
+                >
+                  {myOrders.length}
+                </span>
+              ) : null}
+            </div>
+            <ChevronDown
+              className={`h-5 w-5 shrink-0 ${MP_CARD_TEXT_MUTED} transition-transform duration-200 ${myOrdersOpen ? "rotate-180" : "-rotate-90"}`}
+              aria-hidden
+            />
+          </button>
+          {myOrdersOpen ? (
+            <div className="border-t border-stone-200/80 px-4 pb-4 pt-3">
+              {myOrdersLoading ? (
+                <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("loginChecking")}</p>
+              ) : myOrders.length === 0 ? (
+                <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("orderMyOrdersEmpty")}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {myOrders.map((row) => {
+                    const statusKey = memberPortalOrderStatusLabelKey(row)
+                    const storeLabel =
+                      stores.find((s) => s.storeCode === row.storeCode)?.displayName || row.storeCode
+                    return (
+                      <li key={row.orderId} className={mpCardListItemClass}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{storeLabel}</p>
+                            <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
+                              {row.orderNo}
+                              {row.pickupHint ? ` · ${row.pickupHint}` : ""}
+                            </p>
+                            <p className={`text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
+                              {formatDateTime(row.createdAt, dateLocale)}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="font-semibold tabular-nums text-amber-700">{formatBaht(row.total)}</p>
+                            <p className={`text-[11px] ${MP_CARD_TEXT_MUTED}`}>{t(statusKey)}</p>
+                          </div>
+                        </div>
+                        {row.awaitingPayment ? (
+                          <button
+                            type="button"
+                            className="mt-2 w-full rounded-xl bg-amber-400 py-2 text-xs font-semibold text-black"
+                            onClick={() => setResumePayOrder(row)}
+                          >
+                            {t("orderMyOrdersResumePay")}
+                          </button>
+                        ) : row.paymentExpired ? (
+                          <button
+                            type="button"
+                            className={`mt-2 w-full rounded-xl border border-stone-300 py-2 text-xs font-semibold ${MP_CARD_TEXT_PRIMARY}`}
+                            onClick={() => void handleReorder(row)}
+                          >
+                            {t("orderCheckoutRestoreCart")}
+                          </button>
+                        ) : !row.awaitingPayment && row.status !== "cancelled" && row.status !== "canceled" ? (
+                          <button
+                            type="button"
+                            className={`mt-2 w-full rounded-xl border border-stone-200 py-2 text-xs font-medium ${MP_CARD_TEXT_SECONDARY}`}
+                            onClick={() => void handleReorder(row)}
+                          >
+                            {t("orderMyOrdersReorder")}
+                          </button>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </div>
         <MemberPortalQrPayDialog
           open={Boolean(resumePayOrder)}

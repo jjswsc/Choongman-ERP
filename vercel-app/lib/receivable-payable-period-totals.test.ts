@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   pairReceivableLedgerDates,
+  pairPayableLedgerDates,
   periodTotalsReconcile,
   priorCumulativeBalance,
   sumReceivablePayablePeriodAmounts,
@@ -65,5 +66,23 @@ describe('pairReceivableLedgerDates', () => {
     ])
     expect(pairs.get(10)).toEqual({ salesDate: '2026-04-01', receiveDate: '2026-04-20' })
     expect(pairs.get(11)).toEqual({ salesDate: '2026-04-01', receiveDate: '2026-04-20' })
+  })
+})
+
+describe('pairPayableLedgerDates', () => {
+  it('pairs inbound and payment rows by amount', () => {
+    const pairs = pairPayableLedgerDates([
+      { id: 1, ref_type: 'Inbound', amount: 891124.04, trans_date: '2026-04-01' },
+      { id: 2, ref_type: 'Payment', amount: -891124.04, trans_date: '2026-04-10' },
+    ])
+    expect(pairs.get(1)).toEqual({ purchaseDate: '2026-04-01', paymentDate: '2026-04-10' })
+    expect(pairs.get(2)).toEqual({ purchaseDate: '2026-04-01', paymentDate: '2026-04-10' })
+  })
+
+  it('leaves accrual-only rows with purchase date only', () => {
+    const pairs = pairPayableLedgerDates([
+      { id: 3, ref_type: 'Inbound', amount: 50000, trans_date: '2026-05-10' },
+    ])
+    expect(pairs.get(3)).toEqual({ purchaseDate: '2026-05-10' })
   })
 })
