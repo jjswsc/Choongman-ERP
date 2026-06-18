@@ -2,12 +2,15 @@
 
 import * as React from "react"
 import type { TierFamily } from "@/lib/member-portal-tier-visual"
+import { tierGemAssetUrl } from "@/lib/member-portal-tier-gem-assets"
 import { cn } from "@/lib/utils"
 
 type TierFacetedGemIconProps = {
   family: TierFamily
   size?: number
   className?: string
+  /** 카드 우측 상단 등 — 원본 시안 drop-shadow */
+  variant?: "default" | "cardHero"
 }
 
 type GemPalette = {
@@ -78,8 +81,7 @@ const GEM_PALETTES: Record<TierFamily, GemPalette> = {
   },
 }
 
-/** 참고 디자인 스타일 — 면 분할·하이라이트·바닥 그림자가 있는 3D 보석 SVG */
-export function TierFacetedGemIcon({ family, size = 48, className }: TierFacetedGemIconProps) {
+function TierFacetedGemSvgFallback({ family, size, className }: TierFacetedGemIconProps) {
   const uid = React.useId().replace(/:/g, "")
   const p = GEM_PALETTES[family] || GEM_PALETTES.default
   const id = (name: string) => `tier-gem-${uid}-${name}`
@@ -94,17 +96,24 @@ export function TierFacetedGemIcon({ family, size = 48, className }: TierFaceted
       aria-hidden
     >
       <defs>
+        <filter id={id("glass")} x="-20%" y="-20%" width="140%" height="150%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="blur" />
+          <feSpecularLighting
+            in="blur"
+            surfaceScale="3"
+            specularConstant="1.1"
+            specularExponent="22"
+            lightingColor="#ffffff"
+            result="spec"
+          >
+            <fePointLight x="18" y="8" z="48" />
+          </feSpecularLighting>
+          <feComposite in="spec" in2="SourceAlpha" operator="in" result="specOut" />
+          <feComposite in="SourceGraphic" in2="specOut" operator="arithmetic" k1="0" k2="1" k3="0.85" k4="0" />
+        </filter>
         <linearGradient id={id("table")} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor={p.highlight} />
           <stop offset="55%" stopColor={p.light} />
-          <stop offset="100%" stopColor={p.mid} />
-        </linearGradient>
-        <linearGradient id={id("left")} x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor={p.light} />
-          <stop offset="100%" stopColor={p.deep} />
-        </linearGradient>
-        <linearGradient id={id("right")} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={p.highlight} />
           <stop offset="100%" stopColor={p.mid} />
         </linearGradient>
         <linearGradient id={id("pavilion")} x1="50%" y1="0%" x2="50%" y2="100%">
@@ -120,41 +129,49 @@ export function TierFacetedGemIcon({ family, size = 48, className }: TierFaceted
           <stop offset="100%" stopColor={p.mid} />
         </linearGradient>
       </defs>
-
-      {/* 바닥 그림자 */}
-      <ellipse cx="32" cy="67" rx="17" ry="3.2" fill="rgba(0,0,0,0.28)" />
-
-      {/* 하단 팬션(뾰족한 면) */}
-      <polygon points="32,66 14,36 50,36" fill={`url(#${id("pavilion")})`} />
-      <polygon points="32,66 14,36 22,24" fill={p.shadow} opacity="0.55" />
-      <polygon points="32,66 50,36 42,24" fill={p.mid} opacity="0.72" />
-
-      {/* 크라운 좌·우 측면 */}
-      <polygon points="14,36 22,24 32,30" fill={`url(#${id("crown-l")})`} />
-      <polygon points="50,36 42,24 32,30" fill={`url(#${id("crown-r")})`} />
-
-      {/* 상단 테이블(윗면) */}
-      <polygon points="32,12 22,24 32,30 42,24" fill={`url(#${id("table")})`} />
-      <polygon points="22,24 14,36 32,30" fill={`url(#${id("left")})`} opacity="0.92" />
-      <polygon points="42,24 50,36 32,30" fill={`url(#${id("right")})`} opacity="0.95" />
-
-      {/* 상단 광택 하이라이트 */}
-      <polygon points="32,12 26,20 32,22 38,20" fill="white" opacity="0.55" />
-      <polygon points="24,22 28,26 32,24" fill="white" opacity="0.22" />
-
-      {/* 반짝 포인트 */}
-      <circle cx="27" cy="18" r="1.6" fill="white" opacity="0.92" />
-      <circle cx="36" cy="21" r="0.9" fill="white" opacity="0.55" />
-
-      {/* 외곽 림 */}
-      <polygon
-        points="32,12 22,24 14,36 32,66 50,36 42,24"
-        fill="none"
-        stroke="white"
-        strokeOpacity="0.18"
-        strokeWidth="0.6"
-        strokeLinejoin="round"
-      />
+      <g filter={`url(#${id("glass")})`}>
+        <ellipse cx="32" cy="67" rx="17" ry="3.2" fill="rgba(0,0,0,0.28)" />
+        <polygon points="32,66 14,36 50,36" fill={`url(#${id("pavilion")})`} />
+        <polygon points="14,36 22,24 32,30" fill={`url(#${id("crown-l")})`} />
+        <polygon points="50,36 42,24 32,30" fill={`url(#${id("crown-r")})`} />
+        <polygon points="32,12 22,24 32,30 42,24" fill={`url(#${id("table")})`} />
+        <polygon points="32,12 26,20 32,22 38,20" fill="white" opacity="0.62" />
+        <circle cx="27" cy="18" r="1.8" fill="white" opacity="0.95" />
+      </g>
     </svg>
+  )
+}
+
+/** 고해상도 3D 젬 PNG(WebP) + SVG 폴백 */
+export function TierFacetedGemIcon({
+  family,
+  size = 48,
+  className,
+  variant = "default",
+}: TierFacetedGemIconProps) {
+  const [useFallback, setUseFallback] = React.useState(false)
+  const src = tierGemAssetUrl(family)
+
+  const shadowClass =
+    variant === "cardHero"
+      ? "drop-shadow-[0_8px_10px_rgba(255,255,255,0.18)]"
+      : "drop-shadow-[0_8px_16px_rgba(0,0,0,0.28)]"
+
+  if (useFallback) {
+    return <TierFacetedGemSvgFallback family={family} size={size} className={cn(shadowClass, className)} />
+  }
+
+  return (
+    <img
+      src={src}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden
+      decoding="async"
+      className={cn("pointer-events-none max-w-none object-contain", shadowClass, className)}
+      style={{ width: size, height: size }}
+      onError={() => setUseFallback(true)}
+    />
   )
 }

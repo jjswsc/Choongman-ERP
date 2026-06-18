@@ -1,6 +1,12 @@
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { isOfficeStore } from '@/lib/permissions'
+import { INBOUND_HQ_LOCATION } from '@/lib/stock-location-patterns'
+import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
+import type { ErpStoreMatchIndex } from '@/lib/erp-store-identity'
+import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 
 const PAYABLE_LEDGER_SELECT =
   'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id'
@@ -29,6 +35,10 @@ export type PayableAttributionMaps = {
   accrualStoreByVendorDate: Map<string, string>
   /** 같은 거래처·금액 PO/입고 발생 매장 — 지급일≠발생일 폴백 */
   accrualStoreByVendorAmount: Map<string, string>
+  /** 통장 출금 ↔ 입고 연동 — bank_transaction_id → 대표 귀속 매장 */
+  storeByBankInboundLink: Map<number, string>
+  /** 통장 출금 ↔ 입고 연동 — bank_transaction_id → 연동된 모든 귀속 매장 */
+  storesByBankInboundLink: Map<number, Set<string>>
 }
 
 function vendorDateStoreKey(vendorCode: string, transDate: string): string {
@@ -171,12 +181,55 @@ export function buildAccrualStoreByVendorDate(
   return buildPayableAccrualStoreIndexes(rows, maps).accrualStoreByVendorDate
 }
 
-export function matchesPayableStoreNorm(resolved: string | null | undefined, storeFilter: string): boolean {
+function isPayableOfficeLocation(store: string): boolean {
+  const t = String(store || '').trim()
+  if (!t) return false
+  return t === INBOUND_HQ_LOCATION || isOfficeStore(t) || isHeadOfficeLikeStoreName(t)
+}
+
+export function matchesPayableStoreNorm(
+  resolved: string | null | undefined,
+  storeFilter: string,
+  index?: ErpStoreMatchIndex
+): boolean {
   const f = storeFilter.trim()
   if (!f || f.toLowerCase() === 'all' || f === '전체') return true
   const r = String(resolved || '').trim()
   if (!r) return false
+  if (index) {
+    return matchesAccountingStoreScopeRow(r, f, index.masters, index.legacyToCanonical)
+  }
+  if (isPayableOfficeLocation(f) && isPayableOfficeLocation(r)) return true
   return storesMatchForGradeLookup(r, f)
+}
+
+function paymentLinkedStores(
+  r: PayableTransactionRow,
+  maps: PayableAttributionMaps
+): Set<string> | null {
+  const bankId = r.bank_transaction_id != null ? Number(r.bank_transaction_id) : 0
+  if (!bankId) return null
+  const linked = maps.storesByBankInboundLink.get(bankId)
+  return linked && linked.size > 0 ? linked : null
+}
+
+function rowMatchesPayableStoreFilter(
+  r: PayableTransactionRow,
+  storeFilter: string,
+  maps: PayableAttributionMaps,
+  index?: ErpStoreMatchIndex
+): boolean {
+  if (isPurchasePaymentRow(r)) {
+    const linked = paymentLinkedStores(r, maps)
+    if (linked) {
+      for (const store of linked) {
+        if (matchesPayableStoreNorm(store, storeFilter, index)) return true
+      }
+      return false
+    }
+  }
+  const attributed = resolvePayableAttributedStore(r, maps)
+  return matchesPayableStoreNorm(attributed, storeFilter, index)
 }
 
 export function isPayableStoreFilterActive(storeFilter: string | undefined | null): boolean {
@@ -213,6 +266,11 @@ export function resolvePayableAttributedStore(
     return maps.storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
   }
   if (isPurchasePaymentRow(r)) {
+    const bankId = r.bank_transaction_id != null ? Number(r.bank_transaction_id) : 0
+    if (bankId > 0) {
+      const linked = maps.storeByBankInboundLink.get(bankId)
+      if (linked) return linked
+    }
     const vc = String(r.vendor_code || '').trim().toLowerCase()
     const dt = String(r.trans_date || '').trim().slice(0, 10)
     const amountAbs = Math.abs(Number(r.amount ?? 0))
@@ -224,7 +282,8 @@ export function resolvePayableAttributedStore(
     }
   }
   if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
-    return maps.storeByBankId.get(Number(r.bank_transaction_id)) || null
+    const bankStore = maps.storeByBankId.get(Number(r.bank_transaction_id))
+    if (bankStore) return bankStore
   }
   return null
 }
@@ -308,6 +367,8 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
     ),
   ]
   const storeByBankId = new Map<number, string>()
+  const storeByBankInboundLink = new Map<number, string>()
+  const storesByBankInboundLink = new Map<number, Set<string>>()
   if (bankIdsAll.length > 0) {
     const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIdsAll.join(',')})`, {
       select: 'id,store',
@@ -317,6 +378,41 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
       if (bt.id == null) continue
       const st = String(bt.store || '').trim()
       if (st) storeByBankId.set(Number(bt.id), st)
+    }
+
+    const inboundLinks = (await supabaseSelectFilter(
+      'bank_transaction_inbound_links',
+      `bank_transaction_id=in.(${bankIdsAll.join(',')})`,
+      {
+        select: 'bank_transaction_id,inbound_batch_id,amount',
+        limit: 10000,
+      }
+    )) as { bank_transaction_id?: number; inbound_batch_id?: number; amount?: number }[] | null
+
+    const linkWeightByBank = new Map<number, Map<string, number>>()
+    for (const link of inboundLinks || []) {
+      const bankId = Number(link.bank_transaction_id || 0)
+      const batchId = Number(link.inbound_batch_id || 0)
+      if (!bankId || !batchId) continue
+      const store = locationByInboundId.get(batchId)
+      if (!store) continue
+      if (!storesByBankInboundLink.has(bankId)) storesByBankInboundLink.set(bankId, new Set())
+      storesByBankInboundLink.get(bankId)!.add(store)
+      const weight = Math.abs(Number(link.amount ?? 0)) || 1
+      if (!linkWeightByBank.has(bankId)) linkWeightByBank.set(bankId, new Map())
+      const weights = linkWeightByBank.get(bankId)!
+      weights.set(store, (weights.get(store) || 0) + weight)
+    }
+    for (const [bankId, weights] of linkWeightByBank) {
+      let bestStore = ''
+      let bestWeight = -1
+      for (const [store, weight] of weights) {
+        if (weight > bestWeight) {
+          bestWeight = weight
+          bestStore = store
+        }
+      }
+      if (bestStore) storeByBankInboundLink.set(bankId, bestStore)
     }
   }
 
@@ -333,6 +429,8 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
     storeByBankId,
     accrualStoreByVendorDate,
     accrualStoreByVendorAmount,
+    storeByBankInboundLink,
+    storesByBankInboundLink,
   }
 }
 
@@ -356,8 +454,9 @@ export async function scopePayableLedgerRows(
   storeFilter?: string
 ): Promise<{ maps: PayableAttributionMaps; scopedRows: PayableTransactionRow[] }> {
   const maps = await buildPayableAttributionMaps(rows)
+  const index = await ensureErpStoreMatchIndex()
   const scopedRows = isPayableStoreFilterActive(storeFilter)
-    ? filterPayableRowsByStore(rows, storeFilter!, maps)
+    ? filterPayableRowsByStore(rows, storeFilter!, maps, index)
     : rows
   return { maps, scopedRows }
 }
@@ -411,14 +510,12 @@ export function buildPayableListWithCumulative(params: {
 export function filterPayableRowsByStore(
   rows: PayableTransactionRow[],
   storeFilter: string,
-  maps: PayableAttributionMaps
+  maps: PayableAttributionMaps,
+  index?: ErpStoreMatchIndex
 ): PayableTransactionRow[] {
   if (!isPayableStoreFilterActive(storeFilter)) return rows
 
-  return rows.filter((r) => {
-    const attributed = resolvePayableAttributedStore(r, maps)
-    return matchesPayableStoreNorm(attributed, storeFilter)
-  })
+  return rows.filter((r) => rowMatchesPayableStoreFilter(r, storeFilter, maps, index))
 }
 
 export function aggregatePayableBalancesByVendor(

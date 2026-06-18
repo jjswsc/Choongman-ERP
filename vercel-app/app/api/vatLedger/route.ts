@@ -15,9 +15,8 @@ import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
-import { syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
+import { syncIncrementalVatLedgersFromExpenseAndBank, syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
 import { backfillVatLedgerStoreNames, enrichVatLedgerRowsStoreNames } from '@/lib/pos-ledger-drafts'
-import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -62,18 +61,6 @@ function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): 
   delete next.submitted_by_employee_id
   delete next.submitted_by_employee_code
   return next
-}
-
-function monthStartYmd(ym: string): string {
-  return `${ym}-01`
-}
-
-function monthEndYmd(ym: string): string {
-  const y = Number(ym.slice(0, 4))
-  const m = Number(ym.slice(5, 7))
-  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return `${ym}-28`
-  const d = new Date(Date.UTC(y, m, 0))
-  return d.toISOString().slice(0, 10)
 }
 
 type PendingEvidenceLite = {
@@ -145,37 +132,6 @@ async function listPendingEvidenceRows(taxMonth: string, storeScope?: string | n
     }))
 }
 
-async function syncInputVatFromExpensesForPeriod(params: {
-  startMonth: string
-  endMonth: string
-  storeFilter: string
-}): Promise<void> {
-  const storeFilter = String(params.storeFilter || '').trim()
-  const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
-  const officeScope = !!storeFilter && isHeadOfficeLikeStoreName(storeFilter)
-  const startYmd = monthStartYmd(params.startMonth)
-  const endYmd = monthEndYmd(params.endMonth)
-  const expParts = [
-    `expense_date=gte.${encodeURIComponent(startYmd)}`,
-    `expense_date=lte.${encodeURIComponent(endYmd)}`,
-    'vat_amount=gt.0',
-    'status=neq.rejected',
-  ]
-  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
-    select: 'id,store_name',
-    order: 'id.asc',
-    pageSize: 2000,
-    maxRows: 30000,
-  })) as { id?: number; store_name?: string | null }[]
-  for (const row of expenseRows || []) {
-    const id = Math.floor(Number(row.id) || 0)
-    if (id <= 0) continue
-    const rowStore = String(row.store_name || '').trim()
-    if (storeFilter && !storeScope.matches(rowStore) && !(officeScope && !rowStore)) continue
-    await syncExpenseAccrualInputVatLedger(id, officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined)
-  }
-}
-
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -242,11 +198,6 @@ export async function GET(request: NextRequest) {
     const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
 
     const runVatAutoSync = async () => {
-      await syncInputVatFromExpensesForPeriod({
-        startMonth: period.startMonth,
-        endMonth: period.endMonth,
-        storeFilter: syncStoreFilter,
-      })
       await syncTaxVatLedgersFromStockAndExpenses({
         months: period.months,
         storeFilter: syncStoreFilter,
@@ -277,6 +228,17 @@ export async function GET(request: NextRequest) {
     )
     const hasBlankStoreRows = (probeRows || []).some((row) => !String(row.store_name || '').trim())
     const didSync = forceSync || !hasAnyRows || !hasInputEntries
+
+    // 지출 발생·통장 인보이스 확인 건은 조회마다 증분 동기화(PP30 누락 방지).
+    try {
+      await syncIncrementalVatLedgersFromExpenseAndBank({
+        months: period.months,
+        storeFilter: syncStoreFilter,
+      })
+    } catch (e) {
+      console.warn('vatLedger GET incremental sync skipped:', e)
+    }
+
     if (didSync) {
       try {
         await runVatAutoSync()

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { syncInvoiceBackedBankInputVatLedgerForBankId } from '@/lib/invoice-backed-input-vat-ledger'
 import { updateVatLedgerEntryEvidence } from '@/lib/vat-ledger-invoice-evidence'
 
 /** 통장 거래 인보이스 수령 체크 (매입 대금 건)
@@ -25,6 +27,9 @@ export async function POST(request: NextRequest) {
       id?: number
       category?: string
       purchase_order_id?: number
+      invoice_received?: boolean | null
+      invoice_no?: string | null
+      invoice_photo_url?: string | null
     }[]
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
@@ -77,6 +82,16 @@ export async function POST(request: NextRequest) {
             await updateVatLedgerEntryEvidence(vid, evidenceStatus, evidenceReasonCode)
           }
         }
+        const bankInvoicePatch: Record<string, unknown> = {}
+        if (typeof invoiceReceived === 'boolean') bankInvoicePatch.invoice_received = invoiceReceived
+        if (invoiceNo !== undefined) bankInvoicePatch.invoice_no = String(invoiceNo || '').trim() || null
+        if (invoicePhotoUrl !== undefined) {
+          bankInvoicePatch.invoice_photo_url = String(invoicePhotoUrl || '').trim() || null
+        }
+        if (Object.keys(bankInvoicePatch).length > 0) {
+          await supabaseUpdate('expense_accruals', expenseId, bankInvoicePatch)
+        }
+        await syncExpenseAccrualInputVatLedger(expenseId)
       }
 
       // 2) 발주/입고(stock_logs) 기반 VAT 행 동기화 (purchase_order_id 연결 시)
@@ -115,6 +130,12 @@ export async function POST(request: NextRequest) {
           // 스키마 차이(inbound_batch_id 미존재 등) 환경에서는 VAT 연동만 스킵
         }
       }
+    }
+
+    try {
+      await syncInvoiceBackedBankInputVatLedgerForBankId(bankTxId)
+    } catch (bankVatErr) {
+      console.warn('updateBankTransactionInvoice bank VAT sync:', bankVatErr)
     }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })

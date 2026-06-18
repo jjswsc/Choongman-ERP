@@ -14,7 +14,6 @@ import {
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
-import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -136,17 +135,14 @@ export async function POST(request: NextRequest) {
 
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
-    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     let validCategory = transType === 'deposit'
       ? (depositCategories.includes(category) ? category : depositCategories[0])
       : (withdrawCategories.includes(category) ? category : 'expense')
     if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
 
-    if (transType === 'withdraw') {
-      const purchaseGuard = assertPurchasePaymentViaExpenseOnly(category)
-      if (!purchaseGuard.ok) {
-        return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
-      }
+    if (validCategory === 'purchase_payment' && !vendorCode) {
+      return NextResponse.json({ success: false, message: '매입 대금은 거래처를 선택해 주세요.' }, { status: 400, headers })
     }
 
     if (transType === 'deposit' && validCategory !== 'receivable_receive') {
@@ -216,6 +212,7 @@ export async function POST(request: NextRequest) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
     }
     if (validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
+    if (validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
     if (refType) row.ref_type = refType
     if (refId != null && !isNaN(Number(refId))) row.ref_id = Number(refId)
     if (transType === 'deposit' && withholdingTaxAmount !== undefined) {

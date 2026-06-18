@@ -57,15 +57,20 @@ export function MemberPortalAmbienceBackground({
 export function MemberPortalShell({
   children,
   embedPreview = false,
+  bottomClearance,
 }: {
   children: React.ReactNode
   embedPreview?: boolean
+  /** 하단 고정 UI(탭·퀵메뉴 등)만큼 본문 padding-bottom 오버라이드 */
+  bottomClearance?: string
 }) {
   return (
     <div
       className={`relative mx-auto w-full ${MP_MAX_WIDTH} px-4 pt-[max(1rem,env(safe-area-inset-top))]`}
       style={{
-        paddingBottom: embedPreview ? MP_EMBED_PREVIEW_BOTTOM_CLEARANCE : MP_BOTTOM_NAV_CLEARANCE,
+        paddingBottom:
+          bottomClearance ??
+          (embedPreview ? MP_EMBED_PREVIEW_BOTTOM_CLEARANCE : MP_BOTTOM_NAV_CLEARANCE),
       }}
     >
       {children}

@@ -4,6 +4,7 @@ import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import {
+  syncIncrementalVatLedgersFromExpenseAndBank,
   syncTaxVatLedgersFromStockAndExpenses,
   syncTaxWithholdingLedgersFromPayroll,
   syncTaxWithholdingLedgersFromExpenses,
@@ -114,6 +115,15 @@ export async function GET(request: NextRequest) {
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
+    // vatLedger 조회와 동일: 지출·통장 인보이스 건은 조회마다 증분 동기화(PP30 누락 방지).
+    try {
+      await syncIncrementalVatLedgersFromExpenseAndBank({
+        months: period.months,
+        storeFilter: syncStoreFilter,
+      })
+    } catch (e) {
+      console.warn('getThaiTaxFilingSummary incremental sync skipped:', e)
+    }
     // vatLedger 조회와 동일: 원천 데이터는 발생 시점에 동기화되므로, 매장 거래량에 비례한
     // 조회 시 전체 재동기화(수천 건 순차 upsert)는 타임아웃을 유발한다. 해당 기간·매장에
     // 행이 없거나 매입이 없을 때만 동기화한다(거래량 많은 매장 빈 요약 방지).

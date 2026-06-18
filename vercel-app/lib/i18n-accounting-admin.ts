@@ -41,8 +41,10 @@ const ACCOUNTING_ADMIN_KEYS = {
   acct_aging_days_badge: '',
   acct_bank_attention_filter: '',
   acct_bank_attention_unclassified: '',
+  acct_bank_attention_expense_link: '',
   acct_bank_attention_no_subject: '',
   acct_bank_attention_hint: '',
+  acct_bank_vat_not_registered: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -97,10 +99,12 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   acct_aging_bucket_over_90: '90일+',
   acct_aging_total_open: '미결 발생 합계',
   acct_aging_days_badge: '{n}일',
-  acct_bank_attention_filter: '미분류·계정 미지정',
+  acct_bank_attention_filter: '미분류·지출 미연동',
   acct_bank_attention_unclassified: '미분류 용도',
+  acct_bank_attention_expense_link: '지출관리 미연동',
   acct_bank_attention_no_subject: '계정과목 미지정',
-  acct_bank_attention_hint: '미분류 용도 또는 계정과목이 비어 있는 행입니다. 분류 후 저장하세요.',
+  acct_bank_attention_hint: '미분류·계정 미지정·지출관리 미연동 행입니다. 분류 후 「지출관리 연결」로 마무리하세요.',
+  acct_bank_vat_not_registered: 'VAT 미등록',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -144,8 +148,10 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   acct_aging_days_badge: '{n}d',
   acct_bank_attention_filter: 'Unclassified / no account',
   acct_bank_attention_unclassified: 'Unclassified',
+  acct_bank_attention_expense_link: 'Expense mgmt not linked',
   acct_bank_attention_no_subject: 'No account subject',
-  acct_bank_attention_hint: 'Rows with unclassified category or missing account subject. Classify and save.',
+  acct_bank_attention_hint: 'Unclassified, missing subject, or not linked to expense mgmt. Classify then use Link expense mgmt.',
+  acct_bank_vat_not_registered: 'VAT not registered',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -189,8 +195,10 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   acct_aging_days_badge: '{n} วัน',
   acct_bank_attention_filter: 'ยังไม่จัดประเภท·ไม่มีบัญชี',
   acct_bank_attention_unclassified: 'ยังไม่จัดประเภท',
+  acct_bank_attention_expense_link: 'ยังไม่เชื่อมจัดการค่าใช้จ่าย',
   acct_bank_attention_no_subject: 'ไม่มีบัญชี',
-  acct_bank_attention_hint: 'แถวที่ยังไม่จัดประเภทหรือไม่มีบัญชี จัดประเภทแล้วบันทึก',
+  acct_bank_attention_hint: 'ยังไม่จัดประเภท·ไม่มีบัญชี·ยังไม่เชื่อมจัดการค่าใช้จ่าย — จัดประเภทแล้วเชื่อมจัดการค่าใช้จ่าย',
+  acct_bank_vat_not_registered: 'ยังไม่ลงทะเบียน VAT',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {
@@ -234,6 +242,7 @@ export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADM
   acct_aging_days_badge: '{n} ရက်',
   acct_bank_attention_filter: 'အမျိုးအစားမခွဲ·မှတ်စည်းကိန်း မရှိ',
   acct_bank_attention_unclassified: 'အမျိုးအစားမခွဲ',
+  acct_bank_attention_expense_link: 'Expense mgmt not linked',
   acct_bank_attention_no_subject: 'မှတ်စည်းကိန်း မရှိ',
   acct_bank_attention_hint: 'အမျိုးအစားမခွဲ သို့မဟုတ် မှတ်စည်းကိန်း ဗလာဖြစ်သော အတန်းများ — ခွဲပြီး သိမ်းပါ',
 })
@@ -279,8 +288,8 @@ export const I18N_ACCOUNTING_ADMIN_LA = mergeAccountingAdmin(I18N_ACCOUNTING_ADM
   acct_aging_days_badge: '{n} ມື້',
   acct_bank_attention_filter: 'ຍັງບໍ່ຈັດປະເພດ/ບໍ່ມີບັນຊີ',
   acct_bank_attention_unclassified: 'ຍັງບໍ່ຈັດປະເພດ',
+  acct_bank_attention_expense_link: 'Expense mgmt not linked',
   acct_bank_attention_no_subject: 'ບໍ່ມີບັນຊີ',
-  acct_bank_attention_hint: 'ແຖວທີ່ຍັງບໍ່ຈັດປະເພດ ຫຼື ບໍ່ມີບັນຊີ — ຈັດແລ້ວບັນທຶກ',
 })
 
 export const I18N_ACCOUNTING_ADMIN_KH = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {
@@ -324,7 +333,6 @@ export const I18N_ACCOUNTING_ADMIN_KH = mergeAccountingAdmin(I18N_ACCOUNTING_ADM
   acct_aging_days_badge: '{n} ថ្ងៃ',
   acct_bank_attention_filter: 'មិនបានចាត់ថ្នាក់/គ្មានគណនី',
   acct_bank_attention_unclassified: 'មិនបានចាត់ថ្នាក់',
-  acct_bank_attention_no_subject: 'គ្មានគណនី',
   acct_bank_attention_hint: 'ជួរដែលមិនបានចាត់ថ្នាក់ ឬគ្មានគណនី — ចាត់ថ្នាក់រួចរក្សាទុក',
 })
 
@@ -369,7 +377,6 @@ export const I18N_ACCOUNTING_ADMIN_VI = mergeAccountingAdmin(I18N_ACCOUNTING_ADM
   acct_aging_days_badge: '{n} ngày',
   acct_bank_attention_filter: 'Chưa phân loại / chưa có TK',
   acct_bank_attention_unclassified: 'Chưa phân loại',
-  acct_bank_attention_no_subject: 'Chưa có tài khoản',
   acct_bank_attention_hint: 'Dòng chưa phân loại hoặc thiếu tài khoản — phân loại và lưu',
 })
 
@@ -414,6 +421,5 @@ export const I18N_ACCOUNTING_ADMIN_MS = mergeAccountingAdmin(I18N_ACCOUNTING_ADM
   acct_aging_days_badge: '{n} hari',
   acct_bank_attention_filter: 'Tidak diklasifikasi / tiada akaun',
   acct_bank_attention_unclassified: 'Tidak diklasifikasi',
-  acct_bank_attention_no_subject: 'Tiada akaun',
   acct_bank_attention_hint: 'Baris tidak diklasifikasi atau tiada akaun — klasifikasi dan simpan',
 })

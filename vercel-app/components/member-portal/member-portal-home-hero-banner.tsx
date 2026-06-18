@@ -10,7 +10,7 @@ import {
   type MemberPortalContentItem,
   type MemberPortalHomePromoChannel,
 } from "@/lib/member-portal-content"
-import { MP_HOME_CARD_RADIUS, MP_HOME_HERO_HEIGHT } from "@/lib/member-portal-home-layout"
+import { MP_HOME_HERO_HEIGHT, MP_HOME_PROMO_RADIUS } from "@/lib/member-portal-home-layout"
 
 type HeroBannerCardProps = {
   item: MemberPortalContentItem
@@ -32,7 +32,7 @@ export function MemberPortalHeroBannerCard({
 }: HeroBannerCardProps) {
   return (
     <div
-      className={`group relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} bg-[#261c12] shadow-[0_14px_34px_-12px_rgba(28,21,16,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]`}
+      className={`group relative w-full overflow-hidden ${MP_HOME_PROMO_RADIUS} bg-[#261c12] shadow-[0_14px_34px_-12px_rgba(28,21,16,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]`}
     >
       <button
         type="button"
@@ -57,11 +57,11 @@ export function MemberPortalHeroBannerCard({
             {badgeLabel}
           </span>
         ) : null}
-        <p className="line-clamp-2 text-[1.3rem] font-extrabold leading-tight tracking-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">
+        <p className="line-clamp-2 text-[17px] font-black leading-[1.08] tracking-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">
           {item.title || fallbackTitle}
         </p>
         {item.body ? (
-          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/80">{item.body}</p>
+          <p className="mt-px line-clamp-2 text-[11px] font-semibold leading-relaxed text-white/90">{item.body}</p>
         ) : null}
         {ctaLabel && onCta ? (
           <button
@@ -70,10 +70,10 @@ export function MemberPortalHeroBannerCard({
               e.stopPropagation()
               onCta()
             }}
-            className="pointer-events-auto mt-2.5 inline-flex h-9 w-fit items-center gap-0.5 rounded-full bg-gradient-to-b from-amber-400 to-amber-600 px-4 text-xs font-bold text-white shadow-[0_6px_16px_-4px_rgba(217,119,6,0.7)] ring-1 ring-white/25 transition hover:from-amber-400 hover:to-amber-500 active:scale-95"
+            className="pointer-events-auto mt-0.5 inline-flex h-auto w-fit items-center gap-0.5 rounded-full bg-gradient-to-r from-[#ff9824] to-[#ef5513] px-3 py-1 text-[10px] font-extrabold text-white shadow-[0_7px_14px_rgba(239,85,19,0.28)] transition hover:brightness-105 active:scale-95"
           >
             {ctaLabel}
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5" />
           </button>
         ) : null}
       </div>

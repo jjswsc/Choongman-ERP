@@ -37,7 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft, FileText, PencilLine, Trash2 } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2 } from "lucide-react"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { ReceivableAgingPanel } from "@/components/admin/receivable-aging-panel"
 import {
@@ -49,6 +49,8 @@ import {
 import {
   priorCumulativeBalance,
   sumReceivablePayablePeriodAmounts,
+  pairReceivableLedgerDates,
+  type ReceivableLedgerDatePair,
 } from "@/lib/receivable-payable-period-totals"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -59,8 +61,6 @@ import {
   isManagerOrFranchiseeRole,
   isManagerRole,
   canManageReceivablePayableAllStores,
-  canSyncOrderReceivable,
-  canBulkReconcileOrderReceivables,
   canUpdateReceivableReceiveCheck,
   canMutateManualReceivableBalance,
   canMutateManualPayableBalance,
@@ -83,10 +83,6 @@ import {
   updateManualBalanceTransaction,
   deleteManualBalanceTransaction,
   updateReceivableReceiveCheck,
-  syncOrderReceivable,
-  syncOrderReceivableFromOutbound,
-  syncAllOrderReceivablesBatch,
-  syncAllOrderReceivablesFromOutboundBatch,
   translateTexts,
   type ReceivablePayableItem,
   type PayableTransactionItem,
@@ -195,6 +191,29 @@ function resolveTaxInvoiceClientFromPoBillTo(
   return resolvedClient
 }
 
+function renderReceivableLedgerDateCell(
+  row: { ref_type?: string; trans_date?: string; amount?: number },
+  pair: ReceivableLedgerDatePair | undefined,
+  labels: { sales: string; receive: string }
+) {
+  const fallback = String(row.trans_date || "").trim().slice(0, 10)
+  const salesDate = pair?.salesDate || fallback
+  const receiveDate = pair?.receiveDate
+  if (salesDate && receiveDate && salesDate !== receiveDate) {
+    return (
+      <div className="flex flex-col items-start gap-0.5 leading-tight">
+        <span className="tabular-nums text-xs whitespace-nowrap">
+          <span className="text-muted-foreground">{labels.sales}</span> {salesDate}
+        </span>
+        <span className="tabular-nums text-xs whitespace-nowrap">
+          <span className="text-muted-foreground">{labels.receive}</span> {receiveDate}
+        </span>
+      </div>
+    )
+  }
+  return <span className="tabular-nums">{salesDate || receiveDate || fallback || "-"}</span>
+}
+
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -212,8 +231,6 @@ export function ReceivablePayableTab() {
   const managerStore = (auth?.store || "").trim()
   /** 본사/회계직원: 매장별 선택해서 관리 가능 (별도 로그인 불필요) */
   const canSelectStores = canManageReceivablePayableAllStores(auth?.role || "")
-  const showRecSyncBtn = canSyncOrderReceivable(auth?.role || "")
-  const showBulkRecSyncBtn = canBulkReconcileOrderReceivables(auth?.role || "")
   const showStorePurchaseJournalCol = canDeleteStorePurchaseJournal(auth?.role || "")
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
@@ -249,12 +266,7 @@ export function ReceivablePayableTab() {
   const [expandedPayableRowId, setExpandedPayableRowId] = React.useState<string | null>(null)
   const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, LineItemsCacheEntry>>({})
   const [loadingItemsFor, setLoadingItemsFor] = React.useState<string | null>(null)
-  const [syncPair, setSyncPair] = React.useState<{ orderId: number; kind: "cart" | "outbound" } | null>(null)
   const [updatingReceiveCheckId, setUpdatingReceiveCheckId] = React.useState<number | null>(null)
-  const [bulkRecSyncing, setBulkRecSyncing] = React.useState(false)
-  const [bulkRecProgress, setBulkRecProgress] = React.useState("")
-  const [bulkOutboundRecSyncing, setBulkOutboundRecSyncing] = React.useState(false)
-  const [bulkOutboundRecProgress, setBulkOutboundRecProgress] = React.useState("")
   const [taxInvoiceLoadingKey, setTaxInvoiceLoadingKey] = React.useState<string | null>(null)
   const [manualEdit, setManualEdit] = React.useState<{
     ledger: "receivable" | "payable"
@@ -738,222 +750,6 @@ export function ReceivablePayableTab() {
     [auth?.role, auth?.store, patchListReceiveChecked, t]
   )
 
-  const handleSyncOrderReceivable = React.useCallback(
-    async (orderId: number | undefined) => {
-      if (orderId == null || Number.isNaN(orderId)) return
-      setSyncPair({ orderId, kind: "cart" })
-      try {
-        const res = await syncOrderReceivable({ orderId, userRole: auth?.role })
-        if (res.success) {
-          await appAlert(translateApiMessage(res.message, t) || res.message || t("processSuccess") || "Processed successfully.")
-          loadList()
-        } else {
-          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "Failed")
-        }
-      } catch (e) {
-        await appAlert((t("processFail") || "Failed") + ": " + (e instanceof Error ? e.message : String(e)))
-      } finally {
-        setSyncPair(null)
-      }
-    },
-    [auth?.role, loadList, t]
-  )
-
-  const handleSyncOrderReceivableFromOutbound = React.useCallback(
-    async (orderId: number | undefined) => {
-      if (orderId == null || Number.isNaN(orderId)) return
-      setSyncPair({ orderId, kind: "outbound" })
-      try {
-        const res = await syncOrderReceivableFromOutbound({ orderId, userRole: auth?.role })
-        if (res.success) {
-          const msg =
-            translateApiMessage(res.message, t) ||
-            res.message ||
-            t("processSuccess") ||
-            "처리되었습니다."
-          await appAlert(msg)
-          loadList()
-        } else {
-          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "Failed")
-        }
-      } catch (e) {
-        await appAlert((t("processFail") || "Failed") + ": " + (e instanceof Error ? e.message : String(e)))
-      } finally {
-        setSyncPair(null)
-      }
-    },
-    [auth?.role, loadList, t]
-  )
-
-  const handleBulkSyncOrderReceivables = React.useCallback(async () => {
-    const msg =
-      salesOutletFilter !== "All"
-        ? tt(
-            "recBulkSyncConfirmOutlet",
-            "선택한 매출처({outlet})의 Order 미수금만 현재 품목·직접정산(지두방) 규칙으로 다시 맞춥니다. 계속할까요?"
-          ).replace(/\{outlet\}/g, selectedSalesOutletLabel)
-        : tt(
-            "recBulkSyncConfirmAll",
-            "전체 매출처의 Order 미수금을 현재 품목·직접정산(지두방) 규칙으로 다시 맞춥니다. 시간이 걸릴 수 있습니다. 계속할까요?"
-          )
-    const ok = await appConfirm(msg)
-    if (!ok) return
-    setBulkRecSyncing(true)
-    let lastReceivableId = 0
-    const acc = {
-      processed: 0,
-      updated: 0,
-      removed: 0,
-      skipped: 0,
-      orphanRemoved: 0,
-      errors: 0,
-    }
-    try {
-      for (;;) {
-        const r = await syncAllOrderReceivablesBatch({
-          lastReceivableId,
-          batchSize: 120,
-          userRole: auth?.role,
-          storeFilter: salesOutletFilter !== "All" ? salesOutletFilter : undefined,
-        })
-        if (!r.success) {
-          await appAlert(translateApiMessage(r.message, t) || r.message || t("processFail") || "Failed")
-          break
-        }
-        const s = r.stats
-        if (s) {
-          acc.processed += s.processed
-          acc.updated += s.updated
-          acc.removed += s.removed
-          acc.skipped += s.skipped
-          acc.orphanRemoved += s.orphanRemoved
-          acc.errors += s.errors
-        }
-        lastReceivableId = Number(r.nextReceivableId ?? lastReceivableId)
-        setBulkRecProgress(
-          tt("recBulkSyncProgress", `처리 중… 누적 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped})`)
-        )
-        if (!r.hasMore) {
-          const detail =
-            (r.errorSamples?.length
-              ? `\n${r.errorSamples.map((e) => `#${e.orderId}: ${translateApiMessage(e.message, t) || e.message}`).join("\n")}`
-              : "")
-          await appAlert(
-            tt(
-              "recBulkSyncDone",
-              "일괄 동기화 완료.\n처리 {processed}건 · 갱신 {updated} · 제거 {removed} · 스킵 {skipped} · 고아 삭제 {orphanRemoved} · 오류 {errors}"
-            )
-              .replace(/\{processed\}/g, String(acc.processed))
-              .replace(/\{updated\}/g, String(acc.updated))
-              .replace(/\{removed\}/g, String(acc.removed))
-              .replace(/\{skipped\}/g, String(acc.skipped))
-              .replace(/\{orphanRemoved\}/g, String(acc.orphanRemoved))
-              .replace(/\{errors\}/g, String(acc.errors)) + detail
-          )
-          loadList()
-          break
-        }
-      }
-    } catch (e) {
-      await appAlert((t("processFail") || "Failed") + ": " + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setBulkRecSyncing(false)
-      setBulkRecProgress("")
-    }
-  }, [auth?.role, loadList, salesOutletFilter, selectedSalesOutletLabel, t, tt])
-
-  const handleBulkOutboundSyncOrderReceivables = React.useCallback(async () => {
-    const msg =
-      salesOutletFilter !== "All"
-        ? tt(
-            "recBulkOutboundSyncConfirmOutlet",
-            '선택한 매출처({outlet})의 주문(출고) 미수금과 강제출고 미수금을 출고 관리와 같은 규칙으로 맞춥니다. 계속할까요?'
-          ).replace(/\{outlet\}/g, selectedSalesOutletLabel)
-        : tt(
-            "recBulkOutboundSyncConfirmAll",
-            "전체 매출처의 주문(출고) 미수금과 강제출고 미수금을 출고(본사 출고 로그) 기준으로 맞춥니다. 계속할까요?"
-          )
-    const ok = await appConfirm(msg)
-    if (!ok) return
-    setBulkOutboundRecSyncing(true)
-    let lastReceivableId = 0
-    const acc = {
-      processed: 0,
-      updated: 0,
-      removed: 0,
-      skipped: 0,
-      errors: 0,
-      cartFallback: 0,
-      forceOutboundProcessed: 0,
-      forceOutboundErrors: 0,
-    }
-    try {
-      for (;;) {
-        const r = await syncAllOrderReceivablesFromOutboundBatch({
-          lastReceivableId,
-          batchSize: 120,
-          userRole: auth?.role,
-          storeFilter: salesOutletFilter !== "All" ? salesOutletFilter : undefined,
-        })
-        if (!r.success) {
-          await appAlert(translateApiMessage(r.message, t) || r.message || t("processFail") || "Failed")
-          break
-        }
-        const s = r.stats
-        if (s) {
-          acc.processed += s.processed
-          acc.updated += s.updated
-          acc.removed += s.removed
-          acc.skipped += s.skipped
-          acc.errors += s.errors
-          acc.cartFallback += s.cartFallback
-          if (s.forceOutboundProcessed != null) acc.forceOutboundProcessed = s.forceOutboundProcessed
-          if (s.forceOutboundErrors != null) acc.forceOutboundErrors = s.forceOutboundErrors
-        }
-        lastReceivableId = Number(r.nextReceivableId ?? lastReceivableId)
-        setBulkOutboundRecProgress(
-          tt(
-            "recBulkOutboundSyncProgress",
-            `출고 맞춤 처리 중… 주문(출고) 누적 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped} / 카트대체 ${acc.cartFallback} / 오류 ${acc.errors}) · 강제출고는 마지막에 일괄 반영됩니다`
-          )
-            .replace(/\{processed\}/g, String(acc.processed))
-            .replace(/\{updated\}/g, String(acc.updated))
-            .replace(/\{removed\}/g, String(acc.removed))
-            .replace(/\{skipped\}/g, String(acc.skipped))
-            .replace(/\{fallback\}/g, String(acc.cartFallback))
-            .replace(/\{errors\}/g, String(acc.errors))
-        )
-        if (!r.hasMore) {
-          const detail =
-            r.errorSamples?.length
-              ? `\n${r.errorSamples.map((e) => `#${e.orderId}: ${translateApiMessage(e.message, t) || e.message}`).join("\n")}`
-              : ""
-          await appAlert(
-            tt(
-              "recBulkOutboundSyncDone",
-              `출고 기준 일괄 맞춤 완료: 주문(출고) {processed}건 (갱신 {updated} / 제거 {removed} / 스킵 {skipped} / 오류 {errors} / 카트대체 {fallback}) · 강제출고 {forceFc}건 맞춤 (오류 {forceErr})`
-            )
-              .replace(/\{processed\}/g, String(acc.processed))
-              .replace(/\{updated\}/g, String(acc.updated))
-              .replace(/\{removed\}/g, String(acc.removed))
-              .replace(/\{skipped\}/g, String(acc.skipped))
-              .replace(/\{errors\}/g, String(acc.errors))
-              .replace(/\{fallback\}/g, String(acc.cartFallback))
-              .replace(/\{forceFc\}/g, String(acc.forceOutboundProcessed))
-              .replace(/\{forceErr\}/g, String(acc.forceOutboundErrors)) + detail
-          )
-          loadList()
-          break
-        }
-      }
-    } catch (e) {
-      await appAlert((t("processFail") || "Failed") + ": " + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setBulkOutboundRecSyncing(false)
-      setBulkOutboundRecProgress("")
-    }
-  }, [auth?.role, loadList, salesOutletFilter, selectedSalesOutletLabel, t, tt])
-
   React.useEffect(() => {
     setHasSearchedList(false)
   }, [tab])
@@ -1086,7 +882,7 @@ export function ReceivablePayableTab() {
   )
 
   const amountGridCols =
-    "grid grid-cols-[minmax(120px,200px)_minmax(128px,1fr)_minmax(128px,1fr)_minmax(128px,1fr)_minmax(140px,1.15fr)] gap-3 items-center"
+    "grid grid-cols-[minmax(150px,220px)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(165px,1.2fr)] gap-x-5 gap-y-1 items-center min-w-[920px]"
   const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
   const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
@@ -1503,44 +1299,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     <Button
                       size="sm"
                       onClick={handleLoadList}
-                      disabled={loading || bulkRecSyncing || bulkOutboundRecSyncing}
+                      disabled={loading}
                       className="h-9"
                     >
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
-                    {showBulkRecSyncBtn && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => void handleBulkOutboundSyncOrderReceivables()}
-                        disabled={loading || bulkRecSyncing || bulkOutboundRecSyncing}
-                        className="h-9"
-                        title={tt(
-                          "recBulkOutboundSyncBtnTitle",
-                          "Order 미수금을 출고 로그·출고 화면과 같은 합계로 전건 재설정합니다. 시간이 걸릴 수 있습니다."
-                        )}
-                      >
-                        <ArrowRightLeft className={cn("h-4 w-4 mr-1", bulkOutboundRecSyncing && "animate-spin")} />
-                        {tt("recBulkOutboundSyncBtn", "Bulk Align by Outbound")}
-                      </Button>
-                    )}
-                    {showBulkRecSyncBtn && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void handleBulkSyncOrderReceivables()}
-                        disabled={loading || bulkRecSyncing || bulkOutboundRecSyncing}
-                        className="h-9"
-                        title={tt(
-                          "recBulkSyncBtnTitle",
-                          "과거 포함 Order 미수금 전건을 출고·직접정산 규칙에 맞게 재계산합니다."
-                        )}
-                      >
-                        <RefreshCw className={cn("h-4 w-4 mr-1", bulkRecSyncing && "animate-spin")} />
-                        {tt("recBulkSyncBtn", "Bulk Sync Order Receivables")}
-                      </Button>
-                    )}
                     <Button size="sm" variant="outline" onClick={handlePrint} disabled={loading || listData.length === 0} title={t("pettyPrintHint")} className="h-9">
                       <Printer className="h-4 w-4 mr-1" />
                       {t("printBtn")}
@@ -1558,12 +1322,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         "※ 발주(PO) 승인·매입 대금은 「미지급금(매입)」에 반영됩니다. 이 탭(미수금)은 매장·매출처 매출 회수(주문·수금)용입니다."
                       )}
                     </p>
-                  ) : null}
-                  {bulkOutboundRecProgress ? (
-                    <p className="text-xs text-muted-foreground mb-1">{bulkOutboundRecProgress}</p>
-                  ) : null}
-                  {bulkRecProgress ? (
-                    <p className="text-xs text-muted-foreground mb-2">{bulkRecProgress}</p>
                   ) : null}
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
@@ -1590,7 +1348,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : (
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[720px]")}>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[920px]")}>
                         <div className="text-center">{(t("outColStore") || "출고처")}</div>
                         <div className="text-center tabular-nums">{(t("recColSalesAmount") || "매출금액")}</div>
                         <div
@@ -1623,14 +1381,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             displayItems.length > 0 ? displayItems : allItems
                           )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
+                          const receivableDatePairs = pairReceivableLedgerDates(allItems)
+                          const receivableDateLabels = {
+                            sales: t("recLedgerSalesDateShort") || tt("recLedgerSalesDateShort", "매출"),
+                            receive: t("recLedgerReceiveDateShort") || tt("recLedgerReceiveDateShort", "입금"),
+                          }
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
                           const priorBalanceHint = formatPriorBalanceHint(priorBal)
                           return (
                           <AccordionItem key={item.storeName!} value={item.storeName!}>
-                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
-                              <div className="flex-1 min-w-0">
-                                <div className={cn(amountGridCols, "w-full")}>
+                            <AccordionTrigger className="hover:no-underline px-4 py-3 overflow-x-auto [&>svg]:ml-3 [&>svg]:shrink-0">
+                              <div className={cn(amountGridCols, "w-full pr-2")}>
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
                                     <span className="font-semibold truncate">{item.storeName}</span>
                                     {item.vendorCode && (
@@ -1656,7 +1418,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       "—"
                                     )}
                                   </div>
-                                </div>
                               </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-4">
@@ -1668,7 +1429,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                 <thead>
                                   <tr className="border-b bg-muted/50">
                                     <th className="text-center py-2 px-2 w-[35px] font-semibold" aria-hidden />
-                                    <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
+                                    <th
+                                      className="text-center py-2 px-4 w-[128px] min-w-[128px] font-semibold"
+                                      title={tt("recLedgerDateColHint", "위: 매출(발생)일, 아래: 입금(수령)일")}
+                                    >
+                                      {t("recLedgerDateCol") || tt("recLedgerDateCol", "매출·입금일")}
+                                    </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
                                     <th className="text-center py-2 px-3 w-[160px] min-w-[160px] font-semibold whitespace-nowrap">
                                       {t("recColOrderNo") || "주문번호"}
@@ -1683,14 +1449,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     {showReceivableManualActions && (
                                       <th className="text-center py-2 px-1 w-[72px] font-semibold whitespace-nowrap">
                                         {t("btnEdit") || "수정"}
-                                      </th>
-                                    )}
-                                    {showRecSyncBtn && (
-                                      <th
-                                        className="text-center py-2 px-1 w-[88px] text-xs font-semibold text-muted-foreground"
-                                        title={`${tt("recSyncOrderColHint", "카트·직접정산")} / ${tt("recSyncOutboundColHint", "출고 관리 합계")}`}
-                                      >
-                                        {tt("recSyncAlignColShort", "맞춤")}
                                       </th>
                                     )}
                                     {showStorePurchaseJournalCol && (
@@ -1728,7 +1486,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recLineColSpan =
                                       9 +
                                       (showReceivableManualActions ? 1 : 0) +
-                                      (showRecSyncBtn ? 1 : 0) +
                                       (showStorePurchaseJournalCol ? 1 : 0)
                                     const canEditManualRecRow =
                                       showReceivableManualActions &&
@@ -1789,10 +1546,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           )
                                         ) : null}
                                       </td>
-                                      <td className="py-1.5 px-4 w-[115px]">
-                                        <span>{row.trans_date || "-"}</span>
+                                      <td className="py-1.5 px-4 w-[128px] min-w-[128px] align-top">
+                                        {renderReceivableLedgerDateCell(
+                                          row,
+                                          row.id != null ? receivableDatePairs.get(row.id) : undefined,
+                                          receivableDateLabels
+                                        )}
                                         {rowAgeDays > 30 ? (
-                                          <span className="ml-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+                                          <span className="mt-0.5 block text-[10px] font-medium text-amber-800 dark:text-amber-200">
                                             {t("acct_aging_days_badge").replace("{n}", String(rowAgeDays))}
                                           </span>
                                         ) : null}
@@ -1949,52 +1710,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           )}
                                         </td>
                                       )}
-                                      {showRecSyncBtn && (
-                                        <td className="py-1.5 px-1 w-[88px] text-center align-middle">
-                                          {row.ref_type === "Order" && rowOrderId != null ? (
-                                            <div className="flex justify-center items-center gap-0.5">
-                                              <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-8 w-8 p-0 shrink-0"
-                                                disabled={syncPair != null}
-                                                title={tt("recSyncOrderBtnTitle", "본사 미수 재동기화 (지두방·직접정산 반영)")}
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  void handleSyncOrderReceivable(rowOrderId)
-                                                }}
-                                              >
-                                                <RefreshCw
-                                                  className={cn(
-                                                    "h-4 w-4",
-                                                    syncPair?.orderId === rowOrderId && syncPair?.kind === "cart" && "animate-spin"
-                                                  )}
-                                                />
-                                              </Button>
-                                              <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-8 w-8 p-0 shrink-0"
-                                                disabled={syncPair != null}
-                                                title={tt("recSyncOutboundBtnTitle", "출고 관리 합계에 맞춤 (출고 로그·수량 반영)")}
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  void handleSyncOrderReceivableFromOutbound(rowOrderId)
-                                                }}
-                                              >
-                                                <ArrowRightLeft
-                                                  className={cn(
-                                                    "h-4 w-4",
-                                                    syncPair?.orderId === rowOrderId && syncPair?.kind === "outbound" && "animate-spin"
-                                                  )}
-                                                />
-                                              </Button>
-                                            </div>
-                                          ) : null}
-                                        </td>
-                                      )}
                                       {showStorePurchaseJournalCol && (
                                         <td className="py-1.5 px-1 w-[44px] text-center align-middle">
                                           {row.ref_type === "Order" && rowOrderId != null ? (
@@ -2121,7 +1836,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[720px]")}>
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[920px]")}>
                           <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
@@ -2229,7 +1944,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : (
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[720px]")}>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[920px]")}>
                         <div className="text-center">{(t("vendor") || "매입처")}</div>
                         <div className="text-center tabular-nums">{(t("payColPurchaseAmount") || "매입금액")}</div>
                         <div className="text-center tabular-nums">{(t("payColPaymentAmount") || "지급금액")}</div>
@@ -2262,9 +1977,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const priorBalanceHint = formatPriorBalanceHint(priorBal)
                           return (
                           <AccordionItem key={item.vendorCode!} value={item.vendorCode!}>
-                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
-                              <div className="flex-1 min-w-0">
-                                <div className={cn(amountGridCols, "w-full")}>
+                            <AccordionTrigger className="hover:no-underline px-4 py-3 overflow-x-auto [&>svg]:ml-3 [&>svg]:shrink-0">
+                              <div className={cn(amountGridCols, "w-full pr-2")}>
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
                                     <span className="font-semibold truncate">{formatVendorDisplay(item.vendorCode)}</span>
                                   </div>
@@ -2285,7 +1999,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       "—"
                                     )}
                                   </div>
-                                </div>
                               </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-4">
@@ -2519,7 +2232,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[720px]")}>
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[920px]")}>
                           <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
-import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
+import { assertWithdrawalManagementPurchaseBlocked } from '@/lib/bank-expense-via-expense-mgmt'
 import {
   postWithdrawalJournal,
   type WithdrawalCategory,
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '출금 유형을 선택해 주세요.' }, { status: 400, headers })
     }
 
-    const purchaseGuard = assertPurchasePaymentViaExpenseOnly(category)
+    const purchaseGuard = assertWithdrawalManagementPurchaseBlocked(category)
     if (!purchaseGuard.ok) {
       return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
     }

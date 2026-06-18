@@ -74,9 +74,9 @@ import {
   stripWithdrawalCategoryMetaFromNote,
 } from "@/lib/bank-transaction-note-meta"
 import {
-  isDirectBankPurchasePaymentCategory,
-  PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE,
-} from "@/lib/bank-purchase-payment-via-expense"
+  BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE,
+  isBankExpenseRelatedWithdrawCategory,
+} from "@/lib/bank-expense-via-expense-mgmt"
 import {
   BANK_QUICK_MEMO_DEFAULTS,
   loadBankQuickMemos,
@@ -94,7 +94,7 @@ import {
   AccountingTh,
   AccountingTheadRow,
 } from "@/components/erp/accounting-data-table"
-import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
+import { bankRowNeedsAttention, bankRowShowsVatNotRegistered, countBankAttentionRows, countBankVatNotRegisteredRows } from "@/lib/bank-transaction-attention"
 
 function todayStr() {
   return getBangkokTodayDateString()
@@ -476,10 +476,6 @@ export function BankTransactionsTab() {
     const edits = overrideEdits ?? queryRowEdits[r.id]
     if (!edits || Object.keys(edits).length === 0) return
     const nextCategory = edits.category !== undefined ? edits.category : r.category
-    if (isDirectBankPurchasePaymentCategory(nextCategory)) {
-      await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
-      return
-    }
     setQuerySavingId(r.id)
     try {
       const payload: Parameters<typeof updateBankTransaction>[0] = { bankTransactionId: r.id }
@@ -1443,6 +1439,11 @@ export function BankTransactionsTab() {
     [list, queryRowEdits]
   )
 
+  const bankVatNotRegisteredCount = React.useMemo(
+    () => countBankVatNotRegisteredRows(list, queryRowEdits, (row) => (row as { id?: number }).id),
+    [list, queryRowEdits]
+  )
+
   const depositsHiddenByFilter =
     listTypeCounts.deposits > 0 && listTypeCounts.shownDeposits === 0 && listTypeCounts.shownTotal > 0
 
@@ -1725,7 +1726,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
     if (!importPreview || !accountId) return
     const acc = accounts.find((a) => String(a.id) === accountId)
     const depositCats = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"] as const
-    const withdrawCats = ["transfer", "expense", "correction", "loan", "advance", "unclassified"] as const
+    const withdrawCats = ["transfer", "expense", "purchase_payment", "correction", "loan", "advance", "unclassified"] as const
     const items = importPreview.rows.map((r, idx) => {
       const edit = importRowEdits[idx]
       const rawWithdrawCat =
@@ -1759,7 +1760,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       let accountSubjectId: number | undefined
       if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
-      } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified"].includes(category)) {
+      } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
       }
 
@@ -1772,7 +1773,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         r.transType === "withdraw" && category === "expense"
           ? edit?.expenseDate || r.transDate
           : undefined
-      const vendorCode = undefined
+      const vendorCode =
+        r.transType === "withdraw" && category === "purchase_payment"
+          ? edit?.vendorCode?.trim() || undefined
+          : undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -1935,7 +1939,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         <p className="text-[11px] text-muted-foreground whitespace-pre-line leading-snug">
           {tt(
             "bankExpenseMgmtCoexistBody",
-            "When you will link this bank withdrawal from Expense Management for payment, pick the withdraw category to match your SOP.\n• Transfer, loan, advance, correction, unclassified: no bank auto-journal on save → later bank-link payment mainly adds payable settlement.\n• Expense / Fixed (saved as expense): bank already posts expense/cash → do not also link the same row from Expense Management (pick one workflow).\n• Purchase payment: posts payable/cash → do not also run the same vendor payment twice from Expense Management; use one path."
+            "지출 관련 통장 출금(경비·매입 대금 등)은 통장에서 분류만 저장됩니다. 분개·미지급 반영은 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 완료됩니다.\n• 이체·대출·가수금·정산 수정·미분류: 통장에서 바로 분개 가능\n• 경비·매입 대금: 지출관리 연결 필수"
           )}
         </p>
       </div>
@@ -2180,8 +2184,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </div>
                   ) : null}
 
-                  {!loading && bankAttentionCounts.total > 0 ? (
-                    <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                  {!loading && (bankAttentionCounts.total > 0 || bankVatNotRegisteredCount > 0) ? (
+                    <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
                       <MetricCard
                         size="sm"
                         variant="warning"
@@ -2191,8 +2195,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       <MetricCard
                         size="sm"
                         variant="warning"
+                        label={t("acct_bank_attention_expense_link")}
+                        value={String(bankAttentionCounts.expenseLinkPending)}
+                      />
+                      <MetricCard
+                        size="sm"
+                        variant="warning"
                         label={t("acct_bank_attention_no_subject")}
                         value={String(bankAttentionCounts.noSubject)}
+                      />
+                      <MetricCard
+                        size="sm"
+                        variant="warning"
+                        label={t("acct_bank_vat_not_registered")}
+                        value={String(bankVatNotRegisteredCount)}
                       />
                       <MetricCard
                         size="sm"
@@ -2280,6 +2296,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             const hasEdits = r.id && edits && Object.keys(edits).length > 0
                             const isSaving = querySavingId === r.id
                             const attention = bankRowNeedsAttention(r, edits)
+                            const vatNotRegistered = bankRowShowsVatNotRegistered(r, edits)
                             return (
                             <AccountingTbodyRow
                               id={r.id ? `bank-tx-row-${r.id}` : undefined}
@@ -2295,11 +2312,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className="p-2 align-middle">
                                 {r.transType === "withdraw" ? (
-                                  cat === "purchase_payment" || cat === "purchase_advance" ? (
-                                    <span className="text-xs text-muted-foreground" title={tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE)}>
-                                      {t("bankCategoryPurchasePayment") || "매입 대금"}
-                                    </span>
-                                  ) : (
                                   <Select value={cat} onValueChange={(v) => r.id && setQueryRowEdit(r.id, "category", v)}>
                                     <SelectTrigger className="h-8 text-xs">
                                       <SelectValue />
@@ -2307,13 +2319,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     <SelectContent>
                                       <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                                       <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                      <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
                                       <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                       <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                       <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                       <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                                     </SelectContent>
                                   </Select>
-                                  )
                                 ) : (
                                   <Select
                                     value={cat}
@@ -2501,7 +2513,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               </td>
                               <td className="p-2 align-middle">
                                 <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                                {r.transType === "withdraw" && !r.isLinked ? (
+                                {r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) && !r.isLinked ? (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -2510,7 +2522,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   >
                                     {t("bankRegisterLinkExpenseMgmt") || tt("bankRegisterLinkExpenseMgmt", "지출관리 연결")}
                                   </Button>
-                                ) : r.transType === "withdraw" && r.isLinked ? (
+                                ) : r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) && r.isLinked ? (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -2573,7 +2585,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 </div>
                               </td>
                               <td className="p-2 align-middle text-center">
-                                {r.transType === "withdraw" ? (() => {
+                                {r.transType === "withdraw" ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                  {(() => {
                                   const hasInvoice = r.invoiceReceived === true || (r.invoiceNo && String(r.invoiceNo).trim() !== "") || (r.invoicePhotoUrl && String(r.invoicePhotoUrl).trim() !== "")
                                   const isPurchasePayment = cat === "purchase_payment" && r.isLinked
                                   return isPurchasePayment ? (
@@ -2590,7 +2604,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ) : (
                                     <Checkbox checked={!!hasInvoice} disabled className="shrink-0 mx-auto pointer-events-none" title={hasInvoice ? (t("poInvoiceReceived") || "인보이스 수령") : (t("poInvoiceNotReceived") || "인보이스 미수령")} />
                                   )
-                                })() : (
+                                })()}
+                                  {vatNotRegistered ? (
+                                    <span
+                                      className="text-[10px] font-medium leading-tight text-amber-700 dark:text-amber-400"
+                                      title={t("acct_bank_vat_not_registered")}
+                                    >
+                                      {t("acct_bank_vat_not_registered")}
+                                    </span>
+                                  ) : null}
+                                  </div>
+                                ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
                               </td>
@@ -2835,9 +2859,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 <SelectTrigger className="h-8 text-xs">
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
+                                  <SelectContent>
                                   <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                                   <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                  <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
                                   <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                   <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                   <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
@@ -3596,7 +3621,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             {registerActionRow ? `${registerActionRow.transDate} · ฿${Math.abs(registerActionRow.amount || 0).toLocaleString()}` : ""}
           </p>
           <p className="text-xs text-muted-foreground">
-            {tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE)}
+            {tt("bankExpenseViaExpenseMgmt", BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE)}
           </p>
           <div className="grid grid-cols-1 gap-2 pt-2">
             <Button

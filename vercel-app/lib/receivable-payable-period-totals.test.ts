@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  pairReceivableLedgerDates,
   periodTotalsReconcile,
   priorCumulativeBalance,
   sumReceivablePayablePeriodAmounts,
@@ -37,5 +38,23 @@ describe('priorCumulativeBalance', () => {
 
   it('returns undefined when cumulative is missing', () => {
     expect(priorCumulativeBalance(undefined, 100)).toBeUndefined()
+  })
+})
+
+describe('pairReceivableLedgerDates', () => {
+  it('pairs order and receive rows by amount', () => {
+    const pairs = pairReceivableLedgerDates([
+      { id: 1, ref_type: 'Order', amount: 50000, trans_date: '2026-04-01' },
+      { id: 2, ref_type: 'Receive', amount: -50000, trans_date: '2026-04-20' },
+    ])
+    expect(pairs.get(1)).toEqual({ salesDate: '2026-04-01', receiveDate: '2026-04-20' })
+    expect(pairs.get(2)).toEqual({ salesDate: '2026-04-01', receiveDate: '2026-04-20' })
+  })
+
+  it('leaves accrual-only rows with sales date only', () => {
+    const pairs = pairReceivableLedgerDates([
+      { id: 3, ref_type: 'Order', amount: 12000, trans_date: '2026-05-10' },
+    ])
+    expect(pairs.get(3)).toEqual({ salesDate: '2026-05-10' })
   })
 })

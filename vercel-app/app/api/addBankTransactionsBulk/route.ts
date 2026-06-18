@@ -12,7 +12,6 @@ import {
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
-import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -201,14 +200,11 @@ export async function POST(request: NextRequest) {
 
       const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
       const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
-      const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
+      const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
       let validCategory = transType === 'deposit'
         ? (depositCategories.includes(category) ? category : 'revenue_delivery')
         : (withdrawCategories.includes(category) ? category : 'unclassified')
       if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
-      if (transType === 'withdraw' && (category === 'purchase_payment' || category === 'purchase_advance')) {
-        validCategory = 'unclassified'
-      }
 
       let effectiveStoreNameForReceivable = storeNameForReceivable
       if (transType === 'deposit' && validCategory !== 'receivable_receive') {
@@ -289,6 +285,9 @@ export async function POST(request: NextRequest) {
       }
       if (transType === 'deposit' && validCategory === 'receivable_receive' && effectiveStoreNameForReceivable) {
         row.store_name = effectiveStoreNameForReceivable
+      }
+      if (transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {
+        row.vendor_code = vendorCode
       }
 
       let btInserted: { id?: number }[] = []

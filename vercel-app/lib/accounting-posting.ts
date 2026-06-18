@@ -178,6 +178,8 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
   return entryId
 }
 
+import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
+
 export async function postBankTransactionJournal(params: {
   bankTransactionId?: number
   transDate: string
@@ -194,6 +196,7 @@ export async function postBankTransactionJournal(params: {
   if (amount <= 0) return null
 
   const cat = String(params.category || '').toLowerCase()
+  if (shouldSkipBankAutoJournal(cat, params.transType)) return null
 
   let expenseOverride: BankWithdrawExpenseOverride | null = null
   if (params.transType === 'withdraw') {

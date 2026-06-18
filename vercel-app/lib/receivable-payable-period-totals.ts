@@ -50,3 +50,72 @@ export function periodTotalsReconcile(
 ): boolean {
   return Math.abs(roundMoney(salesSum - receiveSum) - roundMoney(periodNet)) <= epsilon
 }
+
+export type ReceivableLedgerDatePair = {
+  salesDate?: string
+  receiveDate?: string
+}
+
+function sliceYmd(d: string | undefined): string {
+  return String(d || '').trim().slice(0, 10)
+}
+
+function isReceivableAccrualRow(refType: string | undefined, amount: number): boolean {
+  const t = String(refType || '')
+  if (t === 'Order' || t === 'ForceOutbound' || t === 'AccountingPO') return amount > 0
+  if (t === 'Opening') return amount > 0
+  return false
+}
+
+function isReceivableSettlementRow(refType: string | undefined, amount: number): boolean {
+  if (String(refType || '') === 'Receive') return true
+  return amount < 0
+}
+
+/** 같은 매출처 그룹 내 매출·입금 행을 금액으로 1:1 짝지어 양쪽 날짜를 표시 */
+export function pairReceivableLedgerDates(
+  items: { id?: number; ref_type?: string; amount?: number; trans_date?: string }[] | undefined
+): Map<number, ReceivableLedgerDatePair> {
+  const out = new Map<number, ReceivableLedgerDatePair>()
+  const rows = items ?? []
+
+  const receivePool = new Map<number, { id?: number; trans_date?: string }[]>()
+  for (const r of rows) {
+    const amount = Number(r.amount ?? 0)
+    if (!isReceivableSettlementRow(r.ref_type, amount)) continue
+    const amt = roundMoney(Math.abs(amount))
+    if (amt <= 0) continue
+    if (!receivePool.has(amt)) receivePool.set(amt, [])
+    receivePool.get(amt)!.push(r)
+  }
+  for (const pool of receivePool.values()) {
+    pool.sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+  }
+
+  const accruals = rows
+    .filter((r) => isReceivableAccrualRow(r.ref_type, Number(r.amount ?? 0)))
+    .sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+
+  for (const acc of accruals) {
+    const salesDate = sliceYmd(acc.trans_date)
+    const amt = roundMoney(Math.abs(Number(acc.amount ?? 0)))
+    const pool = receivePool.get(amt)
+    const recv = pool?.shift()
+    const receiveDate = recv ? sliceYmd(recv.trans_date) : undefined
+    const pair: ReceivableLedgerDatePair = { salesDate, receiveDate }
+    if (acc.id != null) out.set(acc.id, pair)
+    if (recv?.id != null) out.set(recv.id, pair)
+  }
+
+  for (const r of rows) {
+    if (r.id == null || out.has(r.id)) continue
+    const amount = Number(r.amount ?? 0)
+    if (isReceivableSettlementRow(r.ref_type, amount)) {
+      out.set(r.id, { receiveDate: sliceYmd(r.trans_date) })
+    } else if (isReceivableAccrualRow(r.ref_type, amount)) {
+      out.set(r.id, { salesDate: sliceYmd(r.trans_date) })
+    }
+  }
+
+  return out
+}

@@ -36,7 +36,8 @@ import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-o
 import { MemberPortalHomeTopBar } from "@/components/member-portal/member-portal-home-top-bar"
 import { MemberPortalHomeHeroBanner, MemberPortalHomeNewMenuHeroes } from "@/components/member-portal/member-portal-home-hero-banner"
 import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
-import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
+import { MemberPortalHomeQuickMenu } from "@/components/member-portal/member-portal-home-quick-menu"
+import { MP_HOME_SECTION_GAP, MP_HOME_QUICK_MENU_SHELL_CLEARANCE } from "@/lib/member-portal-home-layout"
 import {
   DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
   resolveMemberPortalHomePrivilegesForLang,
@@ -1058,7 +1059,10 @@ export function MemberPortalApp() {
       uiTheme={uiTheme}
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
-      <MemberPortalShell embedPreview={embedPreview}>
+      <MemberPortalShell
+        embedPreview={embedPreview}
+        bottomClearance={tab === "home" ? MP_HOME_QUICK_MENU_SHELL_CLEARANCE : undefined}
+      >
         {tab === "home" ? (
           <MemberPortalHomeTopBar
             greeting={t(memberPortalGreetingKey())}
@@ -1440,6 +1444,10 @@ export function MemberPortalApp() {
           </div>
         )}
       </MemberPortalShell>
+
+      {tab === "home" ? (
+        <MemberPortalHomeQuickMenu t={t} onNavigate={changeTab} embedPreview={embedPreview} />
+      ) : null}
 
       <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} embedPreview={embedPreview} />
 

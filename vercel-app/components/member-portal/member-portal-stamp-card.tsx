@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Gift, History, Stamp, X, Drumstick } from "lucide-react"
+import { Gift, History, Stamp, X } from "lucide-react"
 import { createPortal } from "react-dom"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
 import {
@@ -11,11 +11,16 @@ import {
   MP_CARD_TEXT_SUBTLE,
 } from "@/lib/member-portal-design"
 import {
-  MP_HOME_CARD_RADIUS,
+  MP_HOME_STAMP_CARD_RADIUS,
+  MP_HOME_STAMP_FOOD_H,
+  MP_HOME_STAMP_FOOD_W,
+  MP_HOME_STAMP_SLOT_SIZE,
 } from "@/lib/member-portal-home-layout"
 import type { LangCode } from "@/lib/lang-context"
 import { memberPortalT } from "@/lib/member-portal-i18n"
 import type { MemberStampCardStatus, MemberStampHistoryRow } from "@/lib/member-stamp-card"
+
+const STAMP_CROWN = "♕"
 
 const STAMP_SEEN_KEY = "cm_stamp_seen_fingerprint"
 
@@ -98,6 +103,78 @@ function StampCelebrationSheet({
   )
 }
 
+function resolveStampHomeSubtitle(
+  lang: LangCode,
+  status: MemberStampCardStatus
+): string {
+  const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
+  const slots = Math.max(1, status.cardSlots)
+  const finalMilestone = status.milestones[status.milestones.length - 1]
+  const reward =
+    status.nextMilestone?.label ||
+    finalMilestone?.label ||
+    t("stampCardDesc")
+
+  if (finalMilestone?.label || status.nextMilestone?.label) {
+    return t("stampHomeSubtitle")
+      .replace("{total}", String(slots))
+      .replace("{reward}", reward)
+  }
+  return t("stampCardDesc")
+}
+
+function StampHomeShell({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+}) {
+  const Tag = onClick ? "button" : "div"
+  return (
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`relative w-full overflow-hidden text-left ${MP_HOME_STAMP_CARD_RADIUS} bg-gradient-to-r from-[#f2faeb] to-[#fff8eb] py-[13px] pl-[15px] pr-[125px] shadow-[0_6px_16px_rgba(54,30,7,0.05)] transition-transform duration-200 ${
+        onClick ? "hover:brightness-[1.01] active:scale-[0.995]" : ""
+      }`}
+      style={{ minHeight: 112 }}
+    >
+      {children}
+      <div
+        className={`pointer-events-none absolute bottom-[10px] right-4 ${MP_HOME_STAMP_FOOD_W} ${MP_HOME_STAMP_FOOD_H}`}
+        aria-hidden
+      >
+        <img
+          src="/member-portal/single-chicken.webp"
+          alt=""
+          className="h-full w-full object-contain drop-shadow-[0_8px_10px_rgba(108,54,12,0.18)]"
+        />
+      </div>
+    </Tag>
+  )
+}
+
+function StampHomeSlots({ slots, filled }: { slots: number; filled: number }) {
+  return (
+    <div className="my-[9px] flex flex-wrap gap-1">
+      {Array.from({ length: slots }, (_, i) => {
+        const isFilled = i < filled
+        return (
+          <span
+            key={i}
+            className={`grid ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 place-items-center rounded-full text-[10px] font-black leading-none ${
+              isFilled ? "bg-[#ffc27a] text-white" : "bg-[#dce3d3] text-[#a9b19f]"
+            }`}
+          >
+            {STAMP_CROWN}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 function MemberPortalStampPreparingPlaceholder({
   lang,
   variant,
@@ -109,34 +186,19 @@ function MemberPortalStampPreparingPlaceholder({
 
   if (variant === "home") {
     return (
-      <div
-        className={`relative w-full overflow-hidden ${MP_HOME_CARD_RADIUS} border border-stone-200/90 bg-white shadow-[0_8px_24px_-12px_rgba(28,25,23,0.12)]`}
-        aria-live="polite"
-      >
-        <div className="flex items-center gap-3 p-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-stone-900">{t("stampPreparingTitle")}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-stone-500">{t("stampPreparingDesc")}</p>
-            <div className="mt-3 grid grid-cols-5 gap-2">
-              {Array.from({ length: 10 }, (_, i) => (
-                <span
-                  key={i}
-                  className="grid aspect-square place-items-center rounded-full bg-stone-100 text-stone-300"
-                >
-                  <Drumstick className="h-4 w-4" />
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="relative h-24 w-24 shrink-0">
-            <img
-              src="/member-portal/single-chicken.webp"
-              alt=""
-              className="h-full w-full rounded-2xl object-cover"
-            />
-          </div>
+      <StampHomeShell>
+        <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampPreparingTitle")}</h3>
+        <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">{t("stampPreparingDesc")}</p>
+        <StampHomeSlots slots={10} filled={0} />
+        <div className="flex items-center gap-4">
+          <span className="text-[10px] font-extrabold text-[#4b8a31]">
+            {t("stampHomeCount").replace("{current}", "0").replace("{total}", "10")}
+          </span>
+          <span className="rounded-full bg-gradient-to-r from-[#75b74d] to-[#578f3c] px-[13px] py-1 text-[8px] font-extrabold text-white">
+            {t("stampViewCard")}
+          </span>
         </div>
-      </div>
+      </StampHomeShell>
     )
   }
 
@@ -186,65 +248,22 @@ export function MemberPortalStampHomeWidget({
   const slots = Math.max(1, status.cardSlots)
   const filled = status.currentStamps
 
-  const stampGridCols = slots <= 5 ? slots : 5
-
   return (
-    <button
-      type="button"
-      onClick={onOpenPrivilege}
-      className={`group w-full overflow-hidden text-left ${MP_HOME_CARD_RADIUS} border border-stone-200/90 bg-white shadow-[0_10px_28px_-14px_rgba(28,25,23,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-14px_rgba(28,25,23,0.2)] active:translate-y-0`}
-    >
-      <div className="flex items-center gap-3 p-4">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-stone-900">{t("stampCardTitle")}</p>
-          <p className="mt-0.5 text-[11px] text-stone-500">
-            {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
-          </p>
-          <div
-            className="mt-3 grid gap-2"
-            style={{ gridTemplateColumns: `repeat(${stampGridCols}, minmax(0, 1fr))` }}
-          >
-            {Array.from({ length: slots }, (_, i) => {
-              const isFilled = i < filled
-              return (
-                <span
-                  key={i}
-                  className={`grid aspect-square place-items-center rounded-full ${
-                    isFilled
-                      ? "bg-amber-500 text-white shadow-[0_3px_8px_-2px_rgba(217,119,6,0.55)]"
-                      : "bg-stone-100 text-stone-300"
-                  }`}
-                >
-                  <Drumstick className="h-4 w-4" />
-                </span>
-              )
-            })}
-          </div>
-          {status.nextMilestone ? (
-            <p className="mt-2 line-clamp-1 text-[10px] text-stone-500">
-              {t("stampNextReward")
-                .replace("{remaining}", String(status.nextMilestone.stampsRemaining))
-                .replace("{label}", status.nextMilestone.label)}
-            </p>
-          ) : null}
-        </div>
-        <div className="relative h-24 w-24 shrink-0 transition-transform duration-300 group-hover:scale-[1.03]">
-          <img
-            src="/member-portal/single-chicken.webp"
-            alt=""
-            className="h-full w-full rounded-2xl object-cover shadow-sm"
-          />
-        </div>
-      </div>
-      <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3">
-        <span className="text-sm font-bold text-emerald-600">
-          {filled} / {slots}
+    <StampHomeShell onClick={onOpenPrivilege}>
+      <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampHomeTitle")}</h3>
+      <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">
+        {resolveStampHomeSubtitle(lang, status)}
+      </p>
+      <StampHomeSlots slots={slots} filled={filled} />
+      <div className="flex items-center gap-4">
+        <span className="text-[10px] font-extrabold text-[#4b8a31]">
+          {t("stampHomeCount").replace("{current}", String(filled)).replace("{total}", String(slots))}
         </span>
-        <span className="rounded-full bg-emerald-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm">
+        <span className="rounded-full bg-gradient-to-r from-[#75b74d] to-[#578f3c] px-[13px] py-1 text-[8px] font-extrabold text-white shadow-sm">
           {t("stampViewCard")}
         </span>
       </div>
-    </button>
+    </StampHomeShell>
   )
 }
 

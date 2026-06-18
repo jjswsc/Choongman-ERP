@@ -1,19 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import {
-  assertPurchasePaymentViaExpenseOnly,
-  isDirectBankPurchasePaymentCategory,
-} from '@/lib/bank-purchase-payment-via-expense'
+import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 
-describe('bank-purchase-payment-via-expense', () => {
-  it('detects purchase bank categories', () => {
-    expect(isDirectBankPurchasePaymentCategory('purchase_payment')).toBe(true)
-    expect(isDirectBankPurchasePaymentCategory('purchase_advance')).toBe(true)
-    expect(isDirectBankPurchasePaymentCategory('expense')).toBe(false)
-  })
-
-  it('blocks direct bank purchase payment', () => {
-    const blocked = assertPurchasePaymentViaExpenseOnly('purchase_payment')
-    expect(blocked.ok).toBe(false)
-    expect(assertPurchasePaymentViaExpenseOnly('transfer').ok).toBe(true)
+describe('bank-purchase-payment-via-expense shim', () => {
+  it('allows bank category save (link required at posting time)', () => {
+    expect(assertPurchasePaymentViaExpenseOnly('purchase_payment').ok).toBe(true)
+    expect(assertPurchasePaymentViaExpenseOnly('expense').ok).toBe(true)
   })
 })

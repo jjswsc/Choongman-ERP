@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Choongman Membership Home</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --orange:#f25a13;
+      --orange-2:#ff9b2d;
+      --dark:#151515;
+      --cream:#fff7ed;
+      --soft:#fff1df;
+      --text:#161616;
+      --muted:#747474;
+      --green:#5f963d;
+      --line:#eee3d6;
+      --shadow:0 14px 34px rgba(50,25,5,.12);
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:"Noto Sans Thai",system-ui,sans-serif;
+      background:#f7efe5;
+      display:flex;
+      justify-content:center;
+      align-items:flex-start;
+      padding:18px;
+      color:var(--text);
+    }
+
+    .app{
+      width:375px;
+      min-height:812px;
+      background:#fffdfa;
+      border-radius:28px;
+      overflow:hidden;
+      box-shadow:0 22px 60px rgba(33,18,5,.18);
+      padding:14px 13px 18px;
+    }
+
+    .header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:10px;
+    }
+
+    .profile{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    .logo{
+      width:50px;
+      height:50px;
+      border-radius:13px;
+      background:linear-gradient(135deg,#ff5b18,#e64b0d);
+      color:#fff;
+      border:3px solid #fff0e4;
+      display:grid;
+      place-items:center;
+      font-size:6.9px;
+      font-weight:900;
+      line-height:1.05;
+      text-align:center;
+      box-shadow:0 7px 14px rgba(241,86,18,.24);
+      transform:rotate(-4deg);
+    }
+
+    .hello{
+      font-size:12px;
+      line-height:1.15;
+      color:#2b2b2b;
+      margin-bottom:1px;
+    }
+
+    .name{
+      font-size:18px;
+      font-weight:900;
+      line-height:1.1;
+    }
+
+    .tier-pill{
+      width:max-content;
+      margin-top:3px;
+      padding:1px 9px 2px;
+      border-radius:100px;
+      background:#fff0e5;
+      color:#66331a;
+      font-size:10px;
+      font-weight:800;
+      display:flex;
+      align-items:center;
+      gap:3px;
+      letter-spacing:.2px;
+    }
+
+    .bell{
+      position:relative;
+      width:38px;
+      height:38px;
+      border-radius:50%;
+      background:#fff4e7;
+      display:grid;
+      place-items:center;
+      color:#1b1b1b;
+      font-size:20px;
+    }
+
+    .bell::after{
+      content:"";
+      position:absolute;
+      top:4px;
+      right:3px;
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      background:var(--orange);
+      border:2px solid #fffdfa;
+    }
+
+    .member-card{
+      position:relative;
+      overflow:hidden;
+      height:172px;
+      border-radius:18px;
+      background:
+        radial-gradient(circle at 82% 18%,rgba(255,255,255,.22),transparent 18%),
+        linear-gradient(135deg,#222 0%,#101010 60%,#262626 100%);
+      color:#fff;
+      padding:13px 16px;
+      box-shadow:0 12px 22px rgba(0,0,0,.16);
+    }
+
+    .member-card::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        linear-gradient(117deg,transparent 0 65%,rgba(255,255,255,.08) 66% 68%,transparent 69%),
+        radial-gradient(circle at 98% 5%,rgba(255,255,255,.12),transparent 24%);
+      pointer-events:none;
+    }
+
+    .card-gem{
+      position:absolute;
+      right:24px;
+      top:18px;
+      font-size:54px;
+      filter:drop-shadow(0 8px 10px rgba(255,255,255,.18));
+    }
+
+    .card-title{
+      position:relative;
+      z-index:1;
+      font-size:9px;
+      letter-spacing:3px;
+      color:#d2d2d2;
+      font-weight:600;
+      margin-bottom:4px;
+    }
+
+    .card-name{
+      position:relative;
+      z-index:1;
+      font-size:21px;
+      font-weight:900;
+      line-height:1.15;
+    }
+
+    .card-phone{
+      position:relative;
+      z-index:1;
+      font-size:13px;
+      color:#f6f6f6;
+      margin-top:1px;
+    }
+
+    .score-box{
+      position:relative;
+      z-index:1;
+      height:54px;
+      margin-top:10px;
+      border:1px solid rgba(255,255,255,.13);
+      border-radius:9px;
+      background:rgba(255,255,255,.025);
+      display:grid;
+      grid-template-columns:1fr 1px 1fr;
+      align-items:center;
+      padding:8px 15px;
+    }
+
+    .vline{height:34px;background:rgba(255,255,255,.15)}
+
+    .label{
+      color:#a9a9a9;
+      font-size:8.5px;
+      letter-spacing:2px;
+      font-weight:600;
+      margin-bottom:2px;
+    }
+
+    .score{
+      font-size:20px;
+      line-height:1;
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      gap:7px;
+    }
+
+    .mini-arrow{
+      width:18px;
+      height:18px;
+      border-radius:50%;
+      background:rgba(255,255,255,.11);
+      display:grid;
+      place-items:center;
+      font-size:16px;
+      font-weight:600;
+    }
+
+    .member-no{
+      font-size:18px;
+      font-weight:900;
+      line-height:1;
+    }
+
+    .next-tier{
+      position:relative;
+      z-index:1;
+      margin-top:10px;
+      font-size:9px;
+      color:#d8d8d8;
+    }
+
+    .next-tier b{
+      color:#fff;
+      font-size:10px;
+      letter-spacing:.5px;
+    }
+
+    .progress{
+      margin:5px 0 5px;
+      height:6px;
+      border-radius:999px;
+      overflow:hidden;
+      background:rgba(255,255,255,.24);
+    }
+
+    .progress span{
+      display:block;
+      width:71%;
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg,var(--orange),var(--orange-2));
+    }
+
+    .card-foot{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      font-size:8.5px;
+      color:#f0f0f0;
+    }
+
+    .outline-btn{
+      padding:4px 9px;
+      border:1px solid rgba(255,255,255,.42);
+      border-radius:999px;
+      font-size:8.5px;
+      color:#fff;
+      background:rgba(255,255,255,.05);
+    }
+
+    .quick-menu{
+      height:64px;
+      margin:10px 0 10px;
+      border-radius:18px;
+      background:rgba(255,255,255,.82);
+      box-shadow:0 9px 22px rgba(53,27,5,.09);
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      align-items:center;
+      padding:6px 4px;
+    }
+
+    .menu-item{
+      text-align:center;
+      color:#222;
+      font-size:7.5px;
+      line-height:1.1;
+      white-space:nowrap;
+    }
+
+    .menu-icon{
+      width:36px;
+      height:36px;
+      margin:0 auto 3px;
+      border-radius:50%;
+      background:#fff4e7;
+      color:var(--orange);
+      display:grid;
+      place-items:center;
+      font-size:18px;
+      font-weight:900;
+    }
+
+    .menu-item b{
+      display:block;
+      font-size:8px;
+      font-weight:800;
+      margin-bottom:1px;
+    }
+
+    .promo{
+      position:relative;
+      overflow:hidden;
+      height:105px;
+      border-radius:15px;
+      color:#fff;
+      padding:12px 15px;
+      background:
+        linear-gradient(90deg,rgba(72,34,12,.96) 0%,rgba(79,38,13,.78) 43%,rgba(79,38,13,.12) 100%),
+        url("https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=700&q=80") center/cover;
+    }
+
+    .promo h2{
+      margin:0;
+      font-size:17px;
+      line-height:1.08;
+      font-weight:900;
+    }
+
+    .promo p{
+      margin:1px 0 0;
+      font-size:11px;
+      font-weight:600;
+    }
+
+    .promo .price{
+      font-size:38px;
+      font-weight:900;
+      line-height:.95;
+      color:#ffe8a8;
+      margin-top:1px;
+    }
+
+    .order-btn{
+      border:0;
+      margin-top:2px;
+      border-radius:999px;
+      padding:4px 12px;
+      color:#fff;
+      font-family:inherit;
+      font-size:10px;
+      font-weight:800;
+      background:linear-gradient(90deg,#ff9824,#ef5513);
+      box-shadow:0 7px 14px rgba(239,85,19,.28);
+    }
+
+    .dots{
+      position:absolute;
+      bottom:8px;
+      left:50%;
+      transform:translateX(-50%);
+      display:flex;
+      gap:5px;
+      align-items:center;
+    }
+
+    .dots i{
+      width:5px;
+      height:5px;
+      border-radius:50%;
+      background:rgba(255,255,255,.55);
+    }
+
+    .dots i.active{
+      width:15px;
+      border-radius:999px;
+      background:#fff;
+    }
+
+    .section-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin:13px 1px 8px;
+    }
+
+    .section-head h2{
+      margin:0;
+      font-size:14px;
+      font-weight:900;
+    }
+
+    .see-all{
+      font-size:9px;
+      color:#3a2417;
+    }
+
+    .benefits{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+
+    .benefit{
+      height:90px;
+      border-radius:14px;
+      background:linear-gradient(135deg,#fffaf4,#fff0df);
+      padding:11px 6px 8px;
+      text-align:center;
+      box-shadow:0 4px 12px rgba(50,25,5,.04);
+    }
+
+    .benefit-icon{
+      width:34px;
+      height:34px;
+      margin:0 auto 5px;
+      border-radius:50%;
+      background:linear-gradient(135deg,#ff9b24,#f05513);
+      color:#fff;
+      display:grid;
+      place-items:center;
+      font-size:18px;
+      font-weight:900;
+    }
+
+    .benefit b{
+      display:block;
+      font-size:8.5px;
+      line-height:1.15;
+      font-weight:900;
+      margin-bottom:2px;
+    }
+
+    .benefit span{
+      display:block;
+      font-size:6.7px;
+      line-height:1.2;
+      color:#666;
+    }
+
+    .stamp-card{
+      position:relative;
+      min-height:112px;
+      margin-top:10px;
+      border-radius:17px;
+      overflow:hidden;
+      padding:13px 125px 13px 15px;
+      background:linear-gradient(90deg,#f2faeb 0%,#fff8eb 100%);
+      box-shadow:0 6px 16px rgba(54,30,7,.05);
+    }
+
+    .stamp-card h3{
+      margin:0 0 2px;
+      font-size:13px;
+      line-height:1.2;
+      font-weight:900;
+    }
+
+    .stamp-card p{
+      margin:0;
+      font-size:10.5px;
+      line-height:1.35;
+      font-weight:800;
+    }
+
+    .stamps{
+      display:flex;
+      gap:4px;
+      margin:9px 0 7px;
+    }
+
+    .stamp{
+      width:19px;
+      height:19px;
+      border-radius:50%;
+      background:#ffc27a;
+      color:#fff;
+      display:grid;
+      place-items:center;
+      font-size:10px;
+      font-weight:900;
+    }
+
+    .stamp.empty{
+      background:#dce3d3;
+      color:#a9b19f;
+    }
+
+    .stamp-bottom{
+      display:flex;
+      align-items:center;
+      gap:16px;
+    }
+
+    .count{
+      color:#4b8a31;
+      font-size:10px;
+      font-weight:800;
+    }
+
+    .stamp-btn{
+      border:0;
+      border-radius:999px;
+      padding:4px 13px;
+      color:#fff;
+      font-family:inherit;
+      font-size:8px;
+      font-weight:800;
+      background:linear-gradient(90deg,#75b74d,#578f3c);
+    }
+
+    .chicken{
+      position:absolute;
+      right:16px;
+      bottom:10px;
+      width:98px;
+      height:80px;
+      display:grid;
+      place-items:center;
+      font-size:68px;
+      filter:drop-shadow(0 8px 10px rgba(108,54,12,.18));
+    }
+
+    @media (max-width:420px){
+      body{padding:0;background:#fffdfa}
+      .app{
+        width:100%;
+        min-height:100vh;
+        border-radius:0;
+        box-shadow:none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <header class="header">
+      <div class="profile">
+        <div class="logo">CHOONGMAN<br>CHICKEN<br>THAILAND</div>
+        <div>
+          <div class="hello">สวัสดีครับ</div>
+          <div class="name">ประวัตร <span style="color:#d99500;">♛</span></div>
+          <div class="tier-pill">💎 DIAMOND</div>
+        </div>
+      </div>
+      <div class="bell">♧</div>
+    </header>
+
+    <section class="member-card">
+      <div class="card-gem">💎</div>
+
+      <div class="card-title">CHOONGMAN MEMBERSHIP</div>
+      <div class="card-name">ประวัตร</div>
+      <div class="card-phone">098 ••••• 3544</div>
+
+      <div class="score-box">
+        <div>
+          <div class="label">POINTS</div>
+          <div class="score">640 P <span class="mini-arrow">›</span></div>
+        </div>
+        <div class="vline"></div>
+        <div>
+          <div class="label">MEMBER NO.</div>
+          <div class="member-no">M007359</div>
+        </div>
+      </div>
+
+      <div class="next-tier">
+        <div>NEXT TIER : <b>PLATINUM</b> 💎</div>
+        <div>คุณอยู่ห่างจากระดับถัดไปอีก 860 คะแนน</div>
+        <div class="progress"><span></span></div>
+        <div class="card-foot">
+          <span>2,140 / 3,000 P (71%)</span>
+          <button class="outline-btn">ดูสิทธิประโยชน์ ›</button>
+        </div>
+      </div>
+    </section>
+
+    <nav class="quick-menu">
+      <div class="menu-item"><div class="menu-icon">♨</div><b>Order</b>สั่งอาหาร</div>
+      <div class="menu-item"><div class="menu-icon">🛒</div><b>Delivery</b>เดลิเวอรี่</div>
+      <div class="menu-item"><div class="menu-icon">🎁</div><b>สิทธิพิเศษ</b>Coupons</div>
+      <div class="menu-item"><div class="menu-icon">🏷</div><b>คูปองของฉัน</b></div>
+      <div class="menu-item"><div class="menu-icon">•••</div><b>More</b></div>
+    </nav>
+
+    <section class="promo">
+      <h2>โปรโมชั่น 111 สุดคุ้ม</h2>
+      <p>ไก่กรอบ 8 ชิ้น เพียง</p>
+      <div class="price">111.-</div>
+      <button class="order-btn">สั่งเลย ›</button>
+      <div class="dots">
+        <i></i><i></i><i class="active"></i><i></i><i></i>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>สิทธิพิเศษสำหรับคุณ</h2>
+        <span class="see-all">ดูทั้งหมด ›</span>
+      </div>
+
+      <div class="benefits">
+        <article class="benefit">
+          <div class="benefit-icon">%</div>
+          <b>รับคะแนน 3 เท่า</b>
+          <span>ทุก 25 บาท รับ 3 คะแนน</span>
+        </article>
+        <article class="benefit">
+          <div class="benefit-icon">♙</div>
+          <b>ส่วนลดวันเกิด 20%</b>
+          <span>เฉพาะเดือนเกิดของคุณ</span>
+        </article>
+        <article class="benefit">
+          <div class="benefit-icon">♕</div>
+          <b>สิทธิพิเศษเฉพาะสมาชิก</b>
+          <span>โปรโมชั่นเฉพาะคุณเท่านั้น</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="stamp-card">
+      <h3>Stamp card อีกนิดเดียวครบ!</h3>
+      <p>สะสมครบ 10 ดวง รับฟรี! ไก่กรอบ 1 ชิ้น</p>
+
+      <div class="stamps">
+        <span class="stamp">♕</span>
+        <span class="stamp">♕</span>
+        <span class="stamp">♕</span>
+        <span class="stamp">♕</span>
+        <span class="stamp">♕</span>
+        <span class="stamp empty">♕</span>
+        <span class="stamp empty">♕</span>
+        <span class="stamp empty">♕</span>
+      </div>
+
+      <div class="stamp-bottom">
+        <span class="count">7 / 10 ดวง</span>
+        <button class="stamp-btn">ดูแสตมป์การ์ด</button>
+      </div>
+
+      <div class="chicken">🍗</div>
+    </section>
+  </main>
+</body>
+</html>

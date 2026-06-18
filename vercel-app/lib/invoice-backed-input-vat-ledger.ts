@@ -47,12 +47,60 @@ function shouldSkipBankTxVatAutoSync(category: string): boolean {
   )
 }
 
-function vatSplitFromTaxInvoiceGross(gross: number): { net: number; vat: number } {
+export function vatSplitFromTaxInvoiceGross(gross: number): { net: number; vat: number } {
   const g = Math.max(0, Math.abs(Number(gross) || 0))
   if (g <= 0) return { net: 0, vat: 0 }
   const vat = round2((g * 7) / 107)
   const net = round2(g - vat)
   return { net, vat }
+}
+
+function resolveBankTxWithdrawCategory(row: { note?: string | null; category?: string | null }): string {
+  const fromNote = parseWithdrawalCategory(String(row.note || ''))
+  if (fromNote) return fromNote
+  return String(row.category || '').trim().toLowerCase()
+}
+
+async function deleteAutoBankVatLedgerRow(bankId: number): Promise<boolean> {
+  const memoTag = `[AUTO:BANK_TX:${bankId}]`
+  const existing = (await supabaseSelectFilter(
+    'vat_ledger_entries',
+    `memo=ilike.${encodeURIComponent(`%${memoTag}%`)}`,
+    { limit: 5, select: 'id,filing_status' }
+  )) as { id?: number; filing_status?: string | null }[] | null
+  const eid = Math.floor(Number(existing?.[0]?.id) || 0)
+  if (eid <= 0) return false
+  if (String(existing?.[0]?.filing_status || '').trim().toLowerCase() === 'submitted') return false
+  await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${eid}`)
+  return true
+}
+
+async function bankTxLinkedAccrualVat(bankId: number): Promise<number> {
+  const payableRows = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${bankId}`,
+    { select: 'expense_accrual_id', limit: 20 }
+  )) as { expense_accrual_id?: number | null }[] | null
+  const accrualId = Math.floor(Number(payableRows?.[0]?.expense_accrual_id) || 0)
+  if (accrualId <= 0) return 0
+  const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
+    limit: 1,
+    select: 'vat_amount',
+  })) as { vat_amount?: number | null }[] | null
+  return Math.max(0, Number(accrualRows?.[0]?.vat_amount) || 0)
+}
+
+async function bankTxHasInboundLink(bankId: number): Promise<boolean> {
+  try {
+    const rows = (await supabaseSelectFilter(
+      'bank_transaction_inbound_links',
+      `bank_transaction_id=eq.${bankId}`,
+      { select: 'id', limit: 1 }
+    )) as { id?: number }[] | null
+    return (rows?.length || 0) > 0
+  } catch {
+    return false
+  }
 }
 
 async function lookupVendorTaxId(vendorCode: string): Promise<string | null> {
@@ -78,11 +126,14 @@ async function lookupVendorName(vendorCode: string): Promise<string> {
 
 type BankTxRow = {
   id?: number
+  trans_type?: string | null
   trans_date?: string | null
   amount?: number | null
   memo?: string | null
   note?: string | null
+  category?: string | null
   vendor_code?: string | null
+  store?: string | null
   store_name?: string | null
   invoice_received?: boolean | null
   invoice_no?: string | null
@@ -115,7 +166,7 @@ export async function syncInvoiceBackedBankInputVatLedgers(params: {
       `trans_date=lte.${encodeURIComponent(endYmd)}`,
     ].join('&'),
     {
-      select: 'id,trans_date,amount,memo,note,vendor_code,store_name,invoice_received,invoice_no',
+      select: 'id,trans_date,amount,memo,note,category,vendor_code,store,store_name,invoice_received,invoice_no',
       order: 'id.asc',
       pageSize: 4000,
       maxRows: 100000,
@@ -173,7 +224,7 @@ export async function syncInvoiceBackedBankInputVatLedgers(params: {
   for (const row of bankRows || []) {
     const bankId = Math.floor(Number(row.id) || 0)
     if (bankId <= 0) continue
-    const category = parseWithdrawalCategory(String(row.note || ''))
+    const category = resolveBankTxWithdrawCategory(row)
     if (shouldSkipBankTxVatAutoSync(category)) {
       skipped += 1
       continue
@@ -199,7 +250,7 @@ export async function syncInvoiceBackedBankInputVatLedgers(params: {
       continue
     }
 
-    const rowStore = String(row.store_name || '').trim()
+    const rowStore = String(row.store_name || row.store || '').trim()
     if (storeFilter && rowStore && !storeScope.matches(rowStore)) {
       skipped += 1
       continue
@@ -304,4 +355,117 @@ export async function syncInvoiceBackedBankInputVatLedgers(params: {
   }
 
   return { upserted, deleted, skipped }
+}
+
+/** 단건 통장 거래의 세금계산서 확인 상태 → 매입 부가세 원장 즉시 반영 */
+export async function syncInvoiceBackedBankInputVatLedgerForBankId(
+  bankTransactionId: number
+): Promise<{ upserted: boolean; deleted: boolean; skipped: boolean }> {
+  const bankId = Math.floor(Number(bankTransactionId) || 0)
+  if (bankId <= 0) return { upserted: false, deleted: false, skipped: true }
+
+  const rows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankId}`, {
+    limit: 1,
+    select:
+      'id,trans_type,trans_date,amount,memo,note,category,vendor_code,store,store_name,invoice_received,invoice_no',
+  })) as BankTxRow[] | null
+  const row = rows?.[0]
+  if (!row?.id) return { upserted: false, deleted: false, skipped: true }
+
+  if (String(row.trans_type || '').toLowerCase() !== 'withdraw') {
+    return { upserted: false, deleted: false, skipped: true }
+  }
+
+  if (!row.invoice_received) {
+    const deleted = await deleteAutoBankVatLedgerRow(bankId)
+    return { upserted: false, deleted, skipped: false }
+  }
+
+  const category = resolveBankTxWithdrawCategory(row)
+  if (shouldSkipBankTxVatAutoSync(category)) {
+    return { upserted: false, deleted: false, skipped: true }
+  }
+  if (await bankTxHasInboundLink(bankId)) {
+    return { upserted: false, deleted: false, skipped: true }
+  }
+  if ((await bankTxLinkedAccrualVat(bankId)) > 0) {
+    return { upserted: false, deleted: false, skipped: true }
+  }
+
+  const docDate = String(row.trans_date || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) {
+    return { upserted: false, deleted: false, skipped: true }
+  }
+  const taxMonth = docDate.slice(0, 7)
+
+  const gross = Math.max(0, Math.abs(Number(row.amount) || 0))
+  if (gross <= 0) return { upserted: false, deleted: false, skipped: true }
+  const { net, vat } = vatSplitFromTaxInvoiceGross(gross)
+  if (net <= 0 && vat <= 0) return { upserted: false, deleted: false, skipped: true }
+
+  const vendorCode = String(row.vendor_code || '').trim()
+  const payeeName = vendorCode ? await lookupVendorName(vendorCode) : String(row.memo || '지출').trim() || '지출'
+  const tin = vendorCode ? await lookupVendorTaxId(vendorCode) : null
+  const invoiceNo = String(row.invoice_no || `BT-${bankId}`).trim().slice(0, 128)
+  const memoTag = `[AUTO:BANK_TX:${bankId}]`
+  const rowStore = String(row.store_name || row.store || '').trim()
+  const useEvidenceColumns = await probeVatLedgerEvidenceColumns()
+
+  const ledgerRow = mergeEvidenceIntoVatLedgerRow(
+    {
+      doc_date: docDate,
+      tax_month: taxMonth,
+      direction: 'input' as const,
+      counterparty_name: payeeName.slice(0, 500),
+      counterparty_tax_id: tin,
+      invoice_number: invoiceNo,
+      net_amount: net,
+      vat_amount: vat,
+      total_amount: gross,
+      vat_status: 'draft_auto',
+      memo: `${memoTag} 세금계산서 확인 통장지출`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: rowStore || null,
+      updated_at: new Date().toISOString(),
+    },
+    'received',
+    null,
+    useEvidenceColumns
+  )
+
+  const existing = (await supabaseSelectFilter(
+    'vat_ledger_entries',
+    `memo=ilike.${encodeURIComponent(`%${memoTag}%`)}`,
+    { limit: 5, select: 'id,filing_status' }
+  )) as { id?: number; filing_status?: string | null }[] | null
+  const existingId = Math.floor(Number(existing?.[0]?.id) || 0)
+  const submitted = String(existing?.[0]?.filing_status || '').trim().toLowerCase() === 'submitted'
+
+  if (existingId > 0) {
+    if (!submitted) {
+      try {
+        await supabaseUpdate('vat_ledger_entries', existingId, ledgerRow)
+      } catch (e) {
+        const fallback = await vatLedgerRowForSchemaError(ledgerRow, e)
+        if (fallback) await supabaseUpdate('vat_ledger_entries', existingId, fallback)
+      }
+    }
+    return { upserted: true, deleted: false, skipped: false }
+  }
+
+  const insertRow = {
+    ...ledgerRow,
+    created_by: 'system',
+    created_at: new Date().toISOString(),
+  }
+  try {
+    await supabaseInsert('vat_ledger_entries', insertRow)
+  } catch (e) {
+    const fallback = await vatLedgerRowForSchemaError(insertRow, e)
+    if (!fallback) throw e
+    await supabaseInsert('vat_ledger_entries', fallback)
+  }
+  return { upserted: true, deleted: false, skipped: false }
 }

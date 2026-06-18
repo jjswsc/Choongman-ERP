@@ -288,6 +288,66 @@ function pickEmployeeTin(row?: EmployeeTaxRow | null): string | null {
   return null
 }
 
+/**
+ * PP30 조회 시 항상 실행하는 경량 동기화 — 지출 발생·통장 인보이스 확인 건만 반영.
+ * 입고(stock_logs) 전체 재동기화는 syncTaxVatLedgersFromStockAndExpenses(지연 실행)에 맡긴다.
+ */
+export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ expenseSynced: number; bankInvoiceUpserted: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { expenseSynced: 0, bankInvoiceUpserted: 0 }
+
+  const storeFilter = String(params.storeFilter || '').trim()
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
+  const officeScope = !!storeFilter && storeFilter !== 'All' && isHeadOfficeLikeStoreName(storeFilter)
+  const startYmd = monthStartYmd(validMonths[0]!)
+  const endYmd = monthEndYmd(validMonths[validMonths.length - 1]!)
+
+  let expenseSynced = 0
+  const expParts = [
+    `expense_date=gte.${encodeURIComponent(startYmd)}`,
+    `expense_date=lte.${encodeURIComponent(endYmd)}`,
+    'vat_amount=gt.0',
+    'status=neq.rejected',
+  ]
+  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
+    select: 'id,store_name',
+    order: 'id.asc',
+    pageSize: 2000,
+    maxRows: 30000,
+  })) as { id?: number; store_name?: string | null }[]
+  for (const row of expenseRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    if (id <= 0) continue
+    const rowStore = String(row.store_name || '').trim()
+    if (storeFilter && storeFilter !== 'All' && !storeScope.matches(rowStore) && !(officeScope && !rowStore)) {
+      continue
+    }
+    await syncExpenseAccrualInputVatLedger(
+      id,
+      officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined
+    )
+    expenseSynced += 1
+  }
+
+  let bankInvoiceUpserted = 0
+  try {
+    const bankSync = await syncInvoiceBackedBankInputVatLedgers({
+      months: validMonths,
+      storeFilter: params.storeFilter,
+    })
+    bankInvoiceUpserted = bankSync.upserted
+  } catch (e) {
+    console.warn('syncIncrementalVatLedgersFromExpenseAndBank bank sync:', e)
+  }
+
+  return { expenseSynced, bankInvoiceUpserted }
+}
+
 export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   months: string[]
   storeFilter?: string

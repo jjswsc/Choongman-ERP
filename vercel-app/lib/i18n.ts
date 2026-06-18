@@ -2500,7 +2500,9 @@ export const i18n = {
       '※ 매입채무는 입고 시 발생하고, 실제 지급은 「지급」 구분 행(통장 매입대금·지급예정 집행)으로 차감됩니다. 입고 행의 「지급여부」는 건별 정산이 아니라 유형 표시입니다. 인보이스 열은 ภ.พ.30(부가세) 참고용이며 지급 여부와 무관합니다.',
     payColInvoiceVat: '인보이스(부가세)',
     purchasePaymentViaExpenseOnly:
-      '매입 대금 지급은 「지출관리 → 지급예정」에서만 집행할 수 있습니다. 통장 거래 화면의 「지출관리 연결」으로 승인된 지급예정을 연결하세요.',
+      '지출 관련 통장 출금은 분류만 저장됩니다. 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 회계 처리가 완료됩니다.',
+    bankExpenseViaExpenseMgmt:
+      '지출 관련 통장 출금은 분류만 저장됩니다. 아래에서 지급예정 선택 또는 지출등록으로 연결하세요.',
     bankRegisterLinkExpenseMgmt: '지출관리 연결',
     addOpeningBalanceShort: '기초 이월',
     recFilterSalesOutlet: '매출처',
@@ -2517,6 +2519,10 @@ export const i18n = {
     recColOrderNo: '주문번호',
     recColReceiveStatus: '수령여부',
     recColReceiveCheck: '수금확인',
+    recLedgerDateCol: '매출·입금일',
+    recLedgerDateColHint: '위: 매출(발생)일, 아래: 입금(수령)일',
+    recLedgerSalesDateShort: '매출',
+    recLedgerReceiveDateShort: '입금',
     recColTaxInvoice: 'Tax Invoice',
     recTaxInvoicePrintTitle: 'Tax Invoice 인쇄',
     recTaxInvoiceNoLines: '주문 품목이 없어 Tax Invoice를 만들 수 없습니다.',
@@ -2531,7 +2537,7 @@ export const i18n = {
     recTypeOpening: '기초이월',
     recTypeReceive: '수령',
     payTypePO: '발주',
-    payTypeInbound: '입고',
+    payTypeInbound: '매입',
     payTypePayment: '지급',
     recStatusReceived: '수령',
     recStatusUnpaid: '미수',
@@ -3770,7 +3776,7 @@ export const i18n = {
     bankImportSaveFirstForExpense: '일괄저장 후 조회 탭에서 지출등록',
     bankImportSaveFirstExpenseHint: '※ 지출등록: 일괄저장 후 조회 탭으로 이동하여 저장된 내역에서 진행해 주세요.',
     bankImportWithdrawCoaHint:
-      '※ 출금: 아래 표에서 용도·계정과목(매입 대금이면 거래처)을 선택하면 저장 시 통장에 반영됩니다. 적요 규칙으로 자동 채워집니다.',
+      '※ 출금: 용도·계정과목(매입 대금이면 거래처)을 선택해 분류만 저장합니다. 경비·매입 대금의 분개·미지급 반영은 저장 후 조회 탭 「지출관리 연결」로 완료하세요.',
     bankImportQuickMemosTitle: '자주 쓰는 메모',
     bankImportQuickMemoHint:
       '메모 칸을 먼저 선택한 뒤 누르면 해당 줄에 붙고, 아니면 클립보드로 복사됩니다.',
@@ -3844,7 +3850,7 @@ export const i18n = {
     bankCoaUsedForBankHint: '통장·적요 규칙·분개는 동일 DB(account_subjects)를 사용합니다',
     bankExpenseMgmtCoexistTitle: '지출 관리와 같은 출금 줄을 쓸 때 (출금 용도)',
     bankExpenseMgmtCoexistBody:
-      '「지출 관리」에서 통장 출금을 지급에 연결할 계획이면, 여기서 저장하는 출금 용도를 팀 기준에 맞추세요.\n• 이체·대출·가수금·정산 수정·미분류: 통장 자동분개 없음 → 이후 지출관리에서 연결 시 미지급 정산 분개만 추가되기 쉬움\n• 경비·고정비(저장 시 경비): 통장에서 비용·현금 분개 이미 발생 → 같은 줄을 지출관리 지급에 다시 연결하지 않음(통장만 또는 지출관리만)\n• 매입 대금: 미지급·현금 분개 발생 → 지출관리의 매입 지급·미지급 정산과 한쪽 절차만 사용',
+      '지출 관련 통장 출금(경비·매입 대금 등)은 통장에서 분류만 저장됩니다. 분개·미지급 반영은 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 완료됩니다.\n• 이체·대출·가수금·정산 수정·미분류: 통장에서 바로 분개 가능\n• 경비·매입 대금: 지출관리 연결 필수',
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급과 맞물립니다. 지출 관리와 겹칠 때는 출금 용도에 따라 자동분개 유무가 갈립니다.',
     helpHow_admin_bank_transactions:
@@ -9540,7 +9546,9 @@ Only matters the employee must handle personally on a working day:
       '※ Payables accrue on inbound; actual payments appear as “Payment” rows (bank purchase_payment or expense payment runs). “Paid” on inbound lines is a row type label, not per-line settlement. The invoice column is for VAT (PP30) only—not payment status.',
     payColInvoiceVat: 'Invoice (VAT)',
     purchasePaymentViaExpenseOnly:
-      'Purchase payments can only be executed in Expense Management → Payment Plan. On Bank Transactions, use “Link expense mgmt” to connect an approved plan.',
+      'Expense-related bank withdrawals are classified only on save. Open the Query tab and use “Link expense mgmt” to connect a payment plan or expense register before accounting is posted.',
+    bankExpenseViaExpenseMgmt:
+      'Expense-related bank withdrawals are classified only. Connect via payment plan or expense register below.',
     bankRegisterLinkExpenseMgmt: 'Link expense mgmt',
     addOpeningBalanceShort: 'Opening balance',
     recFilterSalesOutlet: 'Sales outlet',
@@ -9557,6 +9565,10 @@ Only matters the employee must handle personally on a working day:
     recColOrderNo: 'Order No',
     recColReceiveStatus: 'Received',
     recColReceiveCheck: 'Payment check',
+    recLedgerDateCol: 'Sales · received',
+    recLedgerDateColHint: 'Top: sales (accrual) date; bottom: collection date',
+    recLedgerSalesDateShort: 'Sales',
+    recLedgerReceiveDateShort: 'Rcvd',
     recColTaxInvoice: 'Tax Invoice',
     recTaxInvoicePrintTitle: 'Print Tax Invoice',
     recTaxInvoiceNoLines: 'No order lines; cannot create Tax Invoice.',
@@ -10814,7 +10826,7 @@ Only matters the employee must handle personally on a working day:
     bankImportSaveFirstForExpense: 'After saving, register expense from Query tab',
     bankImportSaveFirstExpenseHint: '※ Expense registration: Save first, then go to Query tab to register on saved transactions.',
     bankImportWithdrawCoaHint:
-      '※ Withdrawals: Choose category and account subject (or vendor for purchase payment) below; they are saved with the import. Memo rules can pre-fill.',
+      '※ Withdrawals: pick category and account subject (or vendor for purchase payment) — classification only. For expense and purchase payment, complete accounting via Query tab → “Link expense mgmt”.',
     bankImportQuickMemosTitle: 'Quick memo phrases',
     bankImportQuickMemoHint:
       'Focus a memo cell first, then click to insert on that row; otherwise the phrase is copied to the clipboard.',
@@ -10888,7 +10900,7 @@ Only matters the employee must handle personally on a working day:
     bankCoaUsedForBankHint: 'Bank, memo rules, and journals use the same account_subjects table',
     bankExpenseMgmtCoexistTitle: 'If Expense Management will use the same withdrawal row (category)',
     bankExpenseMgmtCoexistBody:
-      'When you will link this bank withdrawal from Expense Management for payment, pick the withdraw category to match your SOP.\n• Transfer, loan, advance, correction, unclassified: no bank auto-journal on save → later bank-link payment mainly adds payable settlement.\n• Expense / Fixed (saved as expense): bank already posts expense/cash → do not also link the same row from Expense Management (pick one workflow).\n• Purchase payment: posts payable/cash → do not also run the same vendor payment twice from Expense Management; use one path.',
+      'Expense-related bank withdrawals (expense, purchase payment, etc.) are classified on the bank side only. Post journals and payables after linking via Query tab → “Link expense mgmt”.\n• Transfer, loan, advance, correction, unclassified: bank auto-journal on save\n• Expense and purchase payment: expense management link required',
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables. Overlap with Expense Management depends on the withdraw category.',
     helpHow_admin_bank_transactions:
@@ -16982,7 +16994,11 @@ orderItemQty: 'จำนวน',
     bankImportSaveFirstForExpense: 'บันทึกก่อน แล้วไปแท็บค้นหาเพื่อลงทะเบียนรายจ่าย',
     bankImportSaveFirstExpenseHint: '※ การลงทะเบียนรายจ่าย: บันทึกก่อน แล้วไปแท็บค้นหาเพื่อลงทะเบียนจากรายการที่บันทึกแล้ว',
     bankImportWithdrawCoaHint:
-      '※ รายการถอน: เลือกประเภท·หมวดบัญชี (หรือคู่ค้าถ้าเป็นจ่ายค่าสินค้า) ในตารางด้านล่าง จะบันทึกพร้อมนำเข้า กฎคำสำคัญในรายละเอียดช่วยเติมอัตโนมัติ',
+      '※ รายการถอน: เลือกประเภท·หมวดบัญชี (หรือคู่ค้าถ้าชำระซื้อ) — จัดประเภทเท่านั้น ค่าใช้จ่าย/ชำระซื้อ ให้เชื่อม 「จัดการค่าใช้จ่าย」 ในแท็บค้นหาหลังบันทึก',
+    purchasePaymentViaExpenseOnly:
+      'รายการถอนที่เกี่ยวกับค่าใช้จ่ายจัดประเภทเท่านั้น ไปแท็บค้นหาแล้วกด 「เชื่อมโยงจัดการค่าใช้จ่าย」 เพื่อเชื่อมแผนจ่ายหรือลงทะเบียนค่าใช้จ่าย',
+    bankExpenseViaExpenseMgmt:
+      'รายการถอนที่เกี่ยวกับค่าใช้จ่ายจัดประเภทเท่านั้น เชื่อมแผนจ่ายหรือลงทะเบียนค่าใช้จ่ายด้านล่าง',
     bankImportQuickMemosTitle: 'ข้อความที่ใช้บ่อย',
     bankImportQuickMemoHint:
       'คลิกช่องรายละเอียดก่อน แล้วคลิกปุ่มเพื่อใส่ในแถวนั้น ถ้าไม่ได้เลือกช่องจะคัดลอกไปคลิปบอร์ด',

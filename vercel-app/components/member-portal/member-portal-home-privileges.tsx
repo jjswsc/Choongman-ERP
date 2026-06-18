@@ -1,14 +1,13 @@
 "use client"
 
-import { Cake, ChevronRight, Crown, Gift, Percent, Stamp, Ticket, type LucideIcon } from "lucide-react"
+import { Cake, Crown, Gift, Percent, Stamp, Ticket, type LucideIcon } from "lucide-react"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 import type {
   MemberPortalHomePrivilegeIcon,
   MemberPortalHomePrivilegeLinkTab,
   MemberPortalHomePrivilegeResolved,
 } from "@/lib/member-portal-home-privileges-config"
-import { MP_HOME_CARD_RADIUS } from "@/lib/member-portal-home-layout"
-import { MP_TEXT_PRIMARY, MP_TEXT_SECONDARY } from "@/lib/member-portal-design"
+import { MP_TEXT_PRIMARY } from "@/lib/member-portal-design"
 import type { PortalTab } from "@/components/member-portal/portal-ui"
 
 type MemberPortalHomePrivilegesProps = {
@@ -52,18 +51,17 @@ export function MemberPortalHomePrivileges({
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className={`text-[15px] font-bold tracking-tight ${MP_TEXT_PRIMARY}`}>{t("homeSpecialPrivileges")}</h2>
+      <div className="mb-2 flex items-center justify-between gap-3 px-px">
+        <h2 className={`m-0 text-sm font-black ${MP_TEXT_PRIMARY}`}>{t("homeSpecialPrivileges")}</h2>
         <button
           type="button"
           onClick={onViewAll}
-          className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-amber-700 transition hover:text-amber-800"
+          className="shrink-0 text-[9px] font-semibold text-[#3a2417] transition hover:text-[#2a1810]"
         >
-          {t("homeViewAll")}
-          <ChevronRight className="h-3.5 w-3.5" />
+          {t("homeViewAll")} ›
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-3 gap-2">
         {visible.map((item) => {
           const Icon = PRIVILEGE_ICON_MAP[item.icon] || Percent
 
@@ -72,17 +70,15 @@ export function MemberPortalHomePrivileges({
               key={item.id}
               type="button"
               onClick={() => handleCardClick(item.linkTab)}
-              className={`group relative flex flex-col items-center overflow-hidden ${MP_HOME_CARD_RADIUS} border border-stone-200/90 bg-white px-2 py-4 text-center shadow-[0_4px_16px_-8px_rgba(28,25,23,0.12)] ring-1 ring-stone-100 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(28,25,23,0.16)] active:translate-y-0`}
+              className="group flex h-[90px] flex-col items-center rounded-[14px] bg-gradient-to-br from-[#fffaf4] to-[#fff0df] px-1.5 pb-2 pt-[11px] text-center shadow-[0_4px_12px_rgba(50,25,5,0.04)] transition duration-200 hover:brightness-[1.02] active:scale-[0.98]"
             >
-              <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/70 to-transparent" />
-              <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_6px_14px_-3px_rgba(217,119,6,0.55)] ring-1 ring-white/40 transition-transform duration-200 group-hover:scale-105">
-                <span className="pointer-events-none absolute inset-x-1 top-1 h-1/2 rounded-full bg-gradient-to-b from-white/55 to-transparent" />
-                <Icon className="relative h-[1.35rem] w-[1.35rem]" strokeWidth={2.1} />
+              <span className="mb-[5px] flex h-[34px] w-[34px] items-center justify-center rounded-full bg-gradient-to-br from-[#ff9b24] to-[#f05513] text-white shadow-[0_4px_10px_-2px_rgba(240,85,19,0.35)]">
+                <Icon className="h-[18px] w-[18px]" strokeWidth={2.4} />
               </span>
-              <p className={`relative mt-2.5 line-clamp-2 min-h-[2.25rem] text-[11px] font-bold leading-snug ${MP_TEXT_PRIMARY}`}>
+              <p className={`line-clamp-2 text-[8.5px] font-black leading-[1.15] ${MP_TEXT_PRIMARY}`}>
                 {item.title}
               </p>
-              <p className={`relative mt-1 line-clamp-2 text-[10px] leading-snug ${MP_TEXT_SECONDARY}`}>{item.subtitle}</p>
+              <p className="mt-0.5 line-clamp-2 text-[6.7px] leading-[1.2] text-[#666]">{item.subtitle}</p>
             </button>
           )
         })}

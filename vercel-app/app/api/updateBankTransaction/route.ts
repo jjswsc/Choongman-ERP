@@ -5,7 +5,7 @@ import {
   deleteReceivableFromBankReceive,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
-import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
+import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   extractExpenseAccrualPrefix,
@@ -70,17 +70,13 @@ export async function POST(request: NextRequest) {
     const transDate = String(existing[0].trans_date || '').slice(0, 10)
     await assertAccountingDateOpen(transDate)
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
-    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     const prevCategory = String(existing[0].category || '').toLowerCase()
 
     const patch: Record<string, unknown> = {}
 
     if (category !== undefined) {
       const requested = String(category).toLowerCase()
-      const purchaseGuard = assertPurchasePaymentViaExpenseOnly(requested)
-      if (!purchaseGuard.ok) {
-        return NextResponse.json({ success: false, message: purchaseGuard.message }, { status: 400, headers })
-      }
       let validCategory = transType === 'deposit'
         ? (depositCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
         : (withdrawCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
@@ -235,17 +231,20 @@ export async function POST(request: NextRequest) {
       await deleteJournalEntriesBySource('bank_transaction', bankTxId, {
         memoIncludes: ['통장 거래 자동분개'],
       })
-      await postBankTransactionJournal({
-        bankTransactionId: bankTxId,
-        transDate,
-        transType: transType === 'deposit' ? 'deposit' : 'withdraw',
-        amountAbs: Math.abs(Number(existing[0].amount) || 0),
-        category: String(finalCategory || ''),
-        memo: String(existing[0].memo || '').trim() || String(existing[0].note || '').trim() || undefined,
-        storeName: String(existing[0].store || '').trim() || undefined,
-        postedBy: String(existing[0].user_name || '').trim() || undefined,
-        accountSubjectId: finalAccountSubjectId,
-      })
+      const skipAutoJournal = shouldSkipBankAutoJournal(String(finalCategory || ''), transType)
+      if (!skipAutoJournal) {
+        await postBankTransactionJournal({
+          bankTransactionId: bankTxId,
+          transDate,
+          transType: transType === 'deposit' ? 'deposit' : 'withdraw',
+          amountAbs: Math.abs(Number(existing[0].amount) || 0),
+          category: String(finalCategory || ''),
+          memo: String(existing[0].memo || '').trim() || String(existing[0].note || '').trim() || undefined,
+          storeName: String(existing[0].store || '').trim() || undefined,
+          postedBy: String(existing[0].user_name || '').trim() || undefined,
+          accountSubjectId: finalAccountSubjectId,
+        })
+      }
     } catch (postingErr) {
       console.error('updateBankTransaction reposting:', postingErr)
       return NextResponse.json(

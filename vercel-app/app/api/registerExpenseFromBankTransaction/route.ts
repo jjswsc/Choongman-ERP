@@ -2,10 +2,48 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { postExpenseAccrualJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
+import { vatSplitFromTaxInvoiceGross } from '@/lib/invoice-backed-input-vat-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
-type BankTxRow = { id?: number; account_id?: number; trans_date?: string; trans_type?: string; amount?: number }
+type BankTxRow = {
+  id?: number
+  account_id?: number
+  trans_date?: string
+  trans_type?: string
+  amount?: number
+  invoice_received?: boolean | null
+  invoice_no?: string | null
+  invoice_photo_url?: string | null
+  store?: string | null
+  store_name?: string | null
+}
+
+function invoiceFieldsFromBankRow(bankRow: BankTxRow): Record<string, unknown> {
+  return {
+    invoice_received: Boolean(bankRow.invoice_received),
+    invoice_no: String(bankRow.invoice_no || '').trim() || null,
+    invoice_photo_url: String(bankRow.invoice_photo_url || '').trim() || null,
+  }
+}
+
+function resolveVatAmountFromBank(
+  bankRow: BankTxRow,
+  gross: number,
+  body: Record<string, unknown>
+): number | undefined {
+  const bodyVat = body.vatAmount ?? body.vat_amount
+  if (bodyVat != null && !isNaN(Number(bodyVat))) {
+    const v = Math.max(0, Number(bodyVat))
+    return v > 0 ? v : undefined
+  }
+  if (Boolean(bankRow.invoice_received) && gross > 0) {
+    const { vat } = vatSplitFromTaxInvoiceGross(gross)
+    return vat > 0 ? vat : undefined
+  }
+  return undefined
+}
 
 /** 통장 출금 거래를 지출 발생으로 등록하고 연결 */
 export async function POST(request: NextRequest) {
@@ -44,7 +82,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, { limit: 1 })) as BankTxRow[] | null
+    const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
+      limit: 1,
+      select:
+        'id,account_id,trans_date,trans_type,amount,invoice_received,invoice_no,invoice_photo_url,store,store_name',
+    })) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
     if (!bankRow?.id) {
       return NextResponse.json({ success: false, message: '통장 거래를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -64,11 +106,15 @@ export async function POST(request: NextRequest) {
       if (!accrualId) {
         return NextResponse.json({ success: false, message: '연결된 지출 정보를 찾을 수 없습니다.' }, { status: 404, headers })
       }
+      const linkedAmount = Math.abs(Number(bankRow.amount || 0))
+      const linkedVat = resolveVatAmountFromBank(bankRow, linkedAmount, body)
       await supabaseUpdate('expense_accruals', accrualId, {
         payee_code: payeeCode,
         payee_name: payeeName || payeeCode,
         account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         memo: memo ?? undefined,
+        ...invoiceFieldsFromBankRow(bankRow),
+        ...(linkedVat != null ? { vat_amount: linkedVat } : {}),
       })
       const allPayables = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${accrualId}`, { limit: 10 })) as { id?: number }[]
       for (const p of allPayables || []) {
@@ -79,11 +125,19 @@ export async function POST(request: NextRequest) {
         account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         note: memo,
       })
+      try {
+        await syncExpenseAccrualInvoiceEvidence(accrualId)
+      } catch (syncErr) {
+        console.warn('registerExpenseFromBankTransaction updateExisting VAT sync:', syncErr)
+      }
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
     const amount = Math.abs(Number(bankRow.amount || 0))
     const expenseDate = String(bankRow.trans_date || '').slice(0, 10)
+    const effectiveStoreName =
+      storeName || String(bankRow.store_name || bankRow.store || '').trim() || null
+    const vatAmount = resolveVatAmountFromBank(bankRow, amount, body)
     if (!amount || !expenseDate || !/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) {
       return NextResponse.json({ success: false, message: '통장 거래 정보가 올바르지 않습니다.' }, { status: 400, headers })
     }
@@ -95,9 +149,11 @@ export async function POST(request: NextRequest) {
       expense_date: expenseDate,
       due_date: expenseDate,
       memo: memo || null,
-      store_name: storeName || null,
+      store_name: effectiveStoreName,
       created_by: userName || null,
       status: 'done',
+      ...invoiceFieldsFromBankRow(bankRow),
+      ...(vatAmount != null ? { vat_amount: vatAmount } : {}),
     }
     let subjectCode = '5520'
     let subjectName = '기타경비'
@@ -150,7 +206,7 @@ export async function POST(request: NextRequest) {
       category: 'expense',
       vendor_code: payeeCode,
       expense_date: expenseDate,
-      store: storeName || null,
+      store: effectiveStoreName,
       account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
     })
 
@@ -164,7 +220,7 @@ export async function POST(request: NextRequest) {
         expenseAccountSubjectId:
           accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         memo: `지출 발생(통장연결) ${payeeName || payeeCode}`,
-        storeName: storeName || undefined,
+        storeName: effectiveStoreName || undefined,
         postedBy: userName || undefined,
       })
       await postPayableSettlementJournal({
@@ -173,9 +229,10 @@ export async function POST(request: NextRequest) {
         accountingDate: expenseDate,
         amountAbs: amount,
         memo: `지출 지급 ${payeeName || payeeCode}`,
-        storeName: storeName || undefined,
+        storeName: effectiveStoreName || undefined,
         postedBy: userName || undefined,
       })
+      await syncExpenseAccrualInvoiceEvidence(expenseAccrualId)
     } catch (postingErr) {
       console.error('registerExpenseFromBankTransaction posting:', postingErr)
     }

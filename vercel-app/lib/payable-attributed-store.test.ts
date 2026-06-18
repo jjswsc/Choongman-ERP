@@ -19,6 +19,8 @@ function maps(partial: Partial<PayableAttributionMaps>): PayableAttributionMaps 
     storeByBankId: new Map(),
     accrualStoreByVendorDate: new Map(),
     accrualStoreByVendorAmount: new Map(),
+    storeByBankInboundLink: new Map(),
+    storesByBankInboundLink: new Map(),
     ...partial,
   }
 }
@@ -35,6 +37,23 @@ describe('resolvePayableAttributedStore purchase payment', () => {
       amount: -201562.32,
       ref_type: 'Payment',
       trans_date: '2026-05-20',
+      bank_transaction_id: 9,
+    }
+    expect(resolvePayableAttributedStore(payment, m)).toBe('CM Bangna')
+  })
+
+  it('prefers bank inbound link store over office bank store for Payment rows', () => {
+    const m = maps({
+      locationByInboundId: new Map([[55, 'CM Bangna']]),
+      storeByBankId: new Map([[9, 'CM Office']]),
+      storeByBankInboundLink: new Map([[9, 'CM Bangna']]),
+      storesByBankInboundLink: new Map([[9, new Set(['CM Bangna'])]]),
+    })
+    const payment: PayableTransactionRow = {
+      vendor_code: '1002',
+      amount: -891124.04,
+      ref_type: 'Payment',
+      trans_date: '2026-04-20',
       bank_transaction_id: 9,
     }
     expect(resolvePayableAttributedStore(payment, m)).toBe('CM Bangna')
@@ -194,7 +213,28 @@ describe('isPurchasePayableLedgerRow', () => {
 })
 
 describe('filterPayableRowsByStore', () => {
-  it('includes only rows whose attributed store matches the filter', () => {
+  it('includes inbound and linked payment for the selected store only', () => {
+    const m = maps({
+      locationByInboundId: new Map([[55, 'CM Bangna']]),
+      storeByBankId: new Map([[9, 'CM Office']]),
+      storeByBankInboundLink: new Map([[9, 'CM Bangna']]),
+      storesByBankInboundLink: new Map([[9, new Set(['CM Bangna'])]]),
+    })
+    const rows: PayableTransactionRow[] = [
+      { vendor_code: '1002', ref_type: 'Inbound', ref_id: 55, trans_date: '2026-04-01', amount: 891124.04 },
+      {
+        vendor_code: '1002',
+        ref_type: 'Payment',
+        trans_date: '2026-04-20',
+        amount: -891124.04,
+        bank_transaction_id: 9,
+      },
+    ]
+    const scoped = filterPayableRowsByStore(rows, 'CM Bangna', m)
+    expect(scoped).toHaveLength(2)
+  })
+
+  it('excludes other-store inbound when only office bank payment is unmatched', () => {
     const m = maps({
       locationByInboundId: new Map([[55, 'CM Bangna']]),
       storeByBankId: new Map([[9, 'CM Office']]),
@@ -209,8 +249,31 @@ describe('filterPayableRowsByStore', () => {
         bank_transaction_id: 9,
       },
     ]
+    const officeScoped = filterPayableRowsByStore(rows, 'CM Office', m)
+    expect(officeScoped).toHaveLength(1)
+    expect(officeScoped[0].ref_type).toBe('Payment')
+
+    const bangnaScoped = filterPayableRowsByStore(rows, 'CM Bangna', m)
+    expect(bangnaScoped).toHaveLength(1)
+    expect(bangnaScoped[0].ref_type).toBe('Inbound')
+  })
+
+  it('treats CM Office filter and 입고등록 inbound as the same office scope', () => {
+    const m = maps({
+      locationByInboundId: new Map([[77, '입고등록']]),
+      storeByBankId: new Map([[9, 'CM Office']]),
+    })
+    const rows: PayableTransactionRow[] = [
+      { vendor_code: '1002', ref_type: 'Inbound', ref_id: 77, trans_date: '2026-04-01', amount: 50000 },
+      {
+        vendor_code: '1002',
+        ref_type: 'Payment',
+        trans_date: '2026-04-20',
+        amount: -50000,
+        bank_transaction_id: 9,
+      },
+    ]
     const scoped = filterPayableRowsByStore(rows, 'CM Office', m)
-    expect(scoped).toHaveLength(1)
-    expect(scoped[0].ref_type).toBe('Payment')
+    expect(scoped).toHaveLength(2)
   })
 })

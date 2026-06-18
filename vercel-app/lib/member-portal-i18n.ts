@@ -183,6 +183,9 @@ export type MemberPortalKey =
   | 'quickOrderStoreHint'
   | 'privilegeTitle'
   | 'stampCardTitle'
+  | 'stampHomeTitle'
+  | 'stampHomeSubtitle'
+  | 'stampHomeCount'
   | 'stampCardDesc'
   | 'stampPreparingTitle'
   | 'stampPreparingDesc'
@@ -259,7 +262,16 @@ export type MemberPortalKey =
   | 'greetingEvening'
   | 'homeWelcomeSub'
   | 'homeQuickOrder'
+  | 'homeQuickOrderTitle'
   | 'homeQuickDelivery'
+  | 'homeQuickDeliveryTitle'
+  | 'homeQuickPrivilegesTitle'
+  | 'homeQuickPrivilegesSub'
+  | 'homeQuickMyCouponsTitle'
+  | 'homeQuickMyCoupons'
+  | 'homeQuickMoreTitle'
+  | 'homeQuickMore'
+  | 'homeQuickMenuAria'
   | 'homeQuickStores'
   | 'homeQuickCoupons'
   | 'homeQuickProfile'
@@ -882,6 +894,21 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '등급·혜택, 쿠폰, 포인트, 이용 내역을 한 화면에서 확인하세요.',
   },
   stampCardTitle: { en: 'Stamp card', th: 'บัตรสแตมป์', ko: '스탬프 카드' },
+  stampHomeTitle: {
+    en: 'Stamp card — almost there!',
+    th: 'Stamp card อีกนิดเดียวครบ!',
+    ko: '스탬프 카드 — 거의 다 찼어요!',
+  },
+  stampHomeSubtitle: {
+    en: 'Collect {total} stamps & get {reward}!',
+    th: 'สะสมครบ {total} ดวง รับฟรี! {reward}',
+    ko: '{total}개 모으면 {reward}!',
+  },
+  stampHomeCount: {
+    en: '{current} / {total} stamps',
+    th: '{current} / {total} ดวง',
+    ko: '{current} / {total}개',
+  },
   stampCardDesc: {
     en: 'Earn a stamp when you visit and pay as a member.',
     th: 'สะสมสแตมป์เมื่อมาใช้บริการและชำระเงินในฐานะสมาชิก',
@@ -934,7 +961,7 @@ const MS: Record<MemberPortalKey, Dict> = {
   },
   stampViewCard: {
     en: 'View stamp card',
-    th: 'ดูบัตรสแตมป์',
+    th: 'ดูแสตมป์การ์ด',
     ko: '스탬프 카드 보기',
   },
   stampHistoryBtn: {
@@ -1110,7 +1137,16 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '프리미엄 멤버십을 경험해 보세요',
   },
   homeQuickOrder: { en: 'Order', th: 'สั่งอาหาร', ko: '주문' },
-  homeQuickDelivery: { en: 'Delivery', th: 'เดลิเวอรี', ko: '배달' },
+  homeQuickOrderTitle: { en: 'Order', th: 'Order', ko: 'Order' },
+  homeQuickDelivery: { en: 'Delivery', th: 'เดลิเวอรี่', ko: '배달' },
+  homeQuickDeliveryTitle: { en: 'Delivery', th: 'Delivery', ko: 'Delivery' },
+  homeQuickPrivilegesTitle: { en: 'Privileges', th: 'สิทธิพิเศษ', ko: '혜택' },
+  homeQuickPrivilegesSub: { en: 'Coupons', th: 'Coupons', ko: '쿠폰' },
+  homeQuickMyCouponsTitle: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
+  homeQuickMyCoupons: { en: 'Wallet', th: 'คูปองของฉัน', ko: '쿠폰함' },
+  homeQuickMoreTitle: { en: 'More', th: 'More', ko: 'More' },
+  homeQuickMore: { en: 'Menu', th: 'เมนู', ko: '메뉴' },
+  homeQuickMenuAria: { en: 'Quick menu', th: 'เมนูด่วน', ko: '빠른 메뉴' },
   homeQuickStores: { en: 'Stores', th: 'สาขา', ko: '매장' },
   homeQuickCoupons: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
   homeQuickProfile: { en: 'Profile', th: 'โปรไฟล์', ko: '내정보' },
