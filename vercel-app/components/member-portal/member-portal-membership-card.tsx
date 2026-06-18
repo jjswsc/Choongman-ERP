@@ -72,7 +72,7 @@ export function MemberPortalMembershipCard({
 
   return (
     <div
-      className="relative h-[172px] w-full overflow-hidden rounded-[18px] px-4 py-[13px] text-white shadow-[0_12px_22px_rgba(0,0,0,0.16)]"
+      className="relative w-full overflow-visible rounded-[18px] px-4 py-[13px] pb-4 text-white shadow-[0_12px_22px_rgba(0,0,0,0.16)]"
       style={{
         background:
           "radial-gradient(circle at 82% 18%, rgba(255,255,255,0.22), transparent 18%), linear-gradient(135deg, #222 0%, #101010 60%, #262626 100%)",
@@ -87,7 +87,7 @@ export function MemberPortalMembershipCard({
       />
 
       <div className="pointer-events-none absolute right-6 top-[18px] z-[2]">
-        <TierFacetedGemIcon family={tier.family} size={54} variant="cardHero" />
+        <TierFacetedGemIcon family={tier.family} size={54} variant="cardHero" onDark />
       </div>
 
       <button
@@ -134,10 +134,10 @@ export function MemberPortalMembershipCard({
               <div className="flex flex-wrap items-center gap-1">
                 <span>{t("tierNext")} :</span>
                 <b className="text-[10px] tracking-wide text-white">{tierProgress.nextTierName}</b>
-                {nextFamily ? <TierFacetedGemIcon family={nextFamily} size={14} /> : null}
+                {nextFamily ? <TierFacetedGemIcon family={nextFamily} size={14} onDark /> : null}
               </div>
             ) : null}
-            <p className="mt-0.5 line-clamp-1 text-[9px] leading-snug">{tierProgress.subtitle}</p>
+            <p className="mt-0.5 text-[9px] leading-snug">{tierProgress.subtitle}</p>
             <div className="my-1 h-1.5 overflow-hidden rounded-full bg-white/[0.24]">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#f25a13] to-[#ff9b2d] transition-all duration-700"

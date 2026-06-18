@@ -9,6 +9,7 @@ import {
 } from '@/lib/member-portal-theme'
 import { readSystemSettingString } from '@/lib/system-settings-value'
 import { loadMemberPortalHomePrivilegesConfig } from '@/lib/member-portal-home-privileges-config-server'
+import { loadMemberPortalStampFoodImageUrl } from '@/lib/member-portal-stamp-food-image-server'
 import {
   loadMemberPortalPrepayConfig,
   MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
@@ -56,6 +57,7 @@ export async function GET() {
     const pickupMinLeadMinutes = await resolveMemberPortalPickupMinLeadMinutes()
     const theme = parseMemberPortalUiThemeFromMap(map)
     const homePrivileges = await loadMemberPortalHomePrivilegesConfig()
+    const stampFoodImageUrl = await loadMemberPortalStampFoodImageUrl()
 
     return memberPortalSettingsJsonResponse({
       success: true,
@@ -73,10 +75,12 @@ export async function GET() {
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
       pickupMinLeadMinutes,
       homePrivileges,
+      stampFoodImageUrl,
     })
   } catch {
     const theme = parseMemberPortalUiThemeFromMap(new Map())
     const homePrivileges = await loadMemberPortalHomePrivilegesConfig()
+    const stampFoodImageUrl = await loadMemberPortalStampFoodImageUrl()
     return memberPortalSettingsJsonResponse({
       success: true,
       facebookUrl: brand.memberContactFacebookUrl,
@@ -93,6 +97,7 @@ export async function GET() {
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
       pickupMinLeadMinutes: 30,
       homePrivileges,
+      stampFoodImageUrl,
     })
   }
 }

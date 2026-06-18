@@ -36,13 +36,13 @@ import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-o
 import { MemberPortalHomeTopBar } from "@/components/member-portal/member-portal-home-top-bar"
 import { MemberPortalHomeHeroBanner, MemberPortalHomeNewMenuHeroes } from "@/components/member-portal/member-portal-home-hero-banner"
 import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
-import { MemberPortalHomeQuickMenu } from "@/components/member-portal/member-portal-home-quick-menu"
-import { MP_HOME_SECTION_GAP, MP_HOME_QUICK_MENU_SHELL_CLEARANCE } from "@/lib/member-portal-home-layout"
+import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
 import {
   DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
   resolveMemberPortalHomePrivilegesForLang,
   type MemberPortalHomePrivilegeItem,
 } from "@/lib/member-portal-home-privileges-config"
+import { DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL } from "@/lib/member-portal-stamp-food-image"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -131,6 +131,7 @@ type PublicConfigResponse = {
   textSecondaryColor?: string
   fontScalePct?: number
   homePrivileges?: MemberPortalHomePrivilegeItem[]
+  stampFoodImageUrl?: string
 }
 
 function applyPublicConfigToState(
@@ -165,6 +166,7 @@ function applyPublicConfigToState(
     },
     signupWelcomeCouponEnabled: Boolean(r.signupWelcomeCouponEnabled),
     homePrivileges: Array.isArray(r.homePrivileges) ? r.homePrivileges : DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
+    stampFoodImageUrl: String(r.stampFoodImageUrl || DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL).trim(),
   }
 }
 
@@ -252,6 +254,7 @@ export function MemberPortalApp() {
   const [homePrivileges, setHomePrivileges] = React.useState<MemberPortalHomePrivilegeItem[]>(
     DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES
   )
+  const [stampFoodImageUrl, setStampFoodImageUrl] = React.useState(DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
   const [visits, setVisits] = React.useState<PortalVisitRow[]>([])
@@ -384,6 +387,7 @@ export function MemberPortalApp() {
           setUiTheme(applied.uiTheme)
           setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
           setHomePrivileges(applied.homePrivileges)
+          setStampFoodImageUrl(applied.stampFoodImageUrl)
         })
         .catch(() => {})
     }
@@ -409,6 +413,7 @@ export function MemberPortalApp() {
           setUiTheme(applied.uiTheme)
           setSignupWelcomeCouponEnabled(applied.signupWelcomeCouponEnabled)
           setHomePrivileges(applied.homePrivileges)
+          setStampFoodImageUrl(applied.stampFoodImageUrl)
         })
         .catch(() => {
           setContactUrls({
@@ -1059,10 +1064,7 @@ export function MemberPortalApp() {
       uiTheme={uiTheme}
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
-      <MemberPortalShell
-        embedPreview={embedPreview}
-        bottomClearance={tab === "home" ? MP_HOME_QUICK_MENU_SHELL_CLEARANCE : undefined}
-      >
+      <MemberPortalShell embedPreview={embedPreview}>
         {tab === "home" ? (
           <MemberPortalHomeTopBar
             greeting={t(memberPortalGreetingKey())}
@@ -1172,6 +1174,7 @@ export function MemberPortalApp() {
               lang={lang}
               status={stampStatus}
               loading={stampLoading}
+              foodImageUrl={stampFoodImageUrl}
               onOpenPrivilege={() => changeTab("privilege")}
             />
           </div>
@@ -1444,10 +1447,6 @@ export function MemberPortalApp() {
           </div>
         )}
       </MemberPortalShell>
-
-      {tab === "home" ? (
-        <MemberPortalHomeQuickMenu t={t} onNavigate={changeTab} embedPreview={embedPreview} />
-      ) : null}
 
       <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} embedPreview={embedPreview} />
 

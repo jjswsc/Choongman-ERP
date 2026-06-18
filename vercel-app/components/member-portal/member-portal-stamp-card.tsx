@@ -19,6 +19,7 @@ import {
 import type { LangCode } from "@/lib/lang-context"
 import { memberPortalT } from "@/lib/member-portal-i18n"
 import type { MemberStampCardStatus, MemberStampHistoryRow } from "@/lib/member-stamp-card"
+import { DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL } from "@/lib/member-portal-stamp-food-image"
 
 const STAMP_CROWN = "♕"
 
@@ -126,9 +127,11 @@ function resolveStampHomeSubtitle(
 function StampHomeShell({
   children,
   onClick,
+  foodImageUrl,
 }: {
   children: React.ReactNode
   onClick?: () => void
+  foodImageUrl: string
 }) {
   const Tag = onClick ? "button" : "div"
   return (
@@ -146,7 +149,7 @@ function StampHomeShell({
         aria-hidden
       >
         <img
-          src="/member-portal/single-chicken.webp"
+          src={foodImageUrl}
           alt=""
           className="h-full w-full object-contain drop-shadow-[0_8px_10px_rgba(108,54,12,0.18)]"
         />
@@ -178,15 +181,17 @@ function StampHomeSlots({ slots, filled }: { slots: number; filled: number }) {
 function MemberPortalStampPreparingPlaceholder({
   lang,
   variant,
+  foodImageUrl = DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL,
 }: {
   lang: LangCode
   variant: "home" | "card"
+  foodImageUrl?: string
 }) {
   const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
 
   if (variant === "home") {
     return (
-      <StampHomeShell>
+      <StampHomeShell foodImageUrl={foodImageUrl}>
         <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampPreparingTitle")}</h3>
         <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">{t("stampPreparingDesc")}</p>
         <StampHomeSlots slots={10} filled={0} />
@@ -231,25 +236,27 @@ export function MemberPortalStampHomeWidget({
   lang,
   status,
   loading,
+  foodImageUrl = DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL,
   onOpenPrivilege,
 }: {
   lang: LangCode
   status: MemberStampCardStatus | null
   loading?: boolean
+  foodImageUrl?: string
   onOpenPrivilege: () => void
 }) {
   const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
   if (loading) return null
   if (!status) return null
   if (status.preparing) {
-    return <MemberPortalStampPreparingPlaceholder lang={lang} variant="home" />
+    return <MemberPortalStampPreparingPlaceholder lang={lang} variant="home" foodImageUrl={foodImageUrl} />
   }
   if (!status.enabled) return null
   const slots = Math.max(1, status.cardSlots)
   const filled = status.currentStamps
 
   return (
-    <StampHomeShell onClick={onOpenPrivilege}>
+    <StampHomeShell onClick={onOpenPrivilege} foodImageUrl={foodImageUrl}>
       <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampHomeTitle")}</h3>
       <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">
         {resolveStampHomeSubtitle(lang, status)}

@@ -12,8 +12,8 @@ export const MP_HOME_CARD_RADIUS = 'rounded-[18px]'
 /** 멤버십 카드 가로:세로 (시안 — 헤더·스탯·다음등급 진행바가 모두 들어가는 높이) */
 export const MP_HOME_MEMBERSHIP_ASPECT = 100 / 66
 
-/** 프로모 배너 높이 (choongman_member_home_only.html — 105px) */
-export const MP_HOME_HERO_HEIGHT = 'h-[105px]'
+/** 프로모 배너 높이 (105px + 30%) */
+export const MP_HOME_HERO_HEIGHT = 'h-[137px]'
 
 /** 프로모 배너 모서리 (시안 15px) */
 export const MP_HOME_PROMO_RADIUS = 'rounded-[15px]'
@@ -43,14 +43,3 @@ export const MP_HOME_POPUP_MIN_HEIGHT = 900
 export const MP_HOME_NEW_MENU_ASPECT_W = 1
 export const MP_HOME_NEW_MENU_ASPECT_H = 1
 export const MP_HOME_NEW_MENU_MIN_SIZE = 720
-
-/** 홈 퀵메뉴 독 — 하단 탭 바로 위 고정 (h-16) */
-export const MP_HOME_QUICK_MENU_HEIGHT_REM = 4
-
-/** 퀵메뉴 독 bottom = 하단 탭 높이(5.25rem) + safe-area */
-export const MP_HOME_QUICK_MENU_DOCK_BOTTOM =
-  'calc(5.25rem + env(safe-area-inset-bottom, 0px))'
-
-/** 홈 탭 본문 padding-bottom — 하단 탭 + 퀵메뉴 + 여유 */
-export const MP_HOME_QUICK_MENU_SHELL_CLEARANCE =
-  'calc(5.25rem + 4rem + 0.625rem + env(safe-area-inset-bottom, 0px))'

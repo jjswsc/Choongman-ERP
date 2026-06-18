@@ -11,6 +11,8 @@ type TierFacetedGemIconProps = {
   className?: string
   /** 카드 우측 상단 등 — 원본 시안 drop-shadow */
   variant?: "default" | "cardHero"
+  /** 다크 멤버 카드 위 — 흰 배경 제거 블렌드 */
+  onDark?: boolean
 }
 
 type GemPalette = {
@@ -148,6 +150,7 @@ export function TierFacetedGemIcon({
   size = 48,
   className,
   variant = "default",
+  onDark = false,
 }: TierFacetedGemIconProps) {
   const [useFallback, setUseFallback] = React.useState(false)
   const src = tierGemAssetUrl(family)
@@ -169,7 +172,12 @@ export function TierFacetedGemIcon({
       alt=""
       aria-hidden
       decoding="async"
-      className={cn("pointer-events-none max-w-none object-contain", shadowClass, className)}
+      className={cn(
+        "pointer-events-none max-w-none object-contain",
+        onDark && "mix-blend-lighten",
+        shadowClass,
+        className
+      )}
       style={{ width: size, height: size }}
       onError={() => setUseFallback(true)}
     />
