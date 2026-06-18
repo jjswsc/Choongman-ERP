@@ -89,6 +89,7 @@ import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catal
 import {
   cartLinesToPosOrderItems,
   mergeDineInAddonCartPosItemsWithExisting,
+  isDineInAddonOnlyIncomingCart,
   mergeDineInPaymentCartWithServerItems,
   normalizeCartLineIdForSave,
   orderUiItemsToPosOrderItems,
@@ -8633,10 +8634,15 @@ export default function PosTerminalPage() {
                 const orderNoStr = savedOrderNo
                 const existingItemsBeforeAdd =
                   isAddOrder && existingOrder ? orderUiItemsToPosOrderItems(existingOrder.items) : []
+                const addonOnlyIncomingCart =
+                  isAddOrder &&
+                  existingItemsBeforeAdd.length > 0 &&
+                  isDineInAddonOnlyIncomingCart(existingItemsBeforeAdd, incomingItems)
                 const kitchenCartLines =
                   isAddOrder && existingOrder
                     ? resolveDineInKitchenLinesForAddSubmit(incomingItems, existingItemsBeforeAdd, {
                         formatNote: formatLineNoteForPrint,
+                        addonOnlyIncomingCart,
                       })
                     : payloadItemsNormalized
                 const addKitchenDedupeSuffix = isAddOrder
@@ -9387,7 +9393,13 @@ export default function PosTerminalPage() {
                   const kitchenCartLines = resolveDineInKitchenLinesForAddSubmit(
                     incomingItems,
                     existingItemsBeforeAdd,
-                    { formatNote: formatLineNoteForPrint }
+                    {
+                      formatNote: formatLineNoteForPrint,
+                      addonOnlyIncomingCart: isDineInAddonOnlyIncomingCart(
+                        existingItemsBeforeAdd,
+                        incomingItems
+                      ),
+                    }
                   )
                   const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
                   const shouldAutoPrintReceipt = storeAutoPrint.receiptOnAddOrder

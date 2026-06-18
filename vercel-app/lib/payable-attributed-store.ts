@@ -1,5 +1,6 @@
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const PAYABLE_LEDGER_SELECT =
   'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id'
@@ -171,11 +172,11 @@ export function buildAccrualStoreByVendorDate(
 }
 
 export function matchesPayableStoreNorm(resolved: string | null | undefined, storeFilter: string): boolean {
-  const f = storeFilter.trim().toLowerCase()
-  if (!f || f === 'all' || f === '전체') return true
-  const r = String(resolved || '').trim().toLowerCase()
+  const f = storeFilter.trim()
+  if (!f || f.toLowerCase() === 'all' || f === '전체') return true
+  const r = String(resolved || '').trim()
   if (!r) return false
-  return r === f || r.includes(f) || f.includes(r)
+  return storesMatchForGradeLookup(r, f)
 }
 
 export function isPayableStoreFilterActive(storeFilter: string | undefined | null): boolean {
@@ -414,19 +415,9 @@ export function filterPayableRowsByStore(
 ): PayableTransactionRow[] {
   if (!isPayableStoreFilterActive(storeFilter)) return rows
 
-  /** 거래처 단위 — 한 건이라도 해당 매장이면 같은 vendor_code PO·입고·지급 전체 포함 */
-  const vendorsInScope = new Set<string>()
-  for (const r of rows) {
-    const attributed = resolvePayableAttributedStore(r, maps)
-    if (!matchesPayableStoreNorm(attributed, storeFilter)) continue
-    const vc = String(r.vendor_code || '').trim().toLowerCase()
-    if (vc) vendorsInScope.add(vc)
-  }
-  if (vendorsInScope.size === 0) return []
-
   return rows.filter((r) => {
-    const vc = String(r.vendor_code || '').trim().toLowerCase()
-    return vc && vendorsInScope.has(vc)
+    const attributed = resolvePayableAttributedStore(r, maps)
+    return matchesPayableStoreNorm(attributed, storeFilter)
   })
 }
 

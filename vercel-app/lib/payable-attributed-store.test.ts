@@ -194,7 +194,7 @@ describe('isPurchasePayableLedgerRow', () => {
 })
 
 describe('filterPayableRowsByStore', () => {
-  it('includes full vendor ledger when only payment matches store filter', () => {
+  it('includes only rows whose attributed store matches the filter', () => {
     const m = maps({
       locationByInboundId: new Map([[55, 'CM Bangna']]),
       storeByBankId: new Map([[9, 'CM Office']]),
@@ -210,8 +210,7 @@ describe('filterPayableRowsByStore', () => {
       },
     ]
     const scoped = filterPayableRowsByStore(rows, 'CM Office', m)
-    expect(scoped).toHaveLength(2)
-    expect(scoped.some((r) => r.ref_type === 'Inbound')).toBe(true)
-    expect(scoped.some((r) => r.ref_type === 'Payment')).toBe(true)
+    expect(scoped).toHaveLength(1)
+    expect(scoped[0].ref_type).toBe('Payment')
   })
 })

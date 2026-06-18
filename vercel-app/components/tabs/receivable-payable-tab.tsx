@@ -1085,7 +1085,8 @@ export function ReceivablePayableTab() {
     [listData, tab, endStr]
   )
 
-  const amountGridCols = "grid grid-cols-[minmax(0,1fr)_110px_110px_110px_110px] gap-2 items-center"
+  const amountGridCols =
+    "grid grid-cols-[minmax(120px,200px)_minmax(128px,1fr)_minmax(128px,1fr)_minmax(128px,1fr)_minmax(140px,1.15fr)] gap-3 items-center"
   const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
   const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
@@ -1589,7 +1590,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : (
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[640px]")}>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[720px]")}>
                         <div className="text-center">{(t("outColStore") || "출고처")}</div>
                         <div className="text-center tabular-nums">{(t("recColSalesAmount") || "매출금액")}</div>
                         <div
@@ -1638,10 +1639,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-center tabular-nums">฿{period.salesSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums">฿{period.periodNet.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-bold text-primary">
+                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.salesSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.receiveSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-bold text-primary whitespace-nowrap px-0.5">
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
@@ -2120,7 +2121,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[640px]")}>
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[720px]")}>
                           <div className="text-right">{tt("recSearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
@@ -2228,7 +2229,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : (
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
-                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[640px]")}>
+                      <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm min-w-[720px]")}>
                         <div className="text-center">{(t("vendor") || "매입처")}</div>
                         <div className="text-center tabular-nums">{(t("payColPurchaseAmount") || "매입금액")}</div>
                         <div className="text-center tabular-nums">{(t("payColPaymentAmount") || "지급금액")}</div>
@@ -2267,10 +2268,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
                                     <span className="font-semibold truncate">{formatVendorDisplay(item.vendorCode)}</span>
                                   </div>
-                                  <div className="text-center tabular-nums">฿{period.salesSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums">฿{period.periodNet.toLocaleString()}</div>
-                                  <div className="text-center tabular-nums font-bold text-primary">
+                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.salesSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.receiveSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums whitespace-nowrap px-0.5">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-bold text-primary whitespace-nowrap px-0.5">
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span>฿{cumulativeBal.toLocaleString()}</span>
@@ -2518,7 +2519,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         })}
                       </Accordion>
                       {listSearchTotals.count > 0 ? (
-                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[640px]")}>
+                        <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm min-w-[720px]")}>
                           <div className="text-right">{tt("paySearchTotalLabel", "합계")}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
                           <div className="text-center tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>

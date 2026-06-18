@@ -168,6 +168,20 @@ export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] 
 }
 
 /**
+ * 추가 주문 제출 직전 카트가 기존 order item id 를 하나도 참조하지 않으면 true.
+ * (`mergeDineInAddonCartPosItemsWithExisting` 의 append 경로와 동일 판정)
+ */
+export function isDineInAddonOnlyIncomingCart(
+  existing: Array<{ id?: string }>,
+  fromCart: Array<{ id?: string }>
+): boolean {
+  if (fromCart.length === 0 || existing.length === 0) return false
+  const baseIds = new Set(existing.map((b) => normPosOrderItemId(b.id)).filter(Boolean))
+  if (baseIds.size === 0) return false
+  return fromCart.every((c) => !baseIds.has(normPosOrderItemId(c.id)))
+}
+
+/**
  * 홀(dine-in) 추가 주문: 카트에 **신규 줄만** 있을 때(기존 줄이 카트에 안 올라온 경우)
  * `updatePosOrder`가 `items_json` 전체를 덮어쓰므로, DB에 있던 줄을 유지하고 카트 줄을 이어붙인다.
  * 카트에 기존 id가 하나라도 있으면 카트를 전체 스냅샷으로 보고(수량·삭제 반영) 그대로 둔다.

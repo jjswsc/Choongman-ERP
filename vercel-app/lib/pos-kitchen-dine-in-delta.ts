@@ -184,9 +184,11 @@ function existingHasQtyInfo(items: Array<{ quantity?: number; qty?: number }>): 
 export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLine>(
   cartLines: T[],
   existingOrderItems: Array<{ id?: string; quantity?: number; qty?: number }> | null | undefined,
-  opts?: { formatNote?: DineInNoteNormalizer }
+  opts?: { formatNote?: DineInNoteNormalizer; addonOnlyIncomingCart?: boolean }
 ): T[] {
   if (!existingOrderItems?.length) return cartLines
+
+  if (opts?.addonOnlyIncomingCart) return cartLines
 
   const formatNote = opts?.formatNote ?? defaultDineInNoteNormalize
 
@@ -263,7 +265,7 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
 export function resolveDineInKitchenLinesForAddSubmit<T extends KitchenComparableLine>(
   incomingLines: T[],
   existingOrderItems: Array<{ id?: string; quantity?: number; qty?: number }> | null | undefined,
-  opts?: { formatNote?: DineInNoteNormalizer }
+  opts?: { formatNote?: DineInNoteNormalizer; addonOnlyIncomingCart?: boolean }
 ): T[] {
   return filterKitchenCartLinesForDineInAdd(incomingLines, existingOrderItems, opts)
 }

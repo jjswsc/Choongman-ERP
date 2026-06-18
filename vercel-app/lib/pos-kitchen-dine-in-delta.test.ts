@@ -49,6 +49,18 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
     expect(filterKitchenCartLinesForDineInAdd(cart, [{ id: 'a', quantity: 1 }])).toEqual([])
   })
 
+  it('addon-only incoming cart prints lines even when menu matches existing rows', () => {
+    const cart = [
+      { id: 'cart-chicken-new', name: 'Golden Fried Chicken', price: 219, quantity: 1, menuId: '26' },
+    ]
+    const existing = [
+      { id: 'db-c1', name: 'Golden Fried Chicken', price: 219, quantity: 2, qty: 2, menuId: '26' },
+    ]
+    expect(
+      filterKitchenCartLinesForDineInAdd(cart, existing, { addonOnlyIncomingCart: true })
+    ).toEqual(cart)
+  })
+
   it('matches existing lines by content when cart id changed (cart-* regen)', () => {
     const cart = [
       { id: 'cart-menu1-newuuid', name: 'Budae Jiggae', price: 299, quantity: 1 },

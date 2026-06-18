@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   cartLinesToPosOrderItems,
+  isDineInAddonOnlyIncomingCart,
   mergeDineInAddonCartPosItemsWithExisting,
   mergeDineInPaymentCartWithServerItems,
   normalizeCartLineIdForSave,
@@ -34,6 +35,22 @@ describe('cartLinesToPosOrderItems', () => {
         quantity: 1,
       },
     ])
+  })
+})
+
+describe('isDineInAddonOnlyIncomingCart', () => {
+  it('is true when every incoming line id is new relative to existing order', () => {
+    const existing = [{ id: 'line-a', name: 'Rice', price: 50, qty: 1, quantity: 1 }]
+    const incoming = [{ id: 'cart-new-soup', name: 'Soup', price: 99, qty: 1, quantity: 1 }]
+    expect(isDineInAddonOnlyIncomingCart(existing, incoming)).toBe(true)
+  })
+
+  it('is false when incoming references an existing order line id', () => {
+    const existing = [{ id: 'line-a', name: 'Rice', price: 50, qty: 1, quantity: 1 }]
+    const incoming = [
+      { id: 'cart-existing-0-line-a', name: 'Rice', price: 50, qty: 2, quantity: 2 },
+    ]
+    expect(isDineInAddonOnlyIncomingCart(existing, incoming)).toBe(false)
   })
 })
 
