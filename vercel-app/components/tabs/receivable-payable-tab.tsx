@@ -918,7 +918,8 @@ export function ReceivablePayableTab() {
   )
 
   const amountGridCols =
-    "grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(6rem,max-content))_minmax(6.5rem,max-content)] gap-x-2 sm:gap-x-3 gap-y-1 items-center w-full min-w-0"
+    "grid grid-cols-[minmax(0,2fr)_repeat(4,minmax(6rem,1fr))] gap-x-2 sm:gap-x-3 gap-y-1 items-center w-full min-w-0"
+  const ledgerSummaryHeaderCellCn = "text-center min-w-0 px-1 text-xs sm:text-sm leading-tight"
   const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
   const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
@@ -1385,22 +1386,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
                       <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
-                        <div className="text-left min-w-0 pr-2">{(t("outColStore") || "출고처")}</div>
-                        <div className="text-right tabular-nums text-xs sm:text-sm leading-tight">{(t("recColSalesAmount") || "매출금액")}</div>
+                        <div className={ledgerSummaryHeaderCellCn}>{(t("outColStore") || "출고처")}</div>
+                        <div className={cn(ledgerSummaryHeaderCellCn, "tabular-nums")}>{(t("recColSalesAmount") || "매출금액")}</div>
                         <div
-                          className="text-right tabular-nums text-xs sm:text-sm leading-tight"
+                          className={cn(ledgerSummaryHeaderCellCn, "tabular-nums")}
                           title={tt("recReceiveAmountHint", "조회 기간 내 수령·통장 분개(음수) 합계. 수금확인 체크와 별도입니다.")}
                         >
                           {(t("recColReceiveAmount") || "수령금액")}
                         </div>
                         <div
-                          className="text-right tabular-nums text-xs sm:text-sm leading-tight"
+                          className={cn(ledgerSummaryHeaderCellCn, "tabular-nums")}
                           title={tt("recPeriodNetHint", "매출금액 − 수령금액 (조회 기간 내 순증감)")}
                         >
                           {(t("recColRemainingReceivable") || "기간 순잔액")}
                         </div>
                         <div
-                          className="text-right tabular-nums text-primary text-xs sm:text-sm leading-tight"
+                          className={cn(ledgerSummaryHeaderCellCn, "tabular-nums text-primary")}
                           title={tt(
                             "recCumulativeColHint",
                             "출고처별 종료일까지 전체 이력 합계입니다. 조회 시작일 이전 거래도 포함하며, 아래 기간 내역 합과 다를 수 있습니다."
@@ -1992,17 +1993,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
                       <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
-                        <div className="text-left min-w-0 pr-2">{(t("vendor") || "매입처")}</div>
-                        <div className="text-right tabular-nums text-xs sm:text-sm leading-tight">{(t("payColPurchaseAmount") || "매입금액")}</div>
-                        <div className="text-right tabular-nums text-xs sm:text-sm leading-tight">{(t("payColPaymentAmount") || "지급금액")}</div>
+                        <div className={ledgerSummaryHeaderCellCn}>{(t("vendor") || "매입처")}</div>
+                        <div className={cn(ledgerSummaryHeaderCellCn, "tabular-nums")}>{(t("payColPurchaseAmount") || "매입금액")}</div>
+                        <div className={cn(ledgerSummaryHeaderCellCn, "tabular-nums")}>{(t("payColPaymentAmount") || "지급금액")}</div>
                         <div
-                          className="text-right tabular-nums text-xs sm:text-sm leading-tight"
+                          className={cn(ledgerSummaryHeaderCellCn, "tabular-nums")}
                           title={tt("payPeriodNetHint", "매입금액 − 지급금액 (조회 기간 내 순증감)")}
                         >
                           {(t("payColRemainingPayable") || "기간 순잔액")}
                         </div>
                         <div
-                          className="text-right tabular-nums text-primary text-xs sm:text-sm leading-tight"
+                          className={cn(ledgerSummaryHeaderCellCn, "tabular-nums text-primary")}
                           title={tt(
                             "payCumulativeColHint",
                             "매입처별 종료일까지 전체 이력 합계입니다. 조회 시작일 이전 거래도 포함하며, 아래 기간 내역 합과 다를 수 있습니다."
