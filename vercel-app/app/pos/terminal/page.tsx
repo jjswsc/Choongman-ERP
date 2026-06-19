@@ -83,6 +83,7 @@ import {
   posPaymentAutoPrintDedupeKey,
   reservePosAutoPrintKey,
   reservePosAutoPrintKeys,
+  releasePosAutoPrintKeys,
   hasRecentPosAutoPrintKey,
 } from '@/lib/pos-auto-print-dedupe'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
@@ -2000,16 +2001,20 @@ export default function PosTerminalPage() {
     mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
 
+  const normalizeKitchenAutoPrintDedupeKeys = useCallback((rawKeyOrKeys: string | string[]) => {
+    return Array.from(
+      new Set(
+        (Array.isArray(rawKeyOrKeys) ? rawKeyOrKeys : [rawKeyOrKeys])
+          .map((k) => String(k || '').trim())
+          .filter(Boolean)
+          .map((k) => `k2:${k}`)
+      )
+    )
+  }, [])
+
   const reserveKitchenAutoPrintKey = useCallback(
     (rawKeyOrKeys: string | string[], ttlMs = 6 * 60 * 60 * 1000) => {
-      const keys = Array.from(
-        new Set(
-          (Array.isArray(rawKeyOrKeys) ? rawKeyOrKeys : [rawKeyOrKeys])
-            .map((k) => String(k || '').trim())
-            .filter(Boolean)
-            .map((k) => `k2:${k}`)
-        )
-      )
+      const keys = normalizeKitchenAutoPrintDedupeKeys(rawKeyOrKeys)
       if (!keys.length) return true
       const store = String(currentStoreId || '').trim()
       const reserved = reservePosAutoPrintKeys(store, keys, ttlMs)
@@ -2021,7 +2026,20 @@ export default function PosTerminalPage() {
       }
       return reserved
     },
-    [currentStoreId]
+    [currentStoreId, normalizeKitchenAutoPrintDedupeKeys]
+  )
+
+  const releaseKitchenAutoPrintKey = useCallback(
+    (rawKeyOrKeys: string | string[]) => {
+      const keys = normalizeKitchenAutoPrintDedupeKeys(rawKeyOrKeys)
+      if (!keys.length) return
+      const store = String(currentStoreId || '').trim()
+      releasePosAutoPrintKeys(store, keys)
+      for (const key of keys) {
+        printedKitchenSlipKeysRef.current.delete(key)
+      }
+    },
+    [currentStoreId, normalizeKitchenAutoPrintDedupeKeys]
   )
 
   /**
@@ -2383,7 +2401,8 @@ export default function PosTerminalPage() {
       const items = prepareOrderItemsForKitchenPrint(order.items || [], order.deliveryAppCode)
       const runKitchenForAcceptedOrder = () => {
         if (!autoPrintKitchenSlipOnOrder) return
-        if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
+        const kitchenDedupeKey = `order:${orderId}:kitchen`
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
         void (async () => {
           try {
             const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
@@ -2401,7 +2420,11 @@ export default function PosTerminalPage() {
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
               buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
             )
-            if (!slips.length) return
+            if (!slips.length) {
+              releaseKitchenAutoPrintKey(kitchenDedupeKey)
+              logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId, flow: 'accept' })
+              return
+            }
             const slipDesign = resolveKitchenSlipDesign(settings)
             const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
             const memoLine = kitchenMemo.trim()
@@ -2455,6 +2478,7 @@ export default function PosTerminalPage() {
             }
             setTimeout(() => printOne(0), 0)
           } catch (e) {
+            releaseKitchenAutoPrintKey(kitchenDedupeKey)
             console.error('Kitchen slip print (accept flow):', e)
           }
         })()
@@ -2500,6 +2524,7 @@ export default function PosTerminalPage() {
       getPrinterSettingsForStore,
       resolveMenusForKitchenPrint,
       reserveKitchenAutoPrintKey,
+      releaseKitchenAutoPrintKey,
       pricingAdjustments,
       posReceiptLineOpts,
       optionNameByCode,
@@ -3546,7 +3571,14 @@ export default function PosTerminalPage() {
           dedupeKeys,
           storeCode: storeForDedupe,
         })
-        /** 중복 홀 건너뛸 때 주방 콜백까지 실행하면 Realtime+폴링에서 주방만 2장 나감 */
+        /**
+         * 홀 영수증은 이미 다른 경로(Realtime·폴링·수락)에서 출력됐을 수 있음.
+         * 주방은 별도 dedupe 키이므로, 홀만 건너뛸 때도 주방 콜백은 시도한다
+         * (Grab 수락+폴링 경합 시 영수증만 나가고 주방이 영구 누락되는 GF-959 방지).
+         */
+        if (typeof onAfterDirectPrint === 'function') {
+          onAfterDirectPrint()
+        }
         return
       }
     }
@@ -4384,7 +4416,8 @@ export default function PosTerminalPage() {
         _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
       }
       const runKitchenFromRealtimeOrderInsert = () => {
-        if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
+        const kitchenDedupeKey = `order:${orderId}:kitchen`
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
         const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
         getPrinterSettingsForStore(printSettingsStoreCode)
           .then(async (settings) => {
@@ -4401,7 +4434,11 @@ export default function PosTerminalPage() {
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
               buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
             )
-            if (!slips.length) return
+            if (!slips.length) {
+              releaseKitchenAutoPrintKey(kitchenDedupeKey)
+              logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId, flow: 'realtime' })
+              return
+            }
             const slipDesign = resolveKitchenSlipDesign(settings)
             const kitchenMemo = parsePosOrderMemo(memo).plainMemo
             const memoLine = kitchenMemo.trim()
@@ -4452,7 +4489,10 @@ export default function PosTerminalPage() {
             }
             setTimeout(() => printOne(0), 0)
           })
-          .catch((e) => console.error('Kitchen slip print:', e))
+          .catch((e) => {
+            releaseKitchenAutoPrintKey(kitchenDedupeKey)
+            console.error('Kitchen slip print:', e)
+          })
       }
       const isPendingDelivery =
         String(orderType).trim().toLowerCase() === 'delivery' &&
@@ -5269,7 +5309,8 @@ export default function PosTerminalPage() {
             _autoPrintDedupeKey: `order:${oid}:hall:auto`,
           }
           const runKitchenForPolledOrder = () => {
-            if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
+            const kitchenDedupeKey = `order:${oid}:kitchen`
+            if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
             void (async () => {
               try {
                 const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
@@ -5289,7 +5330,11 @@ export default function PosTerminalPage() {
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
                   buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
                 )
-                if (!slips.length) return
+                if (!slips.length) {
+                  releaseKitchenAutoPrintKey(kitchenDedupeKey)
+                  logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId: oid, flow: 'poll' })
+                  return
+                }
                 const slipDesign = resolveKitchenSlipDesign(settings)
                 const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
                 const memoLine = kitchenMemo.trim()
@@ -5342,6 +5387,7 @@ export default function PosTerminalPage() {
                 }
                 setTimeout(() => printOne(0), 0)
               } catch (e) {
+                releaseKitchenAutoPrintKey(kitchenDedupeKey)
                 console.error('Kitchen slip print:', e)
               }
             })()

@@ -149,6 +149,31 @@ export function hasRecentPosAutoPrintKey(
   return typeof prev === 'number' && now - prev < ttl
 }
 
+/** 인쇄 실패·슬립 0건 등으로 예약만 하고 출력하지 못했을 때 재시도 허용 */
+export function releasePosAutoPrintKeys(storeCode: string, keys: string[]): void {
+  const uniqueKeys = Array.from(
+    new Set((Array.isArray(keys) ? keys : []).map((k) => String(k ?? '').trim()).filter(Boolean))
+  )
+  if (uniqueKeys.length === 0) return
+  const fullKeys = uniqueKeys.map((k) => fullKey(storeCode, k)).filter(Boolean)
+  if (fullKeys.length === 0) return
+  const now = Date.now()
+  const map = pruneMap(readMap(), now)
+  let changed = false
+  for (const fk of fullKeys) {
+    if (fk in map) {
+      delete map[fk]
+      changed = true
+    }
+    if (memoryReservedAt.delete(fk)) changed = true
+  }
+  if (changed) writeMap(map)
+}
+
+export function releasePosAutoPrintKey(storeCode: string, key: string): void {
+  releasePosAutoPrintKeys(storeCode, [key])
+}
+
 /** 테스트·디버그용 */
 export function clearPosAutoPrintDedupeForTests(): void {
   memoryReservedAt.clear()

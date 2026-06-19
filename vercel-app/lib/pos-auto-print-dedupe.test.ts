@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearPosAutoPrintDedupeForTests,
   posPaymentAutoPrintDedupeKey,
+  releasePosAutoPrintKey,
   reservePosAutoPrintKeys,
   reservePosAutoPrintKey,
 } from './pos-auto-print-dedupe'
@@ -70,5 +71,12 @@ describe('reservePosAutoPrintKey', () => {
     ).toBe(true)
     expect(reservePosAutoPrintKey('MBK', 'order:60:hall:auto')).toBe(false)
     expect(reservePosAutoPrintKey('MBK', 'submit:hall:2026060106')).toBe(false)
+  })
+
+  it('release allows kitchen retry after empty-slip abort', () => {
+    expect(reservePosAutoPrintKey('MBK', 'k2:order:959:kitchen')).toBe(true)
+    expect(reservePosAutoPrintKey('MBK', 'k2:order:959:kitchen')).toBe(false)
+    releasePosAutoPrintKey('MBK', 'k2:order:959:kitchen')
+    expect(reservePosAutoPrintKey('MBK', 'k2:order:959:kitchen')).toBe(true)
   })
 })
