@@ -16,6 +16,9 @@ export interface PromoMirrorPayload {
   priceDelivery: number | null
   vatIncluded: boolean
   isActive: boolean
+  channelHall?: boolean
+  channelTakeout?: boolean
+  channelDelivery?: boolean
 }
 
 /** 프로모션과 동일 코드·가격의 미러 메뉴 upsert (promo_id 컬럼 없으면 스킵) */
@@ -25,6 +28,11 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
 }> {
   const promoIdNum = Number(p.promoId)
   if (!promoIdNum) return { ok: false, message: 'promo id 없음' }
+
+  const sellHall = p.channelHall !== false
+  const sellDelivery = p.channelDelivery !== false
+  const sellPackaging = p.channelTakeout !== false
+  const sellMember = p.channelTakeout !== false
 
   const mirrorFieldsSansImage: Record<string, unknown> = {
     code: p.code,
@@ -37,6 +45,10 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
     is_active: p.isActive !== false,
     sort_order: 0,
     promo_id: promoIdNum,
+    sell_hall: sellHall,
+    sell_delivery: sellDelivery,
+    sell_packaging: sellPackaging,
+    sell_member: sellMember,
   }
   /** 신규 미러 행만 빈 썸네일로 시작. 기존 행 UPDATE에 image를 넣으면 POS에서 올린 썸네일이 매 프로모 저장마다 지워짐 */
   const insertMenuRow: Record<string, unknown> = { ...mirrorFieldsSansImage, image: '' }

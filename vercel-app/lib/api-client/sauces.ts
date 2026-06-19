@@ -257,6 +257,7 @@ export async function savePosMenu(
     sellHall?: boolean
     sellDelivery?: boolean
     sellPackaging?: boolean
+    sellMember?: boolean
     /**
      * true 이면 image 컬럼만 갱신한다(프로모 연동 메뉴의 사진 단독 변경 등).
      * 서버는 다른 필드 비교를 건너뛴다.

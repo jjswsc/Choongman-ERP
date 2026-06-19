@@ -1194,6 +1194,9 @@ export function MemberPortalApp() {
             favoriteStoreCodes={favoriteStoreCodes}
             contentItems={contentItems}
             onBottomNavSuppressChange={setOrderBottomNavSuppressed}
+            onSessionRefresh={() => {
+              void loadSession()
+            }}
             onSelectContentItem={(item) => {
               setHomePopupOpen(false)
               setSelectedHomePromo(item)

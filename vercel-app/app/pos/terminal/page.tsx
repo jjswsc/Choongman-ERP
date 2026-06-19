@@ -20,6 +20,7 @@ import {
   readPosCartItemsCache,
   writePosCartItemsCache,
 } from '@/components/pos/cart-panel'
+import { replacePosCartItemsCache } from '@/lib/pos-cart-items-cache'
 import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -90,7 +91,6 @@ import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catal
 import {
   cartLinesToPosOrderItems,
   mergeDineInAddonCartPosItemsWithExisting,
-  isDineInAddonOnlyIncomingCart,
   mergeDineInPaymentCartWithServerItems,
   normalizeCartLineIdForSave,
   orderUiItemsToPosOrderItems,
@@ -213,6 +213,11 @@ import {
   posOrderToCheckoutDiscountSnapshot,
   type PosExistingOrderCheckoutDiscount,
 } from '@/lib/pos-existing-order-checkout-discount'
+import {
+  posOrderToCheckoutMemberSnapshot,
+  resolvePosOrderMemberFieldsForAddonUpdate,
+  type PosExistingOrderCheckoutMember,
+} from '@/lib/pos-existing-order-checkout-member'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import { printPosVoidReceiptForOrder } from '@/lib/print-pos-void-receipt'
 import {
@@ -354,6 +359,8 @@ type PendingPayRequest = {
   existingOrderId?: number | null
   /** DB·플랫폼 할인·합계 — 결제 모달에서 0으로 초기화하지 않음 */
   orderDiscount?: PosExistingOrderCheckoutDiscount
+  /** 기존 주문에 연결된 회원 — 결제 시 포인트 적립용 */
+  orderMember?: PosExistingOrderCheckoutMember
 } | null
 
 type KbankOutcomeState = {
@@ -1673,6 +1680,7 @@ export default function PosTerminalPage() {
     cartRef.current.openDineInPaymentFromOrder({
       ...pendingPayRequest,
       existingOrderId: pendingDineInOrderId,
+      orderMember: pendingPayRequest.orderMember,
     })
     setPendingPayRequest(null)
   }, [pendingPayRequest])
@@ -1685,6 +1693,7 @@ export default function PosTerminalPage() {
       items: pendingTakeoutPayRequest.items,
       existingOrderId: pendingTakeoutOrderId,
       orderDiscount: pendingTakeoutPayRequest.orderDiscount,
+      orderMember: pendingTakeoutPayRequest.orderMember,
     })
     setPendingTakeoutPayRequest(null)
   }, [pendingTakeoutPayRequest, pendingTakeoutOrderId])
@@ -1697,6 +1706,7 @@ export default function PosTerminalPage() {
       items: pendingDeliveryPayRequest.items,
       existingOrderId: pendingDeliveryOrderId,
       orderDiscount: pendingDeliveryPayRequest.orderDiscount,
+      orderMember: pendingDeliveryPayRequest.orderMember,
     })
     setPendingDeliveryPayRequest(null)
   }, [pendingDeliveryPayRequest, pendingDeliveryOrderId])
@@ -8496,6 +8506,14 @@ export default function PosTerminalPage() {
                       Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
                     )
                   }
+                  const addonMemberFields = resolvePosOrderMemberFieldsForAddonUpdate(
+                    {
+                      memberId: payload.memberId,
+                      memberNo: payload.memberNo,
+                      pointUsed: payload.pointUsed,
+                    },
+                    existingOrder
+                  )
                   const updateReq = {
                     id: existingOrderId,
                     items: posItemsForSave,
@@ -8505,11 +8523,9 @@ export default function PosTerminalPage() {
                     discountReason: payload.discountReason ?? '',
                     serviceAmt: payload.serviceAmt ?? 0,
                     serviceReason: payload.serviceReason ?? '',
-                    memberId: payload.memberId,
-                    memberNo: payload.memberNo,
+                    ...addonMemberFields,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
-                    pointUsed: payload.pointUsed,
                     pointEarned: 0,
                     guestCount: payload.guestCount ?? existingOrder.guestCount,
                     paymentCash: 0,
@@ -8681,15 +8697,10 @@ export default function PosTerminalPage() {
                 const orderNoStr = savedOrderNo
                 const existingItemsBeforeAdd =
                   isAddOrder && existingOrder ? orderUiItemsToPosOrderItems(existingOrder.items) : []
-                const addonOnlyIncomingCart =
-                  isAddOrder &&
-                  existingItemsBeforeAdd.length > 0 &&
-                  isDineInAddonOnlyIncomingCart(existingItemsBeforeAdd, incomingItems)
                 const kitchenCartLines =
                   isAddOrder && existingOrder
-                    ? resolveDineInKitchenLinesForAddSubmit(incomingItems, existingItemsBeforeAdd, {
+                    ? resolveDineInKitchenLinesForAddSubmit(posItemsForSave, existingItemsBeforeAdd, {
                         formatNote: formatLineNoteForPrint,
-                        addonOnlyIncomingCart,
                       })
                     : payloadItemsNormalized
                 const addKitchenDedupeSuffix = isAddOrder
@@ -8730,6 +8741,16 @@ export default function PosTerminalPage() {
                   ? storeAutoPrint.receiptOnAddOrder
                   : storeAutoPrint.receiptOnOrder
                 const autoPrintKitchenForSubmit = storeAutoPrint.kitchenOnOrder
+                if (savedOrderId != null && savedOrderId > 0) {
+                  const qtySnap = buildDineInQtySnapshot(receiptPrintItems)
+                  if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(savedOrderId, qtySnap)
+                  if (isMainPosDevice) {
+                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                      savedOrderId,
+                      Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
+                    )
+                  }
+                }
                 const scheduleKitchenAfterDineInSubmit = () => {
                   if (kitchenCartLines.length === 0) return
                   if (isAddOrder) {
@@ -8954,21 +8975,20 @@ export default function PosTerminalPage() {
                   })
                   }
                 }
-                if (savedOrderId != null && savedOrderId > 0) {
-                  const qtySnap = buildDineInQtySnapshot(receiptPrintItems)
-                  if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(savedOrderId, qtySnap)
-                  /**
-                   * 신규 저장 직후 서버 후처리 UPDATE(메모/할인/스냅샷 정규화)가 들어오면
-                   * Realtime add 감지에서 `isAddon`으로 오인되어 `1x > ...` 추가영수증이 한 장 더 찍힐 수 있다.
-                   * 신규 주문은 짧은 창에서 add 감지를 건너뛰고 스냅샷만 갱신한다.
-                   */
-                  if (isMainPosDevice) {
-                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(
-                      savedOrderId,
-                      Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
-                    )
-                  }
-                }
+                /** 저장 후 카트·세션 캐시 비움 — 탭 전환 복원 시 이전 주문 줄이 추가주문 주방에 섞이지 않게 */
+                const submittedTableIdForCache = selectedTableId ?? servingTableId
+                replacePosCartItemsCache(
+                  getPosCartSessionKey({
+                    currentStoreId,
+                    orderType: 'dine-in',
+                    selectedTableId: submittedTableIdForCache ?? '',
+                    deliveryApp: null,
+                    deliveryOrderNo: null,
+                    takeoutLabel: null,
+                  }),
+                  []
+                )
+                replacePosCartItemsCache(buildTerminalCartSessionKeyForTab('tables'), [])
                 if (savedOrderId != null) {
                   setPendingDineInOrderId(savedOrderId)
                   pendingDineInOrderTableRef.current = String(payload.tableName ?? '').trim()
@@ -9438,14 +9458,10 @@ export default function PosTerminalPage() {
                     adjustments: pricingAdjustments,
                   })
                   const kitchenCartLines = resolveDineInKitchenLinesForAddSubmit(
-                    incomingItems,
+                    posItemsForSave,
                     existingItemsBeforeAdd,
                     {
                       formatNote: formatLineNoteForPrint,
-                      addonOnlyIncomingCart: isDineInAddonOnlyIncomingCart(
-                        existingItemsBeforeAdd,
-                        incomingItems
-                      ),
                     }
                   )
                   const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
@@ -10684,6 +10700,7 @@ export default function PosTerminalPage() {
                     ...selectedDeliveryOrder,
                     items: selectedDeliveryOrder.items,
                   }),
+                  orderMember: posOrderToCheckoutMemberSnapshot(selectedDeliveryOrder),
                 })
                 setSelectedDeliveryTargetId(null)
                 setSelectedDeliveryTargetLabel('')
@@ -10796,6 +10813,7 @@ export default function PosTerminalPage() {
                     ...servingTable.order,
                     items: servingTable.order.items,
                   }),
+                  orderMember: posOrderToCheckoutMemberSnapshot(servingTable.order),
                 })
                 setServingTableId(null)
               }}
@@ -10868,6 +10886,7 @@ export default function PosTerminalPage() {
                     ...selectedTakeoutOrder,
                     items: selectedTakeoutOrder.items,
                   }),
+                  orderMember: posOrderToCheckoutMemberSnapshot(selectedTakeoutOrder),
                 })
                 setSelectedTakeoutTargetId(null)
                 setSelectedTakeoutTargetLabel('')

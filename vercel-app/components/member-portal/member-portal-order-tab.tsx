@@ -37,12 +37,12 @@ import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import {
   filterMemberPortalPickupOptions,
-  isDeliveryExclusiveMenu,
   isMemberPortalPickupMenu,
   packagingMenuBasePrice,
   packagingOptionPriceModifier,
   resolvePickupMenuListPriceLabel,
 } from "@/lib/member-portal-pickup-menu-filter"
+import { isBanbanMenu } from "@/lib/pos-banban-utils"
 import { MemberPortalPickupOptionSheet } from "@/components/member-portal/member-portal-pickup-option-sheet"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
@@ -275,7 +275,7 @@ const CartConfirmDialog = React.memo(function CartConfirmDialog({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-[28px] bg-white p-6 text-neutral-900 shadow-2xl">
         <p className="text-lg font-bold">{t("orderCartConfirmTitle")}</p>
         <p className="mt-2 text-sm leading-relaxed text-neutral-600">{t("orderCartConfirmBody")}</p>
@@ -395,6 +395,8 @@ type MemberPortalOrderTabProps = {
   contentItems?: MemberPortalContentItem[]
   onSelectContentItem?: (item: MemberPortalContentItem) => void
   onBottomNavSuppressChange?: (suppressed: boolean) => void
+  /** 결제·적립 후 홈 카드·포인트 잔액 갱신 */
+  onSessionRefresh?: () => void | Promise<void>
 }
 
 async function postMemberOrder(body: Record<string, unknown>) {
@@ -416,6 +418,7 @@ export function MemberPortalOrderTab({
   contentItems = [],
   onSelectContentItem,
   onBottomNavSuppressChange,
+  onSessionRefresh,
 }: MemberPortalOrderTabProps) {
   const primaryFavoriteStoreCode = favoriteStoreCodes[0] || ""
   const [view, setView] = React.useState<OrderView>("hub")
@@ -527,9 +530,7 @@ export function MemberPortalOrderTab({
   }, [menuOptions])
 
   const packagingMenus = React.useMemo(() => {
-    return menus.filter(
-      (m) => isMemberPortalPickupMenu(m, todayStr) && !isDeliveryExclusiveMenu(m)
-    )
+    return menus.filter((m) => isMemberPortalPickupMenu(m, todayStr))
   }, [menus, todayStr])
 
   const filteredStores = React.useMemo(
@@ -697,15 +698,18 @@ export function MemberPortalOrderTab({
 
   const handleMenuAdd = React.useCallback(
     (menu: PosMenu) => {
+      if (isBanbanMenu(menu)) {
+        setOrderError(t("orderBanbanNote"))
+        return
+      }
       const opts = filterMemberPortalPickupOptions(optionsByMenuId[String(menu.id)] || [])
-      const hasSubstitution = opts.some((o) => o.optionType === "substitution")
-      if (hasSubstitution) {
+      if (opts.length > 0 || (menu.optionSelectionGroups?.length ?? 0) > 0) {
         setOptionPickerMenu(menu)
         return
       }
       addToCart(menu, null)
     },
-    [addToCart, optionsByMenuId]
+    [addToCart, optionsByMenuId, t]
   )
 
   const bottomNavSuppressed =
@@ -795,6 +799,7 @@ export function MemberPortalOrderTab({
     if (at !== pickupAt) setPickupAt(at)
     setOrderError("")
     scheduleAfterPaint(() => {
+      setCartSheetOpen(false)
       void (async () => {
         try {
           const res = await fetch("/api/member-portal/orders/checkout-preview", {
@@ -956,9 +961,10 @@ export function MemberPortalOrderTab({
         setPickupReady(false)
         setView("hub")
         void loadMyOrders()
+        void onSessionRefresh?.()
       })
     },
-    [loadMyOrders, t]
+    [loadMyOrders, onSessionRefresh, t]
   )
 
   const handleConfirmSubmit = React.useCallback(() => {
@@ -1160,6 +1166,7 @@ export function MemberPortalOrderTab({
             setResumePayOrder(null)
             setOrderMessage(t("orderSubmitSuccessPaid", { orderNo: no }))
             void loadMyOrders()
+            void onSessionRefresh?.()
           }}
           onExpired={() => {
             setResumePayOrder(null)
@@ -1326,9 +1333,8 @@ export function MemberPortalOrderTab({
             />
           </div>
 
-          {cart.length > 0 ? (
-            <>
-              <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4">
+          {cart.length > 0 && !cartConfirmOpen && !checkoutOpen ? (
+            <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -1356,8 +1362,9 @@ export function MemberPortalOrderTab({
                   </span>
                 </button>
               </div>
+          ) : null}
 
-              {cartSheetOpen ? (
+          {cart.length > 0 && cartSheetOpen ? (
                 <div
                   className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm"
                   role="presentation"
@@ -1484,34 +1491,32 @@ export function MemberPortalOrderTab({
                     </div>
                   </div>
                 </div>
-              ) : null}
-
-              <CartConfirmDialog
-                open={cartConfirmOpen}
-                submitting={submitting}
-                storeName={pickupStoreName}
-                pickupAt={pickupAt}
-                cartTotal={cartTotal}
-                onCancel={() => setCartConfirmOpen(false)}
-                onConfirm={handleConfirmSubmit}
-                t={t}
-              />
-              <MemberPortalCheckoutSheet
-                open={checkoutOpen}
-                lang={lang}
-                t={t}
-                member={member}
-                storeCode={pickupStore}
-                storeName={pickupStoreName}
-                pickupAt={pickupAt}
-                cart={cart}
-                onClose={() => setCheckoutOpen(false)}
-                onPaid={handleCheckoutPaid}
-                onError={(msg) => setOrderError(msg)}
-                onRestoreCart={restoreCheckoutDraft}
-              />
-            </>
           ) : null}
+
+          <CartConfirmDialog
+            open={cartConfirmOpen}
+            submitting={submitting}
+            storeName={pickupStoreName}
+            pickupAt={pickupAt}
+            cartTotal={cartTotal}
+            onCancel={() => setCartConfirmOpen(false)}
+            onConfirm={handleConfirmSubmit}
+            t={t}
+          />
+          <MemberPortalCheckoutSheet
+            open={checkoutOpen}
+            lang={lang}
+            t={t}
+            member={member}
+            storeCode={pickupStore}
+            storeName={pickupStoreName}
+            pickupAt={pickupAt}
+            cart={cart}
+            onClose={() => setCheckoutOpen(false)}
+            onPaid={handleCheckoutPaid}
+            onError={(msg) => setOrderError(msg)}
+            onRestoreCart={restoreCheckoutDraft}
+          />
         </>
       )}
 

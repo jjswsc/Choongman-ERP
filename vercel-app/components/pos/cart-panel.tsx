@@ -101,6 +101,10 @@ import {
   type PosPricingResult,
 } from '@/lib/pos-pricing'
 import type { PosExistingOrderCheckoutDiscount } from '@/lib/pos-existing-order-checkout-discount'
+import {
+  seedCheckoutMemberFromExistingOrder,
+  type PosExistingOrderCheckoutMember,
+} from '@/lib/pos-existing-order-checkout-member'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import {
   translateReceiptTableDisplayName,
@@ -3274,6 +3278,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     existingOrderId?: number | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
+    orderMember?: PosExistingOrderCheckoutMember
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
@@ -3303,6 +3308,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       pricingAdjustments,
       { setDiscountType, setDiscountValueInput, setDiscountReason }
     )
+    seedCheckoutMemberFromExistingOrder(payload.orderMember, {
+      setSelectedMemberId,
+      setMemberMap,
+      setMemberOptions,
+      setPointUsed,
+    })
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -3320,6 +3331,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
+    orderMember?: PosExistingOrderCheckoutMember
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
@@ -3349,6 +3361,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       pricingAdjustments,
       { setDiscountType, setDiscountValueInput, setDiscountReason }
     )
+    seedCheckoutMemberFromExistingOrder(payload.orderMember, {
+      setSelectedMemberId,
+      setMemberMap,
+      setMemberOptions,
+      setPointUsed,
+    })
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -3364,6 +3382,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
+    orderMember?: PosExistingOrderCheckoutMember
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
@@ -3393,6 +3412,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       pricingAdjustments,
       { setDiscountType, setDiscountValueInput, setDiscountReason }
     )
+    seedCheckoutMemberFromExistingOrder(payload.orderMember, {
+      setSelectedMemberId,
+      setMemberMap,
+      setMemberOptions,
+      setPointUsed,
+    })
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)

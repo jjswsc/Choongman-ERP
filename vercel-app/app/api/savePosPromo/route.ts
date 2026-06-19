@@ -302,6 +302,9 @@ export async function POST(req: NextRequest) {
       priceDelivery: ext.price_delivery != null ? Number(ext.price_delivery) : null,
       vatIncluded: ext.vat_included !== false,
       isActive: ext.is_active !== false,
+      channelHall: body.channelHall !== false,
+      channelTakeout: body.channelTakeout !== false,
+      channelDelivery: body.channelDelivery !== false,
     })
     if (!mirror.ok) {
       return NextResponse.json(

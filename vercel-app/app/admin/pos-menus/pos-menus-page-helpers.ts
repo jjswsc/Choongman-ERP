@@ -369,6 +369,7 @@ export const emptyForm = {
   sellHall: true,
   sellDelivery: true,
   sellPackaging: true,
+  sellMember: true,
 }
 
 export type PackagingChecklistDraftRow = {

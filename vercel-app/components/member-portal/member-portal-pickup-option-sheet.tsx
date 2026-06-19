@@ -13,6 +13,10 @@ import { shouldInitChickenTwoPhaseOnMenuOpen } from "@/lib/pos-chicken-option-pi
 import type { ChickenTwoPhasePhase } from "@/lib/pos-chicken-option-picker-plan"
 import { resolveChickenOptionPickerStepTitleSuffix } from "@/lib/pos-chicken-option-picker-plan"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
+import {
+  inferOptionSelectionGroupsFromOptions,
+  syncOptionSelectionConfigToGroupKeys,
+} from "@/lib/pos-option-selection-groups"
 
 type Props = {
   open: boolean
@@ -57,22 +61,43 @@ export function MemberPortalPickupOptionSheet({
   const [twoPhasePhase, setTwoPhasePhase] = React.useState<ChickenTwoPhasePhase>(null)
   const [pendingSizeOpt, setPendingSizeOpt] = React.useState<PosMenuOption | null>(null)
 
+  const pickerMenu = React.useMemo(() => {
+    if (!menu) return null
+    const inferred = inferOptionSelectionGroupsFromOptions(options, menu.code)
+    const configured = menu.optionSelectionGroups || []
+    const groups =
+      configured.length > 0
+        ? configured
+        : inferred.length > 0
+          ? inferred
+          : configured
+    if (groups.length === 0 || groups.join("|") === configured.join("|")) return menu
+    return {
+      ...menu,
+      optionSelectionGroups: groups,
+      optionSelectionConfig: syncOptionSelectionConfigToGroupKeys(
+        groups,
+        menu.optionSelectionConfig
+      ),
+    }
+  }, [menu, options])
+
   React.useEffect(() => {
-    if (!open || !menu) return
+    if (!open || !pickerMenu) return
     setOptionPickerStep(0)
     setOptionPickerSelections({})
     setPendingSizeOpt(null)
-    if (shouldInitChickenTwoPhaseOnMenuOpen({ menu, options, orderType: "takeout" })) {
+    if (shouldInitChickenTwoPhaseOnMenuOpen({ menu: pickerMenu, options, orderType: "takeout" })) {
       setTwoPhasePhase("size")
     } else {
       setTwoPhasePhase(null)
     }
-  }, [open, menu, options])
+  }, [open, pickerMenu, options])
 
-  if (!open || !menu) return null
+  if (!open || !menu || !pickerMenu) return null
 
   const stepSuffix = resolveChickenOptionPickerStepTitleSuffix({
-    menu,
+    menu: pickerMenu,
     orderType: "takeout",
     twoPhasePhase,
     optionPickerStep,
@@ -111,7 +136,7 @@ export function MemberPortalPickupOptionSheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <PosChickenOptionPickerPanel
-            menu={menu}
+            menu={pickerMenu}
             options={options}
             orderType="takeout"
             twoPhasePhase={twoPhasePhase}

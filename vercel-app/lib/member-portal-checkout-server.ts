@@ -10,7 +10,7 @@ import {
 import { assertMemberPickupTimeAllowed } from '@/lib/member-portal-pickup-time'
 import { resolveMemberPortalPickupMinLeadMinutes } from '@/lib/member-portal-pickup-settings'
 import { generateMemberPortalKbankQr } from '@/lib/member-portal-kbank-qr'
-import { applyLoyaltyOnOrder, computeMemberPointEarnForOrder, type MemberSummary } from '@/lib/members-server'
+import { computeMemberPointEarnForOrder, ensurePosOrderLoyaltyApplied, type MemberSummary } from '@/lib/members-server'
 import { buildMemberPortalTakeoutTableNameForStorage } from '@/lib/pos-member-portal-takeout-label'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
@@ -59,6 +59,26 @@ import {
   MEMBER_PORTAL_PAYMENT_PENDING_TAG,
   stripMemberPortalPaymentPendingTag,
 } from '@/lib/member-portal-payment-pending'
+
+/** 회원앱 주문 결제 완료 후 포인트·스탬프 적립 멱등 보장 (폴링·재시도·UI 갱신용) */
+export async function ensureMemberPortalOrderLoyaltyApplied(orderId: number): Promise<number> {
+  const id = Number(orderId || 0)
+  if (!id) return 0
+
+  const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
+    limit: 1,
+    select: 'id,point_earned,created_by',
+  })) as Array<{ id?: number; point_earned?: number | null; created_by?: string | null }>
+  const order = rows?.[0]
+  if (!order?.id) return 0
+
+  const createdBy = String(order.created_by || '')
+  if (!createdBy.startsWith('member_portal:')) {
+    return Math.max(0, Math.trunc(Number(order.point_earned || 0)))
+  }
+
+  return ensurePosOrderLoyaltyApplied(id)
+}
 
 async function resolveStoreContext(storeCode: string) {
   const code = String(storeCode || '').trim()
@@ -314,6 +334,7 @@ export async function finalizeMemberPortalPrepaidOrder(params: {
 
   const status = String(order.status || '').trim().toLowerCase()
   if (status === 'paid' || status === 'completed') {
+    await ensureMemberPortalOrderLoyaltyApplied(orderId)
     return { ok: true, alreadyPaid: true }
   }
 
@@ -354,22 +375,8 @@ export async function finalizeMemberPortalPrepaidOrder(params: {
   }
 
   const memberId = Number(order.member_id || 0)
-  const pointUsed = Math.max(0, Math.trunc(Number(order.point_used || 0)))
   if (memberId > 0) {
-    const loyalty = await applyLoyaltyOnOrder({
-      memberId,
-      orderId,
-      storeCode: String(order.store_code || '').trim(),
-      totalAmount: total,
-      pointUsed,
-      orderNo: String(order.order_no || ''),
-      couponCode: String(order.coupon_code || '').trim() || undefined,
-      orderType: String(order.order_type || 'takeout'),
-      createdBy,
-    })
-    await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
-      point_earned: loyalty.pointEarned,
-    })
+    await ensureMemberPortalOrderLoyaltyApplied(orderId)
   }
 
   await redeemMemberPortalOrderCoupons(orderId)
@@ -407,20 +414,7 @@ export async function finalizeMemberPortalPointsOnlyOrder(orderId: number): Prom
 
   const memberId = Number(order.member_id || 0)
   if (memberId > 0) {
-    const loyalty = await applyLoyaltyOnOrder({
-      memberId,
-      orderId,
-      storeCode: String(order.store_code || '').trim(),
-      totalAmount: Math.max(0, Number(order.total || 0)),
-      pointUsed: Math.max(0, Math.trunc(Number(order.point_used || 0))),
-      orderNo: String(order.order_no || ''),
-      couponCode: String(order.coupon_code || '').trim() || undefined,
-      orderType: String(order.order_type || 'takeout'),
-      createdBy: String(order.created_by || ''),
-    })
-    await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
-      point_earned: loyalty.pointEarned,
-    })
+    await ensureMemberPortalOrderLoyaltyApplied(orderId)
   }
 
   await redeemMemberPortalOrderCoupons(orderId)
@@ -684,6 +678,7 @@ export async function pollMemberPortalOrderPayment(params: {
 
   const curStatus = String(order.status || '').trim().toLowerCase()
   if (curStatus === 'paid' || curStatus === 'completed') {
+    await ensureMemberPortalOrderLoyaltyApplied(orderId)
     return { status: 'approved', paid: true }
   }
   const memo = String(order.memo || '')

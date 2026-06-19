@@ -263,6 +263,7 @@ export default function PosMenusPage() {
     sellHall: formData.sellHall,
     sellDelivery: formData.sellDelivery,
     sellPackaging: formData.sellPackaging,
+    sellMember: formData.sellMember,
   }), [editingId, formData])
   const banbanFlavorAutoMenus = React.useMemo(() => {
     if (!formData.isBanban) return []
@@ -483,6 +484,7 @@ export default function PosMenusPage() {
         sellHall: true,
         sellDelivery: false,
         sellPackaging: true,
+        sellMember: true,
         priceModifier: hall,
         priceModifierDelivery: null as number | null,
         priceModifierPackaging: null as number | null,
@@ -493,6 +495,7 @@ export default function PosMenusPage() {
         sellHall: false,
         sellDelivery: true,
         sellPackaging: false,
+        sellMember: false,
         priceModifier: hall,
         priceModifierDelivery: deliveryInput ?? hall,
         priceModifierPackaging: null as number | null,
@@ -502,6 +505,7 @@ export default function PosMenusPage() {
       sellHall: true,
       sellDelivery: true,
       sellPackaging: true,
+      sellMember: true,
       priceModifier: hall,
       priceModifierDelivery: deliveryInput,
       priceModifierPackaging: null as number | null,
@@ -990,6 +994,7 @@ export default function PosMenusPage() {
           sellHall: m.sellHall !== false,
           sellDelivery: m.sellDelivery !== false,
           sellPackaging: m.sellPackaging !== false,
+          sellMember: m.sellMember !== false,
         })
         void loadPackagingChecklistRows(editingId)
       }
@@ -1220,6 +1225,7 @@ export default function PosMenusPage() {
       sellHall: formData.sellHall,
       sellDelivery: formData.sellDelivery,
       sellPackaging: formData.sellPackaging,
+      sellMember: formData.sellMember,
     }
     if (shouldPersistStoreScope) {
       savePayload.storeCodes = scopeForSave
@@ -1261,6 +1267,7 @@ export default function PosMenusPage() {
       sellHall: formData.sellHall,
       sellDelivery: formData.sellDelivery,
       sellPackaging: formData.sellPackaging,
+      sellMember: formData.sellMember,
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
@@ -1315,6 +1322,7 @@ export default function PosMenusPage() {
       sellHall: menu.sellHall !== false,
       sellDelivery: menu.sellDelivery !== false,
       sellPackaging: menu.sellPackaging !== false,
+      sellMember: menu.sellMember !== false,
     })
     setSelectedStoreCodes(getEditorScopeStoreCodes(menu))
     setStoreScopeDirty(false)
@@ -1412,6 +1420,7 @@ export default function PosMenusPage() {
       sellHall: channelPayload.sellHall,
       sellDelivery: channelPayload.sellDelivery,
       sellPackaging: channelPayload.sellPackaging,
+      sellMember: channelPayload.sellMember,
       descriptionDefault: newOptionDescriptionDefault.trim(),
       descriptionDelivery: newOptionDescriptionDelivery.trim() || null,
       descriptionTable: newOptionDescriptionTable.trim() || null,
@@ -2449,6 +2458,7 @@ export default function PosMenusPage() {
       sellHall: channelPayload.sellHall,
       sellDelivery: channelPayload.sellDelivery,
       sellPackaging: channelPayload.sellPackaging,
+      sellMember: channelPayload.sellMember,
     })
     if (res.success) {
       getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(applyLoadedOptionsForConfig)
@@ -2511,6 +2521,7 @@ export default function PosMenusPage() {
         sellHall: channelPayload.sellHall,
         sellDelivery: channelPayload.sellDelivery,
         sellPackaging: channelPayload.sellPackaging,
+        sellMember: channelPayload.sellMember,
       })
       if (res.success) {
         getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(applyLoadedOptionsForConfig)
@@ -2569,6 +2580,7 @@ export default function PosMenusPage() {
         sellHall: channelPayload.sellHall,
         sellDelivery: channelPayload.sellDelivery,
         sellPackaging: channelPayload.sellPackaging,
+        sellMember: channelPayload.sellMember,
       })
       if (res.success) {
         existingKeys.add(`${size}_${part}`)
@@ -2708,6 +2720,7 @@ export default function PosMenusPage() {
           sellHall: channelPayload.sellHall,
           sellDelivery: channelPayload.sellDelivery,
           sellPackaging: channelPayload.sellPackaging,
+          sellMember: channelPayload.sellMember,
         })
         duplicates.add(key)
         added++
@@ -4248,6 +4261,15 @@ export default function PosMenusPage() {
                         />
                         {t("posOptionSellPackaging") || "포장"}
                       </label>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={formData.sellMember}
+                          onChange={(e) => setFormData((p) => ({ ...p, sellMember: e.target.checked }))}
+                          disabled={isPromoLinkedMenuEdit}
+                        />
+                        {t("posOptionSellMember") || "회원"}
+                      </label>
                     </div>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 text-xs">
@@ -5017,6 +5039,10 @@ export default function PosMenusPage() {
                     <label className="flex items-center gap-2 text-xs">
                       <input type="checkbox" checked={formData.sellPackaging} onChange={(e) => setFormData((p) => ({ ...p, sellPackaging: e.target.checked }))} />
                       {t("posOptionSellPackaging") || "포장"}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={formData.sellMember} onChange={(e) => setFormData((p) => ({ ...p, sellMember: e.target.checked }))} />
+                      {t("posOptionSellMember") || "회원"}
                     </label>
                   </div>
                   <div className="flex items-center gap-4">

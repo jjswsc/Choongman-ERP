@@ -56,6 +56,8 @@ export async function POST(req: NextRequest) {
     const sellHall = body?.sellHall != null ? !!body.sellHall : true
     const sellDelivery = body?.sellDelivery != null ? !!body.sellDelivery : true
     const sellPackaging = body?.sellPackaging != null ? !!body.sellPackaging : true
+    const sellMember =
+      body?.sellMember != null ? !!body.sellMember : sellPackaging
     const hasDescriptionDefault = 'descriptionDefault' in (body || {})
     const hasDescriptionDelivery = 'descriptionDelivery' in (body || {})
     const hasDescriptionTable = 'descriptionTable' in (body || {})
@@ -89,6 +91,7 @@ export async function POST(req: NextRequest) {
       sell_hall: sellHall,
       sell_delivery: sellDelivery,
       sell_packaging: sellPackaging,
+      sell_member: sellMember,
     }
     if (!id || hasDescriptionDefault) {
       rowFull.description_default = String(body?.descriptionDefault ?? '').trim()
@@ -179,6 +182,7 @@ export async function POST(req: NextRequest) {
       delete rowWithoutNew.sell_hall
       delete rowWithoutNew.sell_delivery
       delete rowWithoutNew.sell_packaging
+      delete rowWithoutNew.sell_member
       delete rowWithoutNew.option_type
       delete rowWithoutNew.item_code
       delete rowWithoutNew.additive_source_menu_id

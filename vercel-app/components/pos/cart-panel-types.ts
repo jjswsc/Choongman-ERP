@@ -1,5 +1,6 @@
 import type { PosAppliedCoupon } from '@/lib/api-client'
 import type { PosExistingOrderCheckoutDiscount } from '@/lib/pos-existing-order-checkout-discount'
+import type { PosExistingOrderCheckoutMember } from '@/lib/pos-existing-order-checkout-member'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
@@ -92,17 +93,20 @@ export interface CartPanelHandle {
     existingOrderId?: number | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
+    orderMember?: PosExistingOrderCheckoutMember
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
+    orderMember?: PosExistingOrderCheckoutMember
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
+    orderMember?: PosExistingOrderCheckoutMember
   }) => void
 }

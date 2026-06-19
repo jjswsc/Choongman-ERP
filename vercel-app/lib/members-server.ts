@@ -25,6 +25,11 @@ import {
   resolvePointEarnChannel,
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
+import {
+  isPosOrderPaymentCompleteForTotal,
+  posOrderPaymentSumFromAmounts,
+} from '@/lib/pos-order-paid-at'
+import { isPosCompletionStatus } from '@/lib/pos-order-policy'
 
 export type MemberSummary = {
   id: number
@@ -1040,9 +1045,7 @@ export async function computeMemberPointEarnForOrder(params: {
     }
   }
   const tiers = await getActiveTiers()
-  const currentTierCode = toText(member.tier_code) || 'BRONZE'
-  const currentTier = tiers.find((x) => toText(x.code) === currentTierCode)
-  const pointRate = Number(currentTier?.point_rate || 0.01)
+  const { tierCode: currentTierCode, pointRate } = resolveMemberTierPointRate(tiers, toText(member.tier_code))
   const policy = await loadMemberPointEarnBonusPolicy()
   const channel = resolvePointEarnChannel({
     createdBy: params.createdBy,
@@ -1061,6 +1064,99 @@ export async function computeMemberPointEarnForOrder(params: {
     tierCode: currentTierCode,
     pointRate,
   }
+}
+
+function resolveMemberTierPointRate(
+  tiers: MemberTierRow[],
+  tierCodeRaw: string
+): { tierCode: string; pointRate: number } {
+  const tierCode = (toText(tierCodeRaw) || 'BRONZE').toUpperCase()
+  const currentTier = tiers.find((x) => toText(x.code).toUpperCase() === tierCode)
+  return { tierCode, pointRate: Number(currentTier?.point_rate || 0.01) }
+}
+
+type PosOrderLoyaltyRow = {
+  id?: number
+  order_no?: string | null
+  store_code?: string | null
+  status?: string | null
+  total?: number | null
+  member_id?: number | null
+  point_used?: number | null
+  point_earned?: number | null
+  coupon_code?: string | null
+  created_by?: string | null
+  order_type?: string | null
+  payment_cash?: number | null
+  payment_card?: number | null
+  payment_qr?: number | null
+  payment_other?: number | null
+  payment_delivery_app?: number | null
+}
+
+/** 결제 완료 주문에 대해 등급별 포인트 적립 멱등 보장 (POS·회원앱 공통) */
+export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<number> {
+  const id = Number(orderId || 0)
+  if (!id) return 0
+
+  const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
+    limit: 1,
+    select:
+      'id,order_no,store_code,status,total,member_id,point_used,point_earned,coupon_code,created_by,order_type,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app',
+  })) as PosOrderLoyaltyRow[]
+  const order = rows?.[0]
+  if (!order?.id) return 0
+
+  const memberId = Number(order.member_id || 0)
+  if (!memberId) return 0
+
+  const total = Math.max(0, Number(order.total || 0))
+  const paymentSum = posOrderPaymentSumFromAmounts({
+    paymentCash: Number(order.payment_cash || 0),
+    paymentCard: Number(order.payment_card || 0),
+    paymentQr: Number(order.payment_qr || 0),
+    paymentOther: Number(order.payment_other || 0),
+    paymentDeliveryApp: Number(order.payment_delivery_app || 0),
+  })
+  const status = String(order.status || '').trim().toLowerCase()
+  const paymentComplete = isPosOrderPaymentCompleteForTotal(total, paymentSum)
+  const paidLike = status === 'paid' || status === 'completed' || isPosCompletionStatus(status)
+  if (!paymentComplete && !paidLike) return 0
+
+  const priorEarned = Math.max(0, Math.trunc(Number(order.point_earned || 0)))
+  if (priorEarned > 0) return priorEarned
+
+  try {
+    const ledger = (await supabaseSelectFilter(
+      'member_points_ledger',
+      `member_id=eq.${memberId}&order_id=eq.${id}&kind=eq.earn`,
+      { limit: 1, select: 'points' }
+    )) as Array<{ points?: number | null }>
+    const ledgerPts = Math.max(0, Math.trunc(Number(ledger?.[0]?.points || 0)))
+    if (ledgerPts > 0) {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: ledgerPts })
+      return ledgerPts
+    }
+  } catch {
+    /* ledger 미배포 환경 */
+  }
+
+  const loyalty = await applyLoyaltyOnOrder({
+    memberId,
+    orderId: id,
+    storeCode: String(order.store_code || '').trim(),
+    totalAmount: total,
+    pointUsed: Math.max(0, Math.trunc(Number(order.point_used || 0))),
+    orderNo: String(order.order_no || ''),
+    couponCode: String(order.coupon_code || '').trim() || undefined,
+    orderType: String(order.order_type || ''),
+    createdBy: String(order.created_by || ''),
+  })
+  const earned = Math.max(0, Math.trunc(Number(loyalty.pointEarned || 0)))
+  if (earned > 0) {
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: earned })
+  }
+  return earned
 }
 
 export async function applyLoyaltyOnOrder(params: {
@@ -1100,9 +1196,7 @@ export async function applyLoyaltyOnOrder(params: {
   const member = rows?.[0]
   if (!member) return { pointEarned: 0, tierCode: 'BRONZE', stamp }
   const tiers = await getActiveTiers()
-  const currentTierCode = toText(member.tier_code) || 'BRONZE'
-  const currentTier = tiers.find((x) => toText(x.code) === currentTierCode)
-  const pointRate = Number(currentTier?.point_rate || 0.01)
+  const { tierCode: currentTierCode, pointRate } = resolveMemberTierPointRate(tiers, toText(member.tier_code))
   const pointUsed = Math.max(0, Math.trunc(Number(params.pointUsed || 0)))
   const earnBreakdown = computeMemberPointEarn({
     totalAmount: params.totalAmount,

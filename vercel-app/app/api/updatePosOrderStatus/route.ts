@@ -30,6 +30,7 @@ import {
   posOrderPaymentSumFromAmounts,
 } from '@/lib/pos-order-paid-at'
 import { notifyMemberPortalPickupReady } from '@/lib/member-portal-pickup-notify'
+import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -481,6 +482,18 @@ export async function POST(req: NextRequest) {
       void notifyMemberPortalPickupReady(id).catch((notifyErr) => {
         console.error('updatePosOrderStatus member portal pickup notify:', notifyErr)
       })
+    }
+
+    if (
+      (nextStatus === 'paid' || isPosCompletionStatus(nextStatus)) &&
+      !isPosPaidLikeStatus(prevStatus) &&
+      Number(prev?.member_id || 0) > 0
+    ) {
+      try {
+        await ensurePosOrderLoyaltyApplied(id)
+      } catch (loyaltyErr) {
+        console.error('updatePosOrderStatus loyalty:', loyaltyErr)
+      }
     }
 
     return NextResponse.json({ success: true }, { headers })

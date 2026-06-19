@@ -50,6 +50,8 @@ export interface PosMenu {
   sellDelivery?: boolean
   /** 포장 주문 메뉴 노출 여부 */
   sellPackaging?: boolean
+  /** 회원앱 픽업 주문 메뉴 노출 여부 (기본은 포장과 동일) */
+  sellMember?: boolean
 }
 
 export interface PosOptionSelectionGroupConfig {
@@ -85,6 +87,8 @@ export interface PosMenuOption {
   sellDelivery?: boolean
   /** 포장에서 판매 */
   sellPackaging?: boolean
+  /** 회원앱 픽업에서 판매 */
+  sellMember?: boolean
   /** 채널별 옵션 설명 (미입력 시 default 사용) */
   descriptionDefault?: string
   descriptionDelivery?: string | null
@@ -367,6 +371,7 @@ export async function savePosMenuOption(
     sellHall?: boolean
     sellDelivery?: boolean
     sellPackaging?: boolean
+    sellMember?: boolean
     descriptionDefault?: string
     descriptionDelivery?: string | null
     descriptionTable?: string | null

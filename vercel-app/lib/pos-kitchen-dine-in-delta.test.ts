@@ -49,16 +49,18 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
     expect(filterKitchenCartLinesForDineInAdd(cart, [{ id: 'a', quantity: 1 }])).toEqual([])
   })
 
-  it('addon-only incoming cart prints lines even when menu matches existing rows', () => {
-    const cart = [
-      { id: 'cart-chicken-new', name: 'Golden Fried Chicken', price: 219, quantity: 1, menuId: '26' },
-    ]
+  it('merged save snapshot excludes stale cart duplicate but keeps new lines', () => {
     const existing = [
-      { id: 'db-c1', name: 'Golden Fried Chicken', price: 219, quantity: 2, qty: 2, menuId: '26' },
+      { id: 'db-set', name: 'SOY SAUCE BULGOGI SET', price: 250, quantity: 1, qty: 1, menuId: '44' },
     ]
-    expect(
-      filterKitchenCartLinesForDineInAdd(cart, existing, { addonOnlyIncomingCart: true })
-    ).toEqual(cart)
+    const mergedSave = [
+      ...existing,
+      { id: 'cart-stale-set', name: 'SOY SAUCE BULGOGI SET', price: 250, quantity: 1, menuId: '44' },
+      { id: 'cart-soup', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
+    ]
+    expect(filterKitchenCartLinesForDineInAdd(mergedSave, existing)).toEqual([
+      { id: 'cart-soup', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
+    ])
   })
 
   it('matches existing lines by content when cart id changed (cart-* regen)', () => {

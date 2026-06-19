@@ -1,14 +1,26 @@
 import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import { isBanbanMenu } from "@/lib/pos-banban-utils"
 
-/** 회원앱 픽업 주문에 노출할 메뉴 — POS 포장(sell_packaging)과 동일 기준 */
+function menuSellMemberAllowed(menu: PosMenu): boolean {
+  if (menu.sellMember != null) return menu.sellMember !== false
+  if (menu.sellPackaging === false) return false
+  if (isDeliveryExclusiveMenu(menu)) return false
+  return true
+}
+
+function optionSellMemberAllowed(opt: PosMenuOption): boolean {
+  if (opt.sellMember != null) return opt.sellMember !== false
+  if (opt.sellPackaging === false) return false
+  if (opt.sellDelivery === true && opt.sellHall === false && opt.sellPackaging !== true) return false
+  return true
+}
+
+/** 회원앱 픽업 주문에 노출할 메뉴 — sell_member(미설정 시 포장·배달전용 규칙 폴백) */
 export function isMemberPortalPickupMenu(menu: PosMenu, todayYmd: string): boolean {
   if (menu.isActive === false) return false
   if (isBanbanMenu(menu)) return false
   if (menu.soldOutDate && menu.soldOutDate === todayYmd) return false
-  if (menu.sellPackaging === false) return false
-  if (menu.sellHall === false && menu.sellPackaging !== true) return false
-  return true
+  return menuSellMemberAllowed(menu)
 }
 
 /** 배달 전용(포장·홀 모두 off, 배달만 on) 세트 등 */
@@ -17,11 +29,7 @@ export function isDeliveryExclusiveMenu(menu: PosMenu): boolean {
 }
 
 export function filterMemberPortalPickupOptions(options: PosMenuOption[]): PosMenuOption[] {
-  return (options || []).filter((o) => {
-    if (o.sellPackaging === false) return false
-    if (o.sellDelivery === true && o.sellHall === false && o.sellPackaging !== true) return false
-    return true
-  })
+  return (options || []).filter((o) => optionSellMemberAllowed(o))
 }
 
 export function packagingMenuBasePrice(menu: PosMenu): number {

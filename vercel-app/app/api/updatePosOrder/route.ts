@@ -4,7 +4,7 @@ import {
   supabaseSelectFilterStrippingUnknownColumns,
   supabaseUpdateByFilterWithPgrst204Fallback,
 } from '@/lib/supabase-pgrst204-retry'
-import { applyLoyaltyOnOrder } from '@/lib/members-server'
+import { applyLoyaltyOnOrder, ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolvePosOrderPaidAtStampIso, posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
@@ -79,9 +79,6 @@ export async function POST(req: NextRequest) {
     const paymentQr = normalizedTender.paymentQr
     const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
     const paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
-    const memberId = Math.max(0, Number(body?.memberId ?? 0))
-    const memberNo = String(body?.memberNo ?? '').trim()
-    const pointUsed = Math.max(0, Math.trunc(Number(body?.pointUsed ?? 0)))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
     const guestCountBody = body?.guestCount ?? body?.guest_count
     const pricingAdjustments = body?.pricingAdjustments || {}
@@ -154,6 +151,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const current = existing[0]
+
+    const memberId =
+      body?.memberId != null && body?.memberId !== ''
+        ? Math.max(0, Number(body.memberId))
+        : Math.max(0, Number(current?.member_id || 0))
+    const memberNo =
+      body?.memberNo != null && String(body.memberNo).trim() !== ''
+        ? String(body.memberNo).trim()
+        : String(current?.member_no || '').trim()
+    const pointUsed =
+      body?.pointUsed != null && body?.pointUsed !== ''
+        ? Math.max(0, Math.trunc(Number(body.pointUsed)))
+        : Math.max(0, Math.trunc(Number(current?.point_used || 0)))
 
     const memo = preserveGrabDeliveryMemoAnchor(String(body?.memo ?? ''), String(current?.memo ?? ''))
 
@@ -436,6 +446,9 @@ export async function POST(req: NextRequest) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
         point_earned: pointEarned,
       })
+    } else if (paymentComplete && previousEarned <= 0) {
+      const ensured = await ensurePosOrderLoyaltyApplied(id)
+      if (ensured > 0) pointEarned = ensured
     }
 
     if (appliedCoupons.length > 0 && paymentSum > 0) {

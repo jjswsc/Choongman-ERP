@@ -57,6 +57,7 @@ export type PosMenuUpsertApiBody = {
   sellHall?: boolean
   sellDelivery?: boolean
   sellPackaging?: boolean
+  sellMember?: boolean
   /** 원가 계산기 배달앱 수수료(%) — 0 허용, null이면 DB NULL(앱 기본 25%) */
   deliveryAppFeePercent?: number | null
   id?: string
@@ -176,6 +177,8 @@ export function buildPosMenuUpsertRow(
     row.sell_hall = body.sellHall !== false
     row.sell_delivery = body.sellDelivery !== false
     row.sell_packaging = body.sellPackaging !== false
+    row.sell_member =
+      'sellMember' in body ? body.sellMember !== false : body.sellPackaging !== false
     row.description_default = String(body.descriptionDefault ?? '').trim()
     const vDel = body.descriptionDelivery
     row.description_delivery = vDel == null ? null : String(vDel).trim()
@@ -227,6 +230,7 @@ export function buildPosMenuUpsertRow(
   if ('sellHall' in body) row.sell_hall = body.sellHall !== false
   if ('sellDelivery' in body) row.sell_delivery = body.sellDelivery !== false
   if ('sellPackaging' in body) row.sell_packaging = body.sellPackaging !== false
+  if ('sellMember' in body) row.sell_member = body.sellMember !== false
   if (opts.hasDescriptionDefault) {
     row.description_default = String(body.descriptionDefault ?? '').trim()
   }
@@ -1041,7 +1045,8 @@ export async function upsertPosMenuFromBody(
         hasDescriptionTable ||
         'sellHall' in body ||
         'sellDelivery' in body ||
-        'sellPackaging' in body) &&
+        'sellPackaging' in body ||
+        'sellMember' in body) &&
       (err.includes('option_selection_groups') ||
         err.includes('option_selection_config') ||
         err.includes('kitchen_printer') ||
@@ -1053,6 +1058,7 @@ export async function upsertPosMenuFromBody(
         err.includes('sell_hall') ||
         err.includes('sell_delivery') ||
         err.includes('sell_packaging') ||
+        err.includes('sell_member') ||
         err.includes('42703'))
     ) {
       const rowWithout = { ...baseRow }
@@ -1067,6 +1073,7 @@ export async function upsertPosMenuFromBody(
       delete rowWithout.sell_hall
       delete rowWithout.sell_delivery
       delete rowWithout.sell_packaging
+      delete rowWithout.sell_member
       const result = await doSave(rowWithout)
       if (result.success && itemsSyncCode && 'price' in body) {
         const newPrice = Number(body.price ?? 0)
