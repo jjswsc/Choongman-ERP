@@ -35,17 +35,15 @@ import { memberPortalOrderStatusLabelKey } from "@/lib/member-portal-orders-list
 import { mpGlassCard, mpGlassCardSoft, MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE, mpCardListItemClass, mpCardSearchInputClass } from "@/lib/member-portal-design"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { isBanbanMenu } from "@/lib/pos-banban-utils"
 import {
-  collectPosOptionPickerStepValues,
-  resolvePosOptionPickerMatch,
-} from "@/lib/pos-option-picker-resolve"
-import {
-  filterOptionSelectionGroupsForAudience,
-  filterPosOptionsForVisibleGroups,
-  inferOptionSelectionGroupsFromOptions,
-  resolveStepAudienceFromOrderType,
-} from "@/lib/pos-option-selection-groups"
+  filterMemberPortalPickupOptions,
+  isDeliveryExclusiveMenu,
+  isMemberPortalPickupMenu,
+  packagingMenuBasePrice,
+  packagingOptionPriceModifier,
+  resolvePickupMenuListPriceLabel,
+} from "@/lib/member-portal-pickup-menu-filter"
+import { MemberPortalPickupOptionSheet } from "@/components/member-portal/member-portal-pickup-option-sheet"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
 import {
@@ -85,15 +83,6 @@ type CartLine = {
   qty: number
 }
 
-function packagingMenuPrice(menu: PosMenu): number {
-  return Math.max(0, Number(menu.price || 0))
-}
-
-function packagingOptionModifier(opt: PosMenuOption): number {
-  if (opt.priceModifierPackaging != null) return Number(opt.priceModifierPackaging)
-  return Number(opt.priceModifier || 0)
-}
-
 function cartLineKey(menuId: string, optionId?: string): string {
   return `${menuId}:${optionId || ""}`
 }
@@ -123,6 +112,7 @@ type PickupMenuCatalogProps = {
   activeSubCategory: string
   subCategoriesForMain: string[]
   menuListSections: MenuListSection[]
+  optionsByMenuId: Record<string, PosMenuOption[]>
   onSelectMainCategory: (main: string) => void
   onSelectAllCategories: () => void
   onSelectSubCategory: (sub: string) => void
@@ -139,6 +129,7 @@ const PickupMenuCatalog = React.memo(function PickupMenuCatalog({
   activeSubCategory,
   subCategoriesForMain,
   menuListSections,
+  optionsByMenuId,
   onSelectMainCategory,
   onSelectAllCategories,
   onSelectSubCategory,
@@ -230,7 +221,11 @@ const PickupMenuCatalog = React.memo(function PickupMenuCatalog({
                           <div className="min-w-0 flex-1">
                             <p className="text-[15px] font-medium leading-snug text-neutral-900">{menu.name}</p>
                             <p className="mt-1 text-sm font-semibold text-neutral-800">
-                              {formatBaht(Number(menu.price || 0))}
+                              {resolvePickupMenuListPriceLabel(
+                                menu,
+                                optionsByMenuId[String(menu.id)] || [],
+                                formatBaht
+                              )}
                             </p>
                           </div>
                           <button
@@ -399,6 +394,7 @@ type MemberPortalOrderTabProps = {
   favoriteStoreCodes: string[]
   contentItems?: MemberPortalContentItem[]
   onSelectContentItem?: (item: MemberPortalContentItem) => void
+  onBottomNavSuppressChange?: (suppressed: boolean) => void
 }
 
 async function postMemberOrder(body: Record<string, unknown>) {
@@ -419,6 +415,7 @@ export function MemberPortalOrderTab({
   favoriteStoreCodes,
   contentItems = [],
   onSelectContentItem,
+  onBottomNavSuppressChange,
 }: MemberPortalOrderTabProps) {
   const primaryFavoriteStoreCode = favoriteStoreCodes[0] || ""
   const [view, setView] = React.useState<OrderView>("hub")
@@ -436,8 +433,6 @@ export function MemberPortalOrderTab({
   const [menusLoading, setMenusLoading] = React.useState(false)
   const [cart, setCart] = React.useState<CartLine[]>([])
   const [optionPickerMenu, setOptionPickerMenu] = React.useState<PosMenu | null>(null)
-  const [optionPickerStep, setOptionPickerStep] = React.useState(0)
-  const [optionPickerSelections, setOptionPickerSelections] = React.useState<Record<string, string>>({})
   const [submitting, setSubmitting] = React.useState(false)
   const [orderMessage, setOrderMessage] = React.useState("")
   const [orderError, setOrderError] = React.useState("")
@@ -533,11 +528,7 @@ export function MemberPortalOrderTab({
 
   const packagingMenus = React.useMemo(() => {
     return menus.filter(
-      (m) =>
-        m.isActive !== false &&
-        m.sellPackaging !== false &&
-        (!m.soldOutDate || m.soldOutDate !== todayStr) &&
-        !isBanbanMenu(m)
+      (m) => isMemberPortalPickupMenu(m, todayStr) && !isDeliveryExclusiveMenu(m)
     )
   }, [menus, todayStr])
 
@@ -622,7 +613,7 @@ export function MemberPortalOrderTab({
     setOrderError("")
     try {
       const [rows, opts, cats] = await Promise.all([
-        getPosMenus({ storeCode, fresh: true }),
+        getPosMenus({ storeCode, fresh: true, strictStoreScope: true }),
         getPosMenuOptions({ fresh: true }),
         getPosMenuCategories(),
       ])
@@ -653,8 +644,6 @@ export function MemberPortalOrderTab({
     setMenus([])
     setMenuOptions([])
     setOptionPickerMenu(null)
-    setOptionPickerStep(0)
-    setOptionPickerSelections({})
     setActiveMainCategory("")
     setActiveSubCategory("")
     setCatalogMainCategories([])
@@ -667,19 +656,20 @@ export function MemberPortalOrderTab({
 
   const closeOptionPicker = () => {
     setOptionPickerMenu(null)
-    setOptionPickerStep(0)
-    setOptionPickerSelections({})
   }
 
-  const addToCart = React.useCallback((menu: PosMenu, opt: PosMenuOption | null) => {
-    const price = packagingMenuPrice(menu) + (opt ? packagingOptionModifier(opt) : 0)
-    const rawOptId = opt ? String(opt.id || "").trim() : ""
-    const optionId = rawOptId && /^\d+$/.test(rawOptId) ? rawOptId : undefined
-    const optionCode = opt?.optionCode ? String(opt.optionCode).trim() : undefined
-    const name = opt
-      ? `${String(menu.name || "")} (${String(opt.name || "")})`
-      : String(menu.name || "")
-    const key = cartLineKey(String(menu.id), optionId || optionCode || "")
+  const addToCart = React.useCallback(
+    (menu: PosMenu, opt: PosMenuOption | null, defaultDisplay?: string) => {
+      const price = packagingMenuBasePrice(menu) + (opt ? packagingOptionPriceModifier(opt) : 0)
+      const rawOptId = opt ? String(opt.id || "").trim() : ""
+      const optionId = rawOptId && /^\d+$/.test(rawOptId) ? rawOptId : undefined
+      const optionCode = opt?.optionCode ? String(opt.optionCode).trim() : undefined
+      const name = opt
+        ? `${String(menu.name || "")} (${String(opt.name || "")})`
+        : defaultDisplay
+          ? `${String(menu.name || "")} (${defaultDisplay})`
+          : String(menu.name || "")
+      const key = cartLineKey(String(menu.id), optionId || optionCode || defaultDisplay || "")
     setCart((prev) => {
       const idx = prev.findIndex((l) => l.cartKey === key)
       if (idx >= 0) {
@@ -701,23 +691,33 @@ export function MemberPortalOrderTab({
       ]
     })
     setOptionPickerMenu(null)
-    setOptionPickerStep(0)
-    setOptionPickerSelections({})
-  }, [])
+  },
+    []
+  )
 
   const handleMenuAdd = React.useCallback(
     (menu: PosMenu) => {
-      const groups = menu.optionSelectionGroups
-      if (Array.isArray(groups) && groups.length > 0) {
+      const opts = filterMemberPortalPickupOptions(optionsByMenuId[String(menu.id)] || [])
+      const hasSubstitution = opts.some((o) => o.optionType === "substitution")
+      if (hasSubstitution) {
         setOptionPickerMenu(menu)
-        setOptionPickerStep(0)
-        setOptionPickerSelections({})
         return
       }
       addToCart(menu, null)
     },
-    [addToCart]
+    [addToCart, optionsByMenuId]
   )
+
+  const bottomNavSuppressed =
+    Boolean(optionPickerMenu) ||
+    cartSheetOpen ||
+    cartConfirmOpen ||
+    checkoutOpen ||
+    memberNoticeOpen
+
+  React.useEffect(() => {
+    onBottomNavSuppressChange?.(bottomNavSuppressed)
+  }, [bottomNavSuppressed, onBottomNavSuppressChange])
 
   const selectAllCategories = React.useCallback(() => {
     setActiveMainCategory("")
@@ -1304,8 +1304,8 @@ export function MemberPortalOrderTab({
           </div>
 
           <div
-            className={`-mx-4 overflow-hidden rounded-t-[1.75rem] bg-white text-neutral-900 shadow-[0_-10px_40px_rgba(0,0,0,0.35)] ${
-              cart.length > 0 ? "pb-28" : ""
+            className={`-mx-4 rounded-t-[1.75rem] bg-white text-neutral-900 shadow-[0_-10px_40px_rgba(0,0,0,0.35)] ${
+              cart.length > 0 ? "pb-28" : "pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))]"
             }`}
           >
             <PickupMenuCatalog
@@ -1317,6 +1317,7 @@ export function MemberPortalOrderTab({
               activeSubCategory={activeSubCategory}
               subCategoriesForMain={subCategoriesForMain}
               menuListSections={menuListSections}
+              optionsByMenuId={optionsByMenuId}
               onSelectAllCategories={selectAllCategories}
               onSelectMainCategory={selectMainCategory}
               onSelectSubCategory={selectSubCategory}
@@ -1358,7 +1359,7 @@ export function MemberPortalOrderTab({
 
               {cartSheetOpen ? (
                 <div
-                  className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+                  className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm"
                   role="presentation"
                   onClick={() => setCartSheetOpen(false)}
                 >
@@ -1514,177 +1515,20 @@ export function MemberPortalOrderTab({
         </>
       )}
 
-      {optionPickerMenu ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-0 backdrop-blur-sm sm:items-center sm:px-5">
-          <div className="flex max-h-[85vh] w-full max-w-md flex-col rounded-t-[28px] border border-white/10 bg-[#121214] shadow-2xl sm:rounded-[28px]">
-            {(() => {
-              const menu = optionPickerMenu
-              const opts = optionsByMenuId[String(menu.id)] || []
-              const stepAudience = resolveStepAudienceFromOrderType("takeout")
-              const groupConfigMap = new Map(
-                (menu.optionSelectionConfig || [])
-                  .map((cfg) => [String(cfg?.key ?? "").trim(), cfg] as const)
-                  .filter(([k]) => !!k)
-              )
-              const fallbackGroups = inferOptionSelectionGroupsFromOptions(opts, menu.code)
-              const configuredGroups =
-                (menu.optionSelectionGroups || []).length > 0
-                  ? menu.optionSelectionGroups || []
-                  : fallbackGroups
-              const groups = filterOptionSelectionGroupsForAudience(
-                configuredGroups,
-                groupConfigMap,
-                stepAudience
-              )
-              const visibleGroupKeys = new Set(groups)
-              const optsFiltered = filterPosOptionsForVisibleGroups(
-                opts.filter((o) => o.sellPackaging !== false),
-                visibleGroupKeys
-              )
-              const optsWithSteps = optsFiltered.filter(
-                (o) =>
-                  o.optionType === "substitution" &&
-                  o.optionStepValues &&
-                  Object.keys(o.optionStepValues).length > 0
-              )
-              const isChickenBase =
-                (menu.categoryMain ?? "") === "Chicken" ||
-                String(menu.code || "")
-                  .trim()
-                  .toLowerCase()
-                  .startsWith("c")
-              const useMultiStep = groups.length > 0 && optsWithSteps.length > 0
-
-              if (!useMultiStep) {
-                const flatOpts = optsFiltered.filter((o) => o.optionType === "substitution")
-                return (
-                  <>
-                    <div className="border-b border-white/10 px-5 py-4">
-                      <p className="font-semibold text-white">{menu.name}</p>
-                      <p className="text-xs text-white/45">{t("orderSelectOption")}</p>
-                    </div>
-                    <div className="space-y-2 overflow-y-auto px-5 py-4">
-                      {flatOpts.length === 0 ? (
-                        <Button
-                          type="button"
-                          className="h-11 w-full rounded-2xl bg-amber-400 font-semibold text-black hover:bg-amber-300"
-                          onClick={() => addToCart(menu, null)}
-                        >
-                          {t("orderAdd")}
-                        </Button>
-                      ) : (
-                        flatOpts.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => addToCart(menu, opt)}
-                            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:border-amber-400/30 hover:bg-white/[0.06]"
-                          >
-                            <span className="text-sm text-white/90">{opt.name}</span>
-                            <span className="shrink-0 text-sm font-semibold text-amber-200">
-                              {formatBaht(packagingMenuPrice(menu) + packagingOptionModifier(opt))}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                    <div className="border-t border-white/10 p-4">
-                      <Button type="button" variant="outline" className="w-full rounded-2xl border-white/15" onClick={closeOptionPicker}>
-                        {t("orderBack")}
-                      </Button>
-                    </div>
-                  </>
-                )
-              }
-
-              const groupKey = groups[optionPickerStep]
-              const values = collectPosOptionPickerStepValues({
-                groupKey,
-                groups,
-                menuCode: menu.code,
-                options: opts,
-                optionsWithSteps: optsWithSteps,
-                isChickenMenu: isChickenBase,
-              })
-
-              const handleStepSelect = (value: string) => {
-                const next = { ...optionPickerSelections, [groupKey]: value }
-                setOptionPickerSelections(next)
-                if (optionPickerStep >= groups.length - 1) {
-                  const match = resolvePosOptionPickerMatch({
-                    menuCode: menu.code,
-                    storeCode: pickupStore,
-                    optionSelectionGroups: menu.optionSelectionGroups,
-                    groups,
-                    selections: next,
-                    optionsWithSteps: optsWithSteps,
-                    allOptions: opts,
-                    groupConfigByKey: groupConfigMap,
-                  })
-                  if (match) {
-                    addToCart(menu, match)
-                  } else {
-                    setOrderError(t("orderSubmitFail"))
-                    closeOptionPicker()
-                  }
-                } else {
-                  setOptionPickerStep((s) => s + 1)
-                }
-              }
-
-              return (
-                <>
-                  <div className="border-b border-white/10 px-5 py-4">
-                    <p className="font-semibold text-white">{menu.name}</p>
-                    <p className="text-xs text-white/45">
-                      {t("orderSelectOption")} ·{" "}
-                      {t("orderOptionStep", {
-                        step: String(optionPickerStep + 1),
-                        total: String(groups.length),
-                      })}
-                    </p>
-                  </div>
-                  <div className="space-y-2 overflow-y-auto px-5 py-4">
-                    {values.map((value) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => handleStepSelect(value)}
-                        className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-white/90 transition hover:border-amber-400/30 hover:bg-white/[0.06]"
-                      >
-                        {value}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 border-t border-white/10 p-4">
-                    {optionPickerStep > 0 ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="flex-1 rounded-2xl border-white/15"
-                        onClick={() => setOptionPickerStep((s) => Math.max(0, s - 1))}
-                      >
-                        {t("orderOptionBack")}
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="flex-1 rounded-2xl border-white/15"
-                      onClick={closeOptionPicker}
-                    >
-                      {t("orderBack")}
-                    </Button>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      ) : null}
+      <MemberPortalPickupOptionSheet
+        open={Boolean(optionPickerMenu)}
+        menu={optionPickerMenu}
+        options={filterMemberPortalPickupOptions(
+          optionPickerMenu ? optionsByMenuId[String(optionPickerMenu.id)] || [] : []
+        )}
+        storeCode={pickupStore}
+        onClose={closeOptionPicker}
+        onAdd={(menu, opt, defaultDisplay) => addToCart(menu, opt, defaultDisplay)}
+        t={t}
+      />
 
       {memberNoticeOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-[28px] border border-amber-400/25 bg-[#121214] p-6 shadow-2xl">
             <p className="text-center text-lg font-bold text-amber-100">{t("orderMemberNoticeTitle")}</p>
             <p className="mt-3 text-center text-sm leading-relaxed text-white/65">{t("orderMemberNoticeBody")}</p>

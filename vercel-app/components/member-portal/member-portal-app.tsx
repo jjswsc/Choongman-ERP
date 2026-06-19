@@ -206,6 +206,11 @@ export function MemberPortalApp() {
   const [phone, setPhone] = React.useState("")
   const [birthDate, setBirthDate] = React.useState("")
   const [tab, setTab] = React.useState<PortalTab>("home")
+  const [orderBottomNavSuppressed, setOrderBottomNavSuppressed] = React.useState(false)
+
+  React.useEffect(() => {
+    if (tab !== "order") setOrderBottomNavSuppressed(false)
+  }, [tab])
   const [, startTabTransition] = React.useTransition()
   const changeTab = React.useCallback(
     (next: PortalTab) => {
@@ -1188,6 +1193,7 @@ export function MemberPortalApp() {
             stores={stores}
             favoriteStoreCodes={favoriteStoreCodes}
             contentItems={contentItems}
+            onBottomNavSuppressChange={setOrderBottomNavSuppressed}
             onSelectContentItem={(item) => {
               setHomePopupOpen(false)
               setSelectedHomePromo(item)
@@ -1448,7 +1454,13 @@ export function MemberPortalApp() {
         )}
       </MemberPortalShell>
 
-      <PremiumBottomNav tab={tab} onChange={changeTab} items={navItems} embedPreview={embedPreview} />
+      <PremiumBottomNav
+        tab={tab}
+        onChange={changeTab}
+        items={navItems}
+        embedPreview={embedPreview}
+        hidden={orderBottomNavSuppressed}
+      />
 
       <MemberPortalContentSheet
         open={homePromoOpen}

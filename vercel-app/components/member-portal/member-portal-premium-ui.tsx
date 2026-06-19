@@ -350,14 +350,18 @@ export function PremiumBottomNav({
   onChange,
   items,
   embedPreview = false,
+  hidden = false,
 }: {
   tab: PortalTab
   onChange: (tab: PortalTab) => void
   items: Array<{ id: PortalTab; label: string; icon: LucideIcon }>
   embedPreview?: boolean
+  hidden?: boolean
 }) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
+
+  if (hidden) return null
 
   const nav = (
     <nav

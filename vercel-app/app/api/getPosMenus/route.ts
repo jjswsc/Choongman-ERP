@@ -35,6 +35,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const requestedStoreCode = String(searchParams.get('storeCode') ?? '').trim()
+    const strictStoreScope =
+      searchParams.get('strictStoreScope') === '1' || searchParams.get('memberPortal') === '1'
     const menuScopeCompatibilityMode = String(process.env.POS_MENU_SCOPE_COMPATIBILITY_MODE ?? '1') !== '0'
     try {
       await runDuePriceSchedules(new Date())
@@ -269,9 +271,13 @@ export async function GET(request: Request) {
       }]
     })
 
-    // 매장 코드 표기 차이(레거시 별칭, CM 접두 유무 등)로 필터 결과가 0건이면
-    // POS 빈 화면을 막기 위해 1회 전체 목록 폴백을 허용한다.
-    if (requestedStoreCode && list.length === 0 && (typedRows || []).length > 0) {
+    // 매장 코드 표기 차이로 필터 결과가 0건이면 POS 빈 화면 방지용 1회 폴백(회원앱 strictStoreScope 제외)
+    if (
+      !strictStoreScope &&
+      requestedStoreCode &&
+      list.length === 0 &&
+      (typedRows || []).length > 0
+    ) {
       const fallbackList = (typedRows || []).map((row) => {
         const rowMenuId = Number(row.id || 0)
         const scopedStores = normalizeMenuScopeStoreCodes(

@@ -112,6 +112,16 @@ export type MemberPortalKey =
   | 'orderSelectOption'
   | 'orderOptionBack'
   | 'orderOptionStep'
+  | 'orderOptionGroupSize'
+  | 'orderOptionGroupPart'
+  | 'orderPickSizeThenSide'
+  | 'orderOptionDefault'
+  | 'orderOptional'
+  | 'orderSkip'
+  | 'orderBackToSize'
+  | 'orderOptionStepMismatchFallback'
+  | 'orderAddWithoutOption'
+  | 'orderCancelOption'
   | 'orderBanbanNote'
   | 'orderAdd'
   | 'orderCartTitle'
@@ -670,6 +680,24 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'ขั้นที่ {step}/{total}',
     ko: '{step}/{total} 단계',
   },
+  orderOptionGroupSize: { en: 'Size', th: 'ไซส์', ko: '사이즈' },
+  orderOptionGroupPart: { en: 'Part', th: 'ส่วน', ko: '부위' },
+  orderPickSizeThenSide: {
+    en: '1. Choose size → 2. Choose side',
+    th: '1. เลือกไซส์ → 2. เลือกเครื่องเคียง',
+    ko: '1. 사이즈 선택 → 2. 사이드 선택',
+  },
+  orderOptionDefault: { en: 'Default (S Boneless)', th: 'ค่าเริ่มต้น (S Boneless)', ko: '기본 (S 순살)' },
+  orderOptional: { en: 'optional', th: 'ไม่บังคับ', ko: '선택' },
+  orderSkip: { en: 'Skip', th: 'ข้าม', ko: '건너뛰기' },
+  orderBackToSize: { en: 'Back to size', th: 'กลับไปเลือกไซส์', ko: '사이즈로 돌아가기' },
+  orderOptionStepMismatchFallback: {
+    en: 'Showing the standard option list because step settings do not match.',
+    th: 'แสดงรายการตัวเลือกมาตรฐานเพราะการตั้งค่าขั้นตอนไม่ตรงกัน',
+    ko: '단계 설정이 맞지 않아 일반 옵션 목록으로 표시합니다.',
+  },
+  orderAddWithoutOption: { en: 'Add without option', th: 'เพิ่มโดยไม่เลือกตัวเลือก', ko: '옵션 없이 담기' },
+  orderCancelOption: { en: 'Cancel', th: 'ยกเลิก', ko: '취소' },
   orderBanbanNote: {
     en: 'Half-and-half menu — order at the store.',
     th: 'เมนูครึ่งๆ — สั่งที่ร้าน',

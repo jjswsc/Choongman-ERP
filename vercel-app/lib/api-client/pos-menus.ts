@@ -161,10 +161,16 @@ export interface PosOrderPackagingChecklistGroup {
   }[]
 }
 
-export async function getPosMenus(params?: { fresh?: boolean; storeCode?: string | null }) {
+export async function getPosMenus(params?: {
+  fresh?: boolean
+  storeCode?: string | null
+  /** 회원앱 픽업 — 매장 스코프 0건이어도 전체 메뉴로 폴백하지 않음 */
+  strictStoreScope?: boolean
+}) {
   const storeCode = String(params?.storeCode || '').trim()
   const q = new URLSearchParams()
   if (storeCode) q.set('storeCode', storeCode)
+  if (params?.strictStoreScope) q.set('strictStoreScope', '1')
   const url = '/api/getPosMenus' + (q.toString() ? `?${q.toString()}` : '')
   const cacheKey = posMenusCatalogCacheKey(storeCode || null)
   if (params?.fresh) {
