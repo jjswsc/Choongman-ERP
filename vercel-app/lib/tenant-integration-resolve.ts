@@ -248,10 +248,16 @@ async function shouldResolveTenantIdForStoreCode(): Promise<boolean> {
   }
 }
 
+/**
+ * erp_stores.tenant_id 컬럼이 없는 DB(충만 레거시)를 한 번 만나면 캐시.
+ * 브랜드 env·SUPABASE_URL 오설정으로 가드가 뚫려도, 프로세스당 최대 1회만 조회→이후 영구 스킵(42703 로그 폭주 방지).
+ */
+let erpStoresTenantIdColumnMissing = false
+
 /** erp_stores.store_code → tenant_id (SaaS 매장). 충만 등 레거시 DB는 조회하지 않음 */
 export async function resolveTenantIdForStoreCode(storeCode: string): Promise<string | undefined> {
   const code = String(storeCode || '').trim()
-  if (!code || isLegacyChoongmanErpSupabase()) return undefined
+  if (!code || erpStoresTenantIdColumnMissing || isLegacyChoongmanErpSupabase()) return undefined
   if (!(await shouldResolveTenantIdForStoreCode())) return undefined
   try {
     const { supabaseSelectFilter } = await import('@/lib/supabase-server')
@@ -261,7 +267,11 @@ export async function resolveTenantIdForStoreCode(storeCode: string): Promise<st
     })) as { tenant_id?: string | null }[] | null
     const tenantId = String(rows?.[0]?.tenant_id || '').trim()
     return tenantId || undefined
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/42703|tenant_id.*does not exist|column.*tenant_id/i.test(msg)) {
+      erpStoresTenantIdColumnMissing = true
+    }
     return undefined
   }
 }

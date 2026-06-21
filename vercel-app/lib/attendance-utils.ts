@@ -154,7 +154,7 @@ export function attendancePendingApprovalPostgrestFilter(prefixFilter?: string):
     `status.like.${encodeURIComponent('*승인대기*')}`,
     `status.like.${encodeURIComponent('*강제퇴근*')}`,
   ].join(',')
-  const core = `and=(approved.eq.${pendingEq},or=(${statusOr}))`
+  const core = `and=(approved.eq.${pendingEq},or(${statusOr}))`
   const prefix = String(prefixFilter || '').trim()
   return prefix ? `${prefix}&${core}` : core
 }
