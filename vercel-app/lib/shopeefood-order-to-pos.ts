@@ -2,7 +2,8 @@
  * ShopeeFood 주문 페이로드 → pos_orders 적재 (배달)
  */
 
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { logShopeeFoodEvent } from '@/lib/shopeefood-webhook'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
@@ -278,7 +279,7 @@ export async function persistShopeeFoodOrderToPos(params: {
     delivery_app_code: 'shopee',
   }
 
-  const inserted = (await supabaseInsert('pos_orders', row)) as { id?: number }[]
+  const inserted = (await supabaseInsertWithPgrst204Fallback('pos_orders', row, 'shopeeFoodOrderToPos')) as { id?: number }[]
   const created = Array.isArray(inserted) ? inserted[0] : inserted
   if (!created?.id) {
     return { ok: false, message: 'insert failed' }

@@ -94,11 +94,14 @@ export async function resolvePosStoreFilterCandidates(rawStore: string): Promise
 
   let integrationRows: GrabIntegrationRow[] = []
   try {
-    integrationRows = (await supabaseSelect('pos_grab_store_integrations', {
-      order: 'updated_at.desc',
-      limit: 500,
-      select: 'grab_merchant_id,partner_merchant_id,integration_status',
-    })) as GrabIntegrationRow[]
+    const { isServerSaasBrand } = await import('@/lib/app-brand-server')
+    if (await isServerSaasBrand()) {
+      integrationRows = (await supabaseSelect('pos_grab_store_integrations', {
+        order: 'updated_at.desc',
+        limit: 500,
+        select: 'grab_merchant_id,partner_merchant_id,integration_status',
+      })) as GrabIntegrationRow[]
+    }
   } catch {
     integrationRows = []
   }

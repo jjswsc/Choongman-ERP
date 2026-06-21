@@ -237,10 +237,28 @@ export async function resolveTenantIdByGrabLookup(seed: string): Promise<string 
 
 export { parseGrabPartnerApiMenuMerchantMap }
 
+/** 충만 레거시 Supabase — erp_stores.tenant_id 없음 (브랜드 env 오설정과 무관하게 차단) */
+function isLegacyChoongmanSupabase(): boolean {
+  const url = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '')
+    .trim()
+    .toLowerCase()
+  return url.includes('faxolqgaadcvyeyvrydc')
+}
+
+async function shouldResolveTenantIdForStoreCode(): Promise<boolean> {
+  if (isLegacyChoongmanSupabase()) return false
+  try {
+    const { isServerSaasBrand } = await import('@/lib/app-brand-server')
+    return await isServerSaasBrand()
+  } catch {
+    return isSaasBrand()
+  }
+}
+
 /** erp_stores.store_code → tenant_id (SaaS 매장). 충만 등 레거시 DB는 조회하지 않음 */
 export async function resolveTenantIdForStoreCode(storeCode: string): Promise<string | undefined> {
   const code = String(storeCode || '').trim()
-  if (!code || !isSaasBrand()) return undefined
+  if (!code || !(await shouldResolveTenantIdForStoreCode())) return undefined
   try {
     const { supabaseSelectFilter } = await import('@/lib/supabase-server')
     const rows = (await supabaseSelectFilter('erp_stores', `store_code=eq.${encodeURIComponent(code)}`, {

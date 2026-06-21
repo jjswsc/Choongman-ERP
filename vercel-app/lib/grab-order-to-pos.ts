@@ -1,4 +1,8 @@
-import { supabaseInsert, supabaseSelect, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  supabaseInsertWithPgrst204Fallback,
+  supabaseUpdateByFilterWithPgrst204Fallback,
+} from '@/lib/supabase-pgrst204-retry'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { consumeDeliveryMenuStockByName } from '@/lib/pos-delivery-policy'
@@ -1212,7 +1216,7 @@ export async function persistGrabOrderToPos(
         (oldOptCount === 0 && newOptCount > 0) ||
         JSON.stringify(oldItems) !== JSON.stringify(snapshot.items))
     if (shouldRefreshItems) {
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(existing[0].id)}`, {
+      await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${Number(existing[0].id)}`, {
         items_json: JSON.stringify(snapshot.items),
         subtotal: snapshot.subtotal,
         discount_amt: snapshot.discountAmt,
@@ -1223,7 +1227,7 @@ export async function persistGrabOrderToPos(
         total: snapshot.total,
         payment_cash: snapshot.paymentCash,
         payment_delivery_app: snapshot.paymentDeliveryApp,
-      })
+      }, 'grabOrderToPos:refreshItems')
     }
     return {
       ok: true,
@@ -1268,7 +1272,7 @@ export async function persistGrabOrderToPos(
     delivery_app_code: 'grab',
   }
 
-  const inserted = (await supabaseInsert('pos_orders', row)) as { id?: number }[]
+  const inserted = (await supabaseInsertWithPgrst204Fallback('pos_orders', row, 'grabOrderToPos')) as { id?: number }[]
   const created = Array.isArray(inserted) ? inserted[0] : inserted
   if (!created?.id) return { ok: false, message: 'insert failed' }
 
@@ -1399,13 +1403,13 @@ export async function syncGrabOrderStateToPos(params: {
   let statusUpdated = false
   const prevStatus = String(row.status ?? '').trim().toLowerCase()
   if (nextStatus && canApplyGrabStatusTransition(prevStatus, nextStatus)) {
-    await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(row.id)}`, {
+    await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${Number(row.id)}`, {
       status: nextStatus,
       ...(memoChanged ? { memo: mergedMemo } : {}),
-    })
+    }, 'grabOrderToPos:status')
     statusUpdated = true
   } else if (memoChanged) {
-    await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(row.id)}`, { memo: mergedMemo })
+    await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${Number(row.id)}`, { memo: mergedMemo }, 'grabOrderToPos:memo')
   }
 
   const updated = statusUpdated || memoChanged

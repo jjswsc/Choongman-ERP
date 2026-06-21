@@ -47,3 +47,9 @@ export async function getServerAppBrandConfig(): Promise<AppBrandConfig> {
   const key = await resolveBrandKey()
   return getAppBrandConfigForKey(key)
 }
+
+/** 서버 API·웹훅 — Host/x-app-brand 기준 SaaS(Omni) 여부 */
+export async function isServerSaasBrand(): Promise<boolean> {
+  const brand = await getServerAppBrandConfig()
+  return brand.key === "omnifoodtech"
+}
