@@ -334,6 +334,27 @@ export async function supabaseInsert(table: string, row: Record<string, unknown>
   return text ? (JSON.parse(text) as unknown) : []
 }
 
+/** INSERT — unique 충돌 시 무시(PostgREST resolution=ignore-duplicates). dedupe 큐 등 */
+export async function supabaseInsertIgnoreDuplicates(table: string, row: Record<string, unknown>): Promise<void> {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
+  const res = await supabaseFetch(pathStr, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=ignore-duplicates,return=minimal',
+    },
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    if (/duplicate key value|23505/i.test(text)) return
+    throw new Error('Supabase insert failed: ' + text)
+  }
+}
+
 /**
  * PostgREST upsert — on_conflict 열이 이미 있으면 본문 필드로 병합(갱신).
  * pos_printer_settings(store_code PK) 저장 등 INSERT/UPDATE 분기 실패를 막기 위해 사용.

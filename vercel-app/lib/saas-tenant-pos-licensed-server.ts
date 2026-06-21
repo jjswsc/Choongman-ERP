@@ -1,4 +1,6 @@
 import { supabaseSelect, supabaseSelectFilter, supabaseUpsertMerge } from "@/lib/supabase-server"
+import { isLegacyChoongmanErpSupabase } from "@/lib/erp-legacy-supabase"
+import { resolveTenantIdForStoreCode } from "@/lib/tenant-integration-resolve"
 import {
   normalizePosDeviceBillingBasis,
   sumLicensedPosFromStoreRows,
@@ -14,6 +16,7 @@ type PrinterRow = {
 
 export async function loadLicensedPosByTenant(): Promise<Map<string, number>> {
   const out = new Map<string, number>()
+  if (isLegacyChoongmanErpSupabase()) return out
   try {
     const stores = (await supabaseSelect("erp_stores", { limit: 5000, select: "tenant_id,store_code" })) as StoreRow[]
     if (!Array.isArray(stores) || stores.length === 0) return out
@@ -49,22 +52,13 @@ export async function loadLicensedPosByTenant(): Promise<Map<string, number>> {
 }
 
 export async function resolveTenantIdForStore(storeCode: string): Promise<string | null> {
-  const code = String(storeCode || "").trim()
-  if (!code) return null
-  try {
-    const rows = (await supabaseSelectFilter("erp_stores", `store_code=eq.${encodeURIComponent(code)}`, {
-      limit: 1,
-      select: "tenant_id",
-    })) as StoreRow[]
-    const tenantId = String(rows?.[0]?.tenant_id || "").trim()
-    return tenantId || null
-  } catch {
-    return null
-  }
+  const tenantId = await resolveTenantIdForStoreCode(storeCode)
+  return tenantId || null
 }
 
 /** ERP 단말 설정 저장 후 SaaS 한도(max_pos_devices) 동기화 — erp_admin 기준 테넌트만 */
 export async function syncTenantMaxPosFromErpAdmin(storeCode: string): Promise<void> {
+  if (isLegacyChoongmanErpSupabase()) return
   const tenantId = await resolveTenantIdForStore(storeCode)
   if (!tenantId) return
 

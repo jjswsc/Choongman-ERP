@@ -1,4 +1,4 @@
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsertIgnoreDuplicates, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 type EnqueueKitchenPrintJobInput = {
   storeCode: string
@@ -33,7 +33,7 @@ export async function enqueueKitchenPrintJob(input: EnqueueKitchenPrintJobInput)
     String(input.dedupeKey ?? '').trim() || `order:${orderId}:kitchen:${Number(input.station || 0) || 0}`
 
   try {
-    await supabaseInsert('pos_print_jobs', {
+    await supabaseInsertIgnoreDuplicates('pos_print_jobs', {
       store_code: storeCode,
       order_id: orderId,
       order_no: String(input.orderNo ?? '').trim() || null,
