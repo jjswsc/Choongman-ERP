@@ -12,8 +12,10 @@
 --   · pos_settlements_bootstrap + align
 --   · pos_orders RLS (존재 테이블만)
 --   · erp_stores display_name/aliases (매장명↔store_code 매핑)
+--   · pos_menus / pos_menu_options / pos_printer_settings — API 42703 누락 컬럼 (§7)
 --
--- 장기(메뉴·프린터·Grab·회계 RPC): supabase_migration_consolidated → all_in_one → phase2
+-- 장기(Grab·회계 RPC): supabase_migration_consolidated → all_in_one → phase2
+-- ※ supabase_migrations.schema_migrations 없음 = Dashboard 내부 조회 오류(앱 무관)
 -- ============================================================
 
 -- ── 1) pos_orders: SaaS → Choongman 브릿지 ──
@@ -246,6 +248,56 @@ BEGIN
   END IF;
 END $$;
 
+-- ── 7) POS 메뉴·옵션·프린터 — PostgREST 42703 (Omni 로그 기준) ──
+-- pos_menus.category_main, pos_menu_options.option_code / price_modifier_packaging 등
+-- pos_printer_settings.main_device_max_count 등
+DO $$
+BEGIN
+  IF to_regclass('public.pos_menus') IS NOT NULL THEN
+    ALTER TABLE public.pos_menus ADD COLUMN IF NOT EXISTS category_main TEXT DEFAULT '';
+    ALTER TABLE public.pos_menus ADD COLUMN IF NOT EXISTS description_default TEXT NOT NULL DEFAULT '';
+    ALTER TABLE public.pos_menus ADD COLUMN IF NOT EXISTS description_delivery TEXT;
+    ALTER TABLE public.pos_menus ADD COLUMN IF NOT EXISTS description_table TEXT;
+    CREATE INDEX IF NOT EXISTS idx_pos_menus_category_main ON public.pos_menus (category_main);
+  END IF;
+
+  IF to_regclass('public.pos_menu_options') IS NOT NULL THEN
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS option_code TEXT;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS price_modifier_delivery NUMERIC(12,2);
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS price_modifier_packaging NUMERIC(12,2);
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS option_type TEXT DEFAULT 'substitution';
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS item_code TEXT;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS quantity NUMERIC(10,4) DEFAULT 1;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS option_step_values JSONB DEFAULT NULL;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS sell_hall BOOLEAN DEFAULT true;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS sell_delivery BOOLEAN DEFAULT true;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS sell_packaging BOOLEAN DEFAULT true;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS description_default TEXT NOT NULL DEFAULT '';
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS description_delivery TEXT;
+    ALTER TABLE public.pos_menu_options ADD COLUMN IF NOT EXISTS description_table TEXT;
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'pos_menu_options'
+        AND column_name = 'additive_source_menu_id'
+    ) THEN
+      ALTER TABLE public.pos_menu_options
+        ADD COLUMN additive_source_menu_id INTEGER REFERENCES public.pos_menus (id) ON DELETE SET NULL;
+    END IF;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_pos_menu_options_menu_id_option_code
+      ON public.pos_menu_options (menu_id, option_code)
+      WHERE option_code IS NOT NULL AND btrim(option_code) <> '';
+  END IF;
+
+  IF to_regclass('public.pos_printer_settings') IS NOT NULL THEN
+    ALTER TABLE public.pos_printer_settings
+      ADD COLUMN IF NOT EXISTS main_device_max_count INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE public.pos_printer_settings
+      ADD COLUMN IF NOT EXISTS order_device_max_count INTEGER NOT NULL DEFAULT 8;
+    ALTER TABLE public.pos_printer_settings
+      ADD COLUMN IF NOT EXISTS main_device_role_locked BOOLEAN NOT NULL DEFAULT false;
+  END IF;
+END $$;
+
 -- 확인 (스키마 변경 없음)
 SELECT
   EXISTS (
@@ -261,4 +313,22 @@ SELECT
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'store_name'
       AND is_nullable = 'YES'
-  ) AS store_name_nullable;
+  ) AS store_name_nullable,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_menus' AND column_name = 'category_main'
+  ) AS pos_menus_has_category_main,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_menu_options' AND column_name = 'option_code'
+  ) AS pos_menu_options_has_option_code,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_menu_options'
+      AND column_name = 'price_modifier_packaging'
+  ) AS pos_menu_options_has_price_modifier_packaging,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_printer_settings'
+      AND column_name = 'main_device_max_count'
+  ) AS pos_printer_settings_has_main_device_max_count;

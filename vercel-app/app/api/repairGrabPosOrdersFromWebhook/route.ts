@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 import { buildGrabPosOrderSnapshot } from '@/lib/grab-order-to-pos'
+import { resolvePlatformDiscountReasonForSave } from '@/lib/pos-platform-discount-reason'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 type PosOrderRow = {
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     const orderRows = (await supabaseSelectFilter('pos_orders', baseFilters.join('&'), {
       limit: Math.min(1000, limit * 3),
       order: 'created_at.desc',
-      select: 'id,store_code,memo,status,total,items_json,delivery_app_code',
+      select: 'id,store_code,memo,status,total,items_json,delivery_app_code,discount_amt,discount_reason',
     })) as (PosOrderRow & { delivery_app_code?: string })[] | null
 
     const rows = (orderRows || [])
@@ -134,7 +135,11 @@ export async function POST(request: NextRequest) {
         const oldTotal = round2(Number(row.total ?? 0))
         const nextTotal = round2(snapshot.total)
         const changed = oldItemsJson !== nextItemsJson || Math.abs(oldTotal - nextTotal) > 0.009
-        if (!changed) {
+        const nextReason = resolvePlatformDiscountReasonForSave('grab', snapshot.discountAmt)
+        const reasonChanged =
+          String((row as { discount_reason?: string }).discount_reason ?? '').trim() !== nextReason &&
+          nextReason.length > 0
+        if (!changed && !reasonChanged) {
           skipped += 1
           continue
         }
@@ -142,18 +147,24 @@ export async function POST(request: NextRequest) {
         if (!dryRun) {
           const stamp = `[GRAB_REPAIR ${new Date().toISOString()}${actor ? ` ${actor}` : ''}] rebuilt from webhook payload`
           const nextMemo = memo ? `${memo}\n${stamp}` : stamp
-          await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
-            items_json: nextItemsJson,
-            subtotal: snapshot.subtotal,
-            discount_amt: snapshot.discountAmt,
-            delivery_fee: snapshot.deliveryFee,
-            packaging_fee: snapshot.packagingFee,
-            vat: snapshot.vat,
-            total: snapshot.total,
-            payment_cash: snapshot.paymentCash,
-            payment_delivery_app: snapshot.paymentDeliveryApp,
-            memo: nextMemo,
-          })
+          const patch: Record<string, unknown> = {
+            discount_reason: nextReason,
+          }
+          if (changed) {
+            Object.assign(patch, {
+              items_json: nextItemsJson,
+              subtotal: snapshot.subtotal,
+              discount_amt: snapshot.discountAmt,
+              delivery_fee: snapshot.deliveryFee,
+              packaging_fee: snapshot.packagingFee,
+              vat: snapshot.vat,
+              total: snapshot.total,
+              payment_cash: snapshot.paymentCash,
+              payment_delivery_app: snapshot.paymentDeliveryApp,
+              memo: nextMemo,
+            })
+          }
+          await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, patch)
         }
         updated += 1
       } catch (e) {

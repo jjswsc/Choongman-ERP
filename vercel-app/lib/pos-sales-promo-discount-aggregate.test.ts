@@ -225,6 +225,37 @@ describe('aggregatePosSalesPromoBundleDiscount', () => {
     expect(campaignKind?.bundleDiscount).toBe(60)
     expect(result.totals.promoLineSaleSharePct).toBe(49)
   })
+
+  it('skips bundle discount lines for delivery platform API orders with discount_amt', () => {
+    const result = aggregatePosSalesPromoBundleDiscount({
+      catalog: catalogFixture(),
+      orderRows: [
+        {
+          total: 500,
+          order_type: 'delivery',
+          delivery_app_code: 'grab',
+          discount_amt: 80,
+          items_json: JSON.stringify([
+            {
+              name: 'Festival Set',
+              promoId: '9',
+              promoCode: 'SET-9',
+              price: 250,
+              qty: 1,
+              promoItems: [
+                { menuId: '1', quantity: 1 },
+                { menuId: '2', quantity: 1 },
+              ],
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.rows).toHaveLength(0)
+    expect(result.totals.bundleDiscount).toBe(0)
+    expect(result.totals.paymentDiscount).toBe(80)
+  })
 })
 
 describe('orderTypeToPromoRegularPriceChannel', () => {

@@ -6,6 +6,7 @@ import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { logShopeeFoodEvent } from '@/lib/shopeefood-webhook'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
+import { resolvePlatformDiscountReasonForSave } from '@/lib/pos-platform-discount-reason'
 
 /** ShopeeFood store_id → POS store_code. JSON: {"20278000":"ST01"} */
 export function parseShopeeFoodStoreMap(): Record<string, string> {
@@ -254,7 +255,7 @@ export async function persistShopeeFoodOrderToPos(params: {
     /** 중복 수신 시 동일 문자열로 조회 (주문 비고는 table_name에 반영) */
     memo,
     discount_amt: discountAmt,
-    discount_reason: discountAmt > 0.005 ? 'ShopeeFood' : '',
+    discount_reason: resolvePlatformDiscountReasonForSave('shopee', discountAmt),
     delivery_fee: deliveryFee,
     packaging_fee: packagingFee,
     items_json: JSON.stringify(items),

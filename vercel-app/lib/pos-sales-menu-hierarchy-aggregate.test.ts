@@ -3,6 +3,7 @@ import {
   aggregatePosSalesMenuHierarchy,
   extractOptionSuffixFromOrderLineName,
   filterHierarchyRows,
+  filterHierarchyRowsByDrill,
 } from '@/lib/pos-sales-menu-hierarchy-aggregate'
 
 describe('aggregatePosSalesMenuHierarchy', () => {
@@ -104,5 +105,38 @@ describe('aggregatePosSalesMenuHierarchy', () => {
     const filtered = filterHierarchyRows(rows, ['snow'], false)
     expect(filtered).toHaveLength(1)
     expect(filtered[0]?.label).toBe('Snow Onion')
+  })
+
+  it('filters child levels by drill parent', () => {
+    const categories = [
+      { key: 'a', label: 'Series A', categoryMain: 'Chicken', category: 'Series A' },
+      { key: 'b', label: 'Series B', categoryMain: 'Side', category: 'Series B' },
+    ]
+    const menus = [
+      { key: 'm1', label: 'Snow Onion', categoryMain: 'Chicken', category: 'Series A' },
+      { key: 'm2', label: 'Curry', categoryMain: 'Chicken', category: 'Series B' },
+      { key: 'm3', label: 'Fries', categoryMain: 'Side', category: 'Series B' },
+    ]
+    const options = [
+      { key: 'o1', label: 'Snow Onion — Size S', categoryMain: 'Chicken', category: 'Series A' },
+      { key: 'o2', label: 'Curry — Size M', categoryMain: 'Chicken', category: 'Series B' },
+    ]
+
+    expect(filterHierarchyRowsByDrill(categories, 'category', { main: 'Chicken' })).toHaveLength(1)
+    expect(
+      filterHierarchyRowsByDrill(categories, 'category', { main: 'Chicken' })[0]?.label
+    ).toBe('Series A')
+
+    expect(
+      filterHierarchyRowsByDrill(menus, 'menu', { main: 'Chicken', category: 'Series A' })
+    ).toHaveLength(1)
+    expect(
+      filterHierarchyRowsByDrill(menus, 'menu', { main: 'Chicken', category: 'Series A' })[0]?.label
+    ).toBe('Snow Onion')
+
+    expect(filterHierarchyRowsByDrill(options, 'option', { menu: 'Snow Onion' })).toHaveLength(1)
+    expect(
+      filterHierarchyRowsByDrill(options, 'option', { menu: 'Snow Onion' })[0]?.label
+    ).toContain('Size S')
   })
 })

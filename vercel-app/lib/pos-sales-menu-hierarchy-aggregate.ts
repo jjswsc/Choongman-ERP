@@ -455,6 +455,37 @@ export function filterHierarchyRows(
   })
 }
 
+export type PosSalesDrillFilter = {
+  main?: string
+  category?: string
+  menu?: string
+}
+
+/** Total Sales 드릴다운 — 상위 행 클릭 시 하위 레벨을 부모 기준으로 좁힘 */
+export function filterHierarchyRowsByDrill<
+  T extends { label: string; categoryMain?: string; category?: string },
+>(rows: T[], level: PosSalesHierarchyLevel, drill: PosSalesDrillFilter): T[] {
+  if (!drill.main && !drill.category && !drill.menu) return rows
+  if (level === 'main') return rows
+
+  let filtered = rows
+  if (drill.main) {
+    filtered = filtered.filter((r) => (r.categoryMain || '') === drill.main)
+  }
+  if (level === 'category') return filtered
+
+  if (drill.category) {
+    filtered = filtered.filter((r) => (r.category || '') === drill.category)
+  }
+  if (level === 'menu') return filtered
+
+  if (drill.menu) {
+    const prefix = `${drill.menu} —`
+    filtered = filtered.filter((r) => r.label.startsWith(prefix) || r.label === drill.menu)
+  }
+  return filtered
+}
+
 export function sumHierarchyRows(rows: PosSalesHierarchyRow[]): { qty: number; sales: number } {
   return rows.reduce(
     (acc, r) => ({ qty: acc.qty + r.qty, sales: acc.sales + r.sales }),

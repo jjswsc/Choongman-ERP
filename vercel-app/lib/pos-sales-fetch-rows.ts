@@ -31,9 +31,9 @@ export const POS_SALES_ORDER_ROW_SELECT =
 
 export const POS_SALES_MENU_ROW_SELECT = `${POS_SALES_ORDER_ROW_SELECT},items_json`
 
-/** 세트·결제 할인 분석 — promo 줄 + 결제 할인 사유·쿠폰 */
+/** 세트·결제 할인 분석 — promo 줄 + 결제 할인 사유·쿠폰 + 배달앱 플랫폼 식별 */
 export const POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT =
-  `${POS_SALES_ORDER_ROW_SELECT},items_json,discount_reason,applied_coupons,coupon_code`
+  `${POS_SALES_ORDER_ROW_SELECT},items_json,discount_reason,applied_coupons,coupon_code,delivery_app_code`
 
 /** 할인 드릴다운 — 주문 식별·표시 필드 */
 export const POS_SALES_DISCOUNT_DRILL_ROW_SELECT =

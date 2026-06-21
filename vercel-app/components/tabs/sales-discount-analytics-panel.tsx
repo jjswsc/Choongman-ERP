@@ -383,7 +383,7 @@ export function SalesCombinedDiscountPanel({
         <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
           {tr(
             "salesCombinedDiscountAnalyticsHint",
-            "세트 할인과 결제 할인을 한 화면에서 비교합니다. 합산 %는 참고 지표이며, 두 할인은 서로 다른 층입니다."
+            "세트 할인(홀·포장 프로모 정가 대비)과 결제 할인(POS·배달앱 플랫폼)을 비교합니다. 배달앱 API 주문의 플랫폼 프로모는 결제 할인 › 배달·플랫폼에만 집계되며 세트 할인과 이중 집계하지 않습니다."
           )}
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">

@@ -94,7 +94,12 @@ import {
 import { DEFAULT_MEMBER_PORTAL_UI_THEME, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
-import { mpInputClass, mpPrimaryBtn } from "@/lib/member-portal-design"
+import {
+  mpGenderBtnActiveClass,
+  mpGenderBtnClass,
+  mpInputClass,
+  mpPrimaryBtn,
+} from "@/lib/member-portal-design"
 import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type MemberPortalStoreRow = MemberPortalStoreDto
@@ -1262,6 +1267,7 @@ export function MemberPortalApp() {
               memberId={member.id}
               status={stampStatus}
               loading={stampLoading}
+              foodImageUrl={stampFoodImageUrl}
               onGoCoupons={() => changeTab("privilege")}
             />
             {portalTiers.length > 0 ? (
@@ -1353,7 +1359,7 @@ export function MemberPortalApp() {
             <GlassCard>
               <div className="grid gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("nameLabel")}</Label>
+                  <Label className={MP_CARD_TEXT_SECONDARY}>{t("nameLabel")}</Label>
                   <Input
                     value={profile.name}
                     onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
@@ -1361,19 +1367,20 @@ export function MemberPortalApp() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("phoneLabel")}</Label>
+                  <Label className={MP_CARD_TEXT_SECONDARY}>{t("phoneLabel")}</Label>
                   <Input value={member.phone || ""} disabled className={`${mpInputClass} opacity-60`} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("birthDateLabel")}</Label>
+                  <Label className={MP_CARD_TEXT_SECONDARY}>{t("birthDateLabel")}</Label>
                   <BirthDateFields
+                    variant="light"
                     value={profile.birthDate}
                     onChange={(iso) => setProfile((p) => ({ ...p, birthDate: iso }))}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-white/70">{t("genderLabel")}</Label>
+                    <Label className={MP_CARD_TEXT_SECONDARY}>{t("genderLabel")}</Label>
                     <div className="grid grid-cols-2 gap-2">
                       {(["M", "F"] as const).map((value) => {
                         const active = profile.gender === value
@@ -1382,11 +1389,7 @@ export function MemberPortalApp() {
                             key={value}
                             type="button"
                             onClick={() => setProfile((p) => ({ ...p, gender: value }))}
-                            className={`h-11 rounded-2xl border text-sm font-medium transition ${
-                              active
-                                ? "border-amber-400/50 bg-amber-400/15 text-amber-100"
-                                : "border-white/10 bg-black/20 text-white/75 hover:border-white/20"
-                            }`}
+                            className={active ? mpGenderBtnActiveClass : mpGenderBtnClass}
                           >
                             {value === "M" ? t("genderMale") : t("genderFemale")}
                           </button>
@@ -1395,7 +1398,7 @@ export function MemberPortalApp() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-white/70">{t("nationalityLabel")}</Label>
+                    <Label className={MP_CARD_TEXT_SECONDARY}>{t("nationalityLabel")}</Label>
                     <MemberPortalNationalitySelect
                       value={profile.nationality}
                       onChange={(nationality) => setProfile((p) => ({ ...p, nationality }))}
@@ -1403,7 +1406,7 @@ export function MemberPortalApp() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("emailLabel")}</Label>
+                  <Label className={MP_CARD_TEXT_SECONDARY}>{t("emailLabel")}</Label>
                   <Input
                     value={profile.email}
                     onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
@@ -1411,9 +1414,9 @@ export function MemberPortalApp() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-white/70">{t("referralInputLabel")}</Label>
+                  <Label className={MP_CARD_TEXT_SECONDARY}>{t("referralInputLabel")}</Label>
                   {member.referredByMemberId ? (
-                    <p className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/55">
+                    <p className={`rounded-2xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm ${MP_CARD_TEXT_MUTED}`}>
                       {t("profileReferralLocked")}
                     </p>
                   ) : (
@@ -1425,14 +1428,14 @@ export function MemberPortalApp() {
                     />
                   )}
                 </div>
-                <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm">
+                <label className={`flex items-center gap-3 rounded-2xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm ${MP_CARD_TEXT_SECONDARY}`}>
                   <input
                     type="checkbox"
                     checked={profile.consentMarketing}
                     onChange={(e) => setProfile((p) => ({ ...p, consentMarketing: e.target.checked }))}
-                    className="h-4 w-4 accent-amber-400"
+                    className="h-4 w-4 accent-amber-500"
                   />
-                  <span className="text-white/75">{t("consentMarketing")}</span>
+                  <span>{t("consentMarketing")}</span>
                 </label>
               </div>
 
@@ -1443,8 +1446,8 @@ export function MemberPortalApp() {
 
             <MemberPortalProfileContactLinks urls={contactUrls} />
 
-            <GlassCard soft className="text-sm text-stone-600">
-              <p>{t("memberNo")} {member.memberNo}</p>
+            <GlassCard soft className={`text-sm ${MP_CARD_TEXT_MUTED}`}>
+              <p className={MP_CARD_TEXT_PRIMARY}>{t("memberNo")} {member.memberNo}</p>
               {activeDashboard.referralCode ? (
                 <p className="mt-1">{t("myReferralCode")} {activeDashboard.referralCode}</p>
               ) : null}

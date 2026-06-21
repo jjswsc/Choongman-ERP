@@ -36,7 +36,7 @@ import {
   topChannelCompareChartRows,
   type HierarchyLevelsByOrderType,
 } from "@/lib/pos-sales-menu-hierarchy-compare"
-import { sumHierarchyRows } from "@/lib/pos-sales-menu-hierarchy-aggregate"
+import { sumHierarchyRows, filterHierarchyRowsByDrill, type PosSalesDrillFilter } from "@/lib/pos-sales-menu-hierarchy-aggregate"
 import { ADMIN_BTN_XS_CN, ADMIN_CHART_COLORS, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import {
   buildPosStoreDisplayNameLookup,
@@ -172,6 +172,7 @@ export function TotalSalesTab() {
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
   const [compareChannels, setCompareChannels] = React.useState(false)
   const [level, setLevel] = React.useState<PosSalesHierarchyLevel>("menu")
+  const [drillFilter, setDrillFilter] = React.useState<PosSalesDrillFilter>({})
   const [loading, setLoading] = React.useState(false)
   const [exporting, setExporting] = React.useState(false)
   const [truncated, setTruncated] = React.useState(false)
@@ -438,6 +439,7 @@ export function TotalSalesTab() {
       setByOrderTypeLevels(
         compareChannels && mainRes.byOrderType ? mapByOrderTypeLevels(mainRes.byOrderType) : null
       )
+      setDrillFilter({})
       setTruncated(!!mainRes.truncated)
       setSnapshotToday(sumHierarchyRows(todayRes.levels.menu))
       setSnapshotMonth(sumHierarchyRows(monthRes.levels.menu))
@@ -465,7 +467,7 @@ export function TotalSalesTab() {
   loadDataRef.current = loadData
 
   const drillToChildLevel = React.useCallback(
-    (row: PosSalesHierarchyRow) => {
+    (row: Pick<PosSalesHierarchyRow, "label" | "categoryMain" | "category">) => {
       const next: Partial<Record<PosSalesHierarchyLevel, PosSalesHierarchyLevel>> = {
         main: "category",
         category: "menu",
@@ -474,6 +476,23 @@ export function TotalSalesTab() {
       const child = next[level]
       if (!child) return
       setLevel(child)
+      setDrillFilter(() => {
+        if (level === "main") return { main: row.label }
+        if (level === "category") {
+          return {
+            main: row.categoryMain ?? undefined,
+            category: row.label,
+          }
+        }
+        if (level === "menu") {
+          return {
+            main: row.categoryMain ?? undefined,
+            category: row.category ?? undefined,
+            menu: row.label,
+          }
+        }
+        return {}
+      })
       setSearch(row.label)
       setSearchAnd(false)
     },
@@ -496,11 +515,15 @@ export function TotalSalesTab() {
     void loadDataRef.current()
   }, [compareChannels, levelsData, canQuery, startStr, endStr])
 
-  const activeRows = levelsData?.[level] ?? []
+  const activeRows = React.useMemo(() => {
+    const rows = levelsData?.[level] ?? []
+    return filterHierarchyRowsByDrill(rows, level, drillFilter)
+  }, [levelsData, level, drillFilter])
   const compareRows = React.useMemo(() => {
     if (!compareChannels || !byOrderTypeLevels) return []
-    return buildHierarchyChannelCompareRows(level, byOrderTypeLevels, compareChannelsList)
-  }, [compareChannels, byOrderTypeLevels, level, compareChannelsList])
+    const rows = buildHierarchyChannelCompareRows(level, byOrderTypeLevels, compareChannelsList)
+    return filterHierarchyRowsByDrill(rows, level, drillFilter)
+  }, [compareChannels, byOrderTypeLevels, level, compareChannelsList, drillFilter])
 
   const totals = compareChannels
     ? compareRows.reduce(
@@ -1069,6 +1092,23 @@ export function TotalSalesTab() {
               {tr("totalSalesDrillHint", "클릭 시 하위 집계·검색으로 이동")}
             </p>
           ) : null}
+          {drillFilter.main || drillFilter.category || drillFilter.menu ? (
+            <p className="text-xs text-muted-foreground">
+              {tr("totalSalesDrillActive", "하위 필터")}:{" "}
+              {[drillFilter.main, drillFilter.category, drillFilter.menu].filter(Boolean).join(" › ")}
+              {" · "}
+              <button
+                type="button"
+                className="underline hover:text-foreground"
+                onClick={() => {
+                  setDrillFilter({})
+                  setSearch("")
+                }}
+              >
+                {tr("totalSalesDrillClear", "필터 해제")}
+              </button>
+            </p>
+          ) : null}
 
           <div className="overflow-auto max-h-[calc(100vh-520px)] rounded-lg border">
             <table
@@ -1177,7 +1217,18 @@ export function TotalSalesTab() {
                       <tr key={row.key} className="border-b hover:bg-muted/30">
                         <td className="py-2 pl-3 text-muted-foreground tabular-nums">{idx + 1}</td>
                         <td className="max-w-0 py-2 pr-2" title={row.label}>
-                          <span className="block truncate">{row.label}</span>
+                          {level !== "option" ? (
+                            <button
+                              type="button"
+                              className="block max-w-full truncate text-left font-medium hover:underline"
+                              onClick={() => drillToChildLevel(row)}
+                              title={tr("totalSalesDrillHint", "클릭 시 하위 집계·검색으로 이동")}
+                            >
+                              {row.label}
+                            </button>
+                          ) : (
+                            <span className="block truncate">{row.label}</span>
+                          )}
                           {level !== "main" && (row.categoryMain || row.category) ? (
                             <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                               {[row.categoryMain, row.category].filter(Boolean).join(" · ")}

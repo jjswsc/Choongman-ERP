@@ -1,6 +1,6 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
 import { orderUiItemsToPosOrderItems } from '@/lib/pos-order-item-map'
-import { resolvePosOrderPaidAt } from '@/lib/pos-order-paid-at'
+import { posOrderPaymentSumFromAmounts, resolvePosOrderPaidAt } from '@/lib/pos-order-paid-at'
 import type { Order } from '@/lib/pos-types'
 import {
   formatGrabOrderLineNoteForPrint,
@@ -19,6 +19,7 @@ import {
   posOrderToCheckoutDiscountSnapshot,
   resolveEffectivePosOrderDiscountAmt,
 } from '@/lib/pos-existing-order-checkout-discount'
+import { resolvePosOrderReceiptPrintTotal } from '@/lib/pos-order-save-discount'
 import {
   buildKitchenMenuNameLookup,
   resolveKitchenMenuNameFromLookup,
@@ -697,7 +698,6 @@ export function receiptModalDataFromPosOrderForPayment(
   opts?: PosOrderReceiptLineOptions
 ): ReceiptModalData {
   const effectiveDiscountAmt = effectivePosOrderDiscountForReceipt(order, adjustments, opts)
-  const storedTotal = Math.max(0, Number(order.total ?? 0) || 0)
   const pricing = computePosPricing({
     subtotal: order.subtotal ?? 0,
     discountAmt: effectiveDiscountAmt,
@@ -706,7 +706,12 @@ export function receiptModalDataFromPosOrderForPayment(
     cardPaymentAmount: order.paymentCard ?? 0,
     adjustments,
   })
-  const total = storedTotal > 0.005 ? storedTotal : pricing.finalTotal
+  const total = resolvePosOrderReceiptPrintTotal({
+    storedTotal: Math.max(0, Number(order.total ?? 0) || 0),
+    pricingFinalTotal: pricing.finalTotal,
+    effectiveDiscountAmt,
+    paymentSum: posOrderPaymentSum(order),
+  })
   return {
     orderNo: order.orderNo ?? '',
     items: posOrderItemsToReceiptLines(order, opts),
@@ -789,8 +794,12 @@ export function hallOrderReceiptPayloadFromPosOrder(
     cardPaymentAmount: Math.max(0, Number(order.paymentCard ?? 0) || 0),
     adjustments,
   })
-  const storedTotal = Math.max(0, Number(order.total ?? 0) || 0)
-  const total = storedTotal > 0.005 ? storedTotal : pricing.finalTotal
+  const total = resolvePosOrderReceiptPrintTotal({
+    storedTotal: Math.max(0, Number(order.total ?? 0) || 0),
+    pricingFinalTotal: pricing.finalTotal,
+    effectiveDiscountAmt,
+    paymentSum: posOrderPaymentSum(order),
+  })
   const lines = posOrderItemsToReceiptLines(order, opts)
   return {
     orderNo: String(order.orderNo ?? ''),
@@ -837,22 +846,54 @@ export function hallOrderReceiptPayloadFromOrderFields(
     deliveryFee?: number
     packagingFee?: number
     paymentCard?: number
+    paymentCash?: number
+    paymentQr?: number
+    paymentOther?: number
+    paymentDeliveryApp?: number
   },
   adjustments: PosPricingAdjustments
 ): HallOrderPayload {
-  const discountAmt = Math.max(0, Number(fields.discountAmt) || 0)
   const couponDiscountAmt = Math.max(0, Number(fields.couponDiscountAmt) || 0)
   const subtotal = Math.max(0, Number(fields.subtotal) || 0)
+  const effectiveDiscountAmt = resolveEffectivePosOrderDiscountAmt({
+    snapshot: {
+      discountAmt: Math.max(0, Number(fields.discountAmt) || 0),
+      couponDiscountAmt,
+      subtotal,
+      total: Math.max(0, Number(fields.total) || 0),
+      deliveryFee: fields.deliveryFee,
+      packagingFee: fields.packagingFee,
+    },
+    items: (fields.items || []).map((it) => ({
+      price: Number(it.price) || 0,
+      qty: Math.max(0, Number(it.qty ?? 1) || 1),
+      ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
+        ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }
+        : {}),
+    })),
+    adjustments,
+  })
   const pricing = computePosPricing({
     subtotal,
-    discountAmt,
+    discountAmt: effectiveDiscountAmt,
     deliveryFee: fields.deliveryFee ?? 0,
     packagingFee: fields.packagingFee ?? 0,
     cardPaymentAmount: Math.max(0, Number(fields.paymentCard) || 0),
     adjustments,
   })
-  const storedTotal = Math.max(0, Number(fields.total) || 0)
-  const total = storedTotal > 0.005 ? storedTotal : pricing.finalTotal
+  const paymentSum = posOrderPaymentSumFromAmounts({
+    paymentCash: fields.paymentCash,
+    paymentCard: fields.paymentCard,
+    paymentQr: fields.paymentQr,
+    paymentOther: fields.paymentOther,
+    paymentDeliveryApp: fields.paymentDeliveryApp,
+  })
+  const total = resolvePosOrderReceiptPrintTotal({
+    storedTotal: Math.max(0, Number(fields.total) || 0),
+    pricingFinalTotal: pricing.finalTotal,
+    effectiveDiscountAmt,
+    paymentSum,
+  })
   return {
     orderNo: fields.orderNo,
     storeCode: fields.storeCode,
@@ -861,7 +902,7 @@ export function hallOrderReceiptPayloadFromOrderFields(
     ...(fields.memo ? { memo: fields.memo } : {}),
     items: fields.items,
     subtotal,
-    discountAmt,
+    discountAmt: effectiveDiscountAmt,
     couponDiscountAmt,
     ...(fields.discountReason ? { discountReason: fields.discountReason } : {}),
     total,

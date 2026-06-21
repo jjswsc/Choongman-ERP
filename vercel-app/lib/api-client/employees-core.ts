@@ -201,6 +201,17 @@ export async function getAdminEmployeeList(params: {
   }
 }
 
+export async function getAdminEmployeeMedia(row: number): Promise<{ photo: string; idCardPhoto: string }> {
+  const id = Math.trunc(Number(row))
+  if (!Number.isFinite(id) || id <= 0) return { photo: '', idCardPhoto: '' }
+  const res = await apiFetchWithOffline(`/api/getAdminEmployeeMedia?row=${encodeURIComponent(String(id))}`)
+  const data = (await res.json().catch(() => ({}))) as { photo?: string; idCardPhoto?: string }
+  return {
+    photo: data.photo != null ? String(data.photo) : '',
+    idCardPhoto: data.idCardPhoto != null ? String(data.idCardPhoto) : '',
+  }
+}
+
 export async function getEmployeeLatestGrades() {
   const res = await apiFetchWithOffline('/api/getEmployeeLatestGrades')
   return res.json() as Promise<

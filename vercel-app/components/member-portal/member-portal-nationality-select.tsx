@@ -8,6 +8,7 @@ import {
   normalizeMemberPortalNationalityCode,
 } from "@/lib/member-portal-nationalities"
 import { cn } from "@/lib/utils"
+import { mpSelectClass } from "@/lib/member-portal-design"
 
 type MemberPortalNationalitySelectProps = {
   value: string
@@ -29,21 +30,18 @@ export function MemberPortalNationalitySelect({
     <select
       value={selectValue}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none focus:border-amber-400/40",
-        className
-      )}
+      className={cn(mpSelectClass, className)}
     >
-      <option value="" className="bg-[#121214]">
+      <option value="" className="bg-white text-stone-900">
         {t("nationalityPlaceholder")}
       </option>
       {legacyUnknown ? (
-        <option value={value} className="bg-[#121214]">
+        <option value={value} className="bg-white text-stone-900">
           {value}
         </option>
       ) : null}
       {MEMBER_PORTAL_NATIONALITY_OPTIONS.map((opt) => (
-        <option key={opt.code} value={opt.code} className="bg-[#121214]">
+        <option key={opt.code} value={opt.code} className="bg-white text-stone-900">
           {memberPortalNationalityLabel(lang, opt.code)}
         </option>
       ))}

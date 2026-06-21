@@ -47,7 +47,7 @@ export function resolveSalesDiscountDrillExplanation(
     if (kind === 'platform') {
       return tr(
         'salesDiscountDrillExplainPlatform',
-        '배달앱(Grab·Shopee·Line Man 등) 프로모가 discount_amt에 기록된 주문입니다. 매장 POS에서 결제할 때 직원이 입력한 할인과는 별개로, 플랫폼이 이미 반영한 할인입니다.'
+        '배달앱(Grab·Shopee·Line Man 등) API·플랫폼 프로모가 discount_amt에 기록된 주문입니다. POS에서 직원이 수동 입력한 할인과는 별도이며, 세트 내재 할인(정가 대비)과도 별도 층입니다.'
       )
     }
     if (kind === 'manual') {

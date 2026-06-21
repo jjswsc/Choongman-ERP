@@ -12,6 +12,10 @@ import {
   resolveNonCouponDiscountAmt,
   type PosPaymentDiscountKind,
 } from '@/lib/pos-sales-payment-discount-aggregate'
+import {
+  isDeliveryPlatformDiscountOrder,
+  resolvePlatformDiscountReasonForAnalytics,
+} from '@/lib/pos-platform-discount-reason'
 
 export type PosSalesDiscountDrillLayer = 'bundle' | 'payment'
 
@@ -43,6 +47,7 @@ type OrderRowBase = {
   coupon_code?: string
   applied_coupons?: unknown
   items_json?: string
+  delivery_app_code?: string | null
   created_at?: string
   paid_at?: string
 }
@@ -139,12 +144,17 @@ export function collectPosSalesPaymentDiscountDrillOrders(params: {
 
     const nonCouponAmt = resolveNonCouponDiscountAmt(discountAmt, couponTotal)
     if (nonCouponAmt > 0.0001) {
-      const kind = classifyNonCouponKind(reason)
-      const key = paymentRowKey(kind, reason, kind)
+      const kind = classifyNonCouponKind(reason, order)
+      const label =
+        reason ||
+        (kind === 'platform' ? resolvePlatformDiscountReasonForAnalytics(order, nonCouponAmt) : '')
+      const key = paymentRowKey(kind, label, kind)
       const kindOk = !kindFilter || kindFilter === kind
       const keyOk = !rowKeyFilter || rowKeyFilter === key
       if (kindOk && keyOk) {
-        mergeDrillRow(map, order, nonCouponAmt, { discountReason: reason || undefined })
+        mergeDrillRow(map, order, nonCouponAmt, {
+          discountReason: label || reason || undefined,
+        })
       }
     }
 
@@ -206,6 +216,8 @@ export function collectPosSalesPromoBundleDrillOrders(params: {
   const promoKeyFilter = str(params.filter.promoKey)
 
   for (const order of params.orderRows) {
+    if (isDeliveryPlatformDiscountOrder(order)) continue
+
     const channel = orderTypeToPromoRegularPriceChannel(order.order_type)
     for (const row of parseOrderItems(order.items_json)) {
       const promoId = str(row.promoId ?? row.promo_id)

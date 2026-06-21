@@ -4,6 +4,12 @@ import {
   type PosAppliedCouponLine,
 } from '@/lib/pos-coupon-domain'
 import { isCollabDiscountReasonText } from '@/lib/pos-collab-discount'
+import {
+  isDeliveryPlatformDiscountOrder,
+  isPlatformDiscountReasonText,
+  resolvePlatformDiscountReasonForAnalytics,
+  type DeliveryPlatformDiscountOrderRow,
+} from '@/lib/pos-platform-discount-reason'
 
 export type PosPaymentDiscountKind = 'manual' | 'collab' | 'coupon' | 'platform' | 'other'
 
@@ -40,11 +46,8 @@ export type PosSalesPaymentDiscountResult = {
   byKind: PosSalesPaymentKindTotals[]
 }
 
-type OrderRowForPaymentDiscountAgg = {
+type OrderRowForPaymentDiscountAgg = DeliveryPlatformDiscountOrderRow & {
   total?: number
-  discount_amt?: number
-  coupon_discount_amt?: number
-  discount_reason?: string
   applied_coupons?: unknown
   coupon_code?: string
 }
@@ -60,22 +63,6 @@ function round2(n: number): number {
 function pctOf(part: number, whole: number): number {
   if (whole <= 0.0001) return 0
   return round2((part / whole) * 100)
-}
-
-function isPlatformDiscountReason(reason: string): boolean {
-  const r = reason.toLowerCase()
-  if (!r) return false
-  const needles = [
-    'grab',
-    'shopee',
-    'lineman',
-    'line man',
-    'foodpanda',
-    'delivery',
-    '배달',
-    'แอป',
-  ]
-  return needles.some((n) => r.includes(n))
 }
 
 export function resolveCouponLines(order: OrderRowForPaymentDiscountAgg): PosAppliedCouponLine[] {
@@ -99,9 +86,13 @@ export function resolveNonCouponDiscountAmt(
   return discount
 }
 
-export function classifyNonCouponKind(reason: string): Exclude<PosPaymentDiscountKind, 'coupon'> {
+export function classifyNonCouponKind(
+  reason: string,
+  order?: OrderRowForPaymentDiscountAgg
+): Exclude<PosPaymentDiscountKind, 'coupon'> {
   if (isCollabDiscountReasonText(reason)) return 'collab'
-  if (isPlatformDiscountReason(reason)) return 'platform'
+  if (isPlatformDiscountReasonText(reason)) return 'platform'
+  if (order && isDeliveryPlatformDiscountOrder(order)) return 'platform'
   if (reason) return 'manual'
   return 'other'
 }
@@ -170,8 +161,10 @@ export function aggregatePosSalesPaymentDiscount(params: {
 
     const nonCouponAmt = resolveNonCouponDiscountAmt(discountAmt, couponTotal)
     if (nonCouponAmt > 0.0001) {
-      const kind = classifyNonCouponKind(reason)
-      const label = reason
+      const kind = classifyNonCouponKind(reason, order)
+      const label =
+        reason ||
+        (kind === 'platform' ? resolvePlatformDiscountReasonForAnalytics(order, nonCouponAmt) : '')
       const code = kind
       const key = `${kind}::${label.toLowerCase()}`
       const prev = rowBuckets.get(key) ?? {

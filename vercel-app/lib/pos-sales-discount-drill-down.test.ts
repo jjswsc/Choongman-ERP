@@ -22,9 +22,10 @@ describe('collectPosSalesPaymentDiscountDrillOrders', () => {
           order_no: 'A-1',
           store_code: 'CM01',
           order_type: 'delivery',
+          delivery_app_code: 'grab',
           total: 106,
           discount_amt: 23,
-          discount_reason: 'Shopee promo',
+          discount_reason: '',
         },
         {
           id: 2,
@@ -41,6 +42,7 @@ describe('collectPosSalesPaymentDiscountDrillOrders', () => {
     expect(orders).toHaveLength(1)
     expect(orders[0]?.orderId).toBe(1)
     expect(orders[0]?.discountAmount).toBe(23)
+    expect(orders[0]?.discountReason).toBe('Grab platform promo')
   })
 
   it('filters by payment row key', () => {

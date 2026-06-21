@@ -1,12 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { Gift, History, Stamp, X } from "lucide-react"
+import { Gift, History, X } from "lucide-react"
 import { createPortal } from "react-dom"
 import { GlassCard } from "@/components/member-portal/member-portal-premium-ui"
 import {
   MP_CARD_TEXT_MUTED,
-  MP_CARD_TEXT_PRIMARY,
   MP_CARD_TEXT_SECONDARY,
   MP_CARD_TEXT_SUBTLE,
 } from "@/lib/member-portal-design"
@@ -158,17 +157,26 @@ function StampHomeShell({
   )
 }
 
-function StampHomeSlots({ slots, filled }: { slots: number; filled: number }) {
+function StampHomeSlots({
+  slots,
+  filled,
+  animateLast,
+}: {
+  slots: number
+  filled: number
+  animateLast?: boolean
+}) {
   return (
     <div className="my-[9px] flex flex-wrap gap-1">
       {Array.from({ length: slots }, (_, i) => {
         const isFilled = i < filled
+        const pop = Boolean(animateLast && isFilled && i === filled - 1)
         return (
           <span
             key={i}
-            className={`grid ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 place-items-center rounded-full text-[10px] font-black leading-none ${
+            className={`grid ${MP_HOME_STAMP_SLOT_SIZE} shrink-0 place-items-center rounded-full text-[10px] font-black leading-none transition ${
               isFilled ? "bg-[#ffc27a] text-white" : "bg-[#dce3d3] text-[#a9b19f]"
-            }`}
+            } ${pop ? "scale-110 animate-pulse" : ""}`}
           >
             {STAMP_CROWN}
           </span>
@@ -180,55 +188,27 @@ function StampHomeSlots({ slots, filled }: { slots: number; filled: number }) {
 
 function MemberPortalStampPreparingPlaceholder({
   lang,
-  variant,
   foodImageUrl = DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL,
 }: {
   lang: LangCode
-  variant: "home" | "card"
   foodImageUrl?: string
 }) {
   const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
 
-  if (variant === "home") {
-    return (
-      <StampHomeShell foodImageUrl={foodImageUrl}>
-        <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampPreparingTitle")}</h3>
-        <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">{t("stampPreparingDesc")}</p>
-        <StampHomeSlots slots={10} filled={0} />
-        <div className="flex items-center gap-4">
-          <span className="text-[10px] font-extrabold text-[#4b8a31]">
-            {t("stampHomeCount").replace("{current}", "0").replace("{total}", "10")}
-          </span>
-          <span className="rounded-full bg-gradient-to-r from-[#75b74d] to-[#578f3c] px-[13px] py-1 text-[8px] font-extrabold text-white">
-            {t("stampViewCard")}
-          </span>
-        </div>
-      </StampHomeShell>
-    )
-  }
-
   return (
-    <GlassCard soft className="px-4 py-4" aria-live="polite">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
-          <Stamp className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-stone-900">{t("stampPreparingTitle")}</p>
-          <p className="mt-1 text-xs leading-relaxed text-stone-500">{t("stampPreparingDesc")}</p>
-        </div>
+    <StampHomeShell foodImageUrl={foodImageUrl}>
+      <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampPreparingTitle")}</h3>
+      <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">{t("stampPreparingDesc")}</p>
+      <StampHomeSlots slots={10} filled={0} />
+      <div className="flex items-center gap-4">
+        <span className="text-[10px] font-extrabold text-[#4b8a31]">
+          {t("stampHomeCount").replace("{current}", "0").replace("{total}", "10")}
+        </span>
+        <span className="rounded-full bg-gradient-to-r from-[#75b74d] to-[#578f3c] px-[13px] py-1 text-[8px] font-extrabold text-white">
+          {t("stampViewCard")}
+        </span>
       </div>
-      <div className="mt-3 flex gap-1.5">
-        {Array.from({ length: 10 }, (_, i) => (
-          <span
-            key={i}
-            className="flex h-7 flex-1 items-center justify-center rounded-full border border-dashed border-emerald-200 bg-emerald-50/60 text-[11px] text-emerald-600/25"
-          >
-            🍗
-          </span>
-        ))}
-      </div>
-    </GlassCard>
+    </StampHomeShell>
   )
 }
 
@@ -249,7 +229,7 @@ export function MemberPortalStampHomeWidget({
   if (loading) return null
   if (!status) return null
   if (status.preparing) {
-    return <MemberPortalStampPreparingPlaceholder lang={lang} variant="home" foodImageUrl={foodImageUrl} />
+    return <MemberPortalStampPreparingPlaceholder lang={lang} foodImageUrl={foodImageUrl} />
   }
   if (!status.enabled) return null
   const slots = Math.max(1, status.cardSlots)
@@ -280,10 +260,19 @@ type Props = {
   status: MemberStampCardStatus | null
   loading?: boolean
   compact?: boolean
+  foodImageUrl?: string
   onGoCoupons?: () => void
 }
 
-export function MemberPortalStampCard({ lang, memberId, status, loading, compact, onGoCoupons }: Props) {
+export function MemberPortalStampCard({
+  lang,
+  memberId,
+  status,
+  loading,
+  compact,
+  foodImageUrl = DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL,
+  onGoCoupons,
+}: Props) {
   const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
   const [history, setHistory] = React.useState<MemberStampHistoryRow[]>([])
   const [historyOpen, setHistoryOpen] = React.useState(false)
@@ -334,111 +323,66 @@ export function MemberPortalStampCard({ lang, memberId, status, loading, compact
     prevFilledRef.current = status.currentStamps
   }, [status, memberId, t])
 
-  if (loading) {
-    return (
-      <GlassCard soft className={`px-5 py-8 text-center text-sm ${MP_CARD_TEXT_MUTED}`}>
-        …
-      </GlassCard>
-    )
-  }
+  if (loading) return null
 
   if (!status) return null
 
   if (status.preparing) {
-    return <MemberPortalStampPreparingPlaceholder lang={lang} variant="card" />
+    return <MemberPortalStampPreparingPlaceholder lang={lang} foodImageUrl={foodImageUrl} />
   }
 
   if (!status.enabled) return null
 
   const slots = Math.max(1, status.cardSlots)
   const filled = Math.max(0, Math.min(slots, status.currentStamps))
-  const milestoneSlotSet = new Set(status.milestones.map((m) => m.stampCount))
 
   return (
     <>
-      <GlassCard className={compact ? "p-4" : undefined}>
-        <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <Stamp className="h-5 w-5" aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("stampCardTitle")}</p>
-                <p className={`mt-0.5 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("stampCardDesc")}</p>
-              </div>
-              {!compact ? (
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen((v) => !v)}
-                  className={`inline-flex items-center gap-1 rounded-full border border-stone-200 px-2.5 py-1 text-[11px] ${MP_CARD_TEXT_SECONDARY}`}
-                >
-                  <History className="h-3.5 w-3.5" />
-                  {t("stampHistoryBtn")}
-                </button>
-              ) : null}
-            </div>
-            {status.cardExpiresAt ? (
-              <p className="mt-1 text-[11px] text-amber-800/70">
-                {t("stampExpiresAt").replace("{date}", status.cardExpiresAt)}
+      <div className="space-y-3">
+        <StampHomeShell foodImageUrl={foodImageUrl}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampHomeTitle")}</h3>
+              <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">
+                {resolveStampHomeSubtitle(lang, status)}
               </p>
+            </div>
+            {!compact ? (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((v) => !v)}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-stone-200/90 bg-white/80 px-2.5 py-1 text-[10px] font-semibold ${MP_CARD_TEXT_SECONDARY}`}
+              >
+                <History className="h-3 w-3" />
+                {t("stampHistoryBtn")}
+              </button>
+            ) : null}
+          </div>
+          <StampHomeSlots slots={slots} filled={filled} animateLast={animateSlots} />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="text-[10px] font-extrabold text-[#4b8a31]">
+              {t("stampHomeCount").replace("{current}", String(filled)).replace("{total}", String(slots))}
+            </span>
+            {status.totalEarned > 0 ? (
+              <span className={`text-[10px] ${MP_CARD_TEXT_SUBTLE}`}>
+                {t("stampTotalEarned").replace("{count}", String(status.totalEarned))}
+              </span>
+            ) : null}
+            {status.cardExpiresAt ? (
+              <span className="text-[10px] text-amber-800/75">
+                {t("stampExpiresAt").replace("{date}", status.cardExpiresAt)}
+              </span>
             ) : null}
             {status.cardSequence > 1 ? (
-              <p className={`mt-0.5 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
+              <span className={`text-[10px] ${MP_CARD_TEXT_SUBTLE}`}>
                 {t("stampCardSequence").replace("{n}", String(status.cardSequence))}
-              </p>
+              </span>
             ) : null}
           </div>
-        </div>
-
-        <div className="mb-2 h-2 overflow-hidden rounded-full bg-stone-200/80">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-700 ease-out"
-            style={{ width: `${status.progressPercent}%` }}
-          />
-        </div>
-
-        <div className="mb-3 flex items-end justify-between gap-2">
-          <p className={`text-sm ${MP_CARD_TEXT_SECONDARY}`}>
-            {t("stampProgress").replace("{current}", String(filled)).replace("{total}", String(slots))}
-          </p>
-          {status.totalEarned > 0 ? (
-            <p className={`text-xs ${MP_CARD_TEXT_SUBTLE}`}>
-              {t("stampTotalEarned").replace("{count}", String(status.totalEarned))}
-            </p>
-          ) : null}
-        </div>
-
-        <div className={`grid grid-cols-5 gap-2 ${slots <= 5 ? "sm:grid-cols-5" : "sm:grid-cols-10"}`}>
-          {Array.from({ length: slots }, (_, i) => {
-            const slotNo = i + 1
-            const active = i < filled
-            const isMilestone = milestoneSlotSet.has(slotNo)
-            const pop = animateSlots && i === filled - 1 && active
-            return (
-              <div
-                key={i}
-                className={`relative flex aspect-square items-center justify-center rounded-full border text-xs font-semibold transition ${
-                  active
-                    ? "border-amber-300/50 bg-gradient-to-br from-amber-300/30 to-amber-500/20 text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.15)]"
-                    : isMilestone
-                      ? "border-amber-400/35 bg-amber-400/[0.06] text-amber-100/70"
-                      : "border-white/10 bg-white/[0.03] text-white/25"
-                } ${pop ? "scale-110 animate-pulse" : ""}`}
-              >
-                {isMilestone ? (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400/90 text-[9px] text-black">
-                    <Gift className="h-2.5 w-2.5" />
-                  </span>
-                ) : null}
-                {active ? <Stamp className="h-4 w-4" /> : slotNo}
-              </div>
-            )
-          })}
-        </div>
+        </StampHomeShell>
 
         {status.nextMilestone ? (
-          <p className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100/90">
+          <p className={`rounded-[17px] border border-emerald-200/80 bg-gradient-to-r from-[#f2faeb] to-[#fff8eb] px-4 py-3 text-[11px] font-semibold leading-relaxed text-[#2d5016] ${MP_HOME_STAMP_CARD_RADIUS}`}>
             {t("stampNextReward")
               .replace("{remaining}", String(status.nextMilestone.stampsRemaining))
               .replace("{label}", status.nextMilestone.label || status.nextMilestone.couponCode)}
@@ -446,28 +390,30 @@ export function MemberPortalStampCard({ lang, memberId, status, loading, compact
         ) : null}
 
         {historyOpen && history.length > 0 ? (
-          <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
-            <p className="text-xs font-medium text-white/55">{t("stampHistoryTitle")}</p>
-            {history.slice(0, 8).map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-2 text-xs text-white/60">
-                <span>
-                  {row.stampYmd}
-                  {row.storeCode ? ` · ${row.storeCode}` : ""}
-                </span>
-                <span className={row.kind === "earn" ? "text-emerald-200/80" : "text-white/40"}>
-                  {row.kind === "earn"
-                    ? "+1"
-                    : row.kind === "revoke"
-                      ? t("stampHistoryRevoke")
-                      : row.kind === "adjust"
-                        ? t("stampHistoryAdjust")
-                        : row.kind}
-                </span>
-              </div>
-            ))}
-          </div>
+          <GlassCard soft className="px-4 py-3">
+            <p className={`mb-2 text-xs font-semibold ${MP_CARD_TEXT_SECONDARY}`}>{t("stampHistoryTitle")}</p>
+            <div className="space-y-2">
+              {history.slice(0, 8).map((row) => (
+                <div key={row.id} className={`flex items-center justify-between gap-2 text-xs ${MP_CARD_TEXT_MUTED}`}>
+                  <span>
+                    {row.stampYmd}
+                    {row.storeCode ? ` · ${row.storeCode}` : ""}
+                  </span>
+                  <span className={row.kind === "earn" ? "font-medium text-emerald-700" : MP_CARD_TEXT_SUBTLE}>
+                    {row.kind === "earn"
+                      ? "+1"
+                      : row.kind === "revoke"
+                        ? t("stampHistoryRevoke")
+                        : row.kind === "adjust"
+                          ? t("stampHistoryAdjust")
+                          : row.kind}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
         ) : null}
-      </GlassCard>
+      </div>
 
       <StampCelebrationSheet
         open={celebrationOpen}

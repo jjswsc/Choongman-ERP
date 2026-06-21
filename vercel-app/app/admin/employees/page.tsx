@@ -40,6 +40,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { formatEmployeeDisplayName, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import {
   getAdminEmployeeList,
+  getAdminEmployeeMedia,
   getEmployeeLatestGrades,
   getFranchiseeMultiStoreSettings,
   saveAdminEmployee,
@@ -215,6 +216,8 @@ export default function EmployeesPage() {
   const displayLoadSeqRef = React.useRef(0)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
   const [formSheetOpen, setFormSheetOpen] = React.useState(false)
+  /** 편집 시 photo lazy load 완료 전 저장하면 DB 사진이 지워질 수 있음 */
+  const [formMediaLoading, setFormMediaLoading] = React.useState(false)
   const fullListRef = React.useRef<EmployeeTableRow[]>([])
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
@@ -260,6 +263,33 @@ export default function EmployeesPage() {
       }
     },
     [resolveStoreKey]
+  )
+
+  const openEmployeeForm = React.useCallback(
+    (e: AdminEmployeeItem, opts?: { setStoreFilter?: boolean }) => {
+      const base = adminRowToForm(e)
+      setForm(base)
+      setFormSheetOpen(true)
+      if (opts?.setStoreFilter) {
+        setStoreFilter(String(e.store || "").trim() ? String(e.store) : "All")
+      }
+      const rowId = Number(e.row)
+      if (!Number.isFinite(rowId) || rowId <= 0) {
+        setFormMediaLoading(false)
+        return
+      }
+      setFormMediaLoading(true)
+      void getAdminEmployeeMedia(rowId)
+        .then((media) => {
+          setForm((prev) => ({
+            ...prev,
+            photo: media.photo || prev.photo,
+            idCardPhoto: media.idCardPhoto || prev.idCardPhoto,
+          }))
+        })
+        .finally(() => setFormMediaLoading(false))
+    },
+    [adminRowToForm]
   )
 
   React.useEffect(() => {
@@ -411,14 +441,12 @@ export default function EmployeesPage() {
         e = e || cand[0]
       }
       if (e) {
-        setForm(adminRowToForm(e))
+        openEmployeeForm(e, { setStoreFilter: true })
         setHasSearched(true)
-        setFormSheetOpen(true)
-        setStoreFilter(String(e.store || "").trim() ? String(e.store) : "All")
         router.replace("/admin/employees", { scroll: false })
       }
     })
-  }, [searchParams, loadEmployeeList, router, adminRowToForm])
+  }, [searchParams, loadEmployeeList, router, openEmployeeForm])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions
@@ -486,10 +514,7 @@ export default function EmployeesPage() {
 
   const handleEdit = (idx: number) => {
     const e = filteredRows[idx]
-    if (e) {
-      setForm(adminRowToForm(e))
-      setFormSheetOpen(true)
-    }
+    if (e) openEmployeeForm(e)
   }
 
   const handleDelete = async (rowId: number) => {
@@ -509,6 +534,7 @@ export default function EmployeesPage() {
 
   const handleSave = async () => {
     if (!form.name) return
+    if (formMediaLoading) return
     setSaving(true)
     try {
       const { managerGradeDisplay, ...employeePayload } = form
@@ -575,6 +601,7 @@ export default function EmployeesPage() {
     const base = { ...emptyForm }
     if ((isManager || isFranchiseeRole(userRole)) && userStore) base.store = resolveStoreKey(userStore)
     setForm(base)
+    setFormMediaLoading(false)
     setFormSheetOpen(true)
   }
   const storesForFilter = React.useMemo(() => {
@@ -733,7 +760,7 @@ export default function EmployeesPage() {
                     jobOptions={jobOptions}
                     onSave={handleSave}
                     onNew={handleNew}
-                    saving={saving}
+                    saving={saving || formMediaLoading}
                     roleDisabled={isManager || isFranchiseeRole(userRole)}
                     canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
                     canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}

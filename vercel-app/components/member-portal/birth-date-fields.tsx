@@ -9,6 +9,7 @@ import {
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 import { cn } from "@/lib/utils"
+import { mpSelectClass, mpSelectDarkClass, MP_CARD_TEXT_SUBTLE } from "@/lib/member-portal-design"
 
 const MONTH_KEYS = [
   "month1",
@@ -29,9 +30,11 @@ type BirthDateFieldsProps = {
   value: string
   onChange: (iso: string) => void
   className?: string
+  /** 로그인·가입(어두운 오버레이) vs 내 정보(밝은 카드) */
+  variant?: "dark" | "light"
 }
 
-export function BirthDateFields({ value, onChange, className }: BirthDateFieldsProps) {
+export function BirthDateFields({ value, onChange, className, variant = "dark" }: BirthDateFieldsProps) {
   const { t } = useMemberPortalLang()
   const parsed = React.useMemo(() => splitBirthDateParts(value), [value])
   const [day, setDay] = React.useState(parsed.day)
@@ -59,14 +62,18 @@ export function BirthDateFields({ value, onChange, className }: BirthDateFieldsP
     [onChange]
   )
 
-  const selectClass =
-    "h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none focus:border-amber-400/40"
+  const light = variant === "light"
+  const selectClass = light ? mpSelectClass : mpSelectDarkClass
+  const subLabelClass = light ? `text-[11px] ${MP_CARD_TEXT_SUBTLE}` : "text-[11px] text-white/45"
+  const hintClass = light ? `text-[11px] ${MP_CARD_TEXT_SUBTLE}` : "text-[11px] text-white/35"
+  const previewClass = light ? "text-[11px] text-amber-700" : "text-[11px] text-amber-200/70"
+  const optionClass = light ? "bg-white text-stone-900" : "bg-[#121214]"
 
   return (
     <div className={cn("space-y-2", className)}>
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-1">
-          <label className="text-[11px] text-white/45">{t("birthDayLabel")}</label>
+          <label className={subLabelClass}>{t("birthDayLabel")}</label>
           <select
             value={day}
             onChange={(e) => {
@@ -76,18 +83,18 @@ export function BirthDateFields({ value, onChange, className }: BirthDateFieldsP
             }}
             className={selectClass}
           >
-            <option value="" className="bg-[#121214]">
+            <option value="" className={optionClass}>
               {t("birthDayPlaceholder")}
             </option>
             {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-              <option key={d} value={String(d)} className="bg-[#121214]">
+              <option key={d} value={String(d)} className={optionClass}>
                 {d}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-[11px] text-white/45">{t("birthMonthLabel")}</label>
+          <label className={subLabelClass}>{t("birthMonthLabel")}</label>
           <select
             value={month}
             onChange={(e) => {
@@ -97,18 +104,18 @@ export function BirthDateFields({ value, onChange, className }: BirthDateFieldsP
             }}
             className={selectClass}
           >
-            <option value="" className="bg-[#121214]">
+            <option value="" className={optionClass}>
               {t("birthMonthPlaceholder")}
             </option>
             {MONTH_KEYS.map((key, idx) => (
-              <option key={key} value={String(idx + 1)} className="bg-[#121214]">
+              <option key={key} value={String(idx + 1)} className={optionClass}>
                 {t(key as MemberPortalKey)}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-[11px] text-white/45">{t("birthYearLabel")}</label>
+          <label className={subLabelClass}>{t("birthYearLabel")}</label>
           <select
             value={year}
             onChange={(e) => {
@@ -118,20 +125,20 @@ export function BirthDateFields({ value, onChange, className }: BirthDateFieldsP
             }}
             className={selectClass}
           >
-            <option value="" className="bg-[#121214]">
+            <option value="" className={optionClass}>
               {t("birthYearPlaceholder")}
             </option>
             {years.map((y) => (
-              <option key={y} value={String(y)} className="bg-[#121214]">
+              <option key={y} value={String(y)} className={optionClass}>
                 {y}
               </option>
             ))}
           </select>
         </div>
       </div>
-      <p className="text-[11px] text-white/35">{t("birthDateHint")}</p>
+      <p className={hintClass}>{t("birthDateHint")}</p>
       {value ? (
-        <p className="text-[11px] text-amber-200/70">{normalizeMemberBirthDateInput(value)}</p>
+        <p className={previewClass}>{normalizeMemberBirthDateInput(value)}</p>
       ) : null}
     </div>
   )

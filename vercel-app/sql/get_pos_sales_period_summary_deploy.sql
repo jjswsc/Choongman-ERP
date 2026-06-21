@@ -24,6 +24,7 @@ DECLARE
   v_has_store_code boolean;
   v_has_store_name boolean;
   v_has_status boolean;
+  v_has_payload boolean;
   v_total_expr text;
   v_cash_expr text;
   v_store_expr text;
@@ -54,31 +55,45 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'status'
   ) INTO v_has_status;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'payload'
+  ) INTO v_has_payload;
 
-  v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
   IF v_has_total THEN
-    v_total_expr := 'COALESCE(o.total, ' || v_total_expr || ')';
+    v_total_expr := 'COALESCE(o.total, 0)';
   ELSIF v_has_total_amount THEN
-    v_total_expr := 'COALESCE(o.total_amount, ' || v_total_expr || ')';
+    v_total_expr := 'COALESCE(o.total_amount, 0)';
+  ELSIF v_has_payload THEN
+    v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
+  ELSE
+    v_total_expr := '0';
   END IF;
 
-  v_cash_expr := 'COALESCE((o.payload->>''paymentCash'')::numeric, (o.payload->>''payment_cash'')::numeric, 0)';
   IF v_has_payment_cash THEN
-    v_cash_expr := 'COALESCE(o.payment_cash, ' || v_cash_expr || ')';
+    v_cash_expr := 'COALESCE(o.payment_cash, 0)';
+  ELSIF v_has_payload THEN
+    v_cash_expr := 'COALESCE((o.payload->>''paymentCash'')::numeric, (o.payload->>''payment_cash'')::numeric, 0)';
+  ELSE
+    v_cash_expr := '0';
   END IF;
 
   IF v_has_store_code THEN
     v_store_expr := 'COALESCE(o.store_code, '''')';
   ELSIF v_has_store_name THEN
     v_store_expr := 'COALESCE(o.store_name, '''')';
-  ELSE
+  ELSIF v_has_payload THEN
     v_store_expr := 'COALESCE((o.payload->>''storeCode''), (o.payload->>''store_code''), '''')';
+  ELSE
+    v_store_expr := '''''';
   END IF;
 
   IF v_has_status THEN
     v_status_expr := 'LOWER(COALESCE(o.status, ''''))';
-  ELSE
+  ELSIF v_has_payload THEN
     v_status_expr := 'LOWER(COALESCE((o.payload->>''status''), ''''))';
+  ELSE
+    v_status_expr := '''''';
   END IF;
 
   v_sql := '

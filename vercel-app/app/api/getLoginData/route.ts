@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
-import { supabaseSelectEmployeesForLoginList } from '@/lib/employees-compat'
+import { fetchEmployeesForLoginList } from '@/lib/login-data-employees-server'
 import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { legacyEmployeeStoreToCanonicalWithMap } from '@/lib/erp-store-master-shared'
@@ -24,17 +24,21 @@ type LoginDataPayload = {
 /** Supabase 응답이 느린 경우 5분 캐시로 반복 요청 부하 감소 */
 let _loginDataCache: LoginDataPayload | null = null
 const CACHE_TTL_MS = 5 * 60 * 1000
+const EDGE_CACHE_SEC = 300
+
+function loginDataSuccessHeaders(): Headers {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  headers.set('Access-Control-Allow-Headers', 'Content-Type')
+  headers.set('Cache-Control', `public, s-maxage=${EDGE_CACHE_SEC}, stale-while-revalidate=600`)
+  headers.set('CDN-Cache-Control', `public, s-maxage=${EDGE_CACHE_SEC}`)
+  headers.set('Vercel-CDN-Cache-Control', `public, s-maxage=${EDGE_CACHE_SEC}`)
+  return headers
+}
 
 async function getLoginDataHandler(): Promise<LoginDataPayload> {
-  const empList = (await supabaseSelectEmployeesForLoginList()) as {
-    company?: string | null
-    store?: string
-    name?: string
-    nick?: string
-    job?: string
-    role?: string
-    resign_date?: string | null
-  }[] | null
+  const empList = await fetchEmployeesForLoginList()
 
   /** 매장 마스터·거래처는 직원 목록과 독립 → 병렬로 왕복 1회 절감 (직원 조회는 반드시 선행) */
   const [masters, vendorRows] = await Promise.all([
@@ -112,10 +116,11 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
 }
 
 export async function GET() {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
-  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  headers.set('Access-Control-Allow-Headers', 'Content-Type')
+  const errorHeaders = new Headers()
+  errorHeaders.set('Access-Control-Allow-Origin', '*')
+  errorHeaders.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  errorHeaders.set('Access-Control-Allow-Headers', 'Content-Type')
+  errorHeaders.set('Cache-Control', 'no-store')
 
   const url = (process.env.SUPABASE_URL || '').trim()
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
@@ -134,22 +139,26 @@ export async function GET() {
         usedMaster: false,
         error: msg,
       },
-      { status: 503, headers }
+      { status: 503, headers: errorHeaders }
     )
   }
 
   try {
     if (isLoginDataCacheValid() && _loginDataCache) {
-      return NextResponse.json(_loginDataCache, { headers })
+      return NextResponse.json(_loginDataCache, { headers: loginDataSuccessHeaders() })
     }
     const data = await getLoginDataHandler()
     _loginDataCache = data
     markLoginDataCacheValid(CACHE_TTL_MS)
-    return NextResponse.json(data, { headers })
+    return NextResponse.json(data, { headers: loginDataSuccessHeaders() })
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e))
     const msg = err.message
     console.error('getLoginData:', e)
+    if (_loginDataCache) {
+      console.warn('getLoginData: serving stale in-process cache after fetch failure')
+      return NextResponse.json(_loginDataCache, { headers: loginDataSuccessHeaders() })
+    }
     return NextResponse.json(
       {
         users: {},
@@ -161,7 +170,7 @@ export async function GET() {
         usedMaster: false,
         error: msg,
       },
-      { status: 503, headers }
+      { status: 503, headers: errorHeaders }
     )
   }
 }

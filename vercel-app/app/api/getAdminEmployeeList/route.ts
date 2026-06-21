@@ -87,14 +87,15 @@ export async function GET(req: NextRequest) {
     }
     const scopeAllowedList = employeeScopeAllowedStoresFromJwt(jwt)
 
+    /** photo·id_card_photo(base64)는 목록에서 제외 — 편집 시 /api/getAdminEmployeeMedia lazy load */
     const empSelectFull =
-      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,can_manage_office_payroll,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code,employment_status,deleted_at'
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,tax_id,sso_number,sso_exempt,can_manage_office_payroll,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,extra_stores,employee_code,employment_status,deleted_at'
     const empSelectFullNoStatus = empSelectFull.replace(',employment_status,deleted_at', '')
     const empSelectFallback =
-      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo,employee_code'
+      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,employee_code'
     /** employee_code 컬럼 미배포 DB용 */
     const empSelectFallbackNoEmpCode =
-      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade'
     let rows: Record<string, unknown>[] | null = null
     const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
     const empSelectFullNoSsoExempt = empSelectFull.replace(',sso_exempt', '')
@@ -178,7 +179,7 @@ export async function GET(req: NextRequest) {
         role: r.role || 'Staff',
         email: r.email || '',
         idNumber: r.id_number != null ? String(r.id_number).trim() : '',
-        idCardPhoto: r.id_card_photo != null && String(r.id_card_photo).trim() ? String(r.id_card_photo).trim() : '',
+        idCardPhoto: '',
         taxId: r.tax_id != null ? String(r.tax_id).trim() : '',
         ssoNumber: r.sso_number != null ? String(r.sso_number).trim() : '',
         ssoExempt: r.sso_exempt === true || r.sso_exempt === 'true' || r.sso_exempt === 1,
@@ -196,7 +197,7 @@ export async function GET(req: NextRequest) {
             ? Number(r.attendance_allowance)
             : 500,
         grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
-        photo: r.photo != null && r.photo !== '' ? String(r.photo).trim() : '',
+        photo: '',
         extraStores: parseExtraStoresColumn(r.extra_stores),
         employmentStatus,
       })

@@ -42,6 +42,25 @@ describe('aggregatePosSalesPaymentDiscount', () => {
     expect(result.byKind[0]?.kind).toBe('collab')
     expect(result.byKind[0]?.discountAmount).toBe(60)
   })
+
+  it('classifies Grab API order without reason as platform via delivery_app_code', () => {
+    const result = aggregatePosSalesPaymentDiscount({
+      orderRows: [
+        {
+          total: 106,
+          order_type: 'delivery',
+          delivery_app_code: 'grab',
+          discount_amt: 23,
+          discount_reason: '',
+        },
+      ],
+    })
+
+    expect(result.byKind).toHaveLength(1)
+    expect(result.byKind[0]?.kind).toBe('platform')
+    expect(result.byKind[0]?.discountAmount).toBe(23)
+    expect(result.rows[0]?.label).toBe('Grab platform promo')
+  })
 })
 
 describe('buildPosSalesCombinedDiscount', () => {

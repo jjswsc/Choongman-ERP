@@ -31,6 +31,7 @@ import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platfor
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
+import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 
 function isMissingServiceColumnsError(e: unknown): boolean {
   const msg = String(e ?? '').toLowerCase()
@@ -66,7 +67,6 @@ export async function POST(req: NextRequest) {
     const discountReason = String(body?.discountReason ?? '').trim()
     const serviceAmt = Math.max(0, Number(body?.serviceAmt ?? body?.service_amt ?? 0))
     const serviceReason = String(body?.serviceReason ?? body?.service_reason ?? '').trim()
-    const discountAmtNet = Math.max(0, discountAmt - serviceAmt)
     const paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
     const paymentCashTendered = Math.max(0, Number(body?.paymentCashTendered ?? body?.payment_cash_tendered ?? 0))
     const paymentQrType = String(body?.paymentQrType ?? body?.payment_qr_type ?? '').trim()
@@ -244,6 +244,7 @@ export async function POST(req: NextRequest) {
       appliedPre = [{ code: legacyCouponCode, name: legacyCouponCode, discountAmt: legacyCouponAmt, quantity: 1 }]
     }
     const preCouponSum = appliedPre.reduce((s, row) => s + Math.max(0, Number(row.discountAmt ?? 0) || 0), 0)
+    const discountAmtNet = resolveManualDiscountNetForOrderSave({ discountAmt, serviceAmt, items })
     const manualDiscountForCoupons = Math.max(0, discountAmtNet - preCouponSum)
     const collabDiscountAmt = Math.max(0, Number(body?.collabDiscountAmt ?? body?.collab_discount_amt ?? 0))
     const couponResolved = await resolvePosOrderCouponsForSave({

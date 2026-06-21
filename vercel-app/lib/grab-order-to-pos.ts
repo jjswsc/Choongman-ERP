@@ -8,6 +8,7 @@ import {
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
 import { resolveCanonicalErpStoreCode } from '@/lib/erp-store-identity'
+import { resolvePlatformDiscountReasonForSave } from '@/lib/pos-platform-discount-reason'
 import { parseGrabStoreMap, resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
 import { normStoreKey } from '@/lib/store-list-keys'
 import {
@@ -1215,6 +1216,7 @@ export async function persistGrabOrderToPos(
         items_json: JSON.stringify(snapshot.items),
         subtotal: snapshot.subtotal,
         discount_amt: snapshot.discountAmt,
+        discount_reason: resolvePlatformDiscountReasonForSave('grab', snapshot.discountAmt),
         delivery_fee: snapshot.deliveryFee,
         packaging_fee: snapshot.packagingFee,
         vat: snapshot.vat,
@@ -1243,7 +1245,7 @@ export async function persistGrabOrderToPos(
     table_name: snapshot.tableName,
     memo,
     discount_amt: snapshot.discountAmt,
-    discount_reason: '',
+    discount_reason: resolvePlatformDiscountReasonForSave('grab', snapshot.discountAmt),
     delivery_fee: snapshot.deliveryFee,
     packaging_fee: snapshot.packagingFee,
     items_json: JSON.stringify(snapshot.items),

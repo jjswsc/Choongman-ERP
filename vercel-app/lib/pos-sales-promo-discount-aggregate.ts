@@ -1,5 +1,6 @@
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { isDeliveryPlatformDiscountOrder } from '@/lib/pos-platform-discount-reason'
 import {
   orderTypeToPromoRegularPriceChannel,
   resolvePromoRegularPricePerSet,
@@ -77,6 +78,7 @@ type OrderRowForPromoAgg = {
   total?: number
   discount_amt?: number
   coupon_discount_amt?: number
+  delivery_app_code?: string | null
 }
 
 function str(v: unknown): string {
@@ -199,6 +201,9 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
       Number(order.discount_amt) || 0,
       Number(order.coupon_discount_amt) || 0
     )
+    /** 배달앱 API 플랫폼 프로모 — discount_amt 층으로만 집계(세트 내재 할인과 이중 집계 방지) */
+    if (isDeliveryPlatformDiscountOrder(order)) continue
+
     const channel = orderTypeToPromoRegularPriceChannel(order.order_type)
     for (const row of parseOrderItems(order.items_json)) {
       const promoId = str(row.promoId ?? row.promo_id)

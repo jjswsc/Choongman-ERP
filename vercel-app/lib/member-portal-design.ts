@@ -73,6 +73,18 @@ export const mpGlassInset =
 export const mpInputClass =
   'rounded-2xl border-stone-200 bg-white text-stone-900 placeholder:text-stone-400 shadow-sm focus-visible:border-amber-500/50 focus-visible:ring-amber-400/20'
 
+export const mpSelectClass =
+  'h-12 w-full rounded-2xl border border-stone-200 bg-white px-3 text-sm text-stone-900 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-400/20'
+
+export const mpSelectDarkClass =
+  'h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none focus:border-amber-400/40'
+
+export const mpGenderBtnClass =
+  'h-11 rounded-2xl border border-stone-200 bg-white text-sm font-medium text-[color:var(--mp-text-primary,#1c1917)] transition hover:bg-stone-50'
+
+export const mpGenderBtnActiveClass =
+  'h-11 rounded-2xl border border-amber-300/50 bg-amber-50 text-sm font-medium text-amber-900 transition'
+
 export const mpPrimaryBtn =
   'h-12 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-[#f5d78e] text-base font-semibold text-[#1a1208] shadow-[0_8px_24px_rgba(212,175,55,0.28)] hover:from-amber-300 hover:to-amber-200'
 

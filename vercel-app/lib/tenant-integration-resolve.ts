@@ -11,6 +11,7 @@ import type {
   TenantKbankConfig,
 } from '@/lib/tenant-integration-types'
 import type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
+import { isSaasBrand } from '@/lib/app-brand'
 import type { GrabOAuthCredentials } from '@/lib/grab-oauth-credentials'
 import {
   buildGrabPortalMerchantMapDefaults,
@@ -236,10 +237,10 @@ export async function resolveTenantIdByGrabLookup(seed: string): Promise<string 
 
 export { parseGrabPartnerApiMenuMerchantMap }
 
-/** erp_stores.store_code → tenant_id (SaaS 매장) */
+/** erp_stores.store_code → tenant_id (SaaS 매장). 충만 등 레거시 DB는 조회하지 않음 */
 export async function resolveTenantIdForStoreCode(storeCode: string): Promise<string | undefined> {
   const code = String(storeCode || '').trim()
-  if (!code) return undefined
+  if (!code || !isSaasBrand()) return undefined
   try {
     const { supabaseSelectFilter } = await import('@/lib/supabase-server')
     const rows = (await supabaseSelectFilter('erp_stores', `store_code=eq.${encodeURIComponent(code)}`, {

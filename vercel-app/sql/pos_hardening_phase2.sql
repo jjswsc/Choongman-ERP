@@ -57,6 +57,7 @@ DECLARE
   v_has_store_name boolean;
   v_has_status boolean;
   v_has_order_type boolean;
+  v_has_payload boolean;
   v_total_expr text;
   v_subtotal_expr text;
   v_vat_expr text;
@@ -112,57 +113,85 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'order_type'
   ) INTO v_has_order_type;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'payload'
+  ) INTO v_has_payload;
 
-  v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
   IF v_has_total THEN
-    v_total_expr := 'COALESCE(o.total, ' || v_total_expr || ')';
+    v_total_expr := 'COALESCE(o.total, 0)';
   ELSIF v_has_total_amount THEN
-    v_total_expr := 'COALESCE(o.total_amount, ' || v_total_expr || ')';
+    v_total_expr := 'COALESCE(o.total_amount, 0)';
+  ELSIF v_has_payload THEN
+    v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
+  ELSE
+    v_total_expr := '0';
   END IF;
 
-  v_subtotal_expr := 'COALESCE((o.payload->>''subtotal'')::numeric, 0)';
   IF v_has_subtotal THEN
-    v_subtotal_expr := 'COALESCE(o.subtotal, ' || v_subtotal_expr || ')';
+    v_subtotal_expr := 'COALESCE(o.subtotal, 0)';
+  ELSIF v_has_payload THEN
+    v_subtotal_expr := 'COALESCE((o.payload->>''subtotal'')::numeric, 0)';
+  ELSE
+    v_subtotal_expr := '0';
   END IF;
 
-  v_vat_expr := 'COALESCE((o.payload->>''vat'')::numeric, (o.payload->>''vatFeeAmt'')::numeric, 0)';
   IF v_has_vat THEN
-    v_vat_expr := 'COALESCE(o.vat, ' || v_vat_expr || ')';
+    v_vat_expr := 'COALESCE(o.vat, 0)';
+  ELSIF v_has_payload THEN
+    v_vat_expr := 'COALESCE((o.payload->>''vat'')::numeric, (o.payload->>''vatFeeAmt'')::numeric, 0)';
+  ELSE
+    v_vat_expr := '0';
   END IF;
 
-  v_discount_expr := 'COALESCE((o.payload->>''discountAmt'')::numeric, (o.payload->>''discount_amt'')::numeric, 0)';
   IF v_has_discount_amt THEN
-    v_discount_expr := 'COALESCE(o.discount_amt, ' || v_discount_expr || ')';
+    v_discount_expr := 'COALESCE(o.discount_amt, 0)';
+  ELSIF v_has_payload THEN
+    v_discount_expr := 'COALESCE((o.payload->>''discountAmt'')::numeric, (o.payload->>''discount_amt'')::numeric, 0)';
+  ELSE
+    v_discount_expr := '0';
   END IF;
 
-  v_coupon_discount_expr := 'COALESCE((o.payload->>''couponDiscountAmt'')::numeric, (o.payload->>''coupon_discount_amt'')::numeric, 0)';
   IF v_has_coupon_discount_amt THEN
-    v_coupon_discount_expr := 'COALESCE(o.coupon_discount_amt, ' || v_coupon_discount_expr || ')';
+    v_coupon_discount_expr := 'COALESCE(o.coupon_discount_amt, 0)';
+  ELSIF v_has_payload THEN
+    v_coupon_discount_expr := 'COALESCE((o.payload->>''couponDiscountAmt'')::numeric, (o.payload->>''coupon_discount_amt'')::numeric, 0)';
+  ELSE
+    v_coupon_discount_expr := '0';
   END IF;
 
-  v_guest_count_expr := 'COALESCE((o.payload->>''guestCount'')::integer, (o.payload->>''guest_count'')::integer, 0)';
   IF v_has_guest_count THEN
-    v_guest_count_expr := 'COALESCE(o.guest_count, ' || v_guest_count_expr || ')';
+    v_guest_count_expr := 'COALESCE(o.guest_count, 0)';
+  ELSIF v_has_payload THEN
+    v_guest_count_expr := 'COALESCE((o.payload->>''guestCount'')::integer, (o.payload->>''guest_count'')::integer, 0)';
+  ELSE
+    v_guest_count_expr := '0';
   END IF;
 
   IF v_has_store_code THEN
     v_store_expr := 'COALESCE(o.store_code, '''')';
   ELSIF v_has_store_name THEN
     v_store_expr := 'COALESCE(o.store_name, '''')';
-  ELSE
+  ELSIF v_has_payload THEN
     v_store_expr := 'COALESCE((o.payload->>''storeCode''), (o.payload->>''store_code''), '''')';
+  ELSE
+    v_store_expr := '''''';
   END IF;
 
   IF v_has_status THEN
     v_status_expr := 'COALESCE(o.status, '''')';
-  ELSE
+  ELSIF v_has_payload THEN
     v_status_expr := 'COALESCE((o.payload->>''status''), '''')';
+  ELSE
+    v_status_expr := '''''';
   END IF;
 
   IF v_has_order_type THEN
     v_order_type_expr := 'COALESCE(o.order_type, '''')';
-  ELSE
+  ELSIF v_has_payload THEN
     v_order_type_expr := 'COALESCE((o.payload->>''orderType''), (o.payload->>''order_type''), '''')';
+  ELSE
+    v_order_type_expr := '''''';
   END IF;
 
   v_sql := '
@@ -215,6 +244,7 @@ DECLARE
   v_has_store_code boolean;
   v_has_store_name boolean;
   v_has_status boolean;
+  v_has_payload boolean;
   v_total_expr text;
   v_cash_expr text;
   v_store_expr text;
@@ -245,31 +275,45 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'status'
   ) INTO v_has_status;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'payload'
+  ) INTO v_has_payload;
 
-  v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
   IF v_has_total THEN
-    v_total_expr := 'COALESCE(o.total, ' || v_total_expr || ')';
+    v_total_expr := 'COALESCE(o.total, 0)';
   ELSIF v_has_total_amount THEN
-    v_total_expr := 'COALESCE(o.total_amount, ' || v_total_expr || ')';
+    v_total_expr := 'COALESCE(o.total_amount, 0)';
+  ELSIF v_has_payload THEN
+    v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
+  ELSE
+    v_total_expr := '0';
   END IF;
 
-  v_cash_expr := 'COALESCE((o.payload->>''paymentCash'')::numeric, (o.payload->>''payment_cash'')::numeric, 0)';
   IF v_has_payment_cash THEN
-    v_cash_expr := 'COALESCE(o.payment_cash, ' || v_cash_expr || ')';
+    v_cash_expr := 'COALESCE(o.payment_cash, 0)';
+  ELSIF v_has_payload THEN
+    v_cash_expr := 'COALESCE((o.payload->>''paymentCash'')::numeric, (o.payload->>''payment_cash'')::numeric, 0)';
+  ELSE
+    v_cash_expr := '0';
   END IF;
 
   IF v_has_store_code THEN
     v_store_expr := 'COALESCE(o.store_code, '''')';
   ELSIF v_has_store_name THEN
     v_store_expr := 'COALESCE(o.store_name, '''')';
-  ELSE
+  ELSIF v_has_payload THEN
     v_store_expr := 'COALESCE((o.payload->>''storeCode''), (o.payload->>''store_code''), '''')';
+  ELSE
+    v_store_expr := '''''';
   END IF;
 
   IF v_has_status THEN
     v_status_expr := 'LOWER(COALESCE(o.status, ''''))';
-  ELSE
+  ELSIF v_has_payload THEN
     v_status_expr := 'LOWER(COALESCE((o.payload->>''status''), ''''))';
+  ELSE
+    v_status_expr := '''''';
   END IF;
 
   v_sql := '

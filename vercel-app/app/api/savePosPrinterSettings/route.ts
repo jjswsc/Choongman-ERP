@@ -11,6 +11,7 @@ import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, canSavePosCustomerDisplayFields, hasOfficeStaffScope } from '@/lib/permissions'
+import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -323,8 +324,11 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
     }
-    if (!office && authStore && storeCode !== authStore) {
-      return NextResponse.json({ success: false, message: '다른 매장 설정을 수정할 수 없습니다.' }, { status: 403, headers })
+    if (!office && authStore) {
+      const allowed = await canAccessPosStoreForAuth(authStore, storeCode)
+      if (!allowed) {
+        return NextResponse.json({ success: false, message: '다른 매장 설정을 수정할 수 없습니다.' }, { status: 403, headers })
+      }
     }
     const previousRows = (await supabaseSelectFilter(
       'pos_printer_settings',

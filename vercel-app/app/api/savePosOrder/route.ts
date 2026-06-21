@@ -23,6 +23,7 @@ import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-reg
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
+import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import {
@@ -204,7 +205,6 @@ export async function POST(req: NextRequest) {
     const discountReason = String(body.discountReason ?? '').trim()
     const serviceAmt = Math.max(0, Number(body.serviceAmt ?? body.service_amt ?? 0))
     const serviceReason = String(body.serviceReason ?? body.service_reason ?? '').trim()
-    const discountAmtNet = Math.max(0, discountAmt - serviceAmt)
     const deliveryFee = Math.max(0, Number(body.deliveryFee ?? 0))
     const packagingFee = Math.max(0, Number(body.packagingFee ?? 0))
     const paymentCash = Math.max(0, Number(body.paymentCash ?? 0))
@@ -272,6 +272,7 @@ export async function POST(req: NextRequest) {
       appliedPre = [{ code: legacyCouponCode, name: legacyCouponCode, discountAmt: legacyCouponAmt, quantity: 1 }]
     }
     const preCouponSum = appliedPre.reduce((s, row) => s + Math.max(0, Number(row.discountAmt ?? 0) || 0), 0)
+    const discountAmtNet = resolveManualDiscountNetForOrderSave({ discountAmt, serviceAmt, items })
     const manualDiscountForCoupons = Math.max(0, discountAmtNet - preCouponSum)
     const collabDiscountAmt = Math.max(0, Number(body.collabDiscountAmt ?? body.collab_discount_amt ?? 0))
     const couponResolved = await resolvePosOrderCouponsForSave({
