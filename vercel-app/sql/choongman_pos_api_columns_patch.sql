@@ -1,13 +1,14 @@
 -- ============================================================
 -- choongman_pos_api_columns_patch.sql
--- 충만(레거시) Supabase — 오늘 API 변경 호환 (한 번 붙여넣기)
+-- 충만(레거시) Supabase — API·RPC 호환 (한 번 붙여넣기)
 --
 -- 대상: faxolqgaadcvyeyvrydc (충만 ERP)
 -- ⚠️ Omni(SaaS) DB에는 omni_pos_choongman_parity.sql 사용
 --
--- 해결:
---   · pos_orders.discount_reason — Grab/Shopee 주문 POST PGRST204
---   · pos_grab_store_integrations — (선택) Grab 연동 상태 테이블 404
+-- 이 파일만으로 부족하면 아래도 SQL Editor에서 각 1회 실행:
+--   · get_login_data_employees_rpc.sql
+--   · get_pos_sales_period_summary_deploy.sql
+--   · get_pos_sales_analytics_agg.sql  (guest_sum bigint 캐스트 — 매출 RPC 42804)
 -- ============================================================
 
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS discount_reason TEXT DEFAULT '';

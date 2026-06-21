@@ -3,6 +3,7 @@
  * select 목록에 company 를 넣으면 PostgREST 42703 → getLoginData 503.
  */
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 
 export function isMissingEmployeesCompanyColumn(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err)
@@ -23,46 +24,49 @@ function isMissingEmployeesNickColumn(err: unknown): boolean {
 }
 
 export async function supabaseSelectEmployeesForLoginList(): Promise<unknown> {
-  try {
-    return await supabaseSelect('employees', {
-      order: 'id.asc',
-      select: EMPLOYEES_LOGIN_LIST_WITH_COMPANY,
-    })
-  } catch (e) {
-    if (isMissingEmployeesCompanyColumn(e)) {
-      try {
-        return await supabaseSelect('employees', {
-          order: 'id.asc',
-          select: EMPLOYEES_LOGIN_LIST_NO_COMPANY,
-        })
-      } catch (e2) {
-        if (isMissingEmployeesNickColumn(e2)) {
-          return await supabaseSelect('employees', {
-            order: 'id.asc',
-            select: EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK,
-          })
-        }
-        throw e2
-      }
+  const legacy = isLegacyChoongmanErpSupabase()
+  const attempts = legacy
+    ? [
+        EMPLOYEES_LOGIN_LIST_NO_COMPANY,
+        EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK,
+        EMPLOYEES_LOGIN_LIST_WITH_COMPANY,
+        EMPLOYEES_LOGIN_LIST_WITH_COMPANY_NO_NICK,
+      ]
+    : [
+        EMPLOYEES_LOGIN_LIST_WITH_COMPANY,
+        EMPLOYEES_LOGIN_LIST_WITH_COMPANY_NO_NICK,
+        EMPLOYEES_LOGIN_LIST_NO_COMPANY,
+        EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK,
+      ]
+  let lastErr: unknown = null
+  for (const select of attempts) {
+    try {
+      return await supabaseSelect('employees', { order: 'id.asc', select })
+    } catch (e) {
+      lastErr = e
+      if (isMissingEmployeesCompanyColumn(e) || isMissingEmployeesNickColumn(e)) continue
+      throw e
     }
-    if (isMissingEmployeesNickColumn(e)) {
-      try {
-        return await supabaseSelect('employees', {
-          order: 'id.asc',
-          select: EMPLOYEES_LOGIN_LIST_WITH_COMPANY_NO_NICK,
-        })
-      } catch (e2) {
-        if (isMissingEmployeesCompanyColumn(e2)) {
-          return await supabaseSelect('employees', {
-            order: 'id.asc',
-            select: EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK,
-          })
-        }
-        throw e2
-      }
-    }
-    throw e
   }
+  throw lastErr
+}
+
+function loginCheckSelectAttempts(): { select: string }[] {
+  const legacy = isLegacyChoongmanErpSupabase()
+  if (legacy) {
+    return [
+      { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL },
+      { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY },
+      { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL },
+      { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY },
+    ]
+  }
+  return [
+    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL },
+    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY },
+    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL },
+    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY },
+  ]
 }
 
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY =
@@ -81,12 +85,7 @@ function isMissingEmployeesOfficePayrollColumn(err: unknown): boolean {
 
 export async function supabaseSelectFilterEmployeesByNameForLogin(name: string): Promise<unknown> {
   const nameFilter = `name=eq.${encodeURIComponent(name)}`
-  const attempts: { select: string }[] = [
-    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL },
-    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY },
-    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL },
-    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY },
-  ]
+  const attempts = loginCheckSelectAttempts()
   let lastErr: unknown = null
   for (const { select } of attempts) {
     try {

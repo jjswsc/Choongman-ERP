@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { isSaasBrand } from '@/lib/app-brand'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 import { supabaseSelect } from '@/lib/supabase-server'
 import {
   buildLegacyToCanonicalMap,
@@ -63,7 +63,7 @@ async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
       })) as ErpStoreMasterRow[] | null
       return (rows || []).filter((r) => r.is_active !== false)
     } catch {
-      if (!isSaasBrand()) return []
+      if (isLegacyChoongmanErpSupabase()) return []
       try {
         // SaaS 전환 스키마(tenant_id/store_name/store_code) 호환
         const rows = (await supabaseSelect('erp_stores', {
