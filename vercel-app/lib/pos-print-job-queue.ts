@@ -1,4 +1,9 @@
-import { supabaseInsertIgnoreDuplicates, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import {
+  supabaseInsertIgnoreDuplicates,
+  supabaseRpc,
+  supabaseSelectFilter,
+  supabaseUpdateByFilter,
+} from '@/lib/supabase-server'
 
 type EnqueueKitchenPrintJobInput = {
   storeCode: string
@@ -32,23 +37,52 @@ export async function enqueueKitchenPrintJob(input: EnqueueKitchenPrintJobInput)
   const dedupeKey =
     String(input.dedupeKey ?? '').trim() || `order:${orderId}:kitchen:${Number(input.station || 0) || 0}`
 
+  const payload_json = {
+    source: String(input.source || '').trim() || null,
+    ...(input.payload || {}),
+  }
+
   try {
-    await supabaseInsertIgnoreDuplicates('pos_print_jobs', {
-      store_code: storeCode,
-      order_id: orderId,
-      order_no: String(input.orderNo ?? '').trim() || null,
-      job_type: 'kitchen',
-      station:
+    await supabaseRpc('enqueue_pos_print_job', {
+      p_store_code: storeCode,
+      p_order_id: orderId,
+      p_order_no: String(input.orderNo ?? '').trim() || null,
+      p_job_type: 'kitchen',
+      p_station:
         input.station != null && Number.isFinite(Number(input.station))
           ? Math.max(0, Math.min(3, Math.trunc(Number(input.station))))
           : null,
-      status: 'queued',
-      dedupe_key: dedupeKey,
-      payload_json: {
-        source: String(input.source || '').trim() || null,
-        ...(input.payload || {}),
-      },
+      p_status: 'queued',
+      p_dedupe_key: dedupeKey,
+      p_payload_json: payload_json,
     })
+    return
+  } catch (rpcErr) {
+    const rpcMsg = String(rpcErr ?? '').toLowerCase()
+    if (!/enqueue_pos_print_job|42883|pgrst202|does not exist|could not find/i.test(rpcMsg)) {
+      if (isMissingPrintJobsTableError(rpcErr)) return
+      throw rpcErr
+    }
+  }
+
+  try {
+    await supabaseInsertIgnoreDuplicates(
+      'pos_print_jobs',
+      {
+        store_code: storeCode,
+        order_id: orderId,
+        order_no: String(input.orderNo ?? '').trim() || null,
+        job_type: 'kitchen',
+        station:
+          input.station != null && Number.isFinite(Number(input.station))
+            ? Math.max(0, Math.min(3, Math.trunc(Number(input.station))))
+            : null,
+        status: 'queued',
+        dedupe_key: dedupeKey,
+        payload_json,
+      },
+      'dedupe_key'
+    )
   } catch (e) {
     const msg = String(e ?? '').toLowerCase()
     if (msg.includes('duplicate key value') && msg.includes('dedupe_key')) return

@@ -334,10 +334,16 @@ export async function supabaseInsert(table: string, row: Record<string, unknown>
   return text ? (JSON.parse(text) as unknown) : []
 }
 
-/** INSERT — unique 충돌 시 무시(PostgREST resolution=ignore-duplicates). dedupe 큐 등 */
-export async function supabaseInsertIgnoreDuplicates(table: string, row: Record<string, unknown>): Promise<void> {
+/** INSERT — unique 충돌 시 무시. onConflictColumn 지정 필수(미지정 시 PK id만 → dedupe_key 등 partial unique는 23505). */
+export async function supabaseInsertIgnoreDuplicates(
+  table: string,
+  row: Record<string, unknown>,
+  onConflictColumn: string
+): Promise<void> {
   const { url, key } = getConfig()
-  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
+  const conflict = String(onConflictColumn || '').trim()
+  if (!conflict) throw new Error('supabaseInsertIgnoreDuplicates: onConflictColumn required')
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?on_conflict=${encodeURIComponent(conflict)}`
   const res = await supabaseFetch(pathStr, {
     method: 'POST',
     headers: {

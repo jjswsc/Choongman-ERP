@@ -47,3 +47,42 @@ drop trigger if exists trg_pos_print_jobs_updated_at on public.pos_print_jobs;
 create trigger trg_pos_print_jobs_updated_at
 before update on public.pos_print_jobs
 for each row execute function public.touch_pos_print_jobs_updated_at();
+
+-- 주방 인쇄 큐 enqueue — dedupe_key partial unique 충돌 시 DB ERROR 없이 무시
+create or replace function public.enqueue_pos_print_job(
+  p_store_code text,
+  p_order_id bigint,
+  p_order_no text,
+  p_job_type text,
+  p_station smallint,
+  p_status text,
+  p_dedupe_key text,
+  p_payload_json jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(btrim(p_dedupe_key), '') = '' then
+    insert into public.pos_print_jobs (
+      store_code, order_id, order_no, job_type, station, status, dedupe_key, payload_json
+    ) values (
+      p_store_code, p_order_id, p_order_no, p_job_type, p_station, p_status, null, p_payload_json
+    );
+    return;
+  end if;
+
+  insert into public.pos_print_jobs (
+    store_code, order_id, order_no, job_type, station, status, dedupe_key, payload_json
+  ) values (
+    p_store_code, p_order_id, p_order_no, p_job_type, p_station, p_status, p_dedupe_key, p_payload_json
+  )
+  on conflict (dedupe_key) where dedupe_key is not null do nothing;
+end;
+$$;
+
+grant execute on function public.enqueue_pos_print_job(
+  text, bigint, text, text, smallint, text, text, jsonb
+) to service_role;

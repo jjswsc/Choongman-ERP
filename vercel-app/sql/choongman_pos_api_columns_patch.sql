@@ -9,6 +9,7 @@
 --   · get_login_data_employees_rpc.sql
 --   · get_pos_sales_period_summary_deploy.sql
 --   · get_pos_sales_analytics_agg.sql  (guest_sum bigint 캐스트 — 매출 RPC 42804)
+--   · enqueue_pos_print_job_deploy.sql (주방 인쇄 dedupe 23505 로그)
 -- ============================================================
 
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS discount_reason TEXT DEFAULT '';
