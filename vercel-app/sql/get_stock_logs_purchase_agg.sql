@@ -67,5 +67,7 @@ $$;
 COMMENT ON FUNCTION public.get_stock_logs_purchase_agg(text[], timestamptz, timestamptz, text[], text[]) IS
   '기간·location·vendor_target 패턴으로 stock_logs 매입/출고 금액을 품목·거래처 단위로 집계';
 
+REVOKE ALL ON FUNCTION public.get_stock_logs_purchase_agg(text[], timestamptz, timestamptz, text[], text[])
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_stock_logs_purchase_agg(text[], timestamptz, timestamptz, text[], text[])
-  TO anon, authenticated, service_role;
+  TO service_role;

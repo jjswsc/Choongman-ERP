@@ -35,6 +35,9 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.enqueue_pos_print_job(
+  text, bigint, text, text, smallint, text, text, jsonb
+) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.enqueue_pos_print_job(
   text, bigint, text, text, smallint, text, text, jsonb
 ) TO service_role;

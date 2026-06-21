@@ -114,8 +114,12 @@ COMMENT ON FUNCTION public.get_payable_summary(text, text) IS
 COMMENT ON FUNCTION public.get_pos_sales_filter_store_codes(timestamptz, timestamptz) IS
   '매출 관리 매장 필터 DISTINCT store_code.';
 
-GRANT EXECUTE ON FUNCTION public.get_store_stock(text[], timestamptz) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_distinct_stock_locations() TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_receivable_summary(text, text) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_payable_summary(text, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_store_stock(text[], timestamptz) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_distinct_stock_locations() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_receivable_summary(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_payable_summary(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_store_stock(text[], timestamptz) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_distinct_stock_locations() TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_receivable_summary(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_payable_summary(text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_pos_sales_filter_store_codes(timestamptz, timestamptz) TO anon, authenticated, service_role;

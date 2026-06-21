@@ -10,7 +10,7 @@ import {
   filterRowsByPosSalesBusinessDateRange,
   posSalesBusinessDateRangeUtcEnvelope,
 } from '@/lib/pos-sales-business-day-range'
-import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { coercePosOrderTypeForDb, inferPosOrderTypeFromRow } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { verifyBearerWithSaasGate } from '@/lib/saas/bearer-saas-gate'
 import { isOfficeRole } from '@/lib/permissions'
@@ -118,33 +118,7 @@ function inferOrderTypeForResponse(row: {
   delivery_payment_channel?: string
   items_json?: string
 }) {
-  const explicit = coercePosOrderTypeForDb(row.order_type)
-  if (explicit !== 'dine_in') return explicit
-  const channel = String(row.delivery_payment_channel || '').trim().toLowerCase()
-  if (channel === 'grab' || channel === 'lineman' || channel === 'shopee') return 'delivery' as const
-  const memo = String(row.memo || '').toLowerCase()
-  const tableName = String(row.table_name || '').toLowerCase()
-  if (
-    memo.includes('grab_order:') ||
-    memo.includes('lineman_order:') ||
-    memo.includes('shopee_order:') ||
-    memo.includes('delivery') ||
-    tableName.includes('grab') ||
-    tableName.includes('line man') ||
-    tableName.includes('lineman') ||
-    tableName.includes('shopee')
-  ) {
-    return 'delivery' as const
-  }
-  try {
-    const items = JSON.parse(String(row.items_json || '[]'))
-    if (Array.isArray(items) && items.some((it) => String((it as { deliveryAppCode?: string }).deliveryAppCode || '').trim())) {
-      return 'delivery' as const
-    }
-  } catch {
-    // keep dine_in fallback
-  }
-  return 'dine_in' as const
+  return inferPosOrderTypeFromRow(row)
 }
 
 /** 응답 rows 에 promoItems menuName/menuCode 보강이 필요한 menuId 가 하나라도 있으면 true */

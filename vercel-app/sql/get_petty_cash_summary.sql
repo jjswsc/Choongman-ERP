@@ -106,5 +106,7 @@ $$;
 COMMENT ON FUNCTION public.get_petty_cash_summary(date, date, text, text, integer, boolean, text, text, boolean) IS
   'Petty cash 기간 합계(지출·입금·VAT·건수). 관리자 검색 합계 카드용.';
 
+REVOKE ALL ON FUNCTION public.get_petty_cash_summary(date, date, text, text, integer, boolean, text, text, boolean)
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_petty_cash_summary(date, date, text, text, integer, boolean, text, text, boolean)
-  TO anon, authenticated, service_role;
+  TO service_role;

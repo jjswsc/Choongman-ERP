@@ -44,4 +44,5 @@ begin
 end;
 $$;
 
-grant execute on function public.allocate_pos_order_no(text, text) to anon, authenticated, service_role;
+revoke all on function public.allocate_pos_order_no(text, text) from public, anon, authenticated;
+grant execute on function public.allocate_pos_order_no(text, text) to service_role;

@@ -2,6 +2,7 @@
 -- 역할이 바꿀 수 있는 search_path로 인한 객체 탈취 완화: 함수에 고정 search_path 부여.
 --
 -- Supabase Dashboard → SQL Editor → 실행
+-- ※ 전체 린터 대응(search_path + RPC EXECUTE)은 supabase_linter_hardening_one_paste.sql 사용 권장.
 --
 -- 참고 — 린트 0024 (rls_policy_always_true):
 --   `FOR ALL` + USING(true)/WITH CHECK(true) 는 “anon이 테이블에 쓰기” 같은 기존 설계와 맞추기 위한 패턴이라

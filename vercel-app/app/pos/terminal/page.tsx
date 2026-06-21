@@ -158,7 +158,7 @@ import {
   resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
-import { isPosDineInTableNameOnlyUpdate } from '@/lib/pos-dine-in-realtime-update'
+import { isPosDineInTableNameOnlyUpdate, isPosOrderItemsJsonPackagingOnlyUpdate, posOrderRealtimePricingFieldsChanged } from '@/lib/pos-dine-in-realtime-update'
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -235,6 +235,7 @@ import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
 import {
+  inferPosOrderTypeFromRow,
   normalizePosOrderTypeKey,
   resolvePosOrderTypeReceiptLabel,
 } from '@/lib/pos-sales-order-type-filter'
@@ -2582,7 +2583,7 @@ export default function PosTerminalPage() {
             params.onAccepted()
           } else {
             setActiveTab('delivery')
-            setDeliveryListMode('all')
+            setDeliveryListMode('in_progress')
             setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
           }
           if (String(params.deliveryAppCode || '').trim()) {
@@ -2771,7 +2772,7 @@ export default function PosTerminalPage() {
       playIncomingOrderBeep()
       const focusDeliveryOrder = () => {
         setActiveTab('delivery')
-        setDeliveryListMode('all')
+        setDeliveryListMode('in_progress')
         setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
         setSelectedDeliveryTargetLabel('')
       }
@@ -4381,9 +4382,16 @@ export default function PosTerminalPage() {
       pendingEmptyItemsOrderIdsRef.current.delete(orderId)
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(orderId)
+      const inferredOrderType = inferPosOrderTypeFromRow({
+        order_type: String(row.order_type ?? ''),
+        memo: String(row.memo ?? ''),
+        table_name: String(row.table_name ?? ''),
+        delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
+        items_json: row.items_json,
+      })
       autoFocusIncomingDeliveryOrder({
         orderId,
-        orderType: String(row.order_type ?? ''),
+        orderType: inferredOrderType,
         deliveryAppCode: String(row.delivery_app_code ?? ''),
         status: String(row.status ?? ''),
         createdAt: String(row.created_at ?? ''),
@@ -4394,8 +4402,8 @@ export default function PosTerminalPage() {
       refetchCurrentStore()
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNo = String(row.order_no ?? '')
-      const orderType = String(row.order_type ?? 'dine_in')
-      if (orderType.trim().toLowerCase() === 'dine_in') {
+      const orderType = inferredOrderType
+      if (orderType === 'dine_in') {
         const snap = buildDineInQtySnapshot(items)
         if (snap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, snap)
       }
@@ -4505,7 +4513,7 @@ export default function PosTerminalPage() {
           })
       }
       const isPendingDelivery =
-        String(orderType).trim().toLowerCase() === 'delivery' &&
+        inferredOrderType === 'delivery' &&
         String(row.status ?? '').trim().toLowerCase() === 'pending'
       const shouldWaitForDeliveryAccept =
         isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
@@ -4774,28 +4782,44 @@ export default function PosTerminalPage() {
       lastRealtimeOrderEventAtRef.current = Date.now()
       if (!isCurrentStoreOrder(row.store_code)) return
       const rowStore = String(row.store_code ?? currentStoreId ?? '').trim()
+      const oldRowForAutoprint = payload.old as Record<string, unknown> | undefined
+      const inferredOrderType = inferPosOrderTypeFromRow({
+        order_type: String(row.order_type ?? ''),
+        memo: String(row.memo ?? ''),
+        table_name: String(row.table_name ?? ''),
+        delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
+        items_json: row.items_json,
+      })
+      const packagingOnlyUpdate =
+        oldRowForAutoprint != null &&
+        isPosOrderItemsJsonPackagingOnlyUpdate(oldRowForAutoprint, row)
+
+      if (packagingOnlyUpdate) {
+        if (inferredOrderType === 'dine_in') {
+          const parsedPackaging = parseRealtimePosOrderRowItemsJson(row)
+          if (parsedPackaging.ok && parsedPackaging.items.length > 0) {
+            const newQtyById = buildDineInQtySnapshot(parsedPackaging.items)
+            if (newQtyById.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+          }
+        }
+        logPosPrintDebug('realtime_update_skip_packaging_only', { orderId })
+      }
 
       if (
+        !packagingOnlyUpdate &&
         autoPrintReceiptOnOrder &&
         seenOrderIdsRef.current.has(orderId) &&
-        String(row.order_type ?? '').trim().toLowerCase() === 'delivery' &&
+        inferredOrderType === 'delivery' &&
         posOrderRowPaymentSum(row) <= 0 &&
         !isPosOrderPaidLikeStatus(String(row.status ?? ''))
       ) {
-        const oldRow = payload.old as Record<string, unknown> | undefined
-        if (oldRow) {
-          const oldDisc = Math.max(0, Number(oldRow.discount_amt ?? 0) || 0)
+        if (oldRowForAutoprint) {
           const newDisc = Math.max(0, Number(row.discount_amt ?? 0) || 0)
-          const oldCoupon = Math.max(0, Number(oldRow.coupon_discount_amt ?? 0) || 0)
           const newCoupon = Math.max(0, Number(row.coupon_discount_amt ?? 0) || 0)
-          const oldTotal = Math.max(0, Number(oldRow.total ?? 0) || 0)
           const newTotal = Math.max(0, Number(row.total ?? 0) || 0)
-          const discChanged =
-            Math.abs(newDisc - oldDisc) > 0.01 ||
-            Math.abs(newCoupon - oldCoupon) > 0.01 ||
-            Math.abs(newTotal - oldTotal) > 0.01
+          const oldTotal = Math.max(0, Number(oldRowForAutoprint.total ?? 0) || 0)
           if (
-            discChanged &&
+            posOrderRealtimePricingFieldsChanged(oldRowForAutoprint, row) &&
             (newDisc > 0.01 || newCoupon > 0.01 || (oldTotal > newTotal + 0.01 && newTotal > 0.005))
           ) {
             const reprintKey = `order:${orderId}:hall-disc:${Math.round(newDisc * 100)}:${Math.round(newCoupon * 100)}:${Math.round(newTotal * 100)}`
@@ -4803,23 +4827,26 @@ export default function PosTerminalPage() {
               printedHallDiscountReprintKeysRef.current.add(reprintKey)
               const parsedDisc = parseRealtimePosOrderRowItemsJson(row)
               if (parsedDisc.ok && parsedDisc.items.length > 0) {
-                const hallPayload = hallOrderReceiptPayloadFromOrderFields(
-                  {
-                    orderNo: String(row.order_no ?? ''),
-                    storeCode: rowStore,
-                    orderType: resolvePosOrderTypeReceiptLabel(String(row.order_type ?? ''), t),
-                    tableName: String(row.table_name ?? ''),
-                    memo: String(row.memo ?? ''),
-                    items: parsedDisc.items,
-                    subtotal: Math.max(0, Number(row.subtotal ?? 0) || 0),
-                    discountAmt: newDisc,
-                    couponDiscountAmt: newCoupon,
-                    discountReason: String(row.discount_reason ?? '').trim() || undefined,
-                    total: newTotal,
-                    ...posGuestCountSpread(row.guest_count),
-                  },
-                  pricingAdjustments
-                )
+                const hallPayload = {
+                  ...hallOrderReceiptPayloadFromOrderFields(
+                    {
+                      orderNo: String(row.order_no ?? ''),
+                      storeCode: rowStore,
+                      orderType: resolvePosOrderTypeReceiptLabel(inferredOrderType, t),
+                      tableName: String(row.table_name ?? ''),
+                      memo: String(row.memo ?? ''),
+                      items: parsedDisc.items,
+                      subtotal: Math.max(0, Number(row.subtotal ?? 0) || 0),
+                      discountAmt: newDisc,
+                      couponDiscountAmt: newCoupon,
+                      discountReason: String(row.discount_reason ?? '').trim() || undefined,
+                      total: newTotal,
+                      ...posGuestCountSpread(row.guest_count),
+                    },
+                    pricingAdjustments
+                  ),
+                  _autoPrintDedupeKey: reprintKey,
+                }
                 logPosPrintDebug('realtime_update_delivery_discount_hall_reprint', {
                   orderId,
                   newDisc,
@@ -4905,9 +4932,8 @@ export default function PosTerminalPage() {
           })
       }
 
-      if (!wantRemoteDineInAdd) return
-      const ot = String(row.order_type ?? '').trim().toLowerCase()
-      if (ot !== 'dine_in') return
+      if (!wantRemoteDineInAdd || packagingOnlyUpdate) return
+      if (inferredOrderType !== 'dine_in') return
       /**
        * 결제(updatePosOrder + status 반영) UPDATE는 주방 추가주문 출력 대상이 아님.
        * - 결제 직전 pending/cooking 상태에서도 payment_* 값이 먼저 반영될 수 있어

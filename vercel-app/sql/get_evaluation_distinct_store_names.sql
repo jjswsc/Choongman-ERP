@@ -17,4 +17,5 @@ $$;
 COMMENT ON FUNCTION public.get_evaluation_distinct_store_names() IS
   'evaluation_results 에 존재하는 매장명 목록 (평가 목록 필터용)';
 
+REVOKE ALL ON FUNCTION public.get_evaluation_distinct_store_names() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_evaluation_distinct_store_names() TO service_role;

@@ -107,4 +107,5 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.get_employees_for_login() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_employees_for_login() TO service_role;

@@ -88,6 +88,51 @@ export function normalizeOrderTypesQueryString(raw: string | null | undefined): 
   return [...p].sort().join(',')
 }
 
+/**
+ * pos_orders 행 → API·Realtime 공통 order_type.
+ * DB에 dine_in 이어도 Line Man/Grab memo·table_name 이면 delivery 로 본다.
+ */
+export function inferPosOrderTypeFromRow(row: {
+  order_type?: string | null
+  memo?: string | null
+  table_name?: string | null
+  delivery_payment_channel?: string | null
+  items_json?: string | unknown | null
+}): PosOrderTypeValue {
+  const explicit = coercePosOrderTypeForDb(row.order_type)
+  if (explicit !== 'dine_in') return explicit
+  const channel = String(row.delivery_payment_channel ?? '').trim().toLowerCase()
+  if (channel === 'grab' || channel === 'lineman' || channel === 'shopee') return 'delivery'
+  const memo = String(row.memo ?? '').toLowerCase()
+  const tableName = String(row.table_name ?? '').toLowerCase()
+  if (
+    memo.includes('grab_order:') ||
+    memo.includes('lineman_order:') ||
+    memo.includes('shopee_order:') ||
+    memo.includes('delivery') ||
+    tableName.includes('grab') ||
+    tableName.includes('line man') ||
+    tableName.includes('lineman') ||
+    tableName.includes('shopee')
+  ) {
+    return 'delivery'
+  }
+  try {
+    const raw = row.items_json
+    const items =
+      typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : JSON.parse(String(raw ?? '[]'))
+    if (
+      Array.isArray(items) &&
+      items.some((it) => String((it as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim())
+    ) {
+      return 'delivery'
+    }
+  } catch {
+    // keep dine_in fallback
+  }
+  return 'dine_in'
+}
+
 /** 홀 주문서·영수증 인쇄용 주문 유형 표시 라벨 */
 export function resolvePosOrderTypeReceiptLabel(
   orderType: string | undefined | null,
