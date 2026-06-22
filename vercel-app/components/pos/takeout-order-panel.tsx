@@ -228,6 +228,8 @@ export function TakeoutOrderPanel({
   const canCancel =
     order &&
     !['completed', 'cancelled', 'paid', 'refunded'].includes(normalizedStatus)
+  const payButtonDisabled =
+    !order || isPaid || isCompleted || orderPaymentsSum(order) > 0.005
   const canAddOrder = Boolean(
     order &&
       onAddOrder &&
@@ -343,6 +345,35 @@ export function TakeoutOrderPanel({
     }
   }
 
+  const handleHandoverComplete = async () => {
+    if (!order || order.status !== 'ready') return
+    const id = Number(order.id)
+    if (!posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
+      return
+    }
+    if (Number.isNaN(id)) return
+    const go = await appConfirm(
+      t('posTakeoutHandoverConfirm') || '손님 수령 완료로 주문을 마감할까요?'
+    )
+    if (!go) return
+    try {
+      const res = await updatePosOrderStatus({ id, status: 'completed' })
+      if (!res.success) {
+        await appAlert(
+          localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang)
+        )
+        return
+      }
+      onOrderDismissed?.(order)
+      onPackaged?.()
+      onClose?.()
+    } catch (e) {
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    }
+  }
+
   const handlePackComplete = async () => {
     if (!order || order.status === 'completed' || order.status === 'ready') return
     const id = Number(order.id)
@@ -443,7 +474,7 @@ export function TakeoutOrderPanel({
             <>
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-4 h-4 shrink-0" />
-                <span>{t('posDeliveryPackagingComplete') || '포장 완료'}</span>
+                <span>{t('posTakeoutReadyForPickup') || '픽업 대기'}</span>
               </div>
               <ScrollArea className="flex-1 min-h-0 rounded-md border">
                 <ul className="p-2 space-y-2">
@@ -497,20 +528,36 @@ export function TakeoutOrderPanel({
                   })}
                 </ul>
               </ScrollArea>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
-                  disabled={!canAddOrder}
-                  onClick={() => onAddOrder?.()}
-                >
-                  {t('posAddOrderButton') || ti('posAddOrderButton') || '추가 주문'}
-                </Button>
-                <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
-                  {isPaid
-                    ? (t('posPaymentComplete') || '결제 완료')
-                    : (t('posTablePayInStore') || '매장 결제')}
-                </Button>
+              <div className="flex justify-between text-sm font-medium">
+                <span>{t('posInputTotal') || '합계'}</span>
+                <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
+              <Button
+                onClick={() => void handleHandoverComplete()}
+                className="h-11 w-full text-base font-semibold bg-primary"
+              >
+                {t('posTakeoutPickupComplete') || '수령 완료'}
+              </Button>
+              {!payButtonDisabled ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                    disabled={!canAddOrder}
+                    onClick={() => onAddOrder?.()}
+                  >
+                    {t('posAddOrderButton') || ti('posAddOrderButton') || '추가 주문'}
+                  </Button>
+                  <Button
+                    className="h-11 text-base font-semibold"
+                    disabled={payButtonDisabled}
+                    onClick={() => {
+                      if (!payButtonDisabled) onPay?.()
+                    }}
+                  >
+                    {t('posTablePayInStore') || '매장 결제'}
+                  </Button>
+                </div>
+              ) : null}
               {canCancel && (
                 <div className="space-y-1.5">
                   {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
@@ -675,7 +722,13 @@ export function TakeoutOrderPanel({
                 >
                   {t('posAddOrderButton') || ti('posAddOrderButton') || '추가 주문'}
                 </Button>
-                <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
+                <Button
+                  className="h-11 text-base font-semibold"
+                  disabled={payButtonDisabled}
+                  onClick={() => {
+                    if (!payButtonDisabled) onPay?.()
+                  }}
+                >
                   {isPaid
                     ? (t('posPaymentComplete') || '결제 완료')
                     : (t('posTablePayInStore') || '매장 결제')}
