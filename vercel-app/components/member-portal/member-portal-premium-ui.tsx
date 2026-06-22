@@ -9,7 +9,6 @@ import {
   DEFAULT_MEMBER_APP_BG,
   MP_BOTTOM_NAV_CLEARANCE,
   MP_EMBED_PREVIEW_BOTTOM_CLEARANCE,
-  MP_HOME_TIER_PILL_GEM_SIZE,
   MP_MAX_WIDTH,
   MP_PAGE_BG_CLASS,
   MP_SHEET_BOTTOM_OFFSET,
@@ -22,6 +21,7 @@ import {
   mpGlassCardSoft,
   mpGlassInset,
 } from "@/lib/member-portal-design"
+import { MP_HOME_TIER_PILL_GEM_SIZE } from "@/lib/member-portal-home-layout"
 import { memberPortalUiThemeStyle, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
 import { resolveTierFamily } from "@/lib/member-portal-tier-visual"
 import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
