@@ -171,6 +171,19 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 주문 수령 / 공통 API 타임아웃 (클라이언트)
   "요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.": "apiRequestTimeout",
 
+  // POS 쿠폰 검증 (validatePosCoupons / pos-coupon-domain)
+  "쿠폰 코드를 입력하세요.": "posCouponPleaseEnterCode",
+  "유효하지 않거나 만료된 쿠폰입니다.": "posCouponInvalidOrExpired",
+  "아직 사용 기간이 아닙니다.": "posCouponNotYetValid",
+  "사용 기간이 지났습니다.": "posCouponPastValidPeriod",
+  "이미 사용된 쿠폰입니다.": "posCouponAlreadyUsed",
+  "사용 가능한 회원 쿠폰이 없습니다.": "posCouponNoMemberIssue",
+  "쿠폰 사용 한도를 초과했습니다.": "posCouponUsageLimitExceeded",
+  "이 쿠폰은 수동 할인과 함께 사용할 수 없습니다.": "posCouponNoStackManual",
+  "이 쿠폰은 다른 쿠폰과 함께 사용할 수 없습니다.": "posCouponNoStackOther",
+  "적용 가능한 할인 금액이 없습니다.": "posCouponNoDiscountAmount",
+  "쿠폰 검증 중 오류가 발생했습니다.": "posCouponValidateError",
+
   // verify-auth / 공통 API
   "인증이 필요합니다. 다시 로그인해 주세요.": "msg_auth_required_relogin",
   "매장(store)을 지정하세요.": "companyHybridErrStoreRequired",
@@ -271,6 +284,15 @@ export function translateApiMessage(
   }
   // submitAttendance 예외 메시지
   if (trimmed.startsWith("❌ 오류: ")) return t("attApiErrorPrefix") + trimmed.slice("❌ 오류: ".length)
+  const posCouponMinOrder = trimmed.match(/^최소 주문 금액 (\d+(?:\.\d+)?)바트 이상이어야 합니다\.$/)
+  if (posCouponMinOrder)
+    return t("posCouponMinOrderRequired").replace("{amount}", posCouponMinOrder[1]!)
+  const posCouponMaxPerOrder = trimmed.match(/^이 쿠폰은 주문당 최대 (\d+)장까지 사용할 수 있습니다\.$/)
+  if (posCouponMaxPerOrder)
+    return t("posCouponMaxPerOrderExceeded").replace("{max}", posCouponMaxPerOrder[1]!)
+  const posCouponMaxReceipt = trimmed.match(/^영수증당 쿠폰은 최대 (\d+)장까지 사용할 수 있습니다\.$/)
+  if (posCouponMaxReceipt)
+    return t("posCouponMaxReceiptExceeded").replace("{max}", posCouponMaxReceipt[1]!)
   // 출퇴근: "✅ 출근 완료! (정상)" 등 (휴식종료 시 휴게초과·휴게정상 포함)
   const attMatch = trimmed.match(/^✅ (출근|퇴근|휴식시작|휴식종료) 완료! \((.+)\)$/)
   if (attMatch) {

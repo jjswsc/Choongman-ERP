@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tOr } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { getInteriorDashboardSummary, getStoreOpsAlertSummary, type InteriorDashboardTotals, type StoreOpsAlertSummary } from "@/lib/api-client"
 import {
@@ -119,6 +119,7 @@ export function ErpSidebar() {
   const { auth, logout } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const tr = (key: string, fallback: string) => tOr(t, key, fallback)
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
   const brand = useAppBrandConfig()
@@ -347,10 +348,10 @@ export function ErpSidebar() {
         <ScrollArea className="h-full [&_[data-slot=scroll-area-viewport]]:pr-3">
           <nav className="space-y-1">
             {favoriteItems.length > 0 ? (
-              <div className="mb-2 space-y-0.5">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" aria-hidden />
-                  {t("erpNavFavorites")}
+              <div className="mb-3 space-y-0.5 rounded-lg border border-white/10 bg-white/[0.04] px-1 py-1.5 group-data-[collapsible=icon]:mb-2 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+                <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/70 group-data-[collapsible=icon]:hidden">
+                  <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
+                  {tr("erpNavFavorites", "즐겨찾기")}
                 </div>
                 {favoriteItems.map((item) => (
                   <ErpSidebarNavRow

@@ -22,6 +22,21 @@ describe('member-coupon-qr', () => {
 
   it('detects prefixed payloads', () => {
     expect(isMemberCouponQrPayload('CM|CPN|A|B')).toBe(true)
+    expect(isMemberCouponQrPayload('CM~CPN~A~B')).toBe(true)
+    expect(isMemberCouponQrPayload('CM-CPN-A-B')).toBe(true)
     expect(isMemberCouponQrPayload('WELCOME10')).toBe(false)
+  })
+
+  it('parses scanner tilde/hyphen delimiters', () => {
+    expect(parseMemberCouponQrPayload('CM~CPN~M007359~CMHBDCOUPON~504')).toEqual({
+      memberNo: 'M007359',
+      couponCode: 'CMHBDCOUPON',
+      issueId: 504,
+    })
+    expect(parseMemberCouponQrPayload('CM-CPN-M007359-CMHBDCOUPON-504')).toEqual({
+      memberNo: 'M007359',
+      couponCode: 'CMHBDCOUPON',
+      issueId: 504,
+    })
   })
 })

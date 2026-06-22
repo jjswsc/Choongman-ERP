@@ -95,6 +95,7 @@ import {
   normalizeMemberTierCodeForDiscount,
 } from '@/lib/member-tier-discount'
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { isMemberCouponQrPayload, parseMemberCouponQrPayload } from '@/lib/member-coupon-qr'
 import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
 import {
@@ -477,10 +478,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [customerMemo, setCustomerMemo] = useState('')
   const [couponCode, setCouponCode] = useState('')
+  const pendingMemberCouponQrRawRef = useRef<string | null>(null)
   const [couponQuantityInput, setCouponQuantityInput] = useState('1')
   const couponQuantity = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
-  const [couponQrScannerOpen, setCouponQrScannerOpen] = useState(false)
+  const [couponQrScannerOpen, _setCouponQrScannerOpen] = useState(false)
+  const couponQrScannerOpenRef = useRef(false)
+  const couponQrScannerClosingRef = useRef(false)
+  const setCouponQrScannerOpen = useCallback((open: boolean) => {
+    if (!open && couponQrScannerOpenRef.current) {
+      couponQrScannerClosingRef.current = true
+      couponQrScannerOpenRef.current = false
+      _setCouponQrScannerOpen(false)
+      window.setTimeout(() => {
+        couponQrScannerClosingRef.current = false
+      }, 350)
+      return
+    }
+    couponQrScannerOpenRef.current = open
+    _setCouponQrScannerOpen(open)
+  }, [])
+  const isCouponQrScannerOverlayActive = useCallback(
+    () => couponQrScannerOpenRef.current || couponQrScannerClosingRef.current,
+    []
+  )
   const [pointUsed, setPointUsed] = useState('')
   const [couponMessage, setCouponMessage] = useState('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
@@ -3211,7 +3232,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memberId: params.memberId,
         })
         if (!res.valid || !res.appliedCoupons?.length) {
-          setCouponMessage(res.message || t('posCouponInvalid'))
+          setCouponMessage(
+            localizeApiMessage(res.message, t, t('posCouponInvalid'), lang)
+          )
           return false
         }
         setAppliedCoupons(res.appliedCoupons)
@@ -3238,24 +3261,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       serviceDiscountAmt,
       subtotal,
       t,
+      lang,
     ]
   )
 
   const applyCouponFromQrPayload = useCallback(
-    async (raw: string) => {
+    async (raw: string): Promise<boolean> => {
       const parsed = parseMemberCouponQrPayload(raw)
       if (!parsed) {
         setCouponMessage(t('posCouponInvalid'))
-        return
+        return false
       }
 
       const linkedMember = await linkMemberForCouponQr(parsed.memberNo)
       if (!linkedMember) {
         setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
-        return
+        return false
       }
 
-      await applyCouponWithParams({
+      return applyCouponWithParams({
         code: parsed.couponCode,
         memberId: linkedMember.id,
         memberIssueId: parsed.issueId,
@@ -3266,6 +3290,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
 
   const applyCouponCode = async () => {
+    const pendingQrRaw = pendingMemberCouponQrRawRef.current
+    if (pendingQrRaw) {
+      const ok = await applyCouponFromQrPayload(pendingQrRaw)
+      if (ok) pendingMemberCouponQrRawRef.current = null
+      return
+    }
+
     const raw = couponCode.trim()
     if (!raw) {
       setCouponMessage(t('posCouponPleaseEnterCode'))
@@ -3281,12 +3312,68 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     })
   }
 
+  const sanitizeCouponCodeInput = (raw: string) =>
+    String(raw ?? '').replace(/[^\x20-\x7E]/g, '')
+
   const handleCouponCodeInput = (next: string) => {
-    setCouponCode(next)
-    if (parseMemberCouponQrPayload(next)) {
-      void applyCouponFromQrPayload(next)
+    const sanitized = sanitizeCouponCodeInput(next)
+    const parsed = parseMemberCouponQrPayload(sanitized)
+    if (parsed) {
+      pendingMemberCouponQrRawRef.current = sanitized
+      setCouponCode(parsed.couponCode)
+      return
     }
+    pendingMemberCouponQrRawRef.current = null
+    setCouponCode(sanitized)
   }
+
+  useEffect(() => {
+    if (!showPaymentModal || couponQrScannerOpen) return
+
+    let buffer = ''
+    let lastKeyAt = 0
+
+    const resetBuffer = () => {
+      buffer = ''
+      lastKeyAt = 0
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const target = e.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (e.key === 'Enter') {
+        const raw = buffer.trim()
+        resetBuffer()
+        if (raw && isMemberCouponQrPayload(raw)) {
+          e.preventDefault()
+          void applyCouponFromQrPayload(raw)
+        }
+        return
+      }
+
+      if (e.key.length !== 1) return
+      const now = Date.now()
+      if (lastKeyAt > 0 && now - lastKeyAt > 120) resetBuffer()
+      lastKeyAt = now
+      buffer += e.key
+      if (!isMemberCouponQrPayload(buffer) && buffer.length > 96) resetBuffer()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      resetBuffer()
+    }
+  }, [applyCouponFromQrPayload, couponQrScannerOpen, showPaymentModal])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
@@ -4543,6 +4630,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       open={showPaymentModal}
       onOpenChange={(open) => {
         if (!open && lockPaymentModalForTour) return
+        if (!open && isCouponQrScannerOverlayActive()) return
         if (!open && orderType === 'delivery' && checkoutExistingPosOrderIdRef.current != null) {
           handleClearCart()
         }
@@ -4556,10 +4644,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
-          if (lockPaymentModalForTour) e.preventDefault()
+          if (lockPaymentModalForTour || isCouponQrScannerOverlayActive()) e.preventDefault()
         }}
         onInteractOutside={(e) => {
-          if (lockPaymentModalForTour) e.preventDefault()
+          if (lockPaymentModalForTour || isCouponQrScannerOverlayActive()) e.preventDefault()
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
       >
@@ -4768,6 +4856,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   </div>
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Input
+                      lang="en"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      inputMode="text"
                       placeholder={t('posCouponCodePh')}
                       value={couponCode}
                       onChange={(e) => handleCouponCodeInput(e.target.value)}
@@ -4777,7 +4871,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           void applyCouponCode()
                         }
                       }}
-                      className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs"
+                      className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs [ime-mode:disabled]"
+                      style={{ imeMode: 'disabled' }}
                     />
                     <Input
                       type="text"
@@ -4813,13 +4908,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </Button>
                   </div>
                 </div>
-                <PosCouponQrScannerDialog
-                  open={couponQrScannerOpen}
-                  onOpenChange={setCouponQrScannerOpen}
-                  onScan={(raw) => {
-                    void applyCouponFromQrPayload(raw)
-                  }}
-                />
                 {appliedCoupons.length > 0 && (
                   <div className="mt-3 space-y-2">
                     {appliedCoupons.map((row, idx) => (
@@ -5950,6 +6038,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </DialogContent>
       </Dialog>
     )}
+
+    <PosCouponQrScannerDialog
+      open={couponQrScannerOpen}
+      onOpenChange={setCouponQrScannerOpen}
+      onScan={(raw) => {
+        void applyCouponFromQrPayload(raw)
+      }}
+    />
     </>
   )
 })

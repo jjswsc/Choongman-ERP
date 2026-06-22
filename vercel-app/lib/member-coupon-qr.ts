@@ -1,6 +1,11 @@
 /** 회원 쿠폰 POS 스캔용 QR 페이로드 (회원번호 + 쿠폰코드 + 발급 ID) */
 export const MEMBER_COUPON_QR_PREFIX = 'CM|CPN|'
 
+/** USB 스캐너가 `|` 대신 `~`·`-` 등으로 출력하는 경우가 많음 */
+export const MEMBER_COUPON_QR_PREFIX_RE = /^CM[\|~:\-]CPN[\|~:\-]/i
+
+const MEMBER_COUPON_QR_FIELD_SPLIT_RE = /[\|~:\-]+/
+
 export type MemberCouponQrPayload = {
   memberNo: string
   couponCode: string
@@ -20,29 +25,31 @@ export function buildMemberCouponQrPayload(params: {
   return `${MEMBER_COUPON_QR_PREFIX}${memberNo}|${couponCode}`
 }
 
-export function parseMemberCouponQrPayload(raw: string): MemberCouponQrPayload | null {
-  const text = String(raw ?? '').trim()
-  if (!text) return null
-
-  const normalized = text.startsWith(MEMBER_COUPON_QR_PREFIX)
-    ? text.slice(MEMBER_COUPON_QR_PREFIX.length)
-    : text.startsWith('CM:CPN:')
-      ? text.slice('CM:CPN:'.length)
-      : null
-
-  if (normalized != null) {
-    const parts = normalized.split('|').map((p) => p.trim())
-    const memberNo = parts[0] || ''
-    const couponCode = String(parts[1] || '').trim().toUpperCase()
-    const issueId = parts[2] ? Math.trunc(Number(parts[2])) : undefined
-    if (!memberNo || !couponCode) return null
-    return { memberNo, couponCode, issueId: issueId && issueId > 0 ? issueId : undefined }
+function extractMemberCouponQrBody(text: string): string | null {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed) return null
+  if (MEMBER_COUPON_QR_PREFIX_RE.test(trimmed)) {
+    return trimmed.replace(MEMBER_COUPON_QR_PREFIX_RE, '')
   }
-
+  if (trimmed.startsWith('CM:CPN:')) {
+    return trimmed.slice('CM:CPN:'.length)
+  }
   return null
+}
+
+export function parseMemberCouponQrPayload(raw: string): MemberCouponQrPayload | null {
+  const body = extractMemberCouponQrBody(raw)
+  if (body == null) return null
+
+  const parts = body.split(MEMBER_COUPON_QR_FIELD_SPLIT_RE).map((p) => p.trim()).filter(Boolean)
+  const memberNo = parts[0] || ''
+  const couponCode = String(parts[1] || '').trim().toUpperCase()
+  const issueId = parts[2] ? Math.trunc(Number(parts[2])) : undefined
+  if (!memberNo || !couponCode) return null
+  return { memberNo, couponCode, issueId: issueId && issueId > 0 ? issueId : undefined }
 }
 
 export function isMemberCouponQrPayload(raw: string): boolean {
   const text = String(raw ?? '').trim()
-  return text.startsWith(MEMBER_COUPON_QR_PREFIX) || text.startsWith('CM:CPN:')
+  return MEMBER_COUPON_QR_PREFIX_RE.test(text) || text.startsWith('CM:CPN:')
 }

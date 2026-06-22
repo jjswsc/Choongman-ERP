@@ -95,7 +95,7 @@ export function PosCouponQrScannerDialog({ open, onOpenChange, onScan }: PosCoup
             const raw = String(codes?.[0]?.rawValue ?? '').trim()
             if (raw) {
               onScan(raw)
-              onOpenChange(false)
+              window.setTimeout(() => onOpenChange(false), 0)
               return
             }
           } catch {
@@ -122,7 +122,7 @@ export function PosCouponQrScannerDialog({ open, onOpenChange, onScan }: PosCoup
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="z-[110] sm:max-w-md" overlayClassName="z-[110]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="h-4 w-4" />
