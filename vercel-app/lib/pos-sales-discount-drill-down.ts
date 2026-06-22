@@ -14,6 +14,8 @@ import {
 } from '@/lib/pos-sales-payment-discount-aggregate'
 import {
   isDeliveryPlatformDiscountOrder,
+  resolveDeliveryPlatformBundleDiscountAmt,
+  resolveDeliveryPlatformBundleKey,
   resolvePlatformDiscountReasonForAnalytics,
 } from '@/lib/pos-platform-discount-reason'
 
@@ -140,20 +142,21 @@ export function collectPosSalesPaymentDiscountDrillOrders(params: {
     )
     const couponTotal = couponFromLines > 0.0001 ? couponFromLines : couponAmtField
     const orderTotalDiscount = resolvePosSalesDiscountAmount(discountAmt, couponAmtField)
-    if (orderTotalDiscount <= 0.0001) continue
+    const platformBundleDiscount = resolveDeliveryPlatformBundleDiscountAmt(order)
+    const paymentDiscountTotal = round2(orderTotalDiscount - platformBundleDiscount)
+    if (paymentDiscountTotal <= 0.0001) continue
 
     const nonCouponAmt = resolveNonCouponDiscountAmt(discountAmt, couponTotal)
-    if (nonCouponAmt > 0.0001) {
+    const paymentNonCoupon = round2(Math.max(0, nonCouponAmt - platformBundleDiscount))
+    if (paymentNonCoupon > 0.0001) {
       const kind = classifyNonCouponKind(reason, order)
-      const label =
-        reason ||
-        (kind === 'platform' ? resolvePlatformDiscountReasonForAnalytics(order, nonCouponAmt) : '')
+      const label = reason
       const key = paymentRowKey(kind, label, kind)
       const kindOk = !kindFilter || kindFilter === kind
       const keyOk = !rowKeyFilter || rowKeyFilter === key
       if (kindOk && keyOk) {
-        mergeDrillRow(map, order, nonCouponAmt, {
-          discountReason: label || reason || undefined,
+        mergeDrillRow(map, order, paymentNonCoupon, {
+          discountReason: label || undefined,
         })
       }
     }
@@ -216,6 +219,19 @@ export function collectPosSalesPromoBundleDrillOrders(params: {
   const promoKeyFilter = str(params.filter.promoKey)
 
   for (const order of params.orderRows) {
+    const platformBundleDiscount = resolveDeliveryPlatformBundleDiscountAmt(order)
+    if (platformBundleDiscount > 0.0001) {
+      const platformKey = resolveDeliveryPlatformBundleKey(order)
+      const kindOk = !kindFilter || kindFilter === 'platform'
+      const keyOk = !promoKeyFilter || promoKeyFilter === platformKey
+      if (kindOk && keyOk) {
+        mergeDrillRow(map, order, platformBundleDiscount, {
+          promoLabel: resolvePlatformDiscountReasonForAnalytics(order, platformBundleDiscount),
+          discountReason: resolvePlatformDiscountReasonForAnalytics(order, platformBundleDiscount),
+        })
+      }
+    }
+
     if (isDeliveryPlatformDiscountOrder(order)) continue
 
     const channel = orderTypeToPromoRegularPriceChannel(order.order_type)

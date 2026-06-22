@@ -260,25 +260,12 @@ export async function verifyMemberByPhoneBirthDate(params: {
     throw new PhoneBirthLoginError('inactive', '비활성화된 회원입니다. 매장에 문의해 주세요.')
   }
 
-  const member: MemberSummary = {
-    id: Number(matched.id),
-    memberNo: toText(matched.member_no),
-    name: toText(matched.name),
-    fullName: toText(matched.full_name) || toText(matched.name),
-    birthDate: toText(matched.birth_date),
-    gender: toText(matched.gender),
-    nationality: toText(matched.nationality),
-    phone: toText(matched.phone),
-    email: toText(matched.email),
-    joinChannel: toText(matched.join_channel),
-    source: toText(matched.source) || 'app',
-    status: toText(matched.status) || 'active',
-    lineLinked: false,
-    tierCode: toText(matched.tier_code) || 'BRONZE',
-    pointBalance: Number(matched.point_balance || 0),
-    lifetimeAmount: Number(matched.lifetime_amount || 0),
-    createdAt: toText(matched.created_at),
-    updatedAt: toText(matched.updated_at),
+  const member = await getMemberSummaryById(Number(matched.id))
+  if (!member) {
+    throw new PhoneBirthLoginError(
+      'not_found',
+      '등록된 회원 정보와 일치하지 않습니다. 전화번호와 생년월일을 확인해 주세요.'
+    )
   }
 
   const session = await createMemberPortalSession({
@@ -426,26 +413,7 @@ async function findMemberByPhone(phone: string): Promise<MemberSummary | null> {
   const rows = await findMembersByPhoneVariants(phone)
   const row = rows[0]
   if (!row?.id) return null
-  return {
-    id: Number(row.id),
-    memberNo: toText(row.member_no),
-    name: toText(row.name),
-    fullName: toText(row.full_name),
-    birthDate: toText(row.birth_date),
-    gender: toText(row.gender),
-    nationality: toText(row.nationality),
-    phone: toText(row.phone),
-    email: toText(row.email),
-    joinChannel: toText(row.join_channel),
-    source: toText(row.source) || 'app',
-    status: toText(row.status) || 'active',
-    lineLinked: false,
-    tierCode: toText(row.tier_code) || 'BRONZE',
-    pointBalance: Number(row.point_balance || 0),
-    lifetimeAmount: Number(row.lifetime_amount || 0),
-    createdAt: toText(row.created_at),
-    updatedAt: toText(row.updated_at),
-  }
+  return getMemberSummaryById(Number(row.id))
 }
 
 export async function ensureMemberForPortal(params: {

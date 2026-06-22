@@ -108,24 +108,35 @@ export function MemberPortalMembershipCard({
         <h2 className="truncate text-[21px] font-black leading-[1.15]">{displayName}</h2>
         <p className="mt-px text-[13px] text-[#f6f6f6]">{maskPhone(member.phone)}</p>
 
-        <div className="relative mt-2.5 grid h-[54px] grid-cols-[1fr_1px_1fr] items-center rounded-[9px] border border-white/[0.13] bg-white/[0.025] px-[15px] py-2">
-          <div>
-            <p className="mb-0.5 text-[8.5px] font-semibold uppercase tracking-[0.2em] text-[#a9a9a9]">
-              {t("points")}
+        <div className="relative mt-2.5 grid min-h-[54px] grid-cols-[1fr_1px_1fr_1px_1fr] items-center rounded-[9px] border border-white/[0.13] bg-white/[0.025] px-2.5 py-2 sm:px-[11px]">
+          <div className="min-w-0 px-1">
+            <p className="mb-0.5 text-[7.5px] font-semibold uppercase leading-tight tracking-[0.14em] text-[#a9a9a9] sm:text-[8px]">
+              {t("availablePoints")}
             </p>
-            <p className="flex items-center gap-1.5 text-xl font-black leading-none">
+            <p className="truncate text-base font-black leading-none sm:text-lg">
               {formatPoints(member.pointBalance || 0)}
-              <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-white/[0.11] text-base font-semibold leading-none text-white/90">
-                ›
-              </span>
             </p>
           </div>
           <div className="h-[34px] w-px bg-white/[0.15]" />
-          <div className="pl-2">
-            <p className="mb-0.5 text-[8.5px] font-semibold uppercase tracking-[0.2em] text-[#a9a9a9]">
+          <div className="min-w-0 px-1">
+            <p className="mb-0.5 text-[7.5px] font-semibold uppercase leading-tight tracking-[0.14em] text-[#a9a9a9] sm:text-[8px]">
+              {t("cumulativeTierPoints")}
+            </p>
+            <p className="truncate text-base font-black leading-none sm:text-lg">
+              {formatPoints(
+                member.tierPoints ??
+                  dashboard.stats.tierQualificationPoints ??
+                  dashboard.tierProgress.qualificationValue ??
+                  0
+              )}
+            </p>
+          </div>
+          <div className="h-[34px] w-px bg-white/[0.15]" />
+          <div className="min-w-0 pl-1">
+            <p className="mb-0.5 text-[7.5px] font-semibold uppercase leading-tight tracking-[0.14em] text-[#a9a9a9] sm:text-[8px]">
               {t("memberNoShort")}
             </p>
-            <p className="font-mono text-lg font-black leading-none">{member.memberNo || `#${member.id}`}</p>
+            <p className="truncate font-mono text-sm font-black leading-none sm:text-lg">{member.memberNo || `#${member.id}`}</p>
           </div>
         </div>
 

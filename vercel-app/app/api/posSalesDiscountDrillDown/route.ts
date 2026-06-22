@@ -20,7 +20,7 @@ import type { PosPromoSalesKind } from '@/lib/pos-promo-sales-kind'
 import { loadPosSalesPromoPricingCatalog } from '@/lib/pos-sales-promo-pricing-catalog-server'
 
 const PAYMENT_KINDS = new Set<string>(['manual', 'collab', 'coupon', 'platform', 'other'])
-const BUNDLE_KINDS = new Set<string>(['set', 'campaign', 'other'])
+const BUNDLE_KINDS = new Set<string>(['set', 'campaign', 'platform', 'other'])
 
 function parseLayer(raw: string | null): PosSalesDiscountDrillLayer | null {
   const v = String(raw ?? '').trim().toLowerCase()

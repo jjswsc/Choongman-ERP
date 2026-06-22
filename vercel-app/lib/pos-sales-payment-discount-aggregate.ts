@@ -5,9 +5,7 @@ import {
 } from '@/lib/pos-coupon-domain'
 import { isCollabDiscountReasonText } from '@/lib/pos-collab-discount'
 import {
-  isDeliveryPlatformDiscountOrder,
-  isPlatformDiscountReasonText,
-  resolvePlatformDiscountReasonForAnalytics,
+  resolveDeliveryPlatformBundleDiscountAmt,
   type DeliveryPlatformDiscountOrderRow,
 } from '@/lib/pos-platform-discount-reason'
 
@@ -88,11 +86,9 @@ export function resolveNonCouponDiscountAmt(
 
 export function classifyNonCouponKind(
   reason: string,
-  order?: OrderRowForPaymentDiscountAgg
+  _order?: OrderRowForPaymentDiscountAgg
 ): Exclude<PosPaymentDiscountKind, 'coupon'> {
   if (isCollabDiscountReasonText(reason)) return 'collab'
-  if (isPlatformDiscountReasonText(reason)) return 'platform'
-  if (order && isDeliveryPlatformDiscountOrder(order)) return 'platform'
   if (reason) return 'manual'
   return 'other'
 }
@@ -154,17 +150,18 @@ export function aggregatePosSalesPaymentDiscount(params: {
     )
     const couponTotal = couponFromLines > 0.0001 ? couponFromLines : couponAmtField
     const orderTotalDiscount = resolvePosSalesDiscountAmount(discountAmt, couponAmtField)
-    if (orderTotalDiscount <= 0.0001) continue
+    const platformBundleDiscount = resolveDeliveryPlatformBundleDiscountAmt(order)
+    const paymentDiscountTotal = round2(orderTotalDiscount - platformBundleDiscount)
+    if (paymentDiscountTotal <= 0.0001) continue
 
-    totals.discountAmount = round2(totals.discountAmount + orderTotalDiscount)
+    totals.discountAmount = round2(totals.discountAmount + paymentDiscountTotal)
     totals.orderCountWithDiscount += 1
 
     const nonCouponAmt = resolveNonCouponDiscountAmt(discountAmt, couponTotal)
-    if (nonCouponAmt > 0.0001) {
+    const paymentNonCoupon = round2(Math.max(0, nonCouponAmt - platformBundleDiscount))
+    if (paymentNonCoupon > 0.0001) {
       const kind = classifyNonCouponKind(reason, order)
-      const label =
-        reason ||
-        (kind === 'platform' ? resolvePlatformDiscountReasonForAnalytics(order, nonCouponAmt) : '')
+      const label = reason
       const code = kind
       const key = `${kind}::${label.toLowerCase()}`
       const prev = rowBuckets.get(key) ?? {
@@ -175,12 +172,12 @@ export function aggregatePosSalesPaymentDiscount(params: {
         orderCount: 0,
         discountAmount: 0,
       }
-      prev.discountAmount = round2(prev.discountAmount + nonCouponAmt)
+      prev.discountAmount = round2(prev.discountAmount + paymentNonCoupon)
       prev.orderCount += 1
       rowBuckets.set(key, prev)
 
       const kindPrev = kindBuckets.get(kind)!
-      kindPrev.discountAmount = round2(kindPrev.discountAmount + nonCouponAmt)
+      kindPrev.discountAmount = round2(kindPrev.discountAmount + paymentNonCoupon)
       kindPrev.orderKeys.add(orderKey)
     }
 

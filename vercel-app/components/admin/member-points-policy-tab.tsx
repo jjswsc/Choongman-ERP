@@ -56,6 +56,7 @@ export function MemberPointsPolicyTab() {
     DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY
   )
   const [earnBonusSaving, setEarnBonusSaving] = React.useState(false)
+  const [rowSavingCode, setRowSavingCode] = React.useState("")
 
   const load = React.useCallback(async () => {
     const [tiers, policy] = await Promise.all([getMemberTiers(), getMemberTierPolicy()])
@@ -121,6 +122,38 @@ export function MemberPointsPolicyTab() {
       setSaving(false)
     }
   }, [form, load, t])
+
+  const patchRow = React.useCallback((code: string, patch: Partial<TierRow>) => {
+    setRows((prev) => prev.map((r) => (r.code === code ? { ...r, ...patch } : r)))
+    if (form.code === code) {
+      setForm((prev) => ({ ...prev, ...patch }))
+    }
+  }, [form.code])
+
+  const saveRowTier = React.useCallback(
+    async (row: TierRow) => {
+      setRowSavingCode(row.code)
+      try {
+        const res = await saveMemberTier({
+          code: row.code.trim(),
+          name: row.name.trim(),
+          minAmount: Number(row.min_amount || 0),
+          minPoints: Number(row.min_points || 0),
+          pointRate: Number(row.point_rate || 0),
+          sortOrder: Number(row.sort_order || 0),
+          benefitsKo: String(row.benefits_ko || ""),
+          benefitsEn: String(row.benefits_en || ""),
+          benefitsTh: String(row.benefits_th || ""),
+        })
+        if (!res.success) await appAlert(res.message || t("msg_save_fail"))
+        else await appAlert(t("msg_saved"))
+        await load()
+      } finally {
+        setRowSavingCode("")
+      }
+    },
+    [load, t]
+  )
 
   const previewLangDefault: MemberPortalLang = lang === "ko" ? "ko" : lang === "th" ? "th" : "en"
 
@@ -405,7 +438,8 @@ export function MemberPointsPolicyTab() {
         <CardHeader>
           <CardTitle className="text-base">{t("memberTierListTitle")}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t("memberTierListInlineHint")}</p>
           <div className="overflow-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
@@ -416,24 +450,55 @@ export function MemberPointsPolicyTab() {
                   <th className="p-2 text-left">{t("memberTierMinAmount")}</th>
                   <th className="p-2 text-left">{t("memberTierPointRate")}</th>
                   <th className="p-2 text-left">{t("memberTierBenefitsShort")}</th>
+                  <th className="p-2 text-left">{t("commonSave")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr
                     key={r.code}
-                    className={`cursor-pointer border-t hover:bg-muted/20 ${
+                    className={`border-t hover:bg-muted/20 ${
                       r.code === form.code ? "bg-primary/5" : ""
                     }`}
-                    onClick={() => applyRow(r)}
                   >
-                    <td className="p-2">{r.code}</td>
+                    <td className="p-2">
+                      <button type="button" className="font-medium underline-offset-2 hover:underline" onClick={() => applyRow(r)}>
+                        {r.code}
+                      </button>
+                    </td>
                     <td className="p-2">{r.name}</td>
-                    <td className="p-2">{Number(r.min_points || 0).toLocaleString()}</td>
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        className="h-8 w-24"
+                        value={String(r.min_points ?? 0)}
+                        onChange={(e) => patchRow(r.code, { min_points: Number(e.target.value || 0) })}
+                      />
+                    </td>
                     <td className="p-2">{Number(r.min_amount || 0).toLocaleString()}</td>
-                    <td className="p-2">{Number(r.point_rate || 0)}</td>
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.001}
+                        className="h-8 w-24"
+                        value={String(r.point_rate ?? 0)}
+                        onChange={(e) => patchRow(r.code, { point_rate: Number(e.target.value || 0) })}
+                      />
+                    </td>
                     <td className="max-w-[240px] truncate p-2 text-muted-foreground">
                       {String(r.benefits_th || r.benefits_ko || r.benefits_en || "—")}
+                    </td>
+                    <td className="p-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={rowSavingCode === r.code}
+                        onClick={() => void saveRowTier(r)}
+                      >
+                        {rowSavingCode === r.code ? t("loading") : t("commonSave")}
+                      </Button>
                     </td>
                   </tr>
                 ))}

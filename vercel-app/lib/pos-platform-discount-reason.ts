@@ -116,6 +116,33 @@ export function resolveDeliveryAppCodeForPlatformBackfill(row: {
   return fromOrder
 }
 
+/** 배달앱 API 플랫폼 프로모 — 세트 할인 층에 집계할 discount_amt(비쿠폰) */
+export function resolveDeliveryPlatformBundleDiscountAmt(
+  order: DeliveryPlatformDiscountOrderRow & { memo?: string | null }
+): number {
+  if (!isDeliveryPlatformDiscountOrder(order)) return 0
+  const discountAmt = Math.max(0, Number(order.discount_amt) || 0)
+  const couponAmtField = Math.max(0, Number(order.coupon_discount_amt) || 0)
+  return round2(nonCouponDiscountAmt(discountAmt, couponAmtField))
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+export function resolveDeliveryPlatformBundleKey(
+  order: DeliveryPlatformDiscountOrderRow & { memo?: string | null }
+): string {
+  const app = resolveDeliveryAppCodeForPlatformBackfill(order)
+  const c = normalizeDeliveryAppCode(app)
+  if (c.includes('grab')) return 'platform::grab'
+  if (c.includes('shopee')) return 'platform::shopee'
+  if (c.includes('lineman') || (c.includes('line') && c.includes('man'))) return 'platform::lineman'
+  if (c.includes('foodpanda')) return 'platform::foodpanda'
+  if (c.includes('robinhood')) return 'platform::robinhood'
+  return `platform::${c || 'delivery'}`
+}
+
 /** DB backfill — 반환값이 있으면 discount_reason 갱신 대상 */
 export function resolvePlatformDiscountReasonBackfillPatch(
   order: DeliveryPlatformDiscountOrderRow & { memo?: string | null }

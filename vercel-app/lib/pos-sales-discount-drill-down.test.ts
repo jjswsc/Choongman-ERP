@@ -14,7 +14,7 @@ const emptyCatalog: PromoPricingCatalog = {
 }
 
 describe('collectPosSalesPaymentDiscountDrillOrders', () => {
-  it('filters by payment kind platform', () => {
+  it('filters bundle platform delivery orders', () => {
     const orders = collectPosSalesPaymentDiscountDrillOrders({
       orderRows: [
         {
@@ -25,8 +25,17 @@ describe('collectPosSalesPaymentDiscountDrillOrders', () => {
           delivery_app_code: 'grab',
           total: 106,
           discount_amt: 23,
-          discount_reason: '',
+          discount_reason: 'Grab platform promo',
         },
+      ],
+      filter: { kind: 'platform' },
+    })
+    expect(orders).toHaveLength(0)
+  })
+
+  it('filters payment kind manual for hall discount', () => {
+    const orders = collectPosSalesPaymentDiscountDrillOrders({
+      orderRows: [
         {
           id: 2,
           order_no: 'A-2',
@@ -37,12 +46,11 @@ describe('collectPosSalesPaymentDiscountDrillOrders', () => {
           discount_reason: 'VIP',
         },
       ],
-      filter: { kind: 'platform' },
+      filter: { kind: 'manual' },
     })
     expect(orders).toHaveLength(1)
-    expect(orders[0]?.orderId).toBe(1)
-    expect(orders[0]?.discountAmount).toBe(23)
-    expect(orders[0]?.discountReason).toBe('Grab platform promo')
+    expect(orders[0]?.orderId).toBe(2)
+    expect(orders[0]?.discountAmount).toBe(100)
   })
 
   it('filters by payment row key', () => {
@@ -64,6 +72,27 @@ describe('collectPosSalesPaymentDiscountDrillOrders', () => {
 })
 
 describe('collectPosSalesPromoBundleDrillOrders', () => {
+  it('includes delivery platform orders under platform kind', () => {
+    const orders = collectPosSalesPromoBundleDrillOrders({
+      orderRows: [
+        {
+          id: 1,
+          order_no: 'A-1',
+          store_code: 'CM01',
+          order_type: 'delivery',
+          delivery_app_code: 'grab',
+          total: 106,
+          discount_amt: 23,
+          discount_reason: 'Grab platform promo',
+        },
+      ],
+      catalog: emptyCatalog,
+      filter: { kind: 'platform' },
+    })
+    expect(orders).toHaveLength(1)
+    expect(orders[0]?.discountAmount).toBe(23)
+  })
+
   it('returns empty when no promo lines', () => {
     const orders = collectPosSalesPromoBundleDrillOrders({
       orderRows: [{ id: 1, items_json: '[]', total: 100 }],

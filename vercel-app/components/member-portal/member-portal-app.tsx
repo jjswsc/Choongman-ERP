@@ -1257,8 +1257,12 @@ export function MemberPortalApp() {
             <MemberPortalBenefitStatsGrid
               couponsLabel={t("statCoupons")}
               couponsValue={`${activeDashboard.stats.availableCoupons}`}
-              pointsLabel={t("points")}
-              pointsValue={formatPoints(member.pointBalance || 0)}
+              availablePointsLabel={t("availablePoints")}
+              availablePointsValue={formatPoints(member.pointBalance || 0)}
+              cumulativePointsLabel={t("cumulativeTierPoints")}
+              cumulativePointsValue={formatPoints(
+                member.tierPoints ?? activeDashboard.stats.tierQualificationPoints ?? 0
+              )}
               visitsLabel={t("statVisits")}
               visitsValue={`${activeDashboard.stats.visitCount}`}
             />

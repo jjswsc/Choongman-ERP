@@ -28,6 +28,7 @@ export interface Member {
   lineDisplayName?: string
   tierCode?: string
   pointBalance?: number
+  tierPoints?: number
   lifetimeAmount?: number
   lastLineEventType?: string
   lastLineEventAt?: string

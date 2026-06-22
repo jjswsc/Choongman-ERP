@@ -251,7 +251,7 @@ export type PosSalesPromoRow = {
   promoId: string
   promoCode: string
   name: string
-  kind: 'set' | 'campaign' | 'other'
+  kind: 'set' | 'campaign' | 'platform' | 'other'
   qty: number
   saleAmount: number
   regularAmount: number
@@ -282,7 +282,7 @@ export type PosSalesPromoAggregateTotals = {
 }
 
 export type PosSalesPromoKindTotals = {
-  kind: 'set' | 'campaign' | 'other'
+  kind: 'set' | 'campaign' | 'platform' | 'other'
   qty: number
   saleAmount: number
   regularAmount: number

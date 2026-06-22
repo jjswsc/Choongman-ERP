@@ -50,6 +50,7 @@ export type PortalDashboard = {
     avgTicket: number
     availableCoupons: number
     pointsEarnedTotal: number
+    tierQualificationPoints?: number
   }
   tierProgress: {
     currentTierCode: string
@@ -109,6 +110,7 @@ export function buildFallbackDashboard(member: MemberSummary): PortalDashboard {
       avgTicket: 0,
       availableCoupons: 0,
       pointsEarnedTotal: 0,
+      tierQualificationPoints: Number(member.tierPoints || 0),
     },
     tierProgress: {
       currentTierCode: tierCode,

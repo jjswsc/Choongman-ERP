@@ -226,7 +226,7 @@ describe('aggregatePosSalesPromoBundleDiscount', () => {
     expect(result.totals.promoLineSaleSharePct).toBe(49)
   })
 
-  it('skips bundle discount lines for delivery platform API orders with discount_amt', () => {
+  it('aggregates delivery platform promo under bundle platform kind', () => {
     const result = aggregatePosSalesPromoBundleDiscount({
       catalog: catalogFixture(),
       orderRows: [
@@ -252,9 +252,10 @@ describe('aggregatePosSalesPromoBundleDiscount', () => {
       ],
     })
 
-    expect(result.rows).toHaveLength(0)
-    expect(result.totals.bundleDiscount).toBe(0)
-    expect(result.totals.paymentDiscount).toBe(80)
+    expect(result.rows.find((r) => r.kind === 'platform')?.bundleDiscount).toBe(80)
+    expect(result.totals.bundleDiscount).toBe(80)
+    expect(result.totals.paymentDiscount).toBe(0)
+    expect(result.byKind.find((k) => k.kind === 'platform')?.bundleDiscount).toBe(80)
   })
 })
 

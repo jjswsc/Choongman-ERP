@@ -55,6 +55,8 @@ export type MemberSummary = {
   lineDisplayName?: string
   tierCode?: string
   pointBalance?: number
+  /** 등급 승급용 누적 포인트 (결제 사용 시 감소하지 않음) */
+  tierPoints?: number
   lifetimeAmount?: number
   lastLineEventType?: string
   lastLineEventAt?: string
@@ -263,6 +265,7 @@ function toMemberSummary(
     lineDisplayName,
     tierCode: toText(member.tier_code) || 'BRONZE',
     pointBalance: Number(member.point_balance || 0),
+    tierPoints: resolveMemberTierQualificationValue(member, 'points'),
     lifetimeAmount: Number(member.lifetime_amount || 0),
     lastLineEventType,
     lastLineEventAt,

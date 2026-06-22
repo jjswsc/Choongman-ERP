@@ -4,6 +4,7 @@ export type SalesDiscountTr = (key: string, fallback: string) => string
 export function promoKindLabel(kind: string, tr: SalesDiscountTr): string {
   if (kind === 'set') return tr('salesPromoKindSet', '메뉴 세트')
   if (kind === 'campaign') return tr('salesPromoKindCampaign', '캠페인 프로모')
+  if (kind === 'platform') return tr('salesPromoKindPlatform', '배달·플랫폼')
   return tr('salesPromoKindOther', '기타')
 }
 
@@ -44,12 +45,6 @@ export function resolveSalesDiscountDrillExplanation(
   tr: SalesDiscountTr
 ): string {
   if (layer === 'payment') {
-    if (kind === 'platform') {
-      return tr(
-        'salesDiscountDrillExplainPlatform',
-        '배달앱(Grab·Shopee·Line Man 등) API·플랫폼 프로모가 discount_amt에 기록된 주문입니다. POS에서 직원이 수동 입력한 할인과는 별도이며, 세트 내재 할인(정가 대비)과도 별도 층입니다.'
-      )
-    }
     if (kind === 'manual') {
       return tr(
         'salesDiscountDrillExplainManual',
@@ -83,6 +78,12 @@ export function resolveSalesDiscountDrillExplanation(
     return tr(
       'salesDiscountDrillExplainBundleCampaign',
       '캠페인 프로모 줄의 정가 대비 판매가 차이가 있는 주문입니다.'
+    )
+  }
+  if (kind === 'platform') {
+    return tr(
+      'salesDiscountDrillExplainBundlePlatform',
+      '배달앱(Grab·Shopee 등) API 주문의 플랫폼 세트·프로모 할인입니다. discount_amt에 기록되며 POS 결제 할인과는 별도입니다.'
     )
   }
   return tr(

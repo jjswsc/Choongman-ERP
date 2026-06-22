@@ -113,7 +113,7 @@ import {
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
-import { computeMenuSplitDueByPerson } from '@/lib/pos-menu-split-due'
+import { computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { PosCollabQuantityControl } from '@/components/pos/pos-collab-quantity-control'
 import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
@@ -1250,13 +1250,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return round2(sum)
   }, [cartItems, menuSplitPendingQty])
   const menuSplitPendingAmount = useMemo(() => {
-    let sum = 0
+    let baseSum = 0
     for (const item of cartItems) {
       const qty = Math.max(0, Number(menuSplitPendingQty[item.id] || 0))
-      sum += qty * (Number(item.price) || 0)
+      baseSum += qty * (Number(item.price) || 0)
     }
-    return round2(sum)
-  }, [cartItems, menuSplitPendingQty])
+    return computeMenuSplitDueFromBaseSum({ total, subtotal, baseSum, round2 })
+  }, [cartItems, menuSplitPendingQty, subtotal, total])
   const menuSplitItemStatuses = useMemo(() => {
     return cartItems.map((item) => {
       const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
@@ -2210,11 +2210,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       const count = Math.max(1, Number(splitCount) || 1)
       const safeIdx = Math.min(Math.max(0, personIdx), count - 1)
       const pendingSnapshot = { ...menuSplitPendingQty }
-      const pendingFillBase = menuSplitPendingAmount
-      const pendingFillAmount =
-        pendingFillBase > 0.009 && subtotal > 0.009
-          ? round2((total * pendingFillBase) / subtotal)
-          : round2(pendingFillBase)
+      const pendingFillAmount = menuSplitPendingAmount
       let committed = false
       setMenuSplitAssigned((prev) => {
         const next: Record<string, number[]> = { ...prev }
@@ -2256,8 +2252,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       menuSplitPendingQty,
       menuSplitPendingAmount,
       menuSplitRemainingByPerson,
-      subtotal,
-      total,
       activePaymentTab,
       scrollToPaymentMethods,
     ]
@@ -5726,7 +5720,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               )}
                             </div>
                             {renderSplitGuestAmountRows(
-                              Math.max(0, Number(menuSplitBaseByPerson[idx] || 0)),
+                              Math.max(0, Number(menuSplitDueByPerson[idx] || 0)),
                               menuSplitPaidByPerson[idx] || 0,
                               'posSplitCardAssign',
                               '배정',

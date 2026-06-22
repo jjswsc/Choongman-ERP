@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aggregatePosSalesPaymentDiscount } from '@/lib/pos-sales-payment-discount-aggregate'
+import { aggregatePosSalesPromoBundleDiscount } from '@/lib/pos-sales-promo-discount-aggregate'
 import { buildPosSalesCombinedDiscount } from '@/lib/pos-sales-combined-discount-aggregate'
 
 describe('aggregatePosSalesPaymentDiscount', () => {
@@ -43,23 +44,36 @@ describe('aggregatePosSalesPaymentDiscount', () => {
     expect(result.byKind[0]?.discountAmount).toBe(60)
   })
 
-  it('classifies Grab API order without reason as platform via delivery_app_code', () => {
-    const result = aggregatePosSalesPaymentDiscount({
+  it('classifies Grab API order as bundle platform, not payment discount', () => {
+    const payment = aggregatePosSalesPaymentDiscount({
       orderRows: [
         {
           total: 106,
           order_type: 'delivery',
           delivery_app_code: 'grab',
           discount_amt: 23,
-          discount_reason: '',
+          discount_reason: 'Grab platform promo',
         },
       ],
     })
+    expect(payment.byKind).toHaveLength(0)
+    expect(payment.totals.discountAmount).toBe(0)
 
-    expect(result.byKind).toHaveLength(1)
-    expect(result.byKind[0]?.kind).toBe('platform')
-    expect(result.byKind[0]?.discountAmount).toBe(23)
-    expect(result.rows[0]?.label).toBe('Grab platform promo')
+    const bundle = aggregatePosSalesPromoBundleDiscount({
+      catalog: { menus: [], optionsByMenuId: {}, promoMetaById: new Map(), promoItemsByPromoId: new Map(), promoIdByMirrorMenuId: new Map() },
+      orderRows: [
+        {
+          total: 106,
+          order_type: 'delivery',
+          delivery_app_code: 'grab',
+          discount_amt: 23,
+          discount_reason: 'Grab platform promo',
+        },
+      ],
+    })
+    expect(bundle.byKind.find((k) => k.kind === 'platform')?.bundleDiscount).toBe(23)
+    expect(bundle.totals.bundleDiscount).toBe(23)
+    expect(bundle.totals.paymentDiscount).toBe(0)
   })
 })
 

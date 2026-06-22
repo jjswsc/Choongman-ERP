@@ -4,7 +4,7 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import Image from "next/image"
 import type { LucideIcon } from "lucide-react"
-import { ChevronRight, Gift, History, Ticket } from "lucide-react"
+import { ChevronRight, Gift, History, Star, Ticket } from "lucide-react"
 import {
   DEFAULT_MEMBER_APP_BG,
   MP_BOTTOM_NAV_CLEARANCE,
@@ -163,23 +163,28 @@ export function PremiumStatTile({
 export function MemberPortalBenefitStatsGrid({
   couponsLabel,
   couponsValue,
-  pointsLabel,
-  pointsValue,
+  availablePointsLabel,
+  availablePointsValue,
+  cumulativePointsLabel,
+  cumulativePointsValue,
   visitsLabel,
   visitsValue,
 }: {
   couponsLabel: string
   couponsValue: string
-  pointsLabel: string
-  pointsValue: string
+  availablePointsLabel: string
+  availablePointsValue: string
+  cumulativePointsLabel: string
+  cumulativePointsValue: string
   visitsLabel: string
   visitsValue: string
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2">
       <PremiumStatTile icon={Ticket} label={couponsLabel} value={couponsValue} accent="emerald" size="compact" />
-      <PremiumStatTile icon={Gift} label={pointsLabel} value={pointsValue} accent="rose" size="compact" />
       <PremiumStatTile icon={History} label={visitsLabel} value={visitsValue} accent="amber" size="compact" />
+      <PremiumStatTile icon={Gift} label={availablePointsLabel} value={availablePointsValue} accent="rose" size="compact" />
+      <PremiumStatTile icon={Star} label={cumulativePointsLabel} value={cumulativePointsValue} accent="amber" size="compact" />
     </div>
   )
 }

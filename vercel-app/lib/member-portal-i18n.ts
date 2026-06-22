@@ -60,6 +60,8 @@ export type MemberPortalKey =
   | 'statAvgTicket'
   | 'statCoupons'
   | 'statPointsEarned'
+  | 'availablePoints'
+  | 'cumulativeTierPoints'
   | 'referTitle'
   | 'referDesc'
   | 'copyCode'
@@ -560,6 +562,16 @@ const MS: Record<MemberPortalKey, Dict> = {
   statAvgTicket: { en: 'Avg.', th: 'เฉลี่ย', ko: '평균' },
   statCoupons: { en: 'Coupons ready', th: 'คูปองพร้อมใช้', ko: '사용 가능 쿠폰' },
   statPointsEarned: { en: 'Points earned', th: 'แต้มที่ได้รับรวม', ko: '총 적립 포인트' },
+  availablePoints: {
+    en: 'Available points',
+    th: 'พอยท์ใช้ได้',
+    ko: '사용 가능 포인트',
+  },
+  cumulativeTierPoints: {
+    en: 'Tier points (lifetime)',
+    th: 'แต้มสะสม (ระดับ)',
+    ko: '누적 포인트',
+  },
   referTitle: { en: 'Refer a friend', th: 'ชวนเพื่อน รับแต้ม', ko: '친구 초대' },
   referDesc: {
     en: 'Share your referral code when friends sign up',

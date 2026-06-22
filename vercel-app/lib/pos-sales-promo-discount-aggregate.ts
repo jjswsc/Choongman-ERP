@@ -1,6 +1,6 @@
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
-import { isDeliveryPlatformDiscountOrder } from '@/lib/pos-platform-discount-reason'
+import { isDeliveryPlatformDiscountOrder, resolveDeliveryPlatformBundleDiscountAmt, resolveDeliveryPlatformBundleKey, resolvePlatformDiscountReasonForAnalytics } from '@/lib/pos-platform-discount-reason'
 import {
   orderTypeToPromoRegularPriceChannel,
   resolvePromoRegularPricePerSet,
@@ -78,7 +78,9 @@ type OrderRowForPromoAgg = {
   total?: number
   discount_amt?: number
   coupon_discount_amt?: number
+  discount_reason?: string
   delivery_app_code?: string | null
+  memo?: string | null
 }
 
 function str(v: unknown): string {
@@ -162,7 +164,8 @@ export function filterPromoSalesRows(
 
 /**
  * pos_orders items_json — promoId 줄의 정가(카탈로그 역산) vs 판매가 차이 집계.
- * 결제 할인(discount_amt·coupon)은 기간 합계로 별도 제공(세트 내재 할인과 중복 아님).
+ * 배달앱 API 플랫폼 프로모(discount_amt)는 세트 할인 층·platform 유형으로 집계.
+ * POS 결제 할인(수동·쿠폰 등)은 paymentDiscount로 별도 제공.
  */
 export function aggregatePosSalesPromoBundleDiscount(params: {
   orderRows: OrderRowForPromoAgg[]
@@ -173,7 +176,7 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
     Omit<PosSalesPromoRow, 'discountPct' | 'discountPctOfGross' | 'saleSharePctOfGross' | 'bundleDiscountSharePct'>
   >()
   const kindBuckets = new Map<PosPromoSalesKind, ReturnType<typeof emptyKindTotals>>()
-  for (const kind of ['set', 'campaign', 'other'] as const) {
+  for (const kind of ['set', 'campaign', 'platform', 'other'] as const) {
     kindBuckets.set(kind, emptyKindTotals(kind))
   }
 
@@ -197,11 +200,45 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
   for (const order of params.orderRows) {
     totals.periodGrossSales = round2(totals.periodGrossSales + Math.max(0, Number(order.total) || 0))
     totals.periodOrderCount += 1
-    totals.paymentDiscount += resolvePosSalesDiscountAmount(
+
+    const orderPaymentDiscount = resolvePosSalesDiscountAmount(
       Number(order.discount_amt) || 0,
       Number(order.coupon_discount_amt) || 0
     )
-    /** 배달앱 API 플랫폼 프로모 — discount_amt 층으로만 집계(세트 내재 할인과 이중 집계 방지) */
+    const platformBundleDiscount = resolveDeliveryPlatformBundleDiscountAmt(order)
+    totals.paymentDiscount = round2(
+      totals.paymentDiscount + Math.max(0, orderPaymentDiscount - platformBundleDiscount)
+    )
+
+    if (platformBundleDiscount > 0.0001) {
+      const key = resolveDeliveryPlatformBundleKey(order)
+      const label = resolvePlatformDiscountReasonForAnalytics(order, platformBundleDiscount)
+      const prev = buckets.get(key) ?? {
+        key,
+        promoId: '',
+        promoCode: key.replace(/^platform::/, '').toUpperCase(),
+        name: label,
+        kind: 'platform' as const,
+        qty: 0,
+        saleAmount: 0,
+        regularAmount: 0,
+        bundleDiscount: 0,
+        estimatedLineQty: 0,
+        unresolvedLineQty: 0,
+      }
+      prev.qty += 1
+      prev.bundleDiscount = round2(prev.bundleDiscount + platformBundleDiscount)
+      buckets.set(key, prev)
+
+      const kindPrev = kindBuckets.get('platform') ?? emptyKindTotals('platform')
+      kindPrev.qty += 1
+      kindPrev.bundleDiscount = round2(kindPrev.bundleDiscount + platformBundleDiscount)
+      kindBuckets.set('platform', kindPrev)
+
+      totals.bundleDiscount = round2(totals.bundleDiscount + platformBundleDiscount)
+    }
+
+    /** 플랫폼 API 주문 — discount_amt가 세트 프로모이므로 promo 줄 정가 역산과 이중 집계하지 않음 */
     if (isDeliveryPlatformDiscountOrder(order)) continue
 
     const channel = orderTypeToPromoRegularPriceChannel(order.order_type)
@@ -294,7 +331,7 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
     }))
     .sort((a, b) => b.bundleDiscount - a.bundleDiscount || b.saleAmount - a.saleAmount)
 
-  const byKind: PosSalesPromoKindTotals[] = (['set', 'campaign', 'other'] as const)
+  const byKind: PosSalesPromoKindTotals[] = (['set', 'campaign', 'platform', 'other'] as const)
     .map((kind) => {
       const bucket = kindBuckets.get(kind) ?? emptyKindTotals(kind)
       return {

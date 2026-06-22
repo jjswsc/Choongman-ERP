@@ -154,6 +154,7 @@ export function MemberPointsSearchPanel({ selectedMemberId, onSelectMember }: Me
                   <th className="p-2 text-left">{t("name")}</th>
                   <th className="p-2 text-left">{t("memberNo")}</th>
                   <th className="p-2 text-right">{t("memberPointsBalance")}</th>
+                  <th className="p-2 text-right">{t("memberPointsTierCumulative")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,11 +172,14 @@ export function MemberPointsSearchPanel({ selectedMemberId, onSelectMember }: Me
                     <td className="p-2 text-right tabular-nums">
                       {Number(m.pointBalance || 0).toLocaleString()}
                     </td>
+                    <td className="p-2 text-right tabular-nums">
+                      {Number(m.tierPoints || 0).toLocaleString()}
+                    </td>
                   </tr>
                 ))}
                 {!members.length && (
                   <tr>
-                    <td colSpan={3} className="p-4 text-center text-muted-foreground">
+                    <td colSpan={4} className="p-4 text-center text-muted-foreground">
                       {t("memberPointsNoSearchResult")}
                     </td>
                   </tr>

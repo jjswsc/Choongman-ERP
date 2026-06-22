@@ -1,3 +1,18 @@
+/** 메뉴 정가 합(baseSum)에 주문 할인·최종합계 비율을 적용한 결제 대상 금액 */
+export function computeMenuSplitDueFromBaseSum(params: {
+  total: number
+  subtotal: number
+  baseSum: number
+  round2?: (n: number) => number
+}): number {
+  const round2 = params.round2 ?? ((n: number) => Math.round(n * 100) / 100)
+  const { total, subtotal, baseSum } = params
+  const safeBase = Math.max(0, Number(baseSum) || 0)
+  if (safeBase <= 0.009) return 0
+  if (total <= 0 || subtotal <= 0.009) return round2(safeBase)
+  return round2((total * safeBase) / subtotal)
+}
+
 /** 메뉴 기준 더치페이: 인원별 결제 대상 금액(할인·세금 반영) */
 export function computeMenuSplitDueByPerson(params: {
   total: number

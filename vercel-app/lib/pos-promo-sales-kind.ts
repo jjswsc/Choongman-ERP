@@ -1,5 +1,5 @@
-/** 매출 리포트 — 세트(메뉴관리) vs 마케팅 캠페인 프로모 구분 */
-export type PosPromoSalesKind = 'set' | 'campaign' | 'other'
+/** 매출 리포트 — 세트(메뉴관리) vs 마케팅 캠페인 vs 배달앱 플랫폼 프로모 */
+export type PosPromoSalesKind = 'set' | 'campaign' | 'platform' | 'other'
 
 export function resolvePosPromoSalesKind(params: {
   marketingCampaignId?: string | number | null

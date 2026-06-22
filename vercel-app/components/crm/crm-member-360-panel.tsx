@@ -144,6 +144,10 @@ export function CrmMember360Panel({ member }: { member: Member | null }) {
                 <p className="text-lg font-semibold tabular-nums">{Number(member.pointBalance || 0).toLocaleString()}</p>
               </div>
               <div>
+                <p className="text-xs text-muted-foreground">{t("memberPointsTierCumulative")}</p>
+                <p className="text-lg font-semibold tabular-nums">{Number(member.tierPoints || 0).toLocaleString()}</p>
+              </div>
+              <div>
                 <p className="text-xs text-muted-foreground">{t("memberPhone")}</p>
                 <p>{member.phone || "—"}</p>
               </div>

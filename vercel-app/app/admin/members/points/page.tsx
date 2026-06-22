@@ -129,7 +129,7 @@ export default function MemberPointsPage() {
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base">{t("memberPointsSelectedMember")}</CardTitle>
                       </CardHeader>
-                      <CardContent className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                      <CardContent className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
                         <div>
                           <p className="text-xs text-muted-foreground">{t("name")}</p>
                           <p className="font-medium">{selectedMember.name || "—"}</p>
@@ -146,6 +146,12 @@ export default function MemberPointsPage() {
                           <p className="text-xs text-muted-foreground">{t("memberPointsBalance")}</p>
                           <p className="text-lg font-semibold tabular-nums">
                             {Number(selectedMember.pointBalance || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t("memberPointsTierCumulative")}</p>
+                          <p className="text-lg font-semibold tabular-nums">
+                            {Number(selectedMember.tierPoints || 0).toLocaleString()}
                           </p>
                         </div>
                       </CardContent>
@@ -184,7 +190,16 @@ export default function MemberPointsPage() {
                               setDeltaPoints("0")
                               setNote("")
                               setSelectedMember((prev) =>
-                                prev ? { ...prev, pointBalance: Number(prev.pointBalance || 0) + p } : prev
+                                prev
+                                  ? {
+                                      ...prev,
+                                      pointBalance: Number(prev.pointBalance || 0) + p,
+                                      tierPoints:
+                                        p > 0
+                                          ? Number(prev.tierPoints || 0) + p
+                                          : Number(prev.tierPoints || 0),
+                                    }
+                                  : prev
                               )
                               await loadLedger(selectedMember.id, ledgerOffset)
                             } finally {
