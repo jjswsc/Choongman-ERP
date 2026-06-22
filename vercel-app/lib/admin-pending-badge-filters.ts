@@ -3,7 +3,10 @@
  * UI 목록 API(getAttendanceRecordsAdmin, getLeavePendingList 등)와 의미를 맞춘다.
  */
 
-import { attendancePendingApprovalPostgrestFilter } from '@/lib/attendance-utils'
+import {
+  ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS,
+  attendancePendingApprovalPostgrestFilter,
+} from '@/lib/attendance-utils'
 
 /** 미승인 발주 — orders.status=Pending 만 (Hold·Approved·Rejected 제외) */
 export function ordersPendingApprovalPostgrestFilter(): string {
@@ -16,4 +19,11 @@ export function leavePendingApprovalPostgrestFilter(): string {
 }
 
 /** 근태 승인 대기 — approved=대기 전체가 아니라 지각·연장·조퇴·GPS·강제퇴근 등만 */
-export { attendancePendingApprovalPostgrestFilter }
+export { attendancePendingApprovalPostgrestFilter, ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS }
+
+/** 사이드바·대시보드 배지 — 최근 N일(방콕, 오늘 포함) 승인 대기만 */
+export function attendancePendingBadgePostgrestFilter(): string {
+  return attendancePendingApprovalPostgrestFilter(undefined, {
+    lookbackDays: ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS,
+  })
+}

@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       minAmount?: number
       minPoints?: number
       pointRate?: number
+      discountRate?: number
       sortOrder?: number
       benefitsKo?: string
       benefitsEn?: string
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
       minAmount: Number(body.minAmount || 0),
       minPoints: Number(body.minPoints || 0),
       pointRate: Number(body.pointRate || 0),
+      discountRate: Number(body.discountRate ?? 0),
       sortOrder: Number(body.sortOrder || 0),
       benefitsKo: String(body.benefitsKo || ''),
       benefitsEn: String(body.benefitsEn || ''),

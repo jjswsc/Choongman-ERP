@@ -32,12 +32,54 @@ async function persistPosCouponRow(
       'marketing_campaign_id' in row &&
       (msg.includes('PGRST204') || msg.includes('schema cache')) &&
       msg.includes('marketing_campaign_id')
-    if (!missingCampaignColumn) throw saveErr
-    console.warn(
-      'savePosCoupon: pos_coupons.marketing_campaign_id column missing; retrying without it. Run vercel-app/sql/pos_coupons_marketing_campaign_id.sql on Supabase.'
-    )
-    const { marketing_campaign_id: _omit, ...withoutCampaign } = row
-    await persist(withoutCampaign)
+    if (missingCampaignColumn) {
+      console.warn(
+        'savePosCoupon: pos_coupons.marketing_campaign_id column missing; retrying without it. Run vercel-app/sql/pos_coupons_marketing_campaign_id.sql on Supabase.'
+      )
+      const { marketing_campaign_id: _omit, ...withoutCampaign } = row
+      await persist(withoutCampaign)
+      return
+    }
+    const missingPortalImageColumn =
+      'portal_image_url' in row &&
+      (msg.includes('PGRST204') || msg.includes('schema cache')) &&
+      msg.includes('portal_image_url')
+    if (missingPortalImageColumn) {
+      console.warn(
+        'savePosCoupon: pos_coupons.portal_image_url column missing; retrying without it. Run vercel-app/sql/pos_coupons_portal_claim.sql on Supabase.'
+      )
+      const { portal_image_url: _omit, ...withoutPortalImage } = row
+      await persist(withoutPortalImage)
+      return
+    }
+    const missingPortalClaimColumns =
+      ('portal_visible' in row ||
+        'portal_claim_mode' in row ||
+        'portal_point_cost' in row ||
+        'portal_max_claims_per_member' in row ||
+        'portal_sort_order' in row) &&
+      (msg.includes('PGRST204') || msg.includes('schema cache')) &&
+      (/portal_visible/i.test(msg) ||
+        /portal_claim_mode/i.test(msg) ||
+        /portal_point_cost/i.test(msg) ||
+        /portal_max_claims/i.test(msg) ||
+        /portal_sort_order/i.test(msg))
+    if (missingPortalClaimColumns) {
+      console.warn(
+        'savePosCoupon: pos_coupons portal claim columns missing; retrying without them. Run vercel-app/sql/pos_coupons_portal_claim.sql on Supabase.'
+      )
+      const {
+        portal_visible: _v,
+        portal_claim_mode: _m,
+        portal_point_cost: _p,
+        portal_max_claims_per_member: _c,
+        portal_sort_order: _s,
+        ...withoutPortalClaim
+      } = row
+      await persist(withoutPortalClaim)
+      return
+    }
+    throw saveErr
   }
 }
 
@@ -83,6 +125,17 @@ export async function POST(req: NextRequest) {
         : 0
     const allowWithManualDiscount =
       body.allowWithManualDiscount == null ? true : Boolean(body.allowWithManualDiscount)
+    const portalImageUrl = String(body.portalImageUrl ?? body.portal_image_url ?? '').trim()
+    const portalVisible = Boolean(body.portalVisible)
+    const portalClaimModeRaw = String(body.portalClaimMode ?? body.portal_claim_mode ?? 'none').trim().toLowerCase()
+    const portalClaimMode =
+      portalClaimModeRaw === 'free' || portalClaimModeRaw === 'points' ? portalClaimModeRaw : 'none'
+    const portalPointCost = Math.max(0, Math.trunc(Number(body.portalPointCost ?? body.portal_point_cost ?? 0)))
+    const portalMaxClaimsPerMember = Math.max(
+      1,
+      Math.trunc(Number(body.portalMaxClaimsPerMember ?? body.portal_max_claims_per_member ?? 1))
+    )
+    const portalSortOrder = Math.trunc(Number(body.portalSortOrder ?? body.portal_sort_order ?? 0))
 
     if (!code) {
       return NextResponse.json({ success: false, message: '쿠폰 코드를 입력하세요.' }, { headers })
@@ -115,6 +168,22 @@ export async function POST(req: NextRequest) {
       priority,
       combinable_with_manual_discount: allowWithManualDiscount,
       updated_at: new Date().toISOString(),
+    }
+    if (body.portalImageUrl !== undefined || body.portal_image_url !== undefined) {
+      row.portal_image_url = portalImageUrl
+    }
+    if (
+      body.portalVisible !== undefined ||
+      body.portalClaimMode !== undefined ||
+      body.portalPointCost !== undefined ||
+      body.portalMaxClaimsPerMember !== undefined ||
+      body.portalSortOrder !== undefined
+    ) {
+      row.portal_visible = portalVisible
+      row.portal_claim_mode = portalClaimMode
+      row.portal_point_cost = portalPointCost
+      row.portal_max_claims_per_member = portalMaxClaimsPerMember
+      row.portal_sort_order = portalSortOrder
     }
     if (marketingCampaignId != null && Number.isFinite(marketingCampaignId) && marketingCampaignId > 0) {
       row.marketing_campaign_id = marketingCampaignId

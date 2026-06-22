@@ -125,12 +125,14 @@ export function MemberPortalCouponQrButton({
   couponName,
   issueId,
   variant = "dark",
+  className,
 }: {
   memberNo: string
   couponCode: string
   couponName?: string
   issueId: number
   variant?: keyof typeof couponQrButtonClass
+  className?: string
 }) {
   const { t } = useMemberPortalLang()
   const [open, setOpen] = React.useState(false)
@@ -140,7 +142,7 @@ export function MemberPortalCouponQrButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={couponQrButtonClass[variant]}
+        className={className ?? couponQrButtonClass[variant]}
       >
         <QrCode className="h-3.5 w-3.5" />
         {t("showCouponQr")}

@@ -75,6 +75,7 @@ import {
   getPosMenuOptions,
   getMembers,
   getPosCollabCampaigns,
+  getPosMemberTierRates,
   getPosPaymentMethodItems,
   upsertPosTaxInvoiceRecipient,
   validatePosCoupons,
@@ -89,6 +90,10 @@ import {
   collabDiscountAmountForCart,
   collabSupportsQuantityEntry,
 } from '@/lib/pos-collab-discount'
+import {
+  computeMemberTierDiscountAmount,
+  normalizeMemberTierCodeForDiscount,
+} from '@/lib/member-tier-discount'
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { isMemberCouponQrPayload, parseMemberCouponQrPayload } from '@/lib/member-coupon-qr'
 import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
@@ -238,6 +243,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
+    tierDiscountAmt?: number
+    memberTierCode?: string
     pointUsed?: number
     /** 홀 주문 인원 (매출 분석용) */
     guestCount?: number
@@ -260,6 +267,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
+    tierDiscountAmt?: number
+    memberTierCode?: string
     pointUsed?: number
   }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
@@ -278,6 +287,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
+    tierDiscountAmt?: number
+    memberTierCode?: string
     pointUsed?: number
   }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
@@ -296,6 +307,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
+    tierDiscountAmt?: number
+    memberTierCode?: string
     pointUsed?: number
     /** 선불: 결제 후 테이블 유지. 후불: 결제 시 테이블 초기화 */
     isPrepaid?: boolean
@@ -318,6 +331,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     appliedCoupons?: PosAppliedCoupon[]
+    tierDiscountAmt?: number
+    memberTierCode?: string
     pointUsed?: number
   }) => CartPanelOrderCompleteResult
   /** 주문 버튼으로 이미 전송된 주문 ID (결제 시 해당 주문에 결제 반영용) */
@@ -453,7 +468,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [selectedMemberId, setSelectedMemberId] = useState('')
   const [memberKeyword, setMemberKeyword] = useState('')
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
-  const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string }>>({})
+  const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }>>({})
+  const [tierDiscountRates, setTierDiscountRates] = useState<Record<string, number>>({})
   const [, setRecentMemberIds] = useState<string[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [guestCount, setGuestCount] = useState(0)
@@ -797,6 +813,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       collabQuantity
     )
   }, [appliedCollab, cartItems, collabQuantity, hasSelectedDiscountScope, lineDiscountModeByItemId, menuByIdForCollab])
+  const selectedMemberTierDiscountRate = useMemo(() => {
+    if (!selectedMemberId) return 0
+    const tierCode = normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')
+    return Math.max(0, Number(tierDiscountRates[tierCode] ?? 0))
+  }, [memberMap, selectedMemberId, tierDiscountRates])
+  const tierDiscountAmt = useMemo(() => {
+    if (!selectedMemberId || selectedMemberTierDiscountRate <= 0) return 0
+    return computeMemberTierDiscountAmount(discountScopeSubtotal, selectedMemberTierDiscountRate)
+  }, [discountScopeSubtotal, selectedMemberId, selectedMemberTierDiscountRate])
   const manualDiscountInputAmt =
     discountType === 'percent' ? Math.floor((discountScopeSubtotal * discountValue) / 100) : discountValue
   const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
@@ -815,9 +840,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       couponDiscountAmt: legacy.couponDiscountAmt || undefined,
     }
   }, [appliedCoupons])
-  const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal
+  const tierOrderFields = useMemo(
+    () => ({
+      ...(tierDiscountAmt > 0.0001 ? { tierDiscountAmt } : {}),
+      ...(selectedMemberId
+        ? {
+            memberTierCode: normalizeMemberTierCodeForDiscount(
+              memberMap[selectedMemberId]?.tierCode || 'BRONZE'
+            ),
+          }
+        : {}),
+    }),
+    [memberMap, selectedMemberId, tierDiscountAmt]
+  )
+  const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + tierDiscountAmt
   const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
-  const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + collabDiscountAmt)
+  const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + tierDiscountAmt + collabDiscountAmt)
   const lineDiscountSnapshot = useMemo(() => {
     const totalDiscount = Math.max(0, Number(discount) || 0)
     if (!Array.isArray(cartItems) || cartItems.length === 0 || totalDiscount <= 0.0001) {
@@ -840,13 +878,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
       serviceDiscountAmt,
       cancelledLineAmt,
-      manualAndCouponDiscountAmt: manualDiscountAmt + couponDiscountTotal,
+      manualAndCouponDiscountAmt: manualDiscountAmt + couponDiscountTotal + tierDiscountAmt,
     })
   }, [
     appliedCollab,
     cancelledLineAmt,
     cartItems,
     collabDiscountAmt,
+    tierDiscountAmt,
     couponDiscountTotal,
     discount,
     hasSelectedDiscountScope,
@@ -899,6 +938,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             : ''
         }`
       : ''
+    const tierPart =
+      tierDiscountAmt > 0
+        ? `${tr('posTierDiscount', '등급 할인')} (${normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')} ${(selectedMemberTierDiscountRate * 100).toFixed(1)}%)`
+        : ''
     const lineDiscountCount = cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
     const linePart = [
       lineDiscountCount > 0 ? `${tr('posDiscount', '할인')} ${lineDiscountCount}${tr('posMenuLineUnit', '건')}` : '',
@@ -909,9 +952,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       selectedCancelledLineCount > 0
         ? `${tr('posLineCancelledShort', '취소처리')} ${selectedCancelledLineCount}${tr('posMenuLineUnit', '건')}`
         : ''
-    const parts = [base, collabPart, linePart, cancelPart].filter(Boolean)
+    const parts = [base, collabPart, tierPart, linePart, cancelPart].filter(Boolean)
     return parts.join(' · ')
-  }, [appliedCollab, cartItems, collabQuantity, discountReason, lineDiscountModeByItemId, selectedCancelledLineCount, t])
+  }, [appliedCollab, cartItems, collabQuantity, discountReason, lineDiscountModeByItemId, memberMap, selectedCancelledLineCount, selectedMemberId, selectedMemberTierDiscountRate, t, tierDiscountAmt])
   const paymentServiceReason = useMemo(() => {
     if (selectedServiceLineCount <= 0) return ''
     return `${tr('posServiceHandled', '서비스처리')} ${selectedServiceLineCount}${tr('posMenuLineUnit', '건')}`
@@ -1616,7 +1659,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           value: String(row.id),
           label: `${row.name}${row.memberNo ? ` (${row.memberNo})` : ''}${row.phone ? ` · ${row.phone}` : ''}`,
         }))
-      const map: Record<string, { id: number; memberNo: string; name: string; phone: string; email: string }> = {}
+      const map: Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }> = {}
       for (const row of rows) {
         map[String(row.id)] = {
           id: row.id,
@@ -1624,6 +1667,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           name: row.name || '',
           phone: row.phone || '',
           email: row.email || '',
+          tierCode: row.tierCode || 'BRONZE',
         }
       }
       setMemberOptions(options)
@@ -1640,6 +1684,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const handleMemberSearch = () => {
     loadMembers(memberKeyword)
   }
+
+  useEffect(() => {
+    getPosMemberTierRates()
+      .then((res) => {
+        if (res.success && res.rates) setTierDiscountRates(res.rates)
+      })
+      .catch(() => {})
+  }, [])
 
   const buildSplitReceiptPayloads = (): CartPanelSplitReceiptPayload[] | undefined => {
     if (!showSplit) return undefined
@@ -2866,6 +2918,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       memo: buildOrderMemo(customerMemo),
       discountAmt: discount,
       discountReason: paymentDiscountReason,
+      ...tierOrderFields,
       serviceAmt: serviceDiscountAmt,
       serviceReason: paymentServiceReason || undefined,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
@@ -2974,6 +3027,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
           discountReason: paymentDiscountReason,
+          ...tierOrderFields,
           serviceAmt: serviceDiscountAmt,
           serviceReason: paymentServiceReason || undefined,
           payment: buildPaymentPayloadForOrderSubmit({
@@ -3008,6 +3062,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
           discountReason: paymentDiscountReason,
+          ...tierOrderFields,
           serviceAmt: serviceDiscountAmt,
           serviceReason: paymentServiceReason || undefined,
           payment: buildPaymentPayloadForOrderSubmit({
@@ -3040,6 +3095,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
           discountReason: paymentDiscountReason,
+          ...tierOrderFields,
           serviceAmt: serviceDiscountAmt,
           serviceReason: paymentServiceReason || undefined,
           payment: buildPaymentPayloadForOrderSubmit({
@@ -3120,6 +3176,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         name: match.name || '',
         phone: match.phone || '',
         email: match.email || '',
+        tierCode: match.tierCode || 'BRONZE',
       },
     }))
     return { id: match.id, name }
@@ -3143,6 +3200,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           subtotal,
           manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
           collabDiscountAmt,
+          tierDiscountAmt,
           cartLines: buildCouponCartLines(),
           applied: appliedCoupons,
           candidate: {
@@ -3174,6 +3232,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       buildCouponCartLines,
       cancelledLineAmt,
       collabDiscountAmt,
+      tierDiscountAmt,
       couponQuantity,
       manualDiscountAmt,
       serviceDiscountAmt,
@@ -3444,6 +3503,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         memo: buildOrderMemo(customerMemo),
         discountAmt: discount,
         discountReason: paymentDiscountReason,
+        ...tierOrderFields,
         payment: {
           paymentCash: 0,
           paymentCard: 0,
@@ -3648,6 +3708,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
           <p>
             {tr('posManualDiscountExpected', '직접 할인 예상')}: {formatBahtNum(manualDiscountAmt)} ฿ ·{' '}
+            {tr('posTierDiscountExpected', '등급 할인 예상')}: {formatBahtNum(tierDiscountAmt)} ฿ ·{' '}
             {tr('posCollabDiscountExpected', '협업 할인 예상')}: {formatBahtNum(collabDiscountAmt)} ฿
           </p>
           <p className="mt-0.5">
@@ -4262,6 +4323,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </Button>
             ))}
           </div>
+          {selectedMemberId && tierDiscountAmt > 0 ? (
+            <p className="text-[11px] font-medium text-violet-800 dark:text-violet-200">
+              {tr('posTierDiscountExpected', '등급 할인 예상')}: -{formatBahtNum(tierDiscountAmt)} ฿ (
+              {normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')}{' '}
+              {(selectedMemberTierDiscountRate * 100).toFixed(1)}%)
+            </p>
+          ) : null}
           {memberSearchEmpty && (
             <p className="text-xs text-amber-600">
               {t('posMemberSearchEmpty') || '검색 결과가 없습니다. ERP 회원관리에서 회원을 먼저 등록해 주세요.'}
@@ -4424,6 +4492,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   memo: buildOrderMemo(customerMemo),
                   discountAmt: discount,
                   discountReason: paymentDiscountReason,
+                  ...tierOrderFields,
                   serviceAmt: serviceDiscountAmt,
                   serviceReason: paymentServiceReason || undefined,
                   memberId: selectedMemberId ? Number(selectedMemberId) : undefined,

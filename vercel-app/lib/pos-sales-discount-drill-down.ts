@@ -7,11 +7,12 @@ import {
 } from '@/lib/pos-order-promo-regular-price'
 import { resolvePosPromoSalesKind, type PosPromoSalesKind } from '@/lib/pos-promo-sales-kind'
 import {
-  classifyNonCouponKind,
   resolveCouponLines,
   resolveNonCouponDiscountAmt,
+  splitPaymentNonCouponDiscount,
   type PosPaymentDiscountKind,
 } from '@/lib/pos-sales-payment-discount-aggregate'
+import { resolveMemberTierDiscountLabel } from '@/lib/pos-tier-discount-reason'
 import {
   isDeliveryPlatformDiscountOrder,
   resolveDeliveryPlatformBundleDiscountAmt,
@@ -50,6 +51,8 @@ type OrderRowBase = {
   applied_coupons?: unknown
   items_json?: string
   delivery_app_code?: string | null
+  tier_discount_amt?: number | null
+  member_tier_code?: string | null
   created_at?: string
   paid_at?: string
 }
@@ -149,15 +152,23 @@ export function collectPosSalesPaymentDiscountDrillOrders(params: {
     const nonCouponAmt = resolveNonCouponDiscountAmt(discountAmt, couponTotal)
     const paymentNonCoupon = round2(Math.max(0, nonCouponAmt - platformBundleDiscount))
     if (paymentNonCoupon > 0.0001) {
-      const kind = classifyNonCouponKind(reason, order)
-      const label = reason
-      const key = paymentRowKey(kind, label, kind)
-      const kindOk = !kindFilter || kindFilter === kind
-      const keyOk = !rowKeyFilter || rowKeyFilter === key
-      if (kindOk && keyOk) {
-        mergeDrillRow(map, order, paymentNonCoupon, {
-          discountReason: label || undefined,
-        })
+      const split = splitPaymentNonCouponDiscount(order, paymentNonCoupon)
+      const parts: Array<{ kind: PosPaymentDiscountKind; amt: number; label: string; code: string }> = [
+        { kind: 'tier', amt: split.tier, label: resolveMemberTierDiscountLabel(order), code: str(order.member_tier_code).toUpperCase() || 'tier' },
+        { kind: 'collab', amt: split.collab, label: reason, code: 'collab' },
+        { kind: 'manual', amt: split.manual, label: reason, code: 'manual' },
+        { kind: 'other', amt: split.other, label: reason || 'other', code: 'other' },
+      ]
+      for (const part of parts) {
+        if (part.amt <= 0.0001) continue
+        const key = paymentRowKey(part.kind, part.label, part.code)
+        const kindOk = !kindFilter || kindFilter === part.kind
+        const keyOk = !rowKeyFilter || rowKeyFilter === key
+        if (kindOk && keyOk) {
+          mergeDrillRow(map, order, part.amt, {
+            discountReason: part.label || undefined,
+          })
+        }
       }
     }
 

@@ -119,6 +119,7 @@ type MemberTierRow = {
   min_amount?: number
   min_points?: number
   point_rate?: number
+  discount_rate?: number | null
   sort_order?: number
   benefits_ko?: string | null
   benefits_en?: string | null
@@ -413,6 +414,116 @@ export async function listMembersCursor(params?: { q?: string; afterId?: number;
     const rows = await listMembers({ q, limit: batchLimit })
     const filtered = afterId ? rows.filter((m) => m.id > afterId) : rows
     return filtered.slice(0, limit)
+  }
+}
+
+export type MemberPointsSearchParams = {
+  q?: string
+  afterId?: number
+  limit?: number
+  tierCode?: string
+  status?: string
+  pointBalanceMin?: number | string
+  pointBalanceMax?: number | string
+  tierPointsMin?: number | string
+  tierPointsMax?: number | string
+}
+
+function parseOptionalIntInput(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = Math.trunc(Number(v))
+  return Number.isFinite(n) ? n : null
+}
+
+export function memberPointsSearchHasCriteria(params: MemberPointsSearchParams): boolean {
+  return Boolean(
+    toText(params.q) ||
+      toText(params.tierCode) ||
+      toText(params.status) ||
+      parseOptionalIntInput(params.pointBalanceMin) != null ||
+      parseOptionalIntInput(params.pointBalanceMax) != null ||
+      parseOptionalIntInput(params.tierPointsMin) != null ||
+      parseOptionalIntInput(params.tierPointsMax) != null
+  )
+}
+
+export async function listMembersPointsSearch(params: MemberPointsSearchParams): Promise<MemberSummary[]> {
+  if (!memberPointsSearchHasCriteria(params)) return []
+
+  const q = toText(params.q)
+  const afterId = Number(params.afterId || 0) || null
+  const limit = Math.max(1, Math.min(Number(params.limit || 100), 500))
+  const tierCode = toText(params.tierCode).toUpperCase()
+  const status = toText(params.status)
+  const pointBalanceMin = parseOptionalIntInput(params.pointBalanceMin)
+  const pointBalanceMax = parseOptionalIntInput(params.pointBalanceMax)
+  const tierPointsMin = parseOptionalIntInput(params.tierPointsMin)
+  const tierPointsMax = parseOptionalIntInput(params.tierPointsMax)
+
+  try {
+    const rows = (await supabaseRpc<MemberRow[]>('search_members_points_cursor', {
+      p_after_id: afterId,
+      p_limit: limit,
+      p_q: q || null,
+      p_tier_code: tierCode || null,
+      p_status: status || null,
+      p_point_balance_min: pointBalanceMin,
+      p_point_balance_max: pointBalanceMax,
+      p_tier_points_min: tierPointsMin,
+      p_tier_points_max: tierPointsMax,
+    })) as MemberRow[]
+    const memberIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
+    const lineIdentityMap = await getLineIdentities(memberIds)
+    const lineEventMap = await getLatestMemberEvents(memberIds)
+    return (rows || []).map((row) => {
+      const id = Number(row.id || 0)
+      const evt = lineEventMap.get(id)
+      return toMemberSummary(row, lineIdentityMap.get(id), {
+        lastLineEventType: evt?.eventType,
+        lastLineEventAt: evt?.processedAt,
+      })
+    })
+  } catch {
+    const filters: string[] = []
+    if (afterId) filters.push(`id.lt.${afterId}`)
+    if (tierCode) filters.push(`tier_code=eq.${tierCode}`)
+    if (status) filters.push(`status=eq.${status}`)
+    if (pointBalanceMin != null) filters.push(`point_balance.gte.${pointBalanceMin}`)
+    if (pointBalanceMax != null) filters.push(`point_balance.lte.${pointBalanceMax}`)
+    if (q) filters.push(buildMemberSearchPostgrestOrFilter(q))
+
+    let rows: MemberRow[] = []
+    if (filters.length) {
+      rows = (await supabaseSelectFilter('members', filters.join('&'), {
+        order: 'id.desc',
+        limit,
+        select:
+          'id,member_no,name,full_name,phone,email,birth_date,gender,nationality,tier_code,status,point_balance,tier_points,line_tier_points,lifetime_amount,join_channel,join_store_code,created_at',
+      })) as MemberRow[]
+    } else if (tierPointsMin != null || tierPointsMax != null) {
+      throw new Error('누적 포인트 범위 검색은 SQL(search_members_points_cursor) 배포 후 사용할 수 있습니다.')
+    }
+
+    if (tierPointsMin != null || tierPointsMax != null) {
+      rows = rows.filter((row) => {
+        const tp = resolveMemberTierQualificationValue(row, 'points')
+        if (tierPointsMin != null && tp < tierPointsMin) return false
+        if (tierPointsMax != null && tp > tierPointsMax) return false
+        return true
+      })
+    }
+
+    const memberIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
+    const lineIdentityMap = await getLineIdentities(memberIds)
+    const lineEventMap = await getLatestMemberEvents(memberIds)
+    return (rows || []).map((row) => {
+      const id = Number(row.id || 0)
+      const evt = lineEventMap.get(id)
+      return toMemberSummary(row, lineIdentityMap.get(id), {
+        lastLineEventType: evt?.eventType,
+        lastLineEventAt: evt?.processedAt,
+      })
+    })
   }
 }
 
@@ -918,6 +1029,7 @@ export async function saveMemberTier(params: {
   minPoints?: number
   pointRate: number
   sortOrder?: number
+  discountRate?: number
   benefitsKo?: string
   benefitsEn?: string
   benefitsTh?: string
@@ -933,6 +1045,7 @@ export async function saveMemberTier(params: {
         min_amount: Math.max(0, Number(params.minAmount || 0)),
         min_points: Math.max(0, Math.trunc(Number(params.minPoints || 0))),
         point_rate: Math.max(0, Number(params.pointRate || 0)),
+        discount_rate: Math.max(0, Number(params.discountRate ?? 0)),
         sort_order: Math.max(0, Math.trunc(Number(params.sortOrder || 0))),
         benefits_ko: toText(params.benefitsKo) || null,
         benefits_en: toText(params.benefitsEn) || null,
@@ -1399,6 +1512,7 @@ export async function listMemberCouponIssues(params?: {
     maxDiscountAmt: number | null
     validTo: string
     stackMode: string
+    portalImageUrl: string
   }>()
   if (couponCodes.length > 0) {
     const codeFilter = `code=in.(${couponCodes.map((code) => encodeURIComponent(code)).join(',')})`
@@ -1414,6 +1528,7 @@ export async function listMemberCouponIssues(params?: {
       max_discount_amt?: number | null
       valid_to?: string | null
       stack_mode?: string | null
+      portal_image_url?: string | null
     }>
     for (const coupon of couponRows || []) {
       const code = toText(coupon.code).toUpperCase()
@@ -1431,6 +1546,7 @@ export async function listMemberCouponIssues(params?: {
         maxDiscountAmt: coupon.max_discount_amt != null ? Number(coupon.max_discount_amt) : null,
         validTo: toText(coupon.valid_to),
         stackMode: toText(coupon.stack_mode) || 'fixed_only',
+        portalImageUrl: toText(coupon.portal_image_url),
       })
     }
   }
@@ -1513,6 +1629,7 @@ export async function listMemberCouponIssues(params?: {
       restoredAt: toText(row.restored_at),
       restoreReason: toText(row.restore_reason),
       restoredFromOrderId: Number(row.restored_from_order_id || 0) || null,
+      portalImageUrl: coupon?.portalImageUrl || '',
     }
   })
 

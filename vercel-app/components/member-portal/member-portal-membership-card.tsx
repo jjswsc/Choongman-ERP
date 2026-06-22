@@ -28,6 +28,7 @@ export function MemberPortalMembershipCard({
   showQr,
   onToggleQr,
   tierProgress,
+  pointRetentionYears,
 }: {
   member: MemberSummary
   dashboard: PortalDashboard
@@ -35,8 +36,10 @@ export function MemberPortalMembershipCard({
   showQr: boolean
   onToggleQr: () => void
   tierProgress?: MembershipCardTierProgress
+  pointRetentionYears?: number
 }) {
   const { t } = useMemberPortalLang()
+  const yearsText = String(pointRetentionYears ?? 2)
   const tier = tierVisual(dashboard.tierProgress.currentTierCode)
   const displayName = member.fullName || member.name || "Member"
   const nextFamily = tierProgress?.nextTierCode ? tierVisual(tierProgress.nextTierCode).family : null
@@ -139,6 +142,10 @@ export function MemberPortalMembershipCard({
             <p className="truncate font-mono text-sm font-black leading-none sm:text-lg">{member.memberNo || `#${member.id}`}</p>
           </div>
         </div>
+
+        <p className="relative z-[1] mt-2 text-[8px] leading-snug text-[#a9a9a9]">
+          {t("cumulativeTierPointsHint", { years: yearsText })}
+        </p>
 
         {tierProgress ? (
           <div className="relative mt-2.5 text-[9px] text-[#d8d8d8]">

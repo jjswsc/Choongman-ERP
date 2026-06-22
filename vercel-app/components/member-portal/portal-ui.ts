@@ -31,6 +31,7 @@ export type PortalCouponRow = {
   status: string
   issuedAt: string
   usedAt?: string
+  portalImageUrl?: string
 }
 
 export type PortalVisitRow = {

@@ -33,6 +33,12 @@ export async function GET(_req: NextRequest) {
       item_scope_json?: Record<string, unknown> | null
       priority?: number | null
       combinable_with_manual_discount?: boolean | null
+      portal_image_url?: string | null
+      portal_visible?: boolean | null
+      portal_claim_mode?: string | null
+      portal_point_cost?: number | null
+      portal_max_claims_per_member?: number | null
+      portal_sort_order?: number | null
     }[]
     const list = (rows || []).map((r) => {
       const mapped = mapPosCouponDbRow(r)
@@ -59,6 +65,19 @@ export async function GET(_req: NextRequest) {
         itemScope: mapped.itemScope ?? null,
         priority: mapped.priority ?? 0,
         allowWithManualDiscount: mapped.allowWithManualDiscount !== false,
+        portalImageUrl: String(r.portal_image_url ?? '').trim(),
+        portalVisible: Boolean(r.portal_visible),
+        portalClaimMode:
+          String(r.portal_claim_mode ?? 'none').trim().toLowerCase() === 'free' ||
+          String(r.portal_claim_mode ?? 'none').trim().toLowerCase() === 'points'
+            ? (String(r.portal_claim_mode).trim().toLowerCase() as 'free' | 'points')
+            : 'none',
+        portalPointCost: Math.max(0, Math.trunc(Number(r.portal_point_cost ?? 0))),
+        portalMaxClaimsPerMember: Math.max(
+          1,
+          Math.trunc(Number(r.portal_max_claims_per_member ?? 1))
+        ),
+        portalSortOrder: Math.trunc(Number(r.portal_sort_order ?? 0)),
       }
     }).filter(Boolean)
     return NextResponse.json(list, { headers })

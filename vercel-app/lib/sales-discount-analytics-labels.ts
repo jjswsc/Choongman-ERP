@@ -12,6 +12,7 @@ export function paymentKindLabel(kind: string, tr: SalesDiscountTr): string {
   if (kind === 'manual') return tr('salesPaymentDiscountKindManual', '수동 할인')
   if (kind === 'collab') return tr('salesPaymentDiscountKindCollab', '협업 할인')
   if (kind === 'coupon') return tr('salesPaymentDiscountKindCoupon', '쿠폰')
+  if (kind === 'tier') return tr('salesPaymentDiscountKindTier', '등급 할인')
   if (kind === 'platform') return tr('salesPaymentDiscountKindPlatform', '배달·플랫폼')
   return tr('salesPaymentDiscountKindOther', '기타')
 }
@@ -61,6 +62,12 @@ export function resolveSalesDiscountDrillExplanation(
       return tr(
         'salesDiscountDrillExplainCollab',
         '협업(브랜드·제휴) 할인 사유가 기록된 주문입니다.'
+      )
+    }
+    if (kind === 'tier') {
+      return tr(
+        'salesDiscountDrillExplainTier',
+        '회원 등급 자동 할인(tier_discount_amt)이 적용된 POS 주문입니다.'
       )
     }
     return tr(

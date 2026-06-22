@@ -24,6 +24,7 @@ type TierRow = {
   min_amount: number
   min_points: number
   point_rate: number
+  discount_rate: number
   sort_order: number
   benefits_ko?: string | null
   benefits_en?: string | null
@@ -37,6 +38,7 @@ function emptyForm(): Omit<TierRow, "code"> & { code: string } {
     min_amount: 0,
     min_points: 0,
     point_rate: 0.01,
+    discount_rate: 0,
     sort_order: 1,
     benefits_ko: "",
     benefits_en: "",
@@ -57,12 +59,17 @@ export function MemberPointsPolicyTab() {
   )
   const [earnBonusSaving, setEarnBonusSaving] = React.useState(false)
   const [rowSavingCode, setRowSavingCode] = React.useState("")
+  const [pointRetentionYears, setPointRetentionYears] = React.useState(2)
+  const [pointRetentionSaving, setPointRetentionSaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const [tiers, policy] = await Promise.all([getMemberTiers(), getMemberTierPolicy()])
     setRows(tiers as TierRow[])
     if (policy.upgradeBasis === "amount" || policy.upgradeBasis === "points") {
       setUpgradeBasis(policy.upgradeBasis)
+    }
+    if (typeof policy.pointRetentionYears === "number" && policy.pointRetentionYears > 0) {
+      setPointRetentionYears(policy.pointRetentionYears)
     }
     if (policy.earnBonus) {
       setEarnBonus({
@@ -95,6 +102,7 @@ export function MemberPointsPolicyTab() {
       min_amount: Number(r.min_amount || 0),
       min_points: Number(r.min_points || 0),
       point_rate: Number(r.point_rate || 0),
+      discount_rate: Number(r.discount_rate || 0),
       sort_order: Number(r.sort_order || 0),
       benefits_ko: String(r.benefits_ko || ""),
       benefits_en: String(r.benefits_en || ""),
@@ -111,6 +119,7 @@ export function MemberPointsPolicyTab() {
         minAmount: Number(form.min_amount || 0),
         minPoints: Number(form.min_points || 0),
         pointRate: Number(form.point_rate || 0),
+        discountRate: Number(form.discount_rate || 0),
         sortOrder: Number(form.sort_order || 0),
         benefitsKo: String(form.benefits_ko || ""),
         benefitsEn: String(form.benefits_en || ""),
@@ -140,6 +149,7 @@ export function MemberPointsPolicyTab() {
           minAmount: Number(row.min_amount || 0),
           minPoints: Number(row.min_points || 0),
           pointRate: Number(row.point_rate || 0),
+          discountRate: Number(row.discount_rate || 0),
           sortOrder: Number(row.sort_order || 0),
           benefitsKo: String(row.benefits_ko || ""),
           benefitsEn: String(row.benefits_en || ""),
@@ -207,6 +217,55 @@ export function MemberPointsPolicyTab() {
           >
             {policySaving ? t("loading") : t("memberTierUpgradeBasisSave")}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{tr(t, "memberPointExpiryTitle", { years: pointRetentionYears })}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>{tr(t, "memberPointExpiryDesc", { years: pointRetentionYears })}</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>{tr(t, "memberPointExpiryTierNote", { years: pointRetentionYears })}</li>
+            <li>{tr(t, "memberPointExpiryBalanceNote", { years: pointRetentionYears })}</li>
+          </ul>
+          <div className="flex flex-wrap items-end gap-3 pt-1">
+            <div className="space-y-1">
+              <Label htmlFor="point-retention-years">{t("memberPointRetentionYearsLabel")}</Label>
+              <Input
+                id="point-retention-years"
+                type="number"
+                min={1}
+                max={10}
+                className="h-9 w-24"
+                value={String(pointRetentionYears)}
+                onChange={(e) => setPointRetentionYears(Number(e.target.value || 2))}
+              />
+            </div>
+            <Button
+              variant="outline"
+              disabled={pointRetentionSaving}
+              onClick={async () => {
+                setPointRetentionSaving(true)
+                try {
+                  const res = await saveMemberTierPolicy({ pointRetentionYears })
+                  if (!res.success) await appAlert(res.message || t("msg_save_fail"))
+                  else {
+                    if (typeof res.pointRetentionYears === "number") {
+                      setPointRetentionYears(res.pointRetentionYears)
+                    }
+                    await appAlert(t("memberPointRetentionYearsSaved"))
+                  }
+                } finally {
+                  setPointRetentionSaving(false)
+                }
+              }}
+            >
+              {pointRetentionSaving ? t("loading") : t("memberPointRetentionYearsSave")}
+            </Button>
+          </div>
+          <p className="text-xs">{t("memberPointExpiryCronNote")}</p>
         </CardContent>
       </Card>
 
@@ -420,6 +479,11 @@ export function MemberPointsPolicyTab() {
               onChange={(e) => setForm((prev) => ({ ...prev, point_rate: Number(e.target.value || 0) }))}
             />
             <Input
+              placeholder={t("memberTierDiscountRatePh")}
+              value={String(form.discount_rate)}
+              onChange={(e) => setForm((prev) => ({ ...prev, discount_rate: Number(e.target.value || 0) }))}
+            />
+            <Input
               placeholder={t("memberTierSortOrder")}
               value={String(form.sort_order)}
               onChange={(e) => setForm((prev) => ({ ...prev, sort_order: Number(e.target.value || 0) }))}
@@ -440,6 +504,7 @@ export function MemberPointsPolicyTab() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">{t("memberTierListInlineHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("memberTierDiscountPosHint")}</p>
           <div className="overflow-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
@@ -449,6 +514,7 @@ export function MemberPointsPolicyTab() {
                   <th className="p-2 text-left">{t("memberTierMinPoints")}</th>
                   <th className="p-2 text-left">{t("memberTierMinAmount")}</th>
                   <th className="p-2 text-left">{t("memberTierPointRate")}</th>
+                  <th className="p-2 text-left">{t("memberTierDiscountRate")}</th>
                   <th className="p-2 text-left">{t("memberTierBenefitsShort")}</th>
                   <th className="p-2 text-left">{t("commonSave")}</th>
                 </tr>
@@ -485,6 +551,16 @@ export function MemberPointsPolicyTab() {
                         className="h-8 w-24"
                         value={String(r.point_rate ?? 0)}
                         onChange={(e) => patchRow(r.code, { point_rate: Number(e.target.value || 0) })}
+                      />
+                    </td>
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.001}
+                        className="h-8 w-24"
+                        value={String(r.discount_rate ?? 0)}
+                        onChange={(e) => patchRow(r.code, { discount_rate: Number(e.target.value || 0) })}
                       />
                     </td>
                     <td className="max-w-[240px] truncate p-2 text-muted-foreground">

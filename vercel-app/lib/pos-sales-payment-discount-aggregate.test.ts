@@ -44,6 +44,40 @@ describe('aggregatePosSalesPaymentDiscount', () => {
     expect(result.byKind[0]?.discountAmount).toBe(60)
   })
 
+  it('classifies tier discount from tier_discount_amt', () => {
+    const result = aggregatePosSalesPaymentDiscount({
+      orderRows: [
+        {
+          total: 1000,
+          discount_amt: 50,
+          coupon_discount_amt: 0,
+          tier_discount_amt: 50,
+          member_tier_code: 'GOLD',
+          discount_reason: '등급 할인 (GOLD 5.0%)',
+        },
+      ],
+    })
+
+    expect(result.byKind.find((k) => k.kind === 'tier')?.discountAmount).toBe(50)
+    expect(result.byKind.find((k) => k.kind === 'manual')).toBeUndefined()
+  })
+
+  it('classifies tier discount from reason when tier_discount_amt is missing', () => {
+    const result = aggregatePosSalesPaymentDiscount({
+      orderRows: [
+        {
+          total: 1000,
+          discount_amt: 50,
+          coupon_discount_amt: 0,
+          discount_reason: '등급 할인 (GOLD 5.0%)',
+        },
+      ],
+    })
+
+    expect(result.byKind.find((k) => k.kind === 'tier')?.discountAmount).toBe(50)
+    expect(result.byKind.find((k) => k.kind === 'manual')).toBeUndefined()
+  })
+
   it('classifies Grab API order as bundle platform, not payment discount', () => {
     const payment = aggregatePosSalesPaymentDiscount({
       orderRows: [

@@ -40,6 +40,7 @@ export type MemberPortalKey =
   | 'tierBenefitsEmpty'
   | 'tierCurrentBadge'
   | 'tierEarnRate'
+  | 'tierDiscountRate'
   | 'statLifetime'
   | 'homeFeatureLabel'
   | 'homeFeatureEmpty'
@@ -62,6 +63,9 @@ export type MemberPortalKey =
   | 'statPointsEarned'
   | 'availablePoints'
   | 'cumulativeTierPoints'
+  | 'cumulativeTierPointsHint'
+  | 'tierPointExpiryPolicyTitle'
+  | 'tierPointExpiryPolicyDesc'
   | 'referTitle'
   | 'referDesc'
   | 'copyCode'
@@ -216,6 +220,23 @@ export type MemberPortalKey =
   | 'stampExpiresAt'
   | 'stampCardSequence'
   | 'privilegeDesc'
+  | 'privilegeTabCoupons'
+  | 'privilegeTabBenefits'
+  | 'privilegeTabHistory'
+  | 'couponFilterActive'
+  | 'couponFilterUsed'
+  | 'couponFilterAll'
+  | 'couponTabOffers'
+  | 'couponTabWallet'
+  | 'couponOffersAvailable'
+  | 'noCouponOffers'
+  | 'couponOfferCollect'
+  | 'couponOfferRedeemPoints'
+  | 'couponOfferNeedPoints'
+  | 'couponOfferInWallet'
+  | 'couponOfferMaxReached'
+  | 'couponOfferPointCost'
+  | 'couponClaimSuccess'
   | 'couponsTitle'
   | 'couponsSub'
   | 'noCoupons'
@@ -298,6 +319,7 @@ export type MemberPortalKey =
   | 'pointKind_use'
   | 'pointKind_adjust'
   | 'pointKind_expire'
+  | 'pointKind_redeem'
   | 'coupon_issued'
   | 'coupon_used'
   | 'coupon_expired'
@@ -494,6 +516,7 @@ const MS: Record<MemberPortalKey, Dict> = {
   },
   tierCurrentBadge: { en: 'Current', th: 'ระดับปัจจุบัน', ko: '현재 등급' },
   tierEarnRate: { en: 'Point earn rate', th: 'อัตราแต้มสะสม', ko: '포인트 적립율' },
+  tierDiscountRate: { en: 'Tier discount', th: 'ส่วนลดระดับสมาชิก', ko: '등급 할인율' },
   statLifetime: { en: 'Lifetime spend', th: 'ยอดใช้จ่ายสะสม', ko: '누적 이용 금액' },
   homeFeatureLabel: { en: 'New menu', th: 'เมนูใหม่', ko: '신메뉴' },
   homeFeatureEmpty: { en: 'Coming soon', th: 'เร็วๆ นี้', ko: '곧 공개' },
@@ -568,9 +591,24 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '사용 가능 포인트',
   },
   cumulativeTierPoints: {
-    en: 'Tier points (lifetime)',
-    th: 'แต้มสะสม (ระดับ)',
+    en: 'Tier points (2-year rolling)',
+    th: 'แต้มสะสม (2 ปีล่าสุด)',
     ko: '누적 포인트',
+  },
+  cumulativeTierPointsHint: {
+    en: 'Only points earned in the last {years} years count toward your tier.',
+    th: 'นับเฉพาะแต้มที่ได้รับภายใน {years} ปีล่าสุดสำหรับระดับสมาชิก',
+    ko: '적립일로부터 {years}년 이내 포인트만 등급 산정에 반영됩니다.',
+  },
+  tierPointExpiryPolicyTitle: {
+    en: 'Point expiry policy',
+    th: 'นโยบายหมดอายุแต้ม',
+    ko: '포인트 소멸 안내',
+  },
+  tierPointExpiryPolicyDesc: {
+    en: 'Points older than {years} years from the earn date expire automatically. No separate maintenance requirement—keeping your tier means earning enough in the rolling {years}-year window. Available points follow the same rule; oldest credits are used first when you redeem.',
+    th: 'แต้มที่ได้รับเกิน {years} ป จะหมดอายุอัตโนมัติ ไม่มีแต้มคงระดับแยก—รักษาระดับได้ด้วยการสะสมใน {years} ปีล่าสุด แต้มใช้ได้ใช้กฎเดียวกัน และหักจากรายการเก่าก่อน',
+    ko: '적립일로부터 {years}년이 지난 포인트는 자동 소멸됩니다. 별도 유지 포인트 없이, 최근 {years}년간 적립한 포인트로 등급이 유지·산정됩니다. 사용 가능 포인트도 동일하며, 사용 시 오래된 적립분부터 차감됩니다.',
   },
   referTitle: { en: 'Refer a friend', th: 'ชวนเพื่อน รับแต้ม', ko: '친구 초대' },
   referDesc: {
@@ -929,9 +967,34 @@ const MS: Record<MemberPortalKey, Dict> = {
   },
   privilegeTitle: { en: 'My privilege', th: 'สิทธิพิเศษของฉัน', ko: '내 혜택' },
   privilegeDesc: {
-    en: 'Membership levels, coupons, points, and visit history in one place.',
-    th: 'ระดับสมาชิก คูปอง แต้ม และประวัติการใช้บริการในหน้าเดียว',
-    ko: '등급·혜택, 쿠폰, 포인트, 이용 내역을 한 화면에서 확인하세요.',
+    en: 'Coupons, tier benefits, and activity — organized in tabs.',
+    th: 'คูปอง สิทธิ์สมาชิก และประวัติ — แยกเป็นแท็บอ่านง่าย',
+    ko: '쿠폰·등급 혜택·이용 내역을 탭으로 나눠 깔끔하게 확인하세요.',
+  },
+  privilegeTabCoupons: { en: 'Coupons', th: 'คูปอง', ko: '쿠폰' },
+  privilegeTabBenefits: { en: 'Benefits', th: 'สิทธิพิเศษ', ko: '혜택' },
+  privilegeTabHistory: { en: 'History', th: 'ประวัติ', ko: '내역' },
+  couponFilterActive: { en: 'Ready to use', th: 'พร้อมใช้', ko: '사용 가능' },
+  couponFilterUsed: { en: 'Used / expired', th: 'ใช้แล้ว', ko: '사용·만료' },
+  couponFilterAll: { en: 'All', th: 'ทั้งหมด', ko: '전체' },
+  couponTabOffers: { en: 'Get coupons', th: 'รับคูปอง', ko: '받을 쿠폰' },
+  couponTabWallet: { en: 'My coupons', th: 'คูปองของฉัน', ko: '내 쿠폰' },
+  couponOffersAvailable: { en: 'Available', th: 'รับได้', ko: '받을 수 있음' },
+  noCouponOffers: {
+    en: 'No coupons available to collect right now.',
+    th: 'ยังไม่มีคูปองให้รับในขณะนี้',
+    ko: '지금 받을 수 있는 쿠폰이 없습니다.',
+  },
+  couponOfferCollect: { en: 'Collect coupon', th: 'เก็บคูปอง', ko: '쿠폰 받기' },
+  couponOfferRedeemPoints: { en: 'Redeem {count} P', th: 'แลก {count} คะแนน', ko: '{count}P 교환' },
+  couponOfferNeedPoints: { en: 'Need {count} more P', th: 'ขาด {count} คะแนน', ko: '{count}P 부족' },
+  couponOfferInWallet: { en: 'In My coupons', th: 'อยู่ในคูปองของฉัน', ko: '내 쿠폰에 있음' },
+  couponOfferMaxReached: { en: 'Limit reached', th: 'รับครบแล้ว', ko: '수령 완료' },
+  couponOfferPointCost: { en: '{count} points', th: '{count} คะแนน', ko: '{count}P' },
+  couponClaimSuccess: {
+    en: 'Coupon added to My coupons.',
+    th: 'เพิ่มคูปองใน「คูปองของฉัน」แล้ว',
+    ko: '쿠폰이 「내 쿠폰」에 추가되었습니다.',
   },
   stampCardTitle: { en: 'Stamp card', th: 'บัตรสแตมป์', ko: '스탬프 카드' },
   stampHomeTitle: {
@@ -1221,6 +1284,7 @@ const MS: Record<MemberPortalKey, Dict> = {
   pointKind_use: { en: 'Used', th: 'ใช้', ko: '사용' },
   pointKind_adjust: { en: 'Adjust', th: 'ปรับ', ko: '조정' },
   pointKind_expire: { en: 'Expired', th: 'หมดอายุ', ko: '만료' },
+  pointKind_redeem: { en: 'Redeemed', th: 'แลกคูปอง', ko: '쿠폰 교환' },
   coupon_issued: { en: 'Ready', th: 'พร้อมใช้', ko: '사용 가능' },
   coupon_used: { en: 'Used', th: 'ใช้แล้ว', ko: '사용됨' },
   coupon_expired: { en: 'Expired', th: 'หมดอายุ', ko: '만료' },
@@ -1442,6 +1506,7 @@ export function memberPortalPointKindLabel(lang: LangCode, kind: string): string
   if (k === 'use') return memberPortalT(lang, 'pointKind_use')
   if (k === 'adjust') return memberPortalT(lang, 'pointKind_adjust')
   if (k === 'expire') return memberPortalT(lang, 'pointKind_expire')
+  if (k === 'redeem') return memberPortalT(lang, 'pointKind_redeem')
   return kind || '-'
 }
 

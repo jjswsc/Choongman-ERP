@@ -143,8 +143,19 @@ export function attendanceLogNeedsManagerApproval(row: {
   return false
 }
 
+/** 사이드바·대시보드 근태 배지 — 방콕 달력 기준 최근 N일(오늘 포함) */
+export const ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS = 30
+
+export type AttendancePendingApprovalFilterOptions = {
+  /** 방콕 달력 기준 최근 N일(오늘 포함). 미지정 시 전체 기간 */
+  lookbackDays?: number
+}
+
 /** PostgREST `attendance_logs` — 승인 대기(실제 처리 필요) 건수·목록 조회용 필터 */
-export function attendancePendingApprovalPostgrestFilter(prefixFilter?: string): string {
+export function attendancePendingApprovalPostgrestFilter(
+  prefixFilter?: string,
+  options?: AttendancePendingApprovalFilterOptions
+): string {
   const pendingEq = encodeURIComponent('대기')
   const statusOr = [
     'late_min.gt.0',
@@ -155,8 +166,22 @@ export function attendancePendingApprovalPostgrestFilter(prefixFilter?: string):
     `status.like.${encodeURIComponent('*강제퇴근*')}`,
   ].join(',')
   const core = `and=(approved.eq.${pendingEq},or(${statusOr}))`
+
+  const parts: string[] = []
   const prefix = String(prefixFilter || '').trim()
-  return prefix ? `${prefix}&${core}` : core
+  if (prefix) parts.push(prefix)
+
+  const lookback = options?.lookbackDays
+  if (lookback != null && lookback > 0) {
+    const endYmd = todayStrBangkok()
+    const startYmd = addDayBangkok(endYmd, -(lookback - 1))
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startYmd, endYmd)
+    parts.push(`log_at=gte.${encodeURIComponent(startISO)}`)
+    parts.push(`log_at=lt.${encodeURIComponent(endISOExclusive)}`)
+  }
+
+  parts.push(core)
+  return parts.join('&')
 }
 
 /** 현재 시각을 방콕 기준 날짜 YYYY-MM-DD */

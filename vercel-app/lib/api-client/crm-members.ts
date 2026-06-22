@@ -199,6 +199,7 @@ export async function getMemberTiers() {
         min_amount: number
         min_points: number
         point_rate: number
+        discount_rate?: number
         sort_order: number
         benefits_ko?: string | null
         benefits_en?: string | null
@@ -228,6 +229,7 @@ export async function getMemberTierPolicy() {
     success: boolean
     upgradeBasis?: 'amount' | 'points'
     earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
+    pointRetentionYears?: number
     message?: string
   }>
 }
@@ -235,6 +237,7 @@ export async function getMemberTierPolicy() {
 export async function saveMemberTierPolicy(params: {
   upgradeBasis?: 'amount' | 'points'
   earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
+  pointRetentionYears?: number
 }) {
   const res = await apiFetchWithOffline('/api/member-tiers/policy', {
     method: 'POST',
@@ -245,8 +248,14 @@ export async function saveMemberTierPolicy(params: {
     success: boolean
     upgradeBasis?: 'amount' | 'points'
     earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
+    pointRetentionYears?: number
     message?: string
   }>
+}
+
+export async function getPosMemberTierRates() {
+  const res = await apiFetchWithOffline('/api/pos/member-tier-rates')
+  return res.json() as Promise<{ success: boolean; rates: Record<string, number> }>
 }
 
 export async function saveMemberTier(params: {
@@ -255,6 +264,7 @@ export async function saveMemberTier(params: {
   minAmount: number
   minPoints?: number
   pointRate: number
+  discountRate?: number
   sortOrder?: number
   benefitsKo?: string
   benefitsEn?: string
@@ -356,6 +366,48 @@ export async function getMembersCursor(params?: { q?: string; afterId?: number; 
   const suffix = q.toString()
   const res = await apiFetchWithOffline('/api/members/cursor' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<{ success: boolean; rows: Member[]; nextCursor: number | null; message?: string }>
+}
+
+export type MemberPointsSearchFilters = {
+  q?: string
+  afterId?: number
+  limit?: number
+  tierCode?: string
+  status?: string
+  pointBalanceMin?: string | number
+  pointBalanceMax?: string | number
+  tierPointsMin?: string | number
+  tierPointsMax?: string | number
+}
+
+export async function searchMembersPoints(params: MemberPointsSearchFilters) {
+  const q = new URLSearchParams()
+  if (params.q?.trim()) q.set('q', params.q.trim())
+  if (params.afterId != null) q.set('afterId', String(params.afterId))
+  if (params.limit != null) q.set('limit', String(params.limit))
+  if (params.tierCode?.trim()) q.set('tierCode', params.tierCode.trim())
+  if (params.status?.trim()) q.set('status', params.status.trim())
+  if (params.pointBalanceMin != null && String(params.pointBalanceMin).trim() !== '') {
+    q.set('pointBalanceMin', String(params.pointBalanceMin))
+  }
+  if (params.pointBalanceMax != null && String(params.pointBalanceMax).trim() !== '') {
+    q.set('pointBalanceMax', String(params.pointBalanceMax))
+  }
+  if (params.tierPointsMin != null && String(params.tierPointsMin).trim() !== '') {
+    q.set('tierPointsMin', String(params.tierPointsMin))
+  }
+  if (params.tierPointsMax != null && String(params.tierPointsMax).trim() !== '') {
+    q.set('tierPointsMax', String(params.tierPointsMax))
+  }
+  const suffix = q.toString()
+  const res = await apiFetchWithOffline('/api/members/points-search' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<{
+    success: boolean
+    rows: Member[]
+    nextCursor: number | null
+    needsCriteria?: boolean
+    message?: string
+  }>
 }
 
 export async function getMembers(params?: { q?: string; limit?: number }) {

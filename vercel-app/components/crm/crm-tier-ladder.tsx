@@ -11,6 +11,7 @@ type TierRow = {
   min_amount: number
   min_points: number
   point_rate: number
+  discount_rate: number
   sort_order: number
 }
 
@@ -44,6 +45,9 @@ export function CrmTierLadder({ rows, upgradeBasis }: { rows: TierRow[]; upgrade
             </p>
             <p className="text-xs tabular-nums">
               {t("memberTierPointRate")}: {(Number(tier.point_rate || 0) * 100).toFixed(2)}%
+            </p>
+            <p className="text-xs tabular-nums">
+              {t("memberTierDiscountRate")}: {(Number(tier.discount_rate || 0) * 100).toFixed(2)}%
             </p>
             {idx < sorted.length - 1 ? (
               <span className="absolute -right-2 top-1/2 hidden h-0 w-0 -translate-y-1/2 border-y-8 border-l-8 border-y-transparent border-l-border sm:block" />

@@ -83,6 +83,14 @@ import { isChickenMenu } from '@/lib/pos-menu-categories'
 
 export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
 
+/** 터미널 상위에서 이미 로드한 메뉴·옵션·프로모 (중복 API 방지) */
+export interface PosTerminalParentCatalog {
+  menus: PosMenu[]
+  promos: PosPromoWithItems[]
+  options: PosMenuOption[]
+  loading?: boolean
+}
+
 export interface PosTerminalMenuScreenProps {
   /** 선택된 테이블 이름 (상단에 표시) */
   selectedTableName: string
@@ -122,6 +130,8 @@ export interface PosTerminalMenuScreenProps {
    * 테이블 오더 등 손님 단말에서만 true — 직원 POS는 false.
    */
   showMenuDescriptions?: boolean
+  /** 설정 시 getPosMenus/Options/Promos 재호출 없이 상위 카탈로그 사용 */
+  parentCatalog?: PosTerminalParentCatalog | null
 }
 
 type PromoChoiceDialogState = {
@@ -147,6 +157,7 @@ export function PosTerminalMenuScreen({
   hideTableContextBar = false,
   showMenuDescriptions = false,
   configReloadNonce = 0,
+  parentCatalog = null,
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -155,8 +166,16 @@ export function PosTerminalMenuScreen({
     [t]
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const useParentCatalog = parentCatalog != null
+  const applyMenusFromCatalogCache = React.useCallback(
+    (list: PosMenu[]) => {
+      if (useParentCatalog) return
+      setMenus(list)
+    },
+    [useParentCatalog]
+  )
   const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
-    React.useCallback((list) => setMenus(list), []),
+    applyMenusFromCatalogCache,
     storeCode || null
   )
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
@@ -245,43 +264,67 @@ export function PosTerminalMenuScreen({
     sellPackaging: true,
   })
 
+  const applyMenuCatalogTabs = React.useCallback(
+    (
+      list: PosMenu[],
+      promoList: PosPromoWithItems[],
+      catRes: { categories: string[]; mainCategories: string[] }
+    ) => {
+      const derivedCats = Array.from(new Set(list.map((m) => String(m.category || '').trim()).filter(Boolean)))
+      const derivedMains = Array.from(
+        new Set(list.map((m) => String(m.categoryMain || '').trim()).filter(Boolean))
+      )
+      const finalCats = (catRes.categories || []).length > 0 ? (catRes.categories || []) : derivedCats
+      const finalMains = (catRes.mainCategories || []).length > 0 ? (catRes.mainCategories || []) : derivedMains
+      const mains = normalizePosMainCategoryTabs([...finalMains, PROMOTION_MAIN_CATEGORY])
+      setMainCategories(mains)
+      setSelectedMainCategory(mains[0] ?? '')
+      const firstSub =
+        mains[0] === PROMOTION_MAIN_CATEGORY
+          ? normalizePromotionSubcategory(
+              Array.from(new Set((promoList || []).map((p) => String(p.category || '').trim()).filter(Boolean)))[0] ||
+                ''
+            )
+          : finalCats.find((c) => {
+              const hit = list.some(
+                (m) => String(m.categoryMain || '').trim() === mains[0] && String(m.category || '').trim() === c
+              )
+              return hit
+            }) || ''
+      setSelectedCategory(firstSub)
+    },
+    []
+  )
+
   const loadMenuData = React.useCallback(async () => {
     const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
+    const fromParent = useParentCatalog ? parentCatalog : null
     const [r0, r1, r2, r3] = await Promise.allSettled([
-      getPosMenus({ fresh: true, storeCode: storeCode || undefined }),
+      fromParent
+        ? Promise.resolve(fromParent.menus)
+        : getPosMenus({ fresh: true, storeCode: storeCode || undefined }),
       getPosMenuCategories(),
-      getPosMenuOptions({ fresh: true }),
-      getPosPromosWithItems(),
+      fromParent ? Promise.resolve(fromParent.options) : getPosMenuOptions({ fresh: true, forCodeMap: true }),
+      fromParent ? Promise.resolve(fromParent.promos) : getPosPromosWithItems(),
     ])
     const list = r0.status === 'fulfilled' ? r0.value || [] : []
     const catRes = r1.status === 'fulfilled' ? r1.value || emptyCats : emptyCats
     const opts = r2.status === 'fulfilled' ? r2.value || [] : []
     const promoList = r3.status === 'fulfilled' ? r3.value || [] : []
-    const derivedCats = Array.from(new Set(list.map((m) => String(m.category || '').trim()).filter(Boolean)))
-    const derivedMains = Array.from(
-      new Set(list.map((m) => String(m.categoryMain || '').trim()).filter(Boolean))
-    )
-    const finalCats = (catRes.categories || []).length > 0 ? (catRes.categories || []) : derivedCats
-    const finalMains = (catRes.mainCategories || []).length > 0 ? (catRes.mainCategories || []) : derivedMains
-    setMenus(list)
-    setPromos(promoList)
-    setAllOptions(opts)
-    const mains = normalizePosMainCategoryTabs([...finalMains, PROMOTION_MAIN_CATEGORY])
-    setMainCategories(mains)
-    setSelectedMainCategory(mains[0] ?? '')
-    const firstSub =
-      mains[0] === PROMOTION_MAIN_CATEGORY
-        ? normalizePromotionSubcategory(
-            Array.from(new Set((promoList || []).map((p) => String(p.category || '').trim()).filter(Boolean)))[0] || ''
-          )
-        : finalCats.find((c) => {
-            const hit = list.some(
-              (m) => String(m.categoryMain || '').trim() === mains[0] && String(m.category || '').trim() === c
-            )
-            return hit
-          }) || ''
-    setSelectedCategory(firstSub)
-  }, [storeCode])
+    if (!fromParent) {
+      setMenus(list)
+      setPromos(promoList)
+      setAllOptions(opts)
+    }
+    applyMenuCatalogTabs(list, promoList, catRes)
+  }, [storeCode, useParentCatalog, parentCatalog, applyMenuCatalogTabs])
+
+  React.useEffect(() => {
+    if (!useParentCatalog || !parentCatalog) return
+    setMenus(parentCatalog.menus)
+    setPromos(parentCatalog.promos)
+    setAllOptions(parentCatalog.options)
+  }, [useParentCatalog, parentCatalog])
 
   React.useEffect(() => {
     if (!String(storeCode || '').trim()) {
@@ -298,9 +341,13 @@ export function PosTerminalMenuScreen({
   }, [storeCode, configReloadNonce])
 
   React.useEffect(() => {
+    if (useParentCatalog && parentCatalog?.loading) {
+      setLoading(true)
+      return
+    }
     setLoading(true)
     loadMenuData().finally(() => setLoading(false))
-  }, [loadMenuData, configReloadNonce])
+  }, [loadMenuData, configReloadNonce, useParentCatalog, parentCatalog?.loading])
 
   React.useEffect(() => {
     const scope = orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'dine-in'

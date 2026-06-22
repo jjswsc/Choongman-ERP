@@ -340,9 +340,9 @@ export async function runCrmCouponCampaign(params: {
       try {
         const duplicate = (await supabaseSelectFilter(
           'member_coupon_issues',
-          `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(campaign.couponCode)}&campaign_id=eq.${campaignId}&status=eq.issued`,
-          { limit: 1, select: 'id' }
-        )) as Array<{ id?: number }>
+          `member_id=eq.${memberId}&campaign_id=eq.${campaignId}`,
+          { limit: 1, select: 'id,status' }
+        )) as Array<{ id?: number; status?: string }>
         if (duplicate?.length) {
           skippedCount += 1
           await supabaseInsert('crm_coupon_campaign_run_members', {
@@ -350,7 +350,10 @@ export async function runCrmCouponCampaign(params: {
             campaign_id: campaignId,
             member_id: memberId,
             status: 'skipped',
-            reason: 'already_issued',
+            reason:
+              String(duplicate[0]?.status || '').toLowerCase() === 'used'
+                ? 'already_redeemed_for_campaign'
+                : 'already_issued_for_campaign',
           })
           continue
         }

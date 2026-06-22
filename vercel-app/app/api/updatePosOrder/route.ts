@@ -247,11 +247,15 @@ export async function POST(req: NextRequest) {
     const discountAmtNet = resolveManualDiscountNetForOrderSave({ discountAmt, serviceAmt, items })
     const manualDiscountForCoupons = Math.max(0, discountAmtNet - preCouponSum)
     const collabDiscountAmt = Math.max(0, Number(body?.collabDiscountAmt ?? body?.collab_discount_amt ?? 0))
+    const tierDiscountAmt = Math.max(0, Number(body?.tierDiscountAmt ?? body?.tier_discount_amt ?? 0))
+    const memberTierCode =
+      String(body?.memberTierCode ?? body?.member_tier_code ?? '').trim().toUpperCase() || null
     const couponResolved = await resolvePosOrderCouponsForSave({
       body: body ?? {},
       subtotal,
-      manualDiscountAmt: Math.max(0, manualDiscountForCoupons - collabDiscountAmt),
+      manualDiscountAmt: Math.max(0, manualDiscountForCoupons - collabDiscountAmt - tierDiscountAmt),
       collabDiscountAmt,
+      tierDiscountAmt,
       memberId: memberId || undefined,
     })
     const couponCode = couponResolved.couponCode
@@ -315,6 +319,8 @@ export async function POST(req: NextRequest) {
       memo,
       discount_amt: discountAmtNetFinal,
       discount_reason: discountReason,
+      tier_discount_amt: tierDiscountAmt,
+      member_tier_code: memberTierCode,
       service_amt: serviceAmt,
       service_reason: serviceReason || null,
       payment_cash: paymentCash,

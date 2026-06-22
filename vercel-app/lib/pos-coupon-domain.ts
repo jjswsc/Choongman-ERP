@@ -71,6 +71,7 @@ export interface PosCouponValidationContext {
   subtotal: number
   manualDiscountAmt: number
   collabDiscountAmt?: number
+  tierDiscountAmt?: number
   applied: PosAppliedCouponLine[]
   cartLines?: PosCouponCartLine[]
   todayYmd: string
@@ -140,8 +141,9 @@ function computeRemainingSubtotal(ctx: PosCouponValidationContext): number {
     ? Math.max(0, Number(ctx.manualDiscountAmt) || 0)
     : 0
   const collab = Math.max(0, Number(ctx.collabDiscountAmt ?? 0) || 0)
+  const tier = Math.max(0, Number(ctx.tierDiscountAmt ?? 0) || 0)
   const couponPart = sumAppliedCouponDiscount(ctx.applied)
-  return round2(Math.max(0, subtotal - manual - collab - couponPart))
+  return round2(Math.max(0, subtotal - manual - collab - tier - couponPart))
 }
 
 function normalizeList(values: unknown): string[] {
@@ -422,10 +424,21 @@ export function revalidateAppliedPosCoupons(
   const kept: PosAppliedCouponLine[] = []
   for (const row of sorted) {
     const template = templatesByCode.get(normalizeCode(row.code))
-    const result = validatePosCouponCandidate(template, { ...ctx, applied: kept }, {
-      code: row.code,
-      quantity: row.quantity ?? 1,
-    })
+    const memberIssueId =
+      Math.max(0, Math.trunc(Number(row.memberCouponIssueId ?? 0) || 0)) || undefined
+    const serialId = Math.max(0, Math.trunc(Number(row.serialId ?? 0) || 0)) || undefined
+    const result = validatePosCouponCandidate(
+      template,
+      { ...ctx, applied: kept },
+      {
+        code: row.code,
+        quantity: row.quantity ?? 1,
+      },
+      {
+        ...(memberIssueId ? { memberIssueId } : {}),
+        ...(serialId ? { serialId } : {}),
+      }
+    )
     if (result.valid && result.appliedCoupons?.length) {
       kept.push(result.appliedCoupons[result.appliedCoupons.length - 1]!)
     }

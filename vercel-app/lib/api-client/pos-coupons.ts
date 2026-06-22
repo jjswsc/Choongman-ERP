@@ -12,6 +12,8 @@ export interface PosAppliedCoupon {
   quantity?: number
   couponId?: number
   priority?: number
+  memberCouponIssueId?: number
+  serialId?: number
 }
 
 export interface PosCoupon {
@@ -38,6 +40,12 @@ export interface PosCoupon {
   itemScope?: { menuIds?: string[]; categoryCodes?: string[] }
   priority?: number
   allowWithManualDiscount?: boolean
+  portalImageUrl?: string
+  portalVisible?: boolean
+  portalClaimMode?: 'none' | 'free' | 'points'
+  portalPointCost?: number
+  portalMaxClaimsPerMember?: number
+  portalSortOrder?: number
 }
 
 export async function getPosCoupons() {
@@ -68,6 +76,12 @@ export async function savePosCoupon(params: {
   itemScope?: { menuIds?: string[]; categoryCodes?: string[] }
   priority?: number
   allowWithManualDiscount?: boolean
+  portalImageUrl?: string
+  portalVisible?: boolean
+  portalClaimMode?: 'none' | 'free' | 'points'
+  portalPointCost?: number
+  portalMaxClaimsPerMember?: number
+  portalSortOrder?: number
 }) {
   const res = await apiFetchWithOffline('/api/savePosCoupon', {
     method: 'POST',
@@ -97,6 +111,7 @@ export async function validatePosCoupons(params: {
   subtotal: number
   manualDiscountAmt?: number
   collabDiscountAmt?: number
+  tierDiscountAmt?: number
   cartLines?: Array<{
     menuId?: string
     categoryCode?: string

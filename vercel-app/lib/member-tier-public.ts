@@ -6,6 +6,7 @@ export type MemberTierDbRow = {
   min_amount?: number
   min_points?: number
   point_rate?: number
+  discount_rate?: number | null
   sort_order?: number
   benefits_ko?: string | null
   benefits_en?: string | null
@@ -18,6 +19,7 @@ export type MemberTierPublic = {
   minAmount: number
   minPoints: number
   pointRate: number
+  discountRate: number
   sortOrder: number
   benefits: string
   pointRangeLabel: string
@@ -84,6 +86,7 @@ export function mapMemberTiersToPublic(rows: MemberTierDbRow[], lang: MemberPort
       minAmount: Math.max(0, Number(row.min_amount || 0)),
       minPoints,
       pointRate: Math.max(0, Number(row.point_rate || 0)),
+      discountRate: Math.max(0, Number(row.discount_rate ?? 0)),
       sortOrder: Number(row.sort_order || idx + 1),
       benefits: pickTierBenefits(row, lang),
       pointRangeLabel: formatPointRange(minPoints, maxExclusive, lang),

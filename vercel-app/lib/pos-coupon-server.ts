@@ -1,7 +1,6 @@
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
-  revalidateAppliedPosCoupons,
   summarizeLegacyCouponFields,
   validatePosCouponCandidate,
   parseAppliedCouponsFromBody,
@@ -244,6 +243,7 @@ export async function validatePosCouponApplication(params: {
   subtotal: number
   manualDiscountAmt?: number
   collabDiscountAmt?: number
+  tierDiscountAmt?: number
   cartLines?: PosCouponCartLine[]
   applied?: PosAppliedCouponLine[]
   candidate: PosCouponCandidateInput
@@ -254,6 +254,7 @@ export async function validatePosCouponApplication(params: {
     subtotal: Math.max(0, Number(params.subtotal) || 0),
     manualDiscountAmt: Math.max(0, Number(params.manualDiscountAmt ?? 0) || 0),
     collabDiscountAmt: Math.max(0, Number(params.collabDiscountAmt ?? 0) || 0),
+    tierDiscountAmt: Math.max(0, Number(params.tierDiscountAmt ?? 0) || 0),
     cartLines: Array.isArray(params.cartLines) ? params.cartLines : [],
     applied: Array.isArray(params.applied) ? params.applied : [],
     todayYmd: getBangkokTodayDateString(),
@@ -273,10 +274,53 @@ export async function validatePosCouponApplication(params: {
   })
 }
 
+async function revalidateAppliedPosCouponsAsync(
+  params: {
+    subtotal: number
+    manualDiscountAmt?: number
+    collabDiscountAmt?: number
+    tierDiscountAmt?: number
+    cartLines?: PosCouponCartLine[]
+    memberId?: number
+  },
+  applied: PosAppliedCouponLine[]
+): Promise<PosAppliedCouponLine[]> {
+  const sorted = [...applied].sort((a, b) => {
+    const aPriority = Number(a.priority ?? 0)
+    const bPriority = Number(b.priority ?? 0)
+    if (aPriority === bPriority) return 0
+    return bPriority - aPriority
+  })
+  const kept: PosAppliedCouponLine[] = []
+  for (const row of sorted) {
+    const memberIssueId =
+      Math.max(0, Math.trunc(Number(row.memberCouponIssueId ?? 0) || 0)) || undefined
+    const result = await validatePosCouponApplication({
+      subtotal: params.subtotal,
+      manualDiscountAmt: params.manualDiscountAmt,
+      collabDiscountAmt: params.collabDiscountAmt,
+      tierDiscountAmt: params.tierDiscountAmt,
+      cartLines: params.cartLines,
+      applied: kept,
+      memberId: params.memberId,
+      candidate: {
+        code: row.code,
+        quantity: row.quantity ?? 1,
+        ...(memberIssueId ? { memberIssueId } : {}),
+      },
+    })
+    if (result.valid && result.appliedCoupons?.length) {
+      kept.push(result.appliedCoupons[result.appliedCoupons.length - 1]!)
+    }
+  }
+  return kept
+}
+
 export async function validatePosCouponApplicationList(params: {
   subtotal: number
   manualDiscountAmt?: number
   collabDiscountAmt?: number
+  tierDiscountAmt?: number
   cartLines?: PosCouponCartLine[]
   appliedCoupons: PosAppliedCouponLine[]
   memberId?: number
@@ -285,23 +329,17 @@ export async function validatePosCouponApplicationList(params: {
   couponDiscountTotal: number
   legacy: { couponCode: string; couponDiscountAmt: number }
 }> {
-  const loyalty = await loadPosLoyaltySettings()
-  const templatesByCode = new Map<string, PosCouponTemplate>()
-  for (const row of params.appliedCoupons) {
-    const code = normalizeCode(row.code)
-    if (!code || templatesByCode.has(code)) continue
-    const { template } = await resolveTemplateForCandidate({ code }, params.memberId)
-    if (template) templatesByCode.set(code, template)
-  }
-  const ctx = {
-    subtotal: Math.max(0, Number(params.subtotal) || 0),
-    manualDiscountAmt: Math.max(0, Number(params.manualDiscountAmt ?? 0) || 0),
-    collabDiscountAmt: Math.max(0, Number(params.collabDiscountAmt ?? 0) || 0),
-    cartLines: Array.isArray(params.cartLines) ? params.cartLines : [],
-    todayYmd: getBangkokTodayDateString(),
-    loyalty,
-  }
-  const appliedCoupons = revalidateAppliedPosCoupons(templatesByCode, ctx, params.appliedCoupons)
+  const appliedCoupons = await revalidateAppliedPosCouponsAsync(
+    {
+      subtotal: Math.max(0, Number(params.subtotal) || 0),
+      manualDiscountAmt: Math.max(0, Number(params.manualDiscountAmt ?? 0) || 0),
+      collabDiscountAmt: Math.max(0, Number(params.collabDiscountAmt ?? 0) || 0),
+      tierDiscountAmt: Math.max(0, Number(params.tierDiscountAmt ?? 0) || 0),
+      cartLines: Array.isArray(params.cartLines) ? params.cartLines : [],
+      memberId: params.memberId,
+    },
+    params.appliedCoupons
+  )
   const legacy = summarizeLegacyCouponFields(appliedCoupons)
   return {
     appliedCoupons,
@@ -337,7 +375,7 @@ export async function persistPosOrderCouponRedemptions(params: {
     let memberCouponIssueId = row.memberCouponIssueId
 
     const { template, serial, memberIssue } = await resolveTemplateForCandidate(
-      { code, quantity: qty },
+      { code, quantity: qty, memberIssueId: memberCouponIssueId },
       params.memberId
     )
     if (!couponId && template?.id) couponId = template.id
@@ -465,6 +503,7 @@ export async function resolvePosOrderCouponsForSave(params: {
   subtotal: number
   manualDiscountAmt: number
   collabDiscountAmt?: number
+  tierDiscountAmt?: number
   cartLines?: PosCouponCartLine[]
   memberId?: number
 }): Promise<{
@@ -500,6 +539,7 @@ export async function resolvePosOrderCouponsForSave(params: {
     subtotal: params.subtotal,
     manualDiscountAmt: params.manualDiscountAmt,
     collabDiscountAmt: params.collabDiscountAmt,
+    tierDiscountAmt: params.tierDiscountAmt,
     cartLines:
       Array.isArray(params.cartLines) && params.cartLines.length > 0
         ? params.cartLines

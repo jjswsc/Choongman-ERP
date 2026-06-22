@@ -49,7 +49,7 @@ export function posOrderToCheckoutMemberSnapshot(order: {
 }
 
 type MemberOption = { value: string; label: string }
-type MemberMapEntry = { id: number; memberNo: string; name: string; phone: string; email: string }
+type MemberMapEntry = { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }
 
 /** 기존 주문 결제 모달 진입 시 장바구니 회원 선택 상태 복원 */
 export function seedCheckoutMemberFromExistingOrder(
@@ -78,6 +78,7 @@ export function seedCheckoutMemberFromExistingOrder(
       name: prev[key]?.name || labelName,
       phone: prev[key]?.phone || '',
       email: prev[key]?.email || '',
+      tierCode: prev[key]?.tierCode || 'BRONZE',
     },
   }))
   setters.setMemberOptions((prev) => {

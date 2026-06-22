@@ -8,8 +8,12 @@ import {
   resolveDeliveryPlatformBundleDiscountAmt,
   type DeliveryPlatformDiscountOrderRow,
 } from '@/lib/pos-platform-discount-reason'
+import {
+  isMemberTierDiscountReasonText,
+  resolveMemberTierDiscountLabel,
+} from '@/lib/pos-tier-discount-reason'
 
-export type PosPaymentDiscountKind = 'manual' | 'collab' | 'coupon' | 'platform' | 'other'
+export type PosPaymentDiscountKind = 'manual' | 'collab' | 'coupon' | 'platform' | 'tier' | 'other'
 
 export type PosSalesPaymentDiscountRow = {
   key: string
@@ -44,10 +48,19 @@ export type PosSalesPaymentDiscountResult = {
   byKind: PosSalesPaymentKindTotals[]
 }
 
-type OrderRowForPaymentDiscountAgg = DeliveryPlatformDiscountOrderRow & {
+export type OrderRowForPaymentDiscountAgg = DeliveryPlatformDiscountOrderRow & {
   total?: number
   applied_coupons?: unknown
   coupon_code?: string
+  tier_discount_amt?: number | null
+  member_tier_code?: string | null
+}
+
+export type PaymentNonCouponSplit = {
+  tier: number
+  collab: number
+  manual: number
+  other: number
 }
 
 function str(v: unknown): string {
@@ -84,13 +97,76 @@ export function resolveNonCouponDiscountAmt(
   return discount
 }
 
+export function splitPaymentNonCouponDiscount(
+  order: OrderRowForPaymentDiscountAgg,
+  paymentNonCoupon: number
+): PaymentNonCouponSplit {
+  const reason = str(order.discount_reason)
+  let remaining = Math.max(0, paymentNonCoupon)
+  const tierStored = Math.max(0, Number(order.tier_discount_amt ?? 0))
+  let tier = Math.min(remaining, tierStored)
+  remaining = round2(Math.max(0, remaining - tier))
+
+  // tier_discount_amt 미저장(레거시) — reason 문구로 등급 할인 추정
+  if (remaining > 0.0001 && tier <= 0.0001 && isMemberTierDiscountReasonText(reason)) {
+    tier = remaining
+    remaining = 0
+  }
+
+  let collab = 0
+  let manual = 0
+  let other = 0
+  if (remaining > 0 && isCollabDiscountReasonText(reason)) {
+    collab = remaining
+    remaining = 0
+  }
+  if (remaining > 0) {
+    if (reason) manual = remaining
+    else other = remaining
+  }
+  return { tier, collab, manual, other }
+}
+
 export function classifyNonCouponKind(
   reason: string,
-  _order?: OrderRowForPaymentDiscountAgg
+  order?: OrderRowForPaymentDiscountAgg
 ): Exclude<PosPaymentDiscountKind, 'coupon'> {
+  if (Math.max(0, Number(order?.tier_discount_amt ?? 0)) > 0.0001) return 'tier'
+  if (isMemberTierDiscountReasonText(reason)) return 'tier'
   if (isCollabDiscountReasonText(reason)) return 'collab'
   if (reason) return 'manual'
   return 'other'
+}
+
+function addPaymentDiscountBucket(
+  rowBuckets: Map<string, Omit<PosSalesPaymentDiscountRow, 'discountPctOfGross' | 'discountSharePct'>>,
+  kindBuckets: Map<
+    PosPaymentDiscountKind,
+    { kind: PosPaymentDiscountKind; orderCount: number; discountAmount: number; orderKeys: Set<string> }
+  >,
+  orderKey: string,
+  kind: PosPaymentDiscountKind,
+  label: string,
+  code: string,
+  amount: number
+) {
+  if (amount <= 0.0001) return
+  const key = kind === 'coupon' ? `coupon::${code.toUpperCase() || '(coupon)'}` : `${kind}::${label.toLowerCase()}`
+  const prev = rowBuckets.get(key) ?? {
+    key,
+    kind,
+    label,
+    code,
+    orderCount: 0,
+    discountAmount: 0,
+  }
+  prev.discountAmount = round2(prev.discountAmount + amount)
+  prev.orderCount += 1
+  rowBuckets.set(key, prev)
+
+  const kindPrev = kindBuckets.get(kind)!
+  kindPrev.discountAmount = round2(kindPrev.discountAmount + amount)
+  kindPrev.orderKeys.add(orderKey)
 }
 
 export function filterPaymentDiscountRows(
@@ -108,7 +184,7 @@ export function filterPaymentDiscountRows(
 }
 
 /**
- * 완료 주문 — 결제 할인(수동·협업·쿠폰·배달앱 등) 유형별 집계.
+ * 완료 주문 — 결제 할인(수동·협업·쿠폰·등급·배달앱 등) 유형별 집계.
  * 총액은 resolvePosSalesDiscountAmount 와 동일 기준.
  */
 export function aggregatePosSalesPaymentDiscount(params: {
@@ -122,7 +198,7 @@ export function aggregatePosSalesPaymentDiscount(params: {
     PosPaymentDiscountKind,
     { kind: PosPaymentDiscountKind; orderCount: number; discountAmount: number; orderKeys: Set<string> }
   >()
-  for (const kind of ['manual', 'collab', 'coupon', 'platform', 'other'] as const) {
+  for (const kind of ['manual', 'collab', 'coupon', 'platform', 'tier', 'other'] as const) {
     kindBuckets.set(kind, { kind, orderCount: 0, discountAmount: 0, orderKeys: new Set() })
   }
 
@@ -160,25 +236,27 @@ export function aggregatePosSalesPaymentDiscount(params: {
     const nonCouponAmt = resolveNonCouponDiscountAmt(discountAmt, couponTotal)
     const paymentNonCoupon = round2(Math.max(0, nonCouponAmt - platformBundleDiscount))
     if (paymentNonCoupon > 0.0001) {
-      const kind = classifyNonCouponKind(reason, order)
-      const label = reason
-      const code = kind
-      const key = `${kind}::${label.toLowerCase()}`
-      const prev = rowBuckets.get(key) ?? {
-        key,
-        kind,
-        label,
-        code,
-        orderCount: 0,
-        discountAmount: 0,
+      const split = splitPaymentNonCouponDiscount(order, paymentNonCoupon)
+      if (split.tier > 0) {
+        addPaymentDiscountBucket(
+          rowBuckets,
+          kindBuckets,
+          orderKey,
+          'tier',
+          resolveMemberTierDiscountLabel(order),
+          str(order.member_tier_code).toUpperCase() || 'tier',
+          split.tier
+        )
       }
-      prev.discountAmount = round2(prev.discountAmount + paymentNonCoupon)
-      prev.orderCount += 1
-      rowBuckets.set(key, prev)
-
-      const kindPrev = kindBuckets.get(kind)!
-      kindPrev.discountAmount = round2(kindPrev.discountAmount + paymentNonCoupon)
-      kindPrev.orderKeys.add(orderKey)
+      if (split.collab > 0) {
+        addPaymentDiscountBucket(rowBuckets, kindBuckets, orderKey, 'collab', reason, 'collab', split.collab)
+      }
+      if (split.manual > 0) {
+        addPaymentDiscountBucket(rowBuckets, kindBuckets, orderKey, 'manual', reason, 'manual', split.manual)
+      }
+      if (split.other > 0) {
+        addPaymentDiscountBucket(rowBuckets, kindBuckets, orderKey, 'other', reason || 'other', 'other', split.other)
+      }
     }
 
     for (const coupon of couponLines) {
@@ -186,25 +264,8 @@ export function aggregatePosSalesPaymentDiscount(params: {
       if (amt <= 0.0001) continue
       const code = str(coupon.code).toUpperCase() || '(coupon)'
       const label = str(coupon.name) || code
-      const key = `coupon::${code}`
-      const prev = rowBuckets.get(key) ?? {
-        key,
-        kind: 'coupon' as const,
-        label,
-        code,
-        orderCount: 0,
-        discountAmount: 0,
-      }
-      prev.discountAmount = round2(prev.discountAmount + amt)
-      prev.orderCount += 1
-      rowBuckets.set(key, prev)
-
-      const kindPrev = kindBuckets.get('coupon')!
-      kindPrev.discountAmount = round2(kindPrev.discountAmount + amt)
-      kindPrev.orderKeys.add(orderKey)
+      addPaymentDiscountBucket(rowBuckets, kindBuckets, orderKey, 'coupon', label, code, amt)
     }
-
-    // discount_amt에 쿠폰이 포함되지 않고 coupon 필드만 있는 레거시는 resolveCouponLines·resolvePosSalesDiscountAmount로 처리
   }
 
   totals.discountAmount = round2(totals.discountAmount)
@@ -219,7 +280,7 @@ export function aggregatePosSalesPaymentDiscount(params: {
     .sort((a, b) => b.discountAmount - a.discountAmount || a.label.localeCompare(b.label))
 
   const byKind: PosSalesPaymentKindTotals[] = (
-    ['manual', 'collab', 'coupon', 'platform', 'other'] as const
+    ['manual', 'collab', 'coupon', 'platform', 'tier', 'other'] as const
   )
     .map((kind) => {
       const bucket = kindBuckets.get(kind)!

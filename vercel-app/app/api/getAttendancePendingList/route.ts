@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import {
+  ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS,
   attendanceLogNeedsManagerApproval,
   attendancePendingApprovalPostgrestFilter,
   attendanceStoreNamePostgrestFilter,
+  bangkokDateRangeToUtc,
 } from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
@@ -26,6 +28,27 @@ function toDisplayStr(val: string | Date | null | undefined): string {
   const datePart = d.toLocaleDateString('en-CA', { timeZone: TZ })
   const timePart = d.toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   return `${datePart} ${timePart}`
+}
+
+function buildAttendancePendingListFilter(store: string, startStr: string, endStr: string): string {
+  const storePrefix =
+    store && store !== 'All' && store !== '전체' ? attendanceStoreNamePostgrestFilter(store) : ''
+
+  if (startStr || endStr) {
+    const startYmd = (startStr || endStr).slice(0, 10)
+    const endYmd = (endStr || startStr).slice(0, 10)
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startYmd, endYmd)
+    const datePrefix = [
+      `log_at=gte.${encodeURIComponent(startISO)}`,
+      `log_at=lt.${encodeURIComponent(endISOExclusive)}`,
+    ].join('&')
+    const prefix = storePrefix ? `${storePrefix}&${datePrefix}` : datePrefix
+    return attendancePendingApprovalPostgrestFilter(prefix)
+  }
+
+  return attendancePendingApprovalPostgrestFilter(storePrefix || undefined, {
+    lookbackDays: ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS,
+  })
 }
 
 export async function GET(request: NextRequest) {
@@ -84,21 +107,12 @@ export async function GET(request: NextRequest) {
     }
     let rows: Row[] = []
 
-    if (store && store !== 'All' && store !== '전체') {
-      const filter = attendancePendingApprovalPostgrestFilter(attendanceStoreNamePostgrestFilter(store))
-      rows = (await supabaseSelectFilter('attendance_logs', filter, {
-        order: 'log_at.desc',
-        limit: 500,
-        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
-      })) as Row[]
-    } else {
-      const filter = attendancePendingApprovalPostgrestFilter()
-      rows = (await supabaseSelectFilter('attendance_logs', filter, {
-        order: 'log_at.desc',
-        limit: 500,
-        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
-      })) as Row[]
-    }
+    const filter = buildAttendancePendingListFilter(store, startStr, endStr)
+    rows = (await supabaseSelectFilter('attendance_logs', filter, {
+      order: 'log_at.desc',
+      limit: 500,
+      select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
+    })) as Row[]
 
     const nickMap: Record<string, string> = {}
     const nickById: Record<number, string> = {}

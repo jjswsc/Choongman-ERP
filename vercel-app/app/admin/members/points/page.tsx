@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmPageHero } from "@/components/crm/crm-shared-ui"
 import { MemberPointsSearchPanel } from "@/components/admin/member-points-search-panel"
-import { adjustMemberPoints, getMembers, type Member } from "@/lib/api-client"
+import { adjustMemberPoints, type Member } from "@/lib/api-client"
 import { apiFetch } from "@/lib/api/fetch"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -46,7 +46,9 @@ export default function MemberPointsPage() {
   const [ledgerFrom, setLedgerFrom] = React.useState("")
   const [ledgerTo, setLedgerTo] = React.useState("")
   const [ledgerOffset, setLedgerOffset] = React.useState(0)
+  const [ledgerLoaded, setLedgerLoaded] = React.useState(false)
   const LEDGER_PAGE = 100
+  const deepLinkMemberId = Number(searchParams.get("memberId") || 0) || null
 
   const loadLedger = React.useCallback(async (memberId: number, offset = 0) => {
     setLedgerLoading(true)
@@ -62,31 +64,13 @@ export default function MemberPointsPage() {
       const points = (await res.json()) as LedgerRow[]
       setRows(points)
       setLedgerOffset(offset)
+      setLedgerLoaded(true)
     } catch {
       setRows([])
     } finally {
       setLedgerLoading(false)
     }
   }, [ledgerFrom, ledgerTo])
-
-  React.useEffect(() => {
-    if (selectedMember?.id) {
-      void loadLedger(selectedMember.id, 0)
-    } else {
-      setRows([])
-    }
-  }, [selectedMember?.id, loadLedger])
-
-  React.useEffect(() => {
-    const memberId = Number(searchParams.get("memberId") || 0)
-    if (!memberId) return
-    getMembers({ q: String(memberId), limit: 5 })
-      .then((list) => {
-        const m = list.find((x) => x.id === memberId) || list[0]
-        if (m) setSelectedMember(m)
-      })
-      .catch(() => {})
-  }, [searchParams])
 
   React.useEffect(() => {
     if (searchParams.get("tab") === "policy") {
@@ -98,6 +82,9 @@ export default function MemberPointsPage() {
     setSelectedMember(member)
     setDeltaPoints("0")
     setNote("")
+    setRows([])
+    setLedgerLoaded(false)
+    setLedgerOffset(0)
   }, [])
 
   return (
@@ -119,6 +106,7 @@ export default function MemberPointsPage() {
                 <MemberPointsSearchPanel
                   selectedMemberId={selectedMember?.id ?? null}
                   onSelectMember={handleSelectMember}
+                  initialMemberId={deepLinkMemberId}
                 />
               </div>
 
@@ -229,12 +217,15 @@ export default function MemberPointsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={!selectedMember?.id}
+                            disabled={!selectedMember?.id || ledgerLoading}
                             onClick={() => selectedMember?.id && loadLedger(selectedMember.id, 0)}
                           >
-                            {t("crmPointsLedgerFilter")}
+                            {ledgerLoading ? t("loading") : t("crmPointsLedgerFilter")}
                           </Button>
                         </div>
+                        {!ledgerLoaded && !ledgerLoading ? (
+                          <p className="text-xs text-muted-foreground">{t("memberPointsLedgerLoadHint")}</p>
+                        ) : null}
                         {ledgerLoading ? (
                           <p className="text-sm text-muted-foreground">{t("loading")}</p>
                         ) : (

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import {
-  attendancePendingApprovalPostgrestFilter,
+  attendancePendingBadgePostgrestFilter,
   leavePendingApprovalPostgrestFilter,
   ordersPendingApprovalPostgrestFilter,
 } from '@/lib/admin-pending-badge-filters'
@@ -31,7 +31,7 @@ export async function GET() {
       supabaseCountFilter('stock_logs', `log_type=eq.Outbound&is_deleted=is.false&log_date=gte.${startStr}&log_date=lte.${endStr}`),
       supabaseCountFilter('stock_logs', `log_type=eq.ForceOutbound&is_deleted=is.false&log_date=gte.${startStr}&log_date=lte.${endStr}`),
       supabaseCountFilter('leave_requests', leavePendingApprovalPostgrestFilter()),
-      supabaseCountFilter('attendance_logs', attendancePendingApprovalPostgrestFilter()),
+      supabaseCountFilter('attendance_logs', attendancePendingBadgePostgrestFilter()),
     ])
 
     const thisMonthOutbound = outboundCount + forceOutboundCount

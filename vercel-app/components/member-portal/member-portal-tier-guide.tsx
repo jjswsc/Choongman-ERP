@@ -12,6 +12,7 @@ import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 type Props = {
   tiers: MemberTierPublic[]
   currentTierCode?: string
+  pointRetentionYears?: number
 }
 
 const TierGuideCard = React.memo(function TierGuideCard({
@@ -49,6 +50,11 @@ const TierGuideCard = React.memo(function TierGuideCard({
           <p className={`mt-2 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
             {earnRateLabel}: {(tier.pointRate * 100).toFixed(1)}%
           </p>
+          {tier.discountRate > 0 ? (
+            <p className={`mt-0.5 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
+              {t("tierDiscountRate")}: {(tier.discountRate * 100).toFixed(1)}%
+            </p>
+          ) : null}
         </div>
       </div>
     </GlassCard>
@@ -74,13 +80,20 @@ const TierGuideList = React.memo(function TierGuideList({ tiers, currentTierCode
   )
 })
 
-export function MemberPortalTierGuide({ tiers, currentTierCode }: Props) {
+export function MemberPortalTierGuide({ tiers, currentTierCode, pointRetentionYears = 2 }: Props) {
   const { t } = useMemberPortalLang()
+  const yearsText = String(pointRetentionYears)
 
   if (tiers.length === 0) return null
 
   return (
     <div className="space-y-3">
+      <GlassCard soft className={`px-4 py-3 ${MP_CARD_TEXT_SECONDARY}`}>
+        <p className={`text-xs font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("tierPointExpiryPolicyTitle")}</p>
+        <p className={`mt-1.5 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>
+          {t("tierPointExpiryPolicyDesc", { years: yearsText })}
+        </p>
+      </GlassCard>
       <div>
         <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("tierGuideTitle")}</h3>
         <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("tierGuideDesc")}</p>
@@ -127,6 +140,11 @@ const TierBenefitCard = React.memo(function TierBenefitCard({
           <p className={`mt-2 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
             {earnRateLabel}: {(tier.pointRate * 100).toFixed(1)}%
           </p>
+          {tier.discountRate > 0 ? (
+            <p className={`mt-0.5 text-[11px] ${MP_CARD_TEXT_SUBTLE}`}>
+              {t("tierDiscountRate")}: {(tier.discountRate * 100).toFixed(1)}%
+            </p>
+          ) : null}
         </div>
       </div>
     </GlassCard>
@@ -154,13 +172,20 @@ const TierBenefitsList = React.memo(function TierBenefitsList({ tiers, currentTi
   )
 })
 
-export function MemberPortalTierBenefits({ tiers, currentTierCode }: Props) {
+export function MemberPortalTierBenefits({ tiers, currentTierCode, pointRetentionYears = 2 }: Props) {
   const { t } = useMemberPortalLang()
+  const yearsText = String(pointRetentionYears)
 
   if (tiers.length === 0) return null
 
   return (
     <div className="space-y-3">
+      <GlassCard soft className={`px-4 py-3 ${MP_CARD_TEXT_SECONDARY}`}>
+        <p className={`text-xs font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("tierPointExpiryPolicyTitle")}</p>
+        <p className={`mt-1.5 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>
+          {t("tierPointExpiryPolicyDesc", { years: yearsText })}
+        </p>
+      </GlassCard>
       <div>
         <h3 className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("tierBenefitsTitle")}</h3>
         <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("tierBenefitsDesc")}</p>
@@ -291,6 +316,7 @@ export function MemberPortalTierBenefitsSheet({
   open,
   tiers,
   currentTierCode,
+  pointRetentionYears = 2,
   closeLabel,
   onClose,
 }: Props & {
@@ -299,6 +325,7 @@ export function MemberPortalTierBenefitsSheet({
   onClose: () => void
 }) {
   const { t } = useMemberPortalLang()
+  const yearsText = String(pointRetentionYears)
   const [selectedTierCode, setSelectedTierCode] = React.useState(currentTierCode || "BRONZE")
 
   React.useEffect(() => {
@@ -330,6 +357,9 @@ export function MemberPortalTierBenefitsSheet({
           {t("tierBenefitsTitle")}
         </h3>
         <p className="mt-1 text-xs leading-relaxed text-white/50">{t("tierBenefitsDesc")}</p>
+        <p className="mt-2 text-xs leading-relaxed text-white/45">
+          {t("tierPointExpiryPolicyDesc", { years: yearsText })}
+        </p>
         <div className="mt-4">
           <TierSelectorRow
             tiers={tiers}
@@ -360,6 +390,7 @@ export function MemberPortalTierBenefitsSheet({
 export function useMemberPortalTiers() {
   const { lang } = useMemberPortalLang()
   const [tiers, setTiers] = React.useState<MemberTierPublic[]>([])
+  const [pointRetentionYears, setPointRetentionYears] = React.useState(2)
   const [loading, setLoading] = React.useState(true)
   const [, startTransition] = React.useTransition()
 
@@ -372,10 +403,17 @@ export function useMemberPortalTiers() {
           cache: "no-store",
           credentials: "same-origin",
         })
-        const data = (await res.json()) as { success?: boolean; tiers?: MemberTierPublic[] }
+        const data = (await res.json()) as {
+          success?: boolean
+          tiers?: MemberTierPublic[]
+          pointRetentionYears?: number
+        }
         if (!cancelled) {
           startTransition(() => {
             setTiers(data.success ? data.tiers || [] : [])
+            if (typeof data.pointRetentionYears === "number" && data.pointRetentionYears > 0) {
+              setPointRetentionYears(data.pointRetentionYears)
+            }
           })
         }
       } catch {
@@ -393,5 +431,5 @@ export function useMemberPortalTiers() {
     }
   }, [lang])
 
-  return { tiers, loading }
+  return { tiers, pointRetentionYears, loading }
 }

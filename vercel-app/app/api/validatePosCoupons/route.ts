@@ -13,12 +13,20 @@ function parseApplied(raw: unknown): PosAppliedCouponLine[] {
       const r = row as Record<string, unknown>
       const code = String(r.code ?? '').trim().toUpperCase()
       if (!code) return null
+      const memberCouponIssueId =
+        Math.max(0, Math.trunc(Number(r.memberCouponIssueId ?? r.member_coupon_issue_id ?? 0) || 0)) ||
+        undefined
+      const serialId =
+        Math.max(0, Math.trunc(Number(r.serialId ?? r.serial_id ?? 0) || 0)) || undefined
       return {
         code,
         name: String(r.name ?? code).trim() || code,
         discountAmt: Math.max(0, Number(r.discountAmt ?? 0) || 0),
         quantity: Math.max(1, Math.trunc(Number(r.quantity ?? 1) || 1)),
         couponId: Number(r.couponId ?? 0) || undefined,
+        ...(memberCouponIssueId ? { memberCouponIssueId } : {}),
+        ...(serialId ? { serialId } : {}),
+        priority: Number(r.priority ?? 0) || undefined,
       } satisfies PosAppliedCouponLine
     })
     .filter(Boolean) as PosAppliedCouponLine[]
@@ -67,6 +75,7 @@ export async function POST(req: NextRequest) {
     const subtotal = Math.max(0, Number(body.subtotal ?? 0))
     const manualDiscountAmt = Math.max(0, Number(body.manualDiscountAmt ?? 0))
     const collabDiscountAmt = Math.max(0, Number(body.collabDiscountAmt ?? 0))
+    const tierDiscountAmt = Math.max(0, Number(body.tierDiscountAmt ?? 0))
     const cartLines = parseCartLines(body.cartLines ?? body.cart_lines ?? body.items)
     const memberId = Math.max(0, Math.trunc(Number(body.memberId ?? 0) || 0)) || undefined
     const applied = parseApplied(body.applied ?? body.appliedCoupons)
@@ -80,6 +89,7 @@ export async function POST(req: NextRequest) {
         subtotal,
         manualDiscountAmt,
         collabDiscountAmt,
+        tierDiscountAmt,
         cartLines,
         applied,
         candidate: {
@@ -96,6 +106,7 @@ export async function POST(req: NextRequest) {
       subtotal,
       manualDiscountAmt,
       collabDiscountAmt,
+      tierDiscountAmt,
       cartLines,
       appliedCoupons: applied,
       memberId,

@@ -356,6 +356,8 @@ export async function updatePosOrder(params: {
   couponCode?: string
   couponDiscountAmt?: number
   appliedCoupons?: PosAppliedCoupon[]
+  tierDiscountAmt?: number
+  memberTierCode?: string
   pointUsed?: number
   pointEarned?: number
   guestCount?: number
@@ -632,6 +634,8 @@ export async function savePosOrder(params: {
   couponCode?: string
   couponDiscountAmt?: number
   appliedCoupons?: PosAppliedCoupon[]
+  tierDiscountAmt?: number
+  memberTierCode?: string
   pointUsed?: number
   pointEarned?: number
   /** 홀 dine_in 시 권장. 미입력 시 0 */

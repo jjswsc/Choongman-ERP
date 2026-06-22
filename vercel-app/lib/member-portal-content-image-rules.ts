@@ -90,6 +90,14 @@ export const MEMBER_PORTAL_CONTENT_IMAGE_RULES = {
     aspectH: 2,
     skipAspectCheck: true,
   },
+  coupon_portal: {
+    label: '회원앱 쿠폰 카드',
+    minWidth: 400,
+    minHeight: 400,
+    aspectW: 1,
+    aspectH: 1,
+    aspectTolerancePct: 0.15,
+  },
 } as const satisfies Record<string, MemberPortalContentImageRule>
 
 export type MemberPortalContentImageRuleKey = keyof typeof MEMBER_PORTAL_CONTENT_IMAGE_RULES

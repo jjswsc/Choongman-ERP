@@ -9,6 +9,10 @@ import {
   loadMemberPointEarnBonusPolicy,
   saveMemberPointEarnBonusPolicy,
 } from '@/lib/member-point-earn-policy-server'
+import {
+  loadMemberPointRetentionYears,
+  saveMemberPointRetentionYears,
+} from '@/lib/member-point-expiry-policy-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(req: NextRequest) {
@@ -16,11 +20,12 @@ export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, 'manager')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
-    const [upgradeBasis, earnBonus] = await Promise.all([
+    const [upgradeBasis, earnBonus, pointRetentionYears] = await Promise.all([
       loadMemberTierUpgradeBasis(),
       loadMemberPointEarnBonusPolicy(),
+      loadMemberPointRetentionYears(),
     ])
-    return NextResponse.json({ success: true, upgradeBasis, earnBonus }, { headers })
+    return NextResponse.json({ success: true, upgradeBasis, earnBonus, pointRetentionYears }, { headers })
   } catch (e) {
     console.error('GET /api/member-tiers/policy:', e)
     return NextResponse.json(
@@ -28,6 +33,7 @@ export async function GET(req: NextRequest) {
         success: false,
         upgradeBasis: 'points' satisfies MemberTierUpgradeBasis,
         earnBonus: null as MemberPointEarnBonusPolicy | null,
+        pointRetentionYears: 2,
       },
       { headers }
     )
@@ -39,16 +45,24 @@ export async function POST(req: NextRequest) {
   const authRes = await requireAuth(req, 'office')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
-    const body = (await req.json()) as { upgradeBasis?: unknown; earnBonus?: unknown }
+    const body = (await req.json()) as {
+      upgradeBasis?: unknown
+      earnBonus?: unknown
+      pointRetentionYears?: unknown
+    }
     let upgradeBasis = await loadMemberTierUpgradeBasis()
     let earnBonus = await loadMemberPointEarnBonusPolicy()
+    let pointRetentionYears = await loadMemberPointRetentionYears()
     if (body.upgradeBasis != null) {
       upgradeBasis = await saveMemberTierUpgradeBasis(body.upgradeBasis)
     }
     if (body.earnBonus != null) {
       earnBonus = await saveMemberPointEarnBonusPolicy(body.earnBonus)
     }
-    return NextResponse.json({ success: true, upgradeBasis, earnBonus }, { headers })
+    if (body.pointRetentionYears != null) {
+      pointRetentionYears = await saveMemberPointRetentionYears(body.pointRetentionYears)
+    }
+    return NextResponse.json({ success: true, upgradeBasis, earnBonus, pointRetentionYears }, { headers })
   } catch (e) {
     console.error('POST /api/member-tiers/policy:', e)
     return NextResponse.json(

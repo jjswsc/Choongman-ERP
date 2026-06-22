@@ -27,7 +27,6 @@ import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import {
   memberPortalDateLocale,
   memberPortalLoginError,
-  memberPortalPointKindLabel,
 } from "@/lib/member-portal-i18n"
 import { normalizeMemberPhone } from "@/lib/member-phone-lookup"
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
@@ -46,7 +45,8 @@ import { DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL } from "@/lib/member-portal-
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
-import { MemberPortalCouponCard } from "@/components/member-portal/member-portal-coupon-card"
+import type { PortalCouponOfferRow } from "@/lib/member-portal-coupon-claim"
+import { MemberPortalPrivilegeTab } from "@/components/member-portal/member-portal-privilege-tab"
 import {
   MemberPortalTierBenefitsSheet,
   MemberPortalTierEntryButton,
@@ -55,7 +55,6 @@ import {
 import { MemberPortalProfileContactLinks, MemberPortalContactChannelButtons } from "@/components/member-portal/member-portal-contact-links"
 import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import {
-  MemberPortalStampCard,
   MemberPortalStampHomeWidget,
   useMemberPortalStampStatus,
 } from "@/components/member-portal/member-portal-stamp-card"
@@ -199,7 +198,7 @@ export function MemberPortalApp() {
     previewAppBackgroundUrl,
   } = useMemberPortalEmbedPreview()
   const { lang, t } = useMemberPortalLang()
-  const { tiers: portalTiers } = useMemberPortalTiers()
+  const { tiers: portalTiers, pointRetentionYears } = useMemberPortalTiers()
   const dateLocale = memberPortalDateLocale(lang)
   const [member, setMember] = React.useState<MemberSummary | null>(null)
   const {
@@ -267,6 +266,9 @@ export function MemberPortalApp() {
   const [stampFoodImageUrl, setStampFoodImageUrl] = React.useState(DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
+  const [couponOffers, setCouponOffers] = React.useState<PortalCouponOfferRow[]>([])
+  const [couponOffersLoading, setCouponOffersLoading] = React.useState(false)
+  const [claimingCouponCode, setClaimingCouponCode] = React.useState<string | null>(null)
   const [visits, setVisits] = React.useState<PortalVisitRow[]>([])
   const [stores, setStores] = React.useState<MemberPortalStoreRow[]>([])
   const [contentItems, setContentItems] = React.useState<MemberPortalContentItem[]>([])
@@ -626,15 +628,19 @@ export function MemberPortalApp() {
   React.useEffect(() => {
     if (tab !== "privilege" || !member) return
     let cancelled = false
+    setCouponOffersLoading(true)
     ;(async () => {
       try {
-        const [couponsRes, dashRes] = await Promise.all([
+        const [couponsRes, offersRes, dashRes] = await Promise.all([
           getJson<{ success: boolean; rows?: PortalCouponRow[] }>("/api/member-portal/me/coupons"),
+          getJson<{ success: boolean; rows?: PortalCouponOfferRow[] }>("/api/member-portal/me/coupon-offers"),
           getJson<{ success: boolean } & PortalDashboard>("/api/member-portal/me/dashboard"),
         ])
         if (cancelled) return
         if (couponsRes.success) setCoupons(couponsRes.rows || [])
+        if (offersRes.success) setCouponOffers(offersRes.rows || [])
         if (dashRes.success && dashRes.member) {
+          setMember(dashRes.member)
           setDashboard({
             member: dashRes.member,
             referralCode: dashRes.referralCode,
@@ -644,12 +650,51 @@ export function MemberPortalApp() {
         }
       } catch {
         /* ignore */
+      } finally {
+        if (!cancelled) setCouponOffersLoading(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [tab, member])
+  }, [tab, member?.id])
+
+  const handleClaimCouponOffer = React.useCallback(
+    async (couponCode: string) => {
+      const code = String(couponCode || "").trim().toUpperCase()
+      if (!code || claimingCouponCode) return
+      setClaimingCouponCode(code)
+      try {
+        const res = await postJson<{
+          success: boolean
+          message?: string
+          coupons?: PortalCouponRow[]
+          rows?: PortalCouponOfferRow[]
+          pointBalance?: number
+        }>(`/api/member-portal/me/coupons/claim?lang=${encodeURIComponent(lang)}`, { couponCode: code })
+        if (res.success) {
+          if (Array.isArray(res.coupons)) setCoupons(res.coupons)
+          setMember((prev) =>
+            prev && typeof res.pointBalance === "number"
+              ? { ...prev, pointBalance: res.pointBalance }
+              : prev
+          )
+          const offersRes = await getJson<{ success: boolean; rows?: PortalCouponOfferRow[] }>(
+            "/api/member-portal/me/coupon-offers"
+          )
+          if (offersRes.success) setCouponOffers(offersRes.rows || [])
+          window.alert(t("couponClaimSuccess"))
+        } else if (res.message) {
+          window.alert(res.message)
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        setClaimingCouponCode(null)
+      }
+    },
+    [claimingCouponCode, lang, t]
+  )
 
   const homePopup = React.useMemo(() => pickMemberPortalHomePopup(contentItems), [contentItems])
   const homePopupContentKey = homePopup?.contentKey || ""
@@ -1049,6 +1094,7 @@ export function MemberPortalApp() {
           <MemberPortalTierBenefitsSheet
             open={tierBenefitsOpen}
             tiers={portalTiers}
+            pointRetentionYears={pointRetentionYears}
             closeLabel={t("contactMenuClose")}
             onClose={() => setTierBenefitsOpen(false)}
           />
@@ -1149,6 +1195,7 @@ export function MemberPortalApp() {
                 actionLabel: portalTiers.length > 0 ? t("tierBenefitsViewBtn") : undefined,
                 onAction: portalTiers.length > 0 ? () => setTierBenefitsOpen(true) : undefined,
               }}
+              pointRetentionYears={pointRetentionYears}
             />
 
             <MemberPortalHomeHeroBanner
@@ -1249,111 +1296,28 @@ export function MemberPortalApp() {
         )}
 
         {tab === "privilege" && (
-          <div className="space-y-3">
-            <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
-            <p className={`-mt-1 text-xs ${MP_CARD_TEXT_SUBTLE}`}>
-              {t("memberNo")} {member.memberNo}
-            </p>
-            <MemberPortalBenefitStatsGrid
-              couponsLabel={t("statCoupons")}
-              couponsValue={`${activeDashboard.stats.availableCoupons}`}
-              availablePointsLabel={t("availablePoints")}
-              availablePointsValue={formatPoints(member.pointBalance || 0)}
-              cumulativePointsLabel={t("cumulativeTierPoints")}
-              cumulativePointsValue={formatPoints(
-                member.tierPoints ?? activeDashboard.stats.tierQualificationPoints ?? 0
-              )}
-              visitsLabel={t("statVisits")}
-              visitsValue={`${activeDashboard.stats.visitCount}`}
-            />
-            <MemberPortalStampCard
-              lang={lang}
-              memberId={member.id}
-              status={stampStatus}
-              loading={stampLoading}
-              foodImageUrl={stampFoodImageUrl}
-              onGoCoupons={() => changeTab("privilege")}
-            />
-            {portalTiers.length > 0 ? (
-              <MemberPortalTierEntryButton
-                title={t("tierBenefitsTitle")}
-                description={t("tierBenefitsDesc")}
-                onClick={() => setTierBenefitsOpen(true)}
-              />
-            ) : null}
-            {coupons.length === 0 ? (
-              <GlassCard soft className={`px-5 py-12 text-center ${MP_CARD_TEXT_MUTED}`}>
-                {t("noCoupons")}
-              </GlassCard>
-            ) : (
-              <div className="space-y-4">
-                {coupons.map((c) => (
-                  <MemberPortalCouponCard
-                    key={c.id}
-                    coupon={c}
-                    memberNo={member.memberNo}
-                    lang={lang}
-                    dateLocale={dateLocale}
-                    t={t}
-                  />
-                ))}
-              </div>
-            )}
-            <SectionTitle title={t("historyTitle")} subtitle={t("historySub")} />
-
-            <div>
-              <h3 className={`mb-3 text-sm font-semibold ${MP_CARD_TEXT_SECONDARY}`}>{t("recentOrders")}</h3>
-              <div className="space-y-2">
-                {visits.length === 0 ? (
-                  <GlassCard soft className={`px-5 py-10 text-center ${MP_CARD_TEXT_MUTED}`}>
-                    {t("noOrders")}
-                  </GlassCard>
-                ) : (
-                  visits.map((v) => (
-                    <GlassCard key={v.orderId} soft className="px-4 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{formatBaht(v.total)}</p>
-                          <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
-                            {stores.find((s) => s.storeCode === v.storeCode)?.displayName || t("store")} · {v.orderNo || `#${v.orderId}`}
-                          </p>
-                        </div>
-                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>{formatDateTime(v.visitedAt, dateLocale)}</p>
-                      </div>
-                    </GlassCard>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h3 className={`mb-3 text-sm font-semibold ${MP_CARD_TEXT_SECONDARY}`}>{t("pointsHistory")}</h3>
-              <div className="space-y-2">
-                {points.length === 0 ? (
-                  <GlassCard soft className={`px-5 py-10 text-center ${MP_CARD_TEXT_MUTED}`}>
-                    {t("noPoints")}
-                  </GlassCard>
-                ) : (
-                  points.map((p) => (
-                    <GlassCard key={p.id} soft className="px-4 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className={`font-medium ${p.points >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                            {p.points >= 0 ? "+" : ""}
-                            {formatPoints(p.points)}
-                          </p>
-                          <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
-                            {memberPortalPointKindLabel(lang, p.kind)} · {p.note || "-"}
-                          </p>
-                        </div>
-                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>{formatDateTime(p.createdAt, dateLocale)}</p>
-                      </div>
-                    </GlassCard>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+          <MemberPortalPrivilegeTab
+            lang={lang}
+            dateLocale={dateLocale}
+            memberNo={member.memberNo}
+            member={member}
+            dashboard={activeDashboard}
+            coupons={coupons}
+            offers={couponOffers}
+            offersLoading={couponOffersLoading}
+            claimingCode={claimingCouponCode}
+            visits={visits}
+            points={points}
+            stampStatus={stampStatus}
+            stampLoading={stampLoading}
+            stampFoodImageUrl={stampFoodImageUrl}
+            portalTiersCount={portalTiers.length}
+            pointRetentionYears={pointRetentionYears}
+            onOpenTierBenefits={() => setTierBenefitsOpen(true)}
+            onClaimOffer={handleClaimCouponOffer}
+            stores={stores}
+            t={t}
+          />
         )}
 
         {tab === "me" && (
@@ -1500,6 +1464,7 @@ export function MemberPortalApp() {
         open={tierBenefitsOpen}
         tiers={portalTiers}
         currentTierCode={activeDashboard.tierProgress.currentTierCode}
+        pointRetentionYears={pointRetentionYears}
         closeLabel={t("contactMenuClose")}
         onClose={() => setTierBenefitsOpen(false)}
       />

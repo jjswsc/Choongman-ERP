@@ -28,7 +28,19 @@ import {
   type CouponItemScope,
 } from "@/lib/crm-coupon-item-scope"
 import { CrmCouponMenuScopePicker } from "@/components/admin/crm-coupon-menu-scope-picker"
+import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
 import { cn } from "@/lib/utils"
+import {
+  MEMBER_PORTAL_CONTENT_IMAGE_RULES,
+  readMemberPortalImageSize,
+  validateMemberPortalImageByRule,
+  memberPortalImageUploadCatchMessage,
+} from "@/lib/member-portal-content-image-rules"
+import {
+  uploadMemberPortalContentImageToStorage,
+  verifyMemberPortalImagePublicUrl,
+  withMemberPortalImageCacheBust,
+} from "@/lib/member-portal-image-upload"
 
 type CouponForm = {
   code: string
@@ -46,6 +58,12 @@ type CouponForm = {
   priority: string
   allowWithManualDiscount: boolean
   isActive: boolean
+  portalImageUrl: string
+  portalVisible: boolean
+  portalClaimMode: "none" | "free" | "points"
+  portalPointCost: string
+  portalMaxClaimsPerMember: string
+  portalSortOrder: string
 }
 
 const EMPTY_FORM: CouponForm = {
@@ -64,6 +82,12 @@ const EMPTY_FORM: CouponForm = {
   priority: "0",
   allowWithManualDiscount: true,
   isActive: true,
+  portalImageUrl: "",
+  portalVisible: false,
+  portalClaimMode: "none",
+  portalPointCost: "0",
+  portalMaxClaimsPerMember: "1",
+  portalSortOrder: "0",
 }
 
 function couponToForm(c: PosCoupon): CouponForm {
@@ -90,6 +114,14 @@ function couponToForm(c: PosCoupon): CouponForm {
     priority: String(c.priority ?? 0),
     allowWithManualDiscount: c.allowWithManualDiscount !== false,
     isActive: c.isActive !== false,
+    portalImageUrl: String(c.portalImageUrl || "").trim(),
+    portalVisible: Boolean(c.portalVisible),
+    portalClaimMode: (c.portalClaimMode === "free" || c.portalClaimMode === "points"
+      ? c.portalClaimMode
+      : "none") as CouponForm["portalClaimMode"],
+    portalPointCost: String(c.portalPointCost ?? 0),
+    portalMaxClaimsPerMember: String(c.portalMaxClaimsPerMember ?? 1),
+    portalSortOrder: String(c.portalSortOrder ?? 0),
   }
 }
 
@@ -140,6 +172,9 @@ export function CrmCouponDefinitionPanel() {
   const [itemScope, setItemScope] = React.useState<CouponItemScope>(emptyCouponItemScope())
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [search, setSearch] = React.useState("")
+  const [portalImageUploading, setPortalImageUploading] = React.useState(false)
+  const [portalImageError, setPortalImageError] = React.useState("")
+  const [portalImagePreviewNonce, setPortalImagePreviewNonce] = React.useState(0)
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
@@ -169,6 +204,7 @@ export function CrmCouponDefinitionPanel() {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setItemScope(emptyCouponItemScope())
+    setPortalImageError("")
     setSheetOpen(true)
   }
 
@@ -176,7 +212,42 @@ export function CrmCouponDefinitionPanel() {
     setEditingId(c.id ?? null)
     setForm(couponToForm(c))
     setItemScope(itemScopeFromCoupon(c))
+    setPortalImageError("")
     setSheetOpen(true)
+  }
+
+  const handlePortalImageUpload = async (file: File) => {
+    setPortalImageError("")
+    setPortalImageUploading(true)
+    try {
+      const rule = MEMBER_PORTAL_CONTENT_IMAGE_RULES.coupon_portal
+      const size = await readMemberPortalImageSize(file)
+      const v = validateMemberPortalImageByRule(size.width, size.height, rule, t, "coupon_portal")
+      if (!v.ok) {
+        setPortalImageError(v.message)
+        return
+      }
+      const uploaded = await uploadMemberPortalContentImageToStorage(file)
+      if (!uploaded.ok) {
+        setPortalImageError(
+          uploaded.message === "UPLOAD_PRESIGN_FAIL"
+            ? t("mpAdmin_errImageUpload") || "업로드에 실패했습니다."
+            : uploaded.message
+        )
+        return
+      }
+      const verified = await verifyMemberPortalImagePublicUrl(uploaded.publicUrl)
+      if (!verified) {
+        setPortalImageError(t("mpAdmin_errImageUpload") || "업로드한 이미지를 불러올 수 없습니다.")
+        return
+      }
+      setForm((f) => ({ ...f, portalImageUrl: uploaded.publicUrl }))
+      setPortalImagePreviewNonce((n) => n + 1)
+    } catch (e) {
+      setPortalImageError(memberPortalImageUploadCatchMessage(t, e))
+    } finally {
+      setPortalImageUploading(false)
+    }
   }
 
   const handleSave = async () => {
@@ -211,6 +282,15 @@ export function CrmCouponDefinitionPanel() {
         priority: Math.max(-100, Math.min(100, Math.trunc(Number(form.priority || 0)))),
         allowWithManualDiscount: form.allowWithManualDiscount,
         itemScope: buildItemScopePayload(itemScope),
+        portalImageUrl: form.portalImageUrl.trim(),
+        portalVisible: form.portalVisible,
+        portalClaimMode: form.portalClaimMode,
+        portalPointCost: Math.max(0, Math.trunc(Number(form.portalPointCost || 0))),
+        portalMaxClaimsPerMember: Math.max(
+          1,
+          Math.trunc(Number(form.portalMaxClaimsPerMember || 1))
+        ),
+        portalSortOrder: Math.trunc(Number(form.portalSortOrder || 0)),
       })
       if (!res.success) {
         await appAlert(res.message || t("posSaveFail") || "저장 실패")
@@ -423,6 +503,126 @@ export function CrmCouponDefinitionPanel() {
                       onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))}
                     />
                   </CouponFormField>
+                </div>
+              </CouponFormSection>
+
+              <CouponFormSection title={t("crmCouponPortalImage") || "회원앱 쿠폰 카드 이미지"}>
+                <CouponFormField label={t("crmCouponPortalImage") || "회원앱 쿠폰 카드 이미지"}>
+                  <Input
+                    value={form.portalImageUrl}
+                    onChange={(e) => setForm((f) => ({ ...f, portalImageUrl: e.target.value }))}
+                    placeholder={t("crmCouponPortalImageUrlPh") || "https://..."}
+                  />
+                </CouponFormField>
+                <CrmImageUploadField
+                  uploading={portalImageUploading}
+                  onFile={handlePortalImageUpload}
+                  hint={t("crmCouponPortalImageHint")}
+                  error={portalImageError}
+                  previewUrl={
+                    form.portalImageUrl.trim()
+                      ? withMemberPortalImageCacheBust(form.portalImageUrl.trim(), portalImagePreviewNonce)
+                      : undefined
+                  }
+                  previewSlot={
+                    form.portalImageUrl.trim() ? (
+                      <img
+                        src={withMemberPortalImageCacheBust(form.portalImageUrl.trim(), portalImagePreviewNonce)}
+                        alt=""
+                        className="mx-auto h-36 w-36 rounded-xl border object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : undefined
+                  }
+                />
+                {form.portalImageUrl.trim() ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => setForm((f) => ({ ...f, portalImageUrl: "" }))}
+                  >
+                    {t("crmCouponPortalImageClear") || "이미지 제거"}
+                  </Button>
+                ) : null}
+                <div className="space-y-3 rounded-lg border border-dashed bg-muted/15 px-4 py-3">
+                  <label className="flex cursor-pointer items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
+                      checked={form.portalVisible}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          portalVisible: e.target.checked,
+                          portalClaimMode:
+                            e.target.checked && f.portalClaimMode === "none" ? "free" : f.portalClaimMode,
+                        }))
+                      }
+                    />
+                    <span>{t("crmCouponPortalVisible") || "회원앱 혜택 탭 카탈로그에 노출"}</span>
+                  </label>
+                  {form.portalVisible ? (
+                    <>
+                      <CouponFormField label={t("crmCouponPortalClaimMode") || "수령 방식"}>
+                        <Select
+                          value={form.portalClaimMode}
+                          onValueChange={(v) =>
+                            setForm((f) => ({
+                              ...f,
+                              portalClaimMode: v as CouponForm["portalClaimMode"],
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="free">
+                              {t("crmCouponPortalClaimFree") || "무료 받기"}
+                            </SelectItem>
+                            <SelectItem value="points">
+                              {t("crmCouponPortalClaimPoints") || "포인트 교환"}
+                            </SelectItem>
+                            <SelectItem value="none">
+                              {t("crmCouponPortalClaimNone") || "노출만 (직접 수령 불가)"}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </CouponFormField>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <CouponFormField label={t("crmCouponPortalPointCost") || "교환 포인트"}>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={form.portalPointCost}
+                            disabled={form.portalClaimMode !== "points"}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, portalPointCost: e.target.value }))
+                            }
+                          />
+                        </CouponFormField>
+                        <CouponFormField label={t("crmCouponPortalMaxClaims") || "1인 수령 한도"}>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={form.portalMaxClaimsPerMember}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, portalMaxClaimsPerMember: e.target.value }))
+                            }
+                          />
+                        </CouponFormField>
+                      </div>
+                      <CouponFormField label={t("crmCouponPortalSortOrder") || "목록 순서"}>
+                        <Input
+                          type="number"
+                          value={form.portalSortOrder}
+                          onChange={(e) => setForm((f) => ({ ...f, portalSortOrder: e.target.value }))}
+                        />
+                      </CouponFormField>
+                    </>
+                  ) : null}
                 </div>
               </CouponFormSection>
 

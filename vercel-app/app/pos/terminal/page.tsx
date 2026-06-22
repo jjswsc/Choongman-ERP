@@ -11,6 +11,7 @@ import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
 import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
 import { resolveOrderBarCookElapsedEndAt } from '@/lib/pos-order-bar-cook-elapsed'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
+import type { PosTerminalParentCatalog } from '@/components/pos/pos-terminal-menu-screen'
 import {
   CartPanel,
   type CartPanelHandle,
@@ -87,6 +88,7 @@ import {
   hasRecentPosAutoPrintKey,
 } from '@/lib/pos-auto-print-dedupe'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
+import { isSaasModuleEnabled, useSaasEnabledModules } from '@/lib/use-saas-enabled-modules'
 import {
   cartLinesToPosOrderItems,
   mergeDineInAddonCartPosItemsWithExisting,
@@ -117,6 +119,7 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
+import { posOrderTierDiscountFieldsFromPayload } from '@/lib/pos-order-tier-discount-fields'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
 import { isBanbanKitchenLine } from '@/lib/pos-banban-utils'
@@ -666,6 +669,7 @@ export default function PosTerminalPage() {
   const [promosWithItems, setPromosWithItems] = useState<PosPromoWithItems[]>([])
   const [menuOptions, setMenuOptions] = useState<PosMenuOption[]>([])
   const [menuOptionsForCodeMap, setMenuOptionsForCodeMap] = useState<PosMenuOption[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
   const receiptQueueRef = useRef<ReceiptModalData[]>([])
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
@@ -832,6 +836,15 @@ export default function PosTerminalPage() {
     })
     setMenuTargets({ byId, byName })
   }, [])
+  const terminalParentCatalog = useMemo<PosTerminalParentCatalog>(
+    () => ({
+      menus,
+      promos: promosWithItems,
+      options: menuOptionsForCodeMap.length > 0 ? menuOptionsForCodeMap : menuOptions,
+      loading: catalogLoading,
+    }),
+    [menus, promosWithItems, menuOptions, menuOptionsForCodeMap, catalogLoading]
+  )
   const optionNameById = useMemo(() => {
     const out = new Map<string, string>()
     for (const opt of menuOptions) {
@@ -1224,6 +1237,7 @@ export default function PosTerminalPage() {
   const posPrinterSettingsInFlightStoreCodeRef = useRef("")
   const posPrinterSettingsInFlightRef = useRef<Promise<PosPrinterSettings> | null>(null)
   const storeSettingsLoadSeqRef = useRef(0)
+  const saasModules = useSaasEnabledModules()
 
   const getPrinterSettingsForStore = useCallback(async (targetStoreCode: string): Promise<PosPrinterSettings> => {
     const normalizedStoreCode = String(targetStoreCode || "").trim()
@@ -1412,6 +1426,11 @@ export default function PosTerminalPage() {
   }, [currentStoreId])
 
   useEffect(() => {
+    if (saasModules != null && !isSaasModuleEnabled(saasModules, 'member_mgmt')) {
+      setTakeoutMemberNames([])
+      return
+    }
+    if (saasModules == null) return
     getMembers({ limit: 300 })
       .then((list) => {
         const names = Array.from(
@@ -1425,7 +1444,7 @@ export default function PosTerminalPage() {
         setTakeoutMemberNames(names)
       })
       .catch(() => setTakeoutMemberNames([]))
-  }, [])
+  }, [saasModules])
 
   useEffect(() => {
     const storeCode = auth?.store
@@ -1618,39 +1637,29 @@ export default function PosTerminalPage() {
         setCustomerDisplayIdleMediaType('none')
         setCustomerDisplayIdleMediaUrl('')
       })
-    getPosMenus({ fresh: true, storeCode: requestStoreCode || undefined })
-      .then(applyPosMenusList)
-      .catch(() => {
+    setCatalogLoading(true)
+    void Promise.allSettled([
+      getPosMenus({ fresh: true, storeCode: requestStoreCode || undefined }),
+      getPosMenuOptions({ fresh: true, forCodeMap: true }),
+      getPosPromosWithItems({ includeInactive: true }),
+    ])
+      .then(([rMenus, rOpts, rPromos]) => {
         if (seq !== storeSettingsLoadSeqRef.current) return
-        setMenus([])
-        setMenuTargets({ byId: new Map(), byName: new Map() })
+        if (rMenus.status === 'fulfilled') {
+          applyPosMenusList(rMenus.value)
+        } else {
+          setMenus([])
+          setMenuTargets({ byId: new Map(), byName: new Map() })
+        }
+        const opts = rOpts.status === 'fulfilled' && Array.isArray(rOpts.value) ? rOpts.value : []
+        setMenuOptions(opts)
+        setMenuOptionsForCodeMap(opts)
+        const promos = rPromos.status === 'fulfilled' && Array.isArray(rPromos.value) ? rPromos.value : []
+        setPromosWithItems(promos)
       })
-    getPosMenuOptions({ fresh: true })
-      .then((rows) => {
+      .finally(() => {
         if (seq !== storeSettingsLoadSeqRef.current) return
-        setMenuOptions(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => {
-        if (seq !== storeSettingsLoadSeqRef.current) return
-        setMenuOptions([])
-      })
-    getPosMenuOptions({ fresh: true, forCodeMap: true })
-      .then((rows) => {
-        if (seq !== storeSettingsLoadSeqRef.current) return
-        setMenuOptionsForCodeMap(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => {
-        if (seq !== storeSettingsLoadSeqRef.current) return
-        setMenuOptionsForCodeMap([])
-      })
-    getPosPromosWithItems({ includeInactive: true })
-      .then((rows) => {
-        if (seq !== storeSettingsLoadSeqRef.current) return
-        setPromosWithItems(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => {
-        if (seq !== storeSettingsLoadSeqRef.current) return
-        setPromosWithItems([])
+        setCatalogLoading(false)
       })
   }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore, lang])
 
@@ -7994,6 +8003,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
@@ -8163,6 +8173,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
@@ -8531,6 +8542,7 @@ export default function PosTerminalPage() {
                     ...addonMemberFields,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointEarned: 0,
                     guestCount: payload.guestCount ?? existingOrder.guestCount,
                     paymentCash: 0,
@@ -8570,6 +8582,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
                     localOrderNo: posSaveClientKey,
@@ -8727,6 +8740,7 @@ export default function PosTerminalPage() {
                   subtotal: mergeSubtotal,
                   discountAmt,
                   couponDiscountAmt: payload.couponDiscountAmt ?? 0,
+                  ...posOrderTierDiscountFieldsFromPayload(payload),
                   discountReason: String(payload.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
@@ -9105,6 +9119,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
                     ...posOrderPaymentFieldsFromSnapshot(pay),
@@ -9143,6 +9158,7 @@ export default function PosTerminalPage() {
                       memberNo: payload.memberNo,
                       couponCode: payload.couponCode,
                       couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
                       ...posOrderPaymentFieldsFromSnapshot(pay),
@@ -9171,6 +9187,7 @@ export default function PosTerminalPage() {
                       memberNo: payload.memberNo,
                       couponCode: payload.couponCode,
                       couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderTierDiscountFieldsFromPayload(payload),
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
                       localOrderNo: posSaveClientKey,
@@ -9679,6 +9696,7 @@ export default function PosTerminalPage() {
                   subtotal,
                   discountAmt,
                   couponDiscountAmt: payload.couponDiscountAmt ?? 0,
+                  ...posOrderTierDiscountFieldsFromPayload(payload),
                   discountReason: String(payload.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
@@ -10401,6 +10419,7 @@ export default function PosTerminalPage() {
                     <PosTerminalMenuScreen
                       mode="pos-order"
                       storeCode={currentStoreId}
+                      parentCatalog={terminalParentCatalog}
                       selectedTableName={
                         selectedTable?.name
                           ? translateReceiptTableDisplayName(selectedTable.name, t)
@@ -10546,6 +10565,7 @@ export default function PosTerminalPage() {
                   <PosTerminalMenuScreen
                     mode="pos-order"
                     storeCode={currentStoreId}
+                    parentCatalog={terminalParentCatalog}
                     selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
                     onBack={() => setSelectedDeliveryTargetId(null)}
                     backButtonLabel={t('posBack') || '뒤로가기'}
@@ -10603,6 +10623,7 @@ export default function PosTerminalPage() {
                   <PosTerminalMenuScreen
                     mode="pos-order"
                     storeCode={currentStoreId}
+                    parentCatalog={terminalParentCatalog}
                     selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${takeoutLabel}`}
                     onBack={() => {
                       const pendingOid = pendingTakeoutOrderId
