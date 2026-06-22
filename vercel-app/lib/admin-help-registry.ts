@@ -1,7 +1,7 @@
 import {
   getErpNavItemsForHelp,
   type ErpNavHelpItem,
-} from "@/components/erp/erp-sidebar"
+} from "@/lib/erp-nav-registry"
 import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
 
 export type AdminHelpEmbedded = "inbound" | "payroll"

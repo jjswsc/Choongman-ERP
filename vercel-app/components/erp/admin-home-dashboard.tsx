@@ -1,26 +1,20 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Activity, BarChart3, LayoutDashboard, Lock, Radio, Smartphone, X } from "lucide-react"
+import { LayoutDashboard, Lock, Pencil, X } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
-import { canViewMobileStoreSales, prefersLogisticsOperationsDashboard } from "@/lib/permissions"
+import { prefersLogisticsOperationsDashboard } from "@/lib/permissions"
 import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
 import { AdminDashboardPendingOrdersAlert } from "@/components/erp/admin-dashboard-pending-orders-alert"
 import { AdminOperationsDashboardPanel } from "@/components/erp/admin-operations-dashboard-panel"
+import { ErpNavFavoritesEditor } from "@/components/erp/erp-nav-favorites-editor"
+import { useErpNavFavorites } from "@/lib/erp-nav-favorites-context"
+import { buildErpNavItemByHrefMap, ERP_NAV_DASHBOARD_DESC } from "@/lib/erp-nav-registry"
 import { Button } from "@/components/ui/button"
-
-type QuickLink = {
-  href: string
-  titleKey: string
-  fallback: string
-  descriptionKey: string
-  descriptionFallback: string
-  icon: typeof Radio
-  primary?: boolean
-}
 
 export function AdminHomeDashboard() {
   const router = useRouter()
@@ -33,46 +27,30 @@ export function AdminHomeDashboard() {
   const role = auth?.role || ""
   const isLogisticsHome = prefersLogisticsOperationsDashboard(role)
   const { stats: dashboardStats } = useAdminDashboardStats()
-  const showMobileSales = Boolean(auth) && canViewMobileStoreSales(role)
+  const { dashboardQuickHrefs } = useErpNavFavorites()
+  const [editorOpen, setEditorOpen] = React.useState(false)
+  const navItemByHref = React.useMemo(() => buildErpNavItemByHrefMap(), [])
 
-  const quickLinks: QuickLink[] = [
-    {
-      href: "/admin/live-store-sales",
-      titleKey: "adminLiveStoreSales",
-      fallback: "실시간 매출",
-      descriptionKey: "adminDashboardLinkLiveSalesDesc",
-      descriptionFallback: "당일 매출·테이블·조리 진행 현황",
-      icon: Radio,
-      primary: true,
-    },
-    {
-      href: "/admin/sales-management",
-      titleKey: "adminSalesManagement",
-      fallback: "매출 관리",
-      descriptionKey: "adminDashboardLinkSalesMgmtDesc",
-      descriptionFallback: "기간·채널·매장별 매출 분석",
-      icon: BarChart3,
-    },
-    {
-      href: "/admin/ops-center",
-      titleKey: "adminOpsCenter",
-      fallback: "운영 센터",
-      descriptionKey: "adminDashboardLinkOpsDesc",
-      descriptionFallback: "주문·결제·인쇄·마감 운영 KPI",
-      icon: Activity,
-    },
-  ]
-
-  if (showMobileSales) {
-    quickLinks.push({
-      href: "/store-sales",
-      titleKey: "mobileStoreSalesTitle",
-      fallback: "매장 실시간 매출",
-      descriptionKey: "adminDashboardLinkMobileSalesDesc",
-      descriptionFallback: "휴대폰용 매출·테이블 화면",
-      icon: Smartphone,
-    })
-  }
+  const quickLinks = React.useMemo(
+    () =>
+      dashboardQuickHrefs
+        .map((href, index) => {
+          const item = navItemByHref.get(href)
+          if (!item) return null
+          const desc = ERP_NAV_DASHBOARD_DESC[href]
+          return {
+            href,
+            titleKey: item.titleKey,
+            fallback: item.titleKey,
+            descriptionKey: desc?.key || "adminDashboardLinkGenericDesc",
+            descriptionFallback: desc?.fallback || tr("adminDashboardLinkGenericDesc", "즐겨찾기 바로가기"),
+            icon: item.icon,
+            primary: index === 0,
+          }
+        })
+        .filter((link): link is NonNullable<typeof link> => Boolean(link)),
+    [dashboardQuickHrefs, navItemByHref, tr]
+  )
 
   return (
     <div className="flex-1 overflow-auto">
@@ -120,13 +98,19 @@ export function AdminHomeDashboard() {
           </div>
         ) : null}
 
-        {isLogisticsHome ? (
-          <AdminOperationsDashboardPanel />
-        ) : (
+        {isLogisticsHome ? <AdminOperationsDashboardPanel /> : null}
+
+        {quickLinks.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">
-              {tr("adminDashboardQuickLinksTitle", "바로가기")}
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                {tr("adminDashboardQuickLinksTitle", "바로가기")}
+              </h2>
+              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setEditorOpen(true)}>
+                <Pencil className="h-3.5 w-3.5" aria-hidden />
+                {tr("erpNavFavoritesEdit", "바로가기 편집")}
+              </Button>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {quickLinks.map((link) => {
                 const Icon = link.icon
@@ -135,9 +119,7 @@ export function AdminHomeDashboard() {
                     key={link.href}
                     href={link.href}
                     className={`group rounded-xl border p-4 shadow-sm transition-colors hover:bg-muted/30 ${
-                      link.primary
-                        ? "border-primary/30 bg-primary/5"
-                        : "border-border/70 bg-card"
+                      link.primary ? "border-primary/30 bg-primary/5" : "border-border/70 bg-card"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -161,23 +143,19 @@ export function AdminHomeDashboard() {
                 )
               })}
             </div>
-            <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              {tr(
-                "adminDashboardHomeHint",
-                "실시간 테이블·조리 현황은「실시간 매출」메뉴에서 확인하세요. 당일 완료 매출 차트도 같은 화면에 있습니다."
-              )}
-            </div>
+            {!isLogisticsHome ? (
+              <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+                {tr(
+                  "adminDashboardHomeHint",
+                  "실시간 테이블·조리 현황은「실시간 매출」메뉴에서 확인하세요. 당일 완료 매출 차트도 같은 화면에 있습니다."
+                )}
+              </div>
+            ) : null}
           </section>
-        )}
-
-        {isLogisticsHome ? (
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="secondary" size="sm">
-              <Link href="/admin/live-store-sales">{tr("adminLiveStoreSales", "실시간 매출")}</Link>
-            </Button>
-          </div>
         ) : null}
       </div>
+
+      <ErpNavFavoritesEditor open={editorOpen} onOpenChange={setEditorOpen} />
     </div>
   )
 }

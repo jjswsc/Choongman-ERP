@@ -3,55 +3,8 @@
 import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname, useRouter } from "next/navigation"
-import {
-  LayoutDashboard,
-  LayoutGrid,
-  Megaphone,
-  ClipboardList,
-  Package,
-  ShoppingCart,
-  Building2,
-  ClipboardCheck,
-  BarChart3,
-  Layers,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  ArrowLeftRight,
-  Users,
-  CalendarClock,
-  CalendarDays,
-  FileText,
-  Wallet,
-  Banknote,
-  Palmtree,
-  Printer,
-  Receipt,
-  Store,
-  MapPin,
-  MessageSquareWarning,
-  Settings,
-  LogOut,
-  ChevronDown,
-  ChevronRight,
-  Tag,
-  Target,
-  TrendingUp,
-  Calculator,
-  Settings2,
-  Wrench,
-  Landmark,
-  GitBranch,
-  Handshake,
-  Bot,
-  Calendar,
-  HandCoins,
-  LayoutPanelTop,
-  PackageSearch,
-  UtensilsCrossed,
-  BookOpen,
-  Radio,
-} from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { LogOut, Settings, ChevronDown, ChevronRight, Star } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -61,184 +14,24 @@ import { useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { getInteriorDashboardSummary, getStoreOpsAlertSummary, type InteriorDashboardTotals, type StoreOpsAlertSummary } from "@/lib/api-client"
 import {
-  isManagerRole,
-  isFranchiseeRole,
   canAccessSettings,
-  canAccessPosOrder,
-  canAccessPosSettlement,
-  canAccessPosOrders,
-  canAccessPosTables,
-  canAccessPosTerminalSettings,
-  canAccessPosMenus,
-  canAccessPosCostAnalysis,
-  canAccessPosPrinters,
-  canAccessPosCoupons,
-  canManageAttendanceQrDevices,
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
-  canAccessAiCenter,
   isLogisticsStaffRole,
 } from "@/lib/permissions"
 import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
-import { useAiCenterModuleEnabled } from "@/lib/use-ai-center-module"
-import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
-import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
-interface MenuItem {
-  titleKey: string
-  icon: React.ElementType
-  href: string
-  badge?: number | string
-  badgeVariant?: "default" | "destructive" | "warning"
-}
+import {
+  ERP_NAV_MENU_SECTIONS,
+  buildErpNavItemByHrefMap,
+  getErpNavItemsForHelp,
+  ERP_NAV_HELP_ITEM_COUNT,
+  type ErpNavHelpItem,
+} from "@/lib/erp-nav-registry"
+import { useErpNavAccess } from "@/lib/use-erp-nav-access"
+import { useErpNavFavorites } from "@/lib/erp-nav-favorites-context"
+import { ErpSidebarNavRow } from "@/components/erp/erp-sidebar-nav-row"
 
-interface MenuSection {
-  titleKey: string
-  items: MenuItem[]
-}
-
-const mainItems: MenuItem[] = [
-  { titleKey: "adminDashboard", icon: LayoutDashboard, href: "/admin" },
-  { titleKey: "aiCenter", icon: Bot, href: "/admin/ai-center" },
-  { titleKey: "adminNotices", icon: Megaphone, href: "/admin/notices" },
-  { titleKey: "companyHybridDocuments", icon: FileText, href: "/admin/company-documents" },
-  { titleKey: "adminWorkLog", icon: ClipboardList, href: "/admin/work-log" },
-  { titleKey: "posCostAnalysis", icon: Calculator, href: "/admin/pos-cost-analysis" },
-]
-
-const menuSections: MenuSection[] = [
-  {
-    titleKey: "adminSectionCustomerCrm",
-    items: [
-      { titleKey: "adminCrmDashboard", icon: LayoutDashboard, href: "/admin/crm" },
-      { titleKey: "memberList", icon: Users, href: "/admin/members" },
-      { titleKey: "memberPoints", icon: Wallet, href: "/admin/members/points" },
-      { titleKey: "memberCoupons", icon: Tag, href: "/admin/crm/coupons" },
-      { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
-      { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/tiers" },
-      { titleKey: "adminCrmSegments", icon: Target, href: "/admin/crm/segments" },
-      { titleKey: "memberAppContent", icon: LayoutPanelTop, href: "/admin/crm/member-app" },
-    ],
-  },
-  {
-    titleKey: "adminSectionSales",
-    items: [
-      { titleKey: "adminLiveStoreSales", icon: Radio, href: "/admin/live-store-sales" },
-      { titleKey: "adminOpsCenter", icon: LayoutDashboard, href: "/admin/ops-center" },
-      { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
-      { titleKey: "adminTotalSales", icon: Layers, href: "/admin/total-sales" },
-    ],
-  },
-  {
-    titleKey: "adminSectionMarketing",
-    items: [
-      { titleKey: "marketingHomeTitle", icon: LayoutDashboard, href: "/admin/marketing" },
-      { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
-      { titleKey: "adminMarketingCollabMenus", icon: Handshake, href: "/admin/marketing/collab-menus" },
-      { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
-      { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
-      { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
-      { titleKey: "adminMarketingMaterials", icon: Package, href: "/admin/marketing/materials" },
-      { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
-      { titleKey: "adminMarketingReport", icon: FileText, href: "/admin/marketing/report" },
-      { titleKey: "adminMarketingIntegrations", icon: Settings2, href: "/admin/marketing/integrations" },
-    ],
-  },
-  {
-    titleKey: "adminSectionStore",
-    items: [
-      { titleKey: "adminStoreOps", icon: LayoutDashboard, href: "/admin/store-ops" },
-      { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
-      { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
-      { titleKey: "adminStoreRepairs", icon: Wrench, href: "/admin/store-repairs" },
-      { titleKey: "adminComplaints", icon: MessageSquareWarning, href: "/admin/complaints" },
-    ],
-  },
-  {
-    titleKey: "adminSectionPos",
-    items: [
-      { titleKey: "adminPosOrder", icon: ShoppingCart, href: "/pos" },
-      { titleKey: "adminPosOrderList", icon: Receipt, href: "/admin/pos-orders" },
-      { titleKey: "adminPosSettlement", icon: Wallet, href: "/admin/pos-settlement" },
-      { titleKey: "adminPosCash", icon: Banknote, href: "/admin/pos-cash" },
-      { titleKey: "adminPosScreenConfig", icon: LayoutGrid, href: "/admin/pos-screen-config" },
-      { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
-      { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
-      { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/crm/coupons?tab=definitions" },
-      { titleKey: "adminPosTaxInvoiceRecipients", icon: FileText, href: "/admin/pos-tax-invoice-recipients" },
-    ],
-  },
-  {
-    titleKey: "adminSectionHr",
-    items: [
-      { titleKey: "adminHrHome", icon: LayoutDashboard, href: "/admin/hr" },
-      { titleKey: "adminEmployees", icon: Users, href: "/admin/employees" },
-      { titleKey: "adminHrPolicies", icon: BookOpen, href: "/admin/hr-policies" },
-      { titleKey: "adminHrCalendar", icon: CalendarDays, href: "/admin/hr-calendar" },
-      { titleKey: "adminAttendance", icon: CalendarClock, href: "/admin/attendance" },
-      { titleKey: "adminLeave", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
-    ],
-  },
-  {
-    titleKey: "adminSectionLogistics",
-    items: [
-      { titleKey: "adminItems", icon: Package, href: "/admin/items" },
-      { titleKey: "adminVendors", icon: Building2, href: "/admin/vendors" },
-      { titleKey: "adminOrders", icon: ClipboardCheck, href: "/admin/orders", badge: 0, badgeVariant: "destructive" },
-      { titleKey: "adminOrderCreate", icon: ShoppingCart, href: "/admin/order-create" },
-      { titleKey: "adminStock", icon: BarChart3, href: "/admin/stock" },
-      { titleKey: "adminInbound", icon: ArrowDownToLine, href: "/admin/inbound" },
-      { titleKey: "adminOutbound", icon: ArrowUpFromLine, href: "/admin/outbound" },
-    ],
-  },
-  {
-    titleKey: "adminSectionAccounting",
-    items: [
-      { titleKey: "adminAccountingPurchaseOrder", icon: FileText, href: "/admin/accounting/purchase-order" },
-      { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
-      { titleKey: "adminReceivablePayable", icon: ArrowLeftRight, href: "/admin/receivable-payable" },
-      { titleKey: "expenseManagementTitle", icon: Receipt, href: "/admin/expense-management" },
-      { titleKey: "adminPettyCash", icon: HandCoins, href: "/admin/petty-cash" },
-      { titleKey: "adminBankTransactions", icon: Landmark, href: "/admin/bank-transactions" },
-      { titleKey: "adminDepreciation", icon: Calculator, href: "/admin/depreciation" },
-      { titleKey: "adminFinancialStatements", icon: TrendingUp, href: "/admin/financial-statements" },
-      { titleKey: "adminChartOfAccounts", icon: GitBranch, href: "/admin/chart-of-accounts" },
-      { titleKey: "adminTaxFiling", icon: Landmark, href: "/admin/tax-filing" },
-    ],
-  },
-  {
-    titleKey: "adminSectionInterior",
-    items: [
-      { titleKey: "adminInteriorProjects", icon: LayoutGrid, href: "/admin/interior" },
-      { titleKey: "interiorSchedule", icon: Calendar, href: "/admin/interior/schedule" },
-      { titleKey: "interiorVendorsHub", icon: HandCoins, href: "/admin/interior/vendors" },
-      { titleKey: "interiorHubSpecs", icon: PackageSearch, href: "/admin/interior/specs" },
-      { titleKey: "interiorHubDrawings", icon: LayoutPanelTop, href: "/admin/interior/drawings" },
-      { titleKey: "interiorKitchen", icon: UtensilsCrossed, href: "/admin/interior/kitchen" },
-      { titleKey: "interiorHubCosts", icon: Wallet, href: "/admin/interior/costs" },
-    ],
-  },
-]
-
-export type ErpNavHelpItem = { href: string; titleKey: string; sectionTitleKey?: string }
-
-/** 사이드바 메뉴 기준 — 도움말 센터·PageHelp가 동일 href/titleKey를 쓰도록 한다. */
-export function getErpNavItemsForHelp(): ErpNavHelpItem[] {
-  const items: ErpNavHelpItem[] = mainItems.map((m) => ({ href: m.href, titleKey: m.titleKey }))
-  for (const s of menuSections) {
-    for (const it of s.items) {
-      items.push({ href: it.href, titleKey: it.titleKey, sectionTitleKey: s.titleKey })
-    }
-  }
-  items.push({
-    href: "/admin/settings",
-    titleKey: "adminSettings",
-    sectionTitleKey: "adminHelpGroupSettings",
-  })
-  return items
-}
-
-/** `getErpNavItemsForHelp()` 개수 = 사이드바(상단+섹션+설정)과 1:1. 도움말 `helpSum_*`·도움말 센터 항목 수와 맞출 것. */
-export const ERP_NAV_HELP_ITEM_COUNT = getErpNavItemsForHelp().length
+export { getErpNavItemsForHelp, ERP_NAV_HELP_ITEM_COUNT, type ErpNavHelpItem }
 
 const SIDEBAR_SECTIONS_STORAGE_KEY = "erp_sidebar_expanded_sections_v1"
 
@@ -303,34 +96,29 @@ function storeNavBadge(
 }
 
 function buildCollapsedSections(): Record<string, boolean> {
-  return Object.fromEntries(menuSections.map((s) => [s.titleKey, false])) as Record<string, boolean>
+  return Object.fromEntries(ERP_NAV_MENU_SECTIONS.map((s) => [s.titleKey, false])) as Record<string, boolean>
 }
 
-/** 매니저에게 숨길 메뉴 href */
-const MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
-
-/** POS 메뉴별 href → 권한 체크 함수 */
-const POS_MENU_ACCESS: Record<string, (role: string, store?: string) => boolean> = {
-  "/pos": canAccessPosOrder,
-  "/admin/pos-orders": canAccessPosOrders,
-  "/admin/pos-settlement": canAccessPosSettlement,
-  "/admin/pos-cash": canAccessPosSettlement,
-  "/admin/pos-tables": canAccessPosTables,
-  "/admin/pos-menus": canAccessPosMenus,
-  "/admin/pos-screen-config": (role) => canAccessPosTerminalSettings(role),
-  "/admin/pos-cost-analysis": canAccessPosCostAnalysis,
-  "/admin/pos-printers": (role, store) => canAccessPosPrinters(role, store),
-  "/admin/pos-coupons": canAccessPosCoupons,
-  "/admin/pos-tax-invoice-recipients": canAccessPosOrders,
+function isErpNavHrefActive(pathname: string, searchParams: URLSearchParams, href: string): boolean {
+  const [path, query] = href.split("?")
+  if (query) {
+    if (pathname !== path) return false
+    const params = new URLSearchParams(query)
+    for (const [key, value] of params.entries()) {
+      if (searchParams.get(key) !== value) return false
+    }
+    return true
+  }
+  return pathname === href
 }
 
 export function ErpSidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { auth, logout } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const isManager = isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
   const brand = useAppBrandConfig()
@@ -339,21 +127,16 @@ export function ErpSidebar() {
   const [storeOpsTotals, setStoreOpsTotals] = React.useState<StoreOpsAlertSummary | null>(null)
   const { stats: dashboardStats } = useAdminDashboardStats()
   const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
-  const aiModuleEnabled = useAiCenterModuleEnabled()
-  const saasModules = useSaasEnabledModules()
+  const { mainItems, sections, isNavItemVisible } = useErpNavAccess()
+  const { favoriteHrefs } = useErpNavFavorites()
+  const navItemByHref = React.useMemo(() => buildErpNavItemByHrefMap(), [])
 
-  const isNavItemVisible = React.useCallback(
-    (href: string) => {
-      if (!isSaasModuleEnabled(saasModules, resolveAdminPathSaasModule(href))) return false
-      if (href === "/admin/ai-center") {
-        return canAccessAiCenter(auth?.role || "") && aiModuleEnabled !== false
-      }
-      if (href === "/admin/pos-cost-analysis") {
-        return canAccessPosCostAnalysis(auth?.role || "")
-      }
-      return true
-    },
-    [saasModules, auth?.role, aiModuleEnabled]
+  const favoriteItems = React.useMemo(
+    () =>
+      favoriteHrefs
+        .map((href) => navItemByHref.get(href))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item && isNavItemVisible(item.href))),
+    [favoriteHrefs, isNavItemVisible, navItemByHref]
   )
 
   React.useEffect(() => {
@@ -392,7 +175,7 @@ export function ErpSidebar() {
       if (!parsed || typeof parsed !== "object") return
       setExpandedSections((prev) => {
         const next = { ...prev }
-        for (const s of menuSections) {
+        for (const s of ERP_NAV_MENU_SECTIONS) {
           const stored = parsed as Record<string, unknown>
           const v = stored[s.titleKey]
           const legacyExpanded =
@@ -407,7 +190,6 @@ export function ErpSidebar() {
     }
   }, [])
 
-  /** 고객 CRM 화면에 있을 때 해당 섹션을 펼침 */
   React.useEffect(() => {
     if (!pathname.startsWith("/admin/members") && !pathname.startsWith("/admin/crm")) return
     setExpandedSections((prev) => {
@@ -422,7 +204,6 @@ export function ErpSidebar() {
     })
   }, [pathname])
 
-  /** 마케팅 화면에 있을 때 해당 섹션을 펼침 */
   React.useEffect(() => {
     if (!pathname.startsWith("/admin/marketing")) return
     setExpandedSections((prev) => {
@@ -437,7 +218,6 @@ export function ErpSidebar() {
     })
   }, [pathname])
 
-  /** 매장 관리 화면에 있을 때 해당 섹션을 펼침 */
   React.useEffect(() => {
     if (
       !pathname.startsWith("/admin/store-ops") &&
@@ -460,7 +240,6 @@ export function ErpSidebar() {
     })
   }, [pathname])
 
-  /** 물류 담당 로그인 시 물류 섹션 자동 펼침 */
   React.useEffect(() => {
     if (!isLogisticsStaff) return
     setExpandedSections((prev) => {
@@ -475,7 +254,6 @@ export function ErpSidebar() {
     })
   }, [isLogisticsStaff])
 
-  /** 인테리어 화면에 있을 때 사이드바 인테리어 섹션을 펼쳐 하위 항목이 보이게 함 */
   React.useEffect(() => {
     if (!pathname.startsWith("/admin/interior")) return
     setExpandedSections((prev) => {
@@ -507,9 +285,29 @@ export function ErpSidebar() {
     router.replace("/admin/login")
   }
 
+  const renderBadge = (
+    badgeVal: number | string | undefined,
+    badgeVariantEff: "default" | "destructive" | "warning" | undefined
+  ) => {
+    if (badgeVal === undefined || Number(badgeVal) <= 0) return null
+    return (
+      <span
+        className={cn(
+          "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold group-data-[collapsible=icon]:hidden",
+          badgeVariantEff === "destructive"
+            ? "bg-destructive text-destructive-foreground"
+            : badgeVariantEff === "warning"
+              ? "bg-warning text-warning-foreground"
+              : "bg-primary text-primary-foreground"
+        )}
+      >
+        {badgeVal}
+      </span>
+    )
+  }
+
   return (
     <Sidebar collapsible="icon" className="border-r-0 print:hidden sidebar-dark">
-      {/* Logo */}
       <SidebarHeader className="px-3 py-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
           <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-transparent">
@@ -545,47 +343,42 @@ export function ErpSidebar() {
         </div>
       </SidebarHeader>
 
-      {/* Navigation */}
       <SidebarContent className="flex-1 overflow-y-auto px-2 pb-4">
         <ScrollArea className="h-full">
           <nav className="space-y-1">
-            {/* Top-level (no section title) - POS 직원은 숨김 */}
-            {!isPosStaff && (
-            <div className="mb-1">
-              <div className="space-y-0.5">
-                {mainItems
-                  .filter((item) => isNavItemVisible(item.href))
-                  .map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded px-3 py-2 text-[13px] transition-colors",
-                      pathname === item.href
-                        ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate group-data-[collapsible=icon]:hidden">{t(item.titleKey)}</span>
-                  </Link>
+            {favoriteItems.length > 0 ? (
+              <div className="mb-2 space-y-0.5">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" aria-hidden />
+                  {t("erpNavFavorites")}
+                </div>
+                {favoriteItems.map((item) => (
+                  <ErpSidebarNavRow
+                    key={`fav-${item.href}`}
+                    item={item}
+                    pathname={pathname}
+                    active={isErpNavHrefActive(pathname, searchParams, item.href)}
+                    showFavoriteToggle
+                  />
                 ))}
               </div>
-            </div>
-            )}
+            ) : null}
 
-            {/* Grouped sections */}
-            {menuSections.map((section) => {
+            {!isPosStaff && mainItems.length > 0 ? (
+              <div className="mb-1 space-y-0.5">
+                {mainItems.map((item) => (
+                  <ErpSidebarNavRow
+                    key={item.href}
+                    item={item}
+                    pathname={pathname}
+                    active={isErpNavHrefActive(pathname, searchParams, item.href)}
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            {sections.map(({ section, items: visibleItems }) => {
               const isExpanded = expandedSections[section.titleKey] ?? false
-              const visibleItems = section.items
-                .filter((item) => !(isManager && MANAGER_HIDDEN_HREFS.has(item.href)))
-                .filter((item) => {
-                  if (!isPosStaff) return isNavItemVisible(item.href)
-                  if (section.titleKey !== "adminSectionPos") return false
-                  const check = POS_MENU_ACCESS[item.href]
-                  return check ? check(auth?.role || "", auth?.store || "") && isNavItemVisible(item.href) : false
-                })
-              if (visibleItems.length === 0) return null
               return (
                 <div key={section.titleKey} className="mb-1">
                   <button
@@ -594,13 +387,9 @@ export function ErpSidebar() {
                     className="flex w-full items-center justify-between rounded-r border-l-2 border-sidebar-foreground/50 bg-sidebar-accent/30 px-3 py-2 text-[13px] font-medium text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-white transition-colors group-data-[collapsible=icon]:hidden"
                   >
                     {t(section.titleKey)}
-                    {isExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
+                    {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   </button>
-                  {isExpanded && (
+                  {isExpanded ? (
                     <div className="space-y-0.5">
                       {visibleItems.map((item) => {
                         const interiorExtra =
@@ -608,8 +397,7 @@ export function ErpSidebar() {
                             ? interiorNavBadge(item.href, interiorDashTotals)
                             : null
                         const logisticsExtra =
-                          section.titleKey === "adminSectionLogistics" ||
-                          section.titleKey === "adminSectionHr"
+                          section.titleKey === "adminSectionLogistics" || section.titleKey === "adminSectionHr"
                             ? logisticsNavBadge(item.href, dashboardStats)
                             : null
                         const storeExtra =
@@ -617,65 +405,36 @@ export function ErpSidebar() {
                             ? storeNavBadge(item.href, storeOpsTotals)
                             : null
                         const badgeVal = logisticsExtra?.n ?? interiorExtra?.n ?? storeExtra?.n ?? item.badge
-                        const badgeVariantEff = logisticsExtra?.variant ?? interiorExtra?.variant ?? storeExtra?.variant ?? item.badgeVariant
+                        const badgeVariantEff =
+                          logisticsExtra?.variant ?? interiorExtra?.variant ?? storeExtra?.variant ?? item.badgeVariant
                         return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={cn(
-                            "flex w-full items-center gap-2.5 rounded px-3 py-2 text-[13px] transition-colors",
-                            pathname === item.href
-                              ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-                          )}
-                        >
-                          <item.icon className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate flex-1 group-data-[collapsible=icon]:hidden">
-                            {t(item.titleKey)}
-                          </span>
-                          {badgeVal !== undefined && Number(badgeVal) > 0 && (
-                            <span
-                              className={cn(
-                                "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold group-data-[collapsible=icon]:hidden",
-                                badgeVariantEff === "destructive"
-                                  ? "bg-destructive text-destructive-foreground"
-                                  : badgeVariantEff === "warning"
-                                  ? "bg-warning text-warning-foreground"
-                                  : "bg-primary text-primary-foreground"
-                              )}
-                            >
-                              {badgeVal}
-                            </span>
-                          )}
-                        </Link>
-                      )})}
+                          <ErpSidebarNavRow
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            active={isErpNavHrefActive(pathname, searchParams, item.href)}
+                            badge={renderBadge(badgeVal, badgeVariantEff)}
+                          />
+                        )
+                      })}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )
             })}
-
           </nav>
         </ScrollArea>
       </SidebarContent>
 
-      {/* Footer */}
       <SidebarFooter className="px-3 py-3 border-t border-sidebar-border">
         <div className="space-y-0.5">
-          {showSettings && (
-            <Link
-              href="/admin/settings"
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded px-3 py-2 text-[13px] transition-colors",
-                pathname === "/admin/settings"
-                  ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-              )}
-            >
-              <Settings className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate group-data-[collapsible=icon]:hidden">{t("adminSettings")}</span>
-            </Link>
-          )}
+          {showSettings && navItemByHref.get("/admin/settings") ? (
+            <ErpSidebarNavRow
+              item={navItemByHref.get("/admin/settings")!}
+              pathname={pathname}
+              active={pathname === "/admin/settings"}
+            />
+          ) : null}
           <button
             type="button"
             onClick={handleLogout}
