@@ -3,6 +3,8 @@ import {
   buildMemberPortalTakeoutBarSubLabel,
   buildMemberPortalTakeoutDisplayLabel,
   buildMemberPortalTakeoutTableNameForStorage,
+  isMemberPortalTakeoutKitchenOpen,
+  isMemberPortalTakeoutOrder,
   resolveMemberPortalTakeoutMeta,
   resolveMemberPortalTakeoutTableDisplay,
 } from '@/lib/pos-member-portal-takeout-label'
@@ -51,5 +53,18 @@ describe('pos-member-portal-takeout-label', () => {
     expect(sub).toMatch(/주문/)
     expect(sub).toMatch(/픽업/)
     expect(sub).toMatch(/15:30/)
+  })
+
+  it('treats member portal paid takeout as kitchen-open', () => {
+    const base = {
+      type: 'takeout' as const,
+      memo: '[회원주문] · 회원:홍길동 · 번호:CM1',
+      memberId: 1,
+      memberNo: 'CM1',
+    }
+    expect(isMemberPortalTakeoutOrder(base)).toBe(true)
+    expect(isMemberPortalTakeoutKitchenOpen({ ...base, status: 'paid' })).toBe(true)
+    expect(isMemberPortalTakeoutKitchenOpen({ ...base, status: 'ready' })).toBe(false)
+    expect(isMemberPortalTakeoutKitchenOpen({ type: 'takeout', status: 'paid' })).toBe(false)
   })
 })

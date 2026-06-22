@@ -343,8 +343,8 @@ export function ErpSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="flex-1 overflow-y-auto px-2 pb-4">
-        <ScrollArea className="h-full">
+      <SidebarContent className="flex-1 overflow-hidden px-2 pb-4">
+        <ScrollArea className="h-full [&_[data-slot=scroll-area-viewport]]:pr-3">
           <nav className="space-y-1">
             {favoriteItems.length > 0 ? (
               <div className="mb-2 space-y-0.5">

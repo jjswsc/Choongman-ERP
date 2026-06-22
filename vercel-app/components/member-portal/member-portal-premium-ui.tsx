@@ -337,15 +337,13 @@ export function PremiumAppHeader({
           <p className="truncate text-[9px] font-bold uppercase tracking-[0.24em] text-amber-700/75">
             {wordmark}
           </p>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-            <p className="truncate text-sm font-bold leading-tight text-stone-900">{displayName}</p>
-            {tierLabel ? (
-              <span className="inline-flex max-w-[44%] shrink-0 items-center gap-0.5 rounded-full bg-[#fff0e5] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-[#66331a]">
-                <TierFacetedGemIcon family={tierFamily} size={MP_HOME_TIER_PILL_GEM_SIZE} />
-                <span className="truncate">{tierLabel}</span>
-              </span>
-            ) : null}
-          </div>
+          <p className="mt-0.5 truncate text-sm font-bold leading-tight text-stone-900">{displayName}</p>
+          {tierLabel ? (
+            <span className="mt-0.5 inline-flex w-max max-w-full items-center gap-0.5 rounded-full bg-[#fff0e5] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-[#66331a]">
+              <TierFacetedGemIcon family={tierFamily} size={MP_HOME_TIER_PILL_GEM_SIZE} />
+              <span className="whitespace-nowrap">{tierLabel}</span>
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1 pt-0.5">

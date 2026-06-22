@@ -17,6 +17,10 @@ import {
 } from "@/lib/member-point-earn-policy"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
+import {
+  formatTierRatePercentInput,
+  parseTierRatePercentInput,
+} from "@/lib/member-tier-rate-percent"
 
 type TierRow = {
   code: string
@@ -474,14 +478,24 @@ export function MemberPointsPolicyTab() {
               onChange={(e) => setForm((prev) => ({ ...prev, min_amount: Number(e.target.value || 0) }))}
             />
             <Input
+              type="number"
+              min={0}
+              step={0.1}
               placeholder={t("memberTierPointRatePh")}
-              value={String(form.point_rate)}
-              onChange={(e) => setForm((prev) => ({ ...prev, point_rate: Number(e.target.value || 0) }))}
+              value={formatTierRatePercentInput(form.point_rate)}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, point_rate: parseTierRatePercentInput(e.target.value) }))
+              }
             />
             <Input
+              type="number"
+              min={0}
+              step={0.1}
               placeholder={t("memberTierDiscountRatePh")}
-              value={String(form.discount_rate)}
-              onChange={(e) => setForm((prev) => ({ ...prev, discount_rate: Number(e.target.value || 0) }))}
+              value={formatTierRatePercentInput(form.discount_rate)}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, discount_rate: parseTierRatePercentInput(e.target.value) }))
+              }
             />
             <Input
               placeholder={t("memberTierSortOrder")}
@@ -547,20 +561,24 @@ export function MemberPointsPolicyTab() {
                       <Input
                         type="number"
                         min={0}
-                        step={0.001}
+                        step={0.1}
                         className="h-8 w-24"
-                        value={String(r.point_rate ?? 0)}
-                        onChange={(e) => patchRow(r.code, { point_rate: Number(e.target.value || 0) })}
+                        value={formatTierRatePercentInput(r.point_rate ?? 0)}
+                        onChange={(e) =>
+                          patchRow(r.code, { point_rate: parseTierRatePercentInput(e.target.value) })
+                        }
                       />
                     </td>
                     <td className="p-2">
                       <Input
                         type="number"
                         min={0}
-                        step={0.001}
+                        step={0.1}
                         className="h-8 w-24"
-                        value={String(r.discount_rate ?? 0)}
-                        onChange={(e) => patchRow(r.code, { discount_rate: Number(e.target.value || 0) })}
+                        value={formatTierRatePercentInput(r.discount_rate ?? 0)}
+                        onChange={(e) =>
+                          patchRow(r.code, { discount_rate: parseTierRatePercentInput(e.target.value) })
+                        }
                       />
                     </td>
                     <td className="max-w-[240px] truncate p-2 text-muted-foreground">

@@ -121,6 +121,41 @@ export function buildMemberPortalTakeoutBarSubLabel(params: {
   return parts.join(' · ')
 }
 
+/** 회원앱 픽업 주문 여부 (pos_orders.type=takeout + 회원 메타) */
+export function isMemberPortalTakeoutOrder(order: {
+  type?: string | null
+  memo?: string | null
+  memberId?: number | null
+  memberNo?: string | null
+  tableName?: string | null
+}): boolean {
+  const type = String(order.type ?? '').trim().toLowerCase()
+  if (type !== 'takeout') return false
+  return resolveMemberPortalTakeoutMeta({
+    memo: order.memo,
+    memberId: order.memberId,
+    memberNo: order.memberNo,
+    tableName: order.tableName,
+  }).isMemberPortal
+}
+
+/**
+ * 회원앱 선결제·포인트 전액 결제 직후 `paid` — 매장 포장은 아직 필요.
+ * POS 「준비중」 목록에 남겨 두기 위한 판별.
+ */
+export function isMemberPortalTakeoutKitchenOpen(order: {
+  type?: string | null
+  status?: string | null
+  memo?: string | null
+  memberId?: number | null
+  memberNo?: string | null
+  tableName?: string | null
+}): boolean {
+  if (!isMemberPortalTakeoutOrder(order)) return false
+  const st = String(order.status ?? '').trim().toLowerCase()
+  return st === 'paid'
+}
+
 /** table_name 이 비어 있는 기존 회원앱 주문도 POS에서 동일하게 보이도록 보강 */
 export function resolveMemberPortalTakeoutTableDisplay(params: {
   tableName?: string | null

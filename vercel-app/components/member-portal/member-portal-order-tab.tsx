@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  ChevronRight,
   ExternalLink,
   Minus,
   Plus,
@@ -53,6 +54,7 @@ import {
 import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { MemberPortalCheckoutSheet } from "@/components/member-portal/member-portal-checkout-sheet"
 import { MemberPortalQrPayDialog } from "@/components/member-portal/member-portal-qr-pay-dialog"
+import { MemberPortalOrderDetailSheet } from "@/components/member-portal/member-portal-order-detail-sheet"
 import { readMemberPortalCheckoutDraft } from "@/lib/member-portal-checkout-draft-storage"
 import { MemberPortalDeliveryAppLogo } from "@/components/member-portal/member-portal-delivery-app-logo"
 import {
@@ -451,6 +453,7 @@ export function MemberPortalOrderTab({
   const [myOrdersLoading, setMyOrdersLoading] = React.useState(false)
   const [myOrdersOpen, setMyOrdersOpen] = React.useState(false)
   const [resumePayOrder, setResumePayOrder] = React.useState<MemberOrderRow | null>(null)
+  const [detailOrder, setDetailOrder] = React.useState<MemberOrderRow | null>(null)
   const myOrdersAwaitingCountRef = React.useRef<number | null>(null)
 
   const dateLocale = lang === "ko" ? "ko-KR" : lang === "en" ? "en-US" : "th-TH"
@@ -1002,17 +1005,24 @@ export function MemberPortalOrderTab({
           <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("orderDesc")}</p>
         </div>
         {!!orderMessage && (
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             {orderMessage}
           </div>
         )}
         {readyPickupOrder ? (
-          <div className="rounded-2xl border border-sky-400/30 bg-sky-500/15 px-4 py-3 text-sm text-sky-100">
+          <button
+            type="button"
+            className="w-full rounded-2xl border border-sky-300/70 bg-sky-50 px-4 py-3 text-left text-sm font-medium text-sky-900 transition hover:bg-sky-100/80"
+            onClick={() => {
+              setMyOrdersOpen(true)
+              setDetailOrder(readyPickupOrder)
+            }}
+          >
             {t("orderPickupReadyBanner", {
               orderNo: readyPickupOrder.orderNo,
               store: readyPickupStoreLabel,
             })}
-          </div>
+          </button>
         ) : null}
         <div className="grid gap-3">
           <button
@@ -1105,7 +1115,11 @@ export function MemberPortalOrderTab({
                       stores.find((s) => s.storeCode === row.storeCode)?.displayName || row.storeCode
                     return (
                       <li key={row.orderId} className={mpCardListItemClass}>
-                        <div className="flex items-start justify-between gap-2">
+                        <button
+                          type="button"
+                          className="flex w-full items-start justify-between gap-2 text-left"
+                          onClick={() => setDetailOrder(row)}
+                        >
                           <div className="min-w-0">
                             <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{storeLabel}</p>
                             <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
@@ -1116,11 +1130,14 @@ export function MemberPortalOrderTab({
                               {formatDateTime(row.createdAt, dateLocale)}
                             </p>
                           </div>
-                          <div className="shrink-0 text-right">
-                            <p className="font-semibold tabular-nums text-amber-700">{formatBaht(row.total)}</p>
-                            <p className={`text-[11px] ${MP_CARD_TEXT_MUTED}`}>{t(statusKey)}</p>
+                          <div className="flex shrink-0 items-start gap-1 text-right">
+                            <div>
+                              <p className="font-semibold tabular-nums text-amber-700">{formatBaht(row.total)}</p>
+                              <p className={`text-[11px] ${MP_CARD_TEXT_MUTED}`}>{t(statusKey)}</p>
+                            </div>
+                            <ChevronRight className={`mt-0.5 h-4 w-4 shrink-0 ${MP_CARD_TEXT_SUBTLE}`} aria-hidden />
                           </div>
-                        </div>
+                        </button>
                         {row.awaitingPayment ? (
                           <button
                             type="button"
@@ -1172,6 +1189,20 @@ export function MemberPortalOrderTab({
             setResumePayOrder(null)
             void loadMyOrders()
           }}
+          t={t}
+        />
+        <MemberPortalOrderDetailSheet
+          open={Boolean(detailOrder)}
+          orderId={detailOrder?.orderId ?? 0}
+          storeLabel={
+            detailOrder
+              ? stores.find((s) => s.storeCode === detailOrder.storeCode)?.displayName ||
+                detailOrder.storeCode
+              : ""
+          }
+          dateLocale={dateLocale}
+          closeLabel={t("contactMenuClose")}
+          onClose={() => setDetailOrder(null)}
           t={t}
         />
       </div>

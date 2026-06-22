@@ -57,7 +57,7 @@ function CouponCopyButton({
 
 function CouponImageFallback({ headline, badge }: { headline: string; badge: string }) {
   return (
-    <div className="relative flex h-full min-h-[7.5rem] w-full flex-col items-center justify-center bg-gradient-to-br from-[#1f1608] via-[#3d2a14] to-[#7a5c18] px-2 py-3 text-center">
+    <div className="relative flex h-full min-h-[6.5rem] w-full flex-col items-center justify-center bg-gradient-to-br from-[#1f1608] via-[#3d2a14] to-[#7a5c18] px-2 py-2.5 text-center">
       <Ticket className="mb-1 h-4 w-4 text-amber-300/55" aria-hidden />
       <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-amber-200/75">{badge}</p>
       <p className="mt-1 bg-gradient-to-br from-[#fff7e6] via-amber-100 to-amber-300 bg-clip-text text-xl font-extrabold leading-none text-transparent">
@@ -101,7 +101,7 @@ export function MemberPortalCouponCard({ coupon, memberNo, lang, dateLocale, t }
               alt=""
               width={340}
               height={340}
-              className="h-full min-h-[7.5rem] w-full object-cover"
+              className="h-full min-h-[6.5rem] w-full object-cover"
               unoptimized
             />
           ) : (
@@ -109,17 +109,17 @@ export function MemberPortalCouponCard({ coupon, memberNo, lang, dateLocale, t }
           )}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col px-3.5 py-3 sm:px-4">
-          <div className="min-w-0">
-            <p className="line-clamp-2 text-sm font-bold leading-snug text-stone-900">{displayName}</p>
-            <p className="mt-1 text-xs font-semibold text-amber-800">{benefit.headline}</p>
+        <div className="flex min-w-0 flex-1 flex-col px-3.5 py-2.5 sm:px-4">
+          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+            <span className="shrink-0 text-sm font-bold leading-snug text-stone-900">{displayName}</span>
+            <span className="shrink-0 text-xs font-semibold text-amber-800">{benefit.headline}</span>
             {benefit.subline ? (
-              <p className="mt-0.5 text-[11px] text-stone-500">{benefit.subline}</p>
+              <span className="min-w-0 truncate text-[11px] text-stone-500">{benefit.subline}</span>
             ) : null}
           </div>
 
           {isActive ? (
-            <div className="mt-2.5 flex items-center gap-1.5">
+            <div className="mt-2 flex items-center gap-1.5">
               <MemberPortalCouponQrButton
                 memberNo={memberNo}
                 couponCode={coupon.couponCode}
@@ -135,7 +135,7 @@ export function MemberPortalCouponCard({ coupon, memberNo, lang, dateLocale, t }
             </div>
           ) : null}
 
-          <div className="mt-auto space-y-1 pt-2 text-[11px] text-stone-600">
+          <div className="mt-auto space-y-1 pt-1.5 text-[11px] text-stone-600">
             {expiresRaw ? (
               <p className="flex items-center gap-1.5">
                 <CalendarDays className="h-3.5 w-3.5 shrink-0 text-amber-700/70" aria-hidden />

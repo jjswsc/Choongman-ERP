@@ -164,6 +164,10 @@ export type MemberPortalKey =
   | 'orderMyOrdersResumePay'
   | 'orderMyOrdersReorder'
   | 'orderMyOrdersReorderDone'
+  | 'orderDetailTitle'
+  | 'orderDetailItems'
+  | 'orderDetailNoItems'
+  | 'orderDetailLoadFail'
   | 'orderPickupReadyBanner'
   | 'orderCheckoutCouponMinOrder'
   | 'orderStatusAwaitingPayment'
@@ -847,6 +851,26 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Items added to cart.',
     th: 'เพิ่มในตะกร้าแล้ว',
     ko: '장바구니에 담았습니다.',
+  },
+  orderDetailTitle: {
+    en: 'Order details',
+    th: 'รายละเอียดคำสั่งซื้อ',
+    ko: '주문 상세',
+  },
+  orderDetailItems: {
+    en: 'Items ordered',
+    th: 'รายการที่สั่ง',
+    ko: '주문 메뉴',
+  },
+  orderDetailNoItems: {
+    en: 'No items found for this order.',
+    th: 'ไม่พบรายการในคำสั่งซื้อนี้',
+    ko: '주문 항목이 없습니다.',
+  },
+  orderDetailLoadFail: {
+    en: 'Could not load this order.',
+    th: 'โหลดคำสั่งซื้อไม่ได้',
+    ko: '주문을 불러올 수 없습니다.',
   },
   orderPickupReadyBanner: {
     en: '{{orderNo}} is ready for pickup at {{store}}.',

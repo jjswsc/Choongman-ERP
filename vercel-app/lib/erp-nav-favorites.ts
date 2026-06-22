@@ -7,7 +7,7 @@ import {
 } from "@/lib/permissions"
 
 export const ERP_NAV_FAVORITES_STORAGE_PREFIX = "erp_nav_favorites_v1"
-export const ERP_NAV_FAVORITES_MAX = 8
+export const ERP_NAV_FAVORITES_MAX = 12
 export const ERP_NAV_DASHBOARD_QUICK_MAX = 6
 export const ERP_NAV_FAVORITES_CHANGED_EVENT = "erp-nav-favorites-changed"
 

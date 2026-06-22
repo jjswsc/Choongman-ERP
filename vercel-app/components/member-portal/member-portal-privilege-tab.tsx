@@ -12,6 +12,7 @@ import {
 import { MemberPortalCouponCard } from "@/components/member-portal/member-portal-coupon-card"
 import { MemberPortalCouponOfferCard } from "@/components/member-portal/member-portal-coupon-offer-card"
 import { MemberPortalStampCard } from "@/components/member-portal/member-portal-stamp-card"
+import { MemberPortalOrderDetailSheet } from "@/components/member-portal/member-portal-order-detail-sheet"
 import { MemberPortalTierEntryButton } from "@/components/member-portal/member-portal-tier-guide"
 import type { MemberStampCardStatus } from "@/lib/member-stamp-card"
 import type { PortalCouponOfferRow } from "@/lib/member-portal-coupon-claim"
@@ -137,6 +138,7 @@ export function MemberPortalPrivilegeTab({
   const [section, setSection] = React.useState<PrivilegeSection>("coupons")
   const [walletTab, setWalletTab] = React.useState<CouponWalletTab>("offers")
   const [couponFilter, setCouponFilter] = React.useState<CouponFilter>("active")
+  const [detailVisit, setDetailVisit] = React.useState<PortalVisitRow | null>(null)
 
   const activeCoupons = React.useMemo(
     () => coupons.filter((c) => c.status === "issued"),
@@ -374,20 +376,27 @@ export function MemberPortalPrivilegeTab({
                 </GlassCard>
               ) : (
                 visits.map((v) => (
-                  <GlassCard key={v.orderId} soft className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <p className={`min-w-0 flex-1 truncate text-sm ${MP_CARD_TEXT_PRIMARY}`}>
-                        <span className="font-medium">{storeName(v.storeCode)}</span>
-                        <span className={`mx-1.5 ${MP_CARD_TEXT_MUTED}`}>·</span>
-                        <span className={`text-xs font-normal ${MP_CARD_TEXT_MUTED}`}>
-                          {formatVisitDateTimeCompact(v.visitedAt, dateLocale)}
-                        </span>
-                      </p>
-                      <p className={`shrink-0 text-sm font-semibold tabular-nums ${MP_CARD_TEXT_PRIMARY}`}>
-                        {formatBaht(v.total)}
-                      </p>
-                    </div>
-                  </GlassCard>
+                  <button
+                    key={v.orderId}
+                    type="button"
+                    onClick={() => setDetailVisit(v)}
+                    className={`${MP_CARD_TEXT_PRIMARY} w-full text-left transition hover:opacity-90 active:scale-[0.99]`}
+                  >
+                    <GlassCard soft className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <p className={`min-w-0 flex-1 truncate text-sm ${MP_CARD_TEXT_PRIMARY}`}>
+                          <span className="font-medium">{storeName(v.storeCode)}</span>
+                          <span className={`mx-1.5 ${MP_CARD_TEXT_MUTED}`}>·</span>
+                          <span className={`text-xs font-normal ${MP_CARD_TEXT_MUTED}`}>
+                            {formatVisitDateTimeCompact(v.visitedAt, dateLocale)}
+                          </span>
+                        </p>
+                        <p className={`shrink-0 text-sm font-semibold tabular-nums ${MP_CARD_TEXT_PRIMARY}`}>
+                          {formatBaht(v.total)}
+                        </p>
+                      </div>
+                    </GlassCard>
+                  </button>
                 ))
               )}
             </div>
@@ -427,6 +436,20 @@ export function MemberPortalPrivilegeTab({
           </div>
         </div>
       ) : null}
+
+      <MemberPortalOrderDetailSheet
+        open={Boolean(detailVisit)}
+        orderId={detailVisit?.orderId ?? 0}
+        storeLabel={
+          detailVisit
+            ? storeName(detailVisit.storeCode)
+            : ""
+        }
+        dateLocale={dateLocale}
+        closeLabel={t("contactMenuClose")}
+        onClose={() => setDetailVisit(null)}
+        t={t}
+      />
     </div>
   )
 }

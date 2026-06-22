@@ -34,6 +34,12 @@ describe("erp nav favorites", () => {
     expect(moveErpNavFavoriteHref(["/a", "/b", "/c"], "/b", "down")).toEqual(["/a", "/c", "/b"])
   })
 
+  it("caps sanitized favorites at twelve", () => {
+    const allowed = new Set(Array.from({ length: 20 }, (_, i) => `/m${i}`))
+    const hrefs = Array.from({ length: 15 }, (_, i) => `/m${i}`)
+    expect(sanitizeErpNavFavoriteHrefs(hrefs, allowed)).toHaveLength(12)
+  })
+
   it("limits dashboard quick links to six", () => {
     const hrefs = ["/1", "/2", "/3", "/4", "/5", "/6", "/7"]
     expect(getErpNavDashboardQuickHrefs(hrefs)).toEqual(hrefs.slice(0, 6))

@@ -25,7 +25,10 @@ import {
   type PosTableFloor,
 } from '@/lib/pos-table-floor-match'
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
-import { resolveMemberPortalTakeoutTableDisplay } from '@/lib/pos-member-portal-takeout-label'
+import {
+  isMemberPortalTakeoutKitchenOpen,
+  resolveMemberPortalTakeoutTableDisplay,
+} from '@/lib/pos-member-portal-takeout-label'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import {
   combineOrdersForTerminalMerge,
@@ -1036,13 +1039,18 @@ export function usePosStoreInternal() {
   const completedDeliveryOrders = currentStoreOrders.filter(
     (o) => o.type === 'delivery' && (o.status === 'completed' || o.status === 'paid')
   )
-  const takeoutOrders = currentStoreOrders.filter((o) => o.type === 'takeout' && isOpenChannelOrder(o))
+  const isOpenTakeoutOrder = (o: Order) =>
+    o.type === 'takeout' && (isOpenChannelOrder(o) || isMemberPortalTakeoutKitchenOpen(o))
+  const takeoutOrders = currentStoreOrders.filter(isOpenTakeoutOrder)
   const packagedTakeoutOrders = currentStoreOrders.filter(
     (o) => o.type === 'takeout' && o.status === 'ready'
   )
-  const completedTakeoutOrders = currentStoreOrders.filter(
-    (o) => o.type === 'takeout' && (o.status === 'completed' || o.status === 'paid')
-  )
+  const completedTakeoutOrders = currentStoreOrders.filter((o) => {
+    if (o.type !== 'takeout') return false
+    if (isMemberPortalTakeoutKitchenOpen(o)) return false
+    const st = String(o.status ?? '').trim().toLowerCase()
+    return st === 'completed' || st === 'paid'
+  })
 
   const updateOrderStatus = useCallback((orderId: string, status: Order['status']) => {
     const businessDate = getPosBusinessDateStr()
@@ -1054,6 +1062,27 @@ export function usePosStoreInternal() {
       })
       ordersByStoreIdRef.current = next
       return next
+    })
+  }, [])
+
+  /** getPosOrders 단건 조회 후 터미널 스냅샷에 병합(품목 누락·목록 미동기화 보강) */
+  const upsertOrderFromServer = useCallback((po: PosOrder & { orderNo?: string }) => {
+    const storeCode = String(po.storeCode ?? '').trim()
+    if (!storeCode) return
+    const order = posOrderToOrder(po)
+    const id = String(order.id ?? '').trim()
+    if (!id) return
+    const businessDate = getPosBusinessDateStr()
+    setOrdersByStoreId((prev) => {
+      const list = Array.isArray(prev[storeCode]) ? [...prev[storeCode]] : []
+      const idx = list.findIndex((row) => String(row.id ?? '').trim() === id)
+      const next = [...list]
+      if (idx >= 0) next[idx] = { ...next[idx], ...order }
+      else next.unshift(order)
+      const merged = { ...prev, [storeCode]: next }
+      persistActiveTerminalOrders(storeCode, businessDate, next)
+      ordersByStoreIdRef.current = merged
+      return merged
     })
   }, [])
 
@@ -1215,6 +1244,7 @@ export function usePosStoreInternal() {
     completedTakeoutOrders,
     updateOrderStatus,
     upsertOptimisticOrder,
+    upsertOrderFromServer,
     loadingTables: loading,
     refetchStores,
   }

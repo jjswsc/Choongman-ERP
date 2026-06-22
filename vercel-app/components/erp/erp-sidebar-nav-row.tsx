@@ -49,11 +49,11 @@ export function ErpSidebarNavRow({
   }
 
   return (
-    <div className={cn("group/nav flex items-center gap-0.5", className)}>
+    <div className={cn("group/nav relative", className)}>
       <Link
         href={item.href}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 rounded px-3 py-2 text-[13px] transition-colors",
+          "flex min-w-0 items-center gap-2.5 rounded px-3 py-2 pr-9 text-[13px] transition-colors",
           isActiveResolved
             ? "bg-primary text-primary-foreground font-medium shadow-sm"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
@@ -68,7 +68,7 @@ export function ErpSidebarNavRow({
           type="button"
           onClick={onToggleFavorite}
           className={cn(
-            "mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded transition-opacity group-data-[collapsible=icon]:hidden",
+            "absolute right-1 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded transition-opacity group-data-[collapsible=icon]:hidden",
             favorite
               ? "text-amber-400 opacity-100"
               : "text-sidebar-foreground/70 opacity-0 hover:text-amber-300 group-hover/nav:opacity-100",

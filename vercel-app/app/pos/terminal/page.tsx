@@ -478,6 +478,7 @@ export default function PosTerminalPage() {
     clearTableOrder,
     removeTerminalOrder,
     upsertOptimisticOrder,
+    upsertOrderFromServer,
     loadingTables,
   } = usePosStore()
   const { formatStoreLabel, resolveStoreKey, legacyToCanonical, storeLabels, posStores } = useStoreList()
@@ -1870,6 +1871,38 @@ export default function PosTerminalPage() {
   const selectedTakeoutOrder = selectedTakeoutOrderId
     ? [...takeoutOrders, ...packagedTakeoutOrders, ...completedTakeoutOrders].find((o) => String(o.id) === selectedTakeoutOrderId)
     : null
+  /** 포장 바 선택 시 poll 스냅샷에 품목이 비어 있으면 단건 조회로 보강 */
+  useEffect(() => {
+    if (activeTab !== 'takeout') return
+    if (!selectedTakeoutOrderId || !currentStoreId || isPosDemo) return
+    if (selectedTakeoutOrder?.items?.length) return
+    const orderId = Number(selectedTakeoutOrderId)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    let cancelled = false
+    void getPosOrders({ orderId, storeCode: currentStoreId })
+      .then((list) => {
+        if (cancelled) return
+        const po = list[0] as PosOrder | undefined
+        if (!po?.id) return
+        upsertOrderFromServer({
+          ...po,
+          storeCode: String(currentStoreId || po.storeCode || '').trim() || po.storeCode,
+        })
+      })
+      .catch((e) => {
+        console.warn('takeout order hydrate:', e)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeTab,
+    selectedTakeoutOrderId,
+    selectedTakeoutOrder?.items?.length,
+    currentStoreId,
+    isPosDemo,
+    upsertOrderFromServer,
+  ])
   const hasPendingPaymentFlow =
     Boolean(pendingPayRequest) ||
     Boolean(pendingTakeoutPayRequest) ||
