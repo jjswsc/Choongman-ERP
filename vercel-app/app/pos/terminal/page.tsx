@@ -48,7 +48,6 @@ import {
   getPosPrinterSettings,
   getPosTodaySales,
   getPosDeliveryApps,
-  getPosBusinessDaySettings,
   getPosTaxInvoiceRecipients,
   getPosPaymentAttempts,
   executeKbankCancelQr,
@@ -137,7 +136,7 @@ import {
   PosTaxInvoiceValidationAlert,
 } from '@/components/pos/pos-tax-invoice-form-ui'
 import { escapeHtml, cn } from '@/lib/utils'
-import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
@@ -500,26 +499,6 @@ export default function PosTerminalPage() {
       onAlert: appAlert,
     })
   }, [isPosDemo, currentStoreId, resolveStoreKey, legacyToCanonical, storeLabels, t])
-
-  useEffect(() => {
-    if (!currentStoreId) return
-    let cancel = false
-    void (async () => {
-      try {
-        const j = await getPosBusinessDaySettings(currentStoreId)
-        if (cancel) return
-        setPosBusinessHoursClient({
-          start: { hour: j.hour, minute: j.minute },
-          end: { hour: j.endHour, minute: j.endMinute },
-        })
-      } catch {
-        /* layout hydrate / 기본값 유지 */
-      }
-    })()
-    return () => {
-      cancel = true
-    }
-  }, [currentStoreId])
 
   useEffect(() => {
     if (loadingTables) return

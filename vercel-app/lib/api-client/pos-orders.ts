@@ -233,7 +233,20 @@ export type PosBusinessDaySettingsDto = PosBusinessDayStartDto & {
   defaultEndMinute?: number
 }
 
-export async function getPosBusinessDaySettings(storeCode?: string | null): Promise<PosBusinessDaySettingsDto> {
+function posBusinessDaySettingsCacheKey(storeCode?: string | null): string {
+  return String(storeCode ?? '').trim().toLowerCase() || '__global__'
+}
+
+const posBusinessDaySettingsInflight = new Map<string, Promise<PosBusinessDaySettingsDto>>()
+
+/** 저장 직후 중복 GET 방지 — in-flight dedupe만 초기화(동작 변경 없음) */
+export function invalidatePosBusinessDaySettingsClientInflight(): void {
+  posBusinessDaySettingsInflight.clear()
+}
+
+async function fetchPosBusinessDaySettingsDto(
+  storeCode?: string | null
+): Promise<PosBusinessDaySettingsDto> {
   const q = storeCode?.trim() ? `?storeCode=${encodeURIComponent(String(storeCode).trim())}` : ''
   const res = await fetch('/api/posBusinessDaySettings' + q, { cache: 'no-store' })
   const j = (await res.json().catch(() => null)) as Partial<PosBusinessDaySettingsDto> | null
@@ -274,6 +287,19 @@ export async function getPosBusinessDaySettings(storeCode?: string | null): Prom
   }
 }
 
+export async function getPosBusinessDaySettings(storeCode?: string | null): Promise<PosBusinessDaySettingsDto> {
+  const key = posBusinessDaySettingsCacheKey(storeCode)
+  const pending = posBusinessDaySettingsInflight.get(key)
+  if (pending) return pending
+  const promise = fetchPosBusinessDaySettingsDto(storeCode).finally(() => {
+    if (posBusinessDaySettingsInflight.get(key) === promise) {
+      posBusinessDaySettingsInflight.delete(key)
+    }
+  })
+  posBusinessDaySettingsInflight.set(key, promise)
+  return promise
+}
+
 export async function savePosBusinessDaySettings(params: {
   hour: number
   minute: number
@@ -302,6 +328,7 @@ export async function savePosBusinessDaySettings(params: {
     body: JSON.stringify(body),
   })
   const j = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string }
+  if (j?.success) invalidatePosBusinessDaySettingsClientInflight()
   return { success: Boolean(j?.success), message: j?.message }
 }
 export async function updatePosOrder(params: {

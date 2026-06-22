@@ -11,6 +11,8 @@ import { localizeApiMessage } from '@/lib/translate-api-message'
 
 const STORAGE_KEY = 'pos_main_device'
 const DEVICE_TOKEN_KEY = 'pos_device_token'
+/** POS 기기 heartbeat — Edge Request 절감. 슬롯 제한(7일)과 무관, last_seen_at 갱신용 */
+const POS_DEVICE_HEARTBEAT_MS = 600_000
 
 export type PosMainDeviceMeta = {
   roleLocked: boolean
@@ -238,7 +240,7 @@ export function usePosMainDevice(
         clientHint: buildPosClientHint(),
       }).catch(() => {})
     ping()
-    const interval = setInterval(ping, 300_000)
+    const interval = setInterval(ping, POS_DEVICE_HEARTBEAT_MS)
     return () => clearInterval(interval)
   }, [storeCode, deviceToken, isMain])
 

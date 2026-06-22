@@ -10,7 +10,6 @@ import {
   getPosPromoItems,
   getPosPromosWithItems,
   getPosOrders,
-  getPosBusinessDaySettings,
   getPosTodaySales,
   getPosTableLayout,
   getPosPrinterSettings,
@@ -29,7 +28,7 @@ import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart, col
 import { summarizeLegacyCouponFields } from "@/lib/pos-coupon-domain"
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
-import { getBangkokDateStr, getPosBusinessDateStr, setPosBusinessHoursClient } from "@/lib/pos-business-day"
+import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -409,26 +408,6 @@ export default function PosOrderPage() {
   React.useEffect(() => {
     loadTodaySales()
   }, [loadTodaySales])
-
-  React.useEffect(() => {
-    if (!storeCode.trim()) return
-    let cancel = false
-    void (async () => {
-      try {
-        const j = await getPosBusinessDaySettings(storeCode.trim())
-        if (cancel) return
-        setPosBusinessHoursClient({
-          start: { hour: j.hour, minute: j.minute },
-          end: { hour: j.endHour, minute: j.endMinute },
-        })
-      } catch {
-        /* 기본값 유지 */
-      }
-    })()
-    return () => {
-      cancel = true
-    }
-  }, [storeCode])
 
   const loadTableLayout = React.useCallback(() => {
     if (!storeCode) return
