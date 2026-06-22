@@ -4,7 +4,17 @@ import {
   getMemberPointRetentionCutoffIso,
   type MemberPointLedgerEntry,
 } from '@/lib/member-point-expiry'
-import { loadMemberPointRetentionYears } from '@/lib/member-point-expiry-policy-server'
+import {
+  loadMemberPointExpiryBatchCursor,
+  loadMemberPointRetentionYears,
+  resetMemberPointExpiryBatchCursor,
+  saveMemberPointExpiryBatchCursor,
+} from '@/lib/member-point-expiry-policy-server'
+import {
+  buildMembersWithPointsBatchFilter,
+  MEMBER_POINT_EXPIRY_BATCH_DEFAULT_MAX,
+  MEMBER_POINT_EXPIRY_BATCH_PAGE_SIZE,
+} from '@/lib/member-point-expiry-batch'
 import { recalculateMemberTier } from '@/lib/members-server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
@@ -71,31 +81,61 @@ export async function expireMemberPointsForMember(
 }
 
 export async function expireMemberPointsBatch(params?: {
+  /** 이번 cron 호출에서 처리할 회원 수 상한 (전체 순회는 커서로 며칠에 나눠 진행) */
   limit?: number
   cutoffIso?: string
-}): Promise<{ processed: number; expiredTotal: number; recalculated: number }> {
-  const limit = Math.max(1, Math.min(Number(params?.limit || 500), 5000))
+}): Promise<{ processed: number; expiredTotal: number; recalculated: number; hasMore: boolean }> {
+  const maxMembers = Math.max(
+    1,
+    Math.min(Number(params?.limit || MEMBER_POINT_EXPIRY_BATCH_DEFAULT_MAX), 50_000)
+  )
   const years = await loadMemberPointRetentionYears()
   const cutoffIso = params?.cutoffIso || getMemberPointRetentionCutoffIso(new Date(), years)
 
-  const rows = (await supabaseSelectFilter(
-    'members',
-    `or=(point_balance.gt.0,tier_points.gt.0)`,
-    { order: 'id.asc', limit, select: 'id' }
-  )) as Array<{ id?: number }>
-
+  let afterId = await loadMemberPointExpiryBatchCursor()
   let processed = 0
   let expiredTotal = 0
   let recalculated = 0
+  let hasMore = false
 
-  for (const row of rows || []) {
-    const id = Number(row.id || 0)
-    if (!id) continue
-    const result = await expireMemberPointsForMember(id, cutoffIso)
-    processed += 1
-    expiredTotal += result.expired
-    if (result.tierRecalculated) recalculated += 1
+  while (processed < maxMembers) {
+    const pageSize = Math.min(MEMBER_POINT_EXPIRY_BATCH_PAGE_SIZE, maxMembers - processed)
+    const rows = (await supabaseSelectFilter('members', buildMembersWithPointsBatchFilter(afterId), {
+      order: 'id.asc',
+      limit: pageSize,
+      select: 'id',
+    })) as Array<{ id?: number }>
+
+    if (!rows?.length) {
+      await resetMemberPointExpiryBatchCursor()
+      hasMore = false
+      break
+    }
+
+    for (const row of rows) {
+      const id = Number(row.id || 0)
+      if (!id) continue
+      afterId = id
+      const result = await expireMemberPointsForMember(id, cutoffIso)
+      processed += 1
+      expiredTotal += result.expired
+      if (result.tierRecalculated) recalculated += 1
+      if (processed >= maxMembers) break
+    }
+
+    await saveMemberPointExpiryBatchCursor(afterId)
+
+    if (processed >= maxMembers) {
+      hasMore = rows.length >= pageSize
+      break
+    }
+
+    if (rows.length < pageSize) {
+      await resetMemberPointExpiryBatchCursor()
+      hasMore = false
+      break
+    }
   }
 
-  return { processed, expiredTotal, recalculated }
+  return { processed, expiredTotal, recalculated, hasMore }
 }

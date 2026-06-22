@@ -58,3 +58,17 @@ describe('getMemberPointRetentionCutoffIso', () => {
     expect(cutoff.startsWith('2024-06-20')).toBe(true)
   })
 })
+
+describe('buildMembersWithPointsBatchFilter', () => {
+  it('커서 없으면 포인트 보유 회원 전체', async () => {
+    const { buildMembersWithPointsBatchFilter } = await import('@/lib/member-point-expiry-batch')
+    expect(buildMembersWithPointsBatchFilter(0)).toBe('or=(point_balance.gt.0,tier_points.gt.0)')
+  })
+
+  it('커서 이후 회원만 조회', async () => {
+    const { buildMembersWithPointsBatchFilter } = await import('@/lib/member-point-expiry-batch')
+    expect(buildMembersWithPointsBatchFilter(42)).toBe(
+      'and=(or=(point_balance.gt.0,tier_points.gt.0),id.gt.42)'
+    )
+  })
+})

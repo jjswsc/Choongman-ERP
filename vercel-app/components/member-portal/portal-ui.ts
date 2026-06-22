@@ -148,6 +148,27 @@ export function formatDateTime(raw: string, locale = 'th-TH'): string {
   })
 }
 
+/** 최근 주문 등 — 매장명과 한 줄에 넣기 위한 짧은 일시(방콕) */
+export function formatVisitDateTimeCompact(raw: string, locale = 'th-TH'): string {
+  const v = String(raw || '').trim()
+  if (!v) return '-'
+  const d = new Date(v.includes('T') ? v : v.replace(' ', 'T'))
+  if (Number.isNaN(d.getTime())) return v.slice(5, 16).replace('T', ' ')
+  const loc = locale || 'th-TH'
+  const use12h = loc.startsWith('ko') || loc.startsWith('en')
+  return d
+    .toLocaleString(loc, {
+      timeZone: 'Asia/Bangkok',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: use12h,
+    })
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function maskPhone(phone: string): string {
   const digits = String(phone || '').replace(/[^\d]/g, '')
   if (digits.length < 6) return phone || '-'

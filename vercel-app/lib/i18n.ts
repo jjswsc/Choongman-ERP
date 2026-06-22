@@ -5506,7 +5506,8 @@ export const i18n = {
       '누적 포인트(등급): 최근 {years}년간 적립한 포인트 합계로 등급이 결정됩니다. 오래된 적립분이 소멸하면 등급이 하향될 수 있습니다.',
     memberPointExpiryBalanceNote:
       '사용 가능 포인트: {years}년이 지난 미사용 적립분은 자동 소멸됩니다. 사용 시에는 오래된 적립분부터 차감됩니다.',
-    memberPointExpiryCronNote: '소멸 배치는 매일 방콕시간 새벽에 자동 실행됩니다.',
+    memberPointExpiryCronNote:
+      '저장한 소멸 기간(년)이 매일 방콕 새벽 자동 배치에 적용됩니다. Vercel 환경변수 CRON_SECRET을 설정해야 cron이 동작합니다.',
     memberPointRetentionYearsLabel: '포인트 소멸 기간(년)',
     memberPointRetentionYearsSave: '소멸 기간 저장',
     memberPointRetentionYearsSaved: '포인트 소멸 기간을 저장했습니다.',
@@ -12622,7 +12623,8 @@ orderItemQty: 'Qty',
       'Tier points: your tier is based on points earned in the last {years} years. When older points expire, your tier may drop.',
     memberPointExpiryBalanceNote:
       'Available points: unused credits older than {years} years expire automatically. Redemptions consume oldest credits first.',
-    memberPointExpiryCronNote: 'Expiry batch runs automatically every day (Bangkok time).',
+    memberPointExpiryCronNote:
+      'The saved expiry period (years) is applied by the nightly batch (Bangkok time). Set Vercel CRON_SECRET for scheduled cron runs.',
     memberPointRetentionYearsLabel: 'Point expiry period (years)',
     memberPointRetentionYearsSave: 'Save expiry period',
     memberPointRetentionYearsSaved: 'Point expiry period saved.',

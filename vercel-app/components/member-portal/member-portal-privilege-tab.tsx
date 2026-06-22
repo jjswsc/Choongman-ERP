@@ -7,7 +7,6 @@ import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 import { MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE } from "@/lib/member-portal-design"
 import {
   GlassCard,
-  MemberPortalBenefitStatsGrid,
   SectionTitle,
 } from "@/components/member-portal/member-portal-premium-ui"
 import { MemberPortalCouponCard } from "@/components/member-portal/member-portal-coupon-card"
@@ -19,6 +18,7 @@ import type { PortalCouponOfferRow } from "@/lib/member-portal-coupon-claim"
 import {
   formatBaht,
   formatDateTime,
+  formatVisitDateTimeCompact,
   formatPoints,
   type PortalCouponRow,
   type PortalDashboard,
@@ -162,7 +162,7 @@ export function MemberPortalPrivilegeTab({
 
   return (
     <div className="space-y-4">
-      <SectionTitle title={t("privilegeTitle")} subtitle={t("privilegeDesc")} />
+      <SectionTitle title={t("privilegeTitle")} />
 
       <GlassCard soft className="overflow-hidden p-0">
         <div className="bg-gradient-to-br from-amber-600 via-amber-500 to-orange-500 px-4 py-4 text-white">
@@ -335,18 +335,6 @@ export function MemberPortalPrivilegeTab({
 
       {section === "benefits" ? (
         <div className="space-y-3">
-          <MemberPortalBenefitStatsGrid
-            couponsLabel={t("statCoupons")}
-            couponsValue={`${activeCoupons.length}`}
-            availablePointsLabel={t("availablePoints")}
-            availablePointsValue={formatPoints(member.pointBalance || 0)}
-            cumulativePointsLabel={t("cumulativeTierPoints")}
-            cumulativePointsValue={formatPoints(
-              member.tierPoints ?? dashboard.stats.tierQualificationPoints ?? 0
-            )}
-            visitsLabel={t("statVisits")}
-            visitsValue={`${dashboard.stats.visitCount}`}
-          />
           <MemberPortalStampCard
             lang={lang}
             memberId={member.id}
@@ -388,16 +376,17 @@ export function MemberPortalPrivilegeTab({
                 </GlassCard>
               ) : (
                 visits.map((v) => (
-                  <GlassCard key={v.orderId} soft className="px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className={`font-medium ${MP_CARD_TEXT_PRIMARY}`}>{formatBaht(v.total)}</p>
-                        <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
-                          {storeName(v.storeCode)} · {v.orderNo || `#${v.orderId}`}
-                        </p>
-                      </div>
-                      <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
-                        {formatDateTime(v.visitedAt, dateLocale)}
+                  <GlassCard key={v.orderId} soft className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <p className={`min-w-0 flex-1 truncate text-sm ${MP_CARD_TEXT_PRIMARY}`}>
+                        <span className="font-medium">{storeName(v.storeCode)}</span>
+                        <span className={`mx-1.5 ${MP_CARD_TEXT_MUTED}`}>·</span>
+                        <span className={`text-xs font-normal ${MP_CARD_TEXT_MUTED}`}>
+                          {formatVisitDateTimeCompact(v.visitedAt, dateLocale)}
+                        </span>
+                      </p>
+                      <p className={`shrink-0 text-sm font-semibold tabular-nums ${MP_CARD_TEXT_PRIMARY}`}>
+                        {formatBaht(v.total)}
                       </p>
                     </div>
                   </GlassCard>
