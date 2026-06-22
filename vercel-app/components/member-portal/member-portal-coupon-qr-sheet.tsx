@@ -114,9 +114,9 @@ export function MemberPortalCouponQrSheet({
 }
 
 const couponQrButtonClass = {
-  dark: "inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition hover:bg-amber-400/20",
+  dark: "inline-flex h-8 items-center justify-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 text-xs font-medium leading-none text-amber-100 transition hover:bg-amber-400/20",
   light:
-    "inline-flex items-center gap-1.5 rounded-full border border-amber-900/12 bg-gradient-to-r from-amber-500 to-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-[0_4px_14px_rgba(180,120,20,0.28)] transition hover:from-amber-400 hover:to-amber-500",
+    "inline-flex h-8 items-center justify-center gap-1 rounded-full border border-amber-900/12 bg-gradient-to-r from-amber-500 to-amber-600 px-3 text-xs font-semibold leading-none text-white shadow-[0_4px_14px_rgba(180,120,20,0.28)] transition hover:from-amber-400 hover:to-amber-500",
 } as const
 
 export function MemberPortalCouponQrButton({
@@ -144,8 +144,8 @@ export function MemberPortalCouponQrButton({
         onClick={() => setOpen(true)}
         className={className ?? couponQrButtonClass[variant]}
       >
-        <QrCode className="h-3.5 w-3.5" />
-        {t("showCouponQr")}
+        <QrCode className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="whitespace-nowrap">{t("showCouponQr")}</span>
       </button>
       <MemberPortalCouponQrSheet
         open={open}

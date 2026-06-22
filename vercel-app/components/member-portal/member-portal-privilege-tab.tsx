@@ -164,44 +164,42 @@ export function MemberPortalPrivilegeTab({
     <div className="space-y-4">
       <SectionTitle title={t("privilegeTitle")} />
 
-      <GlassCard soft className="overflow-hidden p-0">
-        <div className="bg-gradient-to-br from-amber-600 via-amber-500 to-orange-500 px-4 py-4 text-white">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-amber-50/90">
-            {t("availablePoints")}
-          </p>
-          <p className="mt-1 text-2xl font-bold tracking-tight">{formatPoints(member.pointBalance || 0)}</p>
-          <p className="mt-2 text-xs text-amber-50/85">
-            {t("cumulativeTierPoints")}{" "}
-            <span className="font-semibold text-white">
-              {formatPoints(member.tierPoints ?? dashboard.stats.tierQualificationPoints ?? 0)}
-            </span>
-          </p>
-        </div>
-        <div className="grid grid-cols-3 divide-x divide-stone-200/80 border-t border-stone-200/60 bg-white/80">
-          <div className="px-3 py-3 text-center">
-            <p className={`text-lg font-bold tabular-nums ${MP_CARD_TEXT_PRIMARY}`}>
-              {activeCoupons.length}
+      <GlassCard soft className="relative overflow-hidden p-0">
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(251,191,36,0.14),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(249,115,22,0.08),transparent_50%)]"
+          aria-hidden
+        />
+        <div className="relative flex items-stretch divide-x divide-stone-200/60">
+          <div className="flex min-w-0 flex-[1.35] flex-col justify-center px-3.5 py-2.5">
+            <p className={`text-[9px] font-bold uppercase tracking-[0.16em] ${MP_CARD_TEXT_SUBTLE}`}>
+              {t("availablePoints")}
             </p>
-            <p className={`mt-0.5 text-[10px] font-medium uppercase tracking-wide ${MP_CARD_TEXT_SUBTLE}`}>
-              {t("statCoupons")}
+            <p className={`text-xl font-bold tabular-nums leading-tight ${MP_CARD_TEXT_PRIMARY}`}>
+              {formatPoints(member.pointBalance || 0)}
+            </p>
+            <p className={`mt-0.5 truncate text-[10px] ${MP_CARD_TEXT_MUTED}`}>
+              {t("cumulativeTierPoints")}{" "}
+              <span className={`font-semibold ${MP_CARD_TEXT_SECONDARY}`}>
+                {formatPoints(member.tierPoints ?? dashboard.stats.tierQualificationPoints ?? 0)}
+              </span>
             </p>
           </div>
-          <div className="px-3 py-3 text-center">
-            <p className={`text-lg font-bold tabular-nums ${MP_CARD_TEXT_PRIMARY}`}>
-              {claimableOffers.length}
-            </p>
-            <p className={`mt-0.5 text-[10px] font-medium uppercase tracking-wide ${MP_CARD_TEXT_SUBTLE}`}>
-              {t("couponOffersAvailable")}
-            </p>
-          </div>
-          <div className="px-3 py-3 text-center">
-            <p className={`text-lg font-bold tabular-nums ${MP_CARD_TEXT_PRIMARY}`}>
-              {dashboard.stats.visitCount}
-            </p>
-            <p className={`mt-0.5 text-[10px] font-medium uppercase tracking-wide ${MP_CARD_TEXT_SUBTLE}`}>
-              {t("statVisits")}
-            </p>
-          </div>
+          {(
+            [
+              { value: activeCoupons.length, label: t("statCoupons") },
+              { value: claimableOffers.length, label: t("couponOffersAvailable") },
+              { value: dashboard.stats.visitCount, label: t("statVisits") },
+            ] as const
+          ).map((stat) => (
+            <div key={stat.label} className="flex flex-1 flex-col items-center justify-center px-1.5 py-2 text-center">
+              <p className={`text-base font-bold tabular-nums leading-none ${MP_CARD_TEXT_PRIMARY}`}>
+                {stat.value}
+              </p>
+              <p className={`mt-1 line-clamp-2 text-[8px] font-semibold uppercase leading-tight tracking-wide ${MP_CARD_TEXT_SUBTLE}`}>
+                {stat.label}
+              </p>
+            </div>
+          ))}
         </div>
       </GlassCard>
 

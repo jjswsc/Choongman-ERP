@@ -1138,6 +1138,7 @@ export function MemberPortalApp() {
             wordmark={t("memberLounge")}
             displayName={member.fullName || member.name || "Member"}
             tierLabel={activeDashboard.tierProgress.currentTierName || tier.label}
+            tierCode={activeDashboard.tierProgress.currentTierCode}
             logoSrc={brand.logoSymbolSrc}
             logoAlt={brand.logoAlt}
             langSelect={<MemberPortalLangSelect />}

@@ -9,6 +9,7 @@ import {
   DEFAULT_MEMBER_APP_BG,
   MP_BOTTOM_NAV_CLEARANCE,
   MP_EMBED_PREVIEW_BOTTOM_CLEARANCE,
+  MP_HOME_TIER_PILL_GEM_SIZE,
   MP_MAX_WIDTH,
   MP_PAGE_BG_CLASS,
   MP_SHEET_BOTTOM_OFFSET,
@@ -22,6 +23,8 @@ import {
   mpGlassInset,
 } from "@/lib/member-portal-design"
 import { memberPortalUiThemeStyle, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
+import { resolveTierFamily } from "@/lib/member-portal-tier-visual"
+import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
 import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import type { PortalTab } from "@/components/member-portal/portal-ui"
 
@@ -302,6 +305,7 @@ export function PremiumAppHeader({
   wordmark,
   displayName,
   tierLabel,
+  tierCode,
   logoSrc,
   logoAlt,
   langSelect,
@@ -311,37 +315,48 @@ export function PremiumAppHeader({
   wordmark: string
   displayName: string
   tierLabel?: string
+  tierCode?: string
   logoSrc: string
   logoAlt: string
   langSelect: React.ReactNode
   onLogout: () => void
   logoutLabel: string
 }) {
+  const tierFamily = resolveTierFamily(tierCode || tierLabel || "BRONZE")
+
   return (
-    <header className="mb-4 flex items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-stone-200/80 bg-white p-1 shadow-sm">
-          <Image src={logoSrc} alt={logoAlt} width={28} height={28} className="h-7 w-7 object-contain" />
+    <header className="mb-3 flex items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="relative shrink-0">
+          <div className="absolute -inset-0.5 rounded-[14px] bg-gradient-to-br from-amber-400/35 to-orange-500/20 blur-[2px]" />
+          <div className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-[13px] border border-[#fff0e4] bg-gradient-to-br from-[#ff5b18] to-[#e64b0d] p-1.5 shadow-[0_6px_14px_rgba(241,86,18,0.22)]">
+            <Image src={logoSrc} alt={logoAlt} width={32} height={32} className="h-8 w-8 object-contain" />
+          </div>
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700/80">{wordmark}</p>
-          <p className="truncate text-sm font-semibold text-stone-900">{displayName}</p>
-          {tierLabel ? (
-            <span className="mt-0.5 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800">
-              {tierLabel}
-            </span>
-          ) : null}
+          <p className="truncate text-[9px] font-bold uppercase tracking-[0.24em] text-amber-700/75">
+            {wordmark}
+          </p>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            <p className="truncate text-sm font-bold leading-tight text-stone-900">{displayName}</p>
+            {tierLabel ? (
+              <span className="inline-flex max-w-[44%] shrink-0 items-center gap-0.5 rounded-full bg-[#fff0e5] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-[#66331a]">
+                <TierFacetedGemIcon family={tierFamily} size={MP_HOME_TIER_PILL_GEM_SIZE} />
+                <span className="truncate">{tierLabel}</span>
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 pt-0.5">
         {langSelect}
         <button
           type="button"
           onClick={onLogout}
-          className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-stone-200 bg-white/90 ${MP_TEXT_SECONDARY} shadow-sm transition hover:border-stone-300 hover:text-stone-800`}
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-stone-200/90 bg-white/95 ${MP_TEXT_SECONDARY} shadow-sm transition hover:border-stone-300 hover:text-stone-800`}
           aria-label={logoutLabel}
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
           </svg>
         </button>
