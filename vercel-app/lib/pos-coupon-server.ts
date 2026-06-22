@@ -1,4 +1,5 @@
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { expandTruncatedCouponCodeCandidates } from '@/lib/member-coupon-qr'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
   summarizeLegacyCouponFields,
@@ -177,24 +178,45 @@ async function loadCouponTemplateBySerial(code: string): Promise<{
   return { template: mapPosCouponDbRow(couponRows?.[0]), serial }
 }
 
+async function loadMemberCouponIssueById(issueId: number): Promise<MemberIssueRow | null> {
+  const id = Math.max(0, Math.trunc(Number(issueId) || 0))
+  if (id <= 0) return null
+  const nowBangkok = getBangkokDateTimeString()
+  const expiryFilter = `or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(nowBangkok)})`
+  const rows = (await supabaseSelectFilter(
+    'member_coupon_issues',
+    `id=eq.${id}&status=eq.issued&${expiryFilter}`,
+    { limit: 1 }
+  )) as MemberIssueRow[] | null
+  return rows?.[0] ?? null
+}
+
 async function findMemberCouponIssue(params: {
   memberId?: number
-  code: string
+  code?: string
   issueId?: number
 }): Promise<MemberIssueRow | null> {
   const memberId = Math.max(0, Math.trunc(Number(params.memberId ?? 0) || 0))
-  const code = normalizeCode(params.code)
+  const code = normalizeCode(params.code ?? '')
   const issueId = Math.max(0, Math.trunc(Number(params.issueId ?? 0) || 0))
-  if (!memberId || !code) return null
   const nowBangkok = getBangkokDateTimeString()
   const expiryFilter = `or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(nowBangkok)})`
+
+  if (issueId > 0 && (!memberId || !code)) {
+    return loadMemberCouponIssueById(issueId)
+  }
+  if (!memberId || !code) return null
+
   if (issueId > 0) {
     const rows = (await supabaseSelectFilter(
       'member_coupon_issues',
       `id=eq.${issueId}&member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&${expiryFilter}`,
       { limit: 1 }
     )) as MemberIssueRow[] | null
-    return rows?.[0] ?? null
+    if (rows?.[0]) return rows[0]
+    const byIssueId = await loadMemberCouponIssueById(issueId)
+    if (byIssueId && Number(byIssueId.member_id || 0) === memberId) return byIssueId
+    return null
   }
   const rows = (await supabaseSelectFilter(
     'member_coupon_issues',
@@ -213,14 +235,40 @@ async function resolveTemplateForCandidate(
   memberIssue: MemberIssueRow | null
 }> {
   const code = normalizeCode(candidate.code)
-  const direct = await loadCouponTemplateByCode(code)
+  const issueId = Math.max(0, Math.trunc(Number(candidate.memberIssueId ?? 0) || 0))
+  const issueFromId = issueId > 0 ? await loadMemberCouponIssueById(issueId) : null
+
+  const codeCandidates = [
+    ...(issueFromId?.coupon_code ? [normalizeCode(issueFromId.coupon_code)] : []),
+    ...expandTruncatedCouponCodeCandidates(code),
+  ].filter(Boolean)
+  const uniqueCodes = [...new Set(codeCandidates)]
+
+  let direct: PosCouponTemplate | null = null
+  let resolvedCode = code
+  for (const candidateCode of uniqueCodes) {
+    direct = await loadCouponTemplateByCode(candidateCode)
+    if (direct) {
+      resolvedCode = candidateCode
+      break
+    }
+  }
+
+  const effectiveMemberId =
+    Math.max(
+      0,
+      Math.trunc(Number(memberId ?? 0) || 0),
+      Math.trunc(Number(issueFromId?.member_id ?? 0) || 0)
+    ) || undefined
+
   if (direct) {
     if (direct.redemptionMode === 'member_issue') {
-      const memberIssue = await findMemberCouponIssue({
-        memberId,
-        code,
-        issueId: candidate.memberIssueId,
-      })
+      const memberIssue =
+        (await findMemberCouponIssue({
+          memberId: effectiveMemberId,
+          code: resolvedCode,
+          issueId: issueId || issueFromId?.id,
+        })) ?? issueFromId
       return { template: direct, serial: null, memberIssue }
     }
     return { template: direct, serial: null, memberIssue: null }
@@ -266,7 +314,15 @@ export async function validatePosCouponApplication(params: {
     params.memberId
   )
 
-  return validatePosCouponCandidate(template, ctx, params.candidate, {
+  const resolvedCandidateCode = normalizeCode(
+    memberIssue?.coupon_code || template?.code || params.candidate.code
+  )
+  const candidate =
+    resolvedCandidateCode && resolvedCandidateCode !== normalizeCode(params.candidate.code)
+      ? { ...params.candidate, code: resolvedCandidateCode }
+      : params.candidate
+
+  return validatePosCouponCandidate(template, ctx, candidate, {
     serialAlreadyRedeemed: serial ? String(serial.status ?? '') === 'redeemed' : false,
     memberIssueAvailable: template?.redemptionMode === 'member_issue' ? Boolean(memberIssue) : undefined,
     memberIssueId: memberIssue?.id,

@@ -96,7 +96,11 @@ import {
 } from '@/lib/member-tier-discount'
 import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
-import { isMemberCouponQrPayload, parseMemberCouponQrPayload } from '@/lib/member-coupon-qr'
+import {
+  isMemberCouponQrPayload,
+  isMemberCouponScanPayload,
+  parseLooseMemberCouponScanInput,
+} from '@/lib/member-coupon-qr'
 import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
 import {
   computePosPricing,
@@ -3267,26 +3271,38 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const applyCouponFromQrPayload = useCallback(
     async (raw: string): Promise<boolean> => {
-      const parsed = parseMemberCouponQrPayload(raw)
+      const parsed = parseLooseMemberCouponScanInput(raw)
       if (!parsed) {
         setCouponMessage(t('posCouponInvalid'))
         return false
       }
 
-      const linkedMember = await linkMemberForCouponQr(parsed.memberNo)
-      if (!linkedMember) {
+      let memberId: number | undefined
+      let successNote: string | undefined
+
+      if (parsed.memberNo) {
+        const linkedMember = await linkMemberForCouponQr(parsed.memberNo)
+        if (!linkedMember) {
+          setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
+          return false
+        }
+        memberId = linkedMember.id
+        successNote = i18nTr(t, 'posCouponQrMemberLinked', { name: linkedMember.name })
+      } else if (selectedMemberId) {
+        memberId = Number(selectedMemberId)
+      } else if (!parsed.issueId) {
         setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
         return false
       }
 
       return applyCouponWithParams({
         code: parsed.couponCode,
-        memberId: linkedMember.id,
+        memberId,
         memberIssueId: parsed.issueId,
-        successNote: i18nTr(t, 'posCouponQrMemberLinked', { name: linkedMember.name }),
+        successNote,
       })
     },
-    [applyCouponWithParams, linkMemberForCouponQr, t]
+    [applyCouponWithParams, linkMemberForCouponQr, selectedMemberId, t]
   )
 
   const applyCouponCode = async () => {
@@ -3302,7 +3318,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setCouponMessage(t('posCouponPleaseEnterCode'))
       return
     }
-    if (isMemberCouponQrPayload(raw)) {
+    if (isMemberCouponQrPayload(raw) || parseLooseMemberCouponScanInput(raw)) {
       await applyCouponFromQrPayload(raw)
       return
     }
@@ -3317,7 +3333,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const handleCouponCodeInput = (next: string) => {
     const sanitized = sanitizeCouponCodeInput(next)
-    const parsed = parseMemberCouponQrPayload(sanitized)
+    const parsed = parseLooseMemberCouponScanInput(sanitized)
     if (parsed) {
       pendingMemberCouponQrRawRef.current = sanitized
       setCouponCode(parsed.couponCode)
@@ -3353,7 +3369,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (e.key === 'Enter') {
         const raw = buffer.trim()
         resetBuffer()
-        if (raw && isMemberCouponQrPayload(raw)) {
+        if (raw && isMemberCouponScanPayload(raw)) {
           e.preventDefault()
           void applyCouponFromQrPayload(raw)
         }
@@ -3365,7 +3381,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (lastKeyAt > 0 && now - lastKeyAt > 120) resetBuffer()
       lastKeyAt = now
       buffer += e.key
-      if (!isMemberCouponQrPayload(buffer) && buffer.length > 96) resetBuffer()
+      if (!isMemberCouponScanPayload(buffer) && buffer.length > 96) resetBuffer()
     }
 
     window.addEventListener('keydown', onKeyDown)

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMemberCouponQrPayload,
   isMemberCouponQrPayload,
+  isMemberCouponScanPayload,
+  parseLooseMemberCouponScanInput,
   parseMemberCouponQrPayload,
 } from '@/lib/member-coupon-qr'
 
@@ -38,5 +40,25 @@ describe('member-coupon-qr', () => {
       couponCode: 'CMHBDCOUPON',
       issueId: 504,
     })
+  })
+
+  it('parses truncated scanner payloads without CM|CPN header', () => {
+    expect(parseLooseMemberCouponScanInput('CMHBDCOUPON~504')).toEqual({
+      memberNo: '',
+      couponCode: 'CMHBDCOUPON',
+      issueId: 504,
+    })
+    expect(parseLooseMemberCouponScanInput('HBDCOUPON~504')).toEqual({
+      memberNo: '',
+      couponCode: 'HBDCOUPON',
+      issueId: 504,
+    })
+    expect(parseLooseMemberCouponScanInput('M007359~CMHBDCOUPON~504')).toEqual({
+      memberNo: 'M007359',
+      couponCode: 'CMHBDCOUPON',
+      issueId: 504,
+    })
+    expect(isMemberCouponScanPayload('HBDCOUPON~504')).toBe(true)
+    expect(isMemberCouponScanPayload('WELCOME10')).toBe(false)
   })
 })

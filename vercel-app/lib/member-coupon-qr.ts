@@ -53,3 +53,68 @@ export function isMemberCouponQrPayload(raw: string): boolean {
   const text = String(raw ?? '').trim()
   return MEMBER_COUPON_QR_PREFIX_RE.test(text) || text.startsWith('CM:CPN:')
 }
+
+function splitCouponScanFields(text: string): string[] {
+  return text.split(MEMBER_COUPON_QR_FIELD_SPLIT_RE).map((p) => p.trim()).filter(Boolean)
+}
+
+function parseTrailingIssueId(parts: string[]): { body: string[]; issueId?: number } {
+  if (parts.length < 2) return { body: parts }
+  const last = parts[parts.length - 1]!
+  const issueId = Math.trunc(Number(last))
+  if (issueId > 0 && String(issueId) === last) {
+    return { body: parts.slice(0, -1), issueId }
+  }
+  return { body: parts }
+}
+
+/** CM|CPN 헤더 없이 스캐너가 `~` 구분으로 보낸 페이로드 (앞부분 잘림·USB 변환 대응) */
+export function parseLooseMemberCouponScanInput(raw: string): MemberCouponQrPayload | null {
+  const text = String(raw ?? '').trim()
+  if (!text) return null
+
+  const full = parseMemberCouponQrPayload(text)
+  if (full) return full
+
+  const parts = splitCouponScanFields(text)
+  if (parts.length < 2) return null
+
+  const { body, issueId } = parseTrailingIssueId(parts)
+  if (body.length >= 2) {
+    const memberNo = body[0]!
+    const couponCode = String(body[body.length - 1] ?? '').trim().toUpperCase()
+    if (memberNo && couponCode) {
+      return { memberNo, couponCode, issueId }
+    }
+  }
+
+  if (body.length === 1 && issueId) {
+    const couponCode = String(body[0] ?? '').trim().toUpperCase()
+    if (couponCode) {
+      return { memberNo: '', couponCode, issueId }
+    }
+  }
+
+  if (body.length === 2 && !issueId) {
+    const memberNo = body[0]!
+    const couponCode = String(body[1] ?? '').trim().toUpperCase()
+    if (memberNo && couponCode) {
+      return { memberNo, couponCode }
+    }
+  }
+
+  return null
+}
+
+export function isMemberCouponScanPayload(raw: string): boolean {
+  return isMemberCouponQrPayload(raw) || parseLooseMemberCouponScanInput(raw) != null
+}
+
+/** 스캐너가 앞 `CM` 접두를 잘랐을 때 검증 후보 */
+export function expandTruncatedCouponCodeCandidates(code: string): string[] {
+  const normalized = String(code ?? '').trim().toUpperCase()
+  if (!normalized) return []
+  const out = [normalized]
+  if (!normalized.startsWith('CM')) out.push(`CM${normalized}`)
+  return [...new Set(out)]
+}
