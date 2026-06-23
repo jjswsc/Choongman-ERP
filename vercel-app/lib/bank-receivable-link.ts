@@ -59,3 +59,19 @@ export function receivableStoreMatchesBank(storeName: string, bankStoreName: str
   if (a === b) return true
   return storesMatchForGradeLookup(a, b)
 }
+
+export function sumOpenReceivablePickAmount(
+  list: { id: number; remainingAmount: number }[],
+  selectedIds: Iterable<number>
+): number {
+  const idSet = new Set(selectedIds)
+  return roundReceivableMoney(
+    list
+      .filter((row) => idSet.has(Number(row.id)))
+      .reduce((sum, row) => sum + Math.max(0, Number(row.remainingAmount) || 0), 0)
+  )
+}
+
+export function receivablePickTotalMatchesBank(bankAmount: number, selectedTotal: number): boolean {
+  return Math.abs(Math.abs(Number(bankAmount) || 0) - Math.abs(Number(selectedTotal) || 0)) <= 0.01
+}

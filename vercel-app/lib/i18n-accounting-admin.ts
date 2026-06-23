@@ -56,6 +56,11 @@ const ACCOUNTING_ADMIN_KEYS = {
   bankRegisterLinkReceivable: '',
   bankReceivablePickEmpty: '',
   bankReceivableAmountMismatch: '',
+  bankReceivablePickMultiHint: '',
+  bankReceivablePickBankAmount: '',
+  bankReceivablePickSelectedTotal: '',
+  bankReceivablePickDiff: '',
+  bankReceivablePickAmountOk: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -126,7 +131,12 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   acct_rec_bank_link: '통장',
   bankRegisterLinkReceivable: '미수 연결',
   bankReceivablePickEmpty: '연결 가능한 미수금(출고·주문)이 없습니다.',
-  bankReceivableAmountMismatch: '통장 금액과 선택한 미수 잔액이 일치해야 합니다.',
+  bankReceivableAmountMismatch: '통장 금액과 선택한 미수 잔액 합계가 일치해야 합니다.',
+  bankReceivablePickMultiHint: '여러 인보이스를 선택할 수 있습니다. 선택 합계가 통장 입금액과 일치해야 저장됩니다.',
+  bankReceivablePickBankAmount: '통장 입금',
+  bankReceivablePickSelectedTotal: '선택 합계',
+  bankReceivablePickDiff: '차이',
+  bankReceivablePickAmountOk: '금액이 일치합니다.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -185,6 +195,11 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   bankRegisterLinkReceivable: 'Link receivable',
   bankReceivablePickEmpty: 'No open receivable (order/outbound) to link.',
   bankReceivableAmountMismatch: 'Bank amount must match the selected receivable balance.',
+  bankReceivablePickMultiHint: 'Select multiple invoices. The selected total must match the bank deposit.',
+  bankReceivablePickBankAmount: 'Bank deposit',
+  bankReceivablePickSelectedTotal: 'Selected total',
+  bankReceivablePickDiff: 'Difference',
+  bankReceivablePickAmountOk: 'Amounts match.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -242,7 +257,12 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   acct_rec_bank_link: 'ธนาคาร',
   bankRegisterLinkReceivable: 'เชื่อมลูกหนี้',
   bankReceivablePickEmpty: 'ไม่มีลูกหนี้ค้างที่เชื่อมได้',
-  bankReceivableAmountMismatch: 'ยอดธนาคารต้องตรงกับยอดลูกหนี้ที่เลือก',
+  bankReceivableAmountMismatch: 'ยอดธนาคารต้องตรงกับยอดลูกหนี้ที่เลือกรวม',
+  bankReceivablePickMultiHint: 'เลือกได้หลายใบแจ้งหนี้ ยอดรวมที่เลือกต้องตรงกับเงินฝาก',
+  bankReceivablePickBankAmount: 'เงินฝากธนาคาร',
+  bankReceivablePickSelectedTotal: 'ยอดรวมที่เลือก',
+  bankReceivablePickDiff: 'ส่วนต่าง',
+  bankReceivablePickAmountOk: 'ยอดตรงกัน',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

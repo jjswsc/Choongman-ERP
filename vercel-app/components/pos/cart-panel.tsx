@@ -487,6 +487,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [couponCode, setCouponCode] = useState('')
   const pendingMemberCouponQrRawRef = useRef<string | null>(null)
   const lastScanBeepAtRef = useRef(0)
+  const couponUsbScanBufferRef = useRef({ chars: '', lastAt: 0 })
   const [couponQuantityInput, setCouponQuantityInput] = useState('1')
   const couponQuantity = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
@@ -3518,25 +3519,35 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const resetBuffer = () => {
       buffer = ''
       lastKeyAt = 0
+      couponUsbScanBufferRef.current = { chars: '', lastAt: 0 }
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
+
       const target = e.target
+      const couponInput =
+        target instanceof HTMLInputElement && target.dataset.posCouponScan === '1'
+
       if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
+        !couponInput &&
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLElement && target.isContentEditable))
       ) {
         return
       }
 
       if (e.key === 'Enter') {
-        const raw = buffer.trim()
+        const raw = normalizeCouponScanDelimiters(buffer.trim())
+        const hadScanBuffer = buffer.length > 0
         resetBuffer()
-        if (raw && isMemberCouponScanPayload(raw)) {
+        if (hadScanBuffer && raw && isMemberCouponScanPayload(raw)) {
           e.preventDefault()
+          e.stopPropagation()
+          setCouponCode('')
+          pendingMemberCouponQrRawRef.current = null
           void applyCouponFromQrPayload(raw)
         }
         return
@@ -3544,15 +3555,48 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
       if (e.key.length !== 1) return
       const now = Date.now()
-      if (lastKeyAt > 0 && now - lastKeyAt > 120) resetBuffer()
+      const gap = lastKeyAt > 0 ? now - lastKeyAt : 999
+
+      if (couponInput) {
+        if (lastKeyAt > 0 && gap > 120) {
+          buffer = e.key
+        } else {
+          buffer += e.key
+        }
+        lastKeyAt = now
+        couponUsbScanBufferRef.current = { chars: buffer, lastAt: now }
+
+        const inScannerBurst = buffer.length >= 2 && gap <= 120
+        if (inScannerBurst || isMemberCouponScanPayload(buffer)) {
+          e.preventDefault()
+          e.stopPropagation()
+          const normalized = normalizeCouponScanDelimiters(buffer)
+          const parsed = parseLooseMemberCouponScanInput(normalized)
+          if (parsed) {
+            pendingMemberCouponQrRawRef.current = normalized
+            setCouponCode(parsed.couponCode)
+          } else {
+            pendingMemberCouponQrRawRef.current = null
+            setCouponCode(normalized)
+          }
+        }
+
+        if (!isMemberCouponScanPayload(buffer) && buffer.length > 128) resetBuffer()
+        return
+      }
+
+      if (lastKeyAt > 0 && gap > 120) resetBuffer()
+
       lastKeyAt = now
       buffer += e.key
-      if (!isMemberCouponScanPayload(buffer) && buffer.length > 96) resetBuffer()
+      couponUsbScanBufferRef.current = { chars: buffer, lastAt: now }
+
+      if (!isMemberCouponScanPayload(buffer) && buffer.length > 128) resetBuffer()
     }
 
-    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
     return () => {
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, true)
       resetBuffer()
     }
   }, [applyCouponFromQrPayload, couponQrScannerOpen, showPaymentModal])
@@ -5099,6 +5143,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Input
                       lang="en"
+                      data-pos-coupon-scan="1"
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="characters"
@@ -5110,6 +5155,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
+                          const fromScanner = normalizeCouponScanDelimiters(
+                            couponUsbScanBufferRef.current.chars.trim()
+                          )
+                          couponUsbScanBufferRef.current = { chars: '', lastAt: 0 }
+                          if (fromScanner && isMemberCouponScanPayload(fromScanner)) {
+                            pendingMemberCouponQrRawRef.current = null
+                            setCouponCode('')
+                            void applyCouponFromQrPayload(fromScanner)
+                            return
+                          }
                           void applyCouponCode(e.currentTarget.value)
                         }
                       }}

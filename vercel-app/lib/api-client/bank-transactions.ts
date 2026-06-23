@@ -402,12 +402,22 @@ export async function getOpenReceivablesForBankTx(params: { bankTransactionId: n
 
 export async function linkReceivableFromBankTransaction(params: {
   bankTransactionId: number
-  receivableAccrualId: number
+  receivableAccrualId?: number
+  receivableAccrualIds?: number[]
 }) {
+  const ids =
+    params.receivableAccrualIds && params.receivableAccrualIds.length > 0
+      ? params.receivableAccrualIds
+      : params.receivableAccrualId
+        ? [params.receivableAccrualId]
+        : []
   const res = await apiFetchWithOffline('/api/linkReceivableFromBankTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      bankTransactionId: params.bankTransactionId,
+      receivableAccrualIds: ids,
+    }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }

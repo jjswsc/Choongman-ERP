@@ -593,4 +593,38 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('Rice x1')
     expect(html).not.toContain('#22 x1')
   })
+
+  it('keeps pre-translated takeout order type label instead of defaulting to dine-in', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '021',
+        storeCode: 'CM True Digital',
+        orderType: 'ซื้อกลับบ้าน',
+        tableName: '회원주문 · ประวัตร · M007359',
+        memo: '[회원주문] · 회원 주문입니다 · 픽업희망:2026-06-23 15:02 · 회원:ประวัตร · 번호:M007359',
+        items: [{ id: '1', name: 'GOLDEN FRIED CHICKEN', price: 219, qty: 1 }],
+        subtotal: 219,
+        discountAmt: 0,
+        total: 219,
+      },
+      t: (k) =>
+        ({
+          posOrderTypeTakeout: 'ซื้อกลับบ้าน',
+          posOrderTypeDineIn: 'ทานที่ร้าน',
+          posMemberPortalOrder: 'สั่งซื้อสมาชิก',
+          posMemberPortalOrderNotice: 'คำสั่งซื้อสมาชิก',
+          posPickupAtShort: 'รับสินค้า',
+          posMember: 'สมาชิก',
+          posMemberNo: 'เลขสมาชิก',
+          posCustomerMemo: 'บันทึกจากลูกค้า',
+          posTable: 'โต๊ะ',
+        })[k] ?? k,
+      lang: 'th',
+    })
+    expect(html).toContain('ซื้อกลับบ้าน')
+    expect(html).not.toContain('ทานที่ร้าน')
+    expect(html).toContain('สั่งซื้อสมาชิก · ประวัตร · M007359')
+    expect(html).toContain('คำสั่งซื้อสมาชิก')
+    expect(html).not.toContain('회원 주문입니다')
+  })
 })

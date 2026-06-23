@@ -1,4 +1,5 @@
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import { isLangCode } from '@/lib/lang-context'
 import {
   escapeHtmlReceiptEmphasizeChannelToken,
   formatPosReceiptOrderNoDisplay,
@@ -6,6 +7,9 @@ import {
 } from '@/lib/pos-delivery-platform'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
+import {
+  translatePosCustomerMemoForReceipt,
+} from '@/lib/pos-member-portal-takeout-label'
 import {
   collectGrabPrintOptionLines,
   enrichGrabPromoItemsForPrint,
@@ -30,7 +34,7 @@ import {
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
-import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+import { resolvePosOrderTypeReceiptLabel } from '@/lib/pos-sales-order-type-filter'
 import {
   expandBanbanComposeLineForPrint,
   filterReceiptOptionLinesForBanban,
@@ -587,13 +591,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         c('span') +
         c('div')
       : ''
-  const otKey = normalizePosOrderTypeKey(payload.orderType)
-  const orderTypeLabelText =
-    otKey === 'delivery'
-      ? tr('posOrderTypeDelivery', 'Delivery')
-      : otKey === 'takeout'
-        ? tr('posOrderTypeTakeout', 'Takeaway')
-        : tr('posOrderTypeDineIn', 'Dine In')
+  const orderTypeLabelText = resolvePosOrderTypeReceiptLabel(payload.orderType, (k) => tr(k, ''))
   const orderTypeChipInline =
     '<span class="receipt-order-type-chip receipt-order-type-chip--inline"> ' +
     esc(orderTypeLabelText) +
@@ -769,8 +767,13 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         c('span') +
         c('div')
       : ''
-  const memoRow = parsedMemo.plainMemo
-    ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + c('div')
+  const memoForPrint = translatePosCustomerMemoForReceipt(
+    payload.memo,
+    (k) => t(k),
+    isLangCode(lang) ? lang : 'en'
+  )
+  const memoRow = memoForPrint
+    ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(memoForPrint) + c('div')
     : ''
   const taxInvoiceRow = parsedMemo.taxInvoice
     ? buildPosTaxInvoiceThermalHtml({ taxInvoice: parsedMemo.taxInvoice, esc, tr })

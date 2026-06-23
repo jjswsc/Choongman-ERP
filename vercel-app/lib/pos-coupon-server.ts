@@ -1,5 +1,4 @@
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { expandTruncatedCouponCodeCandidates } from '@/lib/member-coupon-qr'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
   summarizeLegacyCouponFields,
@@ -203,29 +202,14 @@ async function findMemberCouponIssue(params: {
   const nowBangkok = getBangkokDateTimeString()
   const expiryFilter = `or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(nowBangkok)})`
 
-  if (issueId > 0 && (!memberId || !code)) {
-    return loadMemberCouponIssueById(issueId)
-  }
-  if (!memberId || !code) return null
-
   if (issueId > 0) {
-    const rows = (await supabaseSelectFilter(
-      'member_coupon_issues',
-      `id=eq.${issueId}&member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&${expiryFilter}`,
-      { limit: 1 }
-    )) as MemberIssueRow[] | null
-    if (rows?.[0]) return rows[0]
     const byIssueId = await loadMemberCouponIssueById(issueId)
     if (!byIssueId) return null
     if (memberId > 0 && Number(byIssueId.member_id || 0) !== memberId) return null
-    const issueCode = normalizeCode(byIssueId.coupon_code || '')
-    if (code && issueCode) {
-      const codeMatches =
-        issueCode === code || expandTruncatedCouponCodeCandidates(code).includes(issueCode)
-      if (!codeMatches) return null
-    }
     return byIssueId
   }
+  if (!memberId || !code) return null
+
   const rows = (await supabaseSelectFilter(
     'member_coupon_issues',
     `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&${expiryFilter}`,
@@ -244,50 +228,51 @@ async function resolveTemplateForCandidate(
 }> {
   const code = normalizeCode(candidate.code)
   const issueId = Math.max(0, Math.trunc(Number(candidate.memberIssueId ?? 0) || 0))
-  const issueFromId = issueId > 0 ? await loadMemberCouponIssueById(issueId) : null
+  const clientMemberId = Math.max(0, Math.trunc(Number(memberId ?? 0) || 0))
+  let issueFromId: MemberIssueRow | null = null
 
-  const codeCandidates = [
-    ...(issueFromId?.coupon_code ? [normalizeCode(issueFromId.coupon_code)] : []),
-    ...expandTruncatedCouponCodeCandidates(code),
-  ].filter(Boolean)
-  const uniqueCodes = [...new Set(codeCandidates)]
-
-  let direct: PosCouponTemplate | null = null
-  let resolvedCode = code
-  for (const candidateCode of uniqueCodes) {
-    direct = await loadCouponTemplateByCode(candidateCode)
-    if (direct) {
-      resolvedCode = candidateCode
-      break
+  if (issueId > 0) {
+    issueFromId = await findMemberCouponIssue({
+      ...(clientMemberId > 0 ? { memberId: clientMemberId } : {}),
+      issueId,
+    })
+    const issueCode = normalizeCode(issueFromId?.coupon_code || '')
+    if (issueFromId && issueCode) {
+      const template = await loadCouponTemplateByCode(issueCode)
+      if (template) {
+        return { template, serial: null, memberIssue: issueFromId }
+      }
     }
   }
 
   const effectiveMemberId =
     Math.max(
-      0,
-      Math.trunc(Number(memberId ?? 0) || 0),
+      clientMemberId,
       Math.trunc(Number(issueFromId?.member_id ?? 0) || 0)
     ) || undefined
 
-  if (direct) {
-    if (direct.redemptionMode === 'member_issue') {
-      const memberIssue =
-        (await findMemberCouponIssue({
-          memberId: effectiveMemberId,
-          code: resolvedCode,
-          issueId: issueId || issueFromId?.id,
-        })) ?? issueFromId
-      return { template: direct, serial: null, memberIssue }
+  if (code) {
+    const direct = await loadCouponTemplateByCode(code)
+    if (direct) {
+      if (direct.redemptionMode === 'member_issue') {
+        const memberIssue =
+          (await findMemberCouponIssue({
+            memberId: effectiveMemberId,
+            code,
+            issueId: issueId || undefined,
+          })) ?? null
+        return { template: direct, serial: null, memberIssue }
+      }
+      return { template: direct, serial: null, memberIssue: null }
     }
-    return { template: direct, serial: null, memberIssue: null }
-  }
 
-  const serialLookup = await loadCouponTemplateBySerial(code)
-  if (serialLookup.template) {
-    return {
-      template: serialLookup.template,
-      serial: serialLookup.serial,
-      memberIssue: null,
+    const serialLookup = await loadCouponTemplateBySerial(code)
+    if (serialLookup.template) {
+      return {
+        template: serialLookup.template,
+        serial: serialLookup.serial,
+        memberIssue: null,
+      }
     }
   }
 

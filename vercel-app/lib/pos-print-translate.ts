@@ -2,6 +2,11 @@
  * POS 영수증/인쇄용: 테이블명 끝 `번` 제거·치킨 부위 표기 영문 통일 등.
  */
 
+import {
+  resolveMemberPortalTakeoutMeta,
+  translateMemberPortalReceiptTableName,
+} from '@/lib/pos-member-portal-takeout-label'
+
 /** 치킨 기본가에 해당하는 대표 옵션 표기(표시·카트 기본 선택 등). DB 레거시 `S 순살`과 병행 인식. */
 export const POS_CHICKEN_DEFAULT_OPTION_DISPLAY = 'S Boneless'
 
@@ -122,6 +127,10 @@ export function translateReceiptTableDisplayName(tableName: string, t?: (key: st
     s = s.replace(/\s*번\s*$/u, '').trimEnd()
   }
   if (t) {
+    const memberMeta = resolveMemberPortalTakeoutMeta({ tableName: s })
+    if (memberMeta.isMemberPortal) {
+      return translateMemberPortalReceiptTableName(s, t)
+    }
     const localized = tryTranslateTakeoutTableLabel(s, t)
     if (localized) return localized
   }

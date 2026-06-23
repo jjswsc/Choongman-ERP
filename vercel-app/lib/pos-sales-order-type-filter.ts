@@ -133,6 +133,11 @@ export function inferPosOrderTypeFromRow(row: {
   return 'dine_in'
 }
 
+export function isPosOrderTypeRawKey(raw: string | undefined | null): boolean {
+  const key = normalizePosOrderTypeKey(raw)
+  return key === 'dine_in' || key === 'takeout' || key === 'delivery'
+}
+
 /** 홀 주문서·영수증 인쇄용 주문 유형 표시 라벨 */
 export function resolvePosOrderTypeReceiptLabel(
   orderType: string | undefined | null,
@@ -141,5 +146,7 @@ export function resolvePosOrderTypeReceiptLabel(
   const key = normalizePosOrderTypeKey(orderType)
   if (key === 'delivery') return t('posOrderTypeDelivery') || 'Delivery'
   if (key === 'takeout') return t('posOrderTypeTakeout') || 'Takeaway'
-  return t('posOrderTypeDineIn') || 'Dine In'
+  if (key === 'dine_in') return t('posOrderTypeDineIn') || 'Dine In'
+  const trimmed = String(orderType ?? '').trim()
+  return trimmed || t('posOrderTypeDineIn') || 'Dine In'
 }

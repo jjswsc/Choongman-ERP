@@ -186,6 +186,7 @@ import {
 import {
   buildMemberPortalTakeoutBarSubLabel,
   buildMemberPortalTakeoutDisplayLabel,
+  buildPosCustomerMemoLineForPrint,
   resolveMemberPortalTakeoutMeta,
   resolveMemberPortalTakeoutTableDisplay,
 } from '@/lib/pos-member-portal-takeout-label'
@@ -1320,10 +1321,7 @@ export default function PosTerminalPage() {
       )
       if (!slips.length) throw new Error('no_slips_to_print')
       const slipDesign = resolveKitchenSlipDesign(settings)
-      const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
-      const memoLine = kitchenMemo.trim()
-        ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-        : ''
+      const memoLine = buildPosCustomerMemoLineForPrint(order.memo, ki.t, ki.lang)
       for (let idx = 0; idx < slips.length; idx += 1) {
         const slip = slips[idx]
         const tablePart = order.tableName
@@ -2297,10 +2295,7 @@ export default function PosTerminalPage() {
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
-          const kitchenMemo = parsePosOrderMemo(memo).plainMemo
-          const memoLine = kitchenMemo.trim()
-            ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-            : ''
+          const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
           const cR = (tag: string) => '\u003c/' + tag + '>'
           const tablePartR = tableName
             ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
@@ -2458,10 +2453,7 @@ export default function PosTerminalPage() {
               return
             }
             const slipDesign = resolveKitchenSlipDesign(settings)
-            const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
-            const memoLine = kitchenMemo.trim()
-              ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-              : ''
+            const memoLine = buildPosCustomerMemoLineForPrint(order.memo, ki.t, ki.lang)
             const printOne = (idx: number) => {
               if (idx >= slips.length) return
               const slip = slips[idx]
@@ -2646,10 +2638,7 @@ export default function PosTerminalPage() {
                     )
                     if (!slips.length) return
                     const slipDesign = resolveKitchenSlipDesign(settings)
-                    const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
-                    const memoLine = kitchenMemo.trim()
-                      ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-                      : ''
+                    const memoLine = buildPosCustomerMemoLineForPrint(order.memo, ki.t, ki.lang)
                     const printOne = (idx: number) => {
                       if (idx >= slips.length) return
                       const slip = slips[idx]
@@ -4050,10 +4039,7 @@ export default function PosTerminalPage() {
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
-          const kitchenMemo = parsePosOrderMemo(memo).plainMemo
-          const memoLine = kitchenMemo.trim()
-            ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-            : ''
+          const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
           const orderTypeLabelSlip =
             ki.orderTypeLabels[normalizePosOrderTypeKey(channel)] || channel
           const tablePartR = tableName
@@ -4222,10 +4208,7 @@ export default function PosTerminalPage() {
           const slips = buildPartialCancelKitchenSlips(cancelledSlips, activeSlips)
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
-          const kitchenMemo = parsePosOrderMemo(memo).plainMemo
-          const memoLine = kitchenMemo.trim()
-            ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-            : ''
+          const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
           const otKey = normalizePosOrderTypeKey(po.orderType ?? channel)
           const orderTypeLabelSlip = ki.orderTypeLabels[otKey] || orderTypeLabel
           const tablePartR = tableName
@@ -4479,10 +4462,7 @@ export default function PosTerminalPage() {
               return
             }
             const slipDesign = resolveKitchenSlipDesign(settings)
-            const kitchenMemo = parsePosOrderMemo(memo).plainMemo
-            const memoLine = kitchenMemo.trim()
-              ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-              : ''
+            const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
             const printOne = (idx: number) => {
               if (idx >= slips.length) return
               const slip = slips[idx]
@@ -5393,10 +5373,7 @@ export default function PosTerminalPage() {
                   return
                 }
                 const slipDesign = resolveKitchenSlipDesign(settings)
-                const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
-                const memoLine = kitchenMemo.trim()
-                  ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-                  : ''
+                const memoLine = buildPosCustomerMemoLineForPrint(order.memo, ki.t, ki.lang)
                 const printOne = (idx: number) => {
                   if (idx >= slips.length) return
                   const slip = slips[idx]
@@ -8881,10 +8858,7 @@ export default function PosTerminalPage() {
                         )
                         if (!slips.length) return
                         const slipDesign = resolveKitchenSlipDesign(settings)
-                        const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
-                        const memoLine = kitchenMemo.trim()
-                          ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-                          : ''
+                        const memoLine = buildPosCustomerMemoLineForPrint(payload.memo, ki.t, ki.lang)
                         const tablePartR = payload.tableName
                           ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.tableName, ki.t)
                           : ''
@@ -9803,10 +9777,7 @@ export default function PosTerminalPage() {
                       )
                       if (!slips.length) return
                       const slipDesign = resolveKitchenSlipDesign(settings)
-                      const kitchenMemo = parsePosOrderMemo(memoWithKbank).plainMemo
-                      const memoLine = kitchenMemo.trim()
-                        ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-                        : ''
+                      const memoLine = buildPosCustomerMemoLineForPrint(memoWithKbank, ki.t, ki.lang)
                       const tablePartR = payload.orderLabel
                         ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.orderLabel, ki.t)
                         : ''

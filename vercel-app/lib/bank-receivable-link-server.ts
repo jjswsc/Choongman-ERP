@@ -128,13 +128,19 @@ export async function loadOpenReceivablesForBankTx(bankRow: BankTxRow): Promise<
   return out
 }
 
-export async function linkReceivableAccrualFromBankTransaction(params: {
+export async function linkReceivableAccrualsFromBankTransaction(params: {
   bankTransactionId: number
-  receivableAccrualId: number
+  receivableAccrualIds: number[]
 }): Promise<{ ok: true } | { ok: false; message: string; status?: number }> {
   const bankTransactionId = Number(params.bankTransactionId || 0)
-  const receivableAccrualId = Number(params.receivableAccrualId || 0)
-  if (!bankTransactionId || !receivableAccrualId) {
+  const receivableAccrualIds = [
+    ...new Set(
+      (params.receivableAccrualIds || [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    ),
+  ]
+  if (!bankTransactionId || receivableAccrualIds.length === 0) {
     return { ok: false, message: '통장 거래 ID와 미수금 ID가 필요합니다.', status: 400 }
   }
 
@@ -173,59 +179,67 @@ export async function linkReceivableAccrualFromBankTransaction(params: {
 
   const accrualRows = (await supabaseSelectFilter(
     'receivable_transactions',
-    `id=eq.${receivableAccrualId}`,
+    `id=in.(${receivableAccrualIds.join(',')})`,
     {
-      limit: 1,
+      limit: receivableAccrualIds.length,
       select: 'id,store_name,amount,ref_type,ref_id,trans_date,memo,invoice_no,receive_checked',
     }
   )) as ReceivableAccrualRow[] | null
-  const accrual = accrualRows?.[0]
-  if (!accrual?.id || !isReceivableAccrualRefType(accrual.ref_type)) {
+  const accrualById = new Map<number, ReceivableAccrualRow>()
+  for (const row of accrualRows || []) {
+    const id = Number(row.id || 0)
+    if (id > 0) accrualById.set(id, row)
+  }
+  if (accrualById.size !== receivableAccrualIds.length) {
     return { ok: false, message: '연결할 미수금(출고·주문) 행을 찾을 수 없습니다.', status: 404 }
   }
 
-  if (!receivableStoreMatchesBank(String(accrual.store_name || ''), bankStore)) {
-    return { ok: false, message: '통장 입금 매장과 미수금 매장이 일치하지 않습니다.', status: 400 }
-  }
-
-  const bankAmt = Math.abs(Number(bankRow.amount || 0))
-  const offsetRows = (await supabaseSelectFilter(
-    'receivable_transactions',
-    `ref_type=eq.Receive&ref_id=eq.${receivableAccrualId}`,
-    { select: 'amount', limit: 20 }
-  )) as { amount?: number }[] | null
-  const remaining = computeReceivableOpenAmount(Number(accrual.amount || 0), offsetRows || [])
-  if (remaining <= 0.009) {
-    return { ok: false, message: '이미 수금 완료된 미수금입니다.', status: 400 }
-  }
-  if (Math.abs(bankAmt - remaining) > 0.01) {
-    return {
-      ok: false,
-      message: `통장 금액(฿${bankAmt.toLocaleString()})과 미수 잔액(฿${remaining.toLocaleString()})이 일치해야 합니다.`,
-      status: 400,
+  const offsetsByAccrual = new Map<number, { amount?: number }[]>()
+  for (let i = 0; i < receivableAccrualIds.length; i += 80) {
+    const chunk = receivableAccrualIds.slice(i, i + 80)
+    const offsetRows = (await supabaseSelectFilter(
+      'receivable_transactions',
+      `ref_type=eq.Receive&ref_id=in.(${chunk.join(',')})`,
+      { select: 'ref_id,amount', limit: Math.max(chunk.length * 3, 100) }
+    )) as { ref_id?: number; amount?: number }[] | null
+    for (const row of offsetRows || []) {
+      const aid = Number(row.ref_id || 0)
+      if (!aid) continue
+      const list = offsetsByAccrual.get(aid) || []
+      list.push(row)
+      offsetsByAccrual.set(aid, list)
     }
   }
 
-  const alreadyLinked = (await supabaseSelectFilter(
-    'receivable_transactions',
-    `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive&ref_id=eq.${receivableAccrualId}`,
-    { select: 'id', limit: 1 }
-  )) as { id?: number }[] | null
-  if (alreadyLinked?.length) {
-    await supabaseUpdate('receivable_transactions', receivableAccrualId, { receive_checked: true })
-    return { ok: true }
+  const bankAmt = Math.abs(Number(bankRow.amount || 0))
+  const linkTargets: { accrualId: number; accrual: ReceivableAccrualRow; remaining: number }[] = []
+  let selectedTotal = 0
+
+  for (const accrualId of receivableAccrualIds) {
+    const accrual = accrualById.get(accrualId)!
+    if (!isReceivableAccrualRefType(accrual.ref_type)) {
+      return { ok: false, message: '연결할 미수금(출고·주문) 행을 찾을 수 없습니다.', status: 404 }
+    }
+    if (!receivableStoreMatchesBank(String(accrual.store_name || ''), bankStore)) {
+      return { ok: false, message: '통장 입금 매장과 미수금 매장이 일치하지 않습니다.', status: 400 }
+    }
+    const remaining = computeReceivableOpenAmount(
+      Number(accrual.amount || 0),
+      offsetsByAccrual.get(accrualId) || []
+    )
+    if (remaining <= 0.009) {
+      return { ok: false, message: '이미 수금 완료된 미수금이 포함되어 있습니다.', status: 400 }
+    }
+    selectedTotal = roundReceivableMoney(selectedTotal + remaining)
+    linkTargets.push({ accrualId, accrual, remaining })
   }
 
-  const otherBankLink = (await supabaseSelectFilter(
-    'receivable_transactions',
-    `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive`,
-    { select: 'id,ref_id', limit: 5 }
-  )) as { id?: number; ref_id?: number }[] | null
-  const linkedElsewhere = (otherBankLink || []).some(
-    (r) => Number(r.ref_id || 0) > 0 && Number(r.ref_id) !== receivableAccrualId
-  )
-  if (linkedElsewhere) {
-    return { ok: false, message: '이미 다른 미수금과 연결된 통장 거래입니다.', status: 409 }
+  if (Math.abs(bankAmt - selectedTotal) > 0.01) {
+    return {
+      ok: false,
+      message: `통장 금액(฿${bankAmt.toLocaleString()})과 선택한 미수 잔액 합계(฿${selectedTotal.toLocaleString()})가 일치해야 합니다.`,
+      status: 400,
+    }
   }
 
   await supabaseDeleteByFilter(
@@ -234,23 +248,34 @@ export async function linkReceivableAccrualFromBankTransaction(params: {
   )
 
   const transDate = String(bankRow.trans_date || '').slice(0, 10)
-  const label = String(accrual.invoice_no || accrual.memo || '').trim()
-  const memo = label ? `통장 수금 ${label}`.slice(0, 240) : '통장 수금'
-
-  await supabaseInsert('receivable_transactions', {
-    store_name: String(accrual.store_name || bankStore),
-    amount: -roundReceivableMoney(bankAmt),
-    ref_type: 'Receive',
-    ref_id: receivableAccrualId,
-    trans_date: transDate,
-    memo,
-    receive_checked: false,
-    bank_transaction_id: bankTransactionId,
-  })
-
-  await supabaseUpdate('receivable_transactions', receivableAccrualId, { receive_checked: true })
+  for (const { accrualId, accrual, remaining } of linkTargets) {
+    const label = String(accrual.invoice_no || accrual.memo || '').trim()
+    const memo = label ? `통장 수금 ${label}`.slice(0, 240) : '통장 수금'
+    await supabaseInsert('receivable_transactions', {
+      store_name: String(accrual.store_name || bankStore),
+      amount: -roundReceivableMoney(remaining),
+      ref_type: 'Receive',
+      ref_id: accrualId,
+      trans_date: transDate,
+      memo,
+      receive_checked: false,
+      bank_transaction_id: bankTransactionId,
+    })
+    await supabaseUpdate('receivable_transactions', accrualId, { receive_checked: true })
+  }
 
   return { ok: true }
+}
+
+/** @deprecated 단일 ID — 다중은 linkReceivableAccrualsFromBankTransaction 사용 */
+export async function linkReceivableAccrualFromBankTransaction(params: {
+  bankTransactionId: number
+  receivableAccrualId: number
+}): Promise<{ ok: true } | { ok: false; message: string; status?: number }> {
+  return linkReceivableAccrualsFromBankTransaction({
+    bankTransactionId: params.bankTransactionId,
+    receivableAccrualIds: [params.receivableAccrualId],
+  })
 }
 
 export async function bankTransactionHasReceivableOrderLink(bankTransactionId: number): Promise<boolean> {

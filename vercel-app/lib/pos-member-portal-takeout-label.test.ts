@@ -3,10 +3,12 @@ import {
   buildMemberPortalTakeoutBarSubLabel,
   buildMemberPortalTakeoutDisplayLabel,
   buildMemberPortalTakeoutTableNameForStorage,
+  formatMemberPortalReceiptMemo,
   isMemberPortalTakeoutKitchenOpen,
   isMemberPortalTakeoutOrder,
   resolveMemberPortalTakeoutMeta,
   resolveMemberPortalTakeoutTableDisplay,
+  translateMemberPortalReceiptTableName,
 } from '@/lib/pos-member-portal-takeout-label'
 
 describe('pos-member-portal-takeout-label', () => {
@@ -66,5 +68,25 @@ describe('pos-member-portal-takeout-label', () => {
     expect(isMemberPortalTakeoutKitchenOpen({ ...base, status: 'paid' })).toBe(true)
     expect(isMemberPortalTakeoutKitchenOpen({ ...base, status: 'ready' })).toBe(false)
     expect(isMemberPortalTakeoutKitchenOpen({ type: 'takeout', status: 'paid' })).toBe(false)
+  })
+
+  it('localizes member portal receipt memo and table for Thai POS', () => {
+    const thT = (k: string) =>
+      ({
+        posMemberPortalOrder: 'สั่งซื้อสมาชิก',
+        posMemberPortalOrderNotice: 'คำสั่งซื้อสมาชิก',
+        posPickupAtShort: 'รับสินค้า',
+        posMember: 'สมาชิก',
+        posMemberNo: 'เลขสมาชิก',
+      })[k] ?? k
+
+    const localizedMemo = formatMemberPortalReceiptMemo(memo, thT, 'th')
+    expect(localizedMemo).toContain('[สั่งซื้อสมาชิก]')
+    expect(localizedMemo).toContain('คำสั่งซื้อสมาชิก')
+    expect(localizedMemo).toContain('รับสินค้า:')
+    expect(localizedMemo).not.toContain('회원 주문입니다')
+
+    const table = translateMemberPortalReceiptTableName('회원주문 · ประวัตร · M007359', thT)
+    expect(table).toBe('สั่งซื้อสมาชิก · ประวัตร · M007359')
   })
 })

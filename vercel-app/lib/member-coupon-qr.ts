@@ -127,12 +127,3 @@ export function parseLooseMemberCouponScanInput(raw: string): MemberCouponQrPayl
 export function isMemberCouponScanPayload(raw: string): boolean {
   return isMemberCouponQrPayload(raw) || parseLooseMemberCouponScanInput(raw) != null
 }
-
-/** 스캐너가 앞 `CM` 접두를 잘랐을 때 검증 후보 */
-export function expandTruncatedCouponCodeCandidates(code: string): string[] {
-  const normalized = String(code ?? '').trim().toUpperCase()
-  if (!normalized) return []
-  const out = [normalized]
-  if (!normalized.startsWith('CM')) out.push(`CM${normalized}`)
-  return [...new Set(out)]
-}

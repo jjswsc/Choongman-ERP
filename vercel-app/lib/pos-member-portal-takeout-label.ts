@@ -1,5 +1,7 @@
 import type { LangCode } from '@/lib/lang-context'
+import { MEMBER_PORTAL_PAYMENT_PENDING_TAG } from '@/lib/member-portal-payment-pending'
 import { formatPosTimeHm24Bangkok } from '@/lib/pos-datetime-locale'
+import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 
 export type MemberPortalTakeoutMeta = {
   isMemberPortal: boolean
@@ -32,7 +34,9 @@ export function resolveMemberPortalTakeoutMeta(params: {
     memo.includes(MEMBER_PORTAL_MEMO_TAG) ||
     memo.includes('회원 주문입니다') ||
     /픽업희망:/u.test(memo)
-  const isMemberPortal = memberId > 0 || Boolean(memberNoFromDb) || taggedInMemo
+  const tableLooksMemberPortal = /^회원(?:주문)?\s*[·•]/u.test(tableName)
+  const isMemberPortal =
+    memberId > 0 || Boolean(memberNoFromDb) || taggedInMemo || tableLooksMemberPortal
 
   if (!isMemberPortal) {
     return { isMemberPortal: false, memberName: '', memberNo: '', pickupAtRaw: '' }
@@ -74,6 +78,12 @@ type LabelText = {
 
 const DEFAULT_LABEL_TEXT: LabelText = {
   memberPortalOrder: '회원주문',
+}
+
+export function memberPortalReceiptLabelText(t: (key: string) => string): LabelText {
+  const memberPortalOrder =
+    String(t('posMemberPortalOrder') ?? '').trim() || DEFAULT_LABEL_TEXT.memberPortalOrder
+  return { memberPortalOrder }
 }
 
 /** 포장 바·패널·주방 슬립 헤더용 메인 라벨 */
@@ -169,4 +179,94 @@ export function resolveMemberPortalTakeoutTableDisplay(params: {
   const meta = resolveMemberPortalTakeoutMeta(params)
   if (!meta.isMemberPortal) return ''
   return buildMemberPortalTakeoutDisplayLabel(meta, params.labelText)
+}
+
+function pickLocalizedLabel(t: (key: string) => string, key: string, fallback: string): string {
+  const raw = String(t(key) ?? '').trim()
+  if (!raw || raw === key || /^pos[A-Z]/.test(raw)) return fallback
+  return raw
+}
+
+/** 영수증·주방 슬립 테이블명 — 회원앱 픽업 주문 한글 저장값을 현재 POS 언어로 */
+export function translateMemberPortalReceiptTableName(
+  tableName: string | undefined | null,
+  t: (key: string) => string
+): string {
+  const s = String(tableName ?? '').trim()
+  if (!s) return ''
+  const meta = resolveMemberPortalTakeoutMeta({ tableName: s })
+  if (!meta.isMemberPortal) return s
+  return buildMemberPortalTakeoutDisplayLabel(meta, memberPortalReceiptLabelText(t))
+}
+
+/** 영수증·주방 슬립 고객 메모 — 회원앱 픽업 주문 한글 메모를 현재 POS 언어로 */
+export function formatMemberPortalReceiptMemo(
+  memo: string | undefined | null,
+  t: (key: string) => string,
+  lang: LangCode
+): string {
+  const raw = String(memo ?? '').trim()
+  if (!raw) return ''
+  const meta = resolveMemberPortalTakeoutMeta({ memo: raw })
+  if (!meta.isMemberPortal) return raw
+
+  const labels = memberPortalReceiptLabelText(t)
+  const parts: string[] = [`[${labels.memberPortalOrder}]`]
+
+  if (raw.includes(MEMBER_PORTAL_PAYMENT_PENDING_TAG)) {
+    const pending = pickLocalizedLabel(t, 'posMemberPortalPaymentPending', MEMBER_PORTAL_PAYMENT_PENDING_TAG)
+    parts.push(pending.startsWith('[') ? pending : `[${pending}]`)
+  }
+
+  const notice = pickLocalizedLabel(t, 'posMemberPortalOrderNotice', '회원 주문입니다')
+  parts.push(notice)
+
+  if (meta.pickupAtRaw) {
+    const pickupHm = formatPickupAtForDisplay(meta.pickupAtRaw, lang)
+    if (pickupHm) {
+      parts.push(
+        `${pickLocalizedLabel(t, 'posPickupAtShort', '픽업')}:${pickupHm}`
+      )
+    }
+  }
+  if (meta.memberName) {
+    parts.push(`${pickLocalizedLabel(t, 'posMember', '회원')}:${meta.memberName}`)
+  }
+  if (meta.memberNo) {
+    parts.push(`${pickLocalizedLabel(t, 'posMemberNo', '회원번호')}:${meta.memberNo}`)
+  }
+
+  const couponCode = pickMemoField(raw, '쿠폰')
+  if (couponCode) {
+    parts.push(`${pickLocalizedLabel(t, 'posCoupon', '쿠폰')}:${couponCode}`)
+  }
+  const pointUsed = pickMemoField(raw, '포인트')
+  if (pointUsed) {
+    parts.push(`${pickLocalizedLabel(t, 'posPointsShort', '포인트')}:${pointUsed}`)
+  }
+
+  return parts.join(' · ')
+}
+
+/** parsePosOrderMemo 이후 plainMemo — 회원앱 픽업이면 현재 언어로 재구성 */
+export function translatePosCustomerMemoForReceipt(
+  memo: string | undefined | null,
+  t: (key: string) => string,
+  lang: LangCode
+): string {
+  const plainMemo = String(parsePosOrderMemo(memo).plainMemo ?? '').trim()
+  if (!plainMemo) return ''
+  return formatMemberPortalReceiptMemo(plainMemo, t, lang)
+}
+
+/** 주방 슬립용 `메모: …` 한 줄 */
+export function buildPosCustomerMemoLineForPrint(
+  memo: string | undefined | null,
+  t: (key: string) => string,
+  lang: LangCode
+): string {
+  const text = translatePosCustomerMemoForReceipt(memo, t, lang).trim()
+  if (!text) return ''
+  const label = pickLocalizedLabel(t, 'posCustomerMemo', '메모')
+  return `${label}: ${text}`
 }

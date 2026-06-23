@@ -20,6 +20,14 @@ type RuntimeUiStringKey =
   | "posOrderTypeDineIn"
   | "posOrderTypeTakeout"
   | "posOrderTypeDelivery"
+  | "posMemberPortalOrder"
+  | "posMemberPortalOrderNotice"
+  | "posMemberPortalPaymentPending"
+  | "posPickupAtShort"
+  | "posMember"
+  | "posMemberNo"
+  | "posCoupon"
+  | "posPointsShort"
 
 const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> = {
   ko: {
@@ -42,6 +50,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "매장",
     posOrderTypeTakeout: "포장",
     posOrderTypeDelivery: "배달",
+    posMemberPortalOrder: "회원주문",
+    posMemberPortalOrderNotice: "회원 주문입니다",
+    posMemberPortalPaymentPending: "결제대기",
+    posPickupAtShort: "픽업",
+    posMember: "회원",
+    posMemberNo: "회원번호",
+    posCoupon: "쿠폰",
+    posPointsShort: "포인트",
   },
   en: {
     cancel: "Cancel",
@@ -63,6 +79,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "Dine-in",
     posOrderTypeTakeout: "Takeout",
     posOrderTypeDelivery: "Delivery",
+    posMemberPortalOrder: "Member order",
+    posMemberPortalOrderNotice: "This is a member order",
+    posMemberPortalPaymentPending: "Payment pending",
+    posPickupAtShort: "Pickup",
+    posMember: "Member",
+    posMemberNo: "Member no",
+    posCoupon: "Coupon",
+    posPointsShort: "Points",
   },
   th: {
     cancel: "ยกเลิก",
@@ -86,6 +110,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ทานที่ร้าน",
     posOrderTypeTakeout: "ซื้อกลับบ้าน",
     posOrderTypeDelivery: "เดลิเวอรี",
+    posMemberPortalOrder: "สั่งซื้อสมาชิก",
+    posMemberPortalOrderNotice: "คำสั่งซื้อสมาชิก",
+    posMemberPortalPaymentPending: "รอชำระเงิน",
+    posPickupAtShort: "รับสินค้า",
+    posMember: "สมาชิก",
+    posMemberNo: "เลขสมาชิก",
+    posCoupon: "คูปอง",
+    posPointsShort: "คะแนน",
   },
   mm: {
     cancel: "ပယ်ဖျက်မည်",
@@ -107,6 +139,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ဆိုင်တွင်စားမည်",
     posOrderTypeTakeout: "ထုပ်ယူ",
     posOrderTypeDelivery: "ပို့ဆောင်",
+    posMemberPortalOrder: "Member order",
+    posMemberPortalOrderNotice: "This is a member order",
+    posMemberPortalPaymentPending: "Payment pending",
+    posPickupAtShort: "Pickup",
+    posMember: "Member",
+    posMemberNo: "Member no",
+    posCoupon: "Coupon",
+    posPointsShort: "Points",
   },
   la: {
     cancel: "ຍົກເລີກ",
@@ -128,6 +168,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ນັ່ງກິນໃນຮ້ານ",
     posOrderTypeTakeout: "ຫໍ່ກັບ",
     posOrderTypeDelivery: "ຈັດສົ່ງ",
+    posMemberPortalOrder: "Member order",
+    posMemberPortalOrderNotice: "This is a member order",
+    posMemberPortalPaymentPending: "Payment pending",
+    posPickupAtShort: "Pickup",
+    posMember: "Member",
+    posMemberNo: "Member no",
+    posCoupon: "Coupon",
+    posPointsShort: "Points",
   },
   kh: {
     cancel: "បោះបង់",
@@ -149,6 +197,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ញ៉ាំនៅហាង",
     posOrderTypeTakeout: "យកត្រឡប់",
     posOrderTypeDelivery: "ដឹកជញ្ជូន",
+    posMemberPortalOrder: "Member order",
+    posMemberPortalOrderNotice: "This is a member order",
+    posMemberPortalPaymentPending: "Payment pending",
+    posPickupAtShort: "Pickup",
+    posMember: "Member",
+    posMemberNo: "Member no",
+    posCoupon: "Coupon",
+    posPointsShort: "Points",
   },
   vi: {
     cancel: "Hủy",
@@ -170,6 +226,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "Ăn tại chỗ",
     posOrderTypeTakeout: "Mang đi",
     posOrderTypeDelivery: "Giao hàng",
+    posMemberPortalOrder: "Member order",
+    posMemberPortalOrderNotice: "This is a member order",
+    posMemberPortalPaymentPending: "Payment pending",
+    posPickupAtShort: "Pickup",
+    posMember: "Member",
+    posMemberNo: "Member no",
+    posCoupon: "Coupon",
+    posPointsShort: "Points",
   },
   ms: {
     cancel: "Batal",
@@ -191,6 +255,14 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "Makan di kedai",
     posOrderTypeTakeout: "Bungkus",
     posOrderTypeDelivery: "Penghantaran",
+    posMemberPortalOrder: "Member order",
+    posMemberPortalOrderNotice: "This is a member order",
+    posMemberPortalPaymentPending: "Payment pending",
+    posPickupAtShort: "Pickup",
+    posMember: "Member",
+    posMemberNo: "Member no",
+    posCoupon: "Coupon",
+    posPointsShort: "Points",
   },
 }
 

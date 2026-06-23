@@ -23,7 +23,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, Check, AlertCircle } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -98,7 +98,12 @@ import {
   AccountingTheadRow,
 } from "@/components/erp/accounting-data-table"
 import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
-import { bankDepositNeedsReceivableOrderLink } from "@/lib/bank-receivable-link"
+import {
+  bankDepositNeedsReceivableOrderLink,
+  receivablePickTotalMatchesBank,
+  roundReceivableMoney,
+  sumOpenReceivablePickAmount,
+} from "@/lib/bank-receivable-link"
 
 const BANK_EDIT_BTN_CN = `${ADMIN_BTN_XS_CN} shrink-0 h-7 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15`
 
@@ -358,7 +363,7 @@ export function BankTransactionsTab() {
   const [approvedPickSaving, setApprovedPickSaving] = React.useState(false)
   const [receivablePickRow, setReceivablePickRow] = React.useState<(typeof list)[0] | null>(null)
   const [receivablePickList, setReceivablePickList] = React.useState<OpenReceivableForBankItem[]>([])
-  const [receivablePickId, setReceivablePickId] = React.useState<string>("")
+  const [receivablePickSelectedIds, setReceivablePickSelectedIds] = React.useState<number[]>([])
   const [receivablePickLoading, setReceivablePickLoading] = React.useState(false)
   const [receivablePickSaving, setReceivablePickSaving] = React.useState(false)
   const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
@@ -599,7 +604,7 @@ export function BankTransactionsTab() {
     if (!row?.id) return
     setReceivablePickRow(row)
     setReceivablePickLoading(true)
-    setReceivablePickId("")
+    setReceivablePickSelectedIds([])
     try {
       const res = await getOpenReceivablesForBankTx({ bankTransactionId: Number(row.id) })
       setReceivablePickList(res.list || [])
@@ -2245,7 +2250,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   <AccountingDataTable
                     id="bank-query-list-wrap"
                     className="max-h-[70vh] min-h-[320px]"
-                    minWidthClass="min-w-[1020px] table-fixed"
+                    minWidthClass="min-w-[1240px] table-fixed"
                   >
                     {loading ? (
                       <tbody>
@@ -2271,11 +2276,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "130px" }} />
                           <col style={{ width: "130px" }} />
                           <col style={{ width: "95px" }} />
-                          <col style={{ width: "88px" }} />
-                          <col style={{ width: "148px" }} />
-                          <col style={{ width: "36px" }} />
-                          <col style={{ width: "180px" }} />
-                          <col style={{ width: "140px" }} />
+                          <col style={{ width: "120px" }} />
+                          <col style={{ width: "168px" }} />
+                          <col style={{ width: "32px" }} />
+                          <col style={{ width: "158px" }} />
+                          <col style={{ width: "158px" }} />
                           <col style={{ width: "76px" }} />
                         </colgroup>
                         <AccountingTheadRow sticky>
@@ -2478,20 +2483,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className={`p-2 align-middle text-right whitespace-nowrap tabular-nums ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
                                 {(r.amount ?? 0).toLocaleString()}
                               </td>
-                              <td className="p-2">
+                              <td className="p-2 align-middle text-center">
                                 {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
                                   <Input
                                     type="date"
                                     value={edits?.salesDate ?? r.salesDate ?? (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
                                     onChange={(e) => r.id && setQueryRowEdit(r.id, "salesDate", e.target.value)}
-                                    className="h-8 text-xs min-w-[110px] w-[110px]"
+                                    className="h-8 text-xs min-w-[112px] w-full max-w-[112px] mx-auto"
                                   />
                                 ) : r.transType === "withdraw" && cat === "expense" ? (
                                   <Input
                                     type="date"
                                     value={edits?.expenseDate ?? r.expenseDate ?? r.transDate}
                                     onChange={(e) => r.id && setQueryRowEdit(r.id, "expenseDate", e.target.value)}
-                                    className="h-8 text-xs min-w-[110px] w-[110px]"
+                                    className="h-8 text-xs min-w-[112px] w-full max-w-[112px] mx-auto"
                                   />
                                 ) : (
                                   <span className="text-xs text-muted-foreground">—</span>
@@ -2503,10 +2508,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   r.isLinked ? (
                                     <>
                                       <span
-                                        className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
+                                        className="inline-flex rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
                                         title={t("acct_bank_expense_linked")}
                                       >
-                                        <Check className="h-3 w-3 shrink-0" aria-hidden />
                                         {t("acct_bank_expense_linked")}
                                       </span>
                                       <Button
@@ -2579,10 +2583,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       return (
                                         <>
                                           <span
-                                            className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
+                                            className="inline-flex rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
                                             title={t("acct_bank_receivable_linked")}
                                           >
-                                            <Check className="h-3 w-3 shrink-0" aria-hidden />
                                             {t("acct_bank_receivable_linked")}
                                           </span>
                                           <Button
@@ -2669,7 +2672,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 )}
                               </td>
                               <td
-                                className="p-2 align-middle text-left truncate max-w-[180px] text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                                className="p-2 align-middle text-left truncate max-w-[158px] text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
                                 onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
                                 title={r.memo?.trim() ? r.memo : undefined}
                               >
@@ -2687,7 +2690,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   onFocus={() => {
                                     if (r.id) queryMemoFocusIdRef.current = r.id
                                   }}
-                                  className="h-8 text-xs min-w-[120px] max-w-[160px]"
+                                  className="h-8 text-xs min-w-[140px] w-full max-w-[158px]"
                                 />
                               </td>
                               <td className="p-2 align-middle text-center">
@@ -3865,11 +3868,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           if (!open) {
             setReceivablePickRow(null)
             setReceivablePickList([])
-            setReceivablePickId("")
+            setReceivablePickSelectedIds([])
           }
         }}
       >
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{tt("bankRegisterLinkReceivable", "미수금 연결")}</DialogTitle>
           </DialogHeader>
@@ -3885,45 +3888,91 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               {tt("bankReceivablePickEmpty", "연결 가능한 미수금(출고·주문)이 없습니다.")}
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                {(t("amount") || "금액")}: ฿{Math.abs(Number(receivablePickRow?.amount || 0)).toLocaleString()}
+                {tt(
+                  "bankReceivablePickMultiHint",
+                  "여러 인보이스를 선택할 수 있습니다. 선택 합계가 통장 입금액과 일치해야 저장됩니다."
+                )}
               </p>
-              <Select
-                value={receivablePickId || "__none__"}
-                onValueChange={(v) => setReceivablePickId(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={tt("bankRegisterLinkReceivable", "미수금 연결")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {receivablePickList.map((p) => {
-                    const bankAmt = Math.abs(Number(receivablePickRow?.amount || 0))
-                    const exact = Math.abs(p.remainingAmount - bankAmt) <= 0.01
-                    return (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {exact ? "✓" : "·"} {p.transDate} · {p.refType}
-                        {p.invoiceNo ? ` ${p.invoiceNo}` : ""} / ฿{p.remainingAmount.toLocaleString()}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
+              <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
+                {receivablePickList.map((p) => {
+                  const checked = receivablePickSelectedIds.includes(p.id)
+                  const label =
+                    p.invoiceNo ||
+                    (p.refId ? `#${p.refId}` : "") ||
+                    (p.memo ? p.memo.slice(0, 40) : "")
+                  return (
+                    <label
+                      key={p.id}
+                      className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-muted/40"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        className="mt-0.5"
+                        onCheckedChange={(v) => {
+                          setReceivablePickSelectedIds((prev) => {
+                            if (v) return prev.includes(p.id) ? prev : [...prev, p.id]
+                            return prev.filter((id) => id !== p.id)
+                          })
+                        }}
+                      />
+                      <span className="flex-1 min-w-0 text-sm leading-snug">
+                        <span className="font-medium tabular-nums">{p.transDate}</span>
+                        <span className="text-muted-foreground"> · {p.refType}</span>
+                        {label ? (
+                          <span className="block text-xs text-muted-foreground truncate">{label}</span>
+                        ) : null}
+                      </span>
+                      <span className="text-sm font-medium tabular-nums whitespace-nowrap shrink-0">
+                        ฿{p.remainingAmount.toLocaleString()}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
               {(() => {
-                const selected = receivablePickList.find((x) => String(x.id) === String(receivablePickId))
-                if (!selected || !receivablePickRow) return null
-                const bankAmt = Math.abs(Number(receivablePickRow.amount || 0))
-                const remain = Math.abs(Number(selected.remainingAmount || 0))
-                if (Math.abs(bankAmt - remain) <= 0.01) return null
+                const bankAmt = Math.abs(Number(receivablePickRow?.amount || 0))
+                const selectedTotal = sumOpenReceivablePickAmount(
+                  receivablePickList,
+                  receivablePickSelectedIds
+                )
+                const matches = receivablePickTotalMatchesBank(bankAmt, selectedTotal)
+                const diff = roundReceivableMoney(bankAmt - selectedTotal)
                 return (
-                  <p className="text-xs text-destructive">
-                    {tt(
-                      "bankReceivableAmountMismatch",
-                      "통장 금액과 선택한 미수 잔액이 다릅니다."
-                    )}{" "}
-                    (฿{bankAmt.toLocaleString()} / ฿{remain.toLocaleString()})
-                  </p>
+                  <div
+                    className={cn(
+                      "rounded-md border px-3 py-2 text-sm space-y-1",
+                      receivablePickSelectedIds.length === 0
+                        ? "border-border bg-muted/30"
+                        : matches
+                          ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                          : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
+                    )}
+                  >
+                    <div className="flex justify-between gap-2 tabular-nums">
+                      <span className="text-muted-foreground">
+                        {tt("bankReceivablePickBankAmount", "통장 입금")}
+                      </span>
+                      <span className="font-medium">฿{bankAmt.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 tabular-nums">
+                      <span className="text-muted-foreground">
+                        {tt("bankReceivablePickSelectedTotal", "선택 합계")} ({receivablePickSelectedIds.length})
+                      </span>
+                      <span className="font-medium">฿{selectedTotal.toLocaleString()}</span>
+                    </div>
+                    {receivablePickSelectedIds.length > 0 && !matches ? (
+                      <p className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
+                        {tt("bankReceivablePickDiff", "차이")}: ฿{diff.toLocaleString()}
+                      </p>
+                    ) : null}
+                    {receivablePickSelectedIds.length > 0 && matches ? (
+                      <p className="text-xs text-green-800 dark:text-green-300">
+                        {tt("bankReceivablePickAmountOk", "금액이 일치합니다.")}
+                      </p>
+                    ) : null}
+                  </div>
                 )
               })()}
               <div className="flex justify-end gap-2">
@@ -3932,15 +3981,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 </Button>
                 <Button
                   onClick={async () => {
-                    if (!receivablePickRow?.id || !receivablePickId) return
-                    const selected = receivablePickList.find((x) => String(x.id) === String(receivablePickId))
+                    if (!receivablePickRow?.id || receivablePickSelectedIds.length === 0) return
                     const bankAmt = Math.abs(Number(receivablePickRow.amount || 0))
-                    const remain = Math.abs(Number(selected?.remainingAmount || 0))
-                    if (!selected || Math.abs(bankAmt - remain) > 0.01) {
+                    const selectedTotal = sumOpenReceivablePickAmount(
+                      receivablePickList,
+                      receivablePickSelectedIds
+                    )
+                    if (!receivablePickTotalMatchesBank(bankAmt, selectedTotal)) {
                       await appAlert(
                         tt(
                           "bankReceivableAmountMismatch",
-                          "통장 금액과 선택한 미수 잔액이 일치해야 합니다."
+                          "통장 금액과 선택한 미수 잔액 합계가 일치해야 합니다."
                         )
                       )
                       return
@@ -3949,7 +4000,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     try {
                       const res = await linkReceivableFromBankTransaction({
                         bankTransactionId: Number(receivablePickRow.id),
-                        receivableAccrualId: Number(receivablePickId),
+                        receivableAccrualIds: receivablePickSelectedIds,
                       })
                       if (!res.success) {
                         await appAlert(
@@ -3959,24 +4010,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       }
                       setReceivablePickRow(null)
                       setReceivablePickList([])
-                      setReceivablePickId("")
+                      setReceivablePickSelectedIds([])
                       loadData()
                     } finally {
                       setReceivablePickSaving(false)
                     }
                   }}
                   disabled={
-                    !receivablePickId ||
+                    receivablePickSelectedIds.length === 0 ||
                     receivablePickSaving ||
-                    (() => {
-                      const selected = receivablePickList.find(
-                        (x) => String(x.id) === String(receivablePickId)
-                      )
-                      const bankAmt = Math.abs(Number(receivablePickRow?.amount || 0))
-                      const remain = Math.abs(Number(selected?.remainingAmount || 0))
-                      if (!selected || Math.abs(bankAmt - remain) > 0.01) return true
-                      return false
-                    })()
+                    !receivablePickTotalMatchesBank(
+                      Math.abs(Number(receivablePickRow?.amount || 0)),
+                      sumOpenReceivablePickAmount(receivablePickList, receivablePickSelectedIds)
+                    )
                   }
                 >
                   {receivablePickSaving ? "..." : (t("btnSave") || "저장")}
