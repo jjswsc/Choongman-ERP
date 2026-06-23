@@ -362,7 +362,9 @@ function POSMainPageInner() {
           break
         case 'takeout':
           pushPosRouteWithFallback(
-            isPosDemo ? getPosDemoTerminalRoute('takeout') : '/pos/terminal?type=takeout'
+            isPosDemo
+              ? `${getPosDemoTerminalRoute('takeout')}&takeoutFresh=1`
+              : '/pos/terminal?type=takeout&takeoutFresh=1'
           )
           break
         case 'delivery':

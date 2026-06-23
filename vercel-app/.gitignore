@@ -82,3 +82,5 @@ assets/brand/omnifoodtech-logo.png
 public/downloads/**/*.exe
 # Android APK(100MB+ GitHub 제한). publish-android-apk.ps1 로 배포 시에만 public에 복사
 public/downloads/**/*.apk
+
+.vercel

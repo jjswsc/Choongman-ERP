@@ -182,6 +182,7 @@ import {
   translatePosMenuLineForReceipt,
   translateReceiptTableDisplayName,
   translateTakeoutOrderDisplayLabel,
+  extractTakeoutSlotNumberFromLabel,
 } from '@/lib/pos-print-translate'
 import {
   buildMemberPortalTakeoutBarSubLabel,
@@ -7381,6 +7382,126 @@ export default function PosTerminalPage() {
       })
   }, [takeoutOrders, packagedTakeoutOrders, t])
 
+  const findOpenUnpaidTakeoutForLabel = useCallback(
+    (draftLabel: string): Order | null => {
+      const label = String(draftLabel ?? '').trim()
+      if (!label) return null
+      const draftSlotNo = extractTakeoutSlotNumberFromLabel(label)
+      const candidates = [...takeoutOrders, ...packagedTakeoutOrders]
+      for (const o of candidates) {
+        if (o.type !== 'takeout') continue
+        const st = String(o.status ?? '').trim().toLowerCase()
+        if (st === 'paid' || st === 'completed' || st === 'cancelled' || st === 'canceled' || st === 'refunded') {
+          continue
+        }
+        if (orderPaymentsSum(o) > 0.005) continue
+        if (!o.items?.length) continue
+        const orderLabel = String(o.tableName ?? o.customerName ?? '').trim()
+        if (!orderLabel) continue
+        if (takeoutMode === 'member') {
+          const memberWant = takeoutMemberName.trim()
+          if (memberWant && orderLabel.localeCompare(memberWant, undefined, { sensitivity: 'accent' }) === 0) {
+            return o
+          }
+          continue
+        }
+        if (draftSlotNo) {
+          const orderSlotNo = extractTakeoutSlotNumberFromLabel(orderLabel)
+          if (orderSlotNo && orderSlotNo === draftSlotNo) return o
+        }
+        if (orderLabel.localeCompare(label, undefined, { sensitivity: 'accent' }) === 0) return o
+      }
+      return null
+    },
+    [takeoutOrders, packagedTakeoutOrders, takeoutMode, takeoutMemberName]
+  )
+
+  const openTakeoutDraftWithLabel = useCallback(
+    (label: string) => {
+      const trimmed = String(label ?? '').trim()
+      if (!trimmed) return
+      const cacheKey = getPosCartSessionKey({
+        currentStoreId,
+        orderType: 'takeout',
+        selectedTableId: '',
+        deliveryApp: null,
+        deliveryOrderNo: null,
+        takeoutLabel: translateTakeoutOrderDisplayLabel(trimmed, t),
+      })
+      replacePosCartItemsCache(cacheKey, [])
+      clearCartFromTerminal()
+      setPendingTakeoutOrderId(null)
+      setPendingReceiptOrderNo(null)
+      setSelectedTakeoutTargetId('takeout-draft')
+      setSelectedTakeoutTargetLabel(trimmed)
+    },
+    [currentStoreId, t, clearCartFromTerminal]
+  )
+
+  const enterTakeoutAddOrderMode = useCallback(
+    (order: Order) => {
+      const oid = Number(order.id)
+      if (!Number.isFinite(oid) || oid <= 0) return
+      clearCartFromTerminal()
+      setPendingTakeoutOrderId(oid)
+      setPendingReceiptOrderNo(order.orderNo ?? null)
+      setSelectedTakeoutTargetLabel(resolveTakeoutOrderBarLabel(order))
+      setSelectedTakeoutTargetId('takeout-draft')
+    },
+    [clearCartFromTerminal, resolveTakeoutOrderBarLabel]
+  )
+
+  const requestTakeoutFreshDraft = useCallback(
+    async (label: string) => {
+      const trimmed = String(label ?? '').trim()
+      if (!trimmed) return
+      const existing = findOpenUnpaidTakeoutForLabel(trimmed)
+      if (existing) {
+        const existingLabel = resolveTakeoutOrderBarLabel(existing)
+        const msg = (t('posTakeoutOpenBillExistsBody') || '{{label}}에 미결제 주문이 있습니다.')
+          .replace(/\{\{label\}\}/g, existingLabel)
+        const openNewBill = await appConfirm(msg)
+        if (!openNewBill) {
+          enterTakeoutAddOrderMode(existing)
+          return
+        }
+      }
+      openTakeoutDraftWithLabel(trimmed)
+    },
+    [findOpenUnpaidTakeoutForLabel, resolveTakeoutOrderBarLabel, enterTakeoutAddOrderMode, openTakeoutDraftWithLabel, t]
+  )
+
+  const takeoutFreshHandledRef = useRef(false)
+  const takeoutFreshParam = searchParams.get('takeoutFresh')
+  useEffect(() => {
+    if (takeoutFreshParam !== '1' || orderType !== 'takeout') return
+    if (takeoutFreshHandledRef.current) return
+    takeoutFreshHandledRef.current = true
+    const label =
+      takeoutMode === 'member' && takeoutMemberName.trim()
+        ? takeoutMemberName.trim()
+        : formatTakeoutSlotLabel(takeoutSlot)
+    void (async () => {
+      await requestTakeoutFreshDraft(label)
+      try {
+        const params = new URLSearchParams(window.location.search)
+        params.delete('takeoutFresh')
+        const qs = params.toString()
+        router.replace(qs ? `/pos/terminal?${qs}` : '/pos/terminal?type=takeout', { scroll: false })
+      } catch {
+        // ignore URL cleanup errors
+      }
+    })()
+  }, [
+    takeoutFreshParam,
+    orderType,
+    takeoutMode,
+    takeoutMemberName,
+    takeoutSlot,
+    requestTakeoutFreshDraft,
+    router,
+  ])
+
   const filteredTakeoutMembers = takeoutMemberName.trim()
     ? takeoutMemberNames.filter((name) => name.toLowerCase().includes(takeoutMemberName.trim().toLowerCase())).slice(0, 6)
     : takeoutMemberNames.slice(0, 6)
@@ -10358,7 +10479,7 @@ export default function PosTerminalPage() {
                       onClick={() => {
                         setTakeoutMode('slot')
                         setTakeoutSlot(String(slotNo))
-                        setPendingTakeoutOrderId(null)
+                        void requestTakeoutFreshDraft(formatTakeoutSlotLabel(String(slotNo)))
                       }}
                     >
                       {formatTakeoutSlotLabel(String(slotNo))}
@@ -10392,9 +10513,7 @@ export default function PosTerminalPage() {
                     className="h-8"
                     data-tour="pos-tour-takeout-new"
                     onClick={() => {
-                      setPendingTakeoutOrderId(null)
-                      setSelectedTakeoutTargetId('takeout-draft')
-                      setSelectedTakeoutTargetLabel(baseTakeoutLabel)
+                      void requestTakeoutFreshDraft(baseTakeoutLabel)
                     }}
                   >
                     + {t('posNewOrder') || '새 주문'}
@@ -10889,13 +11008,7 @@ export default function PosTerminalPage() {
                 if (!selectedTakeoutOrder) return
                 if (isPosOrderPaidLikeStatus(String(selectedTakeoutOrder.status ?? ''))) return
                 if (orderPaymentsSum(selectedTakeoutOrder) > 0.005) return
-                const oid = Number(selectedTakeoutOrder.id)
-                if (!Number.isFinite(oid) || oid <= 0) return
-                clearCartFromTerminal()
-                setPendingTakeoutOrderId(oid)
-                setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
-                setSelectedTakeoutTargetLabel(resolveTakeoutOrderBarLabel(selectedTakeoutOrder))
-                setSelectedTakeoutTargetId('takeout-draft')
+                enterTakeoutAddOrderMode(selectedTakeoutOrder)
               }}
               onPay={() => {
                 if (!selectedTakeoutOrder) return

@@ -64,6 +64,19 @@ const TAKEOUT_SLOT_LABEL_PREFIXES = [
   'ซื้อกลับบ้าน',
 ] as const
 
+/** 포장 슬롯 라벨(예: `Takeout 2`, `포장 2`)에서 번호만 추출. 매칭용. */
+export function extractTakeoutSlotNumberFromLabel(raw: string | undefined | null): string | null {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  for (const prefix of TAKEOUT_SLOT_LABEL_PREFIXES) {
+    const esc = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const slotRe = new RegExp(`^${esc}\\s*#?\\s*(\\d+)\\s*$`, 'iu')
+    const slotMatch = s.match(slotRe)
+    if (slotMatch) return slotMatch[1]
+  }
+  return null
+}
+
 function tryTranslateTakeoutTableLabel(s: string, t: (key: string) => string): string | null {
   const pick = (key: string, fallback = ''): string => {
     const raw = String(t(key) ?? '').trim()

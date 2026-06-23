@@ -1391,6 +1391,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posSelectTableNone: '선택 없음',
     posOrderButton: '주문',
     posAddOrderButton: '추가 주문',
+    posTakeoutAddOrderModeBadge: '{{label}} 추가 주문 중',
+    posTakeoutOpenBillExistsBody:
+      '{{label}}에 미결제 주문이 있습니다.\n[확인] 새 빌 열기 · [취소] 해당 빌에 추가 주문',
     posNewOrder: '새 주문',
     posPayButton: '결제',
     posClearCart: '비우기',
@@ -4466,6 +4469,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posSelectTableNone: 'None',
     posOrderButton: 'Order',
     posAddOrderButton: 'Add items',
+    posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
+    posTakeoutOpenBillExistsBody:
+      'Unpaid order on {{label}}.\n[OK] Open new bill · [Cancel] Add to this bill',
     posNewOrder: 'New order',
     posPayButton: 'Pay',
     posClearCart: 'Clear',
@@ -7042,6 +7048,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posLanguage: 'ภาษา',
     posOrderButton: 'สั่งออเดอร์',
     posAddOrderButton: 'สั่งเพิ่ม',
+    posTakeoutAddOrderModeBadge: 'เพิ่มใน {{label}}',
+    posTakeoutOpenBillExistsBody:
+      'มีบิลค้างที่ {{label}}\n[ตกลง] เปิดบิลใหม่ · [ยกเลิก] เพิ่มในบิลเดิม',
     posNewOrder: 'ออเดอร์ใหม่',
     posPayButton: 'ชำระเงิน',
     posPayConfirm: 'ยืนยันการชำระ',
@@ -11852,6 +11861,9 @@ export const I18N_POS_MM: Record<string, string> = {
     posCostSaleAll: 'All',
     posCostSaleFilter: 'Sale status',
     posCostSaleInactive: 'Inactive',
+    posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
+    posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
+    posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -14614,6 +14626,9 @@ export const I18N_POS_LA: Record<string, string> = {
     posCostSaleAll: 'All',
     posCostSaleFilter: 'Sale status',
     posCostSaleInactive: 'Inactive',
+    posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
+    posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
+    posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -17404,6 +17419,9 @@ export const I18N_POS_KH: Record<string, string> = {
     posCostSaleAll: 'All',
     posCostSaleFilter: 'Sale status',
     posCostSaleInactive: 'Inactive',
+    posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
+    posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
+    posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -20168,6 +20186,9 @@ export const I18N_POS_VI: Record<string, string> = {
     posCostSaleAll: 'All',
     posCostSaleFilter: 'Sale status',
     posCostSaleInactive: 'Inactive',
+    posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
+    posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
+    posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -22936,4 +22957,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posCostSaleAll: 'All',
     posCostSaleFilter: 'Sale status',
     posCostSaleInactive: 'Inactive',
+    posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
+    posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
+    posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
 }

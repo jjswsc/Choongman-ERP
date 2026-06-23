@@ -21,7 +21,7 @@ WITH lines AS (
 agg AS (
   SELECT
     l.batch_id,
-    MAX(to_char(l.log_date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')) AS batch_date_ymd,
+    MAX((l.log_date AT TIME ZONE 'Asia/Bangkok')::date) AS batch_date_ymd,
     COALESCE(SUM(l.net) FILTER (WHERE l.tax_kind = 'taxable'), 0) AS taxable_net,
     COALESCE(SUM(l.net) FILTER (WHERE l.tax_kind = 'exempt'), 0) AS exempt_net
   FROM lines l
@@ -58,7 +58,7 @@ LEFT JOIN public.payable_transactions pt
 WHERE c.gross_total > 0
   AND (
     ABS(COALESCE(pt.amount, 0) - c.gross_total) > 0.02
-    OR pt.trans_date IS DISTINCT FROM c.batch_date_ymd
+    OR left(trim(coalesce(pt.trans_date::text, '')), 10)::date IS DISTINCT FROM c.batch_date_ymd
     OR ib.batch_date IS DISTINCT FROM c.batch_date_ymd
     OR ABS(COALESCE(ib.total_amount, 0) - c.gross_total) > 0.02
   )
@@ -83,7 +83,7 @@ WITH lines AS (
 agg AS (
   SELECT
     l.batch_id,
-    MAX(to_char(l.log_date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')) AS batch_date_ymd,
+    MAX((l.log_date AT TIME ZONE 'Asia/Bangkok')::date) AS batch_date_ymd,
     COALESCE(SUM(l.net) FILTER (WHERE l.tax_kind = 'taxable'), 0) AS taxable_net,
     COALESCE(SUM(l.net) FILTER (WHERE l.tax_kind = 'exempt'), 0) AS exempt_net
   FROM lines l
@@ -126,7 +126,7 @@ WITH lines AS (
 agg AS (
   SELECT
     l.batch_id,
-    MAX(to_char(l.log_date AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')) AS batch_date_ymd,
+    MAX((l.log_date AT TIME ZONE 'Asia/Bangkok')::date) AS batch_date_ymd,
     COALESCE(SUM(l.net) FILTER (WHERE l.tax_kind = 'taxable'), 0) AS taxable_net,
     COALESCE(SUM(l.net) FILTER (WHERE l.tax_kind = 'exempt'), 0) AS exempt_net
   FROM lines l
@@ -148,7 +148,7 @@ UPDATE public.payable_transactions pt
 SET
   amount = c.gross_total,
   trans_date = c.batch_date_ymd,
-  memo = LEFT('입고 ' || c.batch_date_ymd || ' ' || COALESCE(ib.vendor_name, ''), 240)
+  memo = LEFT('입고 ' || c.batch_date_ymd::text || ' ' || COALESCE(ib.vendor_name, ''), 240)
 FROM calc c
 JOIN public.inbound_batches ib ON ib.id = c.batch_id
 WHERE pt.ref_type = 'Inbound'
