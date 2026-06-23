@@ -53,6 +53,11 @@ describe('member-coupon-qr', () => {
       couponCode: 'HBDCOUPON',
       issueId: 504,
     })
+    expect(parseLooseMemberCouponScanInput('HBDCOUPON～504')).toEqual({
+      memberNo: '',
+      couponCode: 'HBDCOUPON',
+      issueId: 504,
+    })
     expect(parseLooseMemberCouponScanInput('M007359~CMHBDCOUPON~504')).toEqual({
       memberNo: 'M007359',
       couponCode: 'CMHBDCOUPON',

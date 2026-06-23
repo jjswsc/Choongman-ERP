@@ -4,7 +4,23 @@ export const MEMBER_COUPON_QR_PREFIX = 'CM|CPN|'
 /** USB 스캐너가 `|` 대신 `~`·`-` 등으로 출력하는 경우가 많음 */
 export const MEMBER_COUPON_QR_PREFIX_RE = /^CM[\|~:\-]CPN[\|~:\-]/i
 
-const MEMBER_COUPON_QR_FIELD_SPLIT_RE = /[\|~:\-]+/
+const MEMBER_COUPON_QR_FIELD_SPLIT_RE = /[\|~:\-\uFF5E\u223C\u02DC\u2053\x1D\x1E;]+/
+
+const MEMBER_POS_QR_PREFIX_RE = /^CM[\|~:\-]MEM[\|~:\-]/i
+
+function isMemberPosQrPayload(raw: string): boolean {
+  const text = normalizeCouponScanDelimiters(String(raw ?? '').trim())
+  return MEMBER_POS_QR_PREFIX_RE.test(text) || text.toUpperCase().startsWith('CM:MEM:')
+}
+
+/** 스캐너·키보드가 보내는 다양한 구분 문자를 ASCII `|~:-` 로 통일 */
+export function normalizeCouponScanDelimiters(raw: string): string {
+  return String(raw ?? '')
+    .replace(/[\uFF5E\u223C\u02DC\u2053]/g, '~')
+    .replace(/[\u2016\u2223\u2758]/g, '|')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[\x1D\x1E]/g, '~')
+}
 
 export type MemberCouponQrPayload = {
   memberNo: string
@@ -26,7 +42,7 @@ export function buildMemberCouponQrPayload(params: {
 }
 
 function extractMemberCouponQrBody(text: string): string | null {
-  const trimmed = String(text ?? '').trim()
+  const trimmed = normalizeCouponScanDelimiters(String(text ?? '').trim())
   if (!trimmed) return null
   if (MEMBER_COUPON_QR_PREFIX_RE.test(trimmed)) {
     return trimmed.replace(MEMBER_COUPON_QR_PREFIX_RE, '')
@@ -70,8 +86,10 @@ function parseTrailingIssueId(parts: string[]): { body: string[]; issueId?: numb
 
 /** CM|CPN 헤더 없이 스캐너가 `~` 구분으로 보낸 페이로드 (앞부분 잘림·USB 변환 대응) */
 export function parseLooseMemberCouponScanInput(raw: string): MemberCouponQrPayload | null {
-  const text = String(raw ?? '').trim()
+  const text = normalizeCouponScanDelimiters(String(raw ?? '').trim())
   if (!text) return null
+
+  if (isMemberPosQrPayload(text)) return null
 
   const full = parseMemberCouponQrPayload(text)
   if (full) return full

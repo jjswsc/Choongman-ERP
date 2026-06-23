@@ -45,6 +45,9 @@ const ACCOUNTING_ADMIN_KEYS = {
   acct_bank_attention_no_subject: '',
   acct_bank_attention_hint: '',
   acct_bank_vat_not_registered: '',
+  acct_bank_expense_link_col: '',
+  acct_bank_expense_linked: '',
+  acct_bank_expense_unlinked: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -105,6 +108,9 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   acct_bank_attention_no_subject: '계정과목 미지정',
   acct_bank_attention_hint: '미분류·계정 미지정·지출관리 미연동 행입니다. 분류 후 「지출관리 연결」로 마무리하세요.',
   acct_bank_vat_not_registered: 'VAT 미등록',
+  acct_bank_expense_link_col: '지출 연동',
+  acct_bank_expense_linked: '연동',
+  acct_bank_expense_unlinked: '미연동',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -152,6 +158,9 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   acct_bank_attention_no_subject: 'No account subject',
   acct_bank_attention_hint: 'Unclassified, missing subject, or not linked to expense mgmt. Classify then use Link expense mgmt.',
   acct_bank_vat_not_registered: 'VAT not registered',
+  acct_bank_expense_link_col: 'Expense link',
+  acct_bank_expense_linked: 'Linked',
+  acct_bank_expense_unlinked: 'Not linked',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -199,6 +208,9 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   acct_bank_attention_no_subject: 'ไม่มีบัญชี',
   acct_bank_attention_hint: 'ยังไม่จัดประเภท·ไม่มีบัญชี·ยังไม่เชื่อมจัดการค่าใช้จ่าย — จัดประเภทแล้วเชื่อมจัดการค่าใช้จ่าย',
   acct_bank_vat_not_registered: 'ยังไม่ลงทะเบียน VAT',
+  acct_bank_expense_link_col: 'เชื่อมค่าใช้จ่าย',
+  acct_bank_expense_linked: 'เชื่อมแล้ว',
+  acct_bank_expense_unlinked: 'ยังไม่เชื่อม',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

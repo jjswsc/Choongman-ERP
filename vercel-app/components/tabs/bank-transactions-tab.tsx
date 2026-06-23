@@ -23,7 +23,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, Check, AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -94,7 +94,7 @@ import {
   AccountingTh,
   AccountingTheadRow,
 } from "@/components/erp/accounting-data-table"
-import { bankRowNeedsAttention, bankRowShowsVatNotRegistered, countBankAttentionRows, countBankVatNotRegisteredRows } from "@/lib/bank-transaction-attention"
+import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
 
 function todayStr() {
   return getBangkokTodayDateString()
@@ -1439,11 +1439,6 @@ export function BankTransactionsTab() {
     [list, queryRowEdits]
   )
 
-  const bankVatNotRegisteredCount = React.useMemo(
-    () => countBankVatNotRegisteredRows(list, queryRowEdits, (row) => (row as { id?: number }).id),
-    [list, queryRowEdits]
-  )
-
   const depositsHiddenByFilter =
     listTypeCounts.deposits > 0 && listTypeCounts.shownDeposits === 0 && listTypeCounts.shownTotal > 0
 
@@ -1934,15 +1929,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           </Link>
         </p>
       </div>
-      <div className="rounded-md border border-sky-200/80 dark:border-sky-800/50 bg-sky-50/60 dark:bg-sky-950/25 px-3 py-2.5 space-y-1.5">
-        <p className="text-xs font-medium text-foreground">{tt("bankExpenseMgmtCoexistTitle", "지출 관리와 같은 출금 줄을 쓸 때 (출금 용도)")}</p>
-        <p className="text-[11px] text-muted-foreground whitespace-pre-line leading-snug">
-          {tt(
-            "bankExpenseMgmtCoexistBody",
-            "지출 관련 통장 출금(경비·매입 대금 등)은 통장에서 분류만 저장됩니다. 분개·미지급 반영은 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 완료됩니다.\n• 이체·대출·가수금·정산 수정·미분류: 통장에서 바로 분개 가능\n• 경비·매입 대금: 지출관리 연결 필수"
-          )}
-        </p>
-      </div>
       <input
         ref={invoicePhotoInputRef}
         type="file"
@@ -2184,8 +2170,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </div>
                   ) : null}
 
-                  {!loading && (bankAttentionCounts.total > 0 || bankVatNotRegisteredCount > 0) ? (
-                    <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-5">
+                  {!loading && bankAttentionCounts.total > 0 ? (
+                    <div className="mb-3 grid grid-cols-3 gap-2">
                       <MetricCard
                         size="sm"
                         variant="warning"
@@ -2203,18 +2189,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         variant="warning"
                         label={t("acct_bank_attention_no_subject")}
                         value={String(bankAttentionCounts.noSubject)}
-                      />
-                      <MetricCard
-                        size="sm"
-                        variant="warning"
-                        label={t("acct_bank_vat_not_registered")}
-                        value={String(bankVatNotRegisteredCount)}
-                      />
-                      <MetricCard
-                        size="sm"
-                        label={t("acct_bank_attention_filter")}
-                        value={String(bankAttentionCounts.total)}
-                        subLabel={t("acct_bank_attention_hint")}
                       />
                     </div>
                   ) : null}
@@ -2237,12 +2211,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   <AccountingDataTable
                     id="bank-query-list-wrap"
                     className="max-h-[70vh] min-h-[320px]"
-                    minWidthClass="min-w-[1100px] table-fixed"
+                    minWidthClass="min-w-[1020px] table-fixed"
                   >
                     {loading ? (
                       <tbody>
                         <tr>
-                          <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
+                          <td colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                             {t("loadingItems")}
                           </td>
                         </tr>
@@ -2250,7 +2224,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     ) : filteredList.length === 0 ? (
                       <tbody>
                         <tr>
-                          <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
+                          <td colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                             {list.length === 0 ? (t("pettyNoData") || "데이터 없음") : (t("bankNoMatchFilter") || "조건에 맞는 거래가 없습니다.")}
                           </td>
                         </tr>
@@ -2258,15 +2232,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     ) : (
                       <>
                         <colgroup>
-                          <col style={{ width: "92px" }} />
+                          <col style={{ width: "108px" }} />
                           <col style={{ width: "64px" }} />
                           <col style={{ width: "130px" }} />
                           <col style={{ width: "130px" }} />
                           <col style={{ width: "95px" }} />
-                          <col style={{ width: "108px" }} />
-                          <col style={{ width: "76px" }} />
-                          <col style={{ width: "150px" }} />
-                          <col style={{ width: "40px" }} />
+                          <col style={{ width: "88px" }} />
+                          <col style={{ width: "148px" }} />
+                          <col style={{ width: "36px" }} />
                           <col style={{ width: "180px" }} />
                           <col style={{ width: "140px" }} />
                           <col style={{ width: "76px" }} />
@@ -2277,11 +2250,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <AccountingTh align="center">{t("bankCategoryLabel") || "용도"}</AccountingTh>
                           <AccountingTh align="center">{t("accountSubject") || "계정과목"}</AccountingTh>
                           <AccountingTh align="right">{t("pettyColAmount") || "금액"}</AccountingTh>
-                          <AccountingTh align="center" className="text-xs" title={t("bankDepositWhtHint")}>
-                            {t("bankDepositWhtAmount")}
-                          </AccountingTh>
                           <AccountingTh align="center">{t("bankAttributedDate") || "인식일"}</AccountingTh>
-                          <AccountingTh align="center">{t("bankRegisterLabel") || "지출 등록"}</AccountingTh>
+                          <AccountingTh align="center">{t("acct_bank_expense_link_col") || "지출 연동"}</AccountingTh>
                           <AccountingTh align="center" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</AccountingTh>
                           <AccountingTh>{t("bankMemoLabel") || "은행 적요"}</AccountingTh>
                           <AccountingTh align="center">{t("bankNoteLabel") || "메모"}</AccountingTh>
@@ -2296,7 +2266,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             const hasEdits = r.id && edits && Object.keys(edits).length > 0
                             const isSaving = querySavingId === r.id
                             const attention = bankRowNeedsAttention(r, edits)
-                            const vatNotRegistered = bankRowShowsVatNotRegistered(r, edits)
                             return (
                             <AccountingTbodyRow
                               id={r.id ? `bank-tx-row-${r.id}` : undefined}
@@ -2308,7 +2277,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   "bg-amber-50/80 dark:bg-amber-950/35 border-l-2 border-l-amber-500"
                               )}
                             >
-                              <td className="p-2 align-middle text-center">{r.transDate}</td>
+                              <td className="p-2 align-middle text-center whitespace-nowrap text-xs tabular-nums">{r.transDate}</td>
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className="p-2 align-middle">
                                 {r.transType === "withdraw" ? (
@@ -2465,33 +2434,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className={`p-2 align-middle text-right whitespace-nowrap tabular-nums ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
                                 {(r.amount ?? 0).toLocaleString()}
                               </td>
-                              <td className="p-2 align-middle">
-                                {r.transType === "deposit" ? (
-                                  <Input
-                                    type="text"
-                                    inputMode="decimal"
-                                    placeholder="0"
-                                    title={t("bankDepositWhtHint")}
-                                    value={
-                                      edits?.withholdingTaxAmount ??
-                                      (r.withholdingTaxAmount != null && r.withholdingTaxAmount > 0
-                                        ? String(r.withholdingTaxAmount)
-                                        : "")
-                                    }
-                                    onChange={(e) =>
-                                      r.id &&
-                                      setQueryRowEdit(
-                                        r.id,
-                                        "withholdingTaxAmount",
-                                        e.target.value.replace(/[^\d.,]/g, "")
-                                      )
-                                    }
-                                    className="h-8 w-[72px] text-xs tabular-nums mx-auto"
-                                  />
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">—</span>
-                                )}
-                              </td>
                               <td className="p-2">
                                 {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
                                   <Input
@@ -2512,22 +2454,22 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 )}
                               </td>
                               <td className="p-2 align-middle">
-                                <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                                {r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) && !r.isLinked ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className={ADMIN_BTN_XS_CN}
-                                    onClick={() => setRegisterActionRow(r)}
-                                  >
-                                    {t("bankRegisterLinkExpenseMgmt") || tt("bankRegisterLinkExpenseMgmt", "지출관리 연결")}
-                                  </Button>
-                                ) : r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) && r.isLinked ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className={`${ADMIN_BTN_XS_CN} shrink-0`}
-                                    onClick={() => {
+                                <div className="flex items-center justify-center gap-1 flex-wrap">
+                                {r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) ? (
+                                  r.isLinked ? (
+                                    <>
+                                      <span
+                                        className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
+                                        title={t("acct_bank_expense_linked")}
+                                      >
+                                        <Check className="h-3 w-3 shrink-0" aria-hidden />
+                                        {t("acct_bank_expense_linked")}
+                                      </span>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className={`${ADMIN_BTN_XS_CN} shrink-0 h-7 px-1.5`}
+                                        onClick={() => {
                                       const amt = Math.abs(r.amount ?? 0)
                                       const bankMemo = (r.memo || "").trim().slice(0, 500)
                                       const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
@@ -2548,9 +2490,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       if (r.id) q.set("openRegisterTxId", String(r.id))
                                       router.push(`/admin/expense-management?${q.toString()}`)
                                     }}
-                                  >
-                                    {t("bankRegisterEdit") || "수정"}
-                                  </Button>
+                                      >
+                                        {t("bankRegisterEdit") || "수정"}
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span
+                                        className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-300 whitespace-nowrap"
+                                        title={t("acct_bank_expense_unlinked")}
+                                      >
+                                        <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                                        {t("acct_bank_expense_unlinked")}
+                                      </span>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className={ADMIN_BTN_XS_CN}
+                                        onClick={() => setRegisterActionRow(r)}
+                                      >
+                                        {t("bankRegisterLinkExpenseMgmt") || tt("bankRegisterLinkExpenseMgmt", "연결")}
+                                      </Button>
+                                    </>
+                                  )
                                 ) : r.transType === "deposit" && cat === "receivable_receive" && r.id ? (
                                   <Button
                                     size="sm"
@@ -2586,8 +2548,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               </td>
                               <td className="p-2 align-middle text-center">
                                 {r.transType === "withdraw" ? (
-                                  <div className="flex flex-col items-center gap-0.5">
-                                  {(() => {
+                                  (() => {
                                   const hasInvoice = r.invoiceReceived === true || (r.invoiceNo && String(r.invoiceNo).trim() !== "") || (r.invoicePhotoUrl && String(r.invoicePhotoUrl).trim() !== "")
                                   const isPurchasePayment = cat === "purchase_payment" && r.isLinked
                                   return isPurchasePayment ? (
@@ -2604,16 +2565,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ) : (
                                     <Checkbox checked={!!hasInvoice} disabled className="shrink-0 mx-auto pointer-events-none" title={hasInvoice ? (t("poInvoiceReceived") || "인보이스 수령") : (t("poInvoiceNotReceived") || "인보이스 미수령")} />
                                   )
-                                })()}
-                                  {vatNotRegistered ? (
-                                    <span
-                                      className="text-[10px] font-medium leading-tight text-amber-700 dark:text-amber-400"
-                                      title={t("acct_bank_vat_not_registered")}
-                                    >
-                                      {t("acct_bank_vat_not_registered")}
-                                    </span>
-                                  ) : null}
-                                  </div>
+                                })()
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}

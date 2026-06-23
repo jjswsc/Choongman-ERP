@@ -215,8 +215,15 @@ async function findMemberCouponIssue(params: {
     )) as MemberIssueRow[] | null
     if (rows?.[0]) return rows[0]
     const byIssueId = await loadMemberCouponIssueById(issueId)
-    if (byIssueId && Number(byIssueId.member_id || 0) === memberId) return byIssueId
-    return null
+    if (!byIssueId) return null
+    if (memberId > 0 && Number(byIssueId.member_id || 0) !== memberId) return null
+    const issueCode = normalizeCode(byIssueId.coupon_code || '')
+    if (code && issueCode) {
+      const codeMatches =
+        issueCode === code || expandTruncatedCouponCodeCandidates(code).includes(issueCode)
+      if (!codeMatches) return null
+    }
+    return byIssueId
   }
   const rows = (await supabaseSelectFilter(
     'member_coupon_issues',

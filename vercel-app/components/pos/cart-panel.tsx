@@ -99,8 +99,11 @@ import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   isMemberCouponQrPayload,
   isMemberCouponScanPayload,
+  normalizeCouponScanDelimiters,
   parseLooseMemberCouponScanInput,
 } from '@/lib/member-coupon-qr'
+import { playPosScanRecognizedBeep } from '@/lib/pos-scan-success-sound'
+import { isMemberPosScanPayload, parseMemberPosScanInput } from '@/lib/member-pos-qr'
 import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
 import {
   computePosPricing,
@@ -483,6 +486,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [customerMemo, setCustomerMemo] = useState('')
   const [couponCode, setCouponCode] = useState('')
   const pendingMemberCouponQrRawRef = useRef<string | null>(null)
+  const lastScanBeepAtRef = useRef(0)
   const [couponQuantityInput, setCouponQuantityInput] = useState('1')
   const couponQuantity = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
@@ -1671,7 +1675,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             : deliveryAppProp || ''
   const deliveryBrand = deliveryAppBrandClasses(deliveryAppProp)
 
-  const loadMembers = async (keyword?: string) => {
+  const loadMembers = async (
+    keyword?: string,
+    opts?: { autoSelectExactMemberNo?: string }
+  ) => {
     setMembersLoading(true)
     try {
       const rawKeyword = String(keyword || '').trim()
@@ -1697,6 +1704,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
       setMemberOptions(options)
       setMemberMap(map)
+
+      const exactMemberNo = String(opts?.autoSelectExactMemberNo || '').trim().toUpperCase()
+      if (exactMemberNo) {
+        const exact = rows.find(
+          (row) => String(row.memberNo || '').trim().toUpperCase() === exactMemberNo
+        )
+        if (exact?.id) {
+          setSelectedMemberId(String(exact.id))
+          const now = Date.now()
+          if (now - lastScanBeepAtRef.current > 350) {
+            playPosScanRecognizedBeep()
+            lastScanBeepAtRef.current = now
+          }
+        }
+      }
     } catch (e) {
       console.error('getMembers:', e)
       setMemberOptions([])
@@ -1706,8 +1728,86 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }
 
-  const handleMemberSearch = () => {
-    loadMembers(memberKeyword)
+  const linkMemberByMemberNo = useCallback(
+    async (
+      memberNo: string,
+      opts?: { beep?: boolean }
+    ): Promise<{ id: number; name: string } | null> => {
+      const keyword = String(memberNo || '').trim()
+      if (!keyword) return null
+      const rows = await getMembers({ q: keyword, limit: 20 })
+      const match = (rows || []).find(
+        (row) => String(row.memberNo || '').trim().toUpperCase() === keyword.toUpperCase()
+      )
+      if (!match?.id) return null
+      const value = String(match.id)
+      const name = match.name || match.memberNo || keyword
+      setSelectedMemberId(value)
+      setMemberKeyword(match.memberNo || keyword)
+      setMemberOptions((prev) => {
+        const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+        if (prev.some((row) => row.value === value)) return prev
+        return [{ value, label }, ...prev]
+      })
+      setMemberMap((prev) => ({
+        ...prev,
+        [value]: {
+          id: match.id,
+          memberNo: match.memberNo || '',
+          name: match.name || '',
+          phone: match.phone || '',
+          email: match.email || '',
+          tierCode: match.tierCode || 'BRONZE',
+        },
+      }))
+      if (opts?.beep !== false) {
+        const now = Date.now()
+        if (now - lastScanBeepAtRef.current > 350) {
+          playPosScanRecognizedBeep()
+          lastScanBeepAtRef.current = now
+        }
+      }
+      return { id: match.id, name }
+    },
+    []
+  )
+
+  const handleMemberSearch = useCallback(
+    async (rawOverride?: string) => {
+      const raw = normalizeCouponScanDelimiters(String(rawOverride ?? memberKeyword).trim())
+      if (!raw) return
+
+      if (isMemberCouponScanPayload(raw)) {
+        const couponParsed = parseLooseMemberCouponScanInput(raw)
+        if (couponParsed?.memberNo) {
+          await linkMemberByMemberNo(couponParsed.memberNo, { beep: true })
+          return
+        }
+      }
+
+      const memberParsed = parseMemberPosScanInput(raw)
+      const searchKey = memberParsed?.memberNo ?? raw
+      setMemberKeyword(searchKey)
+      await loadMembers(searchKey, { autoSelectExactMemberNo: memberParsed?.memberNo })
+    },
+    [linkMemberByMemberNo, memberKeyword]
+  )
+
+  const handleMemberKeywordInput = (next: string) => {
+    const sanitized = normalizeCouponScanDelimiters(String(next ?? '').replace(/[^\x20-\x7E\uFF5E\u223C\u02DC\u2053]/g, ''))
+    const memberParsed = parseMemberPosScanInput(sanitized)
+    if (memberParsed) {
+      setMemberKeyword(memberParsed.memberNo)
+      return
+    }
+    if (isMemberCouponScanPayload(sanitized)) {
+      const couponParsed = parseLooseMemberCouponScanInput(sanitized)
+      if (couponParsed?.memberNo) {
+        setMemberKeyword(couponParsed.memberNo)
+        return
+      }
+    }
+    setMemberKeyword(sanitized)
   }
 
   useEffect(() => {
@@ -3177,36 +3277,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     [cartItems]
   )
 
-  const linkMemberForCouponQr = useCallback(async (memberNo: string): Promise<{ id: number; name: string } | null> => {
-    const keyword = String(memberNo || '').trim()
-    if (!keyword) return null
-    const rows = await getMembers({ q: keyword, limit: 20 })
-    const match = (rows || []).find(
-      (row) => String(row.memberNo || '').trim().toUpperCase() === keyword.toUpperCase()
-    )
-    if (!match?.id) return null
-    const value = String(match.id)
-    const name = match.name || match.memberNo || keyword
-    setSelectedMemberId(value)
-    setMemberOptions((prev) => {
-      const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
-      if (prev.some((row) => row.value === value)) return prev
-      return [{ value, label }, ...prev]
-    })
-    setMemberMap((prev) => ({
-      ...prev,
-      [value]: {
-        id: match.id,
-        memberNo: match.memberNo || '',
-        name: match.name || '',
-        phone: match.phone || '',
-        email: match.email || '',
-        tierCode: match.tierCode || 'BRONZE',
-      },
-    }))
-    return { id: match.id, name }
-  }, [])
-
   const applyCouponWithParams = useCallback(
     async (params: {
       code: string
@@ -3271,17 +3341,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const applyCouponFromQrPayload = useCallback(
     async (raw: string): Promise<boolean> => {
-      const parsed = parseLooseMemberCouponScanInput(raw)
+      const normalizedRaw = normalizeCouponScanDelimiters(String(raw ?? '').trim())
+      const parsed = parseLooseMemberCouponScanInput(normalizedRaw)
       if (!parsed) {
         setCouponMessage(t('posCouponInvalid'))
         return false
+      }
+
+      const now = Date.now()
+      if (now - lastScanBeepAtRef.current > 350) {
+        playPosScanRecognizedBeep()
+        lastScanBeepAtRef.current = now
       }
 
       let memberId: number | undefined
       let successNote: string | undefined
 
       if (parsed.memberNo) {
-        const linkedMember = await linkMemberForCouponQr(parsed.memberNo)
+        const linkedMember = await linkMemberByMemberNo(parsed.memberNo, { beep: false })
         if (!linkedMember) {
           setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
           return false
@@ -3302,10 +3379,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         successNote,
       })
     },
-    [applyCouponWithParams, linkMemberForCouponQr, selectedMemberId, t]
+    [applyCouponWithParams, linkMemberByMemberNo, selectedMemberId, t]
   )
 
-  const applyCouponCode = async () => {
+  const applyCouponCode = async (rawOverride?: string) => {
     const pendingQrRaw = pendingMemberCouponQrRawRef.current
     if (pendingQrRaw) {
       const ok = await applyCouponFromQrPayload(pendingQrRaw)
@@ -3313,12 +3390,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       return
     }
 
-    const raw = couponCode.trim()
+    const raw = normalizeCouponScanDelimiters(String(rawOverride ?? couponCode).trim())
     if (!raw) {
       setCouponMessage(t('posCouponPleaseEnterCode'))
       return
     }
-    if (isMemberCouponQrPayload(raw) || parseLooseMemberCouponScanInput(raw)) {
+
+    const memberOnly = parseMemberPosScanInput(raw)
+    if (memberOnly) {
+      const linked = await linkMemberByMemberNo(memberOnly.memberNo, { beep: true })
+      if (linked) {
+        setCouponCode('')
+        setCouponMessage(i18nTr(t, 'posCouponQrMemberLinked', { name: linked.name }))
+      } else {
+        setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
+      }
+      return
+    }
+
+    const loose = parseLooseMemberCouponScanInput(raw)
+    if (isMemberCouponQrPayload(raw) || loose) {
       await applyCouponFromQrPayload(raw)
       return
     }
@@ -3329,7 +3420,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const sanitizeCouponCodeInput = (raw: string) =>
-    String(raw ?? '').replace(/[^\x20-\x7E]/g, '')
+    normalizeCouponScanDelimiters(String(raw ?? '').replace(/[^\x20-\x7E\uFF5E\u223C\u02DC\u2053]/g, ''))
 
   const handleCouponCodeInput = (next: string) => {
     const sanitized = sanitizeCouponCodeInput(next)
@@ -3390,6 +3481,54 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       resetBuffer()
     }
   }, [applyCouponFromQrPayload, couponQrScannerOpen, showPaymentModal])
+
+  useEffect(() => {
+    if (showPaymentModal || couponQrScannerOpen) return
+
+    let buffer = ''
+    let lastKeyAt = 0
+
+    const resetBuffer = () => {
+      buffer = ''
+      lastKeyAt = 0
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const target = e.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (e.key === 'Enter') {
+        const raw = buffer.trim()
+        resetBuffer()
+        if (raw && isMemberPosScanPayload(raw) && !isMemberCouponScanPayload(raw)) {
+          e.preventDefault()
+          void handleMemberSearch(raw)
+        }
+        return
+      }
+
+      if (e.key.length !== 1) return
+      const now = Date.now()
+      if (lastKeyAt > 0 && now - lastKeyAt > 120) resetBuffer()
+      lastKeyAt = now
+      buffer += e.key
+      if (!isMemberPosScanPayload(buffer) && buffer.length > 48) resetBuffer()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      resetBuffer()
+    }
+  }, [couponQrScannerOpen, handleMemberSearch, showPaymentModal])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
@@ -4306,12 +4445,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <Input
               placeholder={t('posMemberSearchPh') || '회원번호/이름/번호'}
               value={memberKeyword}
-              onChange={(e) => setMemberKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleMemberSearch())}
+              onChange={(e) => handleMemberKeywordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void handleMemberSearch(e.currentTarget.value)
+                }
+              }}
               onFocus={scrollIntoViewOnFocus}
               className="h-8 flex-1 w-0 min-w-0 max-w-[9rem]"
             />
-            <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0" onClick={handleMemberSearch} disabled={membersLoading}>
+            <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0" onClick={() => void handleMemberSearch()} disabled={membersLoading}>
               {membersLoading ? '...' : (t('posSearch') || '검색')}
             </Button>
             {orderType === 'dine-in' && (
@@ -4646,7 +4790,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       open={showPaymentModal}
       onOpenChange={(open) => {
         if (!open && lockPaymentModalForTour) return
-        if (!open && isCouponQrScannerOverlayActive()) return
+        if (!open && (couponQrScannerOpen || isCouponQrScannerOverlayActive())) return
         if (!open && orderType === 'delivery' && checkoutExistingPosOrderIdRef.current != null) {
           handleClearCart()
         }
@@ -4660,10 +4804,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
-          if (lockPaymentModalForTour || isCouponQrScannerOverlayActive()) e.preventDefault()
+          if (lockPaymentModalForTour || couponQrScannerOpen || isCouponQrScannerOverlayActive()) {
+            e.preventDefault()
+          }
         }}
         onInteractOutside={(e) => {
-          if (lockPaymentModalForTour || isCouponQrScannerOverlayActive()) e.preventDefault()
+          if (lockPaymentModalForTour || couponQrScannerOpen || isCouponQrScannerOverlayActive()) {
+            e.preventDefault()
+          }
+        }}
+        onFocusOutside={(e) => {
+          if (lockPaymentModalForTour || couponQrScannerOpen || isCouponQrScannerOverlayActive()) {
+            e.preventDefault()
+          }
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
       >
@@ -4884,7 +5037,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
-                          void applyCouponCode()
+                          void applyCouponCode(e.currentTarget.value)
                         }
                       }}
                       className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs [ime-mode:disabled]"
@@ -6059,7 +6212,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       open={couponQrScannerOpen}
       onOpenChange={setCouponQrScannerOpen}
       onScan={(raw) => {
-        void applyCouponFromQrPayload(raw)
+        couponQrScannerClosingRef.current = true
+        void applyCouponFromQrPayload(raw).finally(() => {
+          window.setTimeout(() => {
+            couponQrScannerClosingRef.current = false
+          }, 400)
+        })
       }}
     />
     </>
