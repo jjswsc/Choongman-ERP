@@ -72,18 +72,53 @@ function mergeEphemeralDrafts(serverItems: WorkLogItem[], localItems: WorkLogIte
   return [...serverItems, ...extra]
 }
 
+function resolveWorkLogItemForSave(
+  item: WorkLogItem,
+  draftIdMap: Map<string, string>
+): WorkLogItem {
+  const id = String(item.id || "").trim()
+  if (isEphemeralWorkLogId(id)) {
+    const persisted = draftIdMap.get(id)
+    if (persisted) return { ...item, id: persisted }
+  }
+  return item
+}
+
 function applySavedWorkLogIds(
   items: WorkLogItem[],
-  savedIds: { id: string; content: string }[]
+  sentLogs: WorkLogItem[],
+  savedIds: { id: string; content: string }[],
+  draftIdMap: Map<string, string>
 ): WorkLogItem[] {
   if (savedIds.length === 0) return items
+
+  const clientToSaved = new Map<string, string>()
+  for (let i = 0; i < sentLogs.length; i++) {
+    const sent = sentLogs[i]
+    const saved = savedIds[i]
+    if (!saved?.id) continue
+    const clientId = String(sent.id || "").trim()
+    if (!clientId) continue
+    clientToSaved.set(clientId, saved.id)
+    if (isEphemeralWorkLogId(clientId)) draftIdMap.set(clientId, saved.id)
+  }
+
   return items.map((it) => {
-    if (!isEphemeralWorkLogId(it.id)) return it
+    const id = String(it.id || "").trim()
+    const mapped = clientToSaved.get(id)
+    if (mapped) return { ...it, id: mapped }
+    if (!isEphemeralWorkLogId(id)) return it
+    const fromDraft = draftIdMap.get(id)
+    if (fromDraft) return { ...it, id: fromDraft }
     const key = workLogContentKey(it.content)
     if (!key) return it
     const hit = savedIds.find((s) => workLogContentKey(s.content) === key)
     return hit ? { ...it, id: hit.id } : it
   })
+}
+
+function shouldAutoSaveWorkLogItem(id: string | undefined | null): boolean {
+  return !isEphemeralWorkLogId(id)
 }
 
 function WorklogSection({
@@ -143,6 +178,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveGenRef = React.useRef(0)
   const persistChainRef = React.useRef(Promise.resolve())
+  const draftPersistedIdRef = React.useRef(new Map<string, string>())
 
   const unfinishedCount = React.useMemo(() => {
     const continueCount = localContinue.filter((it) => {
@@ -221,6 +257,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     async (opts?: { quiet?: boolean }) => {
       if (!selectedStaff) return
       cancelPendingAutoSave()
+      draftPersistedIdRef.current.clear()
       if (!opts?.quiet) setLoading(true)
       try {
         const res = await getWorkLogData({
@@ -245,26 +282,34 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   )
 
   const buildTodayLogsForSave = React.useCallback((): WorkLogItem[] => {
+    const draftMap = draftPersistedIdRef.current
     return localTodayRef.current
       .filter((it) => Boolean(normalizeWorkLogContent(it.content)))
-      .map((it) => ({
-        ...it,
-        progress: Number(it.progress) || 0,
-      }))
+      .map((it) => {
+        const resolved = resolveWorkLogItemForSave(it, draftMap)
+        return {
+          ...resolved,
+          progress: Number(resolved.progress) || 0,
+        }
+      })
   }, [])
 
   const buildAllLogs = React.useCallback((): WorkLogItem[] => {
     const finish = localFinishRef.current
     const cont = localContinueRef.current
     const today = localTodayRef.current
+    const draftMap = draftPersistedIdRef.current
     return [
-      ...finish.map((it) => ({ ...it, type: undefined })),
-      ...cont.map((it) => ({
-        ...it,
-        type: "continue" as const,
-        progress: Number(it.progress) || 0,
-      })),
-      ...today.map((it) => ({ ...it, type: undefined })),
+      ...finish.map((it) => ({ ...resolveWorkLogItemForSave(it, draftMap), type: undefined })),
+      ...cont.map((it) => {
+        const resolved = resolveWorkLogItemForSave(it, draftMap)
+        return {
+          ...resolved,
+          type: "continue" as const,
+          progress: Number(resolved.progress) || 0,
+        }
+      }),
+      ...today.map((it) => ({ ...resolveWorkLogItemForSave(it, draftMap), type: undefined })),
     ].filter((it) => it.content || it.id)
   }, [])
 
@@ -295,8 +340,18 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         if (res.success) {
           const savedIds = (res as { savedIds?: { id: string; content: string }[] }).savedIds
           if (savedIds?.length) {
-            setLocalContinue((prev) => applySavedWorkLogIds(prev, savedIds))
-            setLocalToday((prev) => applySavedWorkLogIds(prev, savedIds))
+            const draftMap = draftPersistedIdRef.current
+            const nextContinue = applySavedWorkLogIds(
+              localContinueRef.current,
+              logs,
+              savedIds,
+              draftMap
+            )
+            const nextToday = applySavedWorkLogIds(localTodayRef.current, logs, savedIds, draftMap)
+            localContinueRef.current = nextContinue
+            localTodayRef.current = nextToday
+            setLocalContinue(nextContinue)
+            setLocalToday(nextToday)
           }
           if (reload) await loadData({ quiet: silent })
           return true
@@ -500,6 +555,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       }
       return prev.map((it) => (it.id === idOrIndex ? { ...it, content } : it))
     })
+    const itemId = typeof idOrIndex === "string" ? idOrIndex : undefined
+    if (!shouldAutoSaveWorkLogItem(itemId)) return
     scheduleAutoSaveProgress({ todayOnly })
   }
 
@@ -515,6 +572,8 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       }
       return prev.map((it) => (it.id === idOrIndex ? { ...it, priority } : it))
     })
+    const itemId = typeof idOrIndex === "string" ? idOrIndex : undefined
+    if (!shouldAutoSaveWorkLogItem(itemId)) return
     scheduleAutoSaveProgress({ todayOnly })
   }
 
@@ -526,6 +585,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       localContinueRef.current = next
       return next
     })
+    if (!shouldAutoSaveWorkLogItem(id)) return
     scheduleAutoSaveProgress({ todayOnly: false })
   }
 
@@ -537,6 +597,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
       localTodayRef.current = next
       return next
     })
+    if (!shouldAutoSaveWorkLogItem(id)) return
     scheduleAutoSaveProgress({ todayOnly: true })
   }
 

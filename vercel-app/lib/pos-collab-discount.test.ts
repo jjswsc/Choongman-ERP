@@ -215,6 +215,31 @@ describe('buildCartPanelLineDiscountAllocations', () => {
     expect(alloc[0]).toBeGreaterThan(0)
     expect(alloc[1]).toBeGreaterThan(0)
   })
+
+  it('쿠폰·등급·수동 할인을 분리 배분한다 (Snow 전용 쿠폰)', () => {
+    const lines = [
+      { id: 'a', name: 'SNOW ONION', price: 249, qty: 1, menuId: '8' },
+      { id: 'b', name: 'GUCHUJANG', price: 249, qty: 1, menuId: '9' },
+    ]
+    const couponLineAlloc = [249, 0]
+    const tierDiscount = 49.8
+    const alloc = buildCartPanelLineDiscountAllocations({
+      lines,
+      menuById,
+      lineModeById: {},
+      hasSelectedDiscountScope: false,
+      collabDetail: null,
+      collabDiscountAmt: 0,
+      serviceDiscountAmt: 0,
+      cancelledLineAmt: 0,
+      tierDiscountAmt: tierDiscount,
+      manualDiscountAmt: 0,
+      couponLineAlloc,
+    })
+    expect(alloc[0]).toBeCloseTo(249 + tierDiscount / 2, 1)
+    expect(alloc[1]).toBeCloseTo(tierDiscount / 2, 1)
+    expect(alloc.reduce((s, v) => s + v, 0)).toBeCloseTo(249 + tierDiscount, 1)
+  })
 })
 
 describe('pos-collab-discount amount stacking', () => {

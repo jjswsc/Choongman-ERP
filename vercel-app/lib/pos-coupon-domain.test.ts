@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_POS_LOYALTY_SETTINGS,
+  buildCouponDiscountLineAllocations,
   resolveOrderDiscountAmt,
   resolvePosSalesDiscountAmount,
   summarizeLegacyCouponFields,
@@ -96,6 +97,56 @@ describe('resolveOrderDiscountAmt', () => {
         subtotal: 500,
       })
     ).toBe(500)
+  })
+})
+
+describe('buildCouponDiscountLineAllocations', () => {
+  it('item_scope 쿠폰은 해당 메뉴 줄에만 배분한다', () => {
+    const cartLines = [
+      { menuId: '8', menuCode: 'C008', quantity: 1, lineSubtotal: 249 },
+      { menuId: '9', menuCode: 'C023', quantity: 1, lineSubtotal: 249 },
+    ]
+    const applied = [
+      {
+        code: 'SNOW',
+        discountAmt: 249,
+        quantity: 1,
+        itemScope: { menuIds: ['8'] },
+        discountType: 'item_fixed' as const,
+      },
+    ]
+    const alloc = buildCouponDiscountLineAllocations(cartLines, applied)
+    expect(alloc[0]).toBe(249)
+    expect(alloc[1]).toBe(0)
+  })
+})
+
+describe('validatePosCouponCandidate item_fixed scope', () => {
+  const snowTemplate: PosCouponTemplate = {
+    id: 2,
+    code: 'SNOW249',
+    discountType: 'item_fixed',
+    discountValue: 249,
+    isActive: true,
+    itemScope: { menuIds: ['8'] },
+  }
+
+  it('eligible 메뉴 1개에만 item_fixed 할인', () => {
+    const res = validatePosCouponCandidate(
+      snowTemplate,
+      {
+        ...ctx(),
+        subtotal: 498,
+        cartLines: [
+          { menuId: '8', quantity: 1, lineSubtotal: 249 },
+          { menuId: '9', quantity: 1, lineSubtotal: 249 },
+        ],
+      },
+      { code: 'SNOW249' }
+    )
+    expect(res.valid).toBe(true)
+    expect(res.discountAmt).toBe(249)
+    expect(res.appliedCoupons?.[0]?.itemScope).toEqual({ menuIds: ['8'] })
   })
 })
 

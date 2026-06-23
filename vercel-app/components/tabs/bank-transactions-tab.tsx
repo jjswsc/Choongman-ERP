@@ -100,6 +100,8 @@ import {
 import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
 import { bankDepositNeedsReceivableOrderLink } from "@/lib/bank-receivable-link"
 
+const BANK_EDIT_BTN_CN = `${ADMIN_BTN_XS_CN} shrink-0 h-7 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15`
+
 function todayStr() {
   return getBangkokTodayDateString()
 }
@@ -2509,8 +2511,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       </span>
                                       <Button
                                         size="sm"
-                                        variant="ghost"
-                                        className={`${ADMIN_BTN_XS_CN} shrink-0 h-7 px-1.5`}
+                                        variant="outline"
+                                        className={BANK_EDIT_BTN_CN}
                                         onClick={() => {
                                       const amt = Math.abs(r.amount ?? 0)
                                       const bankMemo = (r.memo || "").trim().slice(0, 500)
@@ -3375,7 +3377,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       </>
                                     ) : (
                                       <>
-                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => handleEditMemoRule(rule)} title={t("btn_edit") || "수정"}>
+                                        <Button size="sm" variant="outline" className="h-8 w-8 border-primary/30 bg-primary/10 p-0 text-primary hover:bg-primary/15" onClick={() => handleEditMemoRule(rule)} title={t("btn_edit") || "수정"}>
                                           <Pencil className="h-4 w-4" />
                                         </Button>
                                         <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => rule.id && handleDeleteMemoRule(rule.id)} title={t("delete")}>

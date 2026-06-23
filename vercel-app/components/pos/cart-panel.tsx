@@ -94,7 +94,7 @@ import {
   computeMemberTierDiscountAmount,
   normalizeMemberTierCodeForDiscount,
 } from '@/lib/member-tier-discount'
-import { summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
+import { buildCouponDiscountLineAllocations, summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   isMemberCouponQrPayload,
@@ -861,6 +861,29 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ) / 100,
     [appliedCoupons]
   )
+  const buildCouponCartLines = useCallback(
+    () =>
+      cartItems.map((item) => {
+        const menuId = String((item as { menuId?: string }).menuId ?? '').trim() || undefined
+        const menu = menuId ? menuByIdForCollab.get(menuId) : undefined
+        const categoryCode =
+          String((item as { categoryCode?: string }).categoryCode ?? '').trim() ||
+          String(menu?.category ?? menu?.categoryMain ?? '').trim() ||
+          undefined
+        return {
+          menuId,
+          menuCode: String(menu?.code ?? '').trim() || undefined,
+          categoryCode,
+          quantity: Math.max(1, Number(item.quantity || 1)),
+          lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
+        }
+      }),
+    [cartItems, menuByIdForCollab]
+  )
+  const couponLineAlloc = useMemo(
+    () => buildCouponDiscountLineAllocations(buildCouponCartLines(), appliedCoupons),
+    [appliedCoupons, buildCouponCartLines]
+  )
   const couponPayloadFields = useMemo(() => {
     const legacy = summarizeLegacyCouponFields(appliedCoupons)
     return {
@@ -907,7 +930,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
       serviceDiscountAmt,
       cancelledLineAmt,
-      manualAndCouponDiscountAmt: manualDiscountAmt + couponDiscountTotal + tierDiscountAmt,
+      tierDiscountAmt,
+      manualDiscountAmt,
+      couponLineAlloc,
     })
   }, [
     appliedCollab,
@@ -915,7 +940,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     cartItems,
     collabDiscountAmt,
     tierDiscountAmt,
-    couponDiscountTotal,
+    couponLineAlloc,
     discount,
     hasSelectedDiscountScope,
     lineDiscountModeByItemId,
@@ -1767,6 +1792,38 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           lastScanBeepAtRef.current = now
         }
       }
+      return { id: match.id, name }
+    },
+    []
+  )
+
+  const linkMemberById = useCallback(
+    async (memberId: number): Promise<{ id: number; name: string } | null> => {
+      const id = Math.max(0, Math.trunc(Number(memberId) || 0))
+      if (!id) return null
+      const rows = await getMembers({ q: String(id), limit: 20 })
+      const match = (rows || []).find((row) => Number(row.id) === id)
+      if (!match?.id) return null
+      const value = String(match.id)
+      const name = match.name || match.memberNo || String(id)
+      setSelectedMemberId(value)
+      setMemberKeyword(match.memberNo || String(id))
+      setMemberOptions((prev) => {
+        const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+        if (prev.some((row) => row.value === value)) return prev
+        return [{ value, label }, ...prev]
+      })
+      setMemberMap((prev) => ({
+        ...prev,
+        [value]: {
+          id: match.id,
+          memberNo: match.memberNo || '',
+          name: match.name || '',
+          phone: match.phone || '',
+          email: match.email || '',
+          tierCode: match.tierCode || 'BRONZE',
+        },
+      }))
       return { id: match.id, name }
     },
     []
@@ -2897,36 +2954,60 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         discountTotal > 0.0001
           ? receiptLinesMatchCart && Math.abs(discountTotal - discount) < 0.02
             ? lineDiscountSnapshot
-            : buildCartPanelLineDiscountAllocations({
-                lines: linesForReceipt.map((i) => ({
-                  id: String(i.id ?? ''),
-                  name: String(i.name ?? ''),
-                  price: Number(i.price ?? 0),
-                  qty: Math.max(1, Number(i.quantity ?? 1) || 1),
-                  ...(i.promoId ? { promoId: String(i.promoId) } : {}),
-                  ...(i.menuId ? { menuId: String(i.menuId) } : {}),
-                  ...(i.menuId1 != null
-                    ? {
-                        menuId1: i.menuId1,
-                        menuId2: i.menuId2,
-                      }
-                    : {}),
-                })),
-                menuById: menuByIdForCollab,
-                lineModeById: lineDiscountModeByItemId,
-                hasSelectedDiscountScope,
-                collabDetail: appliedCollab?.collabDetail ?? null,
-                collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
-                serviceDiscountAmt,
-                cancelledLineAmt,
-                manualAndCouponDiscountAmt: Math.max(
+            : (() => {
+                const receiptCouponLines = linesForReceipt.map((i) => {
+                  const menuId = String(i.menuId ?? '').trim() || undefined
+                  const menu = menuId ? menuByIdForCollab.get(menuId) : undefined
+                  const qty = Math.max(1, Number(i.quantity ?? 1) || 1)
+                  return {
+                    menuId,
+                    menuCode: String(menu?.code ?? '').trim() || undefined,
+                    categoryCode:
+                      String(menu?.category ?? menu?.categoryMain ?? '').trim() || undefined,
+                    quantity: qty,
+                    lineSubtotal: Math.max(0, Number(i.price ?? 0) * qty),
+                  }
+                })
+                const receiptCouponAlloc = buildCouponDiscountLineAllocations(
+                  receiptCouponLines,
+                  appliedCoupons
+                )
+                const receiptCouponSum = receiptCouponAlloc.reduce((sum, v) => sum + v, 0)
+                const otherAmt = Math.max(
                   0,
                   discountTotal -
                     (appliedCollab ? collabDiscountAmt : 0) -
                     serviceDiscountAmt -
                     cancelledLineAmt
-                ),
-              })
+                )
+                const manualPart = Math.max(0, otherAmt - tierDiscountAmt - receiptCouponSum)
+                return buildCartPanelLineDiscountAllocations({
+                  lines: linesForReceipt.map((i) => ({
+                    id: String(i.id ?? ''),
+                    name: String(i.name ?? ''),
+                    price: Number(i.price ?? 0),
+                    qty: Math.max(1, Number(i.quantity ?? 1) || 1),
+                    ...(i.promoId ? { promoId: String(i.promoId) } : {}),
+                    ...(i.menuId ? { menuId: String(i.menuId) } : {}),
+                    ...(i.menuId1 != null
+                      ? {
+                          menuId1: i.menuId1,
+                          menuId2: i.menuId2,
+                        }
+                      : {}),
+                  })),
+                  menuById: menuByIdForCollab,
+                  lineModeById: lineDiscountModeByItemId,
+                  hasSelectedDiscountScope,
+                  collabDetail: appliedCollab?.collabDetail ?? null,
+                  collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
+                  serviceDiscountAmt,
+                  cancelledLineAmt,
+                  tierDiscountAmt,
+                  manualDiscountAmt: manualPart,
+                  couponLineAlloc: receiptCouponAlloc,
+                })
+              })()
           : []
       const receiptItems = linesForReceipt.map((i, idx) => ({
         id: String(i.id ?? ''),
@@ -3266,17 +3347,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setCartItems((prev) => mergeCartPanelAddItem(prev, item))
   }
 
-  const buildCouponCartLines = useCallback(
-    () =>
-      cartItems.map((item) => ({
-        menuId: String((item as { menuId?: string }).menuId ?? '').trim() || undefined,
-        categoryCode: String((item as { categoryCode?: string }).categoryCode ?? '').trim() || undefined,
-        quantity: Math.max(1, Number(item.quantity || 1)),
-        lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
-      })),
-    [cartItems]
-  )
-
   const applyCouponWithParams = useCallback(
     async (params: {
       code: string
@@ -3311,6 +3381,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           )
           return false
         }
+        if (res.resolvedMemberId && !selectedMemberId) {
+          await linkMemberById(res.resolvedMemberId)
+        }
         setAppliedCoupons(res.appliedCoupons)
         setCouponCode('')
         setCouponQuantityInput('1')
@@ -3334,6 +3407,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       manualDiscountAmt,
       serviceDiscountAmt,
       subtotal,
+      selectedMemberId,
+      linkMemberById,
       t,
       lang,
     ]
@@ -3542,12 +3617,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       subtotal,
       manualDiscountAmt: cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt,
       collabDiscountAmt,
-      cartLines: cartItems.map((item) => ({
-        menuId: String((item as { menuId?: string }).menuId ?? '').trim() || undefined,
-        categoryCode: String((item as { categoryCode?: string }).categoryCode ?? '').trim() || undefined,
-        quantity: Math.max(1, Number(item.quantity || 1)),
-        lineSubtotal: Math.max(0, Number(item.price || 0) * Math.max(1, Number(item.quantity || 1))),
-      })),
+      tierDiscountAmt,
+      cartLines: buildCouponCartLines(),
       applied: appliedCoupons,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
     }).then((res) => {
@@ -3563,6 +3634,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     serviceDiscountAmt,
     manualDiscountAmt,
     collabDiscountAmt,
+    tierDiscountAmt,
+    buildCouponCartLines,
     cartItems.length,
     selectedMemberId,
   ])

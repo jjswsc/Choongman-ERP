@@ -138,6 +138,7 @@ function parseCartLines(raw: unknown): PosCouponCartLine[] {
     )
     out.push({
       menuId: String(data.menuId ?? data.menu_id ?? '').trim() || undefined,
+      menuCode: String(data.menuCode ?? data.menu_code ?? '').trim() || undefined,
       categoryCode: String(data.categoryCode ?? data.category_code ?? '').trim() || undefined,
       quantity,
       lineSubtotal,
@@ -329,12 +330,23 @@ export async function validatePosCouponApplication(params: {
       ? { ...params.candidate, code: resolvedCandidateCode }
       : params.candidate
 
-  return validatePosCouponCandidate(template, ctx, candidate, {
+  const result = validatePosCouponCandidate(template, ctx, candidate, {
     serialAlreadyRedeemed: serial ? String(serial.status ?? '') === 'redeemed' : false,
     memberIssueAvailable: template?.redemptionMode === 'member_issue' ? Boolean(memberIssue) : undefined,
     memberIssueId: memberIssue?.id,
     serialId: serial?.id,
   })
+
+  const resolvedMemberId =
+    Math.max(
+      0,
+      Math.trunc(Number(memberIssue?.member_id ?? params.memberId ?? 0) || 0)
+    ) || undefined
+
+  return {
+    ...result,
+    ...(resolvedMemberId ? { resolvedMemberId } : {}),
+  }
 }
 
 async function revalidateAppliedPosCouponsAsync(
@@ -373,7 +385,14 @@ async function revalidateAppliedPosCouponsAsync(
       },
     })
     if (result.valid && result.appliedCoupons?.length) {
-      kept.push(result.appliedCoupons[result.appliedCoupons.length - 1]!)
+      const next = result.appliedCoupons[result.appliedCoupons.length - 1]!
+      kept.push({
+        ...next,
+        memberCouponIssueId: next.memberCouponIssueId ?? memberIssueId,
+        serialId: next.serialId ?? row.serialId,
+        itemScope: next.itemScope ?? row.itemScope,
+        discountType: next.discountType ?? row.discountType,
+      })
     }
   }
   return kept
@@ -467,7 +486,7 @@ export async function persistPosOrderCouponRedemptions(params: {
     if (memberCouponIssueId) {
       await supabaseUpdate('member_coupon_issues', memberCouponIssueId, {
         status: 'used',
-        used_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        used_at: getBangkokDateTimeString(),
         order_id: orderId,
       })
     }

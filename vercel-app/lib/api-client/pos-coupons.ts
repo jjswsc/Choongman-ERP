@@ -14,6 +14,8 @@ export interface PosAppliedCoupon {
   priority?: number
   memberCouponIssueId?: number
   serialId?: number
+  itemScope?: { menuIds?: string[]; categoryCodes?: string[] }
+  discountType?: PosCoupon['discountType']
 }
 
 export interface PosCoupon {
@@ -114,6 +116,7 @@ export async function validatePosCoupons(params: {
   tierDiscountAmt?: number
   cartLines?: Array<{
     menuId?: string
+    menuCode?: string
     categoryCode?: string
     quantity: number
     lineSubtotal: number
@@ -140,6 +143,7 @@ export async function validatePosCoupons(params: {
     couponDiscountTotal?: number
     couponCode?: string
     couponDiscountAmt?: number
+    resolvedMemberId?: number
   }>
 }
 

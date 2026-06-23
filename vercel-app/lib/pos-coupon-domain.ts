@@ -5,7 +5,7 @@
 export type PosCouponRedemptionMode = 'reusable_code' | 'single_use_serial' | 'member_issue'
 export type PosCouponStackMode = 'fixed_only' | 'percent_only' | 'any'
 export type PosCouponCalcBase = 'remaining' | 'subtotal'
-export type PosCouponDiscountType = 'percent' | 'fixed' | 'bogo' | 'set_fixed' | 'item_fixed'
+export type PosCouponDiscountType = 'percent' | 'fixed' | 'amount' | 'bogo' | 'set_fixed' | 'item_fixed'
 
 export interface PosLoyaltySettings {
   brandKey: string
@@ -49,6 +49,11 @@ export interface PosCouponTemplate {
   allowWithManualDiscount?: boolean
 }
 
+export interface PosCouponItemScope {
+  menuIds?: string[]
+  categoryCodes?: string[]
+}
+
 export interface PosAppliedCouponLine {
   code: string
   name?: string
@@ -58,10 +63,14 @@ export interface PosAppliedCouponLine {
   serialId?: number
   memberCouponIssueId?: number
   priority?: number
+  /** 영수증 줄 배분 — 검증 시 템플릿에서 스냅샷 */
+  itemScope?: PosCouponItemScope
+  discountType?: PosCouponDiscountType
 }
 
 export interface PosCouponCartLine {
   menuId?: string
+  menuCode?: string
   categoryCode?: string
   quantity: number
   lineSubtotal: number
@@ -98,6 +107,8 @@ export interface PosCouponValidationResult {
   appliedCoupons?: PosAppliedCouponLine[]
   couponDiscountTotal?: number
   remainingSubtotal?: number
+  /** 회원 발급 쿠폰 QR 등 — POS 회원 연결용 */
+  resolvedMemberId?: number
 }
 
 function round2(n: number): number {
@@ -151,19 +162,86 @@ function normalizeList(values: unknown): string[] {
   return values.map((v) => String(v ?? '').trim()).filter(Boolean)
 }
 
-function cartLineMatchesScope(
+export function couponItemScopeIsRestricted(scope: PosCouponItemScope | undefined): boolean {
+  if (!scope) return false
+  return normalizeList(scope.menuIds).length > 0 || normalizeList(scope.categoryCodes).length > 0
+}
+
+export function cartLineMatchesScope(
   line: PosCouponCartLine,
-  scope: PosCouponTemplate['itemScope']
+  scope: PosCouponItemScope | undefined
 ): boolean {
   if (!scope) return true
   const menuIds = normalizeList(scope.menuIds)
   const categories = normalizeList(scope.categoryCodes).map((v) => v.toUpperCase())
   if (menuIds.length === 0 && categories.length === 0) return true
   const menuId = String(line.menuId ?? '').trim()
+  const menuCode = String(line.menuCode ?? '').trim().toUpperCase()
   const category = String(line.categoryCode ?? '').trim().toUpperCase()
-  if (menuIds.length > 0 && menuId && menuIds.includes(menuId)) return true
+  if (menuIds.length > 0) {
+    const idSet = new Set(menuIds)
+    const idUpperSet = new Set(menuIds.map((v) => v.toUpperCase()))
+    if (menuId && (idSet.has(menuId) || idUpperSet.has(menuId.toUpperCase()))) return true
+    if (menuCode && idUpperSet.has(menuCode)) return true
+  }
   if (categories.length > 0 && category && categories.includes(category)) return true
   return false
+}
+
+function allocateDiscountProportionalToWeights(weights: number[], totalDiscount: number): number[] {
+  const discount = Math.max(0, Number(totalDiscount) || 0)
+  if (weights.length === 0 || discount <= 0.0001) return weights.map(() => 0)
+  const gross = weights.reduce((sum, v) => sum + v, 0)
+  if (gross <= 0.0001) {
+    const per = round2(discount / weights.length)
+    let used = 0
+    return weights.map((_, i) => {
+      if (i === weights.length - 1) return round2(Math.max(0, discount - used))
+      used += per
+      return per
+    })
+  }
+  const out = weights.map(() => 0)
+  let used = 0
+  for (let i = 0; i < weights.length; i += 1) {
+    if (i === weights.length - 1) {
+      out[i] = round2(Math.max(0, discount - used))
+      break
+    }
+    const share = round2((discount * weights[i]) / gross)
+    out[i] = share
+    used += share
+  }
+  return out
+}
+
+/** 적용 쿠폰 할인을 메뉴 범위(itemScope)에 맞는 줄에만 배분 */
+export function buildCouponDiscountLineAllocations(
+  cartLines: PosCouponCartLine[],
+  appliedCoupons: PosAppliedCouponLine[]
+): number[] {
+  if (!cartLines.length) return []
+  const out = cartLines.map(() => 0)
+  if (!appliedCoupons.length) return out
+
+  for (const coupon of appliedCoupons) {
+    const amt = Math.max(0, Number(coupon.discountAmt ?? 0) || 0)
+    if (amt <= 0.0001) continue
+
+    const scope = coupon.itemScope
+    const eligibleIndices: number[] = []
+    cartLines.forEach((line, i) => {
+      if (cartLineMatchesScope(line, scope)) eligibleIndices.push(i)
+    })
+    if (eligibleIndices.length === 0) continue
+
+    const eligibleWeights = eligibleIndices.map((i) => Math.max(0, Number(cartLines[i]?.lineSubtotal ?? 0) || 0))
+    const chunk = allocateDiscountProportionalToWeights(eligibleWeights, amt)
+    eligibleIndices.forEach((idx, j) => {
+      out[idx] = round2(out[idx] + chunk[j])
+    })
+  }
+  return out
 }
 
 function resolveEligibleCartStats(
@@ -265,7 +343,7 @@ function canStackTemplate(
   if (template.allowWithManualDiscount === false && (ctx.manualDiscountAmt || 0) > 0.0001) {
     return '이 쿠폰은 수동 할인과 함께 사용할 수 없습니다.'
   }
-  const fixedLike = ['fixed', 'set_fixed', 'item_fixed', 'bogo']
+  const fixedLike = ['fixed', 'amount', 'set_fixed', 'item_fixed', 'bogo']
   if (applied.length === 0) return null
   if (stackMode === 'fixed_only' && !fixedLike.includes(template.discountType)) {
     return '이 쿠폰은 다른 쿠폰과 함께 사용할 수 없습니다.'
@@ -386,6 +464,8 @@ export function validatePosCouponCandidate(
     quantity,
     couponId: c.id,
     priority: Number(c.priority ?? 0) || 0,
+    ...(c.itemScope ? { itemScope: c.itemScope } : {}),
+    discountType: c.discountType,
     ...(opts?.memberIssueId ? { memberCouponIssueId: opts.memberIssueId } : {}),
     ...(opts?.serialId ? { serialId: opts.serialId } : {}),
   }
@@ -440,7 +520,14 @@ export function revalidateAppliedPosCoupons(
       }
     )
     if (result.valid && result.appliedCoupons?.length) {
-      kept.push(result.appliedCoupons[result.appliedCoupons.length - 1]!)
+      const next = result.appliedCoupons[result.appliedCoupons.length - 1]!
+      kept.push({
+        ...next,
+        memberCouponIssueId: next.memberCouponIssueId ?? memberIssueId,
+        serialId: next.serialId ?? serialId,
+        itemScope: next.itemScope ?? template?.itemScope,
+        discountType: next.discountType ?? template?.discountType,
+      })
     }
   }
   return kept
@@ -487,6 +574,16 @@ export function parseAppliedCouponsFromBody(body: unknown): PosAppliedCouponLine
       memberCouponIssueId:
         Number(row.memberCouponIssueId ?? row.member_coupon_issue_id ?? 0) || undefined,
       priority: Number(row.priority ?? row.coupon_priority ?? 0) || undefined,
+      ...(row.itemScope && typeof row.itemScope === 'object'
+        ? { itemScope: row.itemScope as PosCouponItemScope }
+        : row.item_scope && typeof row.item_scope === 'object'
+          ? { itemScope: row.item_scope as PosCouponItemScope }
+          : {}),
+      ...(String(row.discountType ?? row.discount_type ?? '').trim()
+        ? {
+            discountType: String(row.discountType ?? row.discount_type).trim() as PosCouponDiscountType,
+          }
+        : {}),
     })
   }
   return out

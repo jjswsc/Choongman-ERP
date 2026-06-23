@@ -331,7 +331,11 @@ export function buildCartPanelLineDiscountAllocations(input: {
   collabDiscountAmt: number
   serviceDiscountAmt: number
   cancelledLineAmt: number
-  manualAndCouponDiscountAmt: number
+  /** @deprecated tier·manual·couponLineAlloc 사용 권장 */
+  manualAndCouponDiscountAmt?: number
+  tierDiscountAmt?: number
+  manualDiscountAmt?: number
+  couponLineAlloc?: number[]
 }): number[] {
   const {
     lines,
@@ -342,7 +346,10 @@ export function buildCartPanelLineDiscountAllocations(input: {
     collabDiscountAmt,
     serviceDiscountAmt,
     cancelledLineAmt,
-    manualAndCouponDiscountAmt,
+    manualAndCouponDiscountAmt = 0,
+    tierDiscountAmt = 0,
+    manualDiscountAmt = 0,
+    couponLineAlloc,
   } = input
 
   const modeForLine = (line: CollabCartLineLike): PosCartLineDiscountMode =>
@@ -373,17 +380,36 @@ export function buildCartPanelLineDiscountAllocations(input: {
       ? allocateDiscountProportional(weightsForModes(['cancel']), cancelledLineAmt)
       : lines.map(() => 0)
 
+  const tierWeights = lines.map((line) => (modeForLine(line) !== 'cancel' ? collabLineTotal(line) : 0))
+  const tierAlloc =
+    tierDiscountAmt > 0.0001
+      ? allocateDiscountProportional(tierWeights, tierDiscountAmt)
+      : lines.map(() => 0)
+
   const manualWeights = hasSelectedDiscountScope
     ? weightsForModes(['discount'])
     : lines.map((line) => (modeForLine(line) !== 'cancel' ? collabLineTotal(line) : 0))
 
-  const manualAlloc =
-    manualAndCouponDiscountAmt > 0.0001
+  const useSplitManualTierCoupon =
+    tierDiscountAmt > 0.0001 ||
+    manualDiscountAmt > 0.0001 ||
+    (Array.isArray(couponLineAlloc) && couponLineAlloc.length === lines.length)
+
+  const manualAlloc = useSplitManualTierCoupon
+    ? manualDiscountAmt > 0.0001
+      ? allocateDiscountProportional(manualWeights, manualDiscountAmt)
+      : lines.map(() => 0)
+    : manualAndCouponDiscountAmt > 0.0001
       ? allocateDiscountProportional(manualWeights, manualAndCouponDiscountAmt)
       : lines.map(() => 0)
 
+  const couponAlloc =
+    useSplitManualTierCoupon && Array.isArray(couponLineAlloc) && couponLineAlloc.length === lines.length
+      ? couponLineAlloc
+      : lines.map(() => 0)
+
   const to2 = (n: number) => Math.round(n * 100) / 100
-  return lines.map((_, i) => to2(collabAlloc[i] + serviceAlloc[i] + cancelAlloc[i] + manualAlloc[i]))
+  return lines.map((_, i) => to2(collabAlloc[i] + serviceAlloc[i] + cancelAlloc[i] + tierAlloc[i] + manualAlloc[i] + couponAlloc[i]))
 }
 
 function lineEligibleForCollab(
