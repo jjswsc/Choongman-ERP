@@ -102,8 +102,11 @@ export function buildMemberPortalTakeoutDisplayLabel(
 function formatPickupAtForDisplay(pickupAtRaw: string, lang: LangCode): string {
   const raw = String(pickupAtRaw || '').trim()
   if (!raw) return ''
-  const normalized = raw.replace(' ', 'T').slice(0, 16)
-  const parsed = new Date(normalized)
+  const normalized = raw.replace(' ', 'T').slice(0, 19)
+  const withBangkokTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(normalized)
+    ? normalized
+    : `${normalized}+07:00`
+  const parsed = new Date(withBangkokTz)
   if (Number.isNaN(parsed.getTime())) {
     const hm = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/u.exec(raw)
     return hm?.[2] ?? raw.slice(0, 16)

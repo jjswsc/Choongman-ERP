@@ -39,10 +39,10 @@ describe('validateMemberPortalImageByRule', () => {
     expect(phone.ok).toBe(false)
   })
 
-  it('accepts square new menu images', () => {
+  it('accepts new menu hero images at 12:5', () => {
     const rule = MEMBER_PORTAL_CONTENT_IMAGE_RULES.new_menu
-    const square = validateMemberPortalImageByRule(1080, 1080, rule, t, 'new_menu')
-    expect(square).toEqual({ ok: true })
+    const hero = validateMemberPortalImageByRule(1200, 500, rule, t, 'new_menu')
+    expect(hero).toEqual({ ok: true })
   })
 
   it('rejects undersized promo hero images', () => {

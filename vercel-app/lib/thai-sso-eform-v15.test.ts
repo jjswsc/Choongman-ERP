@@ -39,7 +39,7 @@ describe("mapPayrollCalcRowToSsoEformV15DataRow", () => {
         ssoMemberNo: "12 345 678 90",
         joinDate: "2024-01-01",
         resignDate: "2026-05-10",
-        ssoBase: 15000.7,
+        ssoContributableWage: 15000.7,
       },
       3,
       "2026-05"

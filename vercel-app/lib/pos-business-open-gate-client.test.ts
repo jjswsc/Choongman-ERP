@@ -11,6 +11,7 @@ vi.mock('@/lib/api-client', () => ({
 }))
 
 vi.mock('@/lib/offline/settlement-offline', () => ({
+  settlementStoreCacheKeys: vi.fn(() => []),
   getPosSettlementWithCache: vi.fn(async ({ storeCode, settleDate }: { storeCode?: string; settleDate: string }) => {
     const open =
       (storeCode === 'CM Office' || storeCode === 'Office') &&

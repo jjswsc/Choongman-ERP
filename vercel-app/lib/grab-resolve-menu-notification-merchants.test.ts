@@ -84,7 +84,7 @@ describe('resolveGrabMenuNotificationMerchantIDs', () => {
     else process.env.GRAB_STORE_MAP_JSON = prevMap
   })
 
-  it('uses GFSBPOS when portal map is absent (sandbox-only)', () => {
+  it('resolves GFSBPOS via partner store to portal merchant when defaults link 1040', () => {
     const prevPortal = process.env.GRAB_PORTAL_MERCHANT_MAP
     const prevMap = process.env.GRAB_STORE_MAP_JSON
     delete process.env.GRAB_PORTAL_MERCHANT_MAP
@@ -92,7 +92,7 @@ describe('resolveGrabMenuNotificationMerchantIDs', () => {
       'GFSBPOS-811-087': '1040',
       '1040': 'CM True Digital',
     })
-    expect(resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')).toEqual(['GFSBPOS-811-087'])
+    expect(resolveGrabMenuNotificationMerchantIDs('GFSBPOS-811-087')).toEqual(['3-C6DWPB4VCKK1GT'])
     if (prevPortal === undefined) delete process.env.GRAB_PORTAL_MERCHANT_MAP
     else process.env.GRAB_PORTAL_MERCHANT_MAP = prevPortal
     if (prevMap === undefined) delete process.env.GRAB_STORE_MAP_JSON
