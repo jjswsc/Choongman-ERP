@@ -115,22 +115,29 @@ export function VendorTable({
       </div>
 
       <div className="min-h-0 max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-scroll">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-left text-sm table-fixed">
+          <colgroup>
+            <col className="w-[72px]" />
+            <col className="w-[88px]" />
+            <col />
+            <col className="w-[120px]" />
+            <col className="w-[88px]" />
+            <col className="w-[80px]" />
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 min-w-[92px]">{t("vendorColType")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[140px]">{t("vendorColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("vendorColLinkedStores")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("vendorDirectSettlement")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32 min-w-[130px]">{t("vendorColPhone")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("vendorColAction")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColCode")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColType")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColName")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColLinkedStores")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground text-center">{t("vendorDirectSettlement")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground text-center">{t("vendorColAction")}</th>
             </tr>
           </thead>
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={7} className="p-0">
+                <td colSpan={6} className="p-0">
                   <LogisticsEmptyState
                     icon={Search}
                     title={t("vendorSearchHint")}
@@ -140,13 +147,13 @@ export function VendorTable({
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={7} className="p-0">
+                <td colSpan={6} className="p-0">
                   <div className="py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-0">
+                <td colSpan={6} className="p-0">
                   <LogisticsEmptyState
                     icon={ListFilter}
                     title={t("vendorNoResults")}
@@ -163,12 +170,12 @@ export function VendorTable({
                     idx % 2 === 1 && "bg-muted/5"
                   )}
                 >
-                  <td className="px-5 py-3">
+                  <td className="px-4 py-3">
                     <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary">
                       {vendor.code}
                     </span>
                   </td>
-                  <td className="px-5 py-3 w-24 min-w-[92px] whitespace-nowrap">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span
                       className={cn(
                         "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium",
@@ -184,15 +191,23 @@ export function VendorTable({
                           : t("vendorTypeBoth")}
                     </span>
                   </td>
-                  <td className="px-5 py-3 min-w-[140px]">
-                    <span className="text-sm font-medium text-foreground">
+                  <td className="px-4 py-3">
+                    <span
+                      className="text-sm font-medium text-foreground whitespace-nowrap"
+                      title={
+                        (vendor.type === "sales" || vendor.type === "both") &&
+                        (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
+                          ? vendor.gps_name?.trim() || vendor.sales_outlet
+                          : vendor.name
+                      }
+                    >
                       {(vendor.type === "sales" || vendor.type === "both") &&
                       (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
                         ? vendor.gps_name?.trim() || vendor.sales_outlet
                         : vendor.name}
                     </span>
                   </td>
-                  <td className="px-5 py-3 min-w-[120px]">
+                  <td className="px-4 py-3">
                     {(() => {
                       const links = linkedStoresByVendor[vendor.code] || []
                       if (links.length === 0) {
@@ -222,7 +237,7 @@ export function VendorTable({
                       )
                     })()}
                   </td>
-                  <td className="px-5 py-3 text-center">
+                  <td className="px-4 py-3 text-center">
                     {vendor.direct_settlement ? (
                       <span className="inline-flex items-center rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
                         {t("vendorDirectSettlement")}
@@ -231,10 +246,7 @@ export function VendorTable({
                       <span className="text-muted-foreground">-</span>
                     )}
                   </td>
-                  <td className="px-5 py-3 w-32 min-w-[130px] whitespace-nowrap">
-                    <span className="text-xs text-muted-foreground">{vendor.phone || "-"}</span>
-                  </td>
-                  <td className="px-5 py-3">
+                  <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="outline"
