@@ -15,6 +15,7 @@ import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger
 import { backfillVatLedgerStoreNames, resolveStoreDisplayNameForVatLedger, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
 import { syncInvoiceBackedBankInputVatLedgers } from '@/lib/invoice-backed-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { normalizeItemTaxType } from '@/lib/income-statement-item-vat'
 import {
   isAccountingPurchaseOrderByCartJson,
   parsePurchaseOrderCart,
@@ -401,28 +402,16 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   const startYmd = monthStartYmd(validMonths[0])
   const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
 
-  let itemRows: { code?: string; price?: number; cost?: number; tax_type?: string }[] | null = null
-  try {
-    itemRows = (await supabaseSelect('items', {
-      order: 'id.asc',
-      limit: 12000,
-      select: 'code,price,cost,tax_type',
-    })) as { code?: string; price?: number; cost?: number; tax_type?: string }[] | null
-  } catch {
-    // 일부 로컬/레거시 스키마에는 tax_type 컬럼이 없다.
-    itemRows = (await supabaseSelect('items', {
-      order: 'id.asc',
-      limit: 12000,
-      select: 'code,price,cost',
-    })) as { code?: string; price?: number; cost?: number; tax_type?: string }[] | null
-  }
+  const itemRows = (await supabaseSelect('items', {
+    order: 'id.asc',
+    limit: 12000,
+    select: 'code,price,cost,tax',
+  })) as { code?: string; price?: number; cost?: number; tax?: string }[] | null
   const itemMap: Record<string, ItemTaxMeta> = {}
   for (const it of itemRows || []) {
     const code = String(it.code || '').trim()
     if (!code) continue
-    const taxRaw = String(it.tax_type || '').trim().toLowerCase()
-    const taxType: ItemTaxMeta['taxType'] =
-      taxRaw === 'exempt' || taxRaw === 'zero' ? (taxRaw as 'exempt' | 'zero') : 'taxable'
+    const taxType = normalizeItemTaxType(it.tax)
     itemMap[code] = {
       price: Number(it.price) || 0,
       cost: Number(it.cost) || 0,

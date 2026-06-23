@@ -1,5 +1,5 @@
 /**
- * 손익 VAT 환산 — 품목 tax_type(과세/면세/영세) 반영.
+ * 손익 VAT 환산 — 품목 tax(과세/면세/영세율) 반영.
  * 발주·PP30과 동일: 과세 공급가 합에만 7% VAT (태국 반올림).
  * DB 조회는 income-statement-item-vat-server.ts (server-only).
  */

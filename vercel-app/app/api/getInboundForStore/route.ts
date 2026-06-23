@@ -5,6 +5,8 @@ import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purcha
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole } from '@/lib/permissions'
 import { createVendorNameResolver, resolveVendorFilterAliases } from '@/lib/vendor-name-normalizer'
+import { formatStockLogDateBangkokYmd } from '@/lib/inbound-payable-amount'
+import { isItemVatExempt, normalizeItemTaxType } from '@/lib/income-statement-item-vat'
 
 /** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) + 통장 매입 지급 행 */
 export async function GET(request: NextRequest) {
@@ -57,44 +59,24 @@ export async function GET(request: NextRequest) {
       endStr = last.toISOString().slice(0, 10)
     }
 
-    let itemRows: {
+    const itemRows = (await supabaseSelect('items', {
+      order: 'id.asc',
+      limit: 5000,
+      select: 'code,spec,cost,purchase_source,tax',
+    })) as {
       code?: string
       spec?: string
       cost?: number
       purchase_source?: string
-      tax_type?: string
-    }[] | null = null
-    try {
-      itemRows = (await supabaseSelect('items', {
-        order: 'id.asc',
-        limit: 5000,
-        select: 'code,spec,cost,purchase_source,tax_type',
-      })) as {
-        code?: string
-        spec?: string
-        cost?: number
-        purchase_source?: string
-        tax_type?: string
-      }[] | null
-    } catch {
-      itemRows = (await supabaseSelect('items', {
-        order: 'id.asc',
-        limit: 5000,
-        select: 'code,spec,cost,purchase_source',
-      })) as {
-        code?: string
-        spec?: string
-        cost?: number
-        purchase_source?: string
-      }[] | null
-    }
+      tax?: string
+    }[] | null
     const itemMap: Record<string, { spec: string; cost: number; purchaseSource: 'hq' | 'store'; taxRate: number }> = {}
     for (const row of itemRows || []) {
       const code = String(row.code || '').trim()
       if (code) {
         const ps = String(row.purchase_source || '').trim()
-        const taxRaw = String(row.tax_type || '').trim().toLowerCase()
-        const taxRate = taxRaw === 'exempt' || taxRaw === 'zero' ? 0 : 0.07
+        const taxType = normalizeItemTaxType(row.tax)
+        const taxRate = isItemVatExempt(taxType) ? 0 : 0.07
         itemMap[code] = {
           spec: row.spec || '-',
           cost: Number(row.cost) || 0,
@@ -190,7 +172,7 @@ export async function GET(request: NextRequest) {
       const vatAmount = Math.round(amount * info.taxRate * 100) / 100
       const vendor = rowVendor
       list.push({
-        date: rowDate.toISOString().slice(0, 10),
+        date: formatStockLogDateBangkokYmd(row.log_date),
         vendor,
         name: row.item_name || '-',
         spec: info.spec,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseInsertMany, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { deletePayableFromPO } from '@/lib/receivable-payable'
+import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/inbound-payable-amount'
+import { computeInboundRegisterTotals } from '@/lib/inbound-payable-sync'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
@@ -33,22 +35,28 @@ export async function POST(request: NextRequest) {
 
     const location = storeName || '입고등록'
     const vendorName = String(list[0]?.vendor || '').trim()
-    const batchDate = list[0]?.date ? new Date(list[0].date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
 
-    let totalAmount = 0
+    const itemRows = (await supabaseSelect('items', {
+      order: 'id.asc',
+      limit: 5000,
+      select: 'code,tax',
+    })) as { code?: string; tax?: string | null }[] | null
+    const taxByCode = buildItemTaxMapFromRows(itemRows)
+
+    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(list, taxByCode)
+
     const rows = list.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
       const costVal = item.cost != null && item.cost !== '' ? parseFloat(String(item.cost).replace(/,/g, '')) : null
       const cost = costVal != null && !isNaN(costVal) && costVal >= 0 ? costVal : 0
-      totalAmount += qty * cost
-      const dateObj = item.date ? new Date(item.date) : new Date()
+      const lineYmd = String(item.date || batchDateYmd).trim().slice(0, 10)
       const row: Record<string, unknown> = {
         location,
         item_code: String(item.code || '').trim(),
         item_name: String(item.name || '').trim(),
         spec: String(item.spec || '').trim() || '-',
         qty,
-        log_date: dateObj.toISOString(),
+        log_date: inboundLogDateIsoFromBangkokYmd(lineYmd),
         vendor_target: String(item.vendor || '').trim(),
         log_type: 'Inbound',
       }
@@ -95,8 +103,8 @@ export async function POST(request: NextRequest) {
       location,
       vendor_name: vendorName || '-',
       vendor_code: effectiveVendorCode || vendorCode,
-      batch_date: batchDate,
-      total_amount: totalAmount,
+      batch_date: batchDateYmd,
+      total_amount: grossTotal,
       purchase_order_id: purchaseOrderId && !isNaN(purchaseOrderId) ? purchaseOrderId : null,
     }
     if (poNo) batchRow.po_no = poNo
@@ -108,16 +116,16 @@ export async function POST(request: NextRequest) {
     const rowsWithBatch = validRows.map((r) => ({ ...r, inbound_batch_id: batchId }))
     await supabaseInsertMany('stock_logs', rowsWithBatch)
 
-    // 3. 미지급금 생성 (입고 건별, From HQ 제외)
-    if (batchId && totalAmount > 0 && vendorName && vendorName !== 'From HQ') {
+    // 3. 미지급금 생성 (입고 건별 VAT 포함 합계, From HQ 제외)
+    if (batchId && grossTotal > 0 && vendorName && vendorName !== 'From HQ') {
       const payVendorCode = effectiveVendorCode || vendorCode || vendorName
       await supabaseInsert('payable_transactions', {
         vendor_code: payVendorCode,
-        amount: totalAmount,
+        amount: grossTotal,
         ref_type: 'Inbound',
         ref_id: batchId,
-        trans_date: batchDate,
-        memo: `입고 ${batchDate} ${vendorName}`,
+        trans_date: batchDateYmd,
+        memo: `입고 ${batchDateYmd} ${vendorName}`,
       })
     }
     // 발주 승인으로 쌓인 PO 미지급은 입고 확정 시 Inbound 행으로 대체(중복 잔액 방지)

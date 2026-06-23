@@ -6,8 +6,12 @@ import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
 import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
-import { dedupePayablePaymentsForBankTransaction } from '@/lib/receivable-payable'
+import {
+  dedupePayablePaymentsForBankTransaction,
+  dedupePayablePaymentsForExpenseAccrual,
+} from '@/lib/receivable-payable'
 import { requireAuth } from '@/lib/verify-auth'
+import { resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 
@@ -187,6 +191,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '승인 상태를 확인할 수 없습니다.' }, { status: 400, headers })
     }
 
+    const existingPaymentRows = (await supabaseSelectFilter(
+      'payable_transactions',
+      `expense_accrual_id=eq.${expenseAccrualId}&ref_type=eq.Payment`,
+      { select: 'id,amount,bank_transaction_id', limit: 20 }
+    )) as { id?: number; amount?: number; bank_transaction_id?: number | null }[] | null
+    const existingPaymentAbs = (existingPaymentRows || []).reduce(
+      (sum, row) => sum + Math.abs(Number(row.amount) || 0),
+      0
+    )
+    if (existingPaymentAbs > 0.01) {
+      return NextResponse.json(
+        { success: false, message: '이미 미지급에 지급(Payment) 행이 등록된 지급예정입니다. 중복 집행할 수 없습니다.' },
+        { status: 400, headers }
+      )
+    }
+
     const paidRows = (await supabaseSelectFilter(
       'payable_transactions',
       `expense_accrual_id=eq.${expenseAccrualId}`,
@@ -214,7 +234,23 @@ export async function POST(request: NextRequest) {
     const withdrawalCategory = decoded.withdrawalCategory
     const bankCategory = mapWithdrawalCategoryToBankCategory(withdrawalCategory)
     const note = `expense_accrual_id:${expenseAccrualId};withdrawal_category:${withdrawalCategory}`
-    const vendorCode = payeeCode && !payeeCode.startsWith('auto_') ? payeeCode : null
+    let vendorCode =
+      payeeCode && !payeeCode.startsWith('auto_') ? payeeCode.trim() : ''
+    if (!vendorCode) {
+      vendorCode =
+        (await resolveVendorCodeLoose(payeeCode)) ||
+        (await resolveVendorCodeLoose(source.payee_name))
+    }
+    if (!vendorCode) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+        },
+        { status: 400, headers }
+      )
+    }
     const paymentMemo = memo || `지출 지급(${source.payee_name || payeeCode})`
     const accrualAccountSubjectId = resolveAccrualAccountSubjectId(source)
 
@@ -381,6 +417,11 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     })
 
+    try {
+      await dedupePayablePaymentsForExpenseAccrual(expenseAccrualId)
+    } catch (dedupeErr) {
+      console.warn('executeExpensePayment accrual payable dedupe:', dedupeErr)
+    }
     if (bankId) {
       try {
         await dedupePayablePaymentsForBankTransaction(bankId)

@@ -1,4 +1,4 @@
-import { supabaseDeleteByFilter, supabaseInsert } from '@/lib/supabase-server'
+import { supabaseDeleteByFilter, supabaseTryInsertOnConflict } from '@/lib/supabase-server'
 
 type ReserveGrabWebhookEventInput = {
   eventKind: string
@@ -13,10 +13,6 @@ type ReserveGrabWebhookEventInput = {
 
 function truncate(value: string, max: number): string {
   return String(value || '').slice(0, max)
-}
-
-function isDuplicateKeyError(msg: string): boolean {
-  return /duplicate key value violates unique constraint|23505/i.test(msg)
 }
 
 function isMissingTableError(msg: string): boolean {
@@ -37,20 +33,23 @@ export async function reserveGrabWebhookEvent(
   if (!eventKind || !uniqueKey) return false
 
   try {
-    await supabaseInsert('pos_grab_webhook_events', {
-      event_kind: eventKind,
-      unique_key: uniqueKey,
-      request_id: truncate(input.requestId || '', 120) || null,
-      job_id: truncate(input.jobId || '', 120) || null,
-      order_id: truncate(input.orderId || '', 120) || null,
-      merchant_id: truncate(input.merchantId || '', 120) || null,
-      partner_merchant_id: truncate(input.partnerMerchantId || '', 120) || null,
-      payload_json: input.payload ?? null,
-    })
-    return false
+    const inserted = await supabaseTryInsertOnConflict(
+      'pos_grab_webhook_events',
+      {
+        event_kind: eventKind,
+        unique_key: uniqueKey,
+        request_id: truncate(input.requestId || '', 120) || null,
+        job_id: truncate(input.jobId || '', 120) || null,
+        order_id: truncate(input.orderId || '', 120) || null,
+        merchant_id: truncate(input.merchantId || '', 120) || null,
+        partner_merchant_id: truncate(input.partnerMerchantId || '', 120) || null,
+        payload_json: input.payload ?? null,
+      },
+      'event_kind,unique_key'
+    )
+    return !inserted
   } catch (e) {
     const msg = String(e || '')
-    if (isDuplicateKeyError(msg)) return true
     if (isMissingTableError(msg)) {
       console.warn('[grab-webhook-idempotency] table not ready, skip dedupe')
       return false

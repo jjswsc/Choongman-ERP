@@ -118,12 +118,26 @@ export async function POST(request: NextRequest) {
       patch.expense_date = /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : null
     }
     const finalCategory = (patch.category as string) ?? existing[0].category
+    const finalCategoryLower = String(finalCategory || '').toLowerCase()
     const finalStoreName = storeName !== undefined ? String(storeName || '').trim() || null : (existing[0].store_name ?? null)
     const finalAccountSubjectId =
       patch.account_subject_id !== undefined
         ? (patch.account_subject_id as number | null)
         : (existing[0].account_subject_id ?? null)
-    if (finalCategory === 'purchase_payment' && vendorCode !== undefined) {
+    let withdrawHasLinkedPayment = false
+    if (transType === 'withdraw' && vendorCode !== undefined && finalCategoryLower !== 'purchase_payment') {
+      const linkedRows = (await supabaseSelectFilter(
+        'payable_transactions',
+        `bank_transaction_id=eq.${bankTxId}&ref_type=eq.Payment`,
+        { limit: 1, select: 'id' }
+      )) as { id?: number }[]
+      withdrawHasLinkedPayment = Boolean(linkedRows?.length)
+    }
+    if (
+      transType === 'withdraw' &&
+      vendorCode !== undefined &&
+      (finalCategoryLower === 'purchase_payment' || withdrawHasLinkedPayment)
+    ) {
       patch.vendor_code = String(vendorCode || '').trim() || null
     }
     if (finalCategory === 'receivable_receive' && storeName !== undefined) {
@@ -215,10 +229,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 매입 지급(미지급): purchase_payment ↔ 다른 용도, 거래처 변경 시 payable·지급예정 동기화
+    // 매입 지급(미지급): purchase_payment·지출관리 연동 통장 모두 거래처 변경 시 payable·지급예정 동기화
     if (transType === 'withdraw') {
       const wasPurchasePay = prevCategory === 'purchase_payment'
-      const isPurchasePay = String(finalCategory || '').toLowerCase() === 'purchase_payment'
+      const isPurchasePay = finalCategoryLower === 'purchase_payment'
 
       if (wasPurchasePay && !isPurchasePay) {
         await supabaseDeleteByFilter(
@@ -226,20 +240,26 @@ export async function POST(request: NextRequest) {
           `bank_transaction_id=eq.${bankTxId}&ref_type=eq.Payment&expense_accrual_id=is.null`
         )
       }
-      if (isPurchasePay) {
-        const finalVendorCode = String(
-          patch.vendor_code !== undefined ? patch.vendor_code : existing[0].vendor_code || ''
-        ).trim()
-        if (finalVendorCode) {
-          const bankMemo = String(existing[0].memo || '').trim()
-          await syncPayableLedgerFromBankPurchasePayment({
-            bankTransactionId: bankTxId,
-            vendorCode: finalVendorCode,
-            amountAbs: Math.abs(Number(existing[0].amount) || 0),
-            transDate,
-            memo: bankMemo ? `통장 지급: ${bankMemo.slice(0, 200)}` : '통장 지급',
-          })
-        }
+
+      const linkedPaymentRows = (await supabaseSelectFilter(
+        'payable_transactions',
+        `bank_transaction_id=eq.${bankTxId}&ref_type=eq.Payment`,
+        { limit: 1, select: 'id' }
+      )) as { id?: number }[]
+      const hasLinkedPayment = Boolean(linkedPaymentRows?.length) || withdrawHasLinkedPayment
+
+      const finalVendorCode = String(
+        patch.vendor_code !== undefined ? patch.vendor_code : existing[0].vendor_code || ''
+      ).trim()
+      if (finalVendorCode && (isPurchasePay || hasLinkedPayment)) {
+        const bankMemo = String(existing[0].memo || '').trim()
+        await syncPayableLedgerFromBankPurchasePayment({
+          bankTransactionId: bankTxId,
+          vendorCode: finalVendorCode,
+          amountAbs: Math.abs(Number(existing[0].amount) || 0),
+          transDate,
+          memo: bankMemo ? `통장 지급: ${bankMemo.slice(0, 200)}` : '통장 지급',
+        })
       }
     }
 

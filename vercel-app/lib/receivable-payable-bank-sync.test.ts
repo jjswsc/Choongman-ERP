@@ -24,4 +24,13 @@ describe('pickPayablePaymentKeeperId', () => {
   it('returns null for empty input', () => {
     expect(pickPayablePaymentKeeperId([])).toBeNull()
   })
+
+  it('prefers higher id among accrual-linked duplicates', () => {
+    expect(
+      pickPayablePaymentKeeperId([
+        { id: 100, expense_accrual_id: 50 },
+        { id: 101, expense_accrual_id: 50 },
+      ])
+    ).toBe(101)
+  })
 })

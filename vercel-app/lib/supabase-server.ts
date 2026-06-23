@@ -362,6 +362,40 @@ export async function supabaseInsertIgnoreDuplicates(
 }
 
 /**
+ * INSERT ON CONFLICT DO NOTHING — 충돌 시 DB ERROR 없이 false 반환.
+ * @returns true = 신규 삽입, false = unique 충돌로 무시됨
+ */
+export async function supabaseTryInsertOnConflict(
+  table: string,
+  row: Record<string, unknown>,
+  onConflictColumns: string
+): Promise<boolean> {
+  const { url, key } = getConfig()
+  const conflict = String(onConflictColumns || '').trim()
+  if (!conflict) throw new Error('supabaseTryInsertOnConflict: onConflictColumns required')
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?on_conflict=${encodeURIComponent(conflict)}`
+  const res = await supabaseFetch(pathStr, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=ignore-duplicates,return=representation',
+    },
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    if (/duplicate key value|23505/i.test(text)) return false
+    throw new Error('Supabase insert failed: ' + text)
+  }
+  const text = await res.text()
+  if (!text) return false
+  const parsed = JSON.parse(text) as unknown
+  return Array.isArray(parsed) && parsed.length > 0
+}
+
+/**
  * PostgREST upsert — on_conflict 열이 이미 있으면 본문 필드로 병합(갱신).
  * pos_printer_settings(store_code PK) 저장 등 INSERT/UPDATE 분기 실패를 막기 위해 사용.
  */

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { normalizeVendorCode } from '@/lib/vendor-code-policy'
+import { syncPayableFromInboundBatch } from '@/lib/inbound-payable-sync'
 
 /** 입고 배치 수정 (거래처, 인보이스 등) */
 export async function POST(request: NextRequest) {
@@ -43,6 +44,12 @@ export async function POST(request: NextRequest) {
           await supabaseUpdate('payable_transactions', payables[0].id, payPatch)
         }
       }
+    }
+
+    try {
+      await syncPayableFromInboundBatch(batchId)
+    } catch (syncErr) {
+      console.warn('updateInboundBatch payable sync:', syncErr)
     }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })

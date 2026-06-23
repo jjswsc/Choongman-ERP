@@ -333,6 +333,34 @@ async function resolveVendorDisplayName(vendorCode: string): Promise<string> {
   }
 }
 
+/** 지급예정 1건에 Payment 행이 여러 개일 때 유지할 id (bank 연동 우선, 없으면 최신 id) */
+export async function dedupePayablePaymentsForExpenseAccrual(expenseAccrualId: number): Promise<number | null> {
+  const accrualId = Number(expenseAccrualId || 0)
+  if (!accrualId) return null
+  const rows = (await supabaseSelectFilter(
+    'payable_transactions',
+    `expense_accrual_id=eq.${accrualId}&ref_type=eq.Payment`,
+    { order: 'id.asc', limit: 50, select: 'id,expense_accrual_id,bank_transaction_id' }
+  )) as (PayablePaymentLinkRow & { bank_transaction_id?: number | null })[]
+  if (!rows?.length || rows.length < 2) return rows?.[0]?.id ? Number(rows[0].id) : null
+  const normalized = rows
+    .map((r) => ({
+      id: Number(r.id || 0),
+      accrualId: Number(r.expense_accrual_id || 0),
+      bankId: Number(r.bank_transaction_id || 0),
+    }))
+    .filter((r) => r.id > 0)
+  const withBank = normalized.filter((r) => r.bankId > 0)
+  const pool = withBank.length ? withBank : normalized
+  const keeperId = pool.reduce((best, r) => (r.id > best.id ? r : best)).id
+  for (const r of normalized) {
+    if (r.id !== keeperId) {
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${r.id}`)
+    }
+  }
+  return keeperId
+}
+
 /** 통장 출금 1건에 연결된 Payment 행 중복 제거 — bank_transaction_id당 1행 */
 export async function dedupePayablePaymentsForBankTransaction(bankTransactionId: number): Promise<number | null> {
   const bankId = Number(bankTransactionId || 0)
