@@ -33,7 +33,7 @@ import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { formatBaht, formatDateTime } from "@/components/member-portal/portal-ui"
 import { memberPortalOrderStatusLabelKey } from "@/lib/member-portal-orders-list-shared"
-import { mpGlassCard, mpGlassCardSoft, MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE, mpCardListItemClass, mpCardSearchInputClass } from "@/lib/member-portal-design"
+import { mpGlassCard, mpGlassCardSoft, MP_CARD_TEXT_MUTED, MP_CARD_TEXT_PRIMARY, MP_CARD_TEXT_SECONDARY, MP_CARD_TEXT_SUBTLE, mpCardListItemClass, mpCardSearchInputClass, mpInputClass } from "@/lib/member-portal-design"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import {
@@ -1259,41 +1259,41 @@ export function MemberPortalOrderTab({
           }
           goHub()
         }}
-        className="inline-flex items-center gap-2 text-sm text-white/55 hover:text-white"
+        className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-stone-900"
       >
         <ArrowLeft className="h-4 w-4" />
         {pickupReady ? t("orderPickupSetupBack") : t("orderBack")}
       </button>
 
       <div>
-        <h2 className="text-lg font-semibold">{t("orderPickupBtn")}</h2>
-        <p className="text-sm leading-relaxed text-amber-100/80">{t("orderPickupSavingsDesc")}</p>
+        <h2 className={`text-lg font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderPickupBtn")}</h2>
+        <p className={`text-sm leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("orderPickupSavingsDesc")}</p>
       </div>
 
       {!!orderError && (
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{orderError}</div>
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{orderError}</div>
       )}
 
       {!pickupReady ? (
         <div className={`space-y-4 ${mpGlassCard} p-5`}>
           <div className="space-y-2">
-            <Label className="text-[11px] uppercase tracking-wider text-white/45">{t("orderSelectStore")}</Label>
+            <Label className={`text-[11px] uppercase tracking-wider ${MP_CARD_TEXT_SUBTLE}`}>{t("orderSelectStore")}</Label>
             {stores.length > 4 ? (
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <Search className={`pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 ${MP_CARD_TEXT_SUBTLE}`} />
                 <Input
                   value={storeSearch}
                   onChange={(e) => setStoreSearch(e.target.value)}
                   placeholder={t("locationSearchPh")}
-                  className="h-11 rounded-2xl border-white/10 bg-black/25 pl-10 text-white placeholder:text-white/35"
+                  className={`h-11 pl-10 ${mpInputClass}`}
                 />
               </div>
             ) : null}
             <div className="max-h-52 space-y-2 overflow-y-auto pr-0.5">
               {stores.length === 0 ? (
-                <p className="text-sm text-white/45">{t("orderSelectStorePh")}</p>
+                <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("orderSelectStorePh")}</p>
               ) : filteredStores.length === 0 ? (
-                <p className="text-sm text-white/45">{t("locationNoResult")}</p>
+                <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("locationNoResult")}</p>
               ) : (
                 filteredStores.map((s) => {
                   const selected = pickupStore === s.storeCode
@@ -1304,19 +1304,19 @@ export function MemberPortalOrderTab({
                       onClick={() => setPickupStore(s.storeCode)}
                       className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition ${
                         selected
-                          ? "border-amber-400/50 bg-amber-400/10"
-                          : "border-white/10 bg-black/20 hover:border-white/20"
+                          ? "border-amber-400/60 bg-amber-50 shadow-sm"
+                          : "border-stone-200/90 bg-stone-50/90 hover:border-stone-300 hover:bg-stone-50"
                       }`}
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-white">{s.displayName}</p>
+                        <p className={`truncate text-sm font-medium ${MP_CARD_TEXT_PRIMARY}`}>{s.displayName}</p>
                       </div>
                       {selected ? (
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 text-black">
                           <Check className="h-3.5 w-3.5" />
                         </span>
                       ) : (
-                        <span className="h-6 w-6 shrink-0 rounded-full border border-white/20" />
+                        <span className="h-6 w-6 shrink-0 rounded-full border-2 border-stone-300 bg-white" />
                       )}
                     </button>
                   )
@@ -1334,9 +1334,9 @@ export function MemberPortalOrderTab({
         </div>
       ) : (
         <>
-          <div className="flex items-start gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-            <Store className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p className="min-w-0 truncate text-sm font-semibold text-white">
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3">
+            <Store className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+            <p className={`min-w-0 truncate text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>
               {stores.find((s) => s.storeCode === pickupStore)?.displayName || pickupStore}
             </p>
           </div>

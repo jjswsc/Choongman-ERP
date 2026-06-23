@@ -30,6 +30,65 @@ import {
   resolveStepAudienceFromOrderType,
 } from "@/lib/pos-option-selection-groups"
 
+export function groupHasSelectablePickerValues(params: {
+  groupKey: string
+  groups: string[]
+  menuCode: string | undefined
+  options: PosMenuOption[]
+  optionsWithSteps: PosMenuOption[]
+  isChickenMenu: boolean
+}): boolean {
+  const stepValues = collectPosOptionPickerStepValues({
+    groupKey: params.groupKey,
+    groups: params.groups,
+    menuCode: params.menuCode,
+    options: params.options,
+    optionsWithSteps: params.optionsWithSteps,
+    isChickenMenu: params.isChickenMenu,
+  })
+  if (stepValues.length > 0) return true
+  if (
+    params.isChickenMenu &&
+    shouldUseChickenMultistepPriceList(params.isChickenMenu, params.groupKey)
+  ) {
+    return (
+      collectChickenMultistepPriceListRows({
+        groupKey: params.groupKey,
+        groups: params.groups,
+        menuCode: params.menuCode,
+        options: params.options,
+        optionsWithSteps: params.optionsWithSteps,
+      }).length > 0
+    )
+  }
+  return false
+}
+
+/** 채널·옵션 목록 기준 — 선택지가 없는 단계(part/sidedish 등)는 제외 */
+export function filterGroupsWithSelectableValues(params: {
+  groups: string[]
+  menuCode: string | undefined
+  options: PosMenuOption[]
+  isChickenMenu: boolean
+}): string[] {
+  const optionsWithSteps = params.options.filter(
+    (o) =>
+      o.optionType === "substitution" &&
+      o.optionStepValues &&
+      Object.keys(o.optionStepValues).length > 0
+  )
+  return params.groups.filter((groupKey) =>
+    groupHasSelectablePickerValues({
+      groupKey,
+      groups: params.groups,
+      menuCode: params.menuCode,
+      options: params.options,
+      optionsWithSteps,
+      isChickenMenu: params.isChickenMenu,
+    })
+  )
+}
+
 export type ChickenTwoPhasePhase = "size" | "ancillary" | null
 
 export type ChickenOptionPickerViewMode =
@@ -83,17 +142,30 @@ export function shouldInitChickenTwoPhaseOnMenuOpen(params: {
   options: PosMenuOption[]
   orderType: string
 }): boolean {
-  const cfg = new Map(
+  const groupConfigMap = new Map(
     (params.menu.optionSelectionConfig || [])
       .map((c) => [String(c?.key ?? "").trim(), c] as const)
       .filter(([k]) => !!k)
   )
   const aud = resolveStepAudienceFromOrderType(params.orderType)
-  const groups = filterOptionSelectionGroupsForAudience(
-    params.menu.optionSelectionGroups || [],
-    cfg,
+  const configuredGroups =
+    (params.menu.optionSelectionGroups || []).length > 0
+      ? params.menu.optionSelectionGroups || []
+      : inferOptionSelectionGroupsFromOptions(params.options, params.menu.code)
+  const groupsVisible = filterOptionSelectionGroupsForAudience(
+    configuredGroups,
+    groupConfigMap,
     aud
   )
+  const isChickenBase =
+    (params.menu.categoryMain ?? "") === "Chicken" ||
+    params.menu.code?.trim().toLowerCase().startsWith("c") === true
+  const groups = filterGroupsWithSelectableValues({
+    groups: groupsVisible,
+    menuCode: params.menu.code,
+    options: params.options,
+    isChickenMenu: isChickenBase,
+  })
   const ancillaryGroups = getBarBqAncillarySelectionGroups(groups)
   return shouldUseBarBqTwoPhaseOptionPicker({
     menu: params.menu,
@@ -195,7 +267,17 @@ export function resolveChickenOptionPickerPlan(params: {
   const fallbackGroups = inferOptionSelectionGroupsFromOptions(opts, menu.code)
   const configuredGroups =
     (menu.optionSelectionGroups || []).length > 0 ? menu.optionSelectionGroups || [] : fallbackGroups
-  const groups = filterOptionSelectionGroupsForAudience(configuredGroups, groupConfigMap, stepAudience)
+  const groupsVisible = filterOptionSelectionGroupsForAudience(
+    configuredGroups,
+    groupConfigMap,
+    stepAudience
+  )
+  const groups = filterGroupsWithSelectableValues({
+    groups: groupsVisible,
+    menuCode: menu.code,
+    options: opts,
+    isChickenMenu: isChickenBase,
+  })
   const ancillaryGroups = getBarBqAncillarySelectionGroups(groups)
   const useTwoPhase = shouldUseBarBqTwoPhaseOptionPicker({
     menu,

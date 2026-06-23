@@ -103,9 +103,51 @@ describe("resolveChickenOptionPickerPlan", () => {
     expect(
       shouldInitChickenTwoPhaseOnMenuOpen({
         menu: bbqMenu,
-        options: [{ ...mBoneless, menuId: "bbq", optionStepValues: {} }],
+        options: [
+          { ...mBoneless, menuId: "bbq", optionStepValues: {} },
+          { ...kimchi, menuId: "bbq" },
+        ],
         orderType: "delivery",
       })
     ).toBe(true)
+  })
+
+  it("uses flat-list for Special chicken when sidedish has no pickup options", () => {
+    const specialMenu: PosMenu = {
+      ...soyMenu,
+      id: "special",
+      code: "C099",
+      name: "SOY SAUCE AND SPRING ONION CHICKEN",
+      category: "SPECIALTIES",
+      optionSelectionGroups: ["part", "sidedish"],
+    }
+    const partOpts: PosMenuOption[] = [
+      {
+        ...mBoneless,
+        id: "m1",
+        menuId: "special",
+        name: "M - Boneless",
+        optionStepValues: { part: "Boneless" },
+      },
+      {
+        ...mBoneless,
+        id: "m2",
+        menuId: "special",
+        name: "M - Drumette",
+        optionStepValues: { part: "Drumette" },
+      },
+    ]
+    const plan = resolveChickenOptionPickerPlan({
+      menu: specialMenu,
+      options: partOpts,
+      orderType: "takeout",
+      twoPhasePhase: null,
+      optionPickerStep: 0,
+      optionPickerSelections: {},
+      t,
+    })
+    expect(plan.mode).toBe("flat-list")
+    expect(plan.flatListOpts.length).toBeGreaterThan(0)
+    expect(plan.activeStepGroups).toEqual(["part"])
   })
 })

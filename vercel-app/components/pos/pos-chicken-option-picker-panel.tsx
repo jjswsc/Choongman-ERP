@@ -310,6 +310,22 @@ export function PosChickenOptionPickerPanel({
   }
 
   if (plan.mode === "multistep-fallback") {
+    if (Object.keys(optionPickerSelections).length > 0) {
+      const match = resolveChickenMultistepMatch({
+        menu,
+        plan,
+        selections: optionPickerSelections,
+        storeCode,
+      })
+      if (match) {
+        act(() => onAddToCart(menu, match))
+        return null
+      }
+      if (plan.chickenDefaultDisplay) {
+        act(() => onAddToCart(menu, null, plan.chickenDefaultDisplay))
+        return null
+      }
+    }
     const fallbackOpts = plan.flatListOpts
     return (
       <div className="flex flex-col gap-2 py-2">
