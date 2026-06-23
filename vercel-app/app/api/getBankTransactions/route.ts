@@ -75,16 +75,40 @@ export async function GET(request: NextRequest) {
     }[]
 
     const linkedIds = new Set<number>()
+    const receivableLinkedIds = new Set<number>()
+    const channelSettledIds = new Set<number>()
     const rowIds = (rows || []).map((r) => Number(r.id)).filter((id) => id && !isNaN(id))
     if (rowIds.length > 0) {
-      const idList = rowIds.join(',')
-      const ptRows = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=in.(${idList})`, {
-        select: 'bank_transaction_id',
-        limit: rowIds.length,
-      })) as { bank_transaction_id?: number }[]
-      for (const r of ptRows || []) {
-        const bid = Number(r.bank_transaction_id)
-        if (bid && !isNaN(bid)) linkedIds.add(bid)
+      for (let i = 0; i < rowIds.length; i += 80) {
+        const chunk = rowIds.slice(i, i + 80)
+        const idList = chunk.join(',')
+        const [ptRows, recvRows, settleRows] = await Promise.all([
+          supabaseSelectFilter('payable_transactions', `bank_transaction_id=in.(${idList})`, {
+            select: 'bank_transaction_id',
+            limit: chunk.length,
+          }) as Promise<{ bank_transaction_id?: number }[] | null>,
+          supabaseSelectFilter(
+            'receivable_transactions',
+            `bank_transaction_id=in.(${idList})&ref_type=eq.Receive&ref_id=not.is.null`,
+            { select: 'bank_transaction_id', limit: chunk.length }
+          ) as Promise<{ bank_transaction_id?: number }[] | null>,
+          supabaseSelectFilter('pos_channel_settlements', `bank_transaction_id=in.(${idList})`, {
+            select: 'bank_transaction_id',
+            limit: chunk.length,
+          }) as Promise<{ bank_transaction_id?: number }[] | null>,
+        ])
+        for (const r of ptRows || []) {
+          const bid = Number(r.bank_transaction_id)
+          if (bid && !isNaN(bid)) linkedIds.add(bid)
+        }
+        for (const r of recvRows || []) {
+          const bid = Number(r.bank_transaction_id)
+          if (bid && !isNaN(bid)) receivableLinkedIds.add(bid)
+        }
+        for (const r of settleRows || []) {
+          const bid = Number(r.bank_transaction_id)
+          if (bid && !isNaN(bid)) channelSettledIds.add(bid)
+        }
       }
     }
 
@@ -115,6 +139,8 @@ export async function GET(request: NextRequest) {
           ? Number(r.withholding_tax_rate)
           : undefined,
       isLinked: linkedIds.has(Number(r.id || 0)),
+      isReceivableLinked: receivableLinkedIds.has(Number(r.id || 0)),
+      isChannelSettled: channelSettledIds.has(Number(r.id || 0)),
     }))
 
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)

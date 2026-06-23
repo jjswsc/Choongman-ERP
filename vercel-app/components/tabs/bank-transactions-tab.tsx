@@ -36,6 +36,9 @@ import {
   getBankTransactions,
   addBankTransactionsBulk,
   registerExpenseFromBankTransaction,
+  getOpenReceivablesForBankTx,
+  linkReceivableFromBankTransaction,
+  type OpenReceivableForBankItem,
   saveBankAccount,
   deleteBankAccount,
   getAccountSubjects,
@@ -95,6 +98,7 @@ import {
   AccountingTheadRow,
 } from "@/components/erp/accounting-data-table"
 import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
+import { bankDepositNeedsReceivableOrderLink } from "@/lib/bank-receivable-link"
 
 function todayStr() {
   return getBangkokTodayDateString()
@@ -266,6 +270,8 @@ export function BankTransactionsTab() {
     withholdingTaxAmount?: number
     withholdingTaxRate?: number
     isLinked?: boolean
+    isReceivableLinked?: boolean
+    isChannelSettled?: boolean
   }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
@@ -348,6 +354,11 @@ export function BankTransactionsTab() {
   const [approvedPickId, setApprovedPickId] = React.useState<string>("")
   const [approvedPickLoading, setApprovedPickLoading] = React.useState(false)
   const [approvedPickSaving, setApprovedPickSaving] = React.useState(false)
+  const [receivablePickRow, setReceivablePickRow] = React.useState<(typeof list)[0] | null>(null)
+  const [receivablePickList, setReceivablePickList] = React.useState<OpenReceivableForBankItem[]>([])
+  const [receivablePickId, setReceivablePickId] = React.useState<string>("")
+  const [receivablePickLoading, setReceivablePickLoading] = React.useState(false)
+  const [receivablePickSaving, setReceivablePickSaving] = React.useState(false)
   const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   /** 미리보기 표의 메모 입력에 포커스가 있을 때의 행 인덱스 (빠른 메모 칩 삽입용) */
@@ -581,6 +592,21 @@ export function BankTransactionsTab() {
       setApprovedPickLoading(false)
     }
   }, [auth?.role, selectedAccountStore])
+
+  const openReceivablePick = React.useCallback(async (row: (typeof list)[0]) => {
+    if (!row?.id) return
+    setReceivablePickRow(row)
+    setReceivablePickLoading(true)
+    setReceivablePickId("")
+    try {
+      const res = await getOpenReceivablesForBankTx({ bankTransactionId: Number(row.id) })
+      setReceivablePickList(res.list || [])
+    } catch {
+      setReceivablePickList([])
+    } finally {
+      setReceivablePickLoading(false)
+    }
+  }, [])
 
   React.useEffect(() => {
     if (!registerExpenseRow) {
@@ -2171,18 +2197,24 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   ) : null}
 
                   {!loading && bankAttentionCounts.total > 0 ? (
-                    <div className="mb-3 grid grid-cols-3 gap-2">
+                    <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
                       <MetricCard
                         size="sm"
                         variant="warning"
-                        label={t("acct_bank_attention_unclassified")}
-                        value={String(bankAttentionCounts.unclassified)}
+                        label={t("acct_bank_attention_receivable_link")}
+                        value={String(bankAttentionCounts.receivableLinkPending)}
                       />
                       <MetricCard
                         size="sm"
                         variant="warning"
                         label={t("acct_bank_attention_expense_link")}
                         value={String(bankAttentionCounts.expenseLinkPending)}
+                      />
+                      <MetricCard
+                        size="sm"
+                        variant="warning"
+                        label={t("acct_bank_attention_unclassified")}
+                        value={String(bankAttentionCounts.unclassified)}
                       />
                       <MetricCard
                         size="sm"
@@ -2251,7 +2283,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <AccountingTh align="center">{t("accountSubject") || "계정과목"}</AccountingTh>
                           <AccountingTh align="right">{t("pettyColAmount") || "금액"}</AccountingTh>
                           <AccountingTh align="center">{t("bankAttributedDate") || "인식일"}</AccountingTh>
-                          <AccountingTh align="center">{t("acct_bank_expense_link_col") || "지출 연동"}</AccountingTh>
+                          <AccountingTh align="center">{t("acct_bank_link_col") || "연동"}</AccountingTh>
                           <AccountingTh align="center" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</AccountingTh>
                           <AccountingTh>{t("bankMemoLabel") || "은행 적요"}</AccountingTh>
                           <AccountingTh align="center">{t("bankNoteLabel") || "메모"}</AccountingTh>
@@ -2265,7 +2297,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               r.transType === "withdraw" && rawCat === "fixed" ? "expense" : rawCat
                             const hasEdits = r.id && edits && Object.keys(edits).length > 0
                             const isSaving = querySavingId === r.id
-                            const attention = bankRowNeedsAttention(r, edits)
+                            const attention = bankRowNeedsAttention(
+                              {
+                                ...r,
+                                category: cat,
+                                storeName: edits?.storeName ?? r.storeName,
+                                isReceivableLinked: r.isReceivableLinked,
+                                isChannelSettled: r.isChannelSettled,
+                                memo: r.memo,
+                              },
+                              edits
+                            )
                             return (
                             <AccountingTbodyRow
                               id={r.id ? `bank-tx-row-${r.id}` : undefined}
@@ -2514,33 +2556,87 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     </>
                                   )
                                 ) : r.transType === "deposit" && cat === "receivable_receive" && r.id ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className={ADMIN_BTN_XS_CN}
-                                    onClick={() => {
-                                      const rowEdits = r.id ? queryRowEdits[r.id] : undefined
-                                      const store = (
-                                        rowEdits?.storeName ??
-                                        r.storeName ??
-                                        selectedAccountStore ??
-                                        ""
-                                      ).trim()
-                                      if (!store) {
-                                        void appAlert(
-                                          tt(
-                                            "bankPosChannelSettleNeedStore",
-                                            "매장을 선택한 뒤 채널 정산을 진행하세요."
-                                          )
-                                        )
-                                        return
-                                      }
-                                      setChannelSettleRow(r)
-                                    }}
-                                    title={tt("bankPosChannelSettleRowBtn", "채널 정산 (수수료 분개)")}
-                                  >
-                                    {tt("bankPosChannelSettleRowBtn", "채널 정산")}
-                                  </Button>
+                                  (() => {
+                                    const rowEdits = r.id ? queryRowEdits[r.id] : undefined
+                                    const store = (
+                                      rowEdits?.storeName ??
+                                      r.storeName ??
+                                      selectedAccountStore ??
+                                      ""
+                                    ).trim()
+                                    const depositLinkCtx = {
+                                      transType: r.transType,
+                                      category: cat,
+                                      storeName: store,
+                                      memo: r.memo,
+                                      isReceivableLinked: r.isReceivableLinked,
+                                      isChannelSettled: r.isChannelSettled,
+                                    }
+                                    const needsReceivableLink = bankDepositNeedsReceivableOrderLink(depositLinkCtx)
+                                    if (needsReceivableLink && r.isReceivableLinked) {
+                                      return (
+                                        <>
+                                          <span
+                                            className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
+                                            title={t("acct_bank_receivable_linked")}
+                                          >
+                                            <Check className="h-3 w-3 shrink-0" aria-hidden />
+                                            {t("acct_bank_receivable_linked")}
+                                          </span>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className={`${ADMIN_BTN_XS_CN} shrink-0 h-7 px-1.5`}
+                                            onClick={() => {
+                                              const q = new URLSearchParams({ type: "receivable" })
+                                              if (store) q.set("storeFilter", store)
+                                              q.set("startStr", startStr)
+                                              q.set("endStr", endStr)
+                                              if (r.id) q.set("bankTransactionId", String(r.id))
+                                              router.push(`/admin/receivable-payable?${q.toString()}`)
+                                            }}
+                                          >
+                                            {t("adminReceivablePayable") || "미수금"}
+                                          </Button>
+                                        </>
+                                      )
+                                    }
+                                    if (needsReceivableLink && !r.isReceivableLinked) {
+                                      return (
+                                        <>
+                                          <span
+                                            className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-300 whitespace-nowrap"
+                                            title={t("acct_bank_receivable_unlinked")}
+                                          >
+                                            <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                                            {t("acct_bank_receivable_unlinked")}
+                                          </span>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className={ADMIN_BTN_XS_CN}
+                                            onClick={() => void openReceivablePick(r)}
+                                          >
+                                            {tt("bankRegisterLinkReceivable", "미수 연결")}
+                                          </Button>
+                                        </>
+                                      )
+                                    }
+                                    if (!r.isChannelSettled && store) {
+                                      return (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className={ADMIN_BTN_XS_CN}
+                                          onClick={() => setChannelSettleRow(r)}
+                                          title={tt("bankPosChannelSettleRowBtn", "채널 정산 (수수료 분개)")}
+                                        >
+                                          {tt("bankPosChannelSettleRowBtn", "채널 정산")}
+                                        </Button>
+                                      )
+                                    }
+                                    return <span className="text-muted-foreground">—</span>
+                                  })()
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
@@ -3754,6 +3850,134 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   })()}
                 >
                   {approvedPickSaving ? "..." : (t("btnSave") || "저장")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!receivablePickRow}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReceivablePickRow(null)
+            setReceivablePickList([])
+            setReceivablePickId("")
+          }
+        }}
+      >
+        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
+          <DialogHeader>
+            <DialogTitle>{tt("bankRegisterLinkReceivable", "미수금 연결")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-2">
+            {receivablePickRow
+              ? `${receivablePickRow.transDate} · ฿${Math.abs(receivablePickRow.amount || 0).toLocaleString()}`
+              : ""}
+          </p>
+          {receivablePickLoading ? (
+            <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
+          ) : receivablePickList.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              {tt("bankReceivablePickEmpty", "연결 가능한 미수금(출고·주문)이 없습니다.")}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {(t("amount") || "금액")}: ฿{Math.abs(Number(receivablePickRow?.amount || 0)).toLocaleString()}
+              </p>
+              <Select
+                value={receivablePickId || "__none__"}
+                onValueChange={(v) => setReceivablePickId(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={tt("bankRegisterLinkReceivable", "미수금 연결")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">—</SelectItem>
+                  {receivablePickList.map((p) => {
+                    const bankAmt = Math.abs(Number(receivablePickRow?.amount || 0))
+                    const exact = Math.abs(p.remainingAmount - bankAmt) <= 0.01
+                    return (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {exact ? "✓" : "·"} {p.transDate} · {p.refType}
+                        {p.invoiceNo ? ` ${p.invoiceNo}` : ""} / ฿{p.remainingAmount.toLocaleString()}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+              {(() => {
+                const selected = receivablePickList.find((x) => String(x.id) === String(receivablePickId))
+                if (!selected || !receivablePickRow) return null
+                const bankAmt = Math.abs(Number(receivablePickRow.amount || 0))
+                const remain = Math.abs(Number(selected.remainingAmount || 0))
+                if (Math.abs(bankAmt - remain) <= 0.01) return null
+                return (
+                  <p className="text-xs text-destructive">
+                    {tt(
+                      "bankReceivableAmountMismatch",
+                      "통장 금액과 선택한 미수 잔액이 다릅니다."
+                    )}{" "}
+                    (฿{bankAmt.toLocaleString()} / ฿{remain.toLocaleString()})
+                  </p>
+                )
+              })()}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReceivablePickRow(null)}>
+                  {t("cancel") || "취소"}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!receivablePickRow?.id || !receivablePickId) return
+                    const selected = receivablePickList.find((x) => String(x.id) === String(receivablePickId))
+                    const bankAmt = Math.abs(Number(receivablePickRow.amount || 0))
+                    const remain = Math.abs(Number(selected?.remainingAmount || 0))
+                    if (!selected || Math.abs(bankAmt - remain) > 0.01) {
+                      await appAlert(
+                        tt(
+                          "bankReceivableAmountMismatch",
+                          "통장 금액과 선택한 미수 잔액이 일치해야 합니다."
+                        )
+                      )
+                      return
+                    }
+                    setReceivablePickSaving(true)
+                    try {
+                      const res = await linkReceivableFromBankTransaction({
+                        bankTransactionId: Number(receivablePickRow.id),
+                        receivableAccrualId: Number(receivablePickId),
+                      })
+                      if (!res.success) {
+                        await appAlert(
+                          translateApiMessage(res.message, t) || res.message || t("processFail")
+                        )
+                        return
+                      }
+                      setReceivablePickRow(null)
+                      setReceivablePickList([])
+                      setReceivablePickId("")
+                      loadData()
+                    } finally {
+                      setReceivablePickSaving(false)
+                    }
+                  }}
+                  disabled={
+                    !receivablePickId ||
+                    receivablePickSaving ||
+                    (() => {
+                      const selected = receivablePickList.find(
+                        (x) => String(x.id) === String(receivablePickId)
+                      )
+                      const bankAmt = Math.abs(Number(receivablePickRow?.amount || 0))
+                      const remain = Math.abs(Number(selected?.remainingAmount || 0))
+                      if (!selected || Math.abs(bankAmt - remain) > 0.01) return true
+                      return false
+                    })()
+                  }
+                >
+                  {receivablePickSaving ? "..." : (t("btnSave") || "저장")}
                 </Button>
               </div>
             </div>

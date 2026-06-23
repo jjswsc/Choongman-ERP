@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { headers })
     }
 
-    const linkedFilter = `ref_type=eq.Receive&ref_id=eq.${id}&bank_transaction_id=is.null`
+    const linkedFilter = `ref_type=eq.Receive&ref_id=eq.${id}`
 
     if (receiveChecked) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(receiveDate)) {
@@ -93,8 +93,8 @@ export async function POST(request: NextRequest) {
       const memo = label ? `수금확인 ${label}` : '수금확인'
       const linked = (await supabaseSelectFilter('receivable_transactions', linkedFilter, {
         limit: 1,
-        select: 'id',
-      })) as { id?: number }[] | null
+        select: 'id,bank_transaction_id',
+      })) as { id?: number; bank_transaction_id?: number | null }[] | null
       if (linked?.[0]?.id) {
         await supabaseUpdate('receivable_transactions', linked[0].id, {
           trans_date: receiveDate,

@@ -37,7 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2 } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check } from "lucide-react"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { ReceivableAgingPanel } from "@/components/admin/receivable-aging-panel"
 import {
@@ -98,6 +98,7 @@ import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import type { InvoiceData } from "@/components/invoice"
 import type { InvoiceDataClient } from "@/lib/api-client"
 import { StorePurchaseJournalButton } from "@/components/erp/store-purchase-journal-dialog"
+import { useSearchParams, useRouter } from "next/navigation"
 
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
@@ -249,6 +250,8 @@ export function ReceivablePayableTab() {
     return v
   }, [t])
   const { auth } = useAuth()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const { posStores: storeList, formatStoreLabel, resolveStoreKey } = useStoreList()
   const formatAttributedStoreLabel = React.useCallback(
     (raw: string | undefined | null) => {
@@ -322,6 +325,9 @@ export function ReceivablePayableTab() {
     memo: string
   } | null>(null)
   const [manualEditSaving, setManualEditSaving] = React.useState(false)
+  const [highlightBankTxId, setHighlightBankTxId] = React.useState<number | null>(null)
+  const [pendingDeepLinkSearch, setPendingDeepLinkSearch] = React.useState(false)
+  const urlDeepLinkAppliedRef = React.useRef(false)
 
   const showReceivableManualActions = !(tab === "receivable" && isManagerOnly)
   const showPayableManualActions = canSelectStores
@@ -752,6 +758,110 @@ export function ReceivablePayableTab() {
     setHasSearchedList(true)
     loadList()
   }, [loadList])
+
+  const resolveSalesOutletFilterFromStoreName = React.useCallback(
+    (storeName: string) => {
+      const trimmed = String(storeName || "").trim()
+      if (!trimmed) return "All"
+      const direct = salesOutletOptions.find(
+        (s) => s.code === trimmed || s.name === trimmed
+      )
+      if (direct?.code) return direct.code
+      const storeKey = resolveStoreKey(trimmed)
+      const byStore = salesOutletOptions.find((s) => {
+        const nameKey = resolveStoreKey(s.name || "")
+        const codeKey = resolveStoreKey(s.code || "")
+        return nameKey === storeKey || codeKey === storeKey
+      })
+      if (byStore?.code) return byStore.code
+      return trimmed
+    },
+    [resolveStoreKey, salesOutletOptions]
+  )
+
+  React.useEffect(() => {
+    if (urlDeepLinkAppliedRef.current) return
+    const typeParam = searchParams.get("type")
+    const storeParam = searchParams.get("storeFilter") || searchParams.get("store")
+    const startParam = searchParams.get("startStr") || searchParams.get("start")
+    const endParam = searchParams.get("endStr") || searchParams.get("end")
+    const bankTxParam = searchParams.get("bankTransactionId")
+    const hasDeepLink =
+      typeParam === "receivable" ||
+      Boolean(storeParam) ||
+      Boolean(startParam) ||
+      Boolean(endParam) ||
+      Boolean(bankTxParam)
+    if (!hasDeepLink) return
+    urlDeepLinkAppliedRef.current = true
+    if (typeParam === "receivable" || typeParam === "payable") setTab(typeParam)
+    if (startParam) setStartStr(startParam.slice(0, 10))
+    if (endParam) setEndStr(endParam.slice(0, 10))
+    if (storeParam && typeParam !== "payable") {
+      setSalesOutletFilter(resolveSalesOutletFilterFromStoreName(storeParam))
+    }
+    if (bankTxParam && Number(bankTxParam) > 0) {
+      setHighlightBankTxId(Number(bankTxParam))
+    }
+    setPendingDeepLinkSearch(true)
+  }, [searchParams, resolveSalesOutletFilterFromStoreName])
+
+  React.useEffect(() => {
+    if (!pendingDeepLinkSearch) return
+    setPendingDeepLinkSearch(false)
+    setHasSearchedList(true)
+    loadList()
+  }, [pendingDeepLinkSearch, loadList])
+
+  const bankTxLinkedAccrualIds = React.useMemo(() => {
+    const byBank = new Map<number, Set<number>>()
+    for (const item of listData) {
+      for (const row of item.items || []) {
+        const bankId = Number(row.bank_transaction_id || 0)
+        if (!bankId) continue
+        if (row.ref_type === "Receive" && row.ref_id != null) {
+          const accrualId = Number(row.ref_id)
+          if (accrualId > 0) {
+            const set = byBank.get(bankId) || new Set<number>()
+            set.add(accrualId)
+            byBank.set(bankId, set)
+          }
+        }
+      }
+    }
+    return byBank
+  }, [listData])
+
+  const rowHighlightsBankTx = React.useCallback(
+    (row: NonNullable<ReceivablePayableItem["items"]>[number]) => {
+      if (!highlightBankTxId) return false
+      if (Number(row.bank_transaction_id || 0) === highlightBankTxId) return true
+      if (
+        row.id != null &&
+        (row.ref_type === "Order" ||
+          row.ref_type === "ForceOutbound" ||
+          row.ref_type === "AccountingPO") &&
+        bankTxLinkedAccrualIds.get(highlightBankTxId)?.has(Number(row.id))
+      ) {
+        return true
+      }
+      return false
+    },
+    [bankTxLinkedAccrualIds, highlightBankTxId]
+  )
+
+  const openBankTransactionFromReceivable = React.useCallback(
+    (bankTransactionId: number, transDate?: string) => {
+      const q = new URLSearchParams({ tab: "query", openRegisterTxId: String(bankTransactionId) })
+      const d = String(transDate || "").slice(0, 10)
+      if (d) {
+        q.set("startStr", d)
+        q.set("endStr", d)
+      }
+      router.push(`/admin/bank-transactions?${q.toString()}`)
+    },
+    [router]
+  )
 
   const handleReceiveCheckChange = React.useCallback(
     async (params: {
@@ -1503,6 +1613,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
                                     <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>
+                                    <th className="text-center py-2 px-1 w-[76px] text-xs font-semibold whitespace-nowrap">
+                                      {t("acct_rec_bank_link") || tt("acct_rec_bank_link", "통장")}
+                                    </th>
                                     <th className="text-center py-2 px-1 w-[72px] text-xs font-semibold whitespace-nowrap">
                                       {t("recColTaxInvoice") || "Tax Invoice"}
                                     </th>
@@ -1546,7 +1659,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recOrderTotals = recLineEntry?.orderInvoiceTotals
                                     const recLinesLoading = loadingItemsFor === recRowKey
                                     const recLineColSpan =
-                                      9 +
+                                      10 +
                                       (showReceivableManualActions ? 1 : 0) +
                                       (showStorePurchaseJournalCol ? 1 : 0)
                                     const canEditManualRecRow =
@@ -1581,12 +1694,33 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       isAccrualRow && Number(row.amount ?? 0) > 0
                                         ? agingDaysBetween(endStr, row.trans_date || endStr)
                                         : 0
+                                    const linkedBankTxId = (() => {
+                                      const direct = Number(row.bank_transaction_id || 0)
+                                      if (direct > 0) return direct
+                                      if (
+                                        row.id != null &&
+                                        (row.ref_type === "Order" ||
+                                          row.ref_type === "ForceOutbound" ||
+                                          row.ref_type === "AccountingPO")
+                                      ) {
+                                        const recv = (item.items || []).find(
+                                          (sibling) =>
+                                            sibling.ref_type === "Receive" &&
+                                            Number(sibling.ref_id || 0) === Number(row.id) &&
+                                            Number(sibling.bank_transaction_id || 0) > 0
+                                        )
+                                        if (recv?.bank_transaction_id) return Number(recv.bank_transaction_id)
+                                      }
+                                      return 0
+                                    })()
+                                    const isBankHighlight = rowHighlightsBankTx(row)
                                     return (
                                     <React.Fragment key={row.id ?? recRowKey}>
                                     <tr
                                       className={cn(
                                         "border-b border-border/50",
-                                        rowAgeDays > 0 ? agingRowToneClass(rowAgeDays) : ""
+                                        rowAgeDays > 0 ? agingRowToneClass(rowAgeDays) : "",
+                                        isBankHighlight && "bg-primary/10 ring-2 ring-inset ring-primary/50"
                                       )}
                                     >
                                       <td
@@ -1708,6 +1842,36 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           </div>
                                         ) : (
                                           <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                      <td className="py-1.5 px-1 w-[76px] text-center align-middle">
+                                        {linkedBankTxId > 0 ? (
+                                          <div className="flex flex-col items-center gap-0.5">
+                                            <span
+                                              className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
+                                              title={t("acct_bank_receivable_linked") || tt("acct_bank_receivable_linked", "미수 연동")}
+                                            >
+                                              <Check className="h-3 w-3 shrink-0" aria-hidden />
+                                              {t("acct_bank_receivable_linked") || tt("acct_bank_receivable_linked", "연동")}
+                                            </span>
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="ghost"
+                                              className="h-6 px-1 text-[10px]"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                openBankTransactionFromReceivable(
+                                                  linkedBankTxId,
+                                                  row.trans_date
+                                                )
+                                              }}
+                                            >
+                                              #{linkedBankTxId}
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground text-xs">—</span>
                                         )}
                                       </td>
                                       <td className="py-1.5 px-1 w-[72px] text-center align-middle">

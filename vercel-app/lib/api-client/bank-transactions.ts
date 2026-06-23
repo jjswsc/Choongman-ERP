@@ -33,6 +33,8 @@ export interface BankTransactionItem {
   invoicePhotoUrl?: string
   purchaseOrderId?: number
   isLinked?: boolean
+  isReceivableLinked?: boolean
+  isChannelSettled?: boolean
 }
 
 export interface BankTransactionsSummary {
@@ -372,6 +374,37 @@ export async function saveBankAccount(params: {
 
 export async function deleteBankAccount(params: { id: number }) {
   const res = await apiFetchWithOffline('/api/deleteBankAccount', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface OpenReceivableForBankItem {
+  id: number
+  refType: string
+  refId?: number
+  storeName: string
+  transDate: string
+  invoiceNo?: string
+  memo?: string
+  accrualAmount: number
+  remainingAmount: number
+  receiveChecked: boolean
+}
+
+export async function getOpenReceivablesForBankTx(params: { bankTransactionId: number }) {
+  const q = new URLSearchParams({ bankTransactionId: String(params.bankTransactionId) })
+  const res = await apiFetchWithOffline(`/api/getOpenReceivablesForBankTx?${q}`)
+  return res.json() as Promise<{ success: boolean; message?: string; list: OpenReceivableForBankItem[] }>
+}
+
+export async function linkReceivableFromBankTransaction(params: {
+  bankTransactionId: number
+  receivableAccrualId: number
+}) {
+  const res = await apiFetchWithOffline('/api/linkReceivableFromBankTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

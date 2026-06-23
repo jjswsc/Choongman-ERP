@@ -48,6 +48,14 @@ const ACCOUNTING_ADMIN_KEYS = {
   acct_bank_expense_link_col: '',
   acct_bank_expense_linked: '',
   acct_bank_expense_unlinked: '',
+  acct_bank_link_col: '',
+  acct_bank_receivable_linked: '',
+  acct_bank_receivable_unlinked: '',
+  acct_bank_attention_receivable_link: '',
+  acct_rec_bank_link: '',
+  bankRegisterLinkReceivable: '',
+  bankReceivablePickEmpty: '',
+  bankReceivableAmountMismatch: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -111,6 +119,14 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   acct_bank_expense_link_col: '지출 연동',
   acct_bank_expense_linked: '연동',
   acct_bank_expense_unlinked: '미연동',
+  acct_bank_link_col: '연동',
+  acct_bank_receivable_linked: '미수 연동',
+  acct_bank_receivable_unlinked: '미수 미연동',
+  acct_bank_attention_receivable_link: '미수금 미연동',
+  acct_rec_bank_link: '통장',
+  bankRegisterLinkReceivable: '미수 연결',
+  bankReceivablePickEmpty: '연결 가능한 미수금(출고·주문)이 없습니다.',
+  bankReceivableAmountMismatch: '통장 금액과 선택한 미수 잔액이 일치해야 합니다.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -161,6 +177,14 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   acct_bank_expense_link_col: 'Expense link',
   acct_bank_expense_linked: 'Linked',
   acct_bank_expense_unlinked: 'Not linked',
+  acct_bank_link_col: 'Link',
+  acct_bank_receivable_linked: 'AR linked',
+  acct_bank_receivable_unlinked: 'AR not linked',
+  acct_bank_attention_receivable_link: 'Receivable not linked',
+  acct_rec_bank_link: 'Bank',
+  bankRegisterLinkReceivable: 'Link receivable',
+  bankReceivablePickEmpty: 'No open receivable (order/outbound) to link.',
+  bankReceivableAmountMismatch: 'Bank amount must match the selected receivable balance.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -211,6 +235,14 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   acct_bank_expense_link_col: 'เชื่อมค่าใช้จ่าย',
   acct_bank_expense_linked: 'เชื่อมแล้ว',
   acct_bank_expense_unlinked: 'ยังไม่เชื่อม',
+  acct_bank_link_col: 'เชื่อม',
+  acct_bank_receivable_linked: 'เชื่อมลูกหนี้',
+  acct_bank_receivable_unlinked: 'ยังไม่เชื่อมลูกหนี้',
+  acct_bank_attention_receivable_link: 'ยังไม่เชื่อมลูกหนี้',
+  acct_rec_bank_link: 'ธนาคาร',
+  bankRegisterLinkReceivable: 'เชื่อมลูกหนี้',
+  bankReceivablePickEmpty: 'ไม่มีลูกหนี้ค้างที่เชื่อมได้',
+  bankReceivableAmountMismatch: 'ยอดธนาคารต้องตรงกับยอดลูกหนี้ที่เลือก',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

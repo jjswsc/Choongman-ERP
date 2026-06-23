@@ -2,19 +2,28 @@ import {
   isBankExpenseRelatedWithdrawCategory,
   normalizeBankWithdrawCategory,
 } from '@/lib/bank-expense-via-expense-mgmt'
+import {
+  bankDepositNeedsReceivableOrderLink,
+  bankDepositReceivableLinkPending,
+} from '@/lib/bank-receivable-link'
 
 export type BankAttentionReason =
   | 'unclassified'
   | 'no_subject'
   | 'no_vendor'
   | 'expense_link_pending'
+  | 'receivable_link_pending'
 
 export type BankAttentionRow = {
   transType?: string
   category?: string
   accountSubjectId?: number | null
   vendorCode?: string | null
+  storeName?: string | null
+  memo?: string | null
   isLinked?: boolean
+  isReceivableLinked?: boolean
+  isChannelSettled?: boolean
   invoiceReceived?: boolean
   invoiceNo?: string | null
   invoicePhotoUrl?: string | null
@@ -24,6 +33,7 @@ export type BankAttentionEdits = {
   category?: string
   accountSubjectId?: string
   vendorCode?: string
+  storeName?: string
 }
 
 const DEPOSIT_CATEGORIES_NEED_SUBJECT = new Set([
@@ -67,6 +77,14 @@ export function resolveBankRowVendorCode(
   return String(raw || '').trim()
 }
 
+export function resolveBankRowStoreName(
+  row: BankAttentionRow,
+  edits?: BankAttentionEdits
+): string {
+  const raw = edits?.storeName !== undefined ? edits.storeName : row.storeName
+  return String(raw || '').trim()
+}
+
 export function bankRowNeedsAttention(
   row: BankAttentionRow,
   edits?: BankAttentionEdits
@@ -74,6 +92,19 @@ export function bankRowNeedsAttention(
   const cat = resolveBankRowCategory(row, edits)
   if (cat === 'unclassified' || !cat) {
     return { needsAttention: true, reason: 'unclassified' }
+  }
+
+  if (
+    bankDepositReceivableLinkPending({
+      transType: row.transType,
+      category: cat,
+      storeName: resolveBankRowStoreName(row, edits),
+      memo: row.memo,
+      isReceivableLinked: row.isReceivableLinked,
+      isChannelSettled: row.isChannelSettled,
+    })
+  ) {
+    return { needsAttention: true, reason: 'receivable_link_pending' }
   }
 
   if (row.transType === 'withdraw' && isBankExpenseRelatedWithdrawCategory(cat) && !row.isLinked) {
@@ -133,10 +164,11 @@ export function countBankAttentionRows(
   rows: BankAttentionRow[],
   editsById?: Record<number, BankAttentionEdits>,
   rowId?: (row: BankAttentionRow, index: number) => number | undefined
-): { unclassified: number; noSubject: number; expenseLinkPending: number; noVendor: number; total: number } {
+): { unclassified: number; noSubject: number; expenseLinkPending: number; receivableLinkPending: number; noVendor: number; total: number } {
   let unclassified = 0
   let noSubject = 0
   let expenseLinkPending = 0
+  let receivableLinkPending = 0
   let noVendor = 0
   rows.forEach((row, i) => {
     const id = rowId?.(row, i)
@@ -146,13 +178,15 @@ export function countBankAttentionRows(
     if (reason === 'unclassified') unclassified += 1
     else if (reason === 'no_subject') noSubject += 1
     else if (reason === 'expense_link_pending') expenseLinkPending += 1
+    else if (reason === 'receivable_link_pending') receivableLinkPending += 1
     else if (reason === 'no_vendor') noVendor += 1
   })
   return {
     unclassified,
     noSubject,
     expenseLinkPending,
+    receivableLinkPending,
     noVendor,
-    total: unclassified + noSubject + expenseLinkPending + noVendor,
+    total: unclassified + noSubject + expenseLinkPending + receivableLinkPending + noVendor,
   }
 }
