@@ -295,6 +295,129 @@ export async function applyTaxInvoiceOverrideToReceivable(params: {
   await supabaseUpdate('receivable_transactions', existing[0].id, patch)
 }
 
+type PayablePaymentLinkRow = {
+  id?: number
+  expense_accrual_id?: number | null
+}
+
+/** 동일 통장 건에 Payment 행이 여러 개일 때 유지할 id (지급예정 연동 우선, 없으면 최신 id) */
+export function pickPayablePaymentKeeperId(rows: PayablePaymentLinkRow[]): number | null {
+  const normalized = (rows || [])
+    .map((r) => ({ id: Number(r.id || 0), accrualId: Number(r.expense_accrual_id || 0) }))
+    .filter((r) => r.id > 0)
+  if (!normalized.length) return null
+  const withAccrual = normalized.filter((r) => r.accrualId > 0)
+  const pool = withAccrual.length ? withAccrual : normalized
+  return pool.reduce((best, r) => (r.id > best.id ? r : best)).id
+}
+
+function mergeVendorIntoPayeeCode(existingPayeeCode: string | null | undefined, vendorCode: string): string {
+  const src = String(existingPayeeCode || '').trim()
+  const marker = '::wm::'
+  const idx = src.lastIndexOf(marker)
+  if (idx < 0) return vendorCode
+  return `${vendorCode}${src.slice(idx)}`
+}
+
+async function resolveVendorDisplayName(vendorCode: string): Promise<string> {
+  const code = String(vendorCode || '').trim()
+  if (!code) return ''
+  try {
+    const rows = (await supabaseSelectFilter('vendors', `code=eq.${encodeURIComponent(code)}`, {
+      select: 'name',
+      limit: 1,
+    })) as { name?: string }[] | null
+    return String(rows?.[0]?.name || '').trim() || code
+  } catch {
+    return code
+  }
+}
+
+/** 통장 출금 1건에 연결된 Payment 행 중복 제거 — bank_transaction_id당 1행 */
+export async function dedupePayablePaymentsForBankTransaction(bankTransactionId: number): Promise<number | null> {
+  const bankId = Number(bankTransactionId || 0)
+  if (!bankId) return null
+  const rows = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment`,
+    { order: 'id.asc', limit: 50, select: 'id,expense_accrual_id' }
+  )) as PayablePaymentLinkRow[]
+  if (!rows?.length) return null
+  const keeperId = pickPayablePaymentKeeperId(rows)
+  if (!keeperId) return null
+  for (const r of rows) {
+    const id = Number(r.id || 0)
+    if (id > 0 && id !== keeperId) {
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
+    }
+  }
+  return keeperId
+}
+
+/**
+ * 통장 매입대금 거래처 변경 시 연결된 미지급 Payment·지급예정 payee 동기화 + 중복 제거.
+ * (통장 화면만 수정하면 payable_transactions.vendor_code가 안 바뀌던 문제)
+ */
+export async function syncPayableLedgerFromBankPurchasePayment(params: {
+  bankTransactionId: number
+  vendorCode: string
+  amountAbs: number
+  transDate: string
+  memo: string
+}): Promise<void> {
+  const { bankTransactionId, vendorCode, amountAbs, transDate, memo } = params
+  const vc = String(vendorCode || '').trim()
+  if (!bankTransactionId || !vc || !amountAbs) return
+
+  const keeperId = await dedupePayablePaymentsForBankTransaction(bankTransactionId)
+  const paymentMemo = memo.slice(0, 240)
+  const paymentPatch = {
+    vendor_code: vc,
+    amount: -Math.abs(amountAbs),
+    trans_date: transDate.slice(0, 10),
+    memo: paymentMemo,
+  }
+
+  if (keeperId) {
+    await supabaseUpdate('payable_transactions', keeperId, paymentPatch)
+    const keeperRows = (await supabaseSelectFilter('payable_transactions', `id=eq.${keeperId}`, {
+      limit: 1,
+      select: 'expense_accrual_id',
+    })) as { expense_accrual_id?: number | null }[]
+    const accrualId = Number(keeperRows?.[0]?.expense_accrual_id || 0)
+    if (accrualId > 0) {
+      const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
+        limit: 1,
+        select: 'payee_code',
+      })) as { payee_code?: string | null }[]
+      const payeeName = await resolveVendorDisplayName(vc)
+      await supabaseUpdate('expense_accruals', accrualId, {
+        payee_code: mergeVendorIntoPayeeCode(accrualRows?.[0]?.payee_code, vc),
+        payee_name: payeeName,
+      })
+      const siblingPayables = (await supabaseSelectFilter(
+        'payable_transactions',
+        `expense_accrual_id=eq.${accrualId}`,
+        { limit: 20, select: 'id' }
+      )) as { id?: number }[]
+      for (const p of siblingPayables || []) {
+        if (p.id && Number(p.id) !== keeperId) {
+          await supabaseUpdate('payable_transactions', p.id, { vendor_code: vc })
+        }
+      }
+    }
+    return
+  }
+
+  await upsertPayableFromBankPurchasePayment({
+    bankTransactionId,
+    vendorCode: vc,
+    amountAbs,
+    transDate,
+    memo: paymentMemo,
+  })
+}
+
 /**
  * 통장 연동 매입 지급(ref Payment, 지출발생 미연동) — bank_transaction_id당 1행 유지.
  * CSV 재저장·출금관리 등으로 동일 통장 건에 insert가 반복되면 미지급 내역이 중복되어 보일 수 있어 upsert.

@@ -3,6 +3,7 @@ import { supabaseUpdate, supabaseSelectFilter, supabaseDeleteByFilter } from '@/
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   deleteReceivableFromBankReceive,
+  syncPayableLedgerFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 매입 지급(미지급): 레거시 purchase_payment → unclassified 변경 시 직접 Payment 행 정리
+    // 매입 지급(미지급): purchase_payment ↔ 다른 용도, 거래처 변경 시 payable·지급예정 동기화
     if (transType === 'withdraw') {
       const wasPurchasePay = prevCategory === 'purchase_payment'
       const isPurchasePay = String(finalCategory || '').toLowerCase() === 'purchase_payment'
@@ -224,6 +225,21 @@ export async function POST(request: NextRequest) {
           'payable_transactions',
           `bank_transaction_id=eq.${bankTxId}&ref_type=eq.Payment&expense_accrual_id=is.null`
         )
+      }
+      if (isPurchasePay) {
+        const finalVendorCode = String(
+          patch.vendor_code !== undefined ? patch.vendor_code : existing[0].vendor_code || ''
+        ).trim()
+        if (finalVendorCode) {
+          const bankMemo = String(existing[0].memo || '').trim()
+          await syncPayableLedgerFromBankPurchasePayment({
+            bankTransactionId: bankTxId,
+            vendorCode: finalVendorCode,
+            amountAbs: Math.abs(Number(existing[0].amount) || 0),
+            transDate,
+            memo: bankMemo ? `통장 지급: ${bankMemo.slice(0, 200)}` : '통장 지급',
+          })
+        }
       }
     }
 

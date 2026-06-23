@@ -6,6 +6,7 @@ import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
 import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
+import { dedupePayablePaymentsForBankTransaction } from '@/lib/receivable-payable'
 import { requireAuth } from '@/lib/verify-auth'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
@@ -381,6 +382,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (bankId) {
+      try {
+        await dedupePayablePaymentsForBankTransaction(bankId)
+      } catch (dedupeErr) {
+        console.warn('executeExpensePayment payable dedupe:', dedupeErr)
+      }
       try {
         await propagateExpenseAccrualInvoiceToLinkedBank(expenseAccrualId)
       } catch (propErr) {
