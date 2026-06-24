@@ -1029,8 +1029,15 @@ function collectGrabItemOptionCodeFields(item: {
     item.optionCode2,
     ...(Array.isArray(item.optionCodes) ? item.optionCodes : []),
   ]) {
-    const code = String(raw ?? '').trim().toUpperCase()
-    if (code) out.add(code)
+    const token = String(raw ?? '').trim()
+    if (!token) continue
+    const parts = token.includes('+')
+      ? token.split('+').map((part) => part.trim()).filter(Boolean)
+      : [token]
+    for (const code of parts) {
+      const upper = code.toUpperCase()
+      if (upper) out.add(upper)
+    }
   }
   return Array.from(out)
 }

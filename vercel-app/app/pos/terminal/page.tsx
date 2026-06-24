@@ -9954,7 +9954,12 @@ export default function PosTerminalPage() {
 
                 const storeAutoPrintNonDine = await resolveStoreAutoPrintFlags(currentStoreId)
                 const autoPrintReceiptNonDine = storeAutoPrintNonDine.receiptOnOrder
+                const autoPrintReceiptOnPaymentNonDine = storeAutoPrintNonDine.receiptOnPayment
                 const autoPrintKitchenNonDine = storeAutoPrintNonDine.kitchenOnOrder
+                const kitchenDelayAfterReceiptMs =
+                  typeof window !== 'undefined' && window.cmPosShell
+                    ? resolveAfterReceiptToKitchenDelayMs()
+                    : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
 
                 if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
                   if (autoPrintReceiptNonDine && autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
@@ -9998,6 +10003,21 @@ export default function PosTerminalPage() {
                       splitBatch,
                       orderId: newOrderId,
                     })
+                    /** 주문+동시결제: 로컬 저장 직후 seenOrderIds로 Realtime 주방 인쇄가 막히므로 여기서 출력 */
+                    if (
+                      isMainPosDevice &&
+                      !suppressReceiptModalAutoPrint &&
+                      autoPrintKitchenNonDine &&
+                      payloadItemsNormalized.length > 0
+                    ) {
+                      markQueuedLocalPrintedIfNeeded()
+                      setTimeout(
+                        runKitchenAfterNonDineSubmit,
+                        autoPrintReceiptOnPaymentNonDine
+                          ? kitchenDelayAfterReceiptMs
+                          : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+                      )
+                    }
                   } else {
                     setReceiptData({
                       ...receiptPayloadSubmit,

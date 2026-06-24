@@ -54,6 +54,7 @@ import {
 } from "@/components/member-portal/member-portal-tier-guide"
 import { MemberPortalProfileContactLinks, MemberPortalContactChannelButtons } from "@/components/member-portal/member-portal-contact-links"
 import { MemberPortalComplaintSection } from "@/components/member-portal/member-portal-complaint-section"
+import { MemberPortalComplaintPromoCard } from "@/components/member-portal/member-portal-complaint-promo-card"
 import { MemberPortalLoungeBackdrop } from "@/components/member-portal/member-portal-lounge-backdrop"
 import {
   MemberPortalStampHomeWidget,
@@ -1083,17 +1084,16 @@ export function MemberPortalApp() {
               <div className="relative w-full rounded-t-[28px] border border-white/10 bg-[#121214] px-5 pb-8 pt-5 shadow-2xl">
                 <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" />
                 <p className="mb-4 text-center text-sm font-medium text-white/80">{t("contactMenuTitle")}</p>
-                <button
-                  type="button"
-                  className="mb-2.5 flex h-12 w-full items-center justify-between gap-3 rounded-2xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-lg transition hover:opacity-95"
-                  onClick={() => {
-                    setContactMenuOpen(false)
-                    setAuthPanel("login")
-                    setNotice(t("complaintLoginRequired"))
-                  }}
-                >
-                  {t("contactViaInAppComplaint")}
-                </button>
+                <div className="mb-2.5">
+                  <MemberPortalComplaintPromoCard
+                    variant="onDark"
+                    onOpen={() => {
+                      setContactMenuOpen(false)
+                      setAuthPanel("login")
+                      setNotice(t("complaintLoginRequired"))
+                    }}
+                  />
+                </div>
                 <MemberPortalContactChannelButtons
                   urls={contactUrls}
                   onChannelClick={() => setContactMenuOpen(false)}
@@ -1216,6 +1216,8 @@ export function MemberPortalApp() {
               }}
               pointRetentionYears={pointRetentionYears}
             />
+
+            <MemberPortalComplaintPromoCard onOpen={openInAppComplaint} />
 
             <MemberPortalHomeHeroBanner
               contentItems={contentItems}

@@ -1,5 +1,6 @@
 import type { PosMenu } from '@/lib/api-client'
 import { resolveGrabItemPrintNote } from '@/lib/grab-pos-order-enrich'
+import { flattenPosOrderItemOptionCodes } from '@/lib/pos-option-code-enrich'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 
 export type KitchenPrintPromoItem = {
@@ -80,7 +81,11 @@ export function mapPosOrderRowForKitchenPrint(
     pit.optionCode1 ?? pit.optionCode2 ?? pit.optionCode ?? optionCodes[0] ?? ''
   ).trim()
   const optionCode2 = String(pit.optionCode2 ?? '').trim()
-  const optionCodesMerged = [...new Set([...optionCodes, optionCode1, optionCode2].filter(Boolean))]
+  const optionCodesMerged = [
+    ...new Set([...optionCodes, ...flattenPosOrderItemOptionCodes(pit), optionCode1, optionCode2].filter(Boolean)),
+  ]
+  const primaryOptionCode = optionCodesMerged[0] ?? ''
+  const secondaryOptionCode = optionCodesMerged[1] ?? optionCode2
   const displayName = resolvePosOrderItemMenuDisplayName(
     {
       id: String(it.id ?? ''),
@@ -98,9 +103,9 @@ export function mapPosOrderRowForKitchenPrint(
     /^grab:/i.test(String(it.id ?? '')) || deliveryAppCode === 'grab'
   const mergedNote = resolveGrabItemPrintNote({
     note: note || null,
-    optionCode: optionCode1 || null,
-    optionCode1: optionCode1 || null,
-    optionCode2: optionCode2 || null,
+    optionCode: primaryOptionCode || null,
+    optionCode1: primaryOptionCode || null,
+    optionCode2: secondaryOptionCode || null,
     optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
   })
   const rawPromoItems = Array.isArray(pit.promoItems) ? pit.promoItems : undefined
@@ -117,8 +122,8 @@ export function mapPosOrderRowForKitchenPrint(
     ...(parentMenuId ? { menuId: parentMenuId } : menuId ? { menuId } : {}),
     ...(flavorMenuId1 ? { menuId1: flavorMenuId1 } : {}),
     ...(flavorMenuId2 ? { menuId2: flavorMenuId2 } : {}),
-    ...(optionCode1 ? { optionCode: optionCode1, optionCode1 } : {}),
-    ...(optionCode2 ? { optionCode2 } : {}),
+    ...(primaryOptionCode ? { optionCode: primaryOptionCode, optionCode1: primaryOptionCode } : {}),
+    ...(secondaryOptionCode ? { optionCode2: secondaryOptionCode } : {}),
     ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
     ...(mergedNote ? { note: mergedNote } : {}),
     ...(deliveryAppCode ? { deliveryAppCode } : {}),

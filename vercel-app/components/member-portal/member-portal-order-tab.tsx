@@ -44,6 +44,7 @@ import {
   resolvePickupMenuListPriceLabel,
 } from "@/lib/member-portal-pickup-menu-filter"
 import { isBanbanMenu } from "@/lib/pos-banban-utils"
+import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
 import { MemberPortalPickupOptionSheet } from "@/components/member-portal/member-portal-pickup-option-sheet"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
@@ -79,6 +80,8 @@ type CartLine = {
   cartKey: string
   menuId: string
   optionId?: string
+  optionCode?: string
+  optionCodes?: string[]
   code?: string
   name: string
   price: number
@@ -668,11 +671,17 @@ export function MemberPortalOrderTab({
       const rawOptId = opt ? String(opt.id || "").trim() : ""
       const optionId = rawOptId && /^\d+$/.test(rawOptId) ? rawOptId : undefined
       const optionCode = opt?.optionCode ? String(opt.optionCode).trim() : undefined
-      const name = opt
-        ? `${String(menu.name || "")} (${String(opt.name || "")})`
-        : defaultDisplay
-          ? `${String(menu.name || "")} (${defaultDisplay})`
-          : String(menu.name || "")
+      const optionCodes = optionCode
+        ? optionCode.includes("+")
+          ? optionCode.split("+").map((part) => part.trim()).filter(Boolean)
+          : [optionCode]
+        : undefined
+      const bracket = opt
+        ? resolvePosCartOptionDisplayName(menu, opt, pickupStore || undefined)
+        : defaultDisplay || ""
+      const name = bracket
+        ? `${String(menu.name || "")} (${bracket})`
+        : String(menu.name || "")
       const key = cartLineKey(String(menu.id), optionId || optionCode || defaultDisplay || "")
     setCart((prev) => {
       const idx = prev.findIndex((l) => l.cartKey === key)
@@ -687,6 +696,8 @@ export function MemberPortalOrderTab({
           cartKey: key,
           menuId: String(menu.id),
           optionId,
+          ...(optionCode ? { optionCode } : {}),
+          ...(optionCodes?.length ? { optionCodes } : {}),
           code: optionCode || menu.code,
           name,
           price,
@@ -696,7 +707,7 @@ export function MemberPortalOrderTab({
     })
     setOptionPickerMenu(null)
   },
-    []
+    [pickupStore]
   )
 
   const handleMenuAdd = React.useCallback(
@@ -811,11 +822,16 @@ export function MemberPortalOrderTab({
             credentials: "same-origin",
             body: JSON.stringify({
               storeCode: pickupStore,
-              items: cart.map(({ menuId, optionId, code, name, price, qty }) => ({
+              items: cart.map(({ menuId, optionId, optionCode, optionCodes, code, name, price, qty }) => ({
                 menuId,
                 ...(optionId ? { optionId } : {}),
-                ...(code ? { optionCode: String(code) } : {}),
-                code,
+                ...(optionCode
+                  ? { optionCode: String(optionCode) }
+                  : code
+                    ? { optionCode: String(code) }
+                    : {}),
+                ...(optionCodes?.length ? { optionCodes } : {}),
+                ...(code !== undefined && code !== "" ? { code } : {}),
                 name,
                 price,
                 qty,
@@ -826,10 +842,9 @@ export function MemberPortalOrderTab({
           const data = (await res.json()) as { success?: boolean; preview?: { prepayEnabled?: boolean } }
           const prepay = Boolean(data.success && data.preview?.prepayEnabled)
           setStorePrepayEnabled(prepay)
-          if (prepay) setCheckoutOpen(true)
-          else setCartConfirmOpen(true)
+          setCheckoutOpen(true)
         } catch {
-          setCartConfirmOpen(true)
+          setCheckoutOpen(true)
         }
       })()
     })
@@ -843,11 +858,12 @@ export function MemberPortalOrderTab({
       const res = await postMemberOrder({
         storeCode: pickupStore,
         pickupAt,
-        items: cart.map(({ menuId, optionId, code, name, price, qty }) => ({
+        items: cart.map(({ menuId, optionId, optionCode, optionCodes, code, name, price, qty }) => ({
           menuId,
           ...(optionId ? { optionId } : {}),
-          ...(code ? { optionCode: String(code) } : {}),
-          code,
+          ...(optionCode ? { optionCode: String(optionCode) } : {}),
+          ...(optionCodes?.length ? { optionCodes } : {}),
+          ...(code ? { code } : {}),
           name,
           price,
           qty,
@@ -949,12 +965,22 @@ export function MemberPortalOrderTab({
   )
 
   const handleCheckoutPaid = React.useCallback(
-    ({ orderNo, paidWithPointsOnly }: { orderNo: string; paidWithPointsOnly: boolean }) => {
+    ({
+      orderNo,
+      paidWithPointsOnly,
+      payAtStore,
+    }: {
+      orderNo: string
+      paidWithPointsOnly: boolean
+      payAtStore?: boolean
+    }) => {
       startTransition(() => {
         setOrderMessage(
-          paidWithPointsOnly
-            ? t("orderSubmitSuccessPoints", { orderNo })
-            : t("orderSubmitSuccessPaid", { orderNo })
+          payAtStore
+            ? t("orderSubmitSuccess", { orderNo })
+            : paidWithPointsOnly
+              ? t("orderSubmitSuccessPoints", { orderNo })
+              : t("orderSubmitSuccessPaid", { orderNo })
         )
         setCart([])
         setCartSheetOpen(false)

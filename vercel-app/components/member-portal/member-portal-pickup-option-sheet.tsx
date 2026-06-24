@@ -5,6 +5,7 @@ import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import { PosChickenOptionPickerPanel } from "@/components/pos/pos-chicken-option-picker-panel"
+import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
 import {
   packagingMenuBasePrice,
   packagingOptionPriceModifier,
@@ -152,7 +153,9 @@ export function MemberPortalPickupOptionSheet({
             formatPrice={(n) => String(Math.round(n))}
             t={posKeyT(t)}
             translateChickenPartLabel={(name) => name}
-            resolveCartDisplayName={(_m, opt) => String(opt.name || "")}
+            resolveCartDisplayName={(menu, opt) =>
+              resolvePosCartOptionDisplayName(menu, opt, storeCode || undefined)
+            }
             onAddToCart={(m, opt, defaultDisplay) => {
               onAdd(m, opt, defaultDisplay)
               onClose()

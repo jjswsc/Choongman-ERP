@@ -18,6 +18,8 @@ import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS, MEMBER_PORTAL_QR_STATUS_POLL_MS } fr
 type CartLine = {
   menuId: string
   optionId?: string
+  optionCode?: string
+  optionCodes?: string[]
   code?: string
   name: string
   price: number
@@ -53,7 +55,7 @@ type MemberPortalCheckoutSheetProps = {
   pickupAt: string
   cart: CartLine[]
   onClose: () => void
-  onPaid: (payload: { orderNo: string; paidWithPointsOnly: boolean }) => void
+  onPaid: (payload: { orderNo: string; paidWithPointsOnly: boolean; payAtStore?: boolean }) => void
   onError: (message: string) => void
   onRestoreCart?: () => void
 }
@@ -91,11 +93,16 @@ export function MemberPortalCheckoutSheet({
 
   const cartPayload = React.useMemo(
     () =>
-      cart.map(({ menuId, optionId, code, name, price, qty }) => ({
+      cart.map(({ menuId, optionId, optionCode, optionCodes, code, name, price, qty }) => ({
         menuId,
         ...(optionId ? { optionId } : {}),
-        ...(code ? { optionCode: String(code) } : {}),
-        code,
+        ...(optionCode
+          ? { optionCode: String(optionCode) }
+          : code
+            ? { optionCode: String(code) }
+            : {}),
+        ...(optionCodes?.length ? { optionCodes } : {}),
+        ...(code !== undefined && code !== "" ? { code } : {}),
         name,
         price,
         qty,
@@ -211,7 +218,7 @@ export function MemberPortalCheckoutSheet({
   }
 
   const handlePay = async () => {
-    if (submitting || !preview?.prepayEnabled) return
+    if (submitting || !preview) return
     setSubmitting(true)
     try {
       const res = await fetch("/api/member-portal/orders", {
@@ -254,7 +261,17 @@ export function MemberPortalCheckoutSheet({
         return
       }
 
-      if (!data.requiresQr || !data.orderId) {
+      if (!data.requiresQr) {
+        clearMemberPortalCheckoutDraft()
+        onPaid({
+          orderNo: nextOrderNo,
+          paidWithPointsOnly: false,
+          payAtStore: !preview.prepayEnabled,
+        })
+        return
+      }
+
+      if (!data.orderId) {
         onError(t("orderSubmitFail"))
         return
       }
@@ -414,10 +431,16 @@ export function MemberPortalCheckoutSheet({
 
             <div className="mt-4 flex items-end justify-between border-t border-neutral-100 pt-3">
               <span className="text-sm font-medium">
-                {preview?.requiresQr ? t("orderCheckoutQrAmount") : t("orderCheckoutPayWithPoints")}
+                {preview?.requiresQr
+                  ? t("orderCheckoutQrAmount")
+                  : preview?.prepayEnabled
+                    ? t("orderCheckoutPayWithPoints")
+                    : t("orderCheckoutPayAtStore")}
               </span>
               <span className="text-2xl font-bold tabular-nums">
-                {formatBaht(preview?.requiresQr ? preview.qrAmount : 0)}
+                {formatBaht(
+                  preview?.requiresQr ? preview.qrAmount : (preview?.finalTotal ?? 0)
+                )}
               </span>
             </div>
 
@@ -441,7 +464,9 @@ export function MemberPortalCheckoutSheet({
                   ? t("saving")
                   : preview?.requiresQr
                     ? t("orderCheckoutPayBtn")
-                    : t("orderCheckoutPayWithPoints")}
+                    : preview?.prepayEnabled
+                      ? t("orderCheckoutPayWithPoints")
+                      : t("orderCartConfirmBtn")}
               </button>
             </div>
           </>

@@ -234,6 +234,14 @@ describe('grab-pos-order-enrich', () => {
     ).toBe('mods:Kimchi 30g. · optc:C011-2,C011-5')
   })
 
+  it('resolveGrabItemPrintNote splits combined multistep option codes', () => {
+    expect(
+      resolveGrabItemPrintNote({
+        optionCode: 'C023-1+C023-5',
+      })
+    ).toBe('optc:C023-1,C023-5')
+  })
+
   it('synthesizeGrabItemOptionNote rebuilds optc note from item fields', () => {
     expect(
       synthesizeGrabItemOptionNote({

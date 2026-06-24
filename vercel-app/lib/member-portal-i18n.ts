@@ -26,6 +26,9 @@ export type MemberPortalKey =
   | 'contactViaInAppComplaint'
   | 'complaintSectionTitle'
   | 'complaintSectionSub'
+  | 'complaintHomePromoTitle'
+  | 'complaintHomePromoSub'
+  | 'complaintHomePromoBtn'
   | 'complaintSubmitTitle'
   | 'complaintMyListTitle'
   | 'complaintMyListEmpty'
@@ -196,6 +199,7 @@ export type MemberPortalKey =
   | 'orderCheckoutQrAmount'
   | 'orderCheckoutPayBtn'
   | 'orderCheckoutPayWithPoints'
+  | 'orderCheckoutPayAtStore'
   | 'orderCheckoutPointEarnEstimate'
   | 'orderCheckoutPointEarnBirthday'
   | 'orderCheckoutQrTitle'
@@ -535,6 +539,21 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Tell us what happened — our team will follow up.',
     th: 'แจ้งปัญหาให้เราทราบ ทีมงานจะติดตามให้',
     ko: '불편하셨던 내용을 알려주시면 매장에서 확인합니다.',
+  },
+  complaintHomePromoTitle: {
+    en: 'Something went wrong?',
+    th: 'มีปัญหาหรือไม่พอใจ?',
+    ko: '불편하신 점이 있으신가요?',
+  },
+  complaintHomePromoSub: {
+    en: 'Submit feedback in the app — we track and follow up every report.',
+    th: 'แจ้งผ่านแอปได้เลย ทีมงานจะติดตามให้ทุกเรื่อง',
+    ko: '앱에서 바로 접수하시면 매장에서 확인하고 처리합니다.',
+  },
+  complaintHomePromoBtn: {
+    en: 'Submit feedback',
+    th: 'แจ้งเรื่อง',
+    ko: '불편 접수하기',
   },
   complaintSubmitTitle: {
     en: 'New complaint',
@@ -992,6 +1011,11 @@ const MS: Record<MemberPortalKey, Dict> = {
   orderCheckoutQrAmount: { en: 'Pay by QR', th: 'ชำระ QR', ko: 'QR 결제' },
   orderCheckoutPayBtn: { en: 'Pay with QR', th: 'ชำระด้วย QR', ko: 'QR로 결제' },
   orderCheckoutPayWithPoints: { en: 'Pay with points', th: 'ชำระด้วยพอยท์', ko: '포인트로 결제' },
+  orderCheckoutPayAtStore: {
+    en: 'Pay at store on pickup',
+    th: 'ชำระที่ร้านเมื่อรับ',
+    ko: '픽업 시 매장 결제',
+  },
   orderCheckoutPointEarnEstimate: {
     en: 'Points you will earn: {points}P ({multiplier}×)',
     th: 'ได้รับพอยท์: {points} ({multiplier}×)',

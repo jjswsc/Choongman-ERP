@@ -12,6 +12,7 @@ export type MemberPickupOrderItem = {
   menuId: string
   optionId?: string
   optionCode?: string
+  optionCodes?: string[]
   code?: string | number
   name: string
   price: number

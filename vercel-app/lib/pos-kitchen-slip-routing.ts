@@ -769,6 +769,7 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
       menus as Parameters<typeof enrichBanbanKitchenLineForPrint>[1]
     )
     const displayName = String(banbanPrepared.name ?? resolvedName)
+    const rawName = String((it as { name?: unknown }).name ?? '')
     let promoItems = enrichPromoItemsMenuNames(it.promoItems, lookup)
     const promoItemsForPrint = Array.isArray(promoItems)
       ? promoItems.map((p) => {
@@ -793,13 +794,20 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
     const hasOptionCodeField = Boolean(
       String((it as { optionCode?: unknown }).optionCode ?? '').trim() ||
         String((it as { optionCode1?: unknown }).optionCode1 ?? '').trim() ||
-        String((it as { optionCode2?: unknown }).optionCode2 ?? '').trim()
+        String((it as { optionCode2?: unknown }).optionCode2 ?? '').trim() ||
+        (Array.isArray((it as { optionCodes?: unknown }).optionCodes) &&
+          ((it as { optionCodes?: unknown[] }).optionCodes ?? []).length > 0)
+    )
+    const hasSplittableCombinedCode = ['optionCode', 'optionCode1', 'option_code', 'option_code1'].some(
+      (key) => String((it as Record<string, unknown>)[key] ?? '').includes('+')
     )
     const hasPromoChildren = Array.isArray(promoItems) && promoItems.length > 0
     let injectedNote = existingNote
-    if (!existingNote && !hasOptionCodeField && !hasPromoChildren) {
-      const optionFromName = splitPosPrintItemLine(String(displayName ?? '')).optionLine
-      if (optionFromName) injectedNote = optionFromName
+    if (!existingNote && !hasPromoChildren) {
+      const optionFromRawName = splitPosPrintItemLine(rawName).optionLine
+      if (optionFromRawName && (!hasOptionCodeField || hasSplittableCombinedCode)) {
+        injectedNote = optionFromRawName
+      }
     }
     return {
       ...it,

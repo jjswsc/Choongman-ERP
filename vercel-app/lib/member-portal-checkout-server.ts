@@ -15,7 +15,7 @@ import { buildMemberPortalTakeoutTableNameForStorage } from '@/lib/pos-member-po
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
-import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { enrichOrderItemsWithOptionCode, normalizeMemberPortalPickupItemForPosSave } from '@/lib/pos-option-code-enrich'
 import { isMemberPortalPublicStore } from '@/lib/member-portal-stores'
 import { isMemberPortalPrepayStore } from '@/lib/member-portal-prepay-config'
 import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
@@ -107,20 +107,7 @@ async function loadStorePackagingFee(storeCode: string): Promise<number> {
 
 async function normalizePickupItems(itemsIn: MemberPickupOrderItem[]) {
   return enrichOrderItemsWithOptionCode(
-    itemsIn.map((it) => {
-      const optionIdRaw = String(it.optionId || '').trim()
-      const optionId = /^\d+$/.test(optionIdRaw) ? optionIdRaw : undefined
-      const optionCode = String(it.optionCode || '').trim() || undefined
-      return {
-        menuId: String(it.menuId || ''),
-        ...(optionId ? { optionId } : {}),
-        ...(optionCode ? { optionCode } : {}),
-        code: it.code,
-        name: String(it.name || '').trim(),
-        price: Math.max(0, Number(it.price || 0)),
-        qty: Math.max(1, Math.trunc(Number(it.qty || 1))),
-      }
-    })
+    itemsIn.map((it) => normalizeMemberPortalPickupItemForPosSave(it))
   )
 }
 
@@ -154,7 +141,7 @@ async function resolveMemberPortalCheckoutPricing(params: {
   let appliedCoupons: PosAppliedCouponLine[] = []
   let appliedCouponsJson: PosAppliedCouponLine[] | null = null
   const couponInput = String(params.couponCode || '').trim()
-  if (couponInput && prepayEnabled) {
+  if (couponInput) {
     const coupon = await resolveMemberPortalCheckoutCoupons({
       memberId: params.member.id,
       subtotal,
@@ -180,7 +167,7 @@ async function resolveMemberPortalCheckoutPricing(params: {
   const split = resolveMemberPortalPointAndQr({
     totalBeforePoints,
     pointBalance,
-    requestedPointUsed: prepayEnabled ? Number(params.requestedPointUsed || 0) : 0,
+    requestedPointUsed: Number(params.requestedPointUsed || 0),
   })
   const pricingFinal = computePosPricing({
     subtotal,
@@ -209,7 +196,7 @@ async function resolveMemberPortalCheckoutPricing(params: {
     maxPointUsable,
     pointUsed: split.pointUsed,
     qrAmount: split.qrAmount,
-    requiresQr: split.requiresQr,
+    requiresQr: prepayEnabled && split.requiresQr,
     finalTotal: pricingFinal.finalTotal,
     appliedCoupons,
     appliedCouponsJson,
@@ -460,8 +447,8 @@ export async function createMemberPickupOrderWithPrepay(params: {
     member,
     storeCode,
     items: itemsIn,
-    requestedPointUsed: prepayEnabled ? params.pointUsed : 0,
-    couponCode: prepayEnabled ? params.couponCode : undefined,
+    requestedPointUsed: params.pointUsed,
+    couponCode: params.couponCode,
     prepayConfig,
   })
 
@@ -488,7 +475,7 @@ export async function createMemberPickupOrderWithPrepay(params: {
 
   const orderNo = await allocateNextPosOrderNo(storeCode)
   const orderType = coercePosOrderTypeForDb('takeout')
-  const paidByPointsOnly = prepayEnabled && !preview.requiresQr && preview.finalTotal <= 0.0001
+  const paidByPointsOnly = !preview.requiresQr && preview.finalTotal <= 0.0001
 
   const row = enrichPosOrderRowForSaaS(
     {
@@ -540,6 +527,8 @@ export async function createMemberPickupOrderWithPrepay(params: {
 
   if (paidByPointsOnly) {
     await finalizeMemberPortalPointsOnlyOrder(orderId)
+  } else if (!prepayEnabled && preview.couponCode) {
+    await redeemMemberPortalOrderCoupons(orderId)
   }
 
   return {

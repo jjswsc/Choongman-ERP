@@ -1,14 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDown, ChevronUp, Image as ImageIcon, Loader2, MessageSquareWarning } from "lucide-react"
+import { ChevronUp, Image as ImageIcon, Loader2, MessageSquareWarning } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { MemberPortalComplaintPromoCard } from "@/components/member-portal/member-portal-complaint-promo-card"
 import {
   GlassCard,
-  SectionTitle,
 } from "@/components/member-portal/member-portal-premium-ui"
 import {
   MP_CARD_TEXT_MUTED,
@@ -246,27 +246,27 @@ export function MemberPortalComplaintSection({
 
   return (
     <div className="space-y-4">
-      <SectionTitle title={t("complaintSectionTitle")} subtitle={t("complaintSectionSub")} />
-
-      <GlassCard soft>
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-3 text-left"
-          onClick={() => onFormOpenChange(!formOpen)}
-        >
-          <span className="inline-flex items-center gap-2 text-sm font-semibold text-stone-900">
-            <MessageSquareWarning className="h-4 w-4 text-amber-600" aria-hidden />
-            {t("complaintSubmitTitle")}
-          </span>
-          {formOpen ? (
+      {!formOpen ? (
+        <MemberPortalComplaintPromoCard onOpen={() => onFormOpenChange(true)} />
+      ) : (
+        <GlassCard soft className="border-amber-200/60 bg-amber-50/40">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 text-left"
+            onClick={() => onFormOpenChange(false)}
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-amber-950">
+              <MessageSquareWarning className="h-4 w-4 text-amber-600" aria-hidden />
+              {t("complaintSubmitTitle")}
+            </span>
             <ChevronUp className={`h-4 w-4 ${MP_CARD_TEXT_MUTED}`} aria-hidden />
-          ) : (
-            <ChevronDown className={`h-4 w-4 ${MP_CARD_TEXT_MUTED}`} aria-hidden />
-          )}
-        </button>
+          </button>
+        </GlassCard>
+      )}
 
-        {formOpen ? (
-          <div className="mt-4 grid gap-4 border-t border-stone-200/70 pt-4">
+      {formOpen ? (
+        <GlassCard soft className="border-amber-200/50">
+          <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className={MP_CARD_TEXT_SECONDARY}>{t("nameLabel")}</Label>
@@ -385,11 +385,12 @@ export function MemberPortalComplaintSection({
               {submitLoading ? t("complaintSubmitting") : t("complaintSubmitBtn")}
             </Button>
           </div>
-        ) : null}
-      </GlassCard>
+        </GlassCard>
+      ) : null}
 
       <GlassCard soft>
         <p className={`mb-3 text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("complaintMyListTitle")}</p>
+        <div>
         {listLoading ? (
           <p className={`text-sm ${MP_CARD_TEXT_MUTED}`}>{t("complaintListLoading")}</p>
         ) : rows.length === 0 ? (
@@ -422,6 +423,7 @@ export function MemberPortalComplaintSection({
             ))}
           </ul>
         )}
+        </div>
       </GlassCard>
     </div>
   )

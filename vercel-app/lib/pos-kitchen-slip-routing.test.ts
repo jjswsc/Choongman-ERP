@@ -164,6 +164,23 @@ describe('buildKitchenSlipGroups printer overlay', () => {
     )
     expect(String(row.note ?? '')).toContain('optc:C011-1')
   })
+
+  it('injects chicken option text from raw name when combined option codes are stored', () => {
+    const menus = [{ id: '23', name: 'CURRY Bar.B.Q FRIED CHICKEN', code: 'C023' }]
+    const prepared = preparePosOrderItemsForKitchenSlip(
+      [
+        {
+          id: '23-bbq',
+          menuId: '23',
+          name: 'CURRY Bar.B.Q FRIED CHICKEN (M - Boneless)',
+          qty: 1,
+          optionCode: 'C023-1+C023-5',
+        },
+      ],
+      { menus }
+    )
+    expect(prepared[0]?.note).toBe('M - Boneless')
+  })
 })
 
 describe('buildPartialCancelKitchenSlips', () => {
@@ -228,6 +245,6 @@ describe('preparePosOrderItemsForKitchenSlip banban reprint', () => {
       { menus }
     )
     expect(prepared[0]?.name).toBe('Banban Chicken (GOLDEN FRIED CHICKEN / SOY SAUCE CHICKEN)')
-    expect(String(prepared[0]?.note ?? '')).toContain('/')
+    expect(prepared[0]?.name).toContain('/')
   })
 })

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { ExternalLink } from "lucide-react"
 import { GlassCard, SectionTitle } from "@/components/member-portal/member-portal-premium-ui"
+import { MemberPortalComplaintPromoCard } from "@/components/member-portal/member-portal-complaint-promo-card"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 
 export type MemberPortalContactUrls = {
@@ -161,18 +162,12 @@ export function MemberPortalProfileContactLinks({
   return (
     <div className="space-y-3">
       <SectionTitle title={t("profileContactTitle")} subtitle={t("profileContactSub")} />
-      <GlassCard soft>
-        {onInAppComplaint ? (
-          <button
-            type="button"
-            className="mb-2.5 flex h-12 w-full items-center justify-between gap-3 rounded-2xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-lg transition hover:opacity-95"
-            onClick={onInAppComplaint}
-          >
-            {t("contactViaInAppComplaint")}
-          </button>
-        ) : null}
-        <MemberPortalContactChannelButtons urls={urls} />
-      </GlassCard>
+      {onInAppComplaint ? <MemberPortalComplaintPromoCard onOpen={onInAppComplaint} variant="compact" /> : null}
+      {hasChannels ? (
+        <GlassCard soft>
+          <MemberPortalContactChannelButtons urls={urls} />
+        </GlassCard>
+      ) : null}
     </div>
   )
 }
