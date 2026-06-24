@@ -28,12 +28,14 @@ create table if not exists public.card_transactions (
   trans_type text not null check (trans_type in ('charge', 'expense')),
   amount numeric(14,2) not null check (amount > 0),
   memo text null,
-  -- charge(충전) 시: 통장 이체 연동
+  -- 통장 출금 연동: charge=통장→카드 이체, expense=신용카드 월 대금 등
   bank_transaction_id bigint null,
   -- expense(사용) 시: 지출 정보
   vendor_code text null,
   account_subject_id bigint null,
   note text null,
+  is_bill_header boolean not null default false,
+  parent_id bigint null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint card_transactions_card_account_fkey foreign key (card_account_id) references public.card_accounts(id) on delete cascade
@@ -43,5 +45,12 @@ create index if not exists idx_card_transactions_card_account_id on public.card_
 create index if not exists idx_card_transactions_trans_date on public.card_transactions(trans_date);
 create index if not exists idx_card_transactions_trans_type on public.card_transactions(trans_type);
 
-comment on table public.card_accounts is '카드 계정 (회사카드, 개인카드 등)';
+create index if not exists idx_card_transactions_parent_id on public.card_transactions(parent_id);
+
+-- 기존 DB 마이그레이션 (테이블 선행 생성 후 실행)
+alter table public.card_transactions add column if not exists is_bill_header boolean not null default false;
+alter table public.card_transactions add column if not exists parent_id bigint null;
+
+comment on column public.card_transactions.is_bill_header is '통장 카드대금 총액(배분 전 헤더)';
+comment on column public.card_transactions.parent_id is '카드대금 헤더 ID — 계정별 배분 행';
 comment on table public.card_transactions is '카드 거래: charge=통장→카드 이체/충전, expense=카드 사용';

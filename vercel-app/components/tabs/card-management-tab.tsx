@@ -12,10 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Plus, Pencil, Trash2, CreditCard } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Search, Plus, Pencil, Trash2, CreditCard, Link2, Landmark, ListTree } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAuth } from "@/lib/auth-context"
+import { useSearchParams, useRouter } from "next/navigation"
 import {
   getCardAccounts,
   getCardTransactions,
@@ -25,18 +28,40 @@ import {
   deleteCardTransaction,
   getAccountSubjects,
   getVendorsForPurchase,
+  getBankAccounts,
+  getUnlinkedBankWithdrawalsForCard,
+  registerCardExpenseFromBankTransaction,
+  getCardBillAllocation,
+  saveCardBillAllocation,
   translateTexts,
   useStoreList,
   type CardAccount,
   type CardTransaction,
   type AccountSubjectItem,
+  type BankAccount,
+  type UnlinkedBankWithdrawalForCard,
 } from "@/lib/api-client"
+import { translateApiMessage } from "@/lib/translate-api-message"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
 }
 
+type AllocationLineForm = {
+  key: string
+  id?: number
+  accountSubjectId: string
+  amount: string
+  memo: string
+}
+
+function newAllocationLine(): AllocationLineForm {
+  return { key: `line-${Date.now()}-${Math.random()}`, accountSubjectId: "", amount: "", memo: "" }
+}
+
 export function CardManagementTab() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const tt = React.useCallback((key: string, fallback: string) => {
@@ -44,6 +69,7 @@ export function CardManagementTab() {
     if (!v || v === key) return fallback
     return v
   }, [t])
+  const { auth } = useAuth()
   const { posStores: rawStores, loading: storesLoading } = useStoreList()
   const stores = React.useMemo(
     () =>
@@ -96,6 +122,26 @@ export function CardManagementTab() {
   const [deletingId, setDeletingId] = React.useState<number | null>(null)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
+  const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
+  const [bankAccountId, setBankAccountId] = React.useState<string>("")
+  const [unlinkedBankRows, setUnlinkedBankRows] = React.useState<UnlinkedBankWithdrawalForCard[]>([])
+  const [unlinkedBankLoading, setUnlinkedBankLoading] = React.useState(false)
+  const [bankLinkRow, setBankLinkRow] = React.useState<UnlinkedBankWithdrawalForCard | null>(null)
+  const [bankLinkCardId, setBankLinkCardId] = React.useState("")
+  const [bankLinkSubjectId, setBankLinkSubjectId] = React.useState("__none__")
+  const [bankLinkMemo, setBankLinkMemo] = React.useState("")
+  const [bankLinkSaving, setBankLinkSaving] = React.useState(false)
+
+  const [allocateParentId, setAllocateParentId] = React.useState<number | null>(null)
+  const [allocateHeader, setAllocateHeader] = React.useState<{
+    totalAmount: number
+    memo: string | null
+    transDate: string
+  } | null>(null)
+  const [allocateLines, setAllocateLines] = React.useState<AllocationLineForm[]>([newAllocationLine()])
+  const [allocateLoading, setAllocateLoading] = React.useState(false)
+  const [allocateSaving, setAllocateSaving] = React.useState(false)
+
   React.useEffect(() => {
     const accountMemos = cardAccounts.map((a) => (a.memo || "").trim()).filter(Boolean)
     const transMemos = transactions.map((tx) => (tx.memo || "").trim()).filter(Boolean)
@@ -118,7 +164,187 @@ export function CardManagementTab() {
     return () => { cancelled = true }
   }, [cardAccounts, transactions, lang])
 
+  React.useEffect(() => {
+    getBankAccounts({ userRole: auth?.role, userStore: auth?.store })
+      .then((list) => {
+        const accounts = list || []
+        setBankAccounts(accounts)
+        setBankAccountId((prev) => prev || (accounts[0]?.id ? String(accounts[0].id) : ""))
+      })
+      .catch(() => setBankAccounts([]))
+  }, [auth?.role, auth?.store])
+
+  const loadUnlinkedBank = React.useCallback(async () => {
+    const accountId = Number(bankAccountId || 0)
+    if (!accountId || !startStr || !endStr) {
+      setUnlinkedBankRows([])
+      return
+    }
+    setUnlinkedBankLoading(true)
+    try {
+      const res = await getUnlinkedBankWithdrawalsForCard({ accountId, startStr, endStr })
+      setUnlinkedBankRows(res.list || [])
+    } catch {
+      setUnlinkedBankRows([])
+    } finally {
+      setUnlinkedBankLoading(false)
+    }
+  }, [bankAccountId, startStr, endStr])
+
+  React.useEffect(() => {
+    void loadUnlinkedBank()
+  }, [loadUnlinkedBank])
+
+  const openBankLinkDialog = (row: UnlinkedBankWithdrawalForCard) => {
+    setBankLinkRow(row)
+    setBankLinkMemo(row.memo || "")
+    const defaultCard =
+      filterCardId !== "__all__"
+        ? filterCardId
+        : filteredCardAccounts[0]?.id
+          ? String(filteredCardAccounts[0].id)
+          : ""
+    setBankLinkCardId(defaultCard)
+    const prepay = accountSubjects.find((a) => String(a.code || "").trim() === "1160")
+    setBankLinkSubjectId(prepay?.id ? String(prepay.id) : "__none__")
+  }
+
+  const handleRegisterBankLink = async () => {
+    if (!bankLinkRow?.id) return
+    const cardId = Number(bankLinkCardId || 0)
+    if (!cardId) {
+      await appAlert(tt("cardManagementSelectCard", "Select Card"))
+      return
+    }
+    setBankLinkSaving(true)
+    try {
+      const res = await registerCardExpenseFromBankTransaction({
+        bankTransactionId: bankLinkRow.id,
+        cardAccountId: cardId,
+        accountSubjectId: bankLinkSubjectId !== "__none__" ? Number(bankLinkSubjectId) : undefined,
+        memo: bankLinkMemo.trim() || undefined,
+        userName: auth?.user,
+        userRole: auth?.role,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
+      setBankLinkRow(null)
+      await loadTransactions()
+      await loadUnlinkedBank()
+      if (res.id) {
+        await openAllocation(res.id)
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
+      }
+    } finally {
+      setBankLinkSaving(false)
+    }
+  }
+
+
   const getMemo = React.useCallback((memo: string | undefined | null) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
+
+  const openAllocation = React.useCallback(async (parentId: number) => {
+    setAllocateLoading(true)
+    setAllocateParentId(parentId)
+    try {
+      const res = await getCardBillAllocation(parentId)
+      if (!res.success || !res.header) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        setAllocateParentId(null)
+        return
+      }
+      setAllocateHeader({
+        totalAmount: res.header.totalAmount,
+        memo: res.header.memo,
+        transDate: res.header.transDate,
+      })
+      const lines =
+        res.lines && res.lines.length > 0
+          ? res.lines.map((l) => ({
+              key: `line-${l.id}`,
+              id: l.id,
+              accountSubjectId: String(l.accountSubjectId),
+              amount: String(l.amount),
+              memo: l.memo || "",
+            }))
+          : [newAllocationLine()]
+      setAllocateLines(lines)
+    } catch {
+      await appAlert(t("processFail"))
+      setAllocateParentId(null)
+    } finally {
+      setAllocateLoading(false)
+    }
+  }, [t])
+
+  const closeAllocation = React.useCallback(() => {
+    setAllocateParentId(null)
+    setAllocateHeader(null)
+    setAllocateLines([newAllocationLine()])
+    const q = new URLSearchParams(searchParams.toString())
+    if (q.has("allocateId")) {
+      q.delete("allocateId")
+      router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
+    }
+  }, [router, searchParams])
+
+  const allocateSum = React.useMemo(
+    () =>
+      allocateLines.reduce((s, l) => {
+        const n = Number(String(l.amount).replace(/,/g, ""))
+        return s + (Number.isFinite(n) ? n : 0)
+      }, 0),
+    [allocateLines]
+  )
+
+  const handleSaveAllocation = async () => {
+    if (!allocateParentId || !allocateHeader) return
+    const lines = allocateLines
+      .map((l) => ({
+        id: l.id,
+        accountSubjectId: Number(l.accountSubjectId || 0),
+        amount: Number(String(l.amount).replace(/,/g, "")),
+        memo: l.memo.trim() || undefined,
+      }))
+      .filter((l) => l.accountSubjectId > 0 && l.amount > 0)
+    if (lines.length === 0) {
+      await appAlert(tt("cardManagementAlertAmount", "Please enter amount."))
+      return
+    }
+    setAllocateSaving(true)
+    try {
+      const res = await saveCardBillAllocation({
+        parentId: allocateParentId,
+        lines,
+        userName: auth?.user,
+        userRole: auth?.role,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
+      closeAllocation()
+      await loadTransactions()
+      await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
+    } finally {
+      setAllocateSaving(false)
+    }
+  }
+
+  React.useEffect(() => {
+    const raw = searchParams.get("allocateId")
+    const id = Number(raw || 0)
+    if (!id || allocateParentId === id) return
+    void openAllocation(id)
+  }, [searchParams, allocateParentId, openAllocation])
+
+  const pendingBillHeaders = React.useMemo(
+    () => transactions.filter((tx) => tx.isBillHeader && !tx.allocationComplete),
+    [transactions]
+  )
 
   const loadAccounts = React.useCallback(async () => {
     getCardAccounts()
@@ -177,6 +403,7 @@ export function CardManagementTab() {
     let totalCharge = 0
     let totalExpense = 0
     for (const tx of transactions) {
+      if (tx.isBillHeader) continue
       if (tx.transType === "charge") totalCharge += tx.amount
       else totalExpense += tx.amount
     }
@@ -188,6 +415,9 @@ export function CardManagementTab() {
     setAccountFormName(a?.name || "")
     setAccountFormMemo(a?.memo || "")
     setAccountFormStore(a?.store ? a.store : (filterStore !== "__all__" ? filterStore : "__none__"))
+    setAccountFormCardNumber(a?.cardNumber || "")
+    setAccountFormHolderName(a?.holderName || "")
+    setAccountFormCardCompany(a?.cardCompany || "")
     setAccountDialogOpen(true)
   }
 
@@ -233,6 +463,14 @@ export function CardManagementTab() {
   }
 
   const openTransForm = (tx?: CardTransaction) => {
+    if (tx?.isBillHeader) {
+      if (tx.id) void openAllocation(tx.id)
+      return
+    }
+    if (tx?.parentId) {
+      void openAllocation(tx.parentId)
+      return
+    }
     setEditingTrans(tx || null)
     const list = filterStore && filterStore !== "__all__"
       ? cardAccounts.filter((a) => (a.store || "") === filterStore)
@@ -252,7 +490,7 @@ export function CardManagementTab() {
     const cardId = transFormCardId && transFormCardId !== "__all__" ? Number(transFormCardId) : 0
     const amt = Number(String(transFormAmount).replace(/,/g, ""))
     if (!cardId || !transFormDate || amt <= 0) {
-      await appAlert(tt("cardManagementAlertAmount", "Please enter card, date, and amount."))
+      await appAlert(tt("cardManagementAlertCardDateAmount", "Please enter card, date, and amount."))
       return
     }
     setTransSaving(true)
@@ -338,6 +576,88 @@ export function CardManagementTab() {
 
       <Card>
         <CardContent className="pt-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <div>
+              <div className="font-semibold flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-muted-foreground" />
+                {tt("cardManagementBankLinkTitle", "Link bank card bill payments")}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                {tt(
+                  "cardManagementBankLinkHint",
+                  "Register monthly credit card bill withdrawals from bank CSV as card expenses."
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-2 mb-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-0.5">
+                {tt("cardManagementBankAccount", "Bank account")}
+              </label>
+              <Select value={bankAccountId || "__none__"} onValueChange={(v) => setBankAccountId(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue placeholder={tt("cardManagementBankAccount", "Bank account")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankAccounts.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.name || a.bankName || `#${a.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" variant="outline" className="h-9" onClick={() => void loadUnlinkedBank()} disabled={unlinkedBankLoading || !bankAccountId}>
+              <Search className="h-4 w-4 mr-1" />
+              {unlinkedBankLoading ? "..." : tt("cardManagementBankLinkQuery", "Find unlinked withdrawals")}
+            </Button>
+          </div>
+          {unlinkedBankLoading ? (
+            <p className="text-sm text-muted-foreground py-4">{t("loading")}</p>
+          ) : unlinkedBankRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">{tt("cardManagementNoUnlinkedBank", "No unlinked withdrawals.")}</p>
+          ) : (
+            <div className="rounded-lg border overflow-auto max-h-[220px]">
+              <table className="w-full text-sm min-w-[520px]">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="p-2 text-center">{tt("date", "Date")}</th>
+                    <th className="p-2 text-right">{tt("pettyColAmount", "Amount")}</th>
+                    <th className="p-2 text-left">{tt("memo", "Memo")}</th>
+                    <th className="p-2 w-28"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unlinkedBankRows.map((row) => (
+                    <tr key={row.id} className="border-t">
+                      <td className="p-2 text-center whitespace-nowrap">{row.transDate}</td>
+                      <td className="p-2 text-right tabular-nums font-medium">{fmt(row.amount)}</td>
+                      <td className="p-2 text-muted-foreground text-xs">
+                        <span className="line-clamp-2" title={row.memo}>{getMemo(row.memo)}</span>
+                        {row.likelyCardBill ? (
+                          <Badge variant="secondary" className="mt-1 text-[10px]">
+                            {tt("cardManagementLikelyCardBill", "Likely card bill")}
+                          </Badge>
+                        ) : null}
+                      </td>
+                      <td className="p-2 text-right">
+                        <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => openBankLinkDialog(row)} disabled={filteredCardAccounts.length === 0}>
+                          <Link2 className="h-3.5 w-3.5" />
+                          {tt("cardManagementBankLinkRegister", "Register")}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-4">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <div>
               <label className="text-xs text-muted-foreground block mb-0.5">{tt("store", "Store")}</label>
@@ -392,6 +712,31 @@ export function CardManagementTab() {
             </Button>
           </div>
 
+          {pendingBillHeaders.length > 0 ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30 p-3">
+              <div className="text-sm font-medium mb-2">{tt("cardManagementAllocatePending", "Allocation pending")}</div>
+              <div className="flex flex-wrap gap-2">
+                {pendingBillHeaders.map((h) => (
+                  <Button
+                    key={h.id}
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1"
+                    onClick={() => h.id && void openAllocation(h.id)}
+                  >
+                    <ListTree className="h-3.5 w-3.5" />
+                    {h.transDate} · {fmt(h.amount)}
+                    {h.remainingAmount != null && h.remainingAmount > 0 ? (
+                      <span className="text-amber-700 dark:text-amber-300 text-xs">
+                        ({tt("cardManagementAllocateRemaining", "Unallocated")} {fmt(h.remainingAmount)})
+                      </span>
+                    ) : null}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
             <div className="rounded-lg border p-3">
               <div className="text-xs text-muted-foreground">{tt("cardManagementTotalCharge", "Total Charge")}</div>
@@ -422,6 +767,7 @@ export function CardManagementTab() {
                     <th className="p-2 text-left">{tt("accountSubject", "Account Subject")}</th>
                     <th className="p-2 text-right">{tt("pettyColAmount", "Amount")}</th>
                     <th className="p-2 text-left">{tt("memo", "Memo")}</th>
+                    <th className="p-2 text-center">{tt("cardManagementBankLinked", "Bank linked")}</th>
                     <th className="p-2 w-16"></th>
                   </tr>
                 </thead>
@@ -430,27 +776,72 @@ export function CardManagementTab() {
                     const cardName = cardAccounts.find((c) => c.id === tx.cardAccountId)?.name || "-"
                     const vendor = tx.vendorCode ? vendors.find((v) => v.code === tx.vendorCode) : null
                     const sub = tx.accountSubjectId ? accountSubjects.find((a) => a.id === tx.accountSubjectId) : null
+                    const isHeader = Boolean(tx.isBillHeader)
+                    const isChild = Boolean(tx.parentId)
                     return (
-                      <tr key={tx.id} className="border-t">
+                      <tr key={tx.id} className={`border-t ${isChild ? "bg-muted/20" : ""}`}>
                         <td className="p-2 text-center">{tx.transDate}</td>
                         <td className="p-2 text-center">
-                          <span className={tx.transType === "charge" ? "text-green-600" : "text-orange-600"}>
-                            {tx.transType === "charge" ? tt("cardManagementCharge", "Charge") : tt("cardManagementExpense", "Expense")}
-                          </span>
+                          {isHeader ? (
+                            <span className="text-amber-700 dark:text-amber-300 font-medium">
+                              {tt("cardManagementBillHeader", "Card bill")}
+                            </span>
+                          ) : (
+                            <span className={tx.transType === "charge" ? "text-green-600" : "text-orange-600"}>
+                              {tx.transType === "charge" ? tt("cardManagementCharge", "Charge") : tt("cardManagementExpense", "Expense")}
+                            </span>
+                          )}
                           {filterCardId === "__all__" && <span className="text-xs text-muted-foreground ml-1">({cardName})</span>}
+                          {isChild ? (
+                            <Badge variant="outline" className="ml-1 text-[10px]">{tt("cardManagementAllocateLine", "Allocated line")}</Badge>
+                          ) : null}
                         </td>
-                        <td className="p-2">{tx.transType === "expense" ? (vendor ? `${vendor.name}` : tx.vendorCode || "-") : "-"}</td>
-                        <td className="p-2 text-muted-foreground">{tx.transType === "expense" && sub ? `${sub.code} ${asDisplayName(sub)}` : "-"}</td>
+                        <td className="p-2">{!isHeader && tx.transType === "expense" ? (vendor ? `${vendor.name}` : tx.vendorCode || "-") : "-"}</td>
+                        <td className="p-2 text-muted-foreground">
+                          {!isHeader && tx.transType === "expense" && sub ? `${sub.code} ${asDisplayName(sub)}` : isHeader ? "—" : "-"}
+                        </td>
                         <td className={`p-2 text-right tabular-nums font-medium ${tx.transType === "charge" ? "text-green-600" : "text-orange-600"}`}>
-                          {tx.transType === "charge" ? "+" : "-"}
-                          {fmt(tx.amount)}
+                          {isHeader ? (
+                            <span className="text-amber-700 dark:text-amber-300">{fmt(tx.amount)}</span>
+                          ) : (
+                            <>
+                              {tx.transType === "charge" ? "+" : "-"}
+                              {fmt(tx.amount)}
+                            </>
+                          )}
                         </td>
-                        <td className="p-2 text-muted-foreground text-xs max-w-[160px] truncate" title={tx.memo || undefined}>{getMemo(tx.memo)}</td>
+                        <td className="p-2 text-muted-foreground text-xs max-w-[160px] truncate" title={tx.memo || undefined}>
+                          {getMemo(tx.memo)}
+                          {isHeader && !tx.allocationComplete && tx.remainingAmount != null && tx.remainingAmount > 0 ? (
+                            <span className="block text-amber-700 dark:text-amber-300">
+                              {tt("cardManagementAllocateRemaining", "Unallocated")}: {fmt(tx.remainingAmount)}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="p-2 text-center">
+                          {tx.bankTransactionId ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              {tt("cardManagementBankLinked", "Bank linked")}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="p-2">
                           <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openTransForm(tx)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
+                            {isHeader ? (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" title={tt("cardManagementAllocateOpen", "Allocate by account")} onClick={() => tx.id && void openAllocation(tx.id)}>
+                                <ListTree className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : !isChild ? (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openTransForm(tx)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button size="icon" variant="ghost" className="h-7 w-7" title={tt("cardManagementAllocateOpen", "Allocate by account")} onClick={() => tx.parentId && void openAllocation(tx.parentId!)}>
+                                <ListTree className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => tx.id && handleDeleteTrans(tx.id)} disabled={deletingId === tx.id}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -598,6 +989,139 @@ export function CardManagementTab() {
               {transSaving ? "..." : tt("btn_save", "Save")}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!bankLinkRow} onOpenChange={(open) => { if (!open) setBankLinkRow(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tt("cardManagementBankLinkDialogTitle", "Bank withdrawal → card expense")}</DialogTitle>
+          </DialogHeader>
+          {bankLinkRow ? (
+            <div className="space-y-3 pt-2">
+              <p className="text-xs text-muted-foreground">{tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}</p>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("date", "Date")}</span>
+                  <span>{bankLinkRow.transDate}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("pettyColAmount", "Amount")}</span>
+                  <span className="font-semibold tabular-nums">{fmt(bankLinkRow.amount)}</span>
+                </div>
+                {bankLinkRow.memo ? (
+                  <div className="text-xs text-muted-foreground pt-1 border-t">{getMemo(bankLinkRow.memo)}</div>
+                ) : null}
+              </div>
+              <div>
+                <label className="text-sm font-medium">{tt("cardManagementSelectCard", "Card")}</label>
+                <Select value={bankLinkCardId} onValueChange={setBankLinkCardId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredCardAccounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">{tt("memo", "Memo")}</label>
+                <Input value={bankLinkMemo} onChange={(e) => setBankLinkMemo(e.target.value)} className="mt-1" />
+              </div>
+              <Button onClick={() => void handleRegisterBankLink()} disabled={bankLinkSaving || !bankLinkCardId} className="w-full">
+                {bankLinkSaving ? "..." : tt("cardManagementBankLinkRegister", "Register as card expense")}
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={allocateParentId != null} onOpenChange={(open) => { if (!open) closeAllocation() }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{tt("cardManagementAllocateTitle", "Allocate card expense by account")}</DialogTitle>
+            <DialogDescription>{tt("cardManagementAllocateHint", "Split the total across expense accounts.")}</DialogDescription>
+          </DialogHeader>
+          {allocateLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
+          ) : allocateHeader ? (
+            <div className="space-y-3 pt-2">
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("cardManagementAllocateTotal", "Card bill total")}</span>
+                  <span className="font-semibold tabular-nums">{fmt(allocateHeader.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("cardManagementAllocateRemaining", "Unallocated")}</span>
+                  <span className={`font-semibold tabular-nums ${Math.abs(allocateHeader.totalAmount - allocateSum) > 0.01 ? "text-amber-700" : "text-green-600"}`}>
+                    {fmt(Math.max(0, allocateHeader.totalAmount - allocateSum))}
+                  </span>
+                </div>
+                {allocateHeader.memo ? (
+                  <div className="text-xs text-muted-foreground pt-1 border-t">{allocateHeader.memo}</div>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                {allocateLines.map((line, idx) => (
+                  <div key={line.key} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_100px_auto] sm:items-end border rounded-md p-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">{tt("accountSubject", "Account Subject")}</label>
+                      <Select
+                        value={line.accountSubjectId || "__none__"}
+                        onValueChange={(v) => {
+                          const next = [...allocateLines]
+                          next[idx] = { ...line, accountSubjectId: v === "__none__" ? "" : v }
+                          setAllocateLines(next)
+                        }}
+                      >
+                        <SelectTrigger className="mt-0.5 h-9">
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">—</SelectItem>
+                          {accountSubjects.map((a) => (
+                            <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">{tt("pettyColAmount", "Amount")}</label>
+                      <Input
+                        className="mt-0.5 h-9"
+                        type="number"
+                        value={line.amount}
+                        onChange={(e) => {
+                          const next = [...allocateLines]
+                          next[idx] = { ...line, amount: e.target.value }
+                          setAllocateLines(next)
+                        }}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-9 w-9 text-destructive shrink-0"
+                      disabled={allocateLines.length <= 1}
+                      onClick={() => setAllocateLines(allocateLines.filter((_, i) => i !== idx))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button type="button" variant="outline" size="sm" className="w-full gap-1" onClick={() => setAllocateLines([...allocateLines, newAllocationLine()])}>
+                <Plus className="h-4 w-4" />
+                {tt("cardManagementAllocateAddLine", "Add line")}
+              </Button>
+              <Button onClick={() => void handleSaveAllocation()} disabled={allocateSaving} className="w-full">
+                {allocateSaving ? "..." : tt("cardManagementAllocateSave", "Save allocation")}
+              </Button>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

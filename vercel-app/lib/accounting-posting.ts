@@ -241,6 +241,52 @@ export async function postBankTransactionJournal(params: {
   })
 }
 
+/** 통장 이체 → 신용카드 월 대금: 선급금(전도금) 차변 / 현금 대변 */
+export async function postBankCardBillJournal(params: {
+  bankTransactionId: number
+  transDate: string
+  amountAbs: number
+  memo?: string
+  storeName?: string
+  postedBy?: string
+  accountSubjectId?: number | null
+}) {
+  const amount = Math.abs(Number(params.amountAbs) || 0)
+  if (amount <= 0) return null
+
+  let debitLine: JournalLineInput = { ...accountLine('1160'), side: 'debit', amount }
+  const sid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
+  if (Number.isFinite(sid) && sid > 0) {
+    try {
+      const rows = (await supabaseSelectFilter('account_subjects', `id=eq.${sid}`, {
+        limit: 1,
+        select: 'id,code,name',
+      })) as { id?: number; code?: string; name?: string }[] | null
+      const r = rows?.[0]
+      if (r?.code) {
+        debitLine = {
+          ...accountLine(String(r.code).trim(), { nameKo: String(r.name || r.code).trim() }),
+          side: 'debit',
+          amount,
+          accountSubjectId: sid,
+        }
+      }
+    } catch (e) {
+      console.error('postBankCardBillJournal account_subjects lookup:', e)
+    }
+  }
+
+  return postJournalEntry({
+    accountingDate: params.transDate,
+    sourceType: 'bank_transaction',
+    sourceId: params.bankTransactionId,
+    storeName: params.storeName || null,
+    memo: params.memo || '카드대금 지급(선급금)',
+    postedBy: params.postedBy || null,
+    lines: [debitLine, { ...GL.cash(), side: 'credit', amount }],
+  })
+}
+
 export async function postPettyCashJournal(params: {
   pettyCashId?: number
   transDate: string

@@ -35,6 +35,7 @@ export interface BankTransactionItem {
   isLinked?: boolean
   isReceivableLinked?: boolean
   isChannelSettled?: boolean
+  isCardLinked?: boolean
 }
 
 export interface BankTransactionsSummary {

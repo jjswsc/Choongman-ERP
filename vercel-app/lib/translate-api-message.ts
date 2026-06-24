@@ -136,6 +136,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "통장 거래 ID가 필요합니다.": "bankTxIdRequired",
   "통장 거래를 찾을 수 없습니다.": "bankTxNotFound",
   "출금 거래만 등록할 수 있습니다.": "withdrawOnlyAllowed",
+  "출금 거래만 연결할 수 있습니다.": "cardApiWithdrawOnly",
   "이미 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
   "이미 지급예정과 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
   "통장 거래 정보가 올바르지 않습니다.": "bankTxInvalid",
@@ -192,6 +193,18 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "본사 권한이 필요합니다.": "msg_office_permission_required",
   "매니저 이상 권한이 필요합니다.": "msg_manager_or_higher_required",
   "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
+
+  // 카드 관리 / 통장 카드대금
+  "통장 거래 ID와 카드가 필요합니다.": "cardApiBankAndCardRequired",
+  "이미 지출·매입 관리에 연결된 통장 거래입니다. 카드 지출로 중복 등록할 수 없습니다.":
+    "cardApiAlreadyLinkedExpense",
+  "이미 카드 거래와 연결된 통장 출금입니다.": "cardApiAlreadyLinkedCard",
+  "카드를 찾을 수 없습니다.": "cardApiCardNotFound",
+  "카드 지출 등록에 실패했습니다.": "cardApiRegisterFailed",
+  "카드 대금 ID가 필요합니다.": "cardApiBillIdRequired",
+  "카드 대금을 찾을 수 없습니다.": "cardApiBillNotFound",
+  "통장 연동 카드 대금(총액) 건만 배분할 수 있습니다.": "cardApiBillHeaderOnly",
+  "계정과목·금액을 1건 이상 입력해 주세요.": "cardApiAllocationLineRequired",
 }
 
 /**
@@ -229,6 +242,13 @@ export function translateApiMessage(
     return t("amountMismatch")
   if (trimmed.startsWith("날짜가 일치하지 않습니다."))
     return t("dateMismatch")
+  const cardAllocMatch = trimmed.match(
+    /^배분 합계\(฿(.+)\)가 카드 대금 총액\(฿(.+)\)과 일치해야 합니다\.$/
+  )
+  if (cardAllocMatch)
+    return t("cardApiAllocationSumMismatch")
+      .replace("{sum}", cardAllocMatch[1]!)
+      .replace("{total}", cardAllocMatch[2]!)
   if (/^✅ \d+건 입고 완료!?$/.test(trimmed))
     return t("inSaveSuccess")
   if (/^✅ \d+건의 강제 출고/.test(trimmed))

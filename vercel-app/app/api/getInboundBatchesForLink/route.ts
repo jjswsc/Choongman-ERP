@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  buildInboundVendorOrFilter,
+  INBOUND_BATCH_VENDOR_LIMIT,
+  loadInboundLinkedAmountByBatchId,
+  resolveInboundVendorMatchValues,
+  sortInboundBatchesForLink,
+  type InboundBatchLinkRow,
+} from '@/lib/inbound-batches-for-link-server'
 
 function isOfficeStore(s: string): boolean {
   const x = String(s || '').trim()
@@ -23,6 +31,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([], { headers })
     }
 
+    const matchValues = await resolveInboundVendorMatchValues(vendorCode, vendorName)
+    const vendorFilter = buildInboundVendorOrFilter(matchValues)
+    if (!vendorFilter) {
+      return NextResponse.json([], { headers })
+    }
+
     let locationFilter = ''
     if (storeFilter) {
       if (isOfficeStore(storeFilter)) {
@@ -32,49 +46,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const rows = (await supabaseSelectFilter('inbound_batches', `id=gt.0${locationFilter}`, {
+    const rows = (await supabaseSelectFilter('inbound_batches', `id=gt.0${vendorFilter}${locationFilter}`, {
       order: 'batch_date.desc',
-      limit: 100,
+      limit: INBOUND_BATCH_VENDOR_LIMIT,
       select: 'id,batch_date,vendor_name,vendor_code,total_amount,location',
-    })) as {
-      id?: number
-      batch_date?: string
-      vendor_name?: string
-      vendor_code?: string
-      total_amount?: number
-      location?: string
-    }[]
+    })) as InboundBatchLinkRow[]
 
-    let matchValues: string[] = []
-    if (vendorCode) {
-      matchValues = [vendorCode]
-      try {
-        const vendorRows = (await supabaseSelectFilter('vendors', `code=eq.${encodeURIComponent(vendorCode)}`, {
-          select: 'code,name,gps_name',
-          limit: 1,
-        })) as { code?: string; name?: string; gps_name?: string }[]
-        if (vendorRows?.[0]) {
-          const v = vendorRows[0]
-          const vn = String(v.name || '').trim()
-          const gn = String(v.gps_name || '').trim()
-          if (vn && !matchValues.includes(vn)) matchValues.push(vn)
-          if (gn && !matchValues.includes(gn)) matchValues.push(gn)
-        }
-      } catch {
-        /* vendors 없으면 code만 사용 */
-      }
-    } else if (vendorName) {
-      matchValues = [vendorName]
-    }
-
-    const filtered = (rows || []).filter((r) => {
-      const vc = String(r.vendor_code || '').trim()
-      const vn = String(r.vendor_name || '').trim()
-      return matchValues.some((m) => vc === m || vn === m)
-    })
+    const batchIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
+    const linkedByBatchId = await loadInboundLinkedAmountByBatchId(batchIds)
+    const sorted = sortInboundBatchesForLink(rows || [], linkedByBatchId)
 
     return NextResponse.json(
-      filtered.map((r) => ({
+      sorted.map((r) => ({
         id: r.id,
         batchDate: r.batch_date?.slice(0, 10),
         vendorName: r.vendor_name,

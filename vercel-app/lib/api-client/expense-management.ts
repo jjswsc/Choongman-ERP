@@ -372,6 +372,11 @@ export interface CardTransaction {
   vendorCode?: string | null
   accountSubjectId?: number | null
   note?: string | null
+  isBillHeader?: boolean
+  parentId?: number | null
+  allocatedAmount?: number
+  remainingAmount?: number
+  allocationComplete?: boolean
 }
 
 export async function getCardAccounts() {
@@ -437,6 +442,78 @@ export async function deleteCardTransaction(params: { id: number }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getCardBillAllocation(parentId: number) {
+  const res = await apiFetchWithOffline(`/api/getCardBillAllocation?parentId=${parentId}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    header?: {
+      id: number
+      cardAccountId: number
+      transDate: string
+      totalAmount: number
+      memo: string | null
+      bankTransactionId: number | null
+      allocatedAmount: number
+      remainingAmount: number
+    }
+    lines?: { id: number; accountSubjectId: number; amount: number; memo: string | null }[]
+  }>
+}
+
+export async function saveCardBillAllocation(params: {
+  parentId: number
+  lines: { id?: number; accountSubjectId: number; amount: number; memo?: string }[]
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/saveCardBillAllocation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export type UnlinkedBankWithdrawalForCard = {
+  id: number
+  transDate: string
+  amount: number
+  memo: string
+  likelyCardBill: boolean
+}
+
+export async function getUnlinkedBankWithdrawalsForCard(params: {
+  accountId: number
+  startStr: string
+  endStr: string
+}) {
+  const q = new URLSearchParams({
+    accountId: String(params.accountId),
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  const res = await apiFetchWithOffline(`/api/getUnlinkedBankWithdrawalsForCard?${q}`)
+  return jsonObjectWithList<UnlinkedBankWithdrawalForCard>(await res.json())
+}
+
+export async function registerCardExpenseFromBankTransaction(params: {
+  bankTransactionId: number
+  cardAccountId: number
+  accountSubjectId?: number | null
+  memo?: string
+  note?: string
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/registerCardExpenseFromBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
 }
 
 export type WithdrawalCategoryMain =

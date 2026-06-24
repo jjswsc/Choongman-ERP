@@ -23,7 +23,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle, CreditCard } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -36,6 +36,9 @@ import {
   getBankTransactions,
   addBankTransactionsBulk,
   registerExpenseFromBankTransaction,
+  getCardAccounts,
+  registerCardExpenseFromBankTransaction,
+  type CardAccount,
   getOpenReceivablesForBankTx,
   linkReceivableFromBankTransaction,
   type OpenReceivableForBankItem,
@@ -279,6 +282,7 @@ export function BankTransactionsTab() {
     isLinked?: boolean
     isReceivableLinked?: boolean
     isChannelSettled?: boolean
+    isCardLinked?: boolean
   }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
@@ -356,6 +360,11 @@ export function BankTransactionsTab() {
   const [registerAccountSubjectId, setRegisterAccountSubjectId] = React.useState<string>("")
   const [registerSaving, setRegisterSaving] = React.useState(false)
   const [registerActionRow, setRegisterActionRow] = React.useState<(typeof list)[0] | null>(null)
+  const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
+  const [cardLinkRow, setCardLinkRow] = React.useState<(typeof list)[0] | null>(null)
+  const [cardLinkCardId, setCardLinkCardId] = React.useState("")
+  const [cardLinkMemo, setCardLinkMemo] = React.useState("")
+  const [cardLinkSaving, setCardLinkSaving] = React.useState(false)
   const [approvedPickRow, setApprovedPickRow] = React.useState<(typeof list)[0] | null>(null)
   const [approvedPickList, setApprovedPickList] = React.useState<ExpenseAccrualPlanItem[]>([])
   const [approvedPickId, setApprovedPickId] = React.useState<string>("")
@@ -1026,6 +1035,50 @@ export function BankTransactionsTab() {
   React.useEffect(() => {
     reloadAccountSubjectOptions()
   }, [reloadAccountSubjectOptions])
+
+  React.useEffect(() => {
+    getCardAccounts()
+      .then((rows) => setCardAccounts(rows || []))
+      .catch(() => setCardAccounts([]))
+  }, [])
+
+  const openCardExpenseLink = React.useCallback((row: (typeof list)[0]) => {
+    setCardLinkRow(row)
+    setCardLinkMemo((row.memo || "").trim())
+    setCardLinkCardId(cardAccounts[0]?.id ? String(cardAccounts[0].id) : "")
+  }, [cardAccounts])
+
+  const handleCardExpenseLink = React.useCallback(async () => {
+    if (!cardLinkRow?.id) return
+    const cardId = Number(cardLinkCardId || 0)
+    if (!cardId) {
+      await appAlert(tt("cardManagementSelectCard", "카드를 선택해 주세요."))
+      return
+    }
+    setCardLinkSaving(true)
+    try {
+      const res = await registerCardExpenseFromBankTransaction({
+        bankTransactionId: cardLinkRow.id,
+        cardAccountId: cardId,
+        memo: cardLinkMemo.trim() || undefined,
+        userName: auth?.user,
+        userRole: auth?.role,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
+      setCardLinkRow(null)
+      await reloadBankTransactionsFresh()
+      if (res.id) {
+        router.push(`/admin/expense-management?tab=card&allocateId=${res.id}`)
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
+      }
+    } finally {
+      setCardLinkSaving(false)
+    }
+  }, [auth?.role, auth?.user, cardLinkCardId, cardLinkMemo, cardLinkRow, reloadBankTransactionsFresh, router, t, tt])
 
   React.useEffect(() => {
     const onVis = () => {
@@ -2560,6 +2613,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         {t("bankRegisterLinkExpenseMgmt") || tt("bankRegisterLinkExpenseMgmt", "연결")}
                                       </Button>
                                     </>
+                                  )
+                                ) : r.transType === "withdraw" && cat === "transfer" && r.id ? (
+                                  r.isCardLinked ? (
+                                    <span
+                                      className="inline-flex rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
+                                      title={tt("bankCardExpenseLinked", "카드 연동")}
+                                    >
+                                      {tt("bankCardExpenseLinked", "카드 연동")}
+                                    </span>
+                                  ) : r.isLinked ? (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className={`${ADMIN_BTN_XS_CN} gap-0.5`}
+                                      onClick={() => openCardExpenseLink(r)}
+                                      disabled={cardAccounts.length === 0}
+                                      title={tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}
+                                    >
+                                      <CreditCard className="h-3 w-3 shrink-0" />
+                                      {tt("bankRegisterCardExpense", "카드 지출")}
+                                    </Button>
                                   )
                                 ) : r.transType === "deposit" && cat === "receivable_receive" && r.id ? (
                                   (() => {
@@ -4114,6 +4190,51 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               {registerSaving ? "..." : (t("btnSave") || "저장")}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!cardLinkRow} onOpenChange={(open) => { if (!open) setCardLinkRow(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tt("cardManagementBankLinkDialogTitle", "통장 출금 → 카드 지출 등록")}</DialogTitle>
+            <DialogDescription>{tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}</DialogDescription>
+          </DialogHeader>
+          {cardLinkRow ? (
+            <div className="space-y-3 pt-2">
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("date", "Date")}</span>
+                  <span>{cardLinkRow.transDate}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("pettyColAmount", "Amount")}</span>
+                  <span className="font-semibold tabular-nums">฿{Math.abs(cardLinkRow.amount || 0).toLocaleString()}</span>
+                </div>
+                {cardLinkRow.memo ? (
+                  <div className="text-xs text-muted-foreground pt-1 border-t">{cardLinkRow.memo}</div>
+                ) : null}
+              </div>
+              <div>
+                <label className="text-sm font-medium">{tt("cardManagementSelectCard", "Card")}</label>
+                <Select value={cardLinkCardId} onValueChange={setCardLinkCardId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cardAccounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">{tt("memo", "Memo")}</label>
+                <Input value={cardLinkMemo} onChange={(e) => setCardLinkMemo(e.target.value)} className="mt-1" />
+              </div>
+              <Button onClick={() => void handleCardExpenseLink()} disabled={cardLinkSaving || !cardLinkCardId} className="w-full">
+                {cardLinkSaving ? "..." : tt("bankRegisterCardExpense", "카드 지출")}
+              </Button>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
       {(() => {

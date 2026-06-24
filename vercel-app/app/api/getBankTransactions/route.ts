@@ -77,12 +77,13 @@ export async function GET(request: NextRequest) {
     const linkedIds = new Set<number>()
     const receivableLinkedIds = new Set<number>()
     const channelSettledIds = new Set<number>()
+    const cardLinkedIds = new Set<number>()
     const rowIds = (rows || []).map((r) => Number(r.id)).filter((id) => id && !isNaN(id))
     if (rowIds.length > 0) {
       for (let i = 0; i < rowIds.length; i += 80) {
         const chunk = rowIds.slice(i, i + 80)
         const idList = chunk.join(',')
-        const [ptRows, recvRows, settleRows] = await Promise.all([
+        const [ptRows, recvRows, settleRows, cardRows] = await Promise.all([
           supabaseSelectFilter('payable_transactions', `bank_transaction_id=in.(${idList})`, {
             select: 'bank_transaction_id',
             limit: chunk.length,
@@ -96,6 +97,10 @@ export async function GET(request: NextRequest) {
             select: 'bank_transaction_id',
             limit: chunk.length,
           }) as Promise<{ bank_transaction_id?: number }[] | null>,
+          supabaseSelectFilter('card_transactions', `bank_transaction_id=in.(${idList})`, {
+            select: 'bank_transaction_id',
+            limit: chunk.length,
+          }).catch(() => [] as { bank_transaction_id?: number }[]),
         ])
         for (const r of ptRows || []) {
           const bid = Number(r.bank_transaction_id)
@@ -108,6 +113,10 @@ export async function GET(request: NextRequest) {
         for (const r of settleRows || []) {
           const bid = Number(r.bank_transaction_id)
           if (bid && !isNaN(bid)) channelSettledIds.add(bid)
+        }
+        for (const r of cardRows || []) {
+          const bid = Number(r.bank_transaction_id)
+          if (bid && !isNaN(bid)) cardLinkedIds.add(bid)
         }
       }
     }
@@ -141,6 +150,7 @@ export async function GET(request: NextRequest) {
       isLinked: linkedIds.has(Number(r.id || 0)),
       isReceivableLinked: receivableLinkedIds.has(Number(r.id || 0)),
       isChannelSettled: channelSettledIds.has(Number(r.id || 0)),
+      isCardLinked: cardLinkedIds.has(Number(r.id || 0)),
     }))
 
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)
