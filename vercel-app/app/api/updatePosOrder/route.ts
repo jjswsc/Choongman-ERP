@@ -15,7 +15,7 @@ import {
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
-import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-server'
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'

@@ -11864,6 +11864,8 @@ export const I18N_POS_MM: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
     posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
+    posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
+    posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -14629,6 +14631,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
     posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
+    posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
+    posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -17422,6 +17426,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
     posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
+    posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
+    posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -20189,6 +20195,8 @@ export const I18N_POS_VI: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
     posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
+    posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
+    posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -22960,4 +22968,6 @@ export const I18N_POS_MS: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
     posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
+    posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
+    posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
 }

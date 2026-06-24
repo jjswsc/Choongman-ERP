@@ -18,7 +18,7 @@ import {
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
-import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
+import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-server'
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
