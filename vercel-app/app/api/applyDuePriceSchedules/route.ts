@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/verify-auth"
+import { cronAuthErrorResponse, isCronAuthorized } from "@/lib/verify-cron-auth"
 import { runDuePriceSchedules } from "@/lib/price-schedule"
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const secret = String(process.env.CRON_SECRET || "").trim()
-  if (!secret) return false
-  const auth = String(req.headers.get("authorization") || "").trim()
-  return auth === `Bearer ${secret}`
-}
 
 async function runAndRespond(headers: Headers): Promise<NextResponse> {
   const result = await runDuePriceSchedules(new Date())
@@ -44,6 +38,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
+  const cronDenied = cronAuthErrorResponse(req, headers)
+  if (cronDenied) return cronDenied
   if (!isCronAuthorized(req)) {
     const authRes = await requireAuth(req, "office")
     if (authRes.errorResponse) return authRes.errorResponse

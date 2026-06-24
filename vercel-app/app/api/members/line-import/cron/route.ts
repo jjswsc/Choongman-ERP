@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processLineCrmImport } from '@/lib/line-crm-import'
 import { requireAuth } from '@/lib/verify-auth'
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const secret = String(process.env.CRON_SECRET || '').trim()
-  if (!secret) return false
-  const auth = String(req.headers.get('authorization') || '').trim()
-  return auth === `Bearer ${secret}`
-}
+import { cronAuthErrorResponse, isCronAuthorized } from '@/lib/verify-cron-auth'
 
 function buildRemoteHeaders(): HeadersInit {
   const token = String(process.env.LINE_CRM_IMPORT_AUTH_TOKEN || '').trim()
@@ -28,6 +22,8 @@ function pickFileNameFromUrl(url: string): string {
 export async function GET(req: NextRequest) {
   const headers = new Headers({ 'Access-Control-Allow-Origin': '*' })
 
+  const cronDenied = cronAuthErrorResponse(req, headers)
+  if (cronDenied) return cronDenied
   const fromCron = isCronAuthorized(req)
   let createdBy = 'vercel-cron'
   if (!fromCron) {

@@ -3,11 +3,12 @@
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { isMemberPortalPath } from "@/lib/member-portal-path"
 
 /** 로그인·POS 로그인 등 공개 경로: 한 번이라도 온라인으로 열면 SW·프리캐시가 깔려야 오프라인에서 로그인 화면이 뜸 */
 function shouldRegisterSwForPath(pathname: string | null): boolean {
   if (!pathname) return false
-  if (pathname === "/m" || pathname.startsWith("/m/")) return false
+  if (isMemberPortalPath(pathname)) return false
   if (pathname === "/login" || pathname === "/admin/login" || pathname === "/pos/login") return true
   return false
 }

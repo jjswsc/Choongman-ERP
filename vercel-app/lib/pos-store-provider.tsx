@@ -9,7 +9,7 @@ const PosStoreContext = createContext<PosStoreValue | null>(null)
 
 /** POS 레이아웃 Provider — /pos/* 페이지 이동 시 주문·테이블 스냅샷 유지 */
 export function PosStoreProvider({ children }: { children: React.ReactNode }) {
-  const value = usePosStoreInternal()
+  const value = usePosStoreInternal({ initialLoadScope: 'current' })
   return <PosStoreContext.Provider value={value}>{children}</PosStoreContext.Provider>
 }
 

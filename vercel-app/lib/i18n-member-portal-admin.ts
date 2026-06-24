@@ -35,8 +35,8 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
 
   mpAdmin_contactTitle: '문의 채널 설정',
   mpAdmin_contactDesc:
-    '회원앱 로그인 「문의하기」와 「내 정보」 탭에 표시되는 Facebook · Instagram · LINE 공식 링크를 관리합니다.',
-  mpAdmin_lineOfficialUrl: 'LINE 공식 URL',
+    '회원앱 로그인 「문의하기」와 「내 정보」 탭에 표시되는 Facebook · Instagram · 라인 오피셜 링크를 관리합니다.',
+  mpAdmin_lineOfficialUrl: '라인 오피셜 공식 URL',
   mpAdmin_contactSave: '문의 채널 저장',
   mpAdmin_welcomeCouponTitle: '회원가입 웰컴 쿠폰',
   mpAdmin_welcomeCouponDesc:

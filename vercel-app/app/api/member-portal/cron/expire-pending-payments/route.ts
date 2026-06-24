@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { expireStaleMemberPortalPendingPayments } from '@/lib/member-portal-pending-payment-expiry'
 import { requireAuth } from '@/lib/verify-auth'
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const secret = String(process.env.CRON_SECRET || '').trim()
-  if (!secret) return false
-  const auth = String(req.headers.get('authorization') || '').trim()
-  return auth === `Bearer ${secret}`
-}
+import { cronAuthErrorResponse, isCronAuthorized } from '@/lib/verify-cron-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const fromCron = isCronAuthorized(req)
-  if (!fromCron) {
+  const cronDenied = cronAuthErrorResponse(req)
+  if (cronDenied) return cronDenied
+  if (!isCronAuthorized(req)) {
     const authRes = await requireAuth(req, 'manager')
     if (authRes.errorResponse) return authRes.errorResponse
   }

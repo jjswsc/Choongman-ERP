@@ -171,7 +171,7 @@ export function MemberPortalPickupOptionSheet({
           <Button
             type="button"
             variant="outline"
-            className="mb-1 w-full rounded-2xl border-white/15 text-white hover:bg-white/5"
+            className="mb-1 w-full rounded-2xl border-2 border-white/55 bg-white/10 text-base font-semibold text-white hover:bg-white/15"
             onClick={onClose}
           >
             {t("orderCancelOption")}

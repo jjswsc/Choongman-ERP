@@ -35,11 +35,12 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /**
-     * API(`api/`)·이미지 프록시는 미들웨어에서 제외한다.
+     * - API(`api/`)·이미지 프록시·PWA 정적(`sw.js`, manifest)은 미들웨어에서 제외한다.
      * - API 는 host/bearer 로 브랜드·테넌트를 판정하므로 미들웨어 헤더가 불필요하고,
      *   미들웨어가 Set-Cookie 를 붙이면 각 라우트의 `s-maxage`(CDN 캐시)가 무효화된다.
+     * - `sw.js` 는 Serwist 정적 파일인데 미들웨어를 타면 Edge 실행·비용만 늘고 SW 갱신에도 이득 없다.
      * - 페이지(HTML)만 브랜드 쿠키/헤더가 필요하므로 매처에 남긴다.
      */
-    "/((?!api/|_next/static|_next/image|favicon.ico|login(?:/|$)|admin/login(?:/|$)|saas-admin/login(?:/|$)|pos/login(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|sw\\.js(?:\\?|$)|firebase-messaging-sw\\.js(?:\\?|$)|manifest[^/]*\\.json(?:\\?|$)|login(?:/|$)|admin/login(?:/|$)|saas-admin/login(?:/|$)|pos/login(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot)$).*)",
   ],
 }

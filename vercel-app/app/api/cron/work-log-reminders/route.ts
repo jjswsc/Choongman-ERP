@@ -4,18 +4,14 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { loadEmployedEmployeesForWorkLog } from '@/lib/work-log-store-scope'
 import { notifyWorkLogMissingDaily } from '@/lib/work-log-notifications'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
-
-function isCronAuthorized(req: NextRequest): boolean {
-  const secret = String(process.env.CRON_SECRET || '').trim()
-  if (!secret) return false
-  const auth = String(req.headers.get('authorization') || '').trim()
-  return auth === `Bearer ${secret}`
-}
+import { cronAuthErrorResponse, isCronAuthorized } from '@/lib/verify-cron-auth'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
+  const cronDenied = cronAuthErrorResponse(req, headers)
+  if (cronDenied) return cronDenied
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ success: false, message: 'unauthorized' }, { status: 401, headers })
   }

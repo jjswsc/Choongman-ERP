@@ -597,10 +597,32 @@ function withPosSnapshotTimeout<T>(promise: Promise<T>, ms: number, fallback: T)
 }
 
 export function usePosStoreStandalone() {
-  return usePosStoreInternal()
+  return usePosStoreInternal({ initialLoadScope: 'all' })
 }
 
-export function usePosStoreInternal() {
+export type PosStoreInitialLoadScope = 'all' | 'current'
+
+function resolvePosStoreBootstrapCodes(
+  effectiveStoreCodes: string[],
+  opts: {
+    initialLoadScope: PosStoreInitialLoadScope
+    canSearchAll: boolean
+    canonicalAuthStore: string
+  }
+): string[] {
+  if (!effectiveStoreCodes.length) return []
+  if (opts.initialLoadScope === 'current' && opts.canSearchAll) {
+    const pick =
+      (opts.canonicalAuthStore && effectiveStoreCodes.includes(opts.canonicalAuthStore)
+        ? opts.canonicalAuthStore
+        : effectiveStoreCodes[0]) || ''
+    return pick ? [pick] : effectiveStoreCodes
+  }
+  return effectiveStoreCodes
+}
+
+export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreInitialLoadScope }) {
+  const initialLoadScope = options?.initialLoadScope ?? 'all'
   const { posStores: storeCodes, legacyToCanonical, loading: storeListLoading } = useStoreList()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
@@ -632,6 +654,7 @@ export function usePosStoreInternal() {
   const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
   const ordersByStoreIdRef = useRef<Record<string, Order[]>>({})
   const [loading, setLoading] = useState(true)
+  const loadedPosStoreIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     layoutByStoreIdRef.current = layoutByStoreId
@@ -749,8 +772,14 @@ export function usePosStoreInternal() {
     }
     setLoading(true)
     const businessDate = getPosBusinessDateStr()
-    Promise.all(effectiveStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
+    const bootstrapStoreCodes = resolvePosStoreBootstrapCodes(effectiveStoreCodes, {
+      initialLoadScope,
+      canSearchAll,
+      canonicalAuthStore,
+    })
+    Promise.all(bootstrapStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
       .then((results) => {
+        for (const r of results) loadedPosStoreIdsRef.current.add(r.storeCode)
         const storeList = results.map((r) => r.store)
         const layouts: Record<string, PosTableItem[]> = {}
         const nextOrdersByStore: Record<string, Order[]> = {}
@@ -759,7 +788,9 @@ export function usePosStoreInternal() {
           nextOrdersByStore[r.storeCode] = (r.activeOrders || []).map(posOrderToOrder)
         })
         const mergedOrdersByStore: Record<string, Order[]> = {}
-        for (const code of effectiveStoreCodes) {
+        const orderSeedCodes =
+          initialLoadScope === 'current' && canSearchAll ? bootstrapStoreCodes : effectiveStoreCodes
+        for (const code of orderSeedCodes) {
           mergedOrdersByStore[code] = withPersistedTerminalOrders(
             code,
             businessDate,
@@ -782,17 +813,22 @@ export function usePosStoreInternal() {
         setLayoutByStoreId(layouts)
         setOrdersByStoreId(mergedOrdersByStore)
         setCurrentStoreId((prev) => {
+          const bootstrapDefault = storeList[0]?.id ?? ''
           const next =
             canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)
               ? canonicalAuthStore
               : effectiveStoreCodes[0]
-          return storeList.some((s) => s.id === prev) ? prev : next ?? effectiveStoreCodes[0] ?? ''
+          const preferred =
+            bootstrapDefault && effectiveStoreCodes.includes(bootstrapDefault)
+              ? bootstrapDefault
+              : next ?? effectiveStoreCodes[0] ?? ''
+          return storeList.some((s) => s.id === prev) ? prev : preferred
         })
       })
       .catch(() => {
         const businessDate = getPosBusinessDateStr()
         const fallbackOrders: Record<string, Order[]> = {}
-        for (const code of effectiveStoreCodes) {
+        for (const code of bootstrapStoreCodes) {
           fallbackOrders[code] = loadPersistedActiveTerminalOrders(code, businessDate)
         }
         ordersByStoreIdRef.current = fallbackOrders
@@ -803,7 +839,7 @@ export function usePosStoreInternal() {
               hydrateStoreTablesFromActiveOrders(store, fallbackOrders[store.id] ?? [])
             )
           }
-          return effectiveStoreCodes.map((code) => {
+          return bootstrapStoreCodes.map((code) => {
             const layout = layoutByStoreIdRef.current[code] ?? []
             const base: Store = {
               id: code,
@@ -816,15 +852,15 @@ export function usePosStoreInternal() {
           })
         })
         setCurrentStoreId((prev) => {
-          if (prev && effectiveStoreCodes.includes(prev)) return prev
-          if (canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)) {
+          if (prev && bootstrapStoreCodes.includes(prev)) return prev
+          if (canonicalAuthStore && bootstrapStoreCodes.includes(canonicalAuthStore)) {
             return canonicalAuthStore
           }
-          return effectiveStoreCodes[0] ?? ''
+          return bootstrapStoreCodes[0] ?? effectiveStoreCodes[0] ?? ''
         })
       })
       .finally(() => setLoading(false))
-  }, [effectiveStoreCodes.join(','), canonicalAuthStore, fetchStoreSnapshot, storeListLoading])
+  }, [effectiveStoreCodes.join(','), canonicalAuthStore, fetchStoreSnapshot, storeListLoading, initialLoadScope, canSearchAll])
 
   // effectiveStoreCodes 변경 시 currentStoreId가 목록에 없으면 첫 매장으로
   useEffect(() => {
@@ -939,6 +975,7 @@ export function usePosStoreInternal() {
       )
     )
       .then((results) => {
+        for (const code of targetStoreCodes) loadedPosStoreIdsRef.current.add(code)
         const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
         const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
         const resultOrdersMap = new Map(results.map((r) => [r.storeCode, (r.activeOrders || []).map(posOrderToOrder)]))
@@ -1012,6 +1049,23 @@ export function usePosStoreInternal() {
       void refetchStoresImmediate(pass)
     }, 600)
   }, [refetchStoresImmediate])
+
+  /** POS(/pos/*): 본사 계정은 현재 매장만 먼저 로드 — 매장 전환 시 lazy fetch */
+  useEffect(() => {
+    if (initialLoadScope !== 'current' || !canSearchAll) return
+    if (loading) return
+    const storeCode = String(currentStoreId || '').trim()
+    if (!storeCode || !effectiveStoreCodes.includes(storeCode)) return
+    if (loadedPosStoreIdsRef.current.has(storeCode)) return
+    void refetchStoresImmediate({ scope: 'current', storeCode })
+  }, [
+    initialLoadScope,
+    canSearchAll,
+    currentStoreId,
+    effectiveStoreCodes.join(','),
+    loading,
+    refetchStoresImmediate,
+  ])
 
   const orders = useMemo(() => Object.values(ordersByStoreId).flat(), [ordersByStoreId])
   const currentStoreOrders = useMemo(() => {

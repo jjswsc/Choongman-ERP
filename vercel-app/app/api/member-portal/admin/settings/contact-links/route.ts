@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { readSystemSettingString, writeSystemSettingString } from '@/lib/system-settings-value'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 const KEY_FACEBOOK = 'member_portal_contact_facebook_url'
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     const map = new Map<string, string>()
     for (const row of rows || []) {
       const key = String(row.key || '').trim()
-      const value = String(row.value_json || '').trim()
+      const value = readSystemSettingString(row.value_json)
       if (!key) continue
       map.set(key, value)
     }
@@ -58,17 +59,17 @@ export async function POST(req: NextRequest) {
     const rows: Record<string, unknown>[] = [
       {
         key: KEY_FACEBOOK,
-        value_json: asHttpUrl(body.facebookUrl),
+        value_json: writeSystemSettingString(asHttpUrl(body.facebookUrl)),
         updated_at: getBangkokDateTimeString(),
       },
       {
         key: KEY_INSTAGRAM,
-        value_json: asHttpUrl(body.instagramUrl),
+        value_json: writeSystemSettingString(asHttpUrl(body.instagramUrl)),
         updated_at: getBangkokDateTimeString(),
       },
       {
         key: KEY_LINE_OFFICIAL,
-        value_json: asHttpUrl(body.lineOfficialUrl),
+        value_json: writeSystemSettingString(asHttpUrl(body.lineOfficialUrl)),
         updated_at: getBangkokDateTimeString(),
       },
     ]

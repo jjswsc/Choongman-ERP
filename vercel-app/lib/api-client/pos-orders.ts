@@ -238,10 +238,17 @@ function posBusinessDaySettingsCacheKey(storeCode?: string | null): string {
 }
 
 const posBusinessDaySettingsInflight = new Map<string, Promise<PosBusinessDaySettingsDto>>()
+/** 영업일 설정은 자주 바뀌지 않음 — 탭·컴포넌트 중복 마운트 시 Edge Request 절감 */
+const POS_BUSINESS_DAY_SETTINGS_CLIENT_TTL_MS = 5 * 60 * 1000
+const posBusinessDaySettingsMemory = new Map<
+  string,
+  { fetchedAt: number; value: PosBusinessDaySettingsDto }
+>()
 
-/** 저장 직후 중복 GET 방지 — in-flight dedupe만 초기화(동작 변경 없음) */
+/** 저장 직후·수동 새로고침 — in-flight dedupe + 메모리 TTL 캐시 초기화 */
 export function invalidatePosBusinessDaySettingsClientInflight(): void {
   posBusinessDaySettingsInflight.clear()
+  posBusinessDaySettingsMemory.clear()
 }
 
 async function fetchPosBusinessDaySettingsDto(
@@ -289,13 +296,22 @@ async function fetchPosBusinessDaySettingsDto(
 
 export async function getPosBusinessDaySettings(storeCode?: string | null): Promise<PosBusinessDaySettingsDto> {
   const key = posBusinessDaySettingsCacheKey(storeCode)
+  const cached = posBusinessDaySettingsMemory.get(key)
+  if (cached && Date.now() - cached.fetchedAt < POS_BUSINESS_DAY_SETTINGS_CLIENT_TTL_MS) {
+    return cached.value
+  }
   const pending = posBusinessDaySettingsInflight.get(key)
   if (pending) return pending
-  const promise = fetchPosBusinessDaySettingsDto(storeCode).finally(() => {
-    if (posBusinessDaySettingsInflight.get(key) === promise) {
-      posBusinessDaySettingsInflight.delete(key)
-    }
-  })
+  const promise = fetchPosBusinessDaySettingsDto(storeCode)
+    .then((value) => {
+      posBusinessDaySettingsMemory.set(key, { fetchedAt: Date.now(), value })
+      return value
+    })
+    .finally(() => {
+      if (posBusinessDaySettingsInflight.get(key) === promise) {
+        posBusinessDaySettingsInflight.delete(key)
+      }
+    })
   posBusinessDaySettingsInflight.set(key, promise)
   return promise
 }

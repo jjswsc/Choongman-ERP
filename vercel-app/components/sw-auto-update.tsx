@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { usePathname } from "next/navigation"
+import { isMemberPortalPath } from "@/lib/member-portal-path"
 
 /**
  * 배포 시 새 버전(sw.js) 자동 감지 → 배너 없이 백그라운드에서만 새로고침.
@@ -14,6 +16,7 @@ import { useEffect, useRef, useState } from "react"
  *  - IndexedDB·오프라인 큐 등은 건드리지 않는다.
  */
 export function SwAutoUpdate() {
+  const pathname = usePathname()
   const [updateReady, setUpdateReady] = useState(false)
   const reloadingRef = useRef(false)
 
@@ -26,6 +29,7 @@ export function SwAutoUpdate() {
   useEffect(() => {
     if (typeof window === "undefined") return
     if (process.env.NODE_ENV !== "production") return
+    if (isMemberPortalPath(pathname)) return
     const sw = navigator.serviceWorker
     if (!sw) return
 
@@ -77,16 +81,17 @@ export function SwAutoUpdate() {
       document.removeEventListener("visibilitychange", onVisible)
       if (intervalId) window.clearInterval(intervalId)
     }
-  }, [])
+  }, [pathname])
 
   useEffect(() => {
+    if (isMemberPortalPath(pathname)) return
     if (!updateReady) return
     const onHidden = () => {
       if (document.visibilityState === "hidden") reloadOnce()
     }
     document.addEventListener("visibilitychange", onHidden)
     return () => document.removeEventListener("visibilitychange", onHidden)
-  }, [updateReady])
+  }, [updateReady, pathname])
 
   return null
 }

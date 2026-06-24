@@ -1038,7 +1038,12 @@ export function MemberPortalOrderTab({
                 <Store className="h-5 w-5" />
               </div>
               <div>
-                <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderPickupBtn")}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className={`font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderPickupBtn")}</p>
+                  <span className="rounded-full bg-amber-400/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                    {t("orderPickupPreparingBadge")}
+                  </span>
+                </div>
                 <p className={`mt-1 text-xs leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("orderPickupHubDesc")}</p>
               </div>
             </div>
@@ -1266,7 +1271,12 @@ export function MemberPortalOrderTab({
       </button>
 
       <div>
-        <h2 className={`text-lg font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderPickupBtn")}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className={`text-lg font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("orderPickupBtn")}</h2>
+          <span className="rounded-full bg-amber-400/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+            {t("orderPickupPreparingBadge")}
+          </span>
+        </div>
         <p className={`text-sm leading-relaxed ${MP_CARD_TEXT_MUTED}`}>{t("orderPickupSavingsDesc")}</p>
       </div>
 

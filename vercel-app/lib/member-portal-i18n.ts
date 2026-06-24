@@ -82,6 +82,7 @@ export type MemberPortalKey =
   | 'orderTitle'
   | 'orderDesc'
   | 'orderPickupBtn'
+  | 'orderPickupPreparingBadge'
   | 'orderDeliveryBtn'
   | 'orderPickupHubDesc'
   | 'orderDeliveryHubDesc'
@@ -462,7 +463,7 @@ const MS: Record<MemberPortalKey, Dict> = {
   contactViaLineOfficial: {
     en: 'LINE Official',
     th: 'LINE Official',
-    ko: 'LINE 공식',
+    ko: '라인 오피셜',
   },
   contactMenuClose: {
     en: 'Close',
@@ -637,7 +638,8 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'รับที่ร้านในราคาสมาชิก หรือสั่งผ่านแอปเดลิเวอรี',
     ko: '매장 픽업(회원가) 또는 배달앱 주문을 선택하세요.',
   },
-  orderPickupBtn: { en: 'Pickup order', th: 'รับที่ร้าน', ko: '픽업 주문' },
+  orderPickupBtn: { en: 'Pickup (preparing)', th: 'รับที่ร้าน (กำลังเตรียม)', ko: '픽업 준비중' },
+  orderPickupPreparingBadge: { en: 'Preparing', th: 'กำลังเตรียม', ko: '준비중' },
   orderDeliveryBtn: { en: 'Delivery order', th: 'เดลิเวอรี', ko: '배달 주문' },
   orderPickupHubDesc: {
     en: 'Order for pickup at your store — about 10% cheaper than delivery apps.',
@@ -717,9 +719,9 @@ const MS: Record<MemberPortalKey, Dict> = {
   },
   orderCartConfirmBtn: { en: 'Confirm order', th: 'ยืนยันสั่ง', ko: '주문 확정' },
   orderPayAtPickup: {
-    en: 'Pay at store on pickup',
-    th: 'ชำระที่ร้านเมื่อมารับ',
-    ko: '픽업 시 매장 결제',
+    en: 'Pay with QR code',
+    th: 'ชำระด้วย QR code',
+    ko: 'QR코드 결제',
   },
   orderViewCart: { en: 'View cart', th: 'ดูตะกร้า', ko: '장바구니 보기' },
   orderItemCount: {

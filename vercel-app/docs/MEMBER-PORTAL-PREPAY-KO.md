@@ -2,9 +2,9 @@
 
 ## 배포 체크리스트
 
-1. **Vercel 환경변수**
+1. **Vercel 환경변수 (Production 필수)**
    - `KBANK_TERMINAL_ID` 등 KBank QR (POS와 동일)
-   - `CRON_SECRET` — 만료·대조 크론 Bearer 인증
+   - **`CRON_SECRET`** — Vercel Cron이 `Authorization: Bearer {값}` 으로 호출. **16자 이상 랜덤 문자열**, 특수문자·줄바꿈 없이. Production에 등록 후 **재배포**해야 Cron에 반영됨.
    - (선택) `MEMBER_PORTAL_PREPAY_ENABLED=1` — DB 설정보다 env 우선
 
 2. **Supabase SQL** (1회)
@@ -35,4 +35,4 @@ GET /api/member-portal/cron/reconcile-pending-payments
 Authorization: Bearer {manager session}
 ```
 
-Cron은 `Authorization: Bearer {CRON_SECRET}`.
+Cron은 `Authorization: Bearer {CRON_SECRET}`. `CRON_SECRET` 미설정 시 Cron 로그에 **503**과 안내 메시지가 보입니다.
