@@ -3,6 +3,12 @@ import { postBankCardBillJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { resolveCardBillAccountSubjectId } from '@/lib/card-bill-account'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
+import {
+  extractWithdrawalCategoryFromNote,
+  hasCardBillQueueMarker,
+  mergeCardBillQueueIntoBankNote,
+} from '@/lib/bank-transaction-note-meta'
+import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const LINKED_BANK_SCAN_MAX_ROWS = 1_000_000
@@ -61,8 +67,8 @@ export async function getUnlinkedBankWithdrawalsForCard(params: {
   const rows = (await supabaseSelectFilter('bank_transactions', filter, {
     order: 'trans_date.desc,id.desc',
     limit: 10000,
-    select: 'id,trans_date,amount,memo,note',
-  })) as { id?: number; trans_date?: string; amount?: number; memo?: string; note?: string }[]
+    select: 'id,trans_date,amount,memo,note,category',
+  })) as { id?: number; trans_date?: string; amount?: number; memo?: string; note?: string; category?: string }[]
 
   if (!rows?.length) return []
 
@@ -87,6 +93,7 @@ export async function getUnlinkedBankWithdrawalsForCard(params: {
 
   return (rows || [])
     .filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
+    .filter((r) => hasCardBillQueueMarker(String(r.note || '')))
     .filter((r) => !linkedIds.has(Number(r.id || 0)))
     .map((r) => {
       const memo = String(r.memo || '').trim()
@@ -107,6 +114,125 @@ type BankTxRow = {
   trans_type?: string
   amount?: number
   memo?: string
+  note?: string
+  category?: string
+}
+
+function isTransferBankWithdrawal(row: { category?: string; note?: string }): boolean {
+  const cat = String(row.category || '').trim().toLowerCase()
+  if (cat === 'transfer' || cat.startsWith('transfer_')) return true
+  const fromNote = extractWithdrawalCategoryFromNote(String(row.note || ''))
+  return fromNote === 'transfer' || (fromNote?.startsWith('transfer_') ?? false)
+}
+
+async function collectLinkedBankTransactionIds(): Promise<Set<number>> {
+  const [payableRows, cardRows] = await Promise.all([
+    supabaseSelectFilterAllPages('payable_transactions', 'bank_transaction_id=not.is.null', {
+      select: 'bank_transaction_id',
+      pageSize: 8000,
+      maxRows: LINKED_BANK_SCAN_MAX_ROWS,
+    }) as Promise<{ bank_transaction_id?: number }[]>,
+    supabaseSelectFilterAllPages('card_transactions', 'bank_transaction_id=not.is.null', {
+      select: 'bank_transaction_id',
+      pageSize: 8000,
+      maxRows: LINKED_BANK_SCAN_MAX_ROWS,
+    }) as Promise<{ bank_transaction_id?: number }[]>,
+  ])
+  const linkedIds = new Set<number>()
+  for (const r of [...(payableRows || []), ...(cardRows || [])]) {
+    const bid = Number(r.bank_transaction_id || 0)
+    if (bid > 0) linkedIds.add(bid)
+  }
+  return linkedIds
+}
+
+/** 지출등록(이체)에서 카드대금 연동 대기열에 넣을 이체 출금 후보 */
+export async function getBankWithdrawalsForCardBillQueueMark(params: {
+  accountId: number
+  startStr: string
+  endStr: string
+  amount?: number | null
+  transDate?: string | null
+}): Promise<UnlinkedBankWithdrawalForCard[]> {
+  const accountId = Number(params.accountId || 0)
+  const startStr = String(params.startStr || '').slice(0, 10)
+  const endStr = String(params.endStr || '').slice(0, 10)
+  if (!accountId || !startStr || !endStr) return []
+
+  const filter = `account_id=eq.${accountId}&trans_type=eq.withdraw&trans_date=gte.${startStr}&trans_date=lte.${endStr}`
+  const rows = (await supabaseSelectFilter('bank_transactions', filter, {
+    order: 'trans_date.desc,id.desc',
+    limit: 10000,
+    select: 'id,trans_date,amount,memo,note,category',
+  })) as BankTxRow[]
+
+  if (!rows?.length) return []
+
+  const linkedIds = await collectLinkedBankTransactionIds()
+  const amount = params.amount != null ? parseMoneyAmount(params.amount) : null
+  const transDate = String(params.transDate || '').slice(0, 10)
+
+  return (rows || [])
+    .filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
+    .filter((r) => isTransferBankWithdrawal(r))
+    .filter((r) => !hasCardBillQueueMarker(String(r.note || '')))
+    .filter((r) => !linkedIds.has(Number(r.id || 0)))
+    .map((r) => {
+      const memo = String(r.memo || '').trim()
+      return {
+        id: Number(r.id || 0),
+        transDate: String(r.trans_date || '').slice(0, 10),
+        amount: parseMoneyAmount(r.amount),
+        memo,
+        likelyCardBill: memoLikelyCardBill(memo),
+      }
+    })
+    .filter((r) => {
+      if (!(r.id > 0 && r.amount > 0)) return false
+      if (amount != null && amount > 0 && !moneyEqual(r.amount, amount)) return false
+      if (transDate && /^\d{4}-\d{2}-\d{2}$/.test(transDate) && r.transDate !== transDate) return false
+      return true
+    })
+}
+
+export async function markBankTransactionForCardBill(params: {
+  bankTransactionId: number
+}): Promise<{ ok: true } | { ok: false; message: string; status?: number }> {
+  const bankTransactionId = Number(params.bankTransactionId || 0)
+  if (!bankTransactionId) {
+    return { ok: false, message: '통장 거래 ID가 필요합니다.', status: 400 }
+  }
+
+  const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
+    limit: 1,
+    select: 'id,trans_type,note,category',
+  })) as BankTxRow[] | null
+  const bankRow = bankRows?.[0]
+  if (!bankRow?.id) {
+    return { ok: false, message: '통장 거래를 찾을 수 없습니다.', status: 404 }
+  }
+  if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
+    return { ok: false, message: '출금 거래만 연결할 수 있습니다.', status: 400 }
+  }
+  if (!isTransferBankWithdrawal(bankRow)) {
+    return { ok: false, message: '이체(transfer) 구분 출금만 카드대금 연동 대기열에 넣을 수 있습니다.', status: 400 }
+  }
+
+  const linkedIds = await collectLinkedBankTransactionIds()
+  if (linkedIds.has(bankTransactionId)) {
+    return { ok: false, message: '이미 지출·매입 또는 카드와 연결된 통장 거래입니다.', status: 400 }
+  }
+  if (hasCardBillQueueMarker(String(bankRow.note || ''))) {
+    return { ok: true }
+  }
+
+  await supabaseUpdate('bank_transactions', bankTransactionId, {
+    note: mergeCardBillQueueIntoBankNote(String(bankRow.note || '')),
+    category: 'transfer',
+    updated_at: new Date().toISOString(),
+  })
+
+  return { ok: true }
 }
 
 export async function registerCardExpenseFromBankTransaction(params: {
@@ -142,7 +268,7 @@ export async function registerCardExpenseFromBankTransaction(params: {
     return { ok: false, message: '출금 거래만 연결할 수 있습니다.', status: 400 }
   }
 
-  const amount = Math.abs(Number(bankRow.amount || 0))
+  const amount = parseMoneyAmount(bankRow.amount)
   const transDate = String(bankRow.trans_date || '').slice(0, 10)
   if (!amount || !/^\d{4}-\d{2}-\d{2}$/.test(transDate)) {
     return { ok: false, message: '통장 거래 정보가 올바르지 않습니다.', status: 400 }

@@ -1,4 +1,5 @@
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { expandTruncatedCouponCodeCandidates } from '@/lib/member-coupon-qr'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
   summarizeLegacyCouponFields,
@@ -57,6 +58,15 @@ type MemberIssueRow = {
   coupon_code?: string
   status?: string
   used_at?: string | null
+}
+
+type MemberCouponIssueRejectReason = 'already_used' | 'issue_not_available'
+
+type ResolveTemplateResult = {
+  template: PosCouponTemplate | null
+  serial: SerialDbRow | null
+  memberIssue: MemberIssueRow | null
+  rejectReason?: MemberCouponIssueRejectReason
 }
 
 type RedemptionDbRow = {
@@ -157,6 +167,14 @@ async function loadCouponTemplateByCode(code: string): Promise<PosCouponTemplate
   return mapPosCouponDbRow(rows?.[0])
 }
 
+async function loadCouponTemplateByCodeVariants(code: string): Promise<PosCouponTemplate | null> {
+  for (const candidate of expandTruncatedCouponCodeCandidates(code)) {
+    const template = await loadCouponTemplateByCode(candidate)
+    if (template) return template
+  }
+  return null
+}
+
 async function loadCouponTemplateBySerial(code: string): Promise<{
   template: PosCouponTemplate | null
   serial: SerialDbRow | null
@@ -191,6 +209,15 @@ async function loadMemberCouponIssueById(issueId: number): Promise<MemberIssueRo
   return rows?.[0] ?? null
 }
 
+async function loadMemberCouponIssueRawById(issueId: number): Promise<MemberIssueRow | null> {
+  const id = Math.max(0, Math.trunc(Number(issueId) || 0))
+  if (id <= 0) return null
+  const rows = (await supabaseSelectFilter('member_coupon_issues', `id=eq.${id}`, {
+    limit: 1,
+  })) as MemberIssueRow[] | null
+  return rows?.[0] ?? null
+}
+
 async function findMemberCouponIssue(params: {
   memberId?: number
   code?: string
@@ -206,26 +233,43 @@ async function findMemberCouponIssue(params: {
     const byIssueId = await loadMemberCouponIssueById(issueId)
     if (!byIssueId) return null
     if (memberId > 0 && Number(byIssueId.member_id || 0) !== memberId) return null
+    if (code) {
+      const issueCode = normalizeCode(byIssueId.coupon_code || '')
+      const codeMatches = expandTruncatedCouponCodeCandidates(code).some(
+        (candidate) => candidate === issueCode || expandTruncatedCouponCodeCandidates(issueCode).includes(candidate)
+      )
+      if (issueCode && !codeMatches) return null
+    }
     return byIssueId
   }
   if (!memberId || !code) return null
 
-  const rows = (await supabaseSelectFilter(
-    'member_coupon_issues',
-    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued&${expiryFilter}`,
-    { order: 'expires_at.asc,id.asc', limit: 1 }
-  )) as MemberIssueRow[] | null
-  return rows?.[0] ?? null
+  for (const candidate of expandTruncatedCouponCodeCandidates(code)) {
+    const rows = (await supabaseSelectFilter(
+      'member_coupon_issues',
+      `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(candidate)}&status=eq.issued&${expiryFilter}`,
+      { order: 'expires_at.asc,id.asc', limit: 1 }
+    )) as MemberIssueRow[] | null
+    if (rows?.[0]) return rows[0]
+  }
+  return null
+}
+
+async function resolveExplicitMemberIssueRejectReason(
+  issueId: number,
+  clientMemberId: number
+): Promise<MemberCouponIssueRejectReason> {
+  const raw = await loadMemberCouponIssueRawById(issueId)
+  if (!raw) return 'issue_not_available'
+  if (String(raw.status ?? '').toLowerCase() === 'used') return 'already_used'
+  if (clientMemberId > 0 && Number(raw.member_id || 0) !== clientMemberId) return 'issue_not_available'
+  return 'issue_not_available'
 }
 
 async function resolveTemplateForCandidate(
   candidate: PosCouponCandidateInput,
   memberId?: number
-): Promise<{
-  template: PosCouponTemplate | null
-  serial: SerialDbRow | null
-  memberIssue: MemberIssueRow | null
-}> {
+): Promise<ResolveTemplateResult> {
   const code = normalizeCode(candidate.code)
   const issueId = Math.max(0, Math.trunc(Number(candidate.memberIssueId ?? 0) || 0))
   const clientMemberId = Math.max(0, Math.trunc(Number(memberId ?? 0) || 0))
@@ -234,32 +278,37 @@ async function resolveTemplateForCandidate(
   if (issueId > 0) {
     issueFromId = await findMemberCouponIssue({
       ...(clientMemberId > 0 ? { memberId: clientMemberId } : {}),
+      ...(code ? { code } : {}),
       issueId,
     })
-    const issueCode = normalizeCode(issueFromId?.coupon_code || '')
-    if (issueFromId && issueCode) {
-      const template = await loadCouponTemplateByCode(issueCode)
+    if (issueFromId) {
+      const issueCode = normalizeCode(issueFromId.coupon_code || '')
+      const template = issueCode
+        ? await loadCouponTemplateByCodeVariants(issueCode)
+        : null
       if (template) {
         return { template, serial: null, memberIssue: issueFromId }
       }
+      return { template: null, serial: null, memberIssue: null, rejectReason: 'issue_not_available' }
+    }
+    return {
+      template: null,
+      serial: null,
+      memberIssue: null,
+      rejectReason: await resolveExplicitMemberIssueRejectReason(issueId, clientMemberId),
     }
   }
 
-  const effectiveMemberId =
-    Math.max(
-      clientMemberId,
-      Math.trunc(Number(issueFromId?.member_id ?? 0) || 0)
-    ) || undefined
+  const effectiveMemberId = clientMemberId || undefined
 
   if (code) {
-    const direct = await loadCouponTemplateByCode(code)
+    const direct = await loadCouponTemplateByCodeVariants(code)
     if (direct) {
       if (direct.redemptionMode === 'member_issue') {
         const memberIssue =
           (await findMemberCouponIssue({
             memberId: effectiveMemberId,
             code,
-            issueId: issueId || undefined,
           })) ?? null
         return { template: direct, serial: null, memberIssue }
       }
@@ -302,10 +351,17 @@ export async function validatePosCouponApplication(params: {
     loyalty,
   }
 
-  const { template, serial, memberIssue } = await resolveTemplateForCandidate(
+  const { template, serial, memberIssue, rejectReason } = await resolveTemplateForCandidate(
     params.candidate,
     params.memberId
   )
+
+  if (rejectReason === 'already_used') {
+    return { valid: false, message: '이미 사용된 쿠폰입니다.' }
+  }
+  if (rejectReason === 'issue_not_available' && params.candidate.memberIssueId) {
+    return { valid: false, message: '사용 가능한 회원 쿠폰이 없습니다.' }
+  }
 
   const resolvedCandidateCode = normalizeCode(
     memberIssue?.coupon_code || template?.code || params.candidate.code
@@ -470,6 +526,12 @@ export async function persistPosOrderCouponRedemptions(params: {
 
     if (memberCouponIssueId) {
       await supabaseUpdate('member_coupon_issues', memberCouponIssueId, {
+        status: 'used',
+        used_at: getBangkokDateTimeString(),
+        order_id: orderId,
+      })
+    } else if (memberIssue?.id) {
+      await supabaseUpdate('member_coupon_issues', memberIssue.id, {
         status: 'used',
         used_at: getBangkokDateTimeString(),
         order_id: orderId,

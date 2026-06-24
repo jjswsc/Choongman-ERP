@@ -147,14 +147,30 @@ export function MemberPortalContactChannelButtons({
   )
 }
 
-export function MemberPortalProfileContactLinks({ urls }: { urls: MemberPortalContactUrls }) {
+export function MemberPortalProfileContactLinks({
+  urls,
+  onInAppComplaint,
+}: {
+  urls: MemberPortalContactUrls
+  onInAppComplaint?: () => void
+}) {
   const { t } = useMemberPortalLang()
-  if (!hasMemberPortalContactLinks(urls)) return null
+  const hasChannels = hasMemberPortalContactLinks(urls)
+  if (!hasChannels && !onInAppComplaint) return null
 
   return (
     <div className="space-y-3">
       <SectionTitle title={t("profileContactTitle")} subtitle={t("profileContactSub")} />
       <GlassCard soft>
+        {onInAppComplaint ? (
+          <button
+            type="button"
+            className="mb-2.5 flex h-12 w-full items-center justify-between gap-3 rounded-2xl bg-amber-600 px-4 text-sm font-semibold text-white shadow-lg transition hover:opacity-95"
+            onClick={onInAppComplaint}
+          >
+            {t("contactViaInAppComplaint")}
+          </button>
+        ) : null}
         <MemberPortalContactChannelButtons urls={urls} />
       </GlassCard>
     </div>

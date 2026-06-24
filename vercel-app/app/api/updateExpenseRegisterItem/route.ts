@@ -4,6 +4,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 import { composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
 import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
+import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     const bankTransactionId = Number(body.bankTransactionId || body.bank_transaction_id || 0)
     const action = String(body.action || '').trim().toLowerCase() // update | delete
-    const amount = Math.abs(Number(body.amount || 0))
+    const amount = parseMoneyAmount(body.amount)
     const transDate = String(body.transDate || body.trans_date || '').slice(0, 10)
     const accountId = Number(body.accountId || body.account_id || 0)
     const memo = String(body.memo || '').trim()

@@ -194,7 +194,11 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "매니저 이상 권한이 필요합니다.": "msg_manager_or_higher_required",
   "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
 
-  // 카드 관리 / 통장 카드대금
+  "카드대금 연동 대기열에 등록되었습니다.": "expenseRegisterCardBillQueued",
+  "이체(transfer) 구분 출금만 카드대금 연동 대기열에 넣을 수 있습니다.":
+    "cardApiTransferOnlyForQueue",
+  "이미 지출·매입 또는 카드와 연결된 통장 거래입니다.":
+    "cardApiAlreadyLinkedAny",
   "통장 거래 ID와 카드가 필요합니다.": "cardApiBankAndCardRequired",
   "이미 지출·매입 관리에 연결된 통장 거래입니다. 카드 지출로 중복 등록할 수 없습니다.":
     "cardApiAlreadyLinkedExpense",

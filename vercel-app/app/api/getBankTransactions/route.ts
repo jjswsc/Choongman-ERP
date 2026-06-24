@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { parseMoneyAmount } from '@/lib/money-amount'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const BANK_TX_SUMMARY_SCAN_MAX_ROWS = 1_000_000
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
       id: r.id,
       transDate: String(r.trans_date || '').slice(0, 10),
       transType: String(r.trans_type || 'withdraw').toLowerCase(),
-      amount: Number(r.amount) || 0,
+      amount: parseMoneyAmount(r.amount),
       memo: String(r.memo || '').trim(),
       note: String(r.note || '').trim(),
       category: String(r.category || 'expense').toLowerCase(),

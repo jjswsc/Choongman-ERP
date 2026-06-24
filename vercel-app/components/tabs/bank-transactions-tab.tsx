@@ -23,22 +23,20 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle, CreditCard } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, OFFICE_STORES } from "@/lib/permissions"
 import {
+  approveExpenseAccrual,
   executeExpensePayment,
   getApprovedExpenseAccrualsForBankTx,
   getBankAccounts,
   getBankTransactions,
   addBankTransactionsBulk,
   registerExpenseFromBankTransaction,
-  getCardAccounts,
-  registerCardExpenseFromBankTransaction,
-  type CardAccount,
   getOpenReceivablesForBankTx,
   linkReceivableFromBankTransaction,
   type OpenReceivableForBankItem,
@@ -93,6 +91,7 @@ import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
+import { formatMoneyAmountParam, formatMoneyBaht, moneyEqual, parseMoneyAmount } from "@/lib/money-amount"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import {
   AccountingDataTable,
@@ -360,11 +359,6 @@ export function BankTransactionsTab() {
   const [registerAccountSubjectId, setRegisterAccountSubjectId] = React.useState<string>("")
   const [registerSaving, setRegisterSaving] = React.useState(false)
   const [registerActionRow, setRegisterActionRow] = React.useState<(typeof list)[0] | null>(null)
-  const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
-  const [cardLinkRow, setCardLinkRow] = React.useState<(typeof list)[0] | null>(null)
-  const [cardLinkCardId, setCardLinkCardId] = React.useState("")
-  const [cardLinkMemo, setCardLinkMemo] = React.useState("")
-  const [cardLinkSaving, setCardLinkSaving] = React.useState(false)
   const [approvedPickRow, setApprovedPickRow] = React.useState<(typeof list)[0] | null>(null)
   const [approvedPickList, setApprovedPickList] = React.useState<ExpenseAccrualPlanItem[]>([])
   const [approvedPickId, setApprovedPickId] = React.useState<string>("")
@@ -1035,50 +1029,6 @@ export function BankTransactionsTab() {
   React.useEffect(() => {
     reloadAccountSubjectOptions()
   }, [reloadAccountSubjectOptions])
-
-  React.useEffect(() => {
-    getCardAccounts()
-      .then((rows) => setCardAccounts(rows || []))
-      .catch(() => setCardAccounts([]))
-  }, [])
-
-  const openCardExpenseLink = React.useCallback((row: (typeof list)[0]) => {
-    setCardLinkRow(row)
-    setCardLinkMemo((row.memo || "").trim())
-    setCardLinkCardId(cardAccounts[0]?.id ? String(cardAccounts[0].id) : "")
-  }, [cardAccounts])
-
-  const handleCardExpenseLink = React.useCallback(async () => {
-    if (!cardLinkRow?.id) return
-    const cardId = Number(cardLinkCardId || 0)
-    if (!cardId) {
-      await appAlert(tt("cardManagementSelectCard", "카드를 선택해 주세요."))
-      return
-    }
-    setCardLinkSaving(true)
-    try {
-      const res = await registerCardExpenseFromBankTransaction({
-        bankTransactionId: cardLinkRow.id,
-        cardAccountId: cardId,
-        memo: cardLinkMemo.trim() || undefined,
-        userName: auth?.user,
-        userRole: auth?.role,
-      })
-      if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-        return
-      }
-      setCardLinkRow(null)
-      await reloadBankTransactionsFresh()
-      if (res.id) {
-        router.push(`/admin/expense-management?tab=card&allocateId=${res.id}`)
-      } else {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
-      }
-    } finally {
-      setCardLinkSaving(false)
-    }
-  }, [auth?.role, auth?.user, cardLinkCardId, cardLinkMemo, cardLinkRow, reloadBankTransactionsFresh, router, t, tt])
 
   React.useEffect(() => {
     const onVis = () => {
@@ -2576,7 +2526,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
                                       const q = new URLSearchParams({ tab: "expenseRegister", updateExisting: "1" })
                                       if (r.id) q.set("bankTransactionId", String(r.id))
-                                      if (amt > 0) q.set("amount", String(amt))
+                                      if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
                                       if (bankMemo) q.set("bankMemo", bankMemo)
                                       if (bankNote) q.set("bankNote", bankNote)
                                       if (r.transDate) q.set("transDate", r.transDate)
@@ -2628,13 +2578,27 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className={`${ADMIN_BTN_XS_CN} gap-0.5`}
-                                      onClick={() => openCardExpenseLink(r)}
-                                      disabled={cardAccounts.length === 0}
-                                      title={tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}
+                                      className={ADMIN_BTN_XS_CN}
+                                      onClick={() => {
+                                        const amt = Math.abs(r.amount ?? 0)
+                                        const bankMemo = (r.memo || "").trim().slice(0, 500)
+                                        const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
+                                        const q = new URLSearchParams({ tab: "expenseRegister", category: "transfer" })
+                                        q.set("bankTransactionId", String(r.id))
+                                        if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
+                                        if (bankMemo) q.set("bankMemo", bankMemo)
+                                        if (bankNote) q.set("bankNote", bankNote)
+                                        if (r.transDate) q.set("transDate", r.transDate)
+                                        if (accountId) q.set("accountId", accountId)
+                                        if (selectedAccountStore) q.set("storeName", selectedAccountStore)
+                                        q.set("startStr", startStr)
+                                        q.set("endStr", endStr)
+                                        q.set("returnTab", "query")
+                                        q.set("openRegisterTxId", String(r.id))
+                                        router.push(`/admin/expense-management?${q.toString()}`)
+                                      }}
                                     >
-                                      <CreditCard className="h-3 w-3 shrink-0" />
-                                      {tt("bankRegisterCardExpense", "카드 지출")}
+                                      {t("bankRegisterLink") || "지출 등록"}
                                     </Button>
                                   )
                                 ) : r.transType === "deposit" && cat === "receivable_receive" && r.id ? (
@@ -3774,7 +3738,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
                 const q = new URLSearchParams({ tab: "expenseRegister" })
                 if (r.id) q.set("bankTransactionId", String(r.id))
-                if (amt > 0) q.set("amount", String(amt))
+                if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
                 if (bankMemo) q.set("bankMemo", bankMemo)
                 if (bankNote) q.set("bankNote", bankNote)
                 if (r.transDate) q.set("transDate", r.transDate)
@@ -3810,18 +3774,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             <DialogTitle>{tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground mb-2">
-            {approvedPickRow ? `${approvedPickRow.transDate} · ฿${Math.abs(approvedPickRow.amount || 0).toLocaleString()}` : ""}
+            {approvedPickRow ? `${approvedPickRow.transDate} · ฿${formatMoneyBaht(Math.abs(approvedPickRow.amount || 0))}` : ""}
           </p>
           {approvedPickLoading ? (
             <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
           ) : approvedPickList.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">
-              {t("payableEmpty") || "해당 일자 승인 지급예정이 없습니다."}
+              {t("payableEmpty") || "해당 일자·매장 지급예정이 없습니다. 지출 등록 탭에서 먼저 등록해 주세요."}
             </p>
           ) : (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                {(t("date") || "날짜")}: {approvedPickRow?.transDate || "-"} / {(t("amount") || "금액")}: ฿{Math.abs(Number(approvedPickRow?.amount || 0)).toLocaleString()}
+                {(t("date") || "날짜")}: {approvedPickRow?.transDate || "-"} / {(t("amount") || "금액")}: ฿{formatMoneyBaht(Math.abs(parseMoneyAmount(approvedPickRow?.amount || 0)))}
               </p>
               <Select value={approvedPickId || "__none__"} onValueChange={(v) => setApprovedPickId(v === "__none__" ? "" : v)}>
                 <SelectTrigger className="w-full">
@@ -3838,9 +3802,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           : p.payeeMemoMatchQuality === "ok"
                             ? "✓"
                             : "·"
+                    const statusTag =
+                      p.status === "planned"
+                        ? tt("expensePlanStatusPlanned", "대기")
+                        : p.status === "partial"
+                          ? tt("expensePlanStatusPartial", "부분")
+                          : ""
+                    const amountHint = p.amountMatch === false ? " ≠" : ""
                     return (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {tag} {(p.dueDate || p.expenseDate || "-")} · {p.payeeName} ({p.payeeCode || "-"}) / ฿{(p.remainingAmount || 0).toLocaleString()}
+                      {tag}{statusTag ? ` [${statusTag}]` : ""} {(p.dueDate || p.expenseDate || "-")} · {p.payeeName} ({p.payeeCode || "-"}) / ฿{formatMoneyBaht(p.remainingAmount || 0)}{amountHint}
                     </SelectItem>
                     )
                   })}
@@ -3872,12 +3843,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               {(() => {
                 const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
                 if (!selected || !approvedPickRow) return null
-                const bankAmt = Math.abs(Number(approvedPickRow.amount || 0))
-                const remain = Math.abs(Number(selected.remainingAmount || 0))
-                if (Math.abs(bankAmt - remain) <= 0.01) return null
+                const bankAmt = parseMoneyAmount(approvedPickRow.amount || 0)
+                const remain = parseMoneyAmount(selected?.remainingAmount || 0)
+                if (moneyEqual(bankAmt, remain)) return null
                 return (
                   <p className="text-xs text-destructive">
-                    통장 금액과 선택한 지급예정 잔액이 다릅니다. (통장 ฿{bankAmt.toLocaleString()} / 잔액 ฿{remain.toLocaleString()})
+                    통장 금액과 선택한 지급예정 잔액이 다릅니다. (통장 ฿{formatMoneyBaht(bankAmt)} / 잔액 ฿{formatMoneyBaht(remain)})
                   </p>
                 )
               })()}
@@ -3889,14 +3860,26 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   onClick={async () => {
                     if (!approvedPickRow?.id || !approvedPickId) return
                     const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                    const bankAmt = Math.abs(Number(approvedPickRow.amount || 0))
-                    const remain = Math.abs(Number(selected?.remainingAmount || 0))
-                    if (!selected || Math.abs(bankAmt - remain) > 0.01) {
+                    const bankAmt = parseMoneyAmount(approvedPickRow.amount || 0)
+                    const remain = parseMoneyAmount(selected?.remainingAmount || 0)
+                    if (!selected || !moneyEqual(bankAmt, remain)) {
                       await appAlert(tt("bankPlanAmountMismatch", "통장 금액과 선택한 지급예정 잔액이 일치해야 합니다."))
                       return
                     }
                     setApprovedPickSaving(true)
                     try {
+                      if (selected.status === "planned") {
+                        const approveRes = await approveExpenseAccrual({
+                          expenseAccrualId: Number(approvedPickId),
+                          action: "approve",
+                          userName: auth?.user,
+                          userRole: auth?.role,
+                        })
+                        if (!approveRes.success) {
+                          await appAlert(translateApiMessage(approveRes.message, t) || approveRes.message || t("processFail"))
+                          return
+                        }
+                      }
                       const basePayload = {
                         expenseAccrualId: Number(approvedPickId),
                         paymentMethod: "bank" as const,
@@ -3924,9 +3907,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   }}
                   disabled={!approvedPickId || approvedPickSaving || (() => {
                     const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                    const bankAmt = Math.abs(Number(approvedPickRow?.amount || 0))
-                    const remain = Math.abs(Number(selected?.remainingAmount || 0))
-                    if (!selected || Math.abs(bankAmt - remain) > 0.01) return true
+                    const bankAmt = parseMoneyAmount(approvedPickRow?.amount || 0)
+                    const remain = parseMoneyAmount(selected?.remainingAmount || 0)
+                    if (!selected || !moneyEqual(bankAmt, remain)) return true
                     return false
                   })()}
                 >
@@ -4190,51 +4173,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               {registerSaving ? "..." : (t("btnSave") || "저장")}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!cardLinkRow} onOpenChange={(open) => { if (!open) setCardLinkRow(null) }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{tt("cardManagementBankLinkDialogTitle", "통장 출금 → 카드 지출 등록")}</DialogTitle>
-            <DialogDescription>{tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}</DialogDescription>
-          </DialogHeader>
-          {cardLinkRow ? (
-            <div className="space-y-3 pt-2">
-              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{tt("date", "Date")}</span>
-                  <span>{cardLinkRow.transDate}</span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{tt("pettyColAmount", "Amount")}</span>
-                  <span className="font-semibold tabular-nums">฿{Math.abs(cardLinkRow.amount || 0).toLocaleString()}</span>
-                </div>
-                {cardLinkRow.memo ? (
-                  <div className="text-xs text-muted-foreground pt-1 border-t">{cardLinkRow.memo}</div>
-                ) : null}
-              </div>
-              <div>
-                <label className="text-sm font-medium">{tt("cardManagementSelectCard", "Card")}</label>
-                <Select value={cardLinkCardId} onValueChange={setCardLinkCardId}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cardAccounts.map((a) => (
-                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">{tt("memo", "Memo")}</label>
-                <Input value={cardLinkMemo} onChange={(e) => setCardLinkMemo(e.target.value)} className="mt-1" />
-              </div>
-              <Button onClick={() => void handleCardExpenseLink()} disabled={cardLinkSaving || !cardLinkCardId} className="w-full">
-                {cardLinkSaving ? "..." : tt("bankRegisterCardExpense", "카드 지출")}
-              </Button>
-            </div>
-          ) : null}
         </DialogContent>
       </Dialog>
       {(() => {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { mapComplaintLogRowToDto, type ComplaintLogDbRow } from '@/lib/complaint-log-server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 /** 컴플레인 일지 목록 조회 */
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
   const visitPath = searchParams.get('visitPath')?.trim() || ''
   const typeFilter = searchParams.get('typeFilter')?.trim() || ''
   const statusFilter = searchParams.get('statusFilter')?.trim() || ''
+  const sourceChannel = searchParams.get('sourceChannel')?.trim() || ''
 
   const filters: string[] = []
   if (startStr) filters.push(`log_date=gte.${startStr}`)
@@ -18,6 +20,11 @@ export async function GET(request: NextRequest) {
   if (visitPath) filters.push(`visit_path=eq.${encodeURIComponent(visitPath)}`)
   if (typeFilter) filters.push(`complaint_type=eq.${encodeURIComponent(typeFilter)}`)
   if (statusFilter) filters.push(`status=eq.${encodeURIComponent(statusFilter)}`)
+  if (sourceChannel === '__empty__') {
+    filters.push('source_channel=eq.')
+  } else if (sourceChannel) {
+    filters.push(`source_channel=eq.${encodeURIComponent(sourceChannel)}`)
+  }
 
   const filterStr = filters.length ? filters.join('&') : 'id=gt.0'
 
@@ -25,54 +32,9 @@ export async function GET(request: NextRequest) {
     const list = (await supabaseSelectFilter('complaint_logs', filterStr, {
       order: 'log_date.desc,id.desc',
       limit: 2000,
-    })) as {
-      id?: number
-      number?: string
-      log_date?: string
-      log_time?: string
-      store_name?: string
-      writer?: string
-      customer?: string
-      contact?: string
-      visit_path?: string
-      platform?: string
-      complaint_type?: string
-      menu?: string
-      title?: string
-      content?: string
-      severity?: string
-      action?: string
-      status?: string
-      handler?: string
-      done_date?: string
-      photo_url?: string
-      remark?: string
-    }[]
+    })) as ComplaintLogDbRow[]
 
-    const result = (list || []).map((d) => ({
-      row: d.id,
-      id: d.id,
-      number: String(d.number || ''),
-      date: d.log_date ? String(d.log_date).slice(0, 10) : '',
-      time: String(d.log_time || ''),
-      store: String(d.store_name || ''),
-      writer: String(d.writer || ''),
-      customer: String(d.customer || ''),
-      contact: String(d.contact || ''),
-      visitPath: String(d.visit_path || ''),
-      platform: String(d.platform || ''),
-      type: String(d.complaint_type || ''),
-      menu: String(d.menu || ''),
-      title: String(d.title || ''),
-      content: String(d.content || ''),
-      severity: String(d.severity || ''),
-      action: String(d.action || ''),
-      status: String(d.status || ''),
-      handler: String(d.handler || ''),
-      doneDate: d.done_date ? String(d.done_date).slice(0, 10) : '',
-      photoUrl: String(d.photo_url || ''),
-      remark: String(d.remark || ''),
-    }))
+    const result = (list || []).map((d) => mapComplaintLogRowToDto(d))
 
     result.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))
     return NextResponse.json(result)

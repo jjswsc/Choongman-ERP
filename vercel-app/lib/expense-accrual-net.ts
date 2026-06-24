@@ -2,5 +2,5 @@
 export function expenseAccrualNetPayable(grossAmount: number, withholdingTaxAmount: number): number {
   const g = Math.abs(Number(grossAmount) || 0)
   const w = Math.max(0, Math.abs(Number(withholdingTaxAmount) || 0))
-  return Math.max(0, g - w)
+  return Math.max(0, Math.round((g - w) * 100) / 100)
 }

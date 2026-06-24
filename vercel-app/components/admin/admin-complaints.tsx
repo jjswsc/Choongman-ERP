@@ -4,6 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -126,9 +127,12 @@ export function AdminComplaints() {
   const [listVisitPath, setListVisitPath] = useState("__all__")
   const [listType, setListType] = useState("__all__")
   const [listStatus, setListStatus] = useState("__all__")
+  const [listSourceChannel, setListSourceChannel] = useState("__all__")
   const [listData, setListData] = useState<ComplaintLogItem[]>([])
   const [listLoading, setListLoading] = useState(false)
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
+  const [viewMemberId, setViewMemberId] = useState<number | null>(null)
+  const [viewSourceChannel, setViewSourceChannel] = useState("")
   const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const writerName = auth?.user || auth?.store || ""
@@ -199,6 +203,14 @@ export function AdminComplaints() {
         visitPath: listVisitPath && listVisitPath !== "__all__" ? listVisitPath : undefined,
         typeFilter: listType && listType !== "__all__" ? listType : undefined,
         statusFilter: listStatus && listStatus !== "__all__" ? listStatus : undefined,
+        sourceChannel:
+          listSourceChannel === "member_portal"
+            ? "member_portal"
+            : listSourceChannel === "admin"
+              ? "admin"
+              : listSourceChannel === "staff_manual"
+                ? "__empty__"
+                : undefined,
       })
       setListData(list || [])
     } catch {
@@ -206,7 +218,7 @@ export function AdminComplaints() {
     } finally {
       setListLoading(false)
     }
-  }, [listStart, listEnd, listStore, listVisitPath, listType, listStatus])
+  }, [listStart, listEnd, listStore, listVisitPath, listType, listStatus, listSourceChannel])
 
   useEffect(() => {
     if (tab === "list" || tab === "dash" || tab === "process") void loadList()
@@ -265,12 +277,16 @@ export function AdminComplaints() {
 
   const resetForm = useCallback(() => {
     setEditId("")
+    setViewMemberId(null)
+    setViewSourceChannel("")
     setForm(emptyForm())
     setForm((f) => ({ ...f, writer: writerName }))
   }, [writerName])
 
   const openDetail = useCallback((item: ComplaintLogItem) => {
     const id = String(item.row ?? item.id ?? "")
+    setViewMemberId(item.memberId != null ? Number(item.memberId) : null)
+    setViewSourceChannel(String(item.sourceChannel || ""))
     setForm({
       date: item.date || "",
       time: item.time || "",
@@ -458,6 +474,18 @@ export function AdminComplaints() {
           <TabsContent value="input" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6 space-y-4">
+                {editId && (viewSourceChannel === "member_portal" || viewMemberId) ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+                    {viewSourceChannel === "member_portal" ? (
+                      <Badge variant="secondary">{t("complaint_source_member_portal")}</Badge>
+                    ) : null}
+                    {viewMemberId ? (
+                      <Link href={`/admin/members?memberId=${viewMemberId}`} className="font-medium text-primary underline-offset-2 hover:underline">
+                        {t("complaint_member_link")} #{viewMemberId}
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
                   <div>
                     <label className="text-xs font-semibold block mb-1">{t("label_date")}</label>
@@ -711,6 +739,17 @@ export function AdminComplaints() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <Select value={listSourceChannel || "__all__"} onValueChange={setListSourceChannel}>
+                    <SelectTrigger className="h-9 w-[110px] text-xs">
+                      <SelectValue placeholder={t("complaint_source_channel")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      <SelectItem value="member_portal">{t("complaint_source_member_portal")}</SelectItem>
+                      <SelectItem value="admin">{t("complaint_source_admin")}</SelectItem>
+                      <SelectItem value="staff_manual">{t("complaint_source_staff")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button className="h-9 font-medium" onClick={loadList} disabled={listLoading}>
                     <Search className="mr-1.5 h-3.5 w-3.5" />
                     {listLoading ? t("loading") : t("search")}
@@ -724,6 +763,7 @@ export function AdminComplaints() {
                         <th className="p-2 text-center font-medium">{t("label_date")}</th>
                         <th className="p-2 text-center font-medium">{t("store")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_col_customer")}</th>
+                        <th className="p-2 text-center font-medium">{t("complaint_source_channel")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_col_visit")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_type")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_title")}</th>
@@ -736,11 +776,11 @@ export function AdminComplaints() {
                     <tbody>
                       {listLoading ? (
                         <tr>
-                          <td colSpan={10} className="p-6 text-center text-muted-foreground">{t("loading")}</td>
+                          <td colSpan={11} className="p-6 text-center text-muted-foreground">{t("loading")}</td>
                         </tr>
                       ) : listData.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="p-6 text-center text-muted-foreground">{t("complaint_query_please")}</td>
+                          <td colSpan={11} className="p-6 text-center text-muted-foreground">{t("complaint_query_please")}</td>
                         </tr>
                       ) : (
                         listData.map((item, i) => (
@@ -748,6 +788,15 @@ export function AdminComplaints() {
                             <td className="p-2 text-center">{item.date}</td>
                             <td className="p-2 text-center">{item.store}</td>
                             <td className="p-2 text-center">{getTrans(item.customer || "") || "-"}</td>
+                            <td className="p-2 text-center">
+                              {item.sourceChannel === "member_portal" ? (
+                                <Badge variant="secondary" className="text-[10px]">{t("complaint_source_member_portal")}</Badge>
+                              ) : item.sourceChannel === "admin" ? (
+                                <Badge variant="outline" className="text-[10px]">{t("complaint_source_admin")}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </td>
                             <td className="p-2 text-center">{tr(item.visitPath, visitPathToKey)}</td>
                             <td className="p-2 text-center">{tr(item.type, typeToKey)}</td>
                             <td className="p-2 text-left max-w-[160px] truncate" title={getTrans(item.title || "") || item.title}>{getTrans(item.title || "") || "-"}</td>

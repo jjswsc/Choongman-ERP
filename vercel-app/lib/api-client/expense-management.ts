@@ -3,6 +3,7 @@
  */
 import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
+import { formatMoneyAmountParam } from '../money-amount'
 import { jsonAsArray, jsonObjectWithList } from '../safe-api-json'
 
 export type PayeeMemoMatchQuality = 'ok' | 'uncertain' | 'mismatch' | 'trivial'
@@ -30,7 +31,7 @@ export interface ExpenseAccrualPlanItem {
   dueDate?: string
   memo?: string
   accountSubjectId?: number | null
-  status: 'planned' | 'approved' | 'paid' | 'rejected'
+  status: 'planned' | 'approved' | 'partial' | 'paid' | 'rejected'
   approvedBy?: string | null
   approvedAt?: string | null
   approvalNote?: string | null
@@ -41,6 +42,8 @@ export interface ExpenseAccrualPlanItem {
   /** getApprovedExpenseAccrualsForBankTx: 통장 적요 vs 지급처(느슨) */
   payeeMemoMatchQuality?: PayeeMemoMatchQuality
   payeeMemoMatchDetail?: string
+  /** getApprovedExpenseAccrualsForBankTx: 통장 금액과 잔액 일치 여부(정렬용) */
+  amountMatch?: boolean
 }
 
 export interface LogisticsPaymentPlanItem {
@@ -514,6 +517,37 @@ export async function registerCardExpenseFromBankTransaction(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function markBankTransactionForCardBill(params: {
+  bankTransactionId: number
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/markBankTransactionForCardBill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getBankWithdrawalsForCardBillQueueMark(params: {
+  accountId: number
+  startStr: string
+  endStr: string
+  amount?: number
+  transDate?: string
+}) {
+  const q = new URLSearchParams({
+    accountId: String(params.accountId),
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.amount != null && params.amount > 0) q.set('amount', formatMoneyAmountParam(params.amount))
+  if (params.transDate) q.set('transDate', params.transDate)
+  const res = await apiFetchWithOffline(`/api/getBankWithdrawalsForCardBillQueueMark?${q}`)
+  return jsonObjectWithList<UnlinkedBankWithdrawalForCard>(await res.json())
 }
 
 export type WithdrawalCategoryMain =

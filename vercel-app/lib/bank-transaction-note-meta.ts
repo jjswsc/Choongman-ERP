@@ -47,3 +47,16 @@ export function composeBankNoteWithCategoryAndOptionalAccrualPrefix(
   const body = mergeWithdrawalCategoryIntoBankNote(userDesc, category)
   return prefix ? `${prefix}${body}` : body
 }
+
+/** 지출등록(이체) → 통장 카드대금 연동 대기열 표시용 */
+export const CARD_BILL_QUEUE_MARKER = 'card_bill_queue'
+
+export function hasCardBillQueueMarker(note: string): boolean {
+  return new RegExp(`\\b${CARD_BILL_QUEUE_MARKER}\\b`, 'i').test(String(note || ''))
+}
+
+export function mergeCardBillQueueIntoBankNote(existingNote: string): string {
+  if (hasCardBillQueueMarker(existingNote)) return String(existingNote || '').trim()
+  const base = String(existingNote || '').trim()
+  return base ? `${base} | ${CARD_BILL_QUEUE_MARKER}` : CARD_BILL_QUEUE_MARKER
+}

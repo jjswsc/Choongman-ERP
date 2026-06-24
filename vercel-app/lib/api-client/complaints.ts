@@ -27,6 +27,9 @@ export interface ComplaintLogItem {
   doneDate: string
   photoUrl: string
   remark: string
+  memberId?: number | null
+  sourceChannel?: string
+  createdAt?: string
 }
 
 export async function getComplaintLogList(params: {
@@ -36,6 +39,7 @@ export async function getComplaintLogList(params: {
   visitPath?: string
   typeFilter?: string
   statusFilter?: string
+  sourceChannel?: string
 }) {
   const q = new URLSearchParams()
   if (params.startStr) q.set('startStr', params.startStr)
@@ -44,6 +48,7 @@ export async function getComplaintLogList(params: {
   if (params.visitPath) q.set('visitPath', params.visitPath)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.statusFilter) q.set('statusFilter', params.statusFilter)
+  if (params.sourceChannel) q.set('sourceChannel', params.sourceChannel)
   const res = await apiFetchWithOffline(`/api/getComplaintLogList?${q}`)
   return jsonAsArray<ComplaintLogItem>(await res.json())
 }

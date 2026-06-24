@@ -23,6 +23,57 @@ export type MemberPortalKey =
   | 'contactViaInstagram'
   | 'contactViaLineOfficial'
   | 'contactMenuClose'
+  | 'contactViaInAppComplaint'
+  | 'complaintSectionTitle'
+  | 'complaintSectionSub'
+  | 'complaintSubmitTitle'
+  | 'complaintMyListTitle'
+  | 'complaintMyListEmpty'
+  | 'complaintListLoading'
+  | 'complaintVisitPath'
+  | 'complaintPathHall'
+  | 'complaintPathDelivery'
+  | 'complaintPathTakeout'
+  | 'complaintType'
+  | 'complaintTypeFood'
+  | 'complaintTypeService'
+  | 'complaintTypeEnv'
+  | 'complaintTypePrice'
+  | 'complaintTypeEtc'
+  | 'complaintPlatform'
+  | 'complaintMenu'
+  | 'complaintMenuPh'
+  | 'complaintTitle'
+  | 'complaintTitlePh'
+  | 'complaintContent'
+  | 'complaintContentPh'
+  | 'complaintPhoto'
+  | 'complaintPhotoUpload'
+  | 'complaintPhotoRemove'
+  | 'complaintSubmitBtn'
+  | 'complaintSubmitting'
+  | 'complaintSubmitSuccess'
+  | 'complaintSubmitFail'
+  | 'complaintSelectStore'
+  | 'complaintRequiredHint'
+  | 'complaintActionLabel'
+  | 'complaintStatusRecv'
+  | 'complaintStatusInv'
+  | 'complaintStatusDone'
+  | 'complaintStatusHold'
+  | 'complaintStatusClosed'
+  | 'complaintErr_invalid_store'
+  | 'complaintErr_invalid_visit_path'
+  | 'complaintErr_invalid_type'
+  | 'complaintErr_invalid_platform'
+  | 'complaintErr_platform_required'
+  | 'complaintErr_title_required'
+  | 'complaintErr_content_required'
+  | 'complaintErr_text_too_long'
+  | 'complaintErr_rate_limit'
+  | 'complaintErr_upload_failed'
+  | 'complaintErr_invalid_photo'
+  | 'complaintLoginRequired'
   | 'profileContactTitle'
   | 'profileContactSub'
   | 'memberLounge'
@@ -469,6 +520,157 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Close',
     th: 'ปิด',
     ko: '닫기',
+  },
+  contactViaInAppComplaint: {
+    en: 'Submit in app',
+    th: 'ส่งผ่านแอป',
+    ko: '앱에서 접수하기',
+  },
+  complaintSectionTitle: {
+    en: 'Feedback & complaints',
+    th: 'ข้อเสนอแนะและข้อร้องเรียน',
+    ko: '불편 접수',
+  },
+  complaintSectionSub: {
+    en: 'Tell us what happened — our team will follow up.',
+    th: 'แจ้งปัญหาให้เราทราบ ทีมงานจะติดตามให้',
+    ko: '불편하셨던 내용을 알려주시면 매장에서 확인합니다.',
+  },
+  complaintSubmitTitle: {
+    en: 'New complaint',
+    th: 'แจ้งเรื่องใหม่',
+    ko: '컴플레인 접수',
+  },
+  complaintMyListTitle: {
+    en: 'My submissions',
+    th: 'รายการที่ส่งแล้ว',
+    ko: '내 접수 내역',
+  },
+  complaintMyListEmpty: {
+    en: 'No submissions yet',
+    th: 'ยังไม่มีรายการ',
+    ko: '접수 내역이 없습니다',
+  },
+  complaintListLoading: {
+    en: 'Loading…',
+    th: 'กำลังโหลด…',
+    ko: '불러오는 중…',
+  },
+  complaintVisitPath: {
+    en: 'Visit type',
+    th: 'ประเภทการใช้บริการ',
+    ko: '방문 경로',
+  },
+  complaintPathHall: { en: 'Dine-in', th: 'ทานที่ร้าน', ko: '홀' },
+  complaintPathDelivery: { en: 'Delivery', th: 'เดลิเวอรี่', ko: '배달' },
+  complaintPathTakeout: { en: 'Takeout', th: 'สั่งกลับบ้าน', ko: '포장' },
+  complaintType: { en: 'Category', th: 'ประเภท', ko: '유형' },
+  complaintTypeFood: { en: 'Food', th: 'อาหาร', ko: '음식' },
+  complaintTypeService: { en: 'Service', th: 'บริการ', ko: '서비스' },
+  complaintTypeEnv: { en: 'Cleanliness', th: 'ความสะอาด', ko: '환경/청결' },
+  complaintTypePrice: { en: 'Price / payment', th: 'ราคา/การชำระ', ko: '가격/결제' },
+  complaintTypeEtc: { en: 'Other', th: 'อื่นๆ', ko: '기타' },
+  complaintPlatform: { en: 'Delivery platform', th: 'แพลตฟอร์มเดลิเวอรี่', ko: '배달 플랫폼' },
+  complaintMenu: { en: 'Menu (optional)', th: 'เมนู (ถ้ามี)', ko: '관련 메뉴 (선택)' },
+  complaintMenuPh: { en: 'Menu name', th: 'ชื่อเมนู', ko: '메뉴명' },
+  complaintTitle: { en: 'Subject', th: 'หัวข้อ', ko: '제목' },
+  complaintTitlePh: { en: 'Short summary', th: 'สรุปสั้นๆ', ko: '한 줄 요약' },
+  complaintContent: { en: 'Details', th: 'รายละเอียด', ko: '내용' },
+  complaintContentPh: {
+    en: 'What happened? Include date/time if you remember.',
+    th: 'เกิดอะไรขึ้น? ระบุวันเวลาถ้าจำได้',
+    ko: '상세 내용을 입력해 주세요.',
+  },
+  complaintPhoto: { en: 'Photo (optional)', th: 'รูปภาพ (ถ้ามี)', ko: '사진 (선택)' },
+  complaintPhotoUpload: { en: 'Add photo', th: 'เพิ่มรูป', ko: '사진 첨부' },
+  complaintPhotoRemove: { en: 'Remove', th: 'ลบ', ko: '삭제' },
+  complaintSubmitBtn: { en: 'Submit', th: 'ส่ง', ko: '접수하기' },
+  complaintSubmitting: { en: 'Submitting…', th: 'กำลังส่ง…', ko: '접수 중…' },
+  complaintSubmitSuccess: {
+    en: 'Submitted. Reference: {number}',
+    th: 'ส่งแล้ว หมายเลข: {number}',
+    ko: '접수되었습니다. 접수번호: {number}',
+  },
+  complaintSubmitFail: {
+    en: 'Could not submit. Please try again.',
+    th: 'ส่งไม่สำเร็จ ลองอีกครั้ง',
+    ko: '접수에 실패했습니다. 다시 시도해 주세요.',
+  },
+  complaintSelectStore: {
+    en: 'Select a store',
+    th: 'เลือกสาขา',
+    ko: '매장을 선택하세요',
+  },
+  complaintRequiredHint: {
+    en: 'Please fill in required fields.',
+    th: 'กรอกข้อมูลที่จำเป็น',
+    ko: '필수 항목을 입력해 주세요.',
+  },
+  complaintActionLabel: { en: 'Resolution', th: 'การดำเนินการ', ko: '조치' },
+  complaintStatusRecv: { en: 'Received', th: 'รับเรื่อง', ko: '접수' },
+  complaintStatusInv: { en: 'Investigating', th: 'กำลังตรวจสอบ', ko: '조사중' },
+  complaintStatusDone: { en: 'Resolved', th: 'ดำเนินการแล้ว', ko: '처리완료' },
+  complaintStatusHold: { en: 'On hold', th: 'รอดำเนินการ', ko: '보류' },
+  complaintStatusClosed: { en: 'Closed', th: 'ปิดเรื่อง', ko: '종료' },
+  complaintErr_invalid_store: {
+    en: 'Please select a valid store.',
+    th: 'เลือกสาขาที่ถูกต้อง',
+    ko: '올바른 매장을 선택해 주세요.',
+  },
+  complaintErr_invalid_visit_path: {
+    en: 'Invalid visit type.',
+    th: 'ประเภทการใช้บริการไม่ถูกต้อง',
+    ko: '방문 경로가 올바르지 않습니다.',
+  },
+  complaintErr_invalid_type: {
+    en: 'Invalid category.',
+    th: 'ประเภทไม่ถูกต้อง',
+    ko: '유형이 올바르지 않습니다.',
+  },
+  complaintErr_invalid_platform: {
+    en: 'Invalid delivery platform.',
+    th: 'แพลตฟอร์มไม่ถูกต้อง',
+    ko: '배달 플랫폼이 올바르지 않습니다.',
+  },
+  complaintErr_platform_required: {
+    en: 'Select a delivery platform.',
+    th: 'เลือกแพลตฟอร์มเดลิเวอรี่',
+    ko: '배달 플랫폼을 선택해 주세요.',
+  },
+  complaintErr_title_required: {
+    en: 'Subject is required.',
+    th: 'กรอกหัวข้อ',
+    ko: '제목을 입력해 주세요.',
+  },
+  complaintErr_content_required: {
+    en: 'Details are required.',
+    th: 'กรอกรายละเอียด',
+    ko: '내용을 입력해 주세요.',
+  },
+  complaintErr_text_too_long: {
+    en: 'Text is too long.',
+    th: 'ข้อความยาวเกินไป',
+    ko: '입력 글자 수가 너무 많습니다.',
+  },
+  complaintErr_rate_limit: {
+    en: 'Daily submission limit reached. Try again tomorrow.',
+    th: 'ส่งครบจำนวนต่อวันแล้ว ลองใหม่พรุ่งนี้',
+    ko: '오늘 접수 가능 횟수를 초과했습니다. 내일 다시 시도해 주세요.',
+  },
+  complaintErr_upload_failed: {
+    en: 'Photo upload failed.',
+    th: 'อัปโหลดรูปไม่สำเร็จ',
+    ko: '사진 업로드에 실패했습니다.',
+  },
+  complaintErr_invalid_photo: {
+    en: 'Invalid photo URL.',
+    th: 'URL รูปภาพไม่ถูกต้อง',
+    ko: '사진 주소가 올바르지 않습니다.',
+  },
+  complaintLoginRequired: {
+    en: 'Please log in to submit a complaint in the app.',
+    th: 'เข้าสู่ระบบก่อนเพื่อส่งเรื่องผ่านแอป',
+    ko: '앱 접수는 로그인 후 이용할 수 있습니다.',
   },
   memberLounge: { en: 'Member Lounge', th: 'Member Lounge', ko: 'Member Lounge' },
   logout: { en: 'Logout', th: 'ออกจากระบบ', ko: '로그아웃' },

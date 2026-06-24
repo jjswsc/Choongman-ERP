@@ -411,10 +411,14 @@ CREATE TABLE IF NOT EXISTS complaint_logs (
   done_date DATE,
   photo_url TEXT DEFAULT '',
   remark TEXT DEFAULT '',
+  member_id BIGINT,
+  source_channel TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_complaint_logs_date ON complaint_logs(log_date);
 CREATE INDEX IF NOT EXISTS idx_complaint_logs_store ON complaint_logs(store_name);
+CREATE INDEX IF NOT EXISTS idx_complaint_logs_member_id ON complaint_logs(member_id);
+CREATE INDEX IF NOT EXISTS idx_complaint_logs_source_channel ON complaint_logs(source_channel);
 
 -- 메뉴권한 (기존 시트 "메뉴권한") - store, name 기준 1행, 권한은 JSON
 CREATE TABLE IF NOT EXISTS menu_permissions (

@@ -91,7 +91,7 @@ export const I18N_STORE_ADMIN_KO = pack({
   helpSum_admin_complaints:
     '고객 컴플레인(클레임)을 접수·조사·처리하고, 유형·심각도별 현황을 조회하는 화면입니다.',
   helpHow_admin_complaints:
-    '①「현황」: 기간·매장별 컴플레인 건수·유형·심각도·상태 KPI를 확인합니다.\n②「입력」: 고객·방문 경로·유형·내용·사진을 등록하거나 기존 건을 수정합니다.\n③「검색」: 필터로 목록을 조회하고 상세보기로 처리 상태를 업데이트합니다.\n④「처리」: 미완료 건을 선택해 담당자·조치·상태를 빠르게 변경합니다.',
+    '①「현황」: 기간·매장별 컴플레인 건수·유형·심각도·상태 KPI를 확인합니다.\n②「입력」: 고객·방문 경로·유형·내용·사진을 등록하거나 기존 건을 수정합니다.\n③「검색」: 필터로 목록을 조회하고 상세보기로 처리 상태를 업데이트합니다. 회원앱 접수 건은 유입=회원앱으로 표시됩니다.\n④「처리」: 미완료 건을 선택해 담당자·조치·상태를 빠르게 변경합니다.',
   storeSubnavAria: '매장 관리 하위 메뉴',
   adminStoreOps: '매장 운영',
   store_ops_page_sub: '점검·방문·A/S·컴플레인 KPI 허브',
@@ -162,7 +162,7 @@ export const I18N_STORE_ADMIN_EN = pack({
   helpSum_admin_complaints:
     'Customer complaint intake, investigation, resolution, and KPI dashboard.',
   helpHow_admin_complaints:
-    '① Dashboard: counts by type, severity, and status.\n② Input: register or edit complaints with photos.\n③ List: filter and open details.\n④ Process: quick status and action updates for open items.',
+    '① Dashboard: counts by type, severity, and status.\n② Input: register or edit complaints with photos.\n③ List: filter and open details. Member-app submissions show Source = Member app.\n④ Process: quick status and action updates for open items.',
   storeSubnavAria: 'Store management sub-navigation',
   adminStoreOps: 'Store Operations',
   store_ops_page_sub: 'Checks · visits · repairs · complaints hub',
@@ -233,7 +233,7 @@ export const I18N_STORE_ADMIN_TH = pack({
   helpSum_admin_complaints:
     'รับเรื่อง สอบสวน และแก้ไขคำร้องของลูกค้า พร้อม KPI ตามประเภทและความรุนแรง',
   helpHow_admin_complaints:
-    '① ภาพรวม: KPI ตามประเภท ความรุนแรง และสถานะ\n② กรอก: ลงทะเบียนหรือแก้ไขคำร้องพร้อมรูป\n③ ค้นหา: กรองรายการและเปิดรายละเอียด\n④ ดำเนินการ: อัปเดตสถานะและมาตรการอย่างรวดเร็ว',
+    '① ภาพรวม: KPI ตามประเภท ความรุนแรง และสถานะ\n② กรอก: ลงทะเบียนหรือแก้ไขคำร้องพร้อมรูป\n③ ค้นหา: กรองรายการและเปิดรายละเอียด คำร้องจากแอปสมาชิกจะแสดงแหล่งที่มา=แอปสมาชิก\n④ ดำเนินการ: อัปเดตสถานะและมาตรการอย่างรวดเร็ว',
   storeSubnavAria: 'เมนูย่อยการจัดการร้าน',
   adminStoreOps: 'การดำเนินงานร้าน',
   store_ops_page_sub: 'ศูนย์ KPI ตรวจ · เยี่ยม · ซ่อม · คำร้อง',
@@ -299,7 +299,7 @@ export const I18N_STORE_ADMIN_MM = mergeStoreAdmin(I18N_STORE_ADMIN_EN, {
     '① ခြုံငုံသားချက်: KPI နှင့် chart\n② စာရင်း: ticket ရှာပါ — 3+ ရက် နောက်ကျ ticket များကို သတိပေးပါ\n③ လုပ်ဆောင်ရန်: status၊ handler၊ မှတ်ချက်၊ ဓာတ်ပုံ update',
   helpSum_admin_complaints: 'ဖောက်သည် complaint လက်ခံခြင်း၊ စုံစမ်းခြင်း၊ ဖြေရှင်းခြင်း',
   helpHow_admin_complaints:
-    '① ခြုံငုံသားချက်: အမျိုးအစား·ပြင်းထန်·status KPI\n② ထည့်သွင်းရန်: complaint မှတ်တမ်း/ဓာတ်ပုံ\n③ ရှာရန်: filter နှင့် detail\n④ လုပ်ဆောင်ရန်: status update',
+    '① ခြုံငုံသားချက်: အမျိုးအစား·ပြင်းထန်·status KPI\n② ထည့်သွင်းရန်: complaint မှတ်တမ်း/ဓာတ်ပုံ\n③ ရှာရန်: filter နှင့် detail — Member app တင်သွင်းမှုများတွင် Source = Member app\n④ လုပ်ဆောင်ရန်: status update',
   storeSubnavAria: 'ဆိုင်စီမံခန့်ခွဲမှု sub-menu',
   adminStoreOps: 'ဆိုင်လုပ်ငန်းစဉ်',
   store_ops_page_sub: 'စစ် · သွားရောက် · A/S · complaint KPI',
@@ -365,7 +365,7 @@ export const I18N_STORE_ADMIN_LA = mergeStoreAdmin(I18N_STORE_ADMIN_EN, {
     '① ພາບລວມ: KPI ແລະ chart\n② ລາຍການ: ຄົ້ນຫາ ticket — 3+ ວັນຈະເຕືອນ\n③ ດຳເນີນການ: ອັບເດດ status handler ໝາຍເຫດ ຮູບ',
   helpSum_admin_complaints: 'ຮັບ ແລະ ແກ້ complaint ລູກຄ້າ',
   helpHow_admin_complaints:
-    '① ພາບລວມ: KPI ຕາມປະເພດ ຄວາມຮຸນແຮງ status\n② ປ້ອນ: ລົງທະບຽນ complaint ພ້ອມຮູບ\n③ ຄົ້ນຫາ: filter ແລະ detail\n④ ດຳເນີນການ: ອັບເດດ status',
+    '① ພາບລວມ: KPI ຕາມປະເພດ ຄວາມຮຸນແຮງ status\n② ປ້ອນ: ລົງທະບຽນ complaint ພ້ອມຮູບ\n③ ຄົ້ນຫາ: filter ແລະ detail — ຄຳຮ້ອງຈາກແອັບສະມາຊິກ ສະແດງແຫຼ່ງທີ່ມາ=ແອັບສະມາຊິກ\n④ ດຳເນີນການ: ອັບເດດ status',
   storeSubnavAria: 'sub-menu ຈັດການຮ້ານ',
   adminStoreOps: 'ການດຳເນີນງານຮ້ານ',
   store_ops_page_sub: 'ກວດ · ເຂົ້າເບິ່ງ · A/S · complaint',
@@ -431,7 +431,7 @@ export const I18N_STORE_ADMIN_KH = mergeStoreAdmin(I18N_STORE_ADMIN_EN, {
     '① ផ្ទាំងរួម: KPI chart\n② បញ្ជី: ticket — 3+ ថ្ងៃព្រមាន\n③ ដំណើរការ: update status handler',
   helpSum_admin_complaints: 'ទទួល និងដោះស្រាយ complaint អតិថិជន',
   helpHow_admin_complaints:
-    '① ផ្ទាំងរួម: KPI តាមប្រភេទ ធ្ងន់ status\n② បញ្ចូល: complaint រូប\n③ ស្វែងរក: filter detail\n④ ដំណើរការ: update status',
+    '① ផ្ទាំងរួម: KPI តាមប្រភេទ ធ្ងន់ status\n② បញ្ចូល: complaint រូប\n③ ស្វែងរក: filter detail — ពាក្យបណ្តឹងពី Member app បង្ហាញ Source = Member app\n④ ដំណើរការ: update status',
   storeSubnavAria: 'sub-menu គ្រប់គ្រងហាង',
   adminStoreOps: 'ប្រតិបត្តិការហាង',
   store_ops_page_sub: 'ពិនិត្យ · ទស្សនៈ · A/S · complaint',
@@ -497,7 +497,7 @@ export const I18N_STORE_ADMIN_VI = mergeStoreAdmin(I18N_STORE_ADMIN_EN, {
     '① Tổng quan: KPI và biểu đồ\n② Danh sách: ticket — cảnh báo 3+ ngày\n③ Xử lý: cập nhật trạng thái, người phụ trách',
   helpSum_admin_complaints: 'Tiếp nhận và xử lý khiếu nại khách hàng',
   helpHow_admin_complaints:
-    '① Tổng quan: KPI theo loại, mức độ, trạng thái\n② Nhập: đăng ký khiếu nại kèm ảnh\n③ Tìm: lọc và chi tiết\n④ Xử lý: cập nhật trạng thái',
+    '① Tổng quan: KPI theo loại, mức độ, trạng thái\n② Nhập: đăng ký khiếu nại kèm ảnh\n③ Tìm: lọc và chi tiết — khiếu nại từ Member app hiển thị Nguồn = Member app\n④ Xử lý: cập nhật trạng thái',
   storeSubnavAria: 'Sub-menu quản lý cửa hàng',
   adminStoreOps: 'Vận hành cửa hàng',
   store_ops_page_sub: 'Kiểm tra · thăm · A/S · khiếu nại',
@@ -563,7 +563,7 @@ export const I18N_STORE_ADMIN_MS = mergeStoreAdmin(I18N_STORE_ADMIN_EN, {
     '① Papan pemuka: KPI dan carta\n② Senarai: tiket — amaran 3+ hari\n③ Proses: kemas kini status, pengendali',
   helpSum_admin_complaints: 'Penerimaan dan penyelesaian aduan pelanggan',
   helpHow_admin_complaints:
-    '① Papan pemuka: KPI jenis, keterukan, status\n② Input: daftar aduan dengan foto\n③ Cari: tapis dan butiran\n④ Proses: kemas kini status',
+    '① Papan pemuka: KPI jenis, keterukan, status\n② Input: daftar aduan dengan foto\n③ Cari: tapis dan butiran — aduan Member app menunjukkan Sumber = Member app\n④ Proses: kemas kini status',
   storeSubnavAria: 'Sub-menu pengurusan kedai',
   adminStoreOps: 'Operasi kedai',
   store_ops_page_sub: 'Pemeriksaan · lawatan · A/S · aduan',

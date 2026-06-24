@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildMemberCouponQrPayload,
+  expandTruncatedCouponCodeCandidates,
   isMemberCouponQrPayload,
   isMemberCouponScanPayload,
   parseLooseMemberCouponScanInput,
@@ -65,5 +66,10 @@ describe('member-coupon-qr', () => {
     })
     expect(isMemberCouponScanPayload('HBDCOUPON~504')).toBe(true)
     expect(isMemberCouponScanPayload('WELCOME10')).toBe(false)
+  })
+
+  it('expands truncated coupon codes with CM prefix', () => {
+    expect(expandTruncatedCouponCodeCandidates('HBDCOUPON')).toEqual(['HBDCOUPON', 'CMHBDCOUPON'])
+    expect(expandTruncatedCouponCodeCandidates('CMHBDCOUPON')).toEqual(['CMHBDCOUPON'])
   })
 })

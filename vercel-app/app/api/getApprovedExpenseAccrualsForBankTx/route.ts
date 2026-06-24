@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch, type PayeeMemoMatchQuality } from '@/lib/expense-accrual-bank-memo-match'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { roundMoney2 } from '@/lib/invoice-vat-total'
+import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
@@ -52,6 +55,16 @@ const MEMO_MATCH_ORDER: Record<PayeeMemoMatchQuality, number> = {
   mismatch: 3,
 }
 
+const LINKABLE_ACCRUAL_STATUSES = ['planned', 'approved', 'partial'] as const
+
+function accrualMatchesStore(rowStore: string, storeFilter: string): boolean {
+  const row = String(rowStore || '').trim()
+  const filter = String(storeFilter || '').trim()
+  if (!filter) return true
+  if (!row) return true
+  return storesMatchForGradeLookup(row, filter)
+}
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -89,14 +102,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, list: [], message: '이미 지급예정과 연결된 통장 거래입니다.' }, { headers })
     }
 
-    const bankAmount = Math.abs(Number(bankRow.amount || 0))
+    const bankAmount = parseMoneyAmount(bankRow.amount)
     const bankDate = String(bankRow.trans_date || '').slice(0, 10)
     const bankMemo = String(bankRow.memo || '')
     const bankNote = String(bankRow.note || '')
     const [accrualRows, payableRows] = await Promise.all([
-      supabaseSelectFilter('expense_accruals', 'status=eq.approved', {
+      supabaseSelectFilter('expense_accruals', 'status=in.(planned,approved,partial)', {
         select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by',
-        order: 'approved_at.asc,id.asc',
+        order: 'expense_date.asc,id.asc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
       supabaseSelectFilter('payable_transactions', 'id=gt.0', {
@@ -117,9 +130,9 @@ export async function GET(request: NextRequest) {
       .map((r) => {
         const id = Number(r.id || 0)
         const wht = Math.max(0, Math.abs(Number(r.withholding_tax_amount ?? 0) || 0))
-        const plannedAmount = expenseAccrualNetPayable(Number(r.amount || 0), wht)
+        const plannedAmount = expenseAccrualNetPayable(parseMoneyAmount(r.amount), wht)
         const paidAmount = paidByAccrual.get(id) || 0
-        const remainingAmount = Math.max(0, plannedAmount - paidAmount)
+        const remainingAmount = Math.max(0, roundMoney2(plannedAmount - paidAmount))
         const decoded = decodePayeeCode(r.payee_code)
         return {
           id,
@@ -143,17 +156,17 @@ export async function GET(request: NextRequest) {
         const d = String(r.dueDate || r.expenseDate || '').slice(0, 10)
         return d === bankDate
       })
-      .filter((r) => {
-        if (!storeFilter) return true
-        const rowStore = String(r.storeName || '').trim()
-        return rowStore.toLowerCase() === storeFilter.toLowerCase()
-      })
+      .filter((r) => LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number]))
       .filter((r) => (r.remainingAmount || 0) > 0)
-      // 통장 출금액 = 지급예정 잔액인 건만(오연결·부분집행 혼동 방지)
-      .filter((r) => Math.abs(Number(r.remainingAmount) - bankAmount) <= 0.01)
+
+    let storeScopedList = rawList
+    if (storeFilter) {
+      const matched = rawList.filter((r) => accrualMatchesStore(r.storeName, storeFilter))
+      storeScopedList = matched.length > 0 ? matched : rawList
+    }
 
     const codesForVendor = new Set(
-      rawList
+      storeScopedList
         .map((r) => String(r.payeeCode || '').trim().toLowerCase())
         .filter((c) => c && !c.startsWith('auto_'))
     )
@@ -175,7 +188,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const list = rawList
+    const list = storeScopedList
       .map((r) => {
         const c = String(r.payeeCode || '')
           .trim()
@@ -189,13 +202,20 @@ export async function GET(request: NextRequest) {
           vendorName: vn?.name,
           vendorGpsName: vn?.gps,
         })
+        const amountMatch = moneyEqual(r.remainingAmount, bankAmount)
         return {
           ...r,
           payeeMemoMatchQuality: ev.quality,
           payeeMemoMatchDetail: ev.detail,
+          amountMatch,
         }
       })
       .sort((a, b) => {
+        const amountDiff = Number(b.amountMatch ? 1 : 0) - Number(a.amountMatch ? 1 : 0)
+        if (amountDiff !== 0) return amountDiff
+        const statusOrder = (s: string) => (s === 'approved' || s === 'partial' ? 0 : 1)
+        const sd = statusOrder(String(a.status || '')) - statusOrder(String(b.status || ''))
+        if (sd !== 0) return sd
         const qd =
           (MEMO_MATCH_ORDER[a.payeeMemoMatchQuality] ?? 9) -
           (MEMO_MATCH_ORDER[b.payeeMemoMatchQuality] ?? 9)

@@ -4,6 +4,7 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
+import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
 import {
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest) {
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0)
     const paymentMethod = String(body.paymentMethod || body.payment_method || '').toLowerCase() // bank | petty
     const bankTransactionId = body.bankTransactionId ?? body.bank_transaction_id
-    const amount = Math.abs(Number(body.amount || 0))
+    const amount = parseMoneyAmount(body.amount)
     const transDate = String(body.transDate || body.trans_date || getBangkokTodayDateString()).slice(0, 10)
     const memo = String(body.memo || '').trim()
     const store = String(body.store || '').trim()
@@ -217,9 +218,9 @@ export async function POST(request: NextRequest) {
       return sum + (a < 0 ? Math.abs(a) : 0)
     }, 0)
     const wht = Math.max(0, Math.abs(Number(source.withholding_tax_amount ?? 0) || 0))
-    const plannedAmount = expenseAccrualNetPayable(Number(source.amount || 0), wht)
+    const plannedAmount = expenseAccrualNetPayable(parseMoneyAmount(source.amount), wht)
     const remaining = Math.max(0, plannedAmount - paidAmount)
-    if (Math.abs(amount - remaining) > 0.01) {
+    if (!moneyEqual(amount, remaining)) {
       return NextResponse.json(
         { success: false, message: `부분 지급은 허용되지 않습니다. 잔액과 동일 금액으로 처리해 주세요. (잔액: ${remaining.toLocaleString()})` },
         { status: 400, headers }
@@ -265,9 +266,9 @@ export async function POST(request: NextRequest) {
         if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
           return NextResponse.json({ success: false, message: '출금 거래만 연결할 수 있습니다.' }, { status: 400, headers })
         }
-        const bankAmount = Math.abs(Number(bankRow.amount || 0))
+        const bankAmount = parseMoneyAmount(bankRow.amount)
         const bankDate = String(bankRow.trans_date || '').slice(0, 10)
-        if (Math.abs(bankAmount - amount) > 0.01) {
+        if (!moneyEqual(bankAmount, amount)) {
           return NextResponse.json({ success: false, message: `금액이 일치하지 않습니다. (통장: ${bankAmount.toLocaleString()}, 지급: ${amount.toLocaleString()})` }, { status: 400, headers })
         }
         if (bankDate !== transDate) {

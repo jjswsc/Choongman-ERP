@@ -4,6 +4,7 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { parseMoneyAmount } from '@/lib/money-amount'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
@@ -111,9 +112,9 @@ export async function POST(request: NextRequest) {
     const payeeName = inputPayeeName || inputPayeeCode || autoPayeeNameByCategory(withdrawalCategory)
     const payeeCode = inputPayeeCode || `auto_${withdrawalCategory}`
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)
-    const amount = Math.abs(Number(body.amount) || 0)
-    const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
-    const withholdingTaxAmount = Math.max(0, Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0))
+    const amount = parseMoneyAmount(body.amount)
+    const vatAmount = Math.max(0, parseMoneyAmount(body.vatAmount ?? body.vat_amount ?? 0))
+    const withholdingTaxAmount = Math.max(0, parseMoneyAmount(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0))
     const netPayable = expenseAccrualNetPayable(amount, withholdingTaxAmount)
     const expenseDate = String(body.expenseDate || body.expense_date || getBangkokTodayDateString()).slice(0, 10)
     const dueDateRaw = String(body.dueDate || body.due_date || '').trim()

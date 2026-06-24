@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Wallet, Camera, ArrowLeft } from "lucide-react"
+import { Wallet, Camera, ArrowLeft, CreditCard } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
@@ -39,6 +39,9 @@ import {
   getAdminEmployeeList,
   getInboundBatchesForLink,
   saveBankTransactionInboundLinks,
+  markBankTransactionForCardBill,
+  getBankWithdrawalsForCardBillQueueMark,
+  type UnlinkedBankWithdrawalForCard,
   translateTexts,
   type AccountSubjectItem,
   type BankAccount,
@@ -48,10 +51,12 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { stripWithdrawalCategoryMetaFromNote } from "@/lib/bank-transaction-note-meta"
 import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
+import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { compressImageForUpload } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { useSearchParams, useRouter } from "next/navigation"
 import { isOfficeStore } from "@/lib/permissions"
+import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import {
   resolveExpenseFeeAmounts,
@@ -217,6 +222,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [cardFeeDialogOpen, setCardFeeDialogOpen] = React.useState(false)
   const [deliveryFeeVatMode, setDeliveryFeeVatMode] = React.useState<ExpenseFeeVatMode>("included")
   const [cardFeeVatMode, setCardFeeVatMode] = React.useState<ExpenseFeeVatMode>("included")
+  const [cardBillQueueOpen, setCardBillQueueOpen] = React.useState(false)
+  const [cardBillQueueLoading, setCardBillQueueLoading] = React.useState(false)
+  const [cardBillQueueSaving, setCardBillQueueSaving] = React.useState(false)
+  const [cardBillQueueRows, setCardBillQueueRows] = React.useState<UnlinkedBankWithdrawalForCard[]>([])
   /** 수수료 빠른 입력 시 메인 폼 금액·VAT 해석 기준 */
   const [activeFeeVatMode, setActiveFeeVatMode] = React.useState<ExpenseFeeVatMode | null>(null)
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
@@ -282,6 +291,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const searchParams = useSearchParams()
   const router = useRouter()
   const hasAppliedParams = React.useRef(false)
+  const bankLinkStorePinned = React.useRef(false)
   const bankTransactionIdParam = searchParams.get("bankTransactionId")
   const editAccrualIdParam = searchParams.get("editAccrualId")
   const isEditAccrualMode = !!editAccrualIdParam && !!Number(editAccrualIdParam)
@@ -356,7 +366,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       invoiceNoParam
     if (hasAnyParam) {
       hasAppliedParams.current = true
-      if (amountParam && Number(amountParam) > 0) setAmount(String(Number(amountParam)))
+      if (amountParam && parseMoneyAmount(amountParam) > 0) setAmount(moneyInputStringFromAmount(amountParam))
       if (bankMemoParam) setBankMemo(bankMemoParam)
       if (bankNoteParam || memoParam) {
         setMemo(memoParam || stripWithdrawalCategoryMetaFromNote(bankNoteParam || "") || "")
@@ -387,7 +397,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setCategoryMain(mapped.main)
         if (mapped.sub) setCategorySub(mapped.sub)
       }
-      if (storeNameParam) setStoreName(storeNameParam)
+      if (storeNameParam) {
+        setStoreName(storeNameParam)
+        bankLinkStorePinned.current = true
+      }
       if (accrualVatParam != null && accrualVatParam !== "") {
         const v = Math.max(0, Number(accrualVatParam) || 0)
         setAccrualVatAmount(v > 0 ? String(v) : "")
@@ -400,6 +413,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (invoiceNoParam) setInvoiceNo(invoiceNoParam)
     }
   }, [searchParams, mapCategoryToMainSub])
+
+  React.useEffect(() => {
+    if (!isBankLinkMode || bankLinkStorePinned.current) return
+    const accountIdParam = searchParams.get("accountId")
+    if (!accountIdParam) return
+    const acc = bankAccounts.find((a) => String(a.id) === accountIdParam)
+    const accStore = String(acc?.store || "").trim()
+    if (accStore) {
+      setStoreName(accStore)
+      bankLinkStorePinned.current = true
+    }
+  }, [isBankLinkMode, bankAccounts, searchParams])
 
   const loadInboundBatchesForLink = React.useCallback(async () => {
     if (categoryMain !== "purchase" || !vendorCode.trim() || isBankLinkMode || isEditMode) {
@@ -469,11 +494,44 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       })
   }, [auth?.store, stores])
 
+  const resolveStoreInList = React.useCallback((name: string, list: string[]) => {
+    const n = String(name || "").trim()
+    if (!n) return ""
+    if (list.includes(n)) return n
+    const fuzzy = list.find((s) => storesMatchForGradeLookup(s, n))
+    return fuzzy || n
+  }, [])
+
+  const displayStoreName = React.useMemo(
+    () => resolveStoreInList(storeName, availableStores),
+    [storeName, availableStores, resolveStoreInList]
+  )
+
+  const storeSelectOptions = React.useMemo(() => {
+    const pinned = String(storeName || "").trim()
+    if (!pinned || availableStores.includes(pinned)) return availableStores
+    return [pinned, ...availableStores]
+  }, [availableStores, storeName])
+
   React.useEffect(() => {
     if (availableStores.length === 0) return
+    if (bankLinkStorePinned.current) {
+      const resolved = resolveStoreInList(storeName, availableStores)
+      if (resolved && resolved !== storeName && availableStores.includes(resolved)) {
+        setStoreName(resolved)
+      }
+      return
+    }
     if (storeName && availableStores.includes(storeName)) return
+    if (storeName) {
+      const fuzzy = resolveStoreInList(storeName, availableStores)
+      if (availableStores.includes(fuzzy)) {
+        setStoreName(fuzzy)
+        return
+      }
+    }
     setStoreName(pickOfficeStore(availableStores))
-  }, [availableStores, pickOfficeStore, storeName])
+  }, [availableStores, pickOfficeStore, storeName, resolveStoreInList])
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
@@ -573,7 +631,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const accrualNetPreview = React.useMemo(() => {
     if (!isLaterPayment || (categoryMain !== "purchase" && categoryMain !== "expense")) return null
-    const g = Math.abs(Number(String(amount).replace(/,/g, "")) || 0)
+    const g = parseMoneyAmount(amount)
     const w = Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0))
     return Math.max(0, g - w)
   }, [isLaterPayment, categoryMain, amount, accrualWithholdingTax])
@@ -621,7 +679,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   }, [tt])
 
   const handleRegisterAccrual = async () => {
-    let amt = Number(String(amount).replace(/,/g, ""))
+    let amt = parseMoneyAmount(amount)
     if (
       categoryMain === "purchase" &&
       (!Number.isFinite(amt) || amt <= 0)
@@ -835,7 +893,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const handleEditSubmit = async () => {
     if (!bankTransactionIdParam) return
-    const amt = Number(String(amount).replace(/,/g, ""))
+    const amt = parseMoneyAmount(amount)
     if (!amt || amt <= 0) {
       await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
@@ -911,7 +969,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
       return
     }
-    const amt = Number(String(amount).replace(/,/g, ""))
+    const amt = parseMoneyAmount(amount)
     if (!amt || amt <= 0) {
       await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
@@ -1062,6 +1120,93 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const effectivePaymentMethod = categoryMain === "transfer" ? paymentMethod : "bank"
   const showBankAccountForTransfer = effectivePaymentMethod === "bank" || effectivePaymentMethod === "card"
+
+  const cardBillQueueRange = React.useMemo(() => {
+    const end = transDate && /^\d{4}-\d{2}-\d{2}$/.test(transDate) ? transDate : todayStrBkk()
+    const d = new Date(`${end}T12:00:00+07:00`)
+    d.setMonth(d.getMonth() - 3)
+    const start = d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+    return { startStr: start, endStr: end }
+  }, [transDate])
+
+  const handleMarkBankForCardBill = React.useCallback(
+    async (bankTransactionId: number) => {
+      setCardBillQueueSaving(true)
+      try {
+        const res = await markBankTransactionForCardBill({
+          bankTransactionId,
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return false
+        }
+        await appAlert(
+          translateApiMessage(res.message, t) ||
+            tt("expenseRegisterCardBillQueued", "카드대금 연동 대기열에 등록되었습니다. 카드 관리 탭에서 연동하세요.")
+        )
+        return true
+      } finally {
+        setCardBillQueueSaving(false)
+      }
+    },
+    [auth?.role, auth?.user, t, tt]
+  )
+
+  const openCardBillQueueFlow = React.useCallback(async () => {
+    if (effectivePaymentMethod !== "bank") return
+    const btId = Number(bankTransactionIdParam || 0)
+    if (btId > 0) {
+      const ok = await handleMarkBankForCardBill(btId)
+      if (ok) router.push("/admin/expense-management?tab=card")
+      return
+    }
+    if (!accountId) {
+      await appAlert(tt("expenseRegisterCardBillNeedAccount", "통장 계좌를 먼저 선택해 주세요."))
+      return
+    }
+    setCardBillQueueOpen(true)
+    setCardBillQueueLoading(true)
+    try {
+      const amt = parseMoneyAmount(amount)
+      const res = await getBankWithdrawalsForCardBillQueueMark({
+        accountId: Number(accountId),
+        startStr: startStrParam || cardBillQueueRange.startStr,
+        endStr: endStrParam || cardBillQueueRange.endStr,
+        amount: amt > 0 ? amt : undefined,
+        transDate: transDate || undefined,
+      })
+      setCardBillQueueRows(res.list || [])
+    } catch {
+      setCardBillQueueRows([])
+    } finally {
+      setCardBillQueueLoading(false)
+    }
+  }, [
+    accountId,
+    amount,
+    bankTransactionIdParam,
+    cardBillQueueRange.endStr,
+    cardBillQueueRange.startStr,
+    effectivePaymentMethod,
+    endStrParam,
+    handleMarkBankForCardBill,
+    router,
+    startStrParam,
+    transDate,
+    tt,
+  ])
+
+  const handlePickCardBillQueueRow = React.useCallback(
+    async (row: UnlinkedBankWithdrawalForCard) => {
+      const ok = await handleMarkBankForCardBill(row.id)
+      if (!ok) return
+      setCardBillQueueOpen(false)
+      router.push("/admin/expense-management?tab=card")
+    },
+    [handleMarkBankForCardBill, router]
+  )
   const showAdvanceInstallments = categorySub === "advance" && (categoryMain === "purchase" || categoryMain === "expense")
   const deliveryFeeAccountSubjectId = React.useMemo(() => {
     const byCode = subjects.find((s) => String(s.code || "").trim() === "5528")
@@ -1127,20 +1272,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     setActiveFeeVatMode(cardFeeVatMode)
     setCardFeeDialogOpen(false)
   }, [cardFeeAccountSubjectId, cardFeeVatMode])
+  const handleMoneyInputChange = React.useCallback((raw: string, setter: (value: string) => void) => {
+    setter(normalizeMoneyInputString(raw))
+  }, [])
+
   const handleDeliveryFeeAmountChange = React.useCallback((presetId: string, raw: string) => {
-    const cleaned = String(raw || "").replace(/[^\d.,]/g, "").replace(/,/g, "")
-    const parts = cleaned.split(".")
-    const normalized =
-      parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
-    setDeliveryFeeAmounts((prev) => ({ ...prev, [presetId]: normalized }))
+    setDeliveryFeeAmounts((prev) => ({ ...prev, [presetId]: normalizeMoneyInputString(raw) }))
   }, [])
 
   const handleCardFeeAmountChange = React.useCallback((presetId: string, raw: string) => {
-    const cleaned = String(raw || "").replace(/[^\d.,]/g, "").replace(/,/g, "")
-    const parts = cleaned.split(".")
-    const normalized =
-      parts.length <= 1 ? cleaned : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
-    setCardFeeAmounts((prev) => ({ ...prev, [presetId]: normalized }))
+    setCardFeeAmounts((prev) => ({ ...prev, [presetId]: normalizeMoneyInputString(raw) }))
   }, [])
 
   const feeVatModeLabel = React.useCallback(
@@ -1211,14 +1352,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const feeAmountPreview = React.useMemo(() => {
     if (!activeFeeVatMode || categoryMain !== "expense") return null
-    const raw = Number(String(amount).replace(/,/g, ""))
+    const raw = parseMoneyAmount(amount)
     if (!Number.isFinite(raw) || raw <= 0) return null
     return resolveExpenseFeeAmounts(raw, activeFeeVatMode)
   }, [activeFeeVatMode, amount, categoryMain])
 
   React.useEffect(() => {
     if (!activeFeeVatMode || categoryMain !== "expense") return
-    const raw = Number(String(amount).replace(/,/g, ""))
+    const raw = parseMoneyAmount(amount)
     if (!Number.isFinite(raw) || raw <= 0) {
       setAccrualVatAmount("")
       setInvoiceReceived(false)
@@ -1435,16 +1576,60 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }
 
     if (categoryMain === "purchase") {
+      const amt = parseMoneyAmount(amount)
+      if (!amt || amt <= 0) {
+        await appAlert(tt("pettyAlertAmount", "Please enter amount."))
+        return
+      }
+      if (!vendorCode.trim()) {
+        await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
+        return
+      }
+      if (!accountId) {
+        await appAlert(tt("bankAccount", "Please select an account."))
+        return
+      }
+      if (!storeName) {
+        await appAlert(tt("expenseStoreSelect", "Please select a store."))
+        return
+      }
+
+      let invoicePhotoUrl: string | undefined
+      if (invoicePhotoFile) {
+        try {
+          invoicePhotoUrl = await compressImageForUpload(invoicePhotoFile, 1024, 0.7)
+        } catch {
+          invoicePhotoUrl = undefined
+        }
+      }
+
       await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
-      const q = new URLSearchParams({ tab: "plan" })
-      q.set("bankTransactionId", String(bankTxId))
-      if (accountId) q.set("accountId", accountId)
-      if (transDate) q.set("transDate", transDate)
-      if (startStrParam) q.set("startStr", startStrParam)
-      if (endStrParam) q.set("endStr", endStrParam)
-      if (returnTabParam) q.set("returnTab", returnTabParam)
-      if (returnOpenRegisterTxIdParam) q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
-      router.push(`/admin/expense-management?${q.toString()}`)
+
+      setSaving(true)
+      try {
+        const res = await updateExpenseRegisterItem({
+          bankTransactionId: bankTxId,
+          accountId: Number(accountId),
+          transDate,
+          amount: amt,
+          memo: memo.trim() || undefined,
+          storeName: storeName || undefined,
+          categoryMain,
+          categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
+          vendorCode: vendorCode.trim(),
+          invoiceReceived,
+          invoiceNo: invoiceNo.trim() || undefined,
+          invoicePhotoUrl,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return
+        }
+        redirectAfterBankLinkSuccess()
+      } finally {
+        setSaving(false)
+      }
       return
     }
 
@@ -1480,7 +1665,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       return
     }
 
-    const amt = Number(String(amount).replace(/,/g, ""))
+    const amt = parseMoneyAmount(amount)
     if (!amt || amt <= 0) {
       await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
@@ -1564,12 +1749,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           <div className="flex items-center gap-3">
             <Label className="font-semibold whitespace-nowrap">{tt("expenseStoreSelect", "Store")}</Label>
             <Select
-              value={availableStores.includes(storeName) ? storeName : (availableStores[0] || "")}
+              value={storeSelectOptions.includes(displayStoreName) ? displayStoreName : (storeSelectOptions[0] || "")}
               onValueChange={(v) => {
                 if (v !== storeName) {
                   setTransferToDept("")
                   setTransferToEmployee("")
                 }
+                bankLinkStorePinned.current = true
                 setStoreName(v)
               }}
             >
@@ -1577,7 +1763,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 <SelectValue placeholder={tt("expenseStoreSelect", "Select Store")} />
               </SelectTrigger>
               <SelectContent>
-                {availableStores.map((s) => (
+                {storeSelectOptions.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
@@ -1951,6 +2137,20 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <SelectItem value="card">{tt("wm_paymentMethodCard", "Card")}</SelectItem>
                 </SelectContent>
               </Select>
+              {effectivePaymentMethod === "bank" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1"
+                  onClick={() => void openCardBillQueueFlow()}
+                  disabled={cardBillQueueSaving}
+                  title={tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}
+                >
+                  <CreditCard className="h-4 w-4 shrink-0" />
+                  {cardBillQueueSaving ? "..." : tt("expenseRegisterCardBillQueue", "통장 카드대금 연동")}
+                </Button>
+              ) : null}
             </div>
           )}
           </div>
@@ -2167,11 +2367,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </Label>
                 <Input
                   value={amount}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "")
-                    const parts = v.split(".")
-                    setAmount(parts.length > 2 ? parts[0] + "." + parts[1] : v)
-                  }}
+                  onChange={(e) => handleMoneyInputChange(e.target.value, setAmount)}
                   type="text"
                   inputMode="decimal"
                   placeholder="0"
@@ -2222,11 +2418,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <Label className="text-xs text-muted-foreground">{tt("expenseAccrualVat", "VAT")}</Label>
                   <Input
                     value={accrualVatAmount}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "")
-                      const parts = v.split(".")
-                      setAccrualVatAmount(parts.length > 2 ? parts[0] + "." + parts[1] : v)
-                    }}
+                    onChange={(e) => handleMoneyInputChange(e.target.value, setAccrualVatAmount)}
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
@@ -2239,11 +2431,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "Withholding Tax")}</Label>
                   <Input
                     value={accrualWithholdingTax}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "")
-                      const parts = v.split(".")
-                      setAccrualWithholdingTax(parts.length > 2 ? parts[0] + "." + parts[1] : v)
-                    }}
+                    onChange={(e) => handleMoneyInputChange(e.target.value, setAccrualWithholdingTax)}
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
@@ -2540,6 +2728,39 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cardBillQueueOpen} onOpenChange={setCardBillQueueOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{tt("expenseRegisterCardBillPickTitle", "카드대금 연동할 통장 출금 선택")}</DialogTitle>
+            <DialogDescription>
+              {tt("expenseRegisterCardBillPickHint", "이체 구분 미연결 출금 중 카드 월 대금으로 처리할 건을 선택하세요.")}
+            </DialogDescription>
+          </DialogHeader>
+          {cardBillQueueLoading ? (
+            <p className="text-sm text-muted-foreground py-4">{t("loading")}</p>
+          ) : cardBillQueueRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              {tt("expenseRegisterCardBillPickEmpty", "대기열에 넣을 이체 출금이 없습니다.")}
+            </p>
+          ) : (
+            <div className="max-h-[280px] overflow-y-auto space-y-2">
+              {cardBillQueueRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
+                  onClick={() => void handlePickCardBillQueueRow(row)}
+                >
+                  <span className="text-sm whitespace-nowrap">
+                    {row.transDate} · ฿{row.amount.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[240px]">{row.memo || "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
