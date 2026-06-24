@@ -3,6 +3,7 @@ import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { syncCardAllocationInputVatLedgers } from '@/lib/card-input-vat-ledger'
 import { syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
 import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { requireAuth } from '@/lib/verify-auth'
@@ -82,8 +83,32 @@ export async function POST(request: NextRequest) {
         fail += 1
       }
     }
+    let cardSynced = 0
+    let cardSkipped = 0
+    if (ymOk) {
+      try {
+        const cardRes = await syncCardAllocationInputVatLedgers({
+          months: period!.months,
+          storeFilter: storeFilter || undefined,
+          createdBy: String(auth.name || 'system'),
+        })
+        cardSynced = cardRes.synced
+        cardSkipped = cardRes.skipped
+      } catch (e) {
+        console.warn('syncExpenseInputVatLedgers card sync:', e)
+      }
+    }
+
     return NextResponse.json(
-      { success: true, processed: ok, failed: fail, skipped, scanned: (rows || []).length },
+      {
+        success: true,
+        processed: ok,
+        failed: fail,
+        skipped,
+        scanned: (rows || []).length,
+        cardSynced,
+        cardSkipped,
+      },
       { headers }
     )
   } catch (e) {

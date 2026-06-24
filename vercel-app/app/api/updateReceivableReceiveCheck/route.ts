@@ -11,6 +11,7 @@ import {
 import { canUpdateReceivableReceiveCheck } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { findConsolidatedBankReceiveBlockingManualCheck } from '@/lib/receivable-manual-receive-guard'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -88,6 +89,17 @@ export async function POST(request: NextRequest) {
       const amountAbs = Math.abs(Number(row.amount ?? 0))
       if (amountAbs <= 0) {
         return NextResponse.json({ success: false, message: '매출 금액이 없습니다.' }, { headers })
+      }
+      const bankConsolidated = await findConsolidatedBankReceiveBlockingManualCheck(storeName, receiveDate)
+      if (bankConsolidated) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'RECEIVABLE_BANK_CONSOLIDATED_EXISTS',
+            message: `해당 일자(${receiveDate})에 통장 통합 수금이 이미 반영되어 있습니다 (통장 #${bankConsolidated.bankTransactionId}, ฿${bankConsolidated.amountAbs.toLocaleString()}). 인보이스별 수금확인은 중복 수금이 됩니다. 통장 거래에서 「미수 연결」을 사용하거나, 통장 수금만 유지하세요.`,
+          },
+          { status: 409, headers }
+        )
       }
       const label = String(row.invoice_no || row.memo || '').trim()
       const memo = label ? `수금확인 ${label}` : '수금확인'

@@ -511,6 +511,15 @@ export function MemberPortalApp() {
   }, [lang, loadSession, t])
 
   React.useEffect(() => {
+    if (member) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("signup") === "1") {
+      setAuthPanel("signup")
+      window.history.replaceState({}, "", "/m")
+    }
+  }, [member])
+
+  React.useEffect(() => {
     if (!member?.memberNo) return
     QRCode.toDataURL(member.memberNo, { width: 360, margin: 1, errorCorrectionLevel: "H" })
       .then(setQrDataUrl)
@@ -1442,7 +1451,7 @@ export function MemberPortalApp() {
               onError={setError}
             />
 
-            <MemberPortalProfileContactLinks urls={contactUrls} onInAppComplaint={openInAppComplaint} />
+            <MemberPortalProfileContactLinks urls={contactUrls} />
 
             <GlassCard soft className={`text-sm ${MP_CARD_TEXT_MUTED}`}>
               <p className={MP_CARD_TEXT_PRIMARY}>{t("memberNo")} {member.memberNo}</p>

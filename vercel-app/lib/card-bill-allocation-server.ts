@@ -7,6 +7,10 @@ import {
 import { deleteJournalEntriesBySource, postCardTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
+import {
+  deleteCardTransactionInputVatLedger,
+  syncCardTransactionInputVatLedger,
+} from '@/lib/card-input-vat-ledger'
 
 type ParentRow = {
   id?: number
@@ -24,6 +28,9 @@ type ChildRow = {
   amount?: number
   account_subject_id?: number | null
   memo?: string | null
+  vat_amount?: number | null
+  invoice_received?: boolean | null
+  invoice_no?: string | null
 }
 
 export type CardBillAllocationLine = {
@@ -31,6 +38,9 @@ export type CardBillAllocationLine = {
   accountSubjectId: number
   amount: number
   memo?: string | null
+  vatAmount?: number
+  invoiceReceived?: boolean
+  invoiceNo?: string | null
 }
 
 export async function getCardBillAllocation(parentId: number): Promise<
@@ -46,7 +56,15 @@ export async function getCardBillAllocation(parentId: number): Promise<
         allocatedAmount: number
         remainingAmount: number
       }
-      lines: { id: number; accountSubjectId: number; amount: number; memo: string | null }[]
+      lines: {
+        id: number
+        accountSubjectId: number
+        amount: number
+        memo: string | null
+        vatAmount?: number
+        invoiceReceived?: boolean
+        invoiceNo?: string | null
+      }[]
     }
   | { ok: false; message: string; status?: number }
 > {
@@ -69,7 +87,7 @@ export async function getCardBillAllocation(parentId: number): Promise<
   const children = (await supabaseSelectFilter('card_transactions', `parent_id=eq.${pid}`, {
     order: 'id.asc',
     limit: 500,
-    select: 'id,amount,account_subject_id,memo',
+    select: 'id,amount,account_subject_id,memo,vat_amount,invoice_received,invoice_no',
   })) as ChildRow[] | null
 
   const totalAmount = Math.abs(Number(parent.amount) || 0)
@@ -78,6 +96,9 @@ export async function getCardBillAllocation(parentId: number): Promise<
     accountSubjectId: Number(c.account_subject_id || 0),
     amount: Math.abs(Number(c.amount) || 0),
     memo: c.memo ? String(c.memo).trim() : null,
+    vatAmount: Math.max(0, Number(c.vat_amount) || 0) || undefined,
+    invoiceReceived: Boolean(c.invoice_received),
+    invoiceNo: c.invoice_no ? String(c.invoice_no).trim() : null,
   }))
   const allocatedAmount = lines.reduce((s, l) => s + l.amount, 0)
 
@@ -115,6 +136,9 @@ export async function saveCardBillAllocation(params: {
       accountSubjectId: Number(l.accountSubjectId || 0),
       amount: Math.abs(Number(l.amount) || 0),
       memo: l.memo != null ? String(l.memo || '').trim() || null : null,
+      vatAmount: Math.max(0, Number(l.vatAmount ?? 0) || 0),
+      invoiceReceived: Boolean(l.invoiceReceived),
+      invoiceNo: l.invoiceNo != null ? String(l.invoiceNo || '').trim() || null : null,
     }))
     .filter((l) => l.accountSubjectId > 0 && l.amount > 0)
 
@@ -141,12 +165,21 @@ export async function saveCardBillAllocation(params: {
 
   for (const oldId of existingIds) {
     if (!keepIds.has(oldId)) {
+      await deleteCardTransactionInputVatLedger(oldId)
       await deleteJournalEntriesBySource('card_transaction', oldId)
       await supabaseDeleteByFilter('card_transactions', `id=eq.${oldId}`)
     }
   }
 
+  const syncedVatIds: number[] = []
+
   for (const line of normalized) {
+    const vatAmount = Math.max(0, line.vatAmount || 0)
+    if (vatAmount > line.amount + 0.01) {
+      return { ok: false, message: '부가세는 해당 행 금액(세금 포함)을 초과할 수 없습니다.', status: 400 }
+    }
+    const invoiceReceived = Boolean(line.invoiceReceived)
+    const invoiceNo = invoiceReceived && line.invoiceNo ? line.invoiceNo : null
     const row = {
       card_account_id: header.cardAccountId,
       trans_date: header.transDate,
@@ -158,6 +191,9 @@ export async function saveCardBillAllocation(params: {
       account_subject_id: line.accountSubjectId,
       is_bill_header: false,
       note: null,
+      vat_amount: vatAmount > 0 ? vatAmount : null,
+      invoice_received: invoiceReceived,
+      invoice_no: invoiceNo,
       updated_at: new Date().toISOString(),
     }
 
@@ -173,6 +209,7 @@ export async function saveCardBillAllocation(params: {
         accountSubjectId: line.accountSubjectId,
         postedBy: params.postedBy || undefined,
       })
+      syncedVatIds.push(line.id)
     } else {
       const inserted = (await supabaseInsert('card_transactions', {
         ...row,
@@ -189,7 +226,16 @@ export async function saveCardBillAllocation(params: {
           accountSubjectId: line.accountSubjectId,
           postedBy: params.postedBy || undefined,
         })
+        syncedVatIds.push(newId)
       }
+    }
+  }
+
+  for (const cardTxId of syncedVatIds) {
+    try {
+      await syncCardTransactionInputVatLedger(cardTxId, { createdBy: params.postedBy || undefined })
+    } catch (e) {
+      console.warn('syncCardTransactionInputVatLedger:', cardTxId, e)
     }
   }
 

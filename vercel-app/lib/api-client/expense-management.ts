@@ -462,13 +462,29 @@ export async function getCardBillAllocation(parentId: number) {
       allocatedAmount: number
       remainingAmount: number
     }
-    lines?: { id: number; accountSubjectId: number; amount: number; memo: string | null }[]
+    lines?: {
+      id: number
+      accountSubjectId: number
+      amount: number
+      memo: string | null
+      vatAmount?: number
+      invoiceReceived?: boolean
+      invoiceNo?: string | null
+    }[]
   }>
 }
 
 export async function saveCardBillAllocation(params: {
   parentId: number
-  lines: { id?: number; accountSubjectId: number; amount: number; memo?: string }[]
+  lines: {
+    id?: number
+    accountSubjectId: number
+    amount: number
+    memo?: string
+    vatAmount?: number
+    invoiceReceived?: boolean
+    invoiceNo?: string
+  }[]
   userName?: string
   userRole?: string
 }) {

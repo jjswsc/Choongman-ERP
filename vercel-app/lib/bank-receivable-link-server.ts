@@ -64,6 +64,8 @@ export async function loadOpenReceivablesForBankTx(bankRow: BankTxRow): Promise<
   )) as { id?: number }[] | null
   if (channelLinked?.length) return []
 
+  if (await bankTransactionHasReceivableOrderLink(bankId)) return []
+
   const accrualRows = (await supabaseSelectFilter(
     'receivable_transactions',
     `ref_type=in.(Order,ForceOutbound,AccountingPO)&amount=gt.0`,

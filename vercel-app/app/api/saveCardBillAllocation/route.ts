@@ -27,6 +27,19 @@ export async function POST(request: NextRequest) {
         accountSubjectId: Number(l.accountSubjectId ?? l.account_subject_id ?? 0),
         amount: Number(l.amount ?? 0),
         memo: l.memo != null ? String(l.memo || '') : undefined,
+        vatAmount: l.vatAmount != null || l.vat_amount != null
+          ? Number(l.vatAmount ?? l.vat_amount ?? 0)
+          : undefined,
+        invoiceReceived:
+          typeof l.invoiceReceived === 'boolean'
+            ? l.invoiceReceived
+            : typeof l.invoice_received === 'boolean'
+              ? l.invoice_received
+              : undefined,
+        invoiceNo:
+          l.invoiceNo != null || l.invoice_no != null
+            ? String(l.invoiceNo ?? l.invoice_no ?? '')
+            : undefined,
       })),
       postedBy: userName || null,
     })

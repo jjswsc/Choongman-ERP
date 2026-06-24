@@ -12,6 +12,7 @@ import { buildPayrollMonthPostgrestFilter, buildTaxMonthPostgrestFilter } from '
 import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { syncCardAllocationInputVatLedgers } from '@/lib/card-input-vat-ledger'
 import { backfillVatLedgerStoreNames, resolveStoreDisplayNameForVatLedger, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
 import { syncInvoiceBackedBankInputVatLedgers } from '@/lib/invoice-backed-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -296,11 +297,11 @@ function pickEmployeeTin(row?: EmployeeTaxRow | null): string | null {
 export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
   months: string[]
   storeFilter?: string
-}): Promise<{ expenseSynced: number; bankInvoiceUpserted: number }> {
+}): Promise<{ expenseSynced: number; bankInvoiceUpserted: number; cardAllocationSynced: number }> {
   const validMonths = (params.months || [])
     .map((m) => String(m || '').slice(0, 7))
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
-  if (validMonths.length === 0) return { expenseSynced: 0, bankInvoiceUpserted: 0 }
+  if (validMonths.length === 0) return { expenseSynced: 0, bankInvoiceUpserted: 0, cardAllocationSynced: 0 }
 
   const storeFilter = String(params.storeFilter || '').trim()
   const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
@@ -346,7 +347,18 @@ export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
     console.warn('syncIncrementalVatLedgersFromExpenseAndBank bank sync:', e)
   }
 
-  return { expenseSynced, bankInvoiceUpserted }
+  let cardAllocationSynced = 0
+  try {
+    const cardSync = await syncCardAllocationInputVatLedgers({
+      months: validMonths,
+      storeFilter: params.storeFilter,
+    })
+    cardAllocationSynced = cardSync.synced
+  } catch (e) {
+    console.warn('syncIncrementalVatLedgersFromExpenseAndBank card sync:', e)
+  }
+
+  return { expenseSynced, bankInvoiceUpserted, cardAllocationSynced }
 }
 
 export async function syncTaxVatLedgersFromStockAndExpenses(params: {
@@ -711,6 +723,15 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
       officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined
     )
     expenseSynced += 1
+  }
+
+  try {
+    await syncCardAllocationInputVatLedgers({
+      months: validMonths,
+      storeFilter: params.storeFilter,
+    })
+  } catch (e) {
+    console.warn('syncTaxVatLedgersFromStockAndExpenses card sync:', e)
   }
 
   return { stockUpserted, stockDeleted, expenseSynced, posUpserted, bankInvoiceUpserted }

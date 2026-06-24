@@ -9,6 +9,7 @@ import {
   supabaseUpdate,
   supabaseDeleteByFilter,
 } from './supabase-server'
+import { bankTransactionHasReceivableOrderLink } from './bank-receivable-link-server'
 import { shouldCreateFranchiseReceivableSubledgerFromBankReceive } from './franchise-receivable-subledger-gate'
 import { storeHasPosCompletedOrders } from './bank-settlement-guards'
 import { formatReceivableInvoiceNo } from './receivable-invoice-format'
@@ -524,7 +525,8 @@ export async function shouldUpsertFranchiseReceivableSubledger(params: {
 }
 
 /**
- * 통장 연동 매출 수령(ref Receive) — bank_transaction_id당 1행 유지 (미수금 중복 방지).
+ * 통장 연동 매출 수령(ref Receive) — bank_transaction_id당 통합 1행(ref_id null) 유지.
+ * 인보이스별 연결(linkReceivable)이 있으면 건드리지 않음 — 재저장 시 통합+인보이스 이중 수금 방지.
  */
 export async function upsertReceivableFromBankReceive(params: {
   bankTransactionId: number
@@ -539,10 +541,13 @@ export async function upsertReceivableFromBankReceive(params: {
     await deleteReceivableFromBankReceive({ bankTransactionId, storeName, amountAbs, transDate, memo })
     return
   }
-  const filter = `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive`
+  if (await bankTransactionHasReceivableOrderLink(bankTransactionId)) {
+    return
+  }
+  const filter = `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive&ref_id=is.null`
   const rows = (await supabaseSelectFilter('receivable_transactions', filter, {
     order: 'id.asc',
-    limit: 50,
+    limit: 10,
     select: 'id',
   })) as { id?: number }[]
   const row = {

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { Search, Plus, Pencil, Trash2, CreditCard, Link2, Landmark, ListTree } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -42,6 +43,8 @@ import {
   type UnlinkedBankWithdrawalForCard,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { formatBankAccountLabel } from "@/lib/bank-account-display"
+import { normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -53,10 +56,21 @@ type AllocationLineForm = {
   accountSubjectId: string
   amount: string
   memo: string
+  vatAmount: string
+  invoiceReceived: boolean
+  invoiceNo: string
 }
 
 function newAllocationLine(): AllocationLineForm {
-  return { key: `line-${Date.now()}-${Math.random()}`, accountSubjectId: "", amount: "", memo: "" }
+  return {
+    key: `line-${Date.now()}-${Math.random()}`,
+    accountSubjectId: "",
+    amount: "",
+    memo: "",
+    vatAmount: "",
+    invoiceReceived: false,
+    invoiceNo: "",
+  }
 }
 
 export function CardManagementTab() {
@@ -191,6 +205,17 @@ export function CardManagementTab() {
     }
   }, [bankAccountId, startStr, endStr])
 
+  const selectedBankAccount = React.useMemo(
+    () => bankAccounts.find((a) => String(a.id) === String(bankAccountId)) ?? null,
+    [bankAccounts, bankAccountId]
+  )
+
+  React.useEffect(() => {
+    const acc = bankAccounts.find((a) => String(a.id) === String(bankAccountId))
+    const store = String(acc?.store || "").trim()
+    if (store) setFilterStore(store)
+  }, [bankAccountId, bankAccounts])
+
   React.useEffect(() => {
     void loadUnlinkedBank()
   }, [loadUnlinkedBank])
@@ -269,6 +294,9 @@ export function CardManagementTab() {
               accountSubjectId: String(l.accountSubjectId),
               amount: String(l.amount),
               memo: l.memo || "",
+              vatAmount: l.vatAmount != null && l.vatAmount > 0 ? String(l.vatAmount) : "",
+              invoiceReceived: Boolean(l.invoiceReceived),
+              invoiceNo: l.invoiceNo || "",
             }))
           : [newAllocationLine()]
       setAllocateLines(lines)
@@ -294,8 +322,7 @@ export function CardManagementTab() {
   const allocateSum = React.useMemo(
     () =>
       allocateLines.reduce((s, l) => {
-        const n = Number(String(l.amount).replace(/,/g, ""))
-        return s + (Number.isFinite(n) ? n : 0)
+        return s + parseMoneyAmount(l.amount)
       }, 0),
     [allocateLines]
   )
@@ -306,8 +333,11 @@ export function CardManagementTab() {
       .map((l) => ({
         id: l.id,
         accountSubjectId: Number(l.accountSubjectId || 0),
-        amount: Number(String(l.amount).replace(/,/g, "")),
+        amount: parseMoneyAmount(l.amount),
         memo: l.memo.trim() || undefined,
+        vatAmount: parseMoneyAmount(l.vatAmount) || undefined,
+        invoiceReceived: l.invoiceReceived,
+        invoiceNo: l.invoiceReceived ? l.invoiceNo.trim() || undefined : undefined,
       }))
       .filter((l) => l.accountSubjectId > 0 && l.amount > 0)
     if (lines.length === 0) {
@@ -591,18 +621,20 @@ export function CardManagementTab() {
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2 mb-3">
-            <div>
+            <div className="min-w-[min(100%,28rem)] flex-1">
               <label className="text-xs text-muted-foreground block mb-0.5">
                 {tt("cardManagementBankAccount", "Bank account")}
               </label>
               <Select value={bankAccountId || "__none__"} onValueChange={(v) => setBankAccountId(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="w-[200px] h-9">
-                  <SelectValue placeholder={tt("cardManagementBankAccount", "Bank account")} />
+                <SelectTrigger className="w-full min-w-[280px] max-w-xl h-9">
+                  <SelectValue placeholder={tt("cardManagementBankAccount", "Bank account")}>
+                    {selectedBankAccount ? formatBankAccountLabel(selectedBankAccount) : null}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[min(100vw-2rem,36rem)]">
                   {bankAccounts.map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>
-                      {a.name || a.bankName || `#${a.id}`}
+                    <SelectItem key={a.id} value={String(a.id)} className="whitespace-normal">
+                      {formatBankAccountLabel(a)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1039,7 +1071,7 @@ export function CardManagementTab() {
       </Dialog>
 
       <Dialog open={allocateParentId != null} onOpenChange={(open) => { if (!open) closeAllocation() }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{tt("cardManagementAllocateTitle", "Allocate card expense by account")}</DialogTitle>
             <DialogDescription>{tt("cardManagementAllocateHint", "Split the total across expense accounts.")}</DialogDescription>
@@ -1063,53 +1095,112 @@ export function CardManagementTab() {
                   <div className="text-xs text-muted-foreground pt-1 border-t">{allocateHeader.memo}</div>
                 ) : null}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {allocateLines.map((line, idx) => (
-                  <div key={line.key} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_100px_auto] sm:items-end border rounded-md p-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground">{tt("accountSubject", "Account Subject")}</label>
-                      <Select
-                        value={line.accountSubjectId || "__none__"}
-                        onValueChange={(v) => {
-                          const next = [...allocateLines]
-                          next[idx] = { ...line, accountSubjectId: v === "__none__" ? "" : v }
-                          setAllocateLines(next)
-                        }}
+                  <div key={line.key} className="rounded-md border p-3 space-y-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_auto] sm:items-end">
+                      <div>
+                        <label className="text-xs text-muted-foreground">{tt("accountSubject", "Account Subject")}</label>
+                        <Select
+                          value={line.accountSubjectId || "__none__"}
+                          onValueChange={(v) => {
+                            const next = [...allocateLines]
+                            next[idx] = { ...line, accountSubjectId: v === "__none__" ? "" : v }
+                            setAllocateLines(next)
+                          }}
+                        >
+                          <SelectTrigger className="mt-0.5 h-9">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">—</SelectItem>
+                            {accountSubjects.map((a) => (
+                              <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">{tt("expenseAccrualGrossTotal", "Total (incl. tax)")}</label>
+                        <Input
+                          className="mt-0.5 h-9"
+                          type="text"
+                          inputMode="decimal"
+                          value={line.amount}
+                          onChange={(e) => {
+                            const next = [...allocateLines]
+                            next[idx] = { ...line, amount: normalizeMoneyInputString(e.target.value) }
+                            setAllocateLines(next)
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 text-destructive shrink-0"
+                        disabled={allocateLines.length <= 1}
+                        onClick={() => setAllocateLines(allocateLines.filter((_, i) => i !== idx))}
                       >
-                        <SelectTrigger className="mt-0.5 h-9">
-                          <SelectValue placeholder="—" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">—</SelectItem>
-                          {accountSubjects.map((a) => (
-                            <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground">{tt("pettyColAmount", "Amount")}</label>
+                      <label className="text-xs text-muted-foreground">{tt("memo", "Memo")}</label>
                       <Input
                         className="mt-0.5 h-9"
-                        type="number"
-                        value={line.amount}
+                        value={line.memo}
+                        placeholder={tt("cardManagementAllocateMemoPlaceholder", "Expense title / description")}
                         onChange={(e) => {
                           const next = [...allocateLines]
-                          next[idx] = { ...line, amount: e.target.value }
+                          next[idx] = { ...line, memo: e.target.value }
                           setAllocateLines(next)
                         }}
                       />
                     </div>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-9 w-9 text-destructive shrink-0"
-                      disabled={allocateLines.length <= 1}
-                      onClick={() => setAllocateLines(allocateLines.filter((_, i) => i !== idx))}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="w-[110px]">
+                        <label className="text-xs text-muted-foreground">{tt("expenseAccrualVat", "VAT")}</label>
+                        <Input
+                          className="mt-0.5 h-9"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={line.vatAmount}
+                          onChange={(e) => {
+                            const next = [...allocateLines]
+                            next[idx] = { ...line, vatAmount: normalizeMoneyInputString(e.target.value) }
+                            setAllocateLines(next)
+                          }}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer pb-1.5">
+                        <Checkbox
+                          checked={line.invoiceReceived}
+                          onCheckedChange={(c) => {
+                            const next = [...allocateLines]
+                            next[idx] = { ...line, invoiceReceived: c === true }
+                            setAllocateLines(next)
+                          }}
+                        />
+                        <span className="text-sm">{tt("poInvoiceReceived", "Invoice Received")}</span>
+                      </label>
+                      {line.invoiceReceived ? (
+                        <div className="min-w-[140px] flex-1">
+                          <label className="text-xs text-muted-foreground">{tt("wm_invoiceNoLabel", "Invoice Number")}</label>
+                          <Input
+                            className="mt-0.5 h-9"
+                            value={line.invoiceNo}
+                            placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
+                            onChange={(e) => {
+                              const next = [...allocateLines]
+                              next[idx] = { ...line, invoiceNo: e.target.value }
+                              setAllocateLines(next)
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
               </div>

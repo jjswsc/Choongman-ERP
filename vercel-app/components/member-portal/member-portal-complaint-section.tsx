@@ -83,6 +83,8 @@ function complaintErrorMessage(lang: Parameters<typeof memberPortalT>[0], code: 
     content_required: "complaintErr_content_required",
     text_too_long: "complaintErr_text_too_long",
     rate_limit: "complaintErr_rate_limit",
+    name_required: "complaintErr_name_required",
+    contact_required: "complaintErr_contact_required",
     save_failed: "complaintSubmitFail",
     upload_failed: "complaintErr_upload_failed",
     presign_failed: "complaintErr_upload_failed",

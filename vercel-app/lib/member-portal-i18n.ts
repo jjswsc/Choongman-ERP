@@ -74,6 +74,15 @@ export type MemberPortalKey =
   | 'complaintErr_content_required'
   | 'complaintErr_text_too_long'
   | 'complaintErr_rate_limit'
+  | 'complaintErr_name_required'
+  | 'complaintErr_contact_required'
+  | 'complaintPublicPageTitle'
+  | 'complaintPublicPageSub'
+  | 'complaintPublicSignupTitle'
+  | 'complaintPublicSignupBody'
+  | 'complaintPublicSignupBtn'
+  | 'complaintPublicGuestHint'
+  | 'complaintPublicSignupAfterSubmit'
   | 'complaintErr_upload_failed'
   | 'complaintErr_invalid_photo'
   | 'complaintLoginRequired'
@@ -675,6 +684,51 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Daily submission limit reached. Try again tomorrow.',
     th: 'ส่งครบจำนวนต่อวันแล้ว ลองใหม่พรุ่งนี้',
     ko: '오늘 접수 가능 횟수를 초과했습니다. 내일 다시 시도해 주세요.',
+  },
+  complaintErr_name_required: {
+    en: 'Please enter your name.',
+    th: 'กรุณากรอกชื่อ',
+    ko: '이름을 입력해 주세요.',
+  },
+  complaintErr_contact_required: {
+    en: 'Please enter a valid phone number.',
+    th: 'กรุณากรอกเบอร์โทรศัพท์ที่ถูกต้อง',
+    ko: '연락 가능한 전화번호를 입력해 주세요.',
+  },
+  complaintPublicPageTitle: {
+    en: 'Feedback & complaints',
+    th: 'แจ้งปัญหา / ข้อเสนอแนะ',
+    ko: '불편 접수',
+  },
+  complaintPublicPageSub: {
+    en: 'You can submit without signing up. Our team will still follow up.',
+    th: 'ไม่สมัครก็แจ้งได้ ทีมงานจะติดตามให้ทุกเรื่อง',
+    ko: '회원가입 없이도 접수할 수 있습니다. 접수 후 매장에서 확인합니다.',
+  },
+  complaintPublicSignupTitle: {
+    en: 'Easier with a member account',
+    th: 'สมัครสมาชิกแล้วสะดวกกว่า',
+    ko: '회원이시면 더 편리합니다',
+  },
+  complaintPublicSignupBody: {
+    en: 'Sign up and submit in the member app to view your complaint history and store replies or status updates anytime.',
+    th: 'สมัครสมาชิกแล้วแจ้งผ่านแอป จะดูประวัติการแจ้งและคำตอบ/สถานะจากร้านได้สะดวกในแอป',
+    ko: '회원가입 후 앱에서 접수하시면 접수 이력과 매장 답변·처리 현황을 바로 확인하실 수 있습니다.',
+  },
+  complaintPublicSignupBtn: {
+    en: 'Sign up free',
+    th: 'สมัครสมาชิก',
+    ko: '회원 가입하기',
+  },
+  complaintPublicGuestHint: {
+    en: 'Prefer not to sign up? Fill in the form below.',
+    th: 'ไม่สมัครก็แจ้งได้ กรอกแบบฟอร์มด้านล่าง',
+    ko: '가입 없이 접수하시려면 아래 양식을 작성해 주세요.',
+  },
+  complaintPublicSignupAfterSubmit: {
+    en: 'Next time, sign up to track history and replies in the member app.',
+    th: 'ครั้งหน้าสมัครสมาชิกแล้วแจ้งในแอป จะดูประวัติและคำตอบได้สะดวกขึ้น',
+    ko: '다음부터는 회원가입 후 접수하시면 이력과 답변을 앱에서 편하게 확인하실 수 있습니다.',
   },
   complaintErr_upload_failed: {
     en: 'Photo upload failed.',

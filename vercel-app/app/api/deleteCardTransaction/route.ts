@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter } from '@/lib/supabase-server'
 import { deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
+import { deleteCardTransactionInputVatLedger } from '@/lib/card-input-vat-ledger'
 
 /** 카드 거래 삭제 */
 export async function POST(request: NextRequest) {
@@ -29,12 +30,14 @@ export async function POST(request: NextRequest) {
       for (const child of children || []) {
         const cid = Number(child.id || 0)
         if (cid > 0) {
+          await deleteCardTransactionInputVatLedger(cid)
           await deleteJournalEntriesBySource('card_transaction', cid)
           await supabaseDeleteByFilter('card_transactions', `id=eq.${cid}`)
         }
       }
     }
 
+    await deleteCardTransactionInputVatLedger(id)
     await deleteJournalEntriesBySource('card_transaction', id)
     if (bankTransactionId > 0) {
       await deleteJournalEntriesBySource('bank_transaction', bankTransactionId)

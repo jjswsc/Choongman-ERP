@@ -50,7 +50,13 @@ create index if not exists idx_card_transactions_parent_id on public.card_transa
 -- 기존 DB 마이그레이션 (테이블 선행 생성 후 실행)
 alter table public.card_transactions add column if not exists is_bill_header boolean not null default false;
 alter table public.card_transactions add column if not exists parent_id bigint null;
+alter table public.card_transactions add column if not exists vat_amount numeric(14,2) null;
+alter table public.card_transactions add column if not exists invoice_received boolean not null default false;
+alter table public.card_transactions add column if not exists invoice_no text null;
 
 comment on column public.card_transactions.is_bill_header is '통장 카드대금 총액(배분 전 헤더)';
 comment on column public.card_transactions.parent_id is '카드대금 헤더 ID — 계정별 배분 행';
+comment on column public.card_transactions.vat_amount is '매입 부가세 금액(참고·PP30 연동)';
+comment on column public.card_transactions.invoice_received is '세금계산서(텍스 인보이스) 수령 여부';
+comment on column public.card_transactions.invoice_no is '세금계산서 번호';
 comment on table public.card_transactions is '카드 거래: charge=통장→카드 이체/충전, expense=카드 사용';

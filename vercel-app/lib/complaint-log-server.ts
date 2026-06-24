@@ -9,9 +9,12 @@ export const COMPLAINT_TYPES = ['음식', '서비스', '환경/청결', '가격/
 export const COMPLAINT_SEVERITIES = ['경미', '보통', '심각'] as const
 export const COMPLAINT_STATUSES = ['접수', '조사중', '처리완료', '보류', '종료'] as const
 export const COMPLAINT_SOURCE_MEMBER_PORTAL = 'member_portal'
+export const COMPLAINT_SOURCE_PUBLIC_WEB = 'public_web'
 export const COMPLAINT_SOURCE_ADMIN = 'admin'
 export const MEMBER_PORTAL_COMPLAINT_WRITER = '회원앱'
+export const PUBLIC_WEB_COMPLAINT_WRITER = '공개웹'
 export const MEMBER_COMPLAINT_DAILY_LIMIT = 5
+export const PUBLIC_COMPLAINT_DAILY_LIMIT = 3
 
 export type ComplaintLogDbRow = {
   id?: number
