@@ -28,7 +28,14 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole, OFFICE_STORES } from "@/lib/permissions"
+import { isOfficeRole } from "@/lib/permissions"
+import {
+  BANK_ACCOUNT_HQ_STORE_LABEL,
+  bankAccountStoreKeysMatch,
+  canonicalBankAccountStore,
+  displayBankAccountStore,
+  formatBankAccountLabel,
+} from "@/lib/bank-account-display"
 import {
   approveExpenseAccrual,
   executeExpensePayment,
@@ -66,7 +73,6 @@ import {
   isPosRevenueDepositCategory,
 } from "@/lib/bank-import-deposit-category"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
-import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -892,8 +898,7 @@ export function BankTransactionsTab() {
   React.useEffect(() => {
     const storeWant = plDrillStoreRef.current
     if (!storeWant || !accounts.length) return
-    const q = storeWant.trim().toLowerCase()
-    const match = accounts.find((a) => String(a.store || "").trim().toLowerCase() === q)
+    const match = accounts.find((a) => bankAccountStoreKeysMatch(a.store, storeWant))
     if (match?.id) setAccountId(String(match.id))
   }, [accounts])
 
@@ -1242,7 +1247,9 @@ export function BankTransactionsTab() {
       await appAlert(t("bankAddAccount") || "Please enter account name.")
       return
     }
-    const store = isOffice && newAccountStore ? newAccountStore : auth?.store || ""
+    const store = canonicalBankAccountStore(
+      isOffice && newAccountStore ? newAccountStore : auth?.store || ""
+    ) || undefined
     setAddAccountSaving(true)
     try {
       const res = await saveBankAccount({
@@ -1268,7 +1275,10 @@ export function BankTransactionsTab() {
     if (!editingAccountId || !editAccountForm.name.trim()) return
     setAccountManageSaving(true)
     try {
-      const store = isOffice ? (editAccountForm.store.trim() || undefined) : (auth?.store || undefined)
+      const rawStore = isOffice
+        ? editAccountForm.store.trim() || BANK_ACCOUNT_HQ_STORE_LABEL
+        : auth?.store || ""
+      const store = canonicalBankAccountStore(rawStore) || undefined
       const ob = editAccountForm.openingBalance.trim() ? parseBahtAmount(editAccountForm.openingBalance) : 0
       const obDate = editAccountForm.openingBalanceDate.trim() && /^\d{4}-\d{2}-\d{2}$/.test(editAccountForm.openingBalanceDate) ? editAccountForm.openingBalanceDate : null
       const res = await saveBankAccount({
@@ -1316,23 +1326,19 @@ export function BankTransactionsTab() {
 
   const storeOptions = isOffice ? (storeList || []) : [auth?.store || ""].filter(Boolean)
   const storeOptionsDeduped = React.useMemo(() => {
-    const officeSet = new Set(OFFICE_STORES.map((s) => s.trim().toLowerCase()))
     const seen = new Set<string>()
     const result: string[] = []
     const add = (s: string) => {
-      const key = s.trim().toLowerCase()
-      if (officeSet.has(key)) {
-        if (!seen.has("본사")) { seen.add("본사"); result.push("본사") }
-      } else if (s && !seen.has(s)) {
-        seen.add(s)
-        result.push(s)
-      }
+      const canonical = canonicalBankAccountStore(s)
+      if (!canonical || seen.has(canonical)) return
+      seen.add(canonical)
+      result.push(canonical)
     }
     for (const s of storeOptions || []) {
       if (s === "All") continue
       add(s)
     }
-    return result.length ? result : ["본사"]
+    return result.length ? result : [BANK_ACCOUNT_HQ_STORE_LABEL]
   }, [storeOptions])
 
   const handleEditMemoRule = (rule: BankMemoRule) => {
@@ -1958,28 +1964,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        <Link href="/admin/chart-of-accounts" className="text-primary underline-offset-2 hover:underline font-medium">
-          {tt("bankCoaManageLink", "계정과목 추가·수정: 계정과목표")}
-        </Link>
-        <span className="font-normal">{` · ${tt("bankCoaUsedForBankHint", "통장·적요 규칙·분개는 동일 DB(account_subjects)를 사용합니다")}`}</span>
-      </p>
-      <div className="rounded-md border border-amber-200/80 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2.5 space-y-1">
-        <p className="text-xs font-medium text-foreground">{tt("bankPosReceivableDepositTitle", "POS 자동분개 매장 — 입금 분류")}</p>
-        <p className="text-[11px] text-muted-foreground leading-snug">
-          {tt(
-            "bankPosReceivableDepositBody",
-            "Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 사용하세요. revenue_* 입금은 매출 이중 위험입니다."
-          )}{" "}
-          {tt(
-            "bankPosChannelSettleHint",
-            "수수료(GROSS−NET) 분개는 POS 결산에서 처리하거나, 아래 목록의 입금 행에서 「채널 정산」을 누르세요."
-          )}{" "}
-          <Link href="/admin/pos-settlement" className="text-primary underline underline-offset-2 font-medium">
-            {tt("bankPosChannelSettlePosLink", "POS 결산 →")}
-          </Link>
-        </p>
-      </div>
       <input
         ref={invoicePhotoInputRef}
         type="file"
@@ -2026,13 +2010,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   <SelectContent>
                     {accounts.map((a) => (
                       <SelectItem key={a.id} value={String(a.id)}>
-                        {a.bankName ? `[${a.bankName}] ` : ""}{a.name} {a.store ? `(${a.store})` : ""}
+                        {formatBankAccountLabel(a)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[130px] h-9" />
                 <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[130px] h-9" />
+                <Input
+                  type="text"
+                  placeholder={t("bankActualBalance")}
+                  value={actualBalance}
+                  onChange={(e) => setActualBalance(e.target.value)}
+                  className="w-[120px] h-9 text-right"
+                  title={t("bankVerifyHint")}
+                />
                 <Button size="sm" onClick={loadData} disabled={loading || !accountId}>
                   <Search className="h-4 w-4 mr-1" />
                   {t("btn_query")}
@@ -2047,7 +2039,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 <>
                   {summary && (
                     <div className="mb-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                      <div
+                        className={cn(
+                          "grid grid-cols-2 gap-2",
+                          diff !== null ? "md:grid-cols-3 lg:grid-cols-5" : "md:grid-cols-4"
+                        )}
+                      >
                         <MetricCard
                           size="sm"
                           label={t("bankDeposit")}
@@ -2067,6 +2064,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           value={fmt(summary.calculatedBalance)}
                           subLabel={`${t("bankOpeningBalance")} ${fmt(summary.openingBalance)}`}
                         />
+                        <MetricCard
+                          size="sm"
+                          label={tt("bankListCountLabel", "조회 / 표시")}
+                          value={tt("bankListCountShown", "표시 {shown}건").replace("{shown}", String(listTypeCounts.shownTotal))}
+                          subLabel={tt(
+                            "bankListCountBreakdownShort",
+                            "조회 {total}건 · 입금 {deposits} · 출금 {withdraws}"
+                          )
+                            .replace("{total}", String(listTypeCounts.total))
+                            .replace("{deposits}", String(listTypeCounts.deposits))
+                            .replace("{withdraws}", String(listTypeCounts.withdraws))}
+                          variant="default"
+                        />
                         {diff !== null ? (
                           <MetricCard
                             size="sm"
@@ -2081,16 +2091,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           {tt("bankSummaryFilteredHint", "입·출금 합계는 아래 목록 필터 기준")}
                         </p>
                       ) : null}
-                      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-                        <span className="text-muted-foreground text-xs">{t("bankVerifyHint")}</span>
-                        <Input
-                          type="text"
-                          placeholder={t("bankActualBalance")}
-                          value={actualBalance}
-                          onChange={(e) => setActualBalance(e.target.value)}
-                          className="w-[140px] h-8 text-right"
-                        />
-                      </div>
                     </div>
                   )}
 
@@ -2191,16 +2191,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     <Button size="sm" variant="ghost" onClick={clearListFilters}>
                       {t("btn_reset") || "초기화"}
                     </Button>
-                    <span className="text-sm text-muted-foreground">
-                      {tt(
-                        "bankListCountBreakdown",
-                        "조회 {total}건 (입금 {deposits} · 출금 {withdraws}) → 표시 {shown}건"
-                      )
-                        .replace("{total}", String(listTypeCounts.total))
-                        .replace("{deposits}", String(listTypeCounts.deposits))
-                        .replace("{withdraws}", String(listTypeCounts.withdraws))
-                        .replace("{shown}", String(listTypeCounts.shownTotal))}
-                    </span>
                     <Button size="sm" variant="outline" onClick={exportBankTransactionsExcel} disabled={filteredList.length === 0} title={t("excelBtn") || "엑셀"}>
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn") || "엑셀"}
@@ -2833,7 +2823,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       <SelectContent>
                         {accounts.map((a) => (
                           <SelectItem key={a.id} value={String(a.id)}>
-                            {a.bankName ? `[${a.bankName}] ` : ""}{a.name} {a.store ? `(${a.store})` : ""}
+                            {formatBankAccountLabel(a)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -2871,14 +2861,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       className="max-w-[160px] h-9"
                     />
                     {isOffice && (
-                      <Select value={newAccountStore || "본사"} onValueChange={setNewAccountStore}>
+                      <Select value={newAccountStore || BANK_ACCOUNT_HQ_STORE_LABEL} onValueChange={setNewAccountStore}>
                         <SelectTrigger className="w-[110px] h-9">
                           <SelectValue placeholder={t("store") || "매장"} />
                         </SelectTrigger>
                         <SelectContent>
                           {storeOptionsDeduped.map((s) => (
                             <SelectItem key={s} value={s}>
-                              {OFFICE_STORES.map((o) => o.trim().toLowerCase()).includes(s.trim().toLowerCase()) ? (t("pettyScopeOffice") || "본사") : s}
+                              {displayBankAccountStore(s)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -3541,14 +3531,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       {isOffice && (
                         <div>
                           <label className="text-xs text-muted-foreground block mb-0.5">{t("store")}</label>
-                          <Select value={editAccountForm.store || "본사"} onValueChange={(v) => setEditAccountForm((p) => ({ ...p, store: v }))}>
+                          <Select value={editAccountForm.store || BANK_ACCOUNT_HQ_STORE_LABEL} onValueChange={(v) => setEditAccountForm((p) => ({ ...p, store: v }))}>
                             <SelectTrigger className="h-8 text-sm">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               {storeOptionsDeduped.map((s) => (
                                 <SelectItem key={s} value={s}>
-                                  {OFFICE_STORES.map((o) => o.trim().toLowerCase()).includes(s.trim().toLowerCase()) ? (t("pettyScopeOffice") || "본사") : s}
+                                  {displayBankAccountStore(s)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -3591,7 +3581,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       <div className="flex justify-between items-start gap-2">
                         <div className="min-w-0">
                           <p className="font-medium text-sm truncate">
-                            {a.bankName ? `[${a.bankName}] ` : ""}{a.name} {a.store ? `(${a.store})` : ""}
+                            {formatBankAccountLabel(a)}
                           </p>
                         </div>
                         <div className="flex gap-1 shrink-0">
@@ -3604,7 +3594,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               setEditAccountForm({
                                 name: a.name,
                                 bankName: a.bankName || "",
-                                store: a.store || "본사",
+                                store: displayBankAccountStore(a.store) || BANK_ACCOUNT_HQ_STORE_LABEL,
                                 openingBalance: formatBahtAmountForField(a.openingBalance),
                                 openingBalanceDate: a.openingBalanceDate || "",
                               })

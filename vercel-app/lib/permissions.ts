@@ -18,14 +18,16 @@ export function isOfficeStore(store: string): boolean {
   const x = String(store || "").trim()
   return (
     x === "본사" ||
+    x === "HQ" ||
     x === "Office" ||
     x === "오피스" ||
     x === "본점" ||
+    x.toLowerCase() === "hq" ||
     x.toLowerCase().includes("office")
   )
 }
 
-export const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "CM Office"]
+export const OFFICE_STORES = ["본사", "HQ", "Office", "오피스", "본점", "CM Office"]
 
 const DIRECTOR_ROLES = ["director", "secretary", "ceo", "hr"]
 const OFFICE_ROLES = ["director", "ceo", "hr", "officer", "secretary"]
