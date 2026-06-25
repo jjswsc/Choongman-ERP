@@ -49,7 +49,7 @@ import {
   type ExpenseAccrualPlanItem,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { canApproveExpenseAccrual } from "@/lib/expense-accrual-approve-policy"
+import { canApproveExpenseAccrual, canEditExpenseAccrualPlan } from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
@@ -57,6 +57,32 @@ import { useSearchParams, useRouter } from "next/navigation"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+}
+
+function planRowEditable(r: ExpenseAccrualPlanItem): boolean {
+  return canEditExpenseAccrualPlan({ status: r.status, paidAmount: r.paidAmount })
+}
+
+function renderPlanPayAmountCell(
+  r: ExpenseAccrualPlanItem,
+  tt: (key: string, fallback: string) => string
+) {
+  const gross = r.grossAmount ?? r.plannedAmount ?? 0
+  const planned = r.plannedAmount ?? 0
+  const showNet = gross > 0 && planned > 0 && Math.abs(gross - planned) > 0.005
+  return (
+    <>
+      ฿{gross.toLocaleString()}
+      {showNet ? (
+        <span
+          className="block text-[10px] text-muted-foreground leading-tight"
+          title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}
+        >
+          {tt("expensePlanNetPayShort", "Net")} ฿{planned.toLocaleString()}
+        </span>
+      ) : null}
+    </>
+  )
 }
 
 export function ExpenseManagementTab() {
@@ -837,7 +863,7 @@ export function ExpenseManagementTab() {
                                   )
                                 })()}
                             <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                            <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
                             <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px]" title={r.memo || ""}>{getMemo(r.memo)}</td>
                             <td className="py-2 px-1 text-center align-top">
                               {(r.attachmentUrls?.length ?? 0) > 0 ? (
@@ -862,43 +888,46 @@ export function ExpenseManagementTab() {
                             </td>
                             {renderAccrualInvoiceCell(r)}
                             <td className="py-2 px-1 text-center align-top">
-                              {r.status === "planned" ? (
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-7 w-7"
-                                  title={tt("btnEdit", "Edit")}
-                                  onClick={() => navigateToEditInRegister(r)}
-                                  disabled={payingId === r.id || deletingPlanId === r.id}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                              ) : r.status === "approved" && r.remainingAmount > 0 ? (
-                                <Button
-                                  size="sm"
-                                  variant={payEditorOpenById[r.id] ? "outline" : "default"}
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() =>
-                                    setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))
-                                  }
-                                  disabled={payingId === r.id}
-                                >
-                                  {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
-                                </Button>
-                              ) : !String(r.storeName || "").trim() ? (
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-7 w-7 border-destructive/40 text-destructive"
-                                  title={tt("delete", "Delete")}
-                                  onClick={() => handleDeletePlan(r)}
-                                  disabled={payingId === r.id || deletingPlanId === r.id}
-                                >
-                                  {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                </Button>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">-</span>
-                              )}
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                {planRowEditable(r) ? (
+                                  <Button
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-7 w-7"
+                                    title={tt("btnEdit", "Edit")}
+                                    onClick={() => navigateToEditInRegister(r)}
+                                    disabled={payingId === r.id || deletingPlanId === r.id}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                ) : null}
+                                {r.status === "approved" && r.remainingAmount > 0 ? (
+                                  <Button
+                                    size="sm"
+                                    variant={payEditorOpenById[r.id] ? "outline" : "default"}
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() =>
+                                      setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))
+                                    }
+                                    disabled={payingId === r.id}
+                                  >
+                                    {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
+                                  </Button>
+                                ) : !String(r.storeName || "").trim() ? (
+                                  <Button
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-7 w-7 border-destructive/40 text-destructive"
+                                    title={tt("delete", "Delete")}
+                                    onClick={() => handleDeletePlan(r)}
+                                    disabled={payingId === r.id || deletingPlanId === r.id}
+                                  >
+                                    {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
+                                  </Button>
+                                ) : planRowEditable(r) ? null : (
+                                  <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-2 px-1 text-center align-top sticky right-0 z-[1] border-l border-border/60 bg-card">
                               <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">
@@ -1137,7 +1166,7 @@ export function ExpenseManagementTab() {
                                     : getPayeeLine(r.payeeName, "")}
                                 </td>
                                 <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                                <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
+                                <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
                                 <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px]" title={r.memo || ""}>{getMemo(r.memo)}</td>
                                 <td className="py-2 px-1 text-center align-top">
                                   {(r.attachmentUrls?.length ?? 0) > 0 ? (
@@ -1162,21 +1191,24 @@ export function ExpenseManagementTab() {
                                 </td>
                                 {renderAccrualInvoiceCell(r)}
                                 <td className="py-2 px-1 text-center align-top">
-                                  {r.status === "planned" ? (
-                                    <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "Edit")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-                                  ) : r.status === "approved" && r.remainingAmount > 0 ? (
-                                    <Button size="sm" variant={payEditorOpenById[r.id] ? "outline" : "default"} className="h-7 px-2 text-xs" onClick={() => setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))} disabled={payingId === r.id}>
-                                      {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
-                                    </Button>
-                                  ) : !String(r.storeName || "").trim() ? (
-                                    <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
-                                      {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                    </Button>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">-</span>
-                                  )}
+                                  <div className="flex flex-wrap items-center justify-center gap-1">
+                                    {planRowEditable(r) ? (
+                                      <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "Edit")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </Button>
+                                    ) : null}
+                                    {r.status === "approved" && r.remainingAmount > 0 ? (
+                                      <Button size="sm" variant={payEditorOpenById[r.id] ? "outline" : "default"} className="h-7 px-2 text-xs" onClick={() => setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))} disabled={payingId === r.id}>
+                                        {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
+                                      </Button>
+                                    ) : !String(r.storeName || "").trim() ? (
+                                      <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                        {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
+                                      </Button>
+                                    ) : planRowEditable(r) ? null : (
+                                      <span className="text-xs text-muted-foreground">-</span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="py-2 px-1 text-center align-top sticky right-0 z-[1] border-l border-border/60 bg-card">
                                   <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">

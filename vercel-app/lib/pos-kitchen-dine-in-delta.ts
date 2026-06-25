@@ -15,8 +15,27 @@ type KitchenComparableLine = {
   note?: string
   menuId?: string
   menuId1?: string
+  menu_id1?: string
   optionCode?: string
   optionCode1?: string
+  option_code1?: string
+}
+
+/** items_json(camel/snake) · 카트 · UI 스냅샷 공통 menu id */
+export function resolveKitchenLineMenuId(line: {
+  menuId?: string
+  menuId1?: string
+  menu_id1?: string
+}): string {
+  return String(line.menuId ?? line.menuId1 ?? line.menu_id1 ?? '').trim()
+}
+
+function resolveKitchenLineOptionCode(line: {
+  optionCode?: string
+  optionCode1?: string
+  option_code1?: string
+}): string {
+  return String(line.optionCode ?? line.optionCode1 ?? line.option_code1 ?? '').trim()
 }
 
 /**
@@ -42,18 +61,37 @@ function lineContentSignature(
   line: KitchenComparableLine,
   formatNote: DineInNoteNormalizer = defaultDineInNoteNormalize
 ): string {
-  const menuId = String(line.menuId ?? line.menuId1 ?? '').trim()
+  const menuId = resolveKitchenLineMenuId(line)
   const name = String(line.name ?? '').trim()
   const price = Number(line.price ?? 0) || 0
   const note = formatNote(String(line.note ?? '').trim())
   return [menuId, name, price, note].join('\u001f')
 }
 
+/** 한쪽만 menuId가 비어 있어도 name·price·note가 같으면 동일 품목으로 본다 */
+function linesMatchByKitchenContent(
+  a: KitchenComparableLine,
+  b: KitchenComparableLine,
+  formatNote: DineInNoteNormalizer
+): boolean {
+  if (lineContentSignature(a, formatNote) === lineContentSignature(b, formatNote)) return true
+  const menuIdA = resolveKitchenLineMenuId(a)
+  const menuIdB = resolveKitchenLineMenuId(b)
+  if (menuIdA && menuIdB && menuIdA !== menuIdB) return false
+  const nameA = String(a.name ?? '').trim()
+  const nameB = String(b.name ?? '').trim()
+  const priceA = Number(a.price ?? 0) || 0
+  const priceB = Number(b.price ?? 0) || 0
+  const noteA = formatNote(String(a.note ?? '').trim())
+  const noteB = formatNote(String(b.note ?? '').trim())
+  return nameA === nameB && priceA === priceB && noteA === noteB
+}
+
 /** 추가 주문 주방·홀 자동인쇄 dedupe — 줄 수만 쓰면 연속 1품목 추가가 막힘 */
 export function buildDineInAddKitchenPrintDedupeSuffix(lines: KitchenComparableLine[]): string {
   if (!lines.length) return '0'
   const parts = lines.map((line) => {
-    const menuId = String(line.menuId ?? line.menuId1 ?? '').trim()
+    const menuId = resolveKitchenLineMenuId(line)
     const qty = lineQty(line)
     const note = String(line.note ?? '').trim()
     const name = String(line.name ?? '').trim()
@@ -100,8 +138,10 @@ export function resolveDineInKitchenSnapshotItemKey(
     note?: unknown
     menuId?: unknown
     menuId1?: unknown
+    menu_id1?: unknown
     optionCode?: unknown
     optionCode1?: unknown
+    option_code1?: unknown
   },
   opts?: { formatNote?: (note: string) => string }
 ): string {
@@ -111,8 +151,16 @@ export function resolveDineInKitchenSnapshotItemKey(
   const name = String(item.name ?? '').trim()
   const price = Number(item.price ?? 0) || 0
   const note = formatNote(String(item.note ?? '').trim())
-  const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
-  const optionCode = String(item.optionCode ?? item.optionCode1 ?? '').trim()
+  const menuId = resolveKitchenLineMenuId({
+    menuId: item.menuId != null ? String(item.menuId) : undefined,
+    menuId1: item.menuId1 != null ? String(item.menuId1) : undefined,
+    menu_id1: item.menu_id1 != null ? String(item.menu_id1) : undefined,
+  })
+  const optionCode = resolveKitchenLineOptionCode({
+    optionCode: item.optionCode != null ? String(item.optionCode) : undefined,
+    optionCode1: item.optionCode1 != null ? String(item.optionCode1) : undefined,
+    option_code1: item.option_code1 != null ? String(item.option_code1) : undefined,
+  })
   return `sig:${name}\u001f${price}\u001f${menuId}\u001f${optionCode}\u001f${note}`
 }
 
@@ -148,18 +196,24 @@ export function buildKitchenCartLinesFromSnapshotDelta<T extends KitchenComparab
   resolveKey: (line: T) => string
 ): T[] {
   const out: T[] = []
+  const remainingDeltaByKey = new Map<string, number>()
+  for (const [key, nextQty] of newQtyByKey) {
+    const prevQty = Number(prevQtyByKey.get(key) ?? 0)
+    const delta = nextQty - prevQty
+    if (delta > 0) remainingDeltaByKey.set(key, delta)
+  }
   for (const line of cartLines) {
     const key = resolveKey(line)
     if (!key) continue
-    const prevQty = Number(prevQtyByKey.get(key) ?? 0)
-    const nextQty = Number(newQtyByKey.get(key) ?? 0)
-    const delta = nextQty - prevQty
-    if (delta <= 0) continue
+    const remaining = Number(remainingDeltaByKey.get(key) ?? 0)
+    if (remaining <= 0) continue
     const lineQ = lineQty(line)
-    if (delta >= lineQ) {
+    const take = Math.min(remaining, lineQ)
+    remainingDeltaByKey.set(key, remaining - take)
+    if (take >= lineQ) {
       out.push(line)
     } else {
-      out.push({ ...line, quantity: delta, qty: delta })
+      out.push({ ...line, quantity: take, qty: take })
     }
   }
   return out
@@ -209,10 +263,9 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
         }
         continue
       }
-      const contentSig = lineContentSignature(line, formatNote)
       let matchedExistingQty = 0
       for (const ex of existingOrderItems) {
-        if (lineContentSignature(ex, formatNote) === contentSig) {
+        if (linesMatchByKitchenContent(line, ex, formatNote)) {
           matchedExistingQty += lineQty(ex)
         }
       }

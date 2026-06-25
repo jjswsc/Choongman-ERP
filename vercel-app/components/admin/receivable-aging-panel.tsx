@@ -12,6 +12,7 @@ import {
 } from "@/lib/receivable-aging"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { formatMoneyBaht } from "@/lib/money-amount"
 
 const BUCKET_LABEL_KEY: Record<AgingBucketKey, string> = {
   current: "acct_aging_bucket_current",
@@ -59,7 +60,7 @@ export function ReceivableAgingPanel({
           <AccountingStatCard
             key={key}
             label={t(BUCKET_LABEL_KEY[key])}
-            value={`฿${Math.round(buckets[key]).toLocaleString()}`}
+            value={`฿${formatMoneyBaht(buckets[key])}`}
             tone={BUCKET_TONE[key] === "warn" ? "warn" : BUCKET_TONE[key] === "ok" ? "ok" : "default"}
           />
         ))}
@@ -68,7 +69,7 @@ export function ReceivableAgingPanel({
         size="sm"
         variant="primary"
         label={t("acct_aging_total_open")}
-        value={`฿${Math.round(total).toLocaleString()}`}
+        value={`฿${formatMoneyBaht(total)}`}
       />
     </div>
   )

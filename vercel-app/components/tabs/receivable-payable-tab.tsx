@@ -92,6 +92,7 @@ import {
 } from "@/lib/api-client"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
 import { roundMoney2 } from "@/lib/invoice-vat-total"
+import { formatMoneyBaht } from "@/lib/money-amount"
 import { resolveInvoiceClientForTarget, resolveInvoiceClientFromBillToCandidates } from "@/lib/invoice-client-resolve"
 import type { PoInvoiceBillToVendor } from "@/lib/po-invoice-bill-to"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
@@ -108,6 +109,16 @@ import { INBOUND_HQ_LOCATION } from "@/lib/stock-location-patterns"
 /** 방콕 달력 날짜 (YYYY-MM-DD). 로컬 PC 타임존/UTC와 어긋나면 종료일 필터로 행이 잘릴 수 있음. */
 function bangkokTodayStr() {
   return new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)
+}
+
+/** 미수·미지급 화면 금액 — 소수 둘째 자리 고정(정렬·가독) */
+function fmtBaht(n: number | null | undefined): string {
+  return `฿${formatMoneyBaht(Number(n ?? 0))}`
+}
+
+function fmtBahtSigned(n: number | null | undefined): string {
+  const v = Number(n ?? 0)
+  return `${v >= 0 ? "+" : ""}฿${formatMoneyBaht(v)}`
 }
 
 function buildTaxInvoiceDocNo(issueDate: string, refText: string): string {
@@ -1078,7 +1089,7 @@ export function ReceivablePayableTab() {
       const template = startStr
         ? t("ledgerPriorBalanceBeforeStart") || tt("ledgerPriorBalanceBeforeStart", "조회 시작({date}) 이전 ฿{amount}")
         : t("ledgerPriorBalanceBeforePeriod") || tt("ledgerPriorBalanceBeforePeriod", "조회 기간 이전 ฿{amount}")
-      return template.replace("{date}", startStr).replace("{amount}", prior.toLocaleString())
+      return template.replace("{date}", startStr).replace("{amount}", formatMoneyBaht(prior))
     },
     [startStr, t, tt]
   )
@@ -1216,7 +1227,7 @@ export function ReceivablePayableTab() {
           : ""
         rows.push(
           isRec
-            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), receiveCheckCell, String(row.amount ?? 0), getMemo(row.memo) || ""]
+            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), receiveCheckCell, formatMoneyBaht(row.amount ?? 0), getMemo(row.memo) || ""]
             : [
                 name,
                 row.trans_date || "-",
@@ -1224,7 +1235,7 @@ export function ReceivablePayableTab() {
                 invPayable,
                 formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store),
                 statusPay(row),
-                String(row.amount ?? 0),
+                String(formatMoneyBaht(row.amount ?? 0)),
                 getMemo(row.memo) || "",
               ]
         )
@@ -1275,7 +1286,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
           size="sm"
           variant="primary"
           label={t("acct_kpi_cumulative_balance")}
-          value={`฿${cumulativeSummary.totalAmount.toLocaleString()}`}
+          value={fmtBaht(cumulativeSummary.totalAmount)}
           subLabel={cumulativeBalanceLabel}
         />
         {listSearchTotals.count > 0 ? (
@@ -1283,17 +1294,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
             <MetricCard
               size="sm"
               label={t("acct_kpi_period_net")}
-              value={`฿${listSearchTotals.balanceSum.toLocaleString()}`}
+              value={fmtBaht(listSearchTotals.balanceSum)}
             />
             <MetricCard
               size="sm"
               label={t("acct_kpi_period_accrual")}
-              value={`฿${listSearchTotals.accrualSum.toLocaleString()}`}
+              value={fmtBaht(listSearchTotals.accrualSum)}
             />
             <MetricCard
               size="sm"
               label={t("acct_kpi_period_settlement")}
-              value={`฿${listSearchTotals.settlementSum.toLocaleString()}`}
+              value={fmtBaht(listSearchTotals.settlementSum)}
             />
           </>
         ) : null}
@@ -1329,7 +1340,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
               return (
                 <div key={key} className="break-inside-avoid">
                   <h2 className="font-semibold text-sm mb-1">{name}</h2>
-                  <p className="text-primary font-bold mb-2">฿{(item.balance ?? 0).toLocaleString()}</p>
+                  <p className="text-primary font-bold mb-2">{fmtBaht(item.balance ?? 0)}</p>
                   <table className="w-full text-xs border-collapse table-fixed">
                     <thead>
                       <tr className="border-b">
@@ -1396,7 +1407,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                 : "—"}
                             </td>
                           )}
-                          <td className="py-1 px-2 text-right">{Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                          <td className="py-1 px-2 text-right">{fmtBahtSigned(row.amount)}</td>
                           <td className="py-1 px-2 text-muted-foreground">{getMemo(row.memo)}</td>
                         </tr>
                         )
@@ -1573,13 +1584,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.salesSum.toLocaleString()}</div>
-                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.salesSum)}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.receiveSum)}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.periodNet)}</div>
                                   <div className="text-right tabular-nums font-bold text-primary whitespace-nowrap">
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-end gap-0.5">
-                                        <span>฿{cumulativeBal.toLocaleString()}</span>
+                                        <span>{fmtBaht(cumulativeBal)}</span>
                                         {priorBalanceHint ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
                                             {priorBalanceHint}
@@ -1906,7 +1917,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <span className="text-muted-foreground text-xs">—</span>
                                         )}
                                       </td>
-                                      <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                                      <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{fmtBahtSigned(row.amount)}</td>
                                       <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                       {showReceivableManualActions && (
                                         <td className="py-1.5 px-1 w-[72px] text-center align-middle">
@@ -2005,10 +2016,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                       </td>
                                                       <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
                                                       <td className="py-1 px-2 text-right tabular-nums">
-                                                        {it.unitCost != null ? `฿${it.unitCost.toLocaleString()}` : "-"}
+                                                        {it.unitCost != null ? fmtBaht(it.unitCost) : "-"}
                                                       </td>
                                                       <td className="py-1 px-2 text-right tabular-nums font-medium">
-                                                        ฿{(it.amount ?? 0).toLocaleString()}
+                                                        {fmtBaht(it.amount ?? 0)}
                                                       </td>
                                                     </tr>
                                                   ))}
@@ -2022,7 +2033,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                           {tt("recLineSubtotal", "소계 (공급가)")}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-right tabular-nums font-medium">
-                                                          ฿{recOrderTotals.subtotalRounded.toLocaleString()}
+                                                          {fmtBaht(recOrderTotals.subtotalRounded)}
                                                         </td>
                                                       </tr>
                                                       <tr className="bg-muted/20">
@@ -2033,7 +2044,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                           {tt("recLineVat7", "VAT 7%")}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-right tabular-nums">
-                                                          ฿{recOrderTotals.vatRounded.toLocaleString()}
+                                                          {fmtBaht(recOrderTotals.vatRounded)}
                                                         </td>
                                                       </tr>
                                                       <tr className="bg-muted/20">
@@ -2044,7 +2055,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                           {tt("recLineGrandTotal", "합계 (VAT 포함 · 미수 금액과 동일 규칙)")}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-right tabular-nums font-bold">
-                                                          ฿{recOrderTotals.grandTotal.toLocaleString()}
+                                                          {fmtBaht(recOrderTotals.grandTotal)}
                                                         </td>
                                                       </tr>
                                                     </>
@@ -2075,13 +2086,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       {listSearchTotals.count > 0 ? (
                         <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
                           <div className="text-right">{t("recSearchTotalLabel") || tt("recSearchTotalLabel", "합계")}</div>
-                          <div className="text-right tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
-                          <div className="text-right tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
+                          <div className="text-right tabular-nums">{fmtBaht(listSearchTotals.accrualSum)}</div>
+                          <div className="text-right tabular-nums">{fmtBaht(listSearchTotals.settlementSum)}</div>
                           <div className="text-right tabular-nums font-semibold">
-                            ฿{listSearchTotals.balanceSum.toLocaleString()}
+                            {fmtBaht(listSearchTotals.balanceSum)}
                           </div>
                           <div className="text-right tabular-nums font-bold text-primary">
-                            ฿{(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount).toLocaleString()}
+                            {fmtBaht(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount)}
                           </div>
                         </div>
                       ) : null}
@@ -2224,13 +2235,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left pr-2">
                                     <span className="font-semibold break-words leading-snug">{formatVendorDisplay(item.vendorCode)}</span>
                                   </div>
-                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.salesSum.toLocaleString()}</div>
-                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.receiveSum.toLocaleString()}</div>
-                                  <div className="text-right tabular-nums whitespace-nowrap">฿{period.periodNet.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.salesSum)}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.receiveSum)}</div>
+                                  <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.periodNet)}</div>
                                   <div className="text-right tabular-nums font-bold text-primary whitespace-nowrap">
                                     {cumulativeBal != null ? (
                                       <div className="flex flex-col items-end gap-0.5">
-                                        <span>฿{cumulativeBal.toLocaleString()}</span>
+                                        <span>{fmtBaht(cumulativeBal)}</span>
                                         {priorBalanceHint ? (
                                           <span className="text-[10px] font-normal text-muted-foreground leading-tight">
                                             {priorBalanceHint}
@@ -2375,7 +2386,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               {row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")}
                                             </span>
                                           </td>
-                                          <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                                          <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{fmtBahtSigned(row.amount)}</td>
                                           <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                           {showPayableManualActions && (
                                             <td className="py-1.5 px-1 w-[72px] text-center align-middle">
@@ -2452,10 +2463,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                           </td>
                                                           <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
                                                           <td className="py-1 px-2 text-right tabular-nums">
-                                                            {it.unitCost != null ? `฿${it.unitCost.toLocaleString()}` : "-"}
+                                                            {it.unitCost != null ? fmtBaht(it.unitCost) : "-"}
                                                           </td>
                                                           <td className="py-1 px-2 text-right tabular-nums font-medium">
-                                                            ฿{(it.amount ?? 0).toLocaleString()}
+                                                            {fmtBaht(it.amount ?? 0)}
                                                           </td>
                                                         </tr>
                                                       ))}
@@ -2485,13 +2496,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       {listSearchTotals.count > 0 ? (
                         <div className={cn(amountGridCols, "px-4 py-3 border-t bg-muted/40 font-semibold text-sm")}>
                           <div className="text-right">{t("paySearchTotalLabel") || tt("paySearchTotalLabel", "합계")}</div>
-                          <div className="text-right tabular-nums">฿{listSearchTotals.accrualSum.toLocaleString()}</div>
-                          <div className="text-right tabular-nums">฿{listSearchTotals.settlementSum.toLocaleString()}</div>
+                          <div className="text-right tabular-nums">{fmtBaht(listSearchTotals.accrualSum)}</div>
+                          <div className="text-right tabular-nums">{fmtBaht(listSearchTotals.settlementSum)}</div>
                           <div className="text-right tabular-nums font-semibold">
-                            ฿{listSearchTotals.balanceSum.toLocaleString()}
+                            {fmtBaht(listSearchTotals.balanceSum)}
                           </div>
                           <div className="text-right tabular-nums font-bold text-primary">
-                            ฿{(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount).toLocaleString()}
+                            {fmtBaht(listSearchTotals.cumulativeSum || cumulativeSummary.totalAmount)}
                           </div>
                         </div>
                       ) : null}

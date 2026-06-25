@@ -117,6 +117,74 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
     const delta = filterKitchenCartLinesForDineInAdd(cart, existing)
     expect(delta.some((l) => l.name === 'Golden Fried Chicken')).toBe(true)
   })
+
+  it('matches existing menu_id1 rows when cart line only has menuId', () => {
+    const existing = [
+      {
+        id: 'db-c1',
+        name: 'Golden Fried Chicken',
+        price: 219,
+        quantity: 1,
+        qty: 1,
+        note: 'M - Joint wings',
+        menu_id1: '26',
+      },
+    ]
+    const mergedSave = [
+      ...existing,
+      {
+        id: 'cart-stale',
+        name: 'Golden Fried Chicken',
+        price: 219,
+        quantity: 1,
+        note: 'M - Joint wings',
+        menuId: '26',
+      },
+      {
+        id: 'cart-soup',
+        name: 'Kimchi Soup',
+        price: 199,
+        quantity: 1,
+        menuId: '99',
+      },
+    ]
+    expect(filterKitchenCartLinesForDineInAdd(mergedSave, existing)).toEqual([
+      { id: 'cart-soup', name: 'Kimchi Soup', price: 199, quantity: 1, menuId: '99' },
+    ])
+  })
+
+  it('matches when existing UI snapshot lacks menuId but cart has menuId', () => {
+    const existing = [
+      {
+        id: 'db-c1',
+        name: 'Golden Fried Chicken',
+        price: 219,
+        quantity: 1,
+        qty: 1,
+        note: 'M - Joint wings',
+      },
+    ]
+    const mergedSave = [
+      {
+        id: 'db-c1',
+        name: 'Golden Fried Chicken',
+        price: 219,
+        quantity: 1,
+        note: 'M - Joint wings',
+        menuId: '26',
+      },
+      {
+        id: 'cart-new',
+        name: 'Kimchi Soup',
+        price: 199,
+        quantity: 1,
+        menuId: '99',
+      },
+    ]
+    expect(filterKitchenCartLinesForDineInAdd(mergedSave, existing)).toEqual([
+      { id: 'cart-new', name: 'Kimchi Soup', price: 199, quantity: 1, menuId: '99' },
+    ])
+  })
 })
 
 describe('resolveDineInKitchenSnapshotItemKey', () => {
@@ -170,6 +238,61 @@ describe('buildKitchenCartLinesFromSnapshotDelta', () => {
     expect(buildKitchenCartLinesFromSnapshotDelta(cart, prev, next, resolveKey)).toEqual([
       { id: 'x3', name: 'Banban Chicken', price: 199, quantity: 1, menuId: 'c' },
     ])
+  })
+
+  it('emits only one line when same key has two rows but aggregate delta is 1 (Bangna re-add)', () => {
+    const chicken = {
+      name: 'Golden Fried Chicken',
+      price: 219,
+      quantity: 1,
+      menuId: '26',
+      note: 'M - Joint wings',
+    }
+    const cart = [
+      { id: 'cart-ch1-aaa', ...chicken },
+      { id: 'cart-ch2-bbb', ...chicken },
+    ]
+    const resolveKey = (line: (typeof cart)[number]) =>
+      resolveDineInKitchenSnapshotItemKey({
+        id: line.id,
+        name: line.name,
+        price: line.price,
+        menuId: line.menuId,
+        note: line.note,
+      })
+    const key = resolveKey(cart[0])
+    expect(resolveKey(cart[1])).toBe(key)
+    const prev = new Map([[key, 1]])
+    const next = new Map([[key, 2]])
+    expect(buildKitchenCartLinesFromSnapshotDelta(cart, prev, next, resolveKey)).toEqual([
+      { id: 'cart-ch1-aaa', ...chicken },
+    ])
+  })
+
+  it('emits both lines when same key aggregate delta is 2', () => {
+    const chicken = {
+      name: 'Golden Fried Chicken',
+      price: 219,
+      quantity: 1,
+      menuId: '26',
+      note: 'M - Joint wings',
+    }
+    const cart = [
+      { id: 'cart-ch1-aaa', ...chicken },
+      { id: 'cart-ch2-bbb', ...chicken },
+    ]
+    const resolveKey = (line: (typeof cart)[number]) =>
+      resolveDineInKitchenSnapshotItemKey({
+        id: line.id,
+        name: line.name,
+        price: line.price,
+        menuId: line.menuId,
+        note: line.note,
+      })
+    const key = resolveKey(cart[0])
+    const prev = new Map([[key, 1]])
+    const next = new Map([[key, 3]])
+    expect(buildKitchenCartLinesFromSnapshotDelta(cart, prev, next, resolveKey)).toEqual(cart)
   })
 })
 

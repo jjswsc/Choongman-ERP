@@ -123,6 +123,18 @@ function bankRowSettleDate(r: { transDate: string; salesDate?: string }): string
   return r.transDate.slice(0, 10)
 }
 
+function formatBankLedgerDepositCell(transType: string, amount?: number): string {
+  if (transType !== "deposit") return "—"
+  const n = Math.abs(Number(amount) || 0)
+  return n > 0 ? n.toLocaleString() : "—"
+}
+
+function formatBankLedgerWithdrawCell(transType: string, amount?: number): string {
+  if (transType !== "withdraw") return "—"
+  const n = Math.abs(Number(amount) || 0)
+  return n > 0 ? n.toLocaleString() : "—"
+}
+
 type BankImportRowEdit = {
   category?: string
   accountSubjectId?: string
@@ -1582,7 +1594,8 @@ export function BankTransactionsTab() {
       t("pettyColType") || "유형",
       t("bankCategoryLabel") || "용도",
       t("accountSubject") || "계정과목",
-      t("pettyColAmount") || "금액",
+      t("bankColDepositAmount") || "입금액",
+      t("bankColWithdrawAmount") || "출금액",
       t("bankAttributedDate") || "인식일",
       t("bankMemoLabel") || "은행 적요",
       t("bankNoteLabel") || "메모",
@@ -1594,12 +1607,14 @@ export function BankTransactionsTab() {
       const sub = (r.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === r.accountSubjectId)
       const subLabel = sub ? `${sub.code} ${asDisplayName(sub)}` : "—"
       const attrDate = r.transType === "deposit" && r.salesDate ? r.salesDate : r.transType === "withdraw" && r.expenseDate ? r.expenseDate : "—"
+      const transType = r.transType || "withdraw"
       rows.push([
         r.transDate || "",
-        r.transType === "deposit" ? (t("bankDeposit") || "입금") : (t("bankWithdraw") || "출금"),
+        transType === "deposit" ? (t("bankDeposit") || "입금") : (t("bankWithdraw") || "출금"),
         catLabel,
         subLabel,
-        r.amount ?? 0,
+        transType === "deposit" ? Math.abs(r.amount ?? 0) : "",
+        transType === "withdraw" ? Math.abs(r.amount ?? 0) : "",
         attrDate,
         r.memo || "",
         stripWithdrawalCategoryMetaFromNote(r.note || ""),
@@ -2253,12 +2268,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   <AccountingDataTable
                     id="bank-query-list-wrap"
                     className="max-h-[70vh] min-h-[320px]"
-                    minWidthClass="min-w-[1240px] table-fixed"
+                    minWidthClass="min-w-[1335px] table-fixed"
                   >
                     {loading ? (
                       <tbody>
                         <tr>
-                          <td colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
+                          <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
                             {t("loadingItems")}
                           </td>
                         </tr>
@@ -2266,7 +2281,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     ) : filteredList.length === 0 ? (
                       <tbody>
                         <tr>
-                          <td colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
+                          <td colSpan={12} className="py-8 text-center text-sm text-muted-foreground">
                             {list.length === 0 ? (t("pettyNoData") || "데이터 없음") : (t("bankNoMatchFilter") || "조건에 맞는 거래가 없습니다.")}
                           </td>
                         </tr>
@@ -2278,7 +2293,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "64px" }} />
                           <col style={{ width: "130px" }} />
                           <col style={{ width: "130px" }} />
-                          <col style={{ width: "95px" }} />
+                          <col style={{ width: "88px" }} />
+                          <col style={{ width: "88px" }} />
                           <col style={{ width: "120px" }} />
                           <col style={{ width: "168px" }} />
                           <col style={{ width: "32px" }} />
@@ -2291,7 +2307,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <AccountingTh align="center">{t("pettyColType") || "유형"}</AccountingTh>
                           <AccountingTh align="center">{t("bankCategoryLabel") || "용도"}</AccountingTh>
                           <AccountingTh align="center">{t("accountSubject") || "계정과목"}</AccountingTh>
-                          <AccountingTh align="right">{t("pettyColAmount") || "금액"}</AccountingTh>
+                          <AccountingTh align="right">{t("bankColDepositAmount") || "입금액"}</AccountingTh>
+                          <AccountingTh align="right">{t("bankColWithdrawAmount") || "출금액"}</AccountingTh>
                           <AccountingTh align="center">{t("bankAttributedDate") || "인식일"}</AccountingTh>
                           <AccountingTh align="center">{t("acct_bank_link_col") || "연동"}</AccountingTh>
                           <AccountingTh align="center" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</AccountingTh>
@@ -2483,8 +2500,25 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <span className="text-xs text-muted-foreground">—</span>
                                 )}
                               </td>
-                              <td className={`p-2 align-middle text-right whitespace-nowrap tabular-nums ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
-                                {(r.amount ?? 0).toLocaleString()}
+                              <td
+                                className={cn(
+                                  "p-2 align-middle text-right whitespace-nowrap tabular-nums",
+                                  r.transType === "deposit"
+                                    ? "text-green-600 dark:text-green-400"
+                                    : "text-muted-foreground"
+                                )}
+                              >
+                                {formatBankLedgerDepositCell(r.transType || "withdraw", r.amount)}
+                              </td>
+                              <td
+                                className={cn(
+                                  "p-2 align-middle text-right whitespace-nowrap tabular-nums",
+                                  r.transType === "withdraw"
+                                    ? "text-orange-600 dark:text-orange-400"
+                                    : "text-muted-foreground"
+                                )}
+                              >
+                                {formatBankLedgerWithdrawCell(r.transType || "withdraw", r.amount)}
                               </td>
                               <td className="p-2 align-middle text-center">
                                 {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
@@ -2927,7 +2961,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       <th className="p-2 text-center min-w-[64px]">{t("pettyColType")}</th>
                       <th className="p-2 text-center">{t("bankCategoryLabel")}</th>
                       <th className="p-2 text-center">{t("accountSubject")}</th>
-                      <th className="p-2 text-center">{t("pettyColAmount")}</th>
+                      <th className="p-2 text-right">{t("bankColDepositAmount") || "입금액"}</th>
+                      <th className="p-2 text-right">{t("bankColWithdrawAmount") || "출금액"}</th>
                       <th className="p-2 text-center min-w-[220px]">{t("bankMemoLabel") || "은행 적요"}</th>
                       <th className="p-2 text-center min-w-[150px]">{t("bankNoteLabel") || "메모"}</th>
                       <th className="p-2 text-center whitespace-nowrap">{t("bankAttributedDate") || "인식일"}</th>
@@ -3098,8 +3133,25 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             </Select>
                           ) : "—"}
                         </td>
-                        <td className={`p-2 text-right whitespace-nowrap ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
-                          {(r.amount ?? 0).toLocaleString()}
+                        <td
+                          className={cn(
+                            "p-2 text-right whitespace-nowrap tabular-nums",
+                            r.transType === "deposit"
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {formatBankLedgerDepositCell(r.transType, r.amount)}
+                        </td>
+                        <td
+                          className={cn(
+                            "p-2 text-right whitespace-nowrap tabular-nums",
+                            r.transType === "withdraw"
+                              ? "text-orange-600 dark:text-orange-400"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {formatBankLedgerWithdrawCell(r.transType, r.amount)}
                         </td>
                         <td
                           className="p-2 min-w-[220px] max-w-[280px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"

@@ -17,3 +17,15 @@ export function canApproveExpenseAccrual(userRoleRaw: string | undefined, storeN
   if (isExpenseAccrualHqStoreName(storeName)) return isDirectorRole(role)
   return isOfficeRole(role) || isAccountingRole(role)
 }
+
+/** 지급예정·지출등록 수정 가능 여부 (승인 후·미지급 포함, 지급 시작 후 차단) */
+export function canEditExpenseAccrualPlan(input: {
+  status?: string
+  paidAmount?: number
+}): boolean {
+  const status = String(input.status || '').toLowerCase()
+  if (status === 'paid' || status === 'done') return false
+  const paid = Math.max(0, Number(input.paidAmount) || 0)
+  if (paid > 0.005) return false
+  return status === 'planned' || status === 'approved' || status === 'rejected'
+}

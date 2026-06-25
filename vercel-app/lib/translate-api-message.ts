@@ -147,6 +147,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "지급 예정 데이터를 찾을 수 없습니다.": "expensePlanNotFound",
   "지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.": "planEditableOnlyBeforeApproval",
   "승인 전(요청) 상태에서만 수정/삭제할 수 있습니다.": "planEditableOnlyBeforeApproval",
+  "승인 전(요청) 상태에서만 수정할 수 있습니다.": "planEditableOnlyBeforeApproval",
+  "이미 지급된 금액이 있어 수정할 수 없습니다.": "planEditablePaidBlocked",
+  "요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.":
+    "planDeletableOnlyBeforeApproval",
   "승인되었습니다.": "att_approved",
   "반려되었습니다.": "att_rejected",
   "이미 지급 완료된 건입니다.": "alreadyPaid",

@@ -8,6 +8,7 @@ import {
 } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { canEditExpenseAccrualPlan } from '@/lib/expense-accrual-approve-policy'
 import { requireAuth } from '@/lib/verify-auth'
 
 type ExpenseAccrualRow = {
@@ -125,11 +126,34 @@ export async function POST(request: NextRequest) {
     await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
     const rowStoreName = String(row.store_name ?? '').trim()
     const isNoStore = !rowStoreName
+
+    const payableForEdit = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`, {
+      select: 'id,amount',
+      limit: 50,
+    })) as PayableRow[] | null
+    let paidAmountForEdit = 0
+    for (const tx of payableForEdit || []) {
+      const a = Number(tx.amount || 0)
+      if (a < 0) paidAmountForEdit += Math.abs(a)
+    }
+
     if (action === 'delete') {
       if (!isNoStore && status !== 'planned' && status !== 'rejected') {
         return NextResponse.json({ success: false, message: '요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.' }, { status: 400, headers })
       }
-    } else if (status !== 'planned') {
+    } else if (!canEditExpenseAccrualPlan({ status, paidAmount: paidAmountForEdit })) {
+      if (status === 'paid' || status === 'done' || paidAmountForEdit > 0.005) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              paidAmountForEdit > 0.005
+                ? '이미 지급된 금액이 있어 수정할 수 없습니다.'
+                : '이미 지급 완료된 건입니다.',
+          },
+          { status: 400, headers }
+        )
+      }
       return NextResponse.json({ success: false, message: '승인 전(요청) 상태에서만 수정할 수 있습니다.' }, { status: 400, headers })
     }
 
@@ -227,11 +251,7 @@ export async function POST(request: NextRequest) {
     }
     await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
 
-    const payableRows = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`, {
-      select: 'id,amount',
-      limit: 50,
-    })) as PayableRow[] | null
-    for (const p of payableRows || []) {
+    for (const p of payableForEdit || []) {
       if (!p.id) continue
       const a = Number(p.amount || 0)
       if (a <= 0) continue
