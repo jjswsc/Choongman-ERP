@@ -2,7 +2,7 @@ import {
   resolveReceivableAttributedStore,
   type ReceivableAttributionMaps,
   type ReceivableTransactionRow,
-} from '@/lib/receivable-ledger-scope'
+} from '@/lib/receivable-ledger-pure'
 import { receivableStoreGroupKey } from '@/lib/receivable-store-key'
 
 function roundMoney(n: number): number {

@@ -5,8 +5,8 @@ import {
   listUnallocatedBankReceives,
   sumUnallocatedBankReceiveByStoreGroup,
 } from './receivable-unallocated-bank'
-import type { ReceivableTransactionRow } from './receivable-ledger-scope'
-import { buildReceivableAccrualStoreIndex } from './receivable-ledger-scope'
+import type { ReceivableTransactionRow } from './receivable-ledger-pure'
+import { buildReceivableAccrualStoreIndex } from './receivable-ledger-pure'
 
 describe('isConsolidatedBankReceiveRow', () => {
   it('matches 통장 통합 수금', () => {

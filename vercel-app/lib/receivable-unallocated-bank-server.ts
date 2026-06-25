@@ -5,7 +5,7 @@ import {
   buildReceivableAccrualStoreIndex,
   resolveReceivableAttributedStore,
   type ReceivableTransactionRow,
-} from '@/lib/receivable-ledger-scope'
+} from '@/lib/receivable-ledger-pure'
 import { isConsolidatedBankReceiveRow } from '@/lib/receivable-unallocated-bank'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
