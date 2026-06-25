@@ -16,6 +16,8 @@ import {
   buildAttendanceQrClientHint,
   getOrCreateAttendanceQrDeviceToken,
   readAttendanceQrStoreCode,
+  requestAttendanceQrPersistentStorage,
+  writeAttendanceQrDeviceToken,
   writeAttendanceQrStoreCode,
 } from "@/lib/attendance-qr-device-client"
 import { Button } from "@/components/ui/button"
@@ -44,7 +46,7 @@ export function AttendanceQrKiosk() {
 
   const [mode, setMode] = React.useState<KioskMode>("loading")
   const [deviceToken] = React.useState(() => getOrCreateAttendanceQrDeviceToken())
-  const [storeCode, setStoreCode] = React.useState("")
+  const [storeCode, setStoreCode] = React.useState(() => readAttendanceQrStoreCode())
   const [displayLabel, setDisplayLabel] = React.useState("")
   const [registering, setRegistering] = React.useState(false)
   const [qrDataUrl, setQrDataUrl] = React.useState("")
@@ -55,25 +57,47 @@ export function AttendanceQrKiosk() {
   const canPickStore = canPickAttendanceQrStoreFilter(auth?.role || "", auth?.store || "")
 
   React.useEffect(() => {
+    requestAttendanceQrPersistentStorage()
+  }, [])
+
+  React.useEffect(() => {
     if (!initialized) return
     const savedStore = readAttendanceQrStoreCode()
-    const initialStore =
-      savedStore ||
-      (canPickStore ? "" : String(auth?.store || "").trim())
-    setStoreCode(initialStore)
+    if (savedStore) {
+      setStoreCode(savedStore)
+      return
+    }
+    if (!canPickStore) {
+      const authStore = String(auth?.store || "").trim()
+      if (authStore) setStoreCode(authStore)
+    }
   }, [initialized, auth?.store, canPickStore])
 
-  const refreshQr = React.useCallback(async () => {
-    const store = String(storeCode || readAttendanceQrStoreCode()).trim()
-    const token = String(deviceToken || "").trim()
-    if (!store || !token) return false
+  const resolveStoreCode = React.useCallback(() => {
+    return String(storeCode || readAttendanceQrStoreCode()).trim()
+  }, [storeCode])
 
-    const res = await getAttendanceQrDisplay({ storeCode: store, deviceToken: token })
+  const refreshQr = React.useCallback(async () => {
+    const store = resolveStoreCode()
+    const token = String(deviceToken || "").trim()
+    if (!token) return false
+
+    const res = await getAttendanceQrDisplay({
+      ...(store ? { storeCode: store } : {}),
+      deviceToken: token,
+    })
     if (!res.success || !res.qrPayload) {
+      if (res.message === "attendance_qr_device_not_registered") {
+        setMode("register")
+      }
       setStatusLine(
         localizeApiMessage(res.message, t, t("attendanceQrDisplayFail"), kioskLang)
       )
       return false
+    }
+    if (res.storeCode) {
+      writeAttendanceQrStoreCode(res.storeCode)
+      setStoreCode(res.storeCode)
     }
     const url = await QRCode.toDataURL(res.qrPayload, {
       margin: 2,
@@ -84,21 +108,25 @@ export function AttendanceQrKiosk() {
     setRegisteredLabel(res.displayLabel ?? null)
     setStatusLine("")
     return true
-  }, [deviceToken, storeCode, t, kioskLang])
+  }, [deviceToken, resolveStoreCode, t, kioskLang])
 
   React.useEffect(() => {
     if (!initialized || !deviceToken) return
     let cancelled = false
     ;(async () => {
-      const store = String(storeCode || readAttendanceQrStoreCode()).trim()
-      if (!store) {
-        if (!cancelled) setMode(canRegister ? "register" : "register")
-        return
-      }
-      const check = await checkAttendanceQrDevice({ storeCode: store, deviceToken })
+      const store = resolveStoreCode()
+      const check = await checkAttendanceQrDevice({
+        ...(store ? { storeCode: store } : {}),
+        deviceToken,
+      })
       if (cancelled) return
       if (check.registered) {
-        writeAttendanceQrStoreCode(store)
+        const resolvedStore = String(check.storeCode || store || "").trim()
+        if (resolvedStore) {
+          writeAttendanceQrStoreCode(resolvedStore)
+          setStoreCode(resolvedStore)
+        }
+        writeAttendanceQrDeviceToken(deviceToken)
         setMode("display")
         await refreshQr()
       } else {
@@ -108,7 +136,7 @@ export function AttendanceQrKiosk() {
     return () => {
       cancelled = true
     }
-  }, [initialized, deviceToken, storeCode, canRegister, refreshQr])
+  }, [initialized, deviceToken, resolveStoreCode, refreshQr])
 
   React.useEffect(() => {
     if (mode !== "display") return
@@ -157,6 +185,8 @@ export function AttendanceQrKiosk() {
         return
       }
       writeAttendanceQrStoreCode(store)
+      writeAttendanceQrDeviceToken(deviceToken)
+      requestAttendanceQrPersistentStorage()
       setMode("display")
       await refreshQr()
     } finally {

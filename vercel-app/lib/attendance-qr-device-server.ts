@@ -27,6 +27,22 @@ export async function fetchAttendanceQrDevice(
   return rows?.[0] ?? null
 }
 
+/** localStorage 매장 코드 유실 시 — 등록된 토큰만으로 단말 복구 (동일 토큰이 2매장 이상이면 null) */
+export async function fetchAttendanceQrDeviceByToken(
+  deviceToken: string
+): Promise<AttendanceQrDeviceRow | null> {
+  const token = String(deviceToken || '').trim()
+  if (!token || token.length < 10) return null
+  const rows = (await supabaseSelectFilter(
+    'pos_connected_devices',
+    `device_token=eq.${encodeURIComponent(token)}&role=eq.attendance_display`,
+    { limit: 2 }
+  )) as AttendanceQrDeviceRow[] | null
+  if (!rows?.length) return null
+  if (rows.length > 1) return null
+  return rows[0] ?? null
+}
+
 export async function touchAttendanceQrDevice(params: {
   storeCode: string
   deviceToken: string

@@ -48,6 +48,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const existingAttendanceQr = rows.find(
+      (r) =>
+        String(r.device_token ?? '').trim() === deviceToken && r.role === 'attendance_display'
+    )
+    if (existingAttendanceQr) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'attendance_qr_device_token_in_use',
+          code: 'ATTENDANCE_QR_DEVICE',
+        },
+        { headers }
+      )
+    }
+
     const resolved = resolveDeviceRoleForRegister(rows, deviceToken, clientRole, limits)
     if (resolved.reject && resolved.reject.ok === false) {
       const existing = rows.some((r) => String(r.device_token ?? '').trim() === deviceToken)

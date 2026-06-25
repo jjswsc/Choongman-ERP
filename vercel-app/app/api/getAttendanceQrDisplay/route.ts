@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   fetchAttendanceQrDevice,
+  fetchAttendanceQrDeviceByToken,
   touchAttendanceQrDevice,
 } from '@/lib/attendance-qr-device-server'
 import { buildAttendanceQrPayload, ATTENDANCE_QR_BUCKET_HOURS } from '@/lib/attendance-qr-token'
@@ -24,14 +25,17 @@ export async function GET(req: NextRequest) {
 
   try {
     const { storeCode, deviceToken } = readDeviceAuth(req)
-    if (!storeCode || !deviceToken) {
+    if (!deviceToken) {
       return NextResponse.json(
         { success: false, message: 'device_auth_required' },
         { headers, status: 401 }
       )
     }
 
-    const device = await fetchAttendanceQrDevice(storeCode, deviceToken)
+    let device = storeCode ? await fetchAttendanceQrDevice(storeCode, deviceToken) : null
+    if (!device) {
+      device = await fetchAttendanceQrDeviceByToken(deviceToken)
+    }
     if (!device) {
       return NextResponse.json(
         { success: false, message: 'attendance_qr_device_not_registered' },
@@ -39,18 +43,20 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    const resolvedStoreCode = device.store_code
+
     const clientHint = String(req.headers.get('X-Cm-Client-Hint') || '').trim()
     await touchAttendanceQrDevice({
-      storeCode,
+      storeCode: resolvedStoreCode,
       deviceToken,
       ...(clientHint ? { clientHint } : {}),
     })
 
-    const { qrPayload, expiresAt, bucketStartMs } = buildAttendanceQrPayload(storeCode)
+    const { qrPayload, expiresAt, bucketStartMs } = buildAttendanceQrPayload(resolvedStoreCode)
     return NextResponse.json(
       {
         success: true,
-        storeCode,
+        storeCode: resolvedStoreCode,
         qrPayload,
         expiresAt,
         bucketStartMs,

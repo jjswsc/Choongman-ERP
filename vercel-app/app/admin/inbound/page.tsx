@@ -76,6 +76,8 @@ import {
 import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/inbound-excel-html"
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { cn } from "@/lib/utils"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -161,6 +163,10 @@ export default function InboundPage() {
   const [summaryItemSortBy, setSummaryItemSortBy] = React.useState<"qty" | "amount">("amount")
   const [summaryItemSortDir, setSummaryItemSortDir] = React.useState<"asc" | "desc">("desc")
   const [fromPoId, setFromPoId] = React.useState<number | null>(null)
+  const [fromPoNo, setFromPoNo] = React.useState("")
+  const [fromPoOrderDate, setFromPoOrderDate] = React.useState("")
+  const [fromPoDateDialogOpen, setFromPoDateDialogOpen] = React.useState(false)
+  const [fromPoInboundDateDraft, setFromPoInboundDateDraft] = React.useState("")
   const [taxInvoicePreviewOpen, setTaxInvoicePreviewOpen] = React.useState(false)
   const [taxInvoicePreviewData, setTaxInvoicePreviewData] = React.useState<InvoiceData | null>(null)
 
@@ -282,8 +288,7 @@ export default function InboundPage() {
   }, [inVendor, purchaseVendors])
 
   React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    setInDate(today)
+    setInDate(getBangkokTodayDateString())
   }, [])
 
   React.useEffect(() => {
@@ -330,11 +335,13 @@ export default function InboundPage() {
         if (!po) return
         const poCart = parsePoCart(po.cart_json)
         const vendorName = String(po.vendor_name || "").trim()
-        const batchDate = po.created_at ? po.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)
+        const poNo = String(po.po_no || `PO-${po.id}` || "").trim()
+        const poOrderDate = po.created_at ? po.created_at.slice(0, 10) : getBangkokTodayDateString()
+        const inboundDate = getBangkokTodayDateString()
         const prefill: InboundCartItem[] = poCart
           .filter((c) => String(c.code || "").trim())
           .map((c) => ({
-            date: batchDate,
+            date: inboundDate,
             vendor: vendorName,
             code: String(c.code || "").trim(),
             name: String(c.name || "").trim() || String(c.code || "").trim(),
@@ -345,12 +352,30 @@ export default function InboundPage() {
         if (prefill.length > 0) {
           setCart(prefill)
           setInVendor(vendorName)
-          setInDate(batchDate)
-          setInPoNo(String(po.po_no || `PO-${po.id}` || "").trim())
+          setInDate(inboundDate)
+          setInPoNo(poNo)
+          setFromPoNo(poNo)
+          setFromPoOrderDate(poOrderDate)
+          setFromPoInboundDateDraft(inboundDate)
+          setFromPoDateDialogOpen(true)
+          setTabValue("new")
         }
       })
       .catch(() => {})
   }, [searchParams, isOffice])
+
+  React.useEffect(() => {
+    if (!fromPoId || !inDate.trim()) return
+    setCart((prev) => (prev.length ? prev.map((c) => ({ ...c, date: inDate })) : prev))
+  }, [inDate, fromPoId])
+
+  const applyFromPoInboundDate = React.useCallback(() => {
+    const ymd = fromPoInboundDateDraft.trim().slice(0, 10)
+    if (!ymd) return
+    setInDate(ymd)
+    setCart((prev) => prev.map((c) => ({ ...c, date: ymd })))
+    setFromPoDateDialogOpen(false)
+  }, [fromPoInboundDateDraft])
 
   const handleItemSelect = (item: AdminItem) => {
     setSelectedItem(item)
@@ -378,7 +403,7 @@ export default function InboundPage() {
     setCart((prev) => [
       ...prev,
       {
-        date: inDate || new Date().toISOString().slice(0, 10),
+        date: inDate || getBangkokTodayDateString(),
         vendor: inVendor,
         code: selectedItem.code,
         name: selectedItem.name,
@@ -406,12 +431,17 @@ export default function InboundPage() {
       await appAlert(t("inAlertNoList"))
       return
     }
+    const inboundYmd = inDate.trim().slice(0, 10)
+    if (!inboundYmd) {
+      await appAlert(t("inAlertInboundDate"))
+      return
+    }
     const msg = t("inConfirmSave").replace("{count}", String(cart.length))
     if (!await appConfirm(msg)) return
     setSaving(true)
     try {
       const list = cart.map((c) => ({
-        date: c.date,
+        date: inboundYmd,
         vendor: c.vendor,
         code: c.code,
         name: c.name,
@@ -1217,6 +1247,36 @@ export default function InboundPage() {
             <p className="text-xs text-muted-foreground">{isOffice ? t("inPageSubOffice") : t("inPageSubStoreDirect")}</p>
           </div>
         </div>
+        <Dialog open={fromPoDateDialogOpen} onOpenChange={setFromPoDateDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("inFromPoDateDialogTitle")}</DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed pt-1">
+                {t("inFromPoDateDialogDesc")
+                  .replace("{poNo}", fromPoNo || String(fromPoId || ""))
+                  .replace("{poDate}", fromPoOrderDate)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-2">
+              <label className="text-xs font-semibold">{t("inInboundDate")}</label>
+              <Input
+                type="date"
+                value={fromPoInboundDateDraft}
+                onChange={(e) => setFromPoInboundDateDraft(e.target.value)}
+                className="h-9"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setFromPoDateDialogOpen(false)}>
+                {t("cancel")}
+              </Button>
+              <Button type="button" onClick={applyFromPoInboundDate} disabled={!fromPoInboundDateDraft.trim()}>
+                {t("apply")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "summary" | "guide")} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
@@ -1242,13 +1302,24 @@ export default function InboundPage() {
                     <h3 className="text-sm font-bold mb-4">{t("inNewTitle")}</h3>
                     <div className="space-y-3">
                       <div>
-                        <label className="text-xs font-semibold">{t("inDate")}</label>
+                        <label className="text-xs font-semibold">{t("inInboundDate")}</label>
                         <Input
                           type="date"
                           value={inDate}
                           onChange={(e) => setInDate(e.target.value)}
-                          className="mt-1 h-9"
+                          className={cn(
+                            "mt-1 h-9",
+                            fromPoId && "ring-2 ring-amber-500/60 border-amber-500/50"
+                          )}
+                          required
                         />
+                        {fromPoId && fromPoOrderDate ? (
+                          <p className="mt-1.5 text-xs text-amber-800 dark:text-amber-300 leading-snug">
+                            {t("inFromPoDateHint")
+                              .replace("{poDate}", fromPoOrderDate)
+                              .replace("{poNo}", fromPoNo || String(fromPoId))}
+                          </p>
+                        ) : null}
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("store")}</label>

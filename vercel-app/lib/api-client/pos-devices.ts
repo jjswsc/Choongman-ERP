@@ -122,11 +122,12 @@ export async function registerAttendanceQrDevice(params: {
   return res.json() as Promise<{ success: boolean; message?: string; storeCode?: string; deviceToken?: string }>
 }
 
-export async function checkAttendanceQrDevice(params: { storeCode: string; deviceToken: string }) {
+export async function checkAttendanceQrDevice(params: { storeCode?: string; deviceToken: string }) {
   const q = new URLSearchParams({
-    storeCode: params.storeCode,
     deviceToken: params.deviceToken,
   })
+  const store = String(params.storeCode || '').trim()
+  if (store) q.set('storeCode', store)
   const res = await fetch(`/api/checkAttendanceQrDevice?${q.toString()}`, {
     credentials: 'include',
     cache: 'no-store',
@@ -142,11 +143,12 @@ export async function checkAttendanceQrDevice(params: { storeCode: string; devic
   }>
 }
 
-export async function getAttendanceQrDisplay(params: { storeCode: string; deviceToken: string }) {
+export async function getAttendanceQrDisplay(params: { storeCode?: string; deviceToken: string }) {
   const q = new URLSearchParams({
-    storeCode: params.storeCode,
     deviceToken: params.deviceToken,
   })
+  const store = String(params.storeCode || '').trim()
+  if (store) q.set('storeCode', store)
   const res = await fetch(`/api/getAttendanceQrDisplay?${q.toString()}`, {
     credentials: 'include',
     cache: 'no-store',
