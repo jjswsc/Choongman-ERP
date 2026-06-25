@@ -298,7 +298,27 @@ export async function postPettyCashJournal(params: {
   accountSubjectId?: number | null
 }) {
   const amount = Math.abs(Number(params.amountAbs) || 0)
-  if (amount <= 0 || String(params.transType).toLowerCase() !== 'expense') return null
+  if (amount <= 0) return null
+
+  const transType = String(params.transType).toLowerCase()
+  const prepayment = accountLine('1160')
+
+  if (transType === 'replenish') {
+    return postJournalEntry({
+      accountingDate: params.transDate,
+      sourceType: 'petty_cash',
+      sourceId: params.pettyCashId || null,
+      storeName: params.storeName || null,
+      memo: params.memo || '패티캐시 보충 자동분개',
+      postedBy: params.postedBy || null,
+      lines: [
+        { ...prepayment, side: 'debit', amount, memo: params.storeName ? `패티보충(${params.storeName})` : '패티캐시 보충' },
+        { ...GL.cash(), side: 'credit', amount },
+      ],
+    })
+  }
+
+  if (transType !== 'expense') return null
 
   let expenseLine: JournalLineInput = { ...GL.miscExpense(), side: 'debit', amount }
   const sid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
@@ -329,7 +349,7 @@ export async function postPettyCashJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '시재 지출 자동분개',
     postedBy: params.postedBy || null,
-    lines: [expenseLine, { ...GL.cash(), side: 'credit', amount }],
+    lines: [expenseLine, { ...prepayment, side: 'credit', amount }],
   })
 }
 
@@ -889,7 +909,7 @@ export async function postWithdrawalJournal(params: {
       break
     case 'transfer_to_petty':
       lines = [
-        { ...cash, side: 'debit', amount, memo: params.transferToPettyStore ? `패티보충(${params.transferToPettyStore})` : '패티캐쉬이체' },
+        { ...prepayment, side: 'debit', amount, memo: params.transferToPettyStore ? `패티보충(${params.transferToPettyStore})` : '패티캐시 보충' },
         { ...cash, side: 'credit', amount, memo: '통장이체' },
       ]
       break
@@ -903,7 +923,7 @@ export async function postWithdrawalJournal(params: {
       if (params.transferFromPettyToAccountId) {
         lines = [
           { ...cash, side: 'debit', amount, memo: `이체입금(계좌${params.transferFromPettyToAccountId})` },
-          { ...cash, side: 'credit', amount, memo: '패티캐쉬이체' },
+          { ...prepayment, side: 'credit', amount, memo: '패티캐시 회수' },
         ]
       } else {
         return null

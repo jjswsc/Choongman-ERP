@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
     const decoded = decodePayeeCode(row.payee_code)
     const payeeCode = payeeCodeInput || decoded.payeeCode
     const withdrawalCategory =
-      withdrawalCategoryInput && ['expense', 'expense_advance', 'purchase_payment', 'purchase_advance', 'fixed_asset', 'transfer', 'loan_repayment', 'loan_given', 'tax_vat', 'tax_withholding', 'tax_corporate', 'correction', 'dividend'].includes(withdrawalCategoryInput)
+      withdrawalCategoryInput && ['expense', 'expense_advance', 'purchase_payment', 'purchase_advance', 'fixed_asset', 'transfer', 'transfer_to_petty', 'bank_card_bill', 'loan_repayment', 'loan_given', 'tax_vat', 'tax_withholding', 'tax_corporate', 'correction', 'dividend'].includes(withdrawalCategoryInput)
         ? withdrawalCategoryInput
         : decoded.withdrawalCategory
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)

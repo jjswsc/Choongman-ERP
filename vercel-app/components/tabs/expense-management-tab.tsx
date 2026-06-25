@@ -392,6 +392,8 @@ export function ExpenseManagementTab() {
       expense_advance: tt("wm_advance", "Advance Payment"),
       fixed_asset: tt("wm_fixed_asset", "Fixed Asset"),
       transfer: tt("wm_transfer", "Transfer"),
+      transfer_to_petty: tt("wm_transferKindPettyReplenishClaim", "Petty replenish claim"),
+      bank_card_bill: tt("wm_transferKindBankCardBillClaim", "Card bill claim"),
       tax_vat: tt("wm_tax_vat", "VAT"),
       tax_withholding: tt("wm_tax_withholding", "Withholding Tax"),
       tax_corporate: tt("wm_tax_corporate", "Corporate Tax"),

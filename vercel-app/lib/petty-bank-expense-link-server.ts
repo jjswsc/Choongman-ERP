@@ -217,6 +217,8 @@ export async function registerPettyReplenishFromBankTransaction(params: {
   postedBy?: string | null
   userEmployeeId?: number | null
   userEmployeeCode?: string | null
+  /** 지급예정(보충 청구) → 통장 연동 시 이체 구분·대기열 없이 허용 */
+  fromExpenseAccrualId?: number | null
 }): Promise<{ ok: true; id: number } | { ok: false; message: string; status?: number }> {
   const bankTransactionId = Number(params.bankTransactionId || 0)
   const store = String(params.store || '').trim()
@@ -235,7 +237,13 @@ export async function registerPettyReplenishFromBankTransaction(params: {
   if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
     return { ok: false, message: '출금 거래만 연결할 수 있습니다.', status: 400 }
   }
-  if (!isTransferBankWithdrawal(bankRow) && !hasPettyCashQueueMarker(String(bankRow.note || ''))) {
+  const fromAccrualId = Number(params.fromExpenseAccrualId || 0)
+  const fromExpenseAccrual = fromAccrualId > 0
+  if (
+    !isTransferBankWithdrawal(bankRow) &&
+    !hasPettyCashQueueMarker(String(bankRow.note || '')) &&
+    !fromExpenseAccrual
+  ) {
     return { ok: false, message: '이체(transfer) 구분 출금만 패티캐시 보충으로 연결할 수 있습니다.', status: 400 }
   }
 
@@ -297,10 +305,13 @@ export async function registerPettyReplenishFromBankTransaction(params: {
   }
 
   const bankStore = String(bankRow.store || '').trim() || store
-  const categoryNote = mergeWithdrawalCategoryIntoBankNote(
-    String(bankRow.note || '').replace(/\s*\|\s*petty_cash_queue\b/gi, '').trim(),
-    'transfer_to_petty'
-  )
+  let noteBase = String(bankRow.note || '').replace(/\s*\|\s*petty_cash_queue\b/gi, '').trim()
+  if (fromExpenseAccrual) {
+    noteBase = noteBase
+      ? `${noteBase};expense_accrual_id:${fromAccrualId};withdrawal_category:transfer_to_petty`
+      : `expense_accrual_id:${fromAccrualId};withdrawal_category:transfer_to_petty`
+  }
+  const categoryNote = mergeWithdrawalCategoryIntoBankNote(noteBase, 'transfer_to_petty')
 
   try {
     await postWithdrawalJournal({

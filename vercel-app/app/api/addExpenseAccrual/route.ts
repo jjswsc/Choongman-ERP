@@ -6,6 +6,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { parseMoneyAmount } from '@/lib/money-amount'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -24,7 +25,11 @@ function normalizeWithdrawalCategory(mainRaw: string, subRaw: string, explicitRa
   if (main === 'purchase') return sub === 'advance' ? 'purchase_advance' : 'purchase_payment'
   if (main === 'expense') return sub === 'advance' ? 'expense_advance' : 'expense'
   if (main === 'fixed_asset') return 'fixed_asset'
-  if (main === 'transfer') return 'transfer'
+  if (main === 'transfer') {
+    const ex = String(explicitRaw || '').trim().toLowerCase()
+    if (ex === 'transfer_to_petty' || ex === 'bank_card_bill') return ex
+    return 'transfer'
+  }
   if (main === 'loan') return sub === 'given' ? 'loan_given' : 'loan_repayment'
   if (main === 'tax') {
     if (sub === 'vat') return 'tax_vat'
@@ -73,6 +78,8 @@ function autoPayeeNameByCategory(withdrawalCategory: string): string {
     expense_advance: '경비 선급',
     fixed_asset: '고정자산',
     transfer: '이체',
+    transfer_to_petty: '패티캐시 보충 청구',
+    bank_card_bill: '카드 대금 청구',
     loan_repayment: '대출 상환',
     loan_given: '대여',
     tax_vat: '부가세',
@@ -150,6 +157,12 @@ export async function POST(request: NextRequest) {
     if ((withdrawalCategory === 'expense' || withdrawalCategory === 'expense_advance') && !inputPayeeCode && !inputPayeeName) {
       return NextResponse.json({ success: false, message: '지급처 코드/식별값을 입력해 주세요.' }, { status: 400, headers })
     }
+    if (withdrawalCategory === 'transfer_to_petty' && !storeName) {
+      return NextResponse.json({ success: false, message: '패티캐시 매장을 선택해 주세요.' }, { status: 400, headers })
+    }
+    if (withdrawalCategory === 'bank_card_bill' && !parseCardAccountIdFromPayeeCode(inputPayeeCode)) {
+      return NextResponse.json({ success: false, message: '카드를 선택해 주세요.' }, { status: 400, headers })
+    }
     if (amount <= 0) {
       return NextResponse.json({ success: false, message: '금액을 입력해 주세요.' }, { status: 400, headers })
     }
@@ -223,46 +236,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지출 발생 등록에 실패했습니다.' }, { status: 500, headers })
     }
 
+    const prepaymentAccrual = isPrepaymentAccrualCategory(withdrawalCategory)
+
     await supabaseInsert('payable_transactions', {
       vendor_code: payeeCode.startsWith('auto_') ? null : payeeCode,
       amount: Math.abs(netPayable),
       ref_type: 'Expense',
       ref_id: null,
       trans_date: expenseDate,
-      memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
+      memo: prepaymentAccrual
+        ? withdrawalCategory === 'transfer_to_petty'
+          ? memo
+            ? `패티보충청구: ${memo.slice(0, 200)}`
+            : '패티보충청구'
+          : memo
+            ? `카드대금청구: ${memo.slice(0, 200)}`
+            : '카드대금청구'
+        : memo
+          ? `지출발생: ${memo.slice(0, 200)}`
+          : '지출발생',
       expense_accrual_id: expenseAccrualId,
       account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
       expense_date: expenseDate,
       due_date: dueDate,
     })
 
-    try {
-      await postExpenseAccrualJournal({
-        expenseAccrualId,
-        accountingDate: expenseDate,
-        amountAbs: amount,
-        expenseAccountCode: subjectCode,
-        expenseAccountName: subjectName,
-        expenseAccountSubjectId:
-          accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
-        memo: memo || `지출 발생 ${payeeName || payeeCode}`,
-        storeName: storeName || undefined,
-        postedBy: userName || undefined,
-      })
-    } catch (postingErr) {
-      console.error('addExpenseAccrual posting:', postingErr)
-    }
+    if (!prepaymentAccrual) {
+      try {
+        await postExpenseAccrualJournal({
+          expenseAccrualId,
+          accountingDate: expenseDate,
+          amountAbs: amount,
+          expenseAccountCode: subjectCode,
+          expenseAccountName: subjectName,
+          expenseAccountSubjectId:
+            accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
+          memo: memo || `지출 발생 ${payeeName || payeeCode}`,
+          storeName: storeName || undefined,
+          postedBy: userName || undefined,
+        })
+      } catch (postingErr) {
+        console.error('addExpenseAccrual posting:', postingErr)
+      }
 
-    try {
-      await syncExpenseAccrualInputVatLedger(expenseAccrualId)
-    } catch (vatLedgerErr) {
-      console.error('addExpenseAccrual vat input ledger:', vatLedgerErr)
+      try {
+        await syncExpenseAccrualInputVatLedger(expenseAccrualId)
+      } catch (vatLedgerErr) {
+        console.error('addExpenseAccrual vat input ledger:', vatLedgerErr)
+      }
     }
 
     return NextResponse.json(
       {
         success: true,
-        message: '지출 발생이 등록되었습니다.',
+        message: prepaymentAccrual
+          ? '전도금 보충 청구가 지급예정에 등록되었습니다. 승인 후 통장 거래와 연동하세요.'
+          : '지출 발생이 등록되었습니다.',
         id: expenseAccrualId,
       },
       { headers }

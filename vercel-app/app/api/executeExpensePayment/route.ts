@@ -11,6 +11,9 @@ import {
   dedupePayablePaymentsForBankTransaction,
   dedupePayablePaymentsForExpenseAccrual,
 } from '@/lib/receivable-payable'
+import { registerPettyReplenishFromBankTransaction, collectLinkedBankTransactionIds } from '@/lib/petty-bank-expense-link-server'
+import { registerCardExpenseFromBankTransaction } from '@/lib/card-bank-expense-link-server'
+import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
 
@@ -237,31 +240,207 @@ export async function POST(request: NextRequest) {
     const decoded = decodePayeeCode(source.payee_code)
     const payeeCode = decoded.payeeCode
     const withdrawalCategory = decoded.withdrawalCategory
+    const isPrepay = isPrepaymentAccrualCategory(withdrawalCategory)
+    if (isPrepay && paymentMethod !== 'bank') {
+      return NextResponse.json(
+        { success: false, message: '전도금 보충·카드 대금 청구는 통장 연동으로만 집행할 수 있습니다.' },
+        { status: 400, headers }
+      )
+    }
     const bankCategory = mapWithdrawalCategoryToBankCategory(withdrawalCategory)
     const note = `expense_accrual_id:${expenseAccrualId};withdrawal_category:${withdrawalCategory}`
     let vendorCode =
-      payeeCode && !payeeCode.startsWith('auto_') ? payeeCode.trim() : ''
-    if (!vendorCode) {
-      vendorCode =
-        (await resolveVendorCodeLoose(payeeCode)) ||
-        (await resolveVendorCodeLoose(source.payee_name))
-    }
-    if (!vendorCode) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
-        },
-        { status: 400, headers }
-      )
+      payeeCode && !payeeCode.startsWith('auto_') && !payeeCode.startsWith('card_') ? payeeCode.trim() : ''
+    if (!isPrepay) {
+      if (!vendorCode) {
+        vendorCode =
+          (await resolveVendorCodeLoose(payeeCode)) ||
+          (await resolveVendorCodeLoose(source.payee_name))
+      }
+      if (!vendorCode) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+          },
+          { status: 400, headers }
+        )
+      }
+    } else {
+      vendorCode = String(source.store_name || payeeCode || '').trim() || `prepay_${withdrawalCategory}`
     }
     const paymentMemo = memo || `지출 지급(${source.payee_name || payeeCode})`
     const accrualAccountSubjectId = resolveAccrualAccountSubjectId(source)
 
     if (paymentMethod === 'bank') {
       const existingBankId = bankTransactionId != null ? Number(bankTransactionId) : null
-      if (existingBankId && !isNaN(existingBankId)) {
+
+      if (withdrawalCategory === 'transfer_to_petty') {
+        const pettyStore = store || String(source.store_name || '').trim()
+        if (!pettyStore) {
+          return NextResponse.json({ success: false, message: '패티캐시 매장을 선택해 주세요.' }, { status: 400, headers })
+        }
+        if (existingBankId && !isNaN(existingBankId)) {
+          const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${existingBankId}`, { limit: 1 })) as BankTxRow[] | null
+          const bankRow = bankRows?.[0]
+          if (!bankRow?.id) {
+            return NextResponse.json({ success: false, message: '선택한 통장 거래를 찾을 수 없습니다.' }, { status: 404, headers })
+          }
+          if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
+            return NextResponse.json({ success: false, message: '출금 거래만 연결할 수 있습니다.' }, { status: 400, headers })
+          }
+          const bankAmount = parseMoneyAmount(bankRow.amount)
+          const bankDate = String(bankRow.trans_date || '').slice(0, 10)
+          if (!moneyEqual(bankAmount, amount)) {
+            return NextResponse.json(
+              { success: false, message: `금액이 일치하지 않습니다. (통장: ${bankAmount.toLocaleString()}, 지급: ${amount.toLocaleString()})` },
+              { status: 400, headers }
+            )
+          }
+          if (bankDate !== transDate) {
+            return NextResponse.json(
+              { success: false, message: `날짜가 일치하지 않습니다. (통장: ${bankDate}, 지급: ${transDate})` },
+              { status: 400, headers }
+            )
+          }
+          const linkedIds = await collectLinkedBankTransactionIds()
+          if (linkedIds.has(existingBankId)) {
+            return NextResponse.json({ success: false, message: '이미 연결된 통장 출금입니다.' }, { status: 400, headers })
+          }
+          const reg = await registerPettyReplenishFromBankTransaction({
+            bankTransactionId: existingBankId,
+            store: pettyStore,
+            memo: paymentMemo,
+            postedBy: userName || undefined,
+            userEmployeeId,
+            userEmployeeCode,
+            fromExpenseAccrualId: expenseAccrualId,
+          })
+          if (!reg.ok) {
+            return NextResponse.json({ success: false, message: reg.message }, { status: reg.status || 400, headers })
+          }
+          pettyId = reg.id
+          bankId = existingBankId
+        } else {
+          const accountId = Number(body.accountId || body.account_id || 0)
+          if (!accountId) {
+            return NextResponse.json({ success: false, message: '통장 지급은 계좌를 선택해 주세요.' }, { status: 400, headers })
+          }
+          const inserted = (await insertBankTransactionWithIdentityFallback({
+            account_id: accountId,
+            trans_date: transDate,
+            trans_type: 'withdraw',
+            amount: -Math.abs(amount),
+            memo: paymentMemo,
+            note: `${note};${INTERNAL_BANK_SOURCE_MARKER}`,
+            store: pettyStore,
+            user_name: userName || null,
+            user_employee_id: userEmployeeId,
+            user_employee_code: userEmployeeCode,
+            category: bankCategory,
+            expense_date: transDate,
+          })) as { id?: number }[]
+          bankId = Number(inserted?.[0]?.id || 0) || null
+          if (!bankId) {
+            return NextResponse.json({ success: false, message: '통장 출금 등록에 실패했습니다.' }, { status: 500, headers })
+          }
+          const reg = await registerPettyReplenishFromBankTransaction({
+            bankTransactionId: bankId,
+            store: pettyStore,
+            memo: paymentMemo,
+            postedBy: userName || undefined,
+            userEmployeeId,
+            userEmployeeCode,
+            fromExpenseAccrualId: expenseAccrualId,
+          })
+          if (!reg.ok) {
+            return NextResponse.json({ success: false, message: reg.message }, { status: reg.status || 400, headers })
+          }
+          pettyId = reg.id
+        }
+      } else if (withdrawalCategory === 'bank_card_bill') {
+        const cardAccountId = parseCardAccountIdFromPayeeCode(payeeCode)
+        if (!cardAccountId) {
+          return NextResponse.json({ success: false, message: '카드 정보가 없습니다. 지급예정을 다시 확인해 주세요.' }, { status: 400, headers })
+        }
+        if (existingBankId && !isNaN(existingBankId)) {
+          const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${existingBankId}`, { limit: 1 })) as BankTxRow[] | null
+          const bankRow = bankRows?.[0]
+          if (!bankRow?.id) {
+            return NextResponse.json({ success: false, message: '선택한 통장 거래를 찾을 수 없습니다.' }, { status: 404, headers })
+          }
+          if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
+            return NextResponse.json({ success: false, message: '출금 거래만 연결할 수 있습니다.' }, { status: 400, headers })
+          }
+          const bankAmount = parseMoneyAmount(bankRow.amount)
+          const bankDate = String(bankRow.trans_date || '').slice(0, 10)
+          if (!moneyEqual(bankAmount, amount)) {
+            return NextResponse.json(
+              { success: false, message: `금액이 일치하지 않습니다. (통장: ${bankAmount.toLocaleString()}, 지급: ${amount.toLocaleString()})` },
+              { status: 400, headers }
+            )
+          }
+          if (bankDate !== transDate) {
+            return NextResponse.json(
+              { success: false, message: `날짜가 일치하지 않습니다. (통장: ${bankDate}, 지급: ${transDate})` },
+              { status: 400, headers }
+            )
+          }
+          const linkedIds = await collectLinkedBankTransactionIds()
+          if (linkedIds.has(existingBankId)) {
+            return NextResponse.json({ success: false, message: '이미 연결된 통장 출금입니다.' }, { status: 400, headers })
+          }
+          const reg = await registerCardExpenseFromBankTransaction({
+            bankTransactionId: existingBankId,
+            cardAccountId,
+            memo: paymentMemo,
+            postedBy: userName || undefined,
+          })
+          if (!reg.ok) {
+            return NextResponse.json({ success: false, message: reg.message }, { status: reg.status || 400, headers })
+          }
+          bankId = existingBankId
+          await updateBankTransactionWithIdentityFallback(bankId, {
+            note,
+            category: bankCategory,
+            store: store || source.store_name || null,
+            expense_date: transDate,
+          })
+        } else {
+          const accountId = Number(body.accountId || body.account_id || 0)
+          if (!accountId) {
+            return NextResponse.json({ success: false, message: '통장 지급은 계좌를 선택해 주세요.' }, { status: 400, headers })
+          }
+          const inserted = (await insertBankTransactionWithIdentityFallback({
+            account_id: accountId,
+            trans_date: transDate,
+            trans_type: 'withdraw',
+            amount: -Math.abs(amount),
+            memo: paymentMemo,
+            note: `${note};${INTERNAL_BANK_SOURCE_MARKER}`,
+            store: store || source.store_name || null,
+            user_name: userName || null,
+            user_employee_id: userEmployeeId,
+            user_employee_code: userEmployeeCode,
+            category: bankCategory,
+            expense_date: transDate,
+          })) as { id?: number }[]
+          bankId = Number(inserted?.[0]?.id || 0) || null
+          if (!bankId) {
+            return NextResponse.json({ success: false, message: '통장 출금 등록에 실패했습니다.' }, { status: 500, headers })
+          }
+          const reg = await registerCardExpenseFromBankTransaction({
+            bankTransactionId: bankId,
+            cardAccountId,
+            memo: paymentMemo,
+            postedBy: userName || undefined,
+          })
+          if (!reg.ok) {
+            return NextResponse.json({ success: false, message: reg.message }, { status: reg.status || 400, headers })
+          }
+        }
+      } else if (existingBankId && !isNaN(existingBankId)) {
         const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${existingBankId}`, { limit: 1 })) as BankTxRow[] | null
         const bankRow = bankRows?.[0]
         if (!bankRow?.id) {
@@ -318,18 +497,20 @@ export async function POST(request: NextRequest) {
           user_employee_code: userEmployeeCode,
           ...invoiceFieldsFromAccrual(source),
         })
-        try {
-          await postPayableSettlementJournal({
-            sourceType: 'bank_transaction',
-            sourceId: bankId,
-            accountingDate: transDate,
-            amountAbs: amount,
-            memo: paymentMemo,
-            storeName: store || source.store_name || undefined,
-            postedBy: userName || undefined,
-          })
-        } catch (postingErr) {
-          console.error('executeExpensePayment bank link posting:', postingErr)
+        if (!isPrepay) {
+          try {
+            await postPayableSettlementJournal({
+              sourceType: 'bank_transaction',
+              sourceId: bankId,
+              accountingDate: transDate,
+              amountAbs: amount,
+              memo: paymentMemo,
+              storeName: store || source.store_name || undefined,
+              postedBy: userName || undefined,
+            })
+          } catch (postingErr) {
+            console.error('executeExpensePayment bank link posting:', postingErr)
+          }
         }
       } else {
         const accountId = Number(body.accountId || body.account_id || 0)
@@ -354,18 +535,20 @@ export async function POST(request: NextRequest) {
           ...invoiceFieldsFromAccrual(source),
         })) as { id?: number }[]
         bankId = Number(inserted?.[0]?.id || 0) || null
-        try {
-          await postPayableSettlementJournal({
-            sourceType: 'bank_transaction',
-            sourceId: bankId || undefined,
-            accountingDate: transDate,
-            amountAbs: amount,
-            memo: paymentMemo,
-            storeName: store || source.store_name || undefined,
-            postedBy: userName || undefined,
-          })
-        } catch (postingErr) {
-          console.error('executeExpensePayment bank posting:', postingErr)
+        if (!isPrepay) {
+          try {
+            await postPayableSettlementJournal({
+              sourceType: 'bank_transaction',
+              sourceId: bankId || undefined,
+              accountingDate: transDate,
+              amountAbs: amount,
+              memo: paymentMemo,
+              storeName: store || source.store_name || undefined,
+              postedBy: userName || undefined,
+            })
+          } catch (postingErr) {
+            console.error('executeExpensePayment bank posting:', postingErr)
+          }
         }
       }
     } else {
@@ -386,18 +569,20 @@ export async function POST(request: NextRequest) {
         ...invoiceFieldsFromAccrual(source, { includeVatAmount: true }),
       })) as { id?: number }[]
       pettyId = Number(inserted?.[0]?.id || 0) || null
-      try {
-        await postPayableSettlementJournal({
-          sourceType: 'petty_cash',
-          sourceId: pettyId || undefined,
-          accountingDate: transDate,
-          amountAbs: amount,
-          memo: paymentMemo,
-          storeName: pettyStore,
-          postedBy: userName || undefined,
-        })
-      } catch (postingErr) {
-        console.error('executeExpensePayment petty posting:', postingErr)
+      if (!isPrepay) {
+        try {
+          await postPayableSettlementJournal({
+            sourceType: 'petty_cash',
+            sourceId: pettyId || undefined,
+            accountingDate: transDate,
+            amountAbs: amount,
+            memo: paymentMemo,
+            storeName: pettyStore,
+            postedBy: userName || undefined,
+          })
+        } catch (postingErr) {
+          console.error('executeExpensePayment petty posting:', postingErr)
+        }
       }
     }
 

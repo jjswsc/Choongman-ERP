@@ -61,6 +61,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { isOfficeStore } from "@/lib/permissions"
 import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
+import { encodeCardPayeeCode } from "@/lib/prepayment-accrual-categories"
 import {
   resolveExpenseFeeAmounts,
   type ExpenseFeeVatMode,
@@ -125,6 +126,28 @@ function pettyTransferGroupKey(emp: { store: string; job: string; grade: string;
   return String(emp.role || "Staff").trim() || "Staff"
 }
 
+type TransferKind =
+  | "petty_replenish_claim"
+  | "bank_card_bill_claim"
+  | "bank_petty_link"
+  | "bank_card_link"
+  | "bank_petty_new"
+  | "bank_external"
+  | "bank_card_charge"
+  | "petty_bank"
+
+function paymentMethodFromTransferKind(kind: TransferKind): "bank" | "petty" | "card" {
+  if (kind === "petty_bank") return "petty"
+  if (kind === "bank_card_charge") return "card"
+  return "bank"
+}
+
+function transferBankDestFromKind(kind: TransferKind): "external" | "petty" | null {
+  if (kind === "bank_external") return "external"
+  if (kind === "bank_petty_new") return "petty"
+  return null
+}
+
 const CATEGORY_MAIN_OPTIONS = [
   { value: "purchase", labelKey: "wm_purchase", sub: ["normal", "advance"] },
   { value: "expense", labelKey: "wm_expense", sub: ["normal", "advance"] },
@@ -183,7 +206,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const { auth } = useAuth()
   const { posStores: stores } = useStoreList()
 
-  const [paymentMethod, setPaymentMethod] = React.useState<"bank" | "petty" | "card">("bank")
+  const [transferKind, setTransferKind] = React.useState<TransferKind>("petty_replenish_claim")
   const [transferToCardAccountId, setTransferToCardAccountId] = React.useState<string>("")
   const [amount, setAmount] = React.useState("")
   const [transDate, setTransDate] = React.useState(todayStrBkk)
@@ -196,7 +219,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [accountSubjectId, setAccountSubjectId] = React.useState<string>("")
   const [transferBankAccountNo, setTransferBankAccountNo] = React.useState("")
   const [transferBankRecipientName, setTransferBankRecipientName] = React.useState("")
-  const [transferBankDest, setTransferBankDest] = React.useState<"external" | "petty">("petty")
   const [transferToPettyStore, setTransferToPettyStore] = React.useState("")
   const [transferToDept, setTransferToDept] = React.useState("")
   const [transferToEmployee, setTransferToEmployee] = React.useState("")
@@ -271,11 +293,27 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     [storeName, tt]
   )
 
+  const effectivePaymentMethod = categoryMain === "transfer" ? paymentMethodFromTransferKind(transferKind) : "bank"
+  const effectiveTransferBankDest =
+    categoryMain === "transfer" ? transferBankDestFromKind(transferKind) : null
+  const isTransferPrepaymentClaim =
+    categoryMain === "transfer" &&
+    (transferKind === "petty_replenish_claim" || transferKind === "bank_card_bill_claim")
+  const isTransferLinkOnly =
+    categoryMain === "transfer" && (transferKind === "bank_petty_link" || transferKind === "bank_card_link")
+  const transferKindUsesBank =
+    categoryMain !== "transfer" ||
+    (!isTransferPrepaymentClaim && transferKind !== "petty_bank")
+  const showBankAccountForTransfer =
+    categoryMain === "transfer"
+      ? transferKindUsesBank
+      : effectivePaymentMethod === "bank" || effectivePaymentMethod === "card"
+
   React.useEffect(() => {
-    if (categoryMain === "transfer" && paymentMethod === "bank" && transferBankDest === "petty" && storeName) {
+    if (categoryMain === "transfer" && transferKind === "bank_petty_new" && storeName) {
       setTransferToPettyStore(storeName)
     }
-  }, [categoryMain, paymentMethod, storeName, transferBankDest])
+  }, [categoryMain, transferKind, storeName])
 
   const pettyCashStoreOptions = React.useMemo(
     () => stores.filter((s) => s && s !== "All"),
@@ -591,7 +629,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   }, [subjectEnglishNames])
 
   React.useEffect(() => {
-    if (categoryMain === "transfer" && paymentMethod === "petty" && auth?.role) {
+    if (categoryMain === "transfer" && transferKind === "petty_bank" && auth?.role) {
       getAdminEmployeeList({
         userStore: auth?.store || "",
         userRole: auth?.role || "",
@@ -620,7 +658,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         )
         .catch(() => setEmployeeList([]))
     }
-  }, [categoryMain, paymentMethod, auth?.store, auth?.role])
+  }, [categoryMain, transferKind, auth?.store, auth?.role])
 
   React.useEffect(() => {
     const list = availableStores
@@ -647,7 +685,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const hasTaxSub = categoryMain === "tax"
   const hasLoanSub = categoryMain === "loan"
 
-  const isLaterPayment = !!categoryMain && expensePayMode === "later"
+  const isLaterPayment =
+    isTransferPrepaymentClaim ||
+    ((categoryMain === "purchase" || categoryMain === "expense") && expensePayMode === "later")
 
   const accrualNetPreview = React.useMemo(() => {
     if (!isLaterPayment || (categoryMain !== "purchase" && categoryMain !== "expense")) return null
@@ -710,7 +750,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setAmount(String(fromLinks))
       }
     }
-    const withdrawalCategory = resolveWithdrawalCategory(categoryMain, categorySub)
+    const withdrawalCategory =
+      categoryMain === "transfer"
+        ? transferKind === "petty_replenish_claim"
+          ? "transfer_to_petty"
+          : transferKind === "bank_card_bill_claim"
+            ? "bank_card_bill"
+            : resolveWithdrawalCategory(categoryMain, categorySub)
+        : resolveWithdrawalCategory(categoryMain, categorySub)
     let code = payeeCode.trim()
     let name = payeeName.trim()
     if (categoryMain === "purchase") {
@@ -730,6 +777,28 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
       if (!code) code = name
       if (!name) name = code
+    } else if (categoryMain === "transfer") {
+      if (transferKind === "petty_replenish_claim") {
+        if (!storeName) {
+          await appAlert(tt("expenseStoreSelect", "Please select a store."))
+          return
+        }
+        code = storeName
+        name = `${storeName} · ${tt("wm_transferKindPettyReplenishClaim", "패티 보충 청구")}`
+      } else if (transferKind === "bank_card_bill_claim") {
+        if (!transferToCardAccountId) {
+          await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
+          return
+        }
+        code = encodeCardPayeeCode(Number(transferToCardAccountId))
+        const card = cardAccounts.find((a) => String(a.id) === transferToCardAccountId)
+        name = card?.name
+          ? `${card.name}${card.store ? ` (${card.store})` : ""}`
+          : tt("wm_transferKindBankCardBillClaim", "카드 대금 청구")
+      } else {
+        code = code || `auto_${withdrawalCategory}`
+        name = name || getAutoPayeeName(withdrawalCategory)
+      }
     } else {
       code = code || `auto_${withdrawalCategory}`
       name = name || getAutoPayeeName(withdrawalCategory)
@@ -998,6 +1067,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("wm_selectCategory", "Please select a withdrawal category."))
       return
     }
+    if (isTransferLinkOnly) {
+      await appAlert(
+        tt(
+          "wm_transferUseLinkButton",
+          "이 유형은 아래 「통장 출금 선택」버튼으로 처리합니다. 저장 버튼을 누르지 마세요."
+        )
+      )
+      return
+    }
     if (effectivePaymentMethod === "bank" && !accountId) {
       await appAlert(tt("bankAccount", "Please select an account."))
       return
@@ -1011,14 +1089,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "bank") {
-      if (transferBankDest === "petty") {
+      if (effectiveTransferBankDest === "petty") {
         if (!transferToPettyStore.trim()) {
           await appAlert(tt("wm_transferToPetty", "패티캐시 매장") + tt("msg_enter_required_suffix", " is required."))
           return
         }
-      } else if (!transferBankAccountNo.trim() || !transferBankRecipientName.trim()) {
-        await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
-        return
+      } else if (effectiveTransferBankDest === "external") {
+        if (!transferBankAccountNo.trim() || !transferBankRecipientName.trim()) {
+          await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
+          return
+        }
       }
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
@@ -1093,15 +1173,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         transferToAccountNo: categoryMain === "transfer" && effectivePaymentMethod === "petty" && transferToAccountNo.trim() ? transferToAccountNo.trim() : undefined,
         transferToCardAccountId: categoryMain === "transfer" && effectivePaymentMethod === "card" && transferToCardAccountId ? Number(transferToCardAccountId) : undefined,
         transferBankAccountNo:
-          categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "external"
+          categoryMain === "transfer" && effectivePaymentMethod === "bank" && effectiveTransferBankDest === "external"
             ? transferBankAccountNo.trim()
             : undefined,
         transferBankRecipientName:
-          categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "external"
+          categoryMain === "transfer" && effectivePaymentMethod === "bank" && effectiveTransferBankDest === "external"
             ? transferBankRecipientName.trim()
             : undefined,
         transferToPettyStore:
-          categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "petty"
+          categoryMain === "transfer" && effectivePaymentMethod === "bank" && effectiveTransferBankDest === "petty"
             ? transferToPettyStore.trim()
             : undefined,
         accountId: showBankAccountForTransfer ? Number(accountId) : undefined,
@@ -1155,9 +1235,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }
   }
 
-  const effectivePaymentMethod = categoryMain === "transfer" ? paymentMethod : "bank"
-  const showBankAccountForTransfer = effectivePaymentMethod === "bank" || effectivePaymentMethod === "card"
-
   const cardBillQueueRange = React.useMemo(() => {
     const end = transDate && /^\d{4}-\d{2}-\d{2}$/.test(transDate) ? transDate : todayStrBkk()
     const d = new Date(`${end}T12:00:00+07:00`)
@@ -1192,7 +1269,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   )
 
   const openCardBillQueueFlow = React.useCallback(async () => {
-    if (effectivePaymentMethod !== "bank") return
+    if (transferKind !== "bank_card_link") return
     const btId = Number(bankTransactionIdParam || 0)
     if (btId > 0) {
       const ok = await handleMarkBankForCardBill(btId)
@@ -1226,7 +1303,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     bankTransactionIdParam,
     cardBillQueueRange.endStr,
     cardBillQueueRange.startStr,
-    effectivePaymentMethod,
+    transferKind,
     endStrParam,
     handleMarkBankForCardBill,
     router,
@@ -1271,7 +1348,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   )
 
   const openPettyQueueFlow = React.useCallback(async () => {
-    if (effectivePaymentMethod !== "bank") return
+    if (transferKind !== "bank_petty_link") return
     const btId = Number(bankTransactionIdParam || 0)
     if (btId > 0) {
       const ok = await handleMarkBankForPetty(btId)
@@ -1305,7 +1382,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     bankTransactionIdParam,
     cardBillQueueRange.endStr,
     cardBillQueueRange.startStr,
-    effectivePaymentMethod,
+    transferKind,
     endStrParam,
     handleMarkBankForPetty,
     router,
@@ -1805,14 +1882,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "bank") {
-      if (transferBankDest === "petty") {
+      if (effectiveTransferBankDest === "petty") {
         if (!transferToPettyStore.trim()) {
           await appAlert(tt("wm_transferToPetty", "패티캐시 매장") + tt("msg_enter_required_suffix", " is required."))
           return
         }
-      } else if (!transferBankAccountNo.trim() || !transferBankRecipientName.trim()) {
-        await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
-        return
+      } else if (effectiveTransferBankDest === "external") {
+        if (!transferBankAccountNo.trim() || !transferBankRecipientName.trim()) {
+          await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
+          return
+        }
       }
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
@@ -1833,10 +1912,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         ]
           .filter(Boolean)
           .join(" ") || memoText
-    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "petty" && transferToPettyStore) {
+    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && effectiveTransferBankDest === "petty" && transferToPettyStore) {
       classifyMemo =
         [memoText, transferToPettyStore && `패티보충: ${transferToPettyStore}`].filter(Boolean).join(" / ") || memoText
-    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "external") {
+    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && effectiveTransferBankDest === "external") {
       classifyMemo =
         [memoText, transferBankRecipientName && `받는사람: ${transferBankRecipientName}`, transferBankAccountNo && `계좌: ${transferBankAccountNo}`]
           .filter(Boolean)
@@ -1908,6 +1987,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 onClick={() => {
                   setCategoryMain(opt.value)
                   setCategorySub(opt.sub[0] || "normal")
+                  if (opt.value === "transfer") setTransferKind("petty_replenish_claim")
                 }}
               >
                 {t(opt.labelKey) || opt.value}
@@ -1915,7 +1995,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             ))}
           </div>
 
-          {categoryMain && !isBankLinkMode && !isEditMode && (
+          {categoryMain && !isBankLinkMode && !isEditMode && (categoryMain === "purchase" || categoryMain === "expense") && (
             <div className="flex items-end gap-2">
               <Label className="pb-2.5 shrink-0">{tt("wm_payMode", "Payment Mode")}</Label>
               <div className="flex gap-2">
@@ -2251,46 +2331,283 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           )}
 
           {categoryMain === "transfer" && (
-            <div className="flex items-center gap-2">
-              <Label>{tt("wm_paymentMethod", "Payment Method")}</Label>
-              <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v as "bank" | "petty" | "card"); if (v !== "card") setTransferToCardAccountId(""); }}>
-                <SelectTrigger className="w-[120px] h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bank">{tt("wm_paymentMethodBank", "Bank")}</SelectItem>
-                  <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
-                  <SelectItem value="card">{tt("wm_paymentMethodCard", "Card")}</SelectItem>
-                </SelectContent>
-              </Select>
-              {effectivePaymentMethod === "bank" ? (
-                <>
+            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-3 max-w-3xl">
+              <div>
+                <Label className="font-medium">{tt("wm_transferKind", "이체 유형")}</Label>
+                <Select
+                  value={transferKind}
+                  onValueChange={(v) => {
+                    setTransferKind(v as TransferKind)
+                    if (v !== "bank_card_charge" && v !== "bank_card_bill_claim") setTransferToCardAccountId("")
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-full max-w-xl mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="petty_replenish_claim">{tt("wm_transferKindPettyReplenishClaim", "패티 보충 청구 (지급예정 → 통장 연동)")}</SelectItem>
+                    <SelectItem value="bank_card_bill_claim">{tt("wm_transferKindBankCardBillClaim", "카드 대금 청구 (지급예정 → 통장 연동)")}</SelectItem>
+                    <SelectItem value="bank_petty_link">{tt("wm_transferKindBankPettyLink", "통장 출금 → 패티캐시 (기존 출금 연동)")}</SelectItem>
+                    <SelectItem value="bank_card_link">{tt("wm_transferKindBankCardLink", "통장 출금 → 카드대금 (기존 출금 연동)")}</SelectItem>
+                    <SelectItem value="bank_petty_new">{tt("wm_transferKindBankPettyNew", "통장 → 패티캐시 보충 (신규 등록)")}</SelectItem>
+                    <SelectItem value="bank_external">{tt("wm_transferKindBankExternal", "통장 → 외부 계좌")}</SelectItem>
+                    <SelectItem value="bank_card_charge">{tt("wm_transferKindBankCardCharge", "통장 → 카드 충전")}</SelectItem>
+                    <SelectItem value="petty_bank">{tt("wm_transferKindPettyBank", "패티캐시 → 통장")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {transferKind === "petty_replenish_claim" &&
+                    tt(
+                      "wm_transferKindHintPettyReplenishClaim",
+                      "직원이 사용한 만큼 청구합니다. 금액·매장 입력 후 지급예정 등록 → 승인 → 통장 거래에서 같은 금액으로 연동하세요. (분개: 연동 시 1160/1010)"
+                    )}
+                  {transferKind === "bank_card_bill_claim" &&
+                    tt(
+                      "wm_transferKindHintBankCardBillClaim",
+                      "카드 월 대금을 먼저 청구합니다. 지급예정 등록 → 승인 → 통장 송금 건과 연동 후 카드 탭에서 배분하세요."
+                    )}
+                  {transferKind === "bank_petty_link" &&
+                    tt("wm_transferKindHintBankPettyLink", "이미 통장에서 나간 출금을 패티캐시 보충 대기열에 넣습니다. 아래 「통장 출금 선택」을 누르세요.")}
+                  {transferKind === "bank_card_link" &&
+                    tt("wm_transferKindHintBankCardLink", "이미 통장에서 나간 출금을 카드대금 연동 대기열에 넣습니다. 아래 「통장 출금 선택」을 누르세요.")}
+                  {transferKind === "bank_petty_new" &&
+                    tt("wm_transferKindHintBankPettyNew", "통장에서 패티캐시로 바로 보충합니다. 매장·금액 입력 후 저장하세요.")}
+                  {transferKind === "bank_external" &&
+                    tt("wm_transferKindHintBankExternal", "통장에서 외부 계좌로 이체합니다. 받는 분·계좌번호를 입력 후 저장하세요.")}
+                  {transferKind === "bank_card_charge" &&
+                    tt("wm_transferKindHintBankCardCharge", "통장에서 카드 한도 충전합니다. 카드를 선택한 뒤 저장하세요.")}
+                  {transferKind === "petty_bank" &&
+                    tt("wm_transferKindHintPettyBank", "패티캐시에서 직원 통장으로 이체합니다. 부서·직원·입금계좌를 입력 후 저장하세요.")}
+                </p>
+              </div>
+
+              {transferKindUsesBank && (
+                <div className="max-w-md">
+                  <Label className="text-xs text-muted-foreground">{tt("bankAccount", "Account")}</Label>
+                  <Select value={accountId || "__none__"} onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)} disabled={isBankLinkMode}>
+                    <SelectTrigger className="h-9 w-full mt-1">
+                      <SelectValue placeholder={tt("bankAccount", "Select Account")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {bankAccounts.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          {a.bankName ? `[${a.bankName}] ` : ""}{a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {transferKind === "bank_card_bill_claim" && (
+                <div className="max-w-md">
+                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToCardCharge", "Card to Charge")}</Label>
+                  <Select value={transferToCardAccountId || "__none__"} onValueChange={(v) => setTransferToCardAccountId(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {cardAccounts.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          {a.name}{a.store ? ` (${a.store})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {transferKind === "bank_petty_link" && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="default"
                     className="h-9 gap-1"
                     onClick={() => void openPettyQueueFlow()}
                     disabled={pettyQueueSaving}
                     title={tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
                   >
                     <Wallet className="h-4 w-4 shrink-0" />
-                    {pettyQueueSaving ? "..." : tt("expenseRegisterPettyQueue", "통장 패티캐시 연동")}
+                    {pettyQueueSaving ? "..." : tt("wm_transferPickBankWithdrawal", "통장 출금 선택")}
                   </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {tt("wm_transferPettyLinkAfterHint", "선택 후 패티 캐쉬 탭에서 보충 등록을 완료하세요.")}
+                  </span>
+                </div>
+              )}
+
+              {transferKind === "bank_card_link" && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="default"
                     className="h-9 gap-1"
                     onClick={() => void openCardBillQueueFlow()}
                     disabled={cardBillQueueSaving}
                     title={tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}
                   >
                     <CreditCard className="h-4 w-4 shrink-0" />
-                    {cardBillQueueSaving ? "..." : tt("expenseRegisterCardBillQueue", "통장 카드대금 연동")}
+                    {cardBillQueueSaving ? "..." : tt("wm_transferPickBankWithdrawal", "통장 출금 선택")}
                   </Button>
-                </>
-              ) : null}
+                  <span className="text-xs text-muted-foreground">
+                    {tt("wm_transferCardLinkAfterHint", "선택 후 카드 관리 탭에서 연동을 완료하세요.")}
+                  </span>
+                </div>
+              )}
+
+              {transferKind === "bank_petty_new" && (
+                <div className="max-w-md">
+                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferToPetty", "패티캐시 매장")}</Label>
+                  <Select value={transferToPettyStore || "__none__"} onValueChange={(v) => setTransferToPettyStore(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder={tt("wm_transferToPetty", "패티캐시 매장")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {pettyCashStoreOptions.map((st) => (
+                        <SelectItem key={st} value={st}>{st}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
+                  </p>
+                </div>
+              )}
+
+              {transferKind === "bank_external" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "Account Number")}</Label>
+                    <Input
+                      value={transferBankAccountNo}
+                      onChange={(e) => setTransferBankAccountNo(e.target.value)}
+                      placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "Recipient")}</Label>
+                    <Input
+                      value={transferBankRecipientName}
+                      onChange={(e) => setTransferBankRecipientName(e.target.value)}
+                      placeholder={tt("wm_transferRecipientPlaceholder", "Enter recipient name")}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {transferKind === "bank_card_charge" && (
+                <div className="max-w-md">
+                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToCardCharge", "Card to Charge")}</Label>
+                  <Select value={transferToCardAccountId || "__none__"} onValueChange={(v) => setTransferToCardAccountId(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {cardAccounts.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          {a.name}{a.store ? ` (${a.store})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {transferKind === "petty_bank" && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end max-w-4xl">
+                    <div>
+                      <Label className="text-xs text-muted-foreground block mb-1.5">{pettyTransferFirstSelectLabel}</Label>
+                      <Select
+                        value={transferToDept || "__none__"}
+                        onValueChange={(v) => { setTransferToDept(v === "__none__" ? "" : v); setTransferToEmployee(""); setTransferToAccountNo(""); }}
+                        disabled={!storeName}
+                      >
+                        <SelectTrigger className="h-9 w-full">
+                          <SelectValue placeholder={pettyTransferFirstSelectLabel} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">—</SelectItem>
+                          {[...new Set(employeeList.filter((e) => storeMatchesForPettyTransfer(e.store, storeName)).map((e) => e.job).filter(Boolean))].sort().map((j) => (
+                            <SelectItem key={j} value={j}>{j}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployee", "Employee")}</Label>
+                      <Select
+                        value={transferToEmployee || "__none__"}
+                        onValueChange={(v) => {
+                          setTransferToEmployee(v === "__none__" ? "" : v)
+                          if (v && v !== "__none__") {
+                            const emp = employeeList.find(
+                              (e) =>
+                                storeMatchesForPettyTransfer(e.store, storeName) &&
+                                e.job === transferToDept &&
+                                employeeSelectKey(e) === v
+                            )
+                            setTransferToAccountNo(emp?.accountNumber || "")
+                          } else {
+                            setTransferToAccountNo("")
+                          }
+                        }}
+                        disabled={!transferToDept}
+                      >
+                        <SelectTrigger className="h-9 w-full">
+                          <SelectValue placeholder={tt("wm_transferToEmployee", "Employee")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">—</SelectItem>
+                          {employeeList
+                            .filter((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept)
+                            .map((e) => ({ e, key: employeeSelectKey(e) }))
+                            .filter((x) => Boolean(x.key))
+                            .map(({ e, key }) => (
+                              <SelectItem key={key} value={key}>
+                                {formatEmployeeDisplayName(e.name, e.nameTitle)}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployeeAccount", "Employee Account")}</Label>
+                      {transferToEmployee && transferToEmployee !== "__none__" ? (() => {
+                        const emp = selectedTransferEmployeeRow
+                        const hasAccount = emp?.accountNumber
+                        return (
+                          <div className="h-9 flex items-center text-sm font-medium">
+                            {hasAccount ? (emp?.bankName ? `[${emp.bankName}] ` : "") + (emp?.accountNumber || "") : tt("wm_noAccountNumber", "No Account Number")}
+                          </div>
+                        )
+                      })() : (
+                        <div className="h-9 flex items-center text-sm text-muted-foreground">—</div>
+                      )}
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferAccountDirectInput", "Account Number (Manual Input)")}</Label>
+                      <Input
+                        value={transferToAccountNo}
+                        onChange={(e) => setTransferToAccountNo(e.target.value)}
+                        placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {tt("wm_pettyTransferStoreNote", "Store follows the selected store above.")}
+                  </p>
+                </div>
+              )}
             </div>
           )}
           </div>
@@ -2328,176 +2645,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
-          {categoryMain === "transfer" && effectivePaymentMethod === "bank" && (
-            <div className="space-y-2">
-              <Label>{tt("wm_transferTo", "Transfer To")}</Label>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <Label className="text-xs text-muted-foreground">{tt("wm_transferBankDest", "이체 대상")}</Label>
-                <Select value={transferBankDest} onValueChange={(v) => setTransferBankDest(v as "external" | "petty")}>
-                  <SelectTrigger className="h-9 w-[160px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="petty">{tt("wm_transferDestPetty", "패티캐시 보충")}</SelectItem>
-                    <SelectItem value="external">{tt("wm_transferDestExternal", "외부 계좌")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {transferBankDest === "petty" ? (
-                <div className="max-w-md">
-                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferToPetty", "패티캐시 매장")}</Label>
-                  <Select value={transferToPettyStore || "__none__"} onValueChange={(v) => setTransferToPettyStore(v === "__none__" ? "" : v)}>
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("wm_transferToPetty", "패티캐시 매장")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {pettyCashStoreOptions.map((st) => (
-                        <SelectItem key={st} value={st}>{st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    {tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                  <div>
-                    <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "Account Number")}</Label>
-                    <Input
-                      value={transferBankAccountNo}
-                      onChange={(e) => setTransferBankAccountNo(e.target.value)}
-                      placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
-                      className="h-9"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "Recipient")}</Label>
-                    <Input
-                      value={transferBankRecipientName}
-                      onChange={(e) => setTransferBankRecipientName(e.target.value)}
-                      placeholder={tt("wm_transferRecipientPlaceholder", "Enter recipient name")}
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {categoryMain === "transfer" && effectivePaymentMethod === "card" && (
-            <div className="space-y-2">
-              <Label>{tt("wm_transferTo", "Transfer To")}</Label>
-              <div className="max-w-md">
-                <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToCardCharge", "Card to Charge")}</Label>
-                <Select value={transferToCardAccountId || "__none__"} onValueChange={(v) => setTransferToCardAccountId(v === "__none__" ? "" : v)}>
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">—</SelectItem>
-                    {cardAccounts.map((a) => (
-                      <SelectItem key={a.id} value={String(a.id)}>
-                        {a.name}{a.store ? ` (${a.store})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-          {categoryMain === "transfer" && effectivePaymentMethod === "petty" && (
-            <div className="space-y-2">
-              <Label>{tt("wm_transferTo", "Transfer To")}</Label>
-              <div className="grid grid-cols-[160px_180px_200px_240px] gap-3 items-end max-w-3xl">
-                <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{pettyTransferFirstSelectLabel}</Label>
-                  <Select
-                    value={transferToDept || "__none__"}
-                    onValueChange={(v) => { setTransferToDept(v === "__none__" ? "" : v); setTransferToEmployee(""); setTransferToAccountNo(""); }}
-                    disabled={!storeName}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={pettyTransferFirstSelectLabel} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {[...new Set(employeeList.filter((e) => storeMatchesForPettyTransfer(e.store, storeName)).map((e) => e.job).filter(Boolean))].sort().map((j) => (
-                        <SelectItem key={j} value={j}>{j}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployee", "Employee")}</Label>
-                  <Select
-                    value={transferToEmployee || "__none__"}
-                    onValueChange={(v) => {
-                      setTransferToEmployee(v === "__none__" ? "" : v)
-                      if (v && v !== "__none__") {
-                        const emp = employeeList.find(
-                          (e) =>
-                            storeMatchesForPettyTransfer(e.store, storeName) &&
-                            e.job === transferToDept &&
-                            employeeSelectKey(e) === v
-                        )
-                        setTransferToAccountNo(emp?.accountNumber || "")
-                      } else {
-                        setTransferToAccountNo("")
-                      }
-                    }}
-                    disabled={!transferToDept}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("wm_transferToEmployee", "Employee")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {employeeList
-                        .filter((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept)
-                        .map((e) => ({ e, key: employeeSelectKey(e) }))
-                        .filter((x) => Boolean(x.key))
-                        .map(({ e, key }) => (
-                          <SelectItem key={key} value={key}>
-                            {formatEmployeeDisplayName(e.name, e.nameTitle)}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployeeAccount", "Employee Account")}</Label>
-                  {transferToEmployee && transferToEmployee !== "__none__" ? (() => {
-                    const emp = selectedTransferEmployeeRow
-                    const hasAccount = emp?.accountNumber
-                    return (
-                      <div className="h-9 flex items-center text-sm font-medium">
-                        {hasAccount ? (emp?.bankName ? `[${emp.bankName}] ` : "") + (emp?.accountNumber || "") : tt("wm_noAccountNumber", "No Account Number")}
-                      </div>
-                    )
-                  })() : (
-                    <div className="h-9 flex items-center text-sm text-muted-foreground">—</div>
-                  )}
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferAccountDirectInput", "Account Number (Manual Input)")}</Label>
-                  <Input
-                    value={transferToAccountNo}
-                    onChange={(e) => setTransferToAccountNo(e.target.value)}
-                    placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
-                    className="h-9"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {tt("wm_pettyTransferStoreNote", "Store follows the selected store above.")}
-              </p>
-            </div>
-          )}
-
           <div className="border-t pt-4 space-y-3">
             <div className="flex flex-wrap items-end gap-3 max-w-6xl">
-              {!isLaterPayment && showBankAccountForTransfer && (
+              {!isLaterPayment && showBankAccountForTransfer && categoryMain !== "transfer" && (
                 <div className="w-[220px]">
                   <Label>{effectivePaymentMethod === "card" ? tt("wm_transferFromBank", "Source Bank Account") : tt("bankAccount", "Account")}</Label>
                   <Select value={accountId} onValueChange={setAccountId} disabled={isBankLinkMode}>
@@ -2514,7 +2664,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   </Select>
                 </div>
               )}
-              {!isLaterPayment && effectivePaymentMethod === "petty" && (
+              {!isLaterPayment && effectivePaymentMethod === "petty" && categoryMain !== "transfer" && (
                 <div className="w-[140px]">
                   <Label>{tt("recFilterStoreSelect", "Store")}</Label>
                   <Select value={storeName} onValueChange={setStoreName}>
@@ -2679,6 +2829,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 disabled={
                   saving ||
                   !categoryMain ||
+                  isTransferLinkOnly ||
                   (isBankLinkMode &&
                     ((categoryMain === "purchase" && !vendorCode.trim()) ||
                       (categoryMain === "expense" &&

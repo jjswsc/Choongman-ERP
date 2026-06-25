@@ -42,6 +42,7 @@ function shouldSkipBankTxVatAutoSync(category: string): boolean {
     category === 'transfer' ||
     category === 'transfer_external' ||
     category === 'transfer_to_petty' ||
+    category === 'bank_card_bill' ||
     category === 'transfer_to_card' ||
     category === 'transfer_from_petty'
   )
