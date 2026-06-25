@@ -116,14 +116,18 @@ function resolveAccrualAccountSubjectId(source: ExpenseAccrualRow): number | nul
   return Number.isFinite(sid) && sid > 0 ? sid : null
 }
 
-function invoiceFieldsFromAccrual(source: ExpenseAccrualRow): Record<string, unknown> {
+/** bank_transactions에는 vat_amount 컬럼 없음 — 패티만 includeVatAmount: true */
+function invoiceFieldsFromAccrual(
+  source: ExpenseAccrualRow,
+  options?: { includeVatAmount?: boolean }
+): Record<string, unknown> {
   const vat = Math.max(0, Math.abs(Number(source.vat_amount ?? 0) || 0))
   const payeeCode = String(source.payee_code || '').split('::wm::')[0]?.trim()
   return {
     invoice_received: Boolean(source.invoice_received),
     invoice_no: String(source.invoice_no || '').trim() || null,
     invoice_photo_url: String(source.invoice_photo_url || '').trim() || null,
-    ...(vat > 0 ? { vat_amount: vat } : {}),
+    ...(options?.includeVatAmount && vat > 0 ? { vat_amount: vat } : {}),
     ...(payeeCode && !payeeCode.startsWith('auto_') ? { vendor_code: payeeCode } : {}),
   }
 }
@@ -379,7 +383,7 @@ export async function POST(request: NextRequest) {
         user_employee_id: userEmployeeId,
         user_employee_code: userEmployeeCode,
         account_subject_id: accrualAccountSubjectId,
-        ...invoiceFieldsFromAccrual(source),
+        ...invoiceFieldsFromAccrual(source, { includeVatAmount: true }),
       })) as { id?: number }[]
       pettyId = Number(inserted?.[0]?.id || 0) || null
       try {
