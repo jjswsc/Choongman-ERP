@@ -18,6 +18,9 @@ export const MP_HOME_HERO_HEIGHT = 'h-[137px]'
 /** 프로모 배너 모서리 (시안 15px) */
 export const MP_HOME_PROMO_RADIUS = 'rounded-[15px]'
 
+/** 홈·주문 탭 프로모 캐러셀 자동 슬라이드 간격(ms) */
+export const MP_HOME_HERO_AUTO_SLIDE_MS = 5000
+
 /** 혜택 카드 — 한 화면에 3장 (gap 12px) */
 export const MP_HOME_PRIVILEGE_CARD_WIDTH = 'w-[calc((100%-1.5rem)/3)]'
 

@@ -10,7 +10,11 @@ import {
   type MemberPortalContentItem,
   type MemberPortalHomePromoChannel,
 } from "@/lib/member-portal-content"
-import { MP_HOME_HERO_HEIGHT, MP_HOME_PROMO_RADIUS } from "@/lib/member-portal-home-layout"
+import {
+  MP_HOME_HERO_AUTO_SLIDE_MS,
+  MP_HOME_HERO_HEIGHT,
+  MP_HOME_PROMO_RADIUS,
+} from "@/lib/member-portal-home-layout"
 
 type HeroBannerCardProps = {
   item: MemberPortalContentItem
@@ -18,8 +22,6 @@ type HeroBannerCardProps = {
   ctaLabel?: string
   onSelect: () => void
   onCta?: () => void
-  /** 캐러셀 안에서는 하단 dots 여백 */
-  showDotsPadding?: boolean
 }
 
 /**
@@ -32,7 +34,6 @@ export function MemberPortalHeroBannerCard({
   ctaLabel,
   onSelect,
   onCta,
-  showDotsPadding = false,
 }: HeroBannerCardProps) {
   const ariaTitle = item.title || fallbackTitle
   const showCta = Boolean(ctaLabel && onCta)
@@ -61,11 +62,7 @@ export function MemberPortalHeroBannerCard({
       {showCta ? (
         <>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-16 bg-gradient-to-t from-black/45 to-transparent" />
-          <div
-            className={`pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end px-4 ${
-              showDotsPadding ? "pb-9" : "pb-3"
-            }`}
-          >
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end px-4 pb-3">
             <button
               type="button"
               onClick={(e) => {
@@ -98,13 +95,35 @@ function MemberPortalHeroCarousel({
   onCta?: () => void
 }) {
   const scrollerRef = React.useRef<HTMLDivElement>(null)
+  const activeIndexRef = React.useRef(0)
+  const autoSlidePausedRef = React.useRef(false)
+  const resumeAutoSlideTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeIndex, setActiveIndex] = React.useState(0)
   const itemKeys = React.useMemo(() => items.map((x) => x.contentKey).join("|"), [items])
 
+  const setIndex = React.useCallback((index: number) => {
+    activeIndexRef.current = index
+    setActiveIndex(index)
+  }, [])
+
   React.useEffect(() => {
-    setActiveIndex(0)
+    setIndex(0)
     scrollerRef.current?.scrollTo({ left: 0, behavior: "auto" })
-  }, [itemKeys])
+  }, [itemKeys, setIndex])
+
+  const pauseAutoSlide = React.useCallback((resumeAfterMs = MP_HOME_HERO_AUTO_SLIDE_MS * 2) => {
+    autoSlidePausedRef.current = true
+    if (resumeAutoSlideTimeoutRef.current) clearTimeout(resumeAutoSlideTimeoutRef.current)
+    resumeAutoSlideTimeoutRef.current = setTimeout(() => {
+      autoSlidePausedRef.current = false
+    }, resumeAfterMs)
+  }, [])
+
+  React.useEffect(() => {
+    return () => {
+      if (resumeAutoSlideTimeoutRef.current) clearTimeout(resumeAutoSlideTimeoutRef.current)
+    }
+  }, [])
 
   const syncIndexFromScroll = React.useCallback(() => {
     const el = scrollerRef.current
@@ -112,15 +131,28 @@ function MemberPortalHeroCarousel({
     const width = el.clientWidth
     if (width <= 0) return
     const next = Math.round(el.scrollLeft / width)
-    setActiveIndex(Math.min(items.length - 1, Math.max(0, next)))
-  }, [items.length])
+    setIndex(Math.min(items.length - 1, Math.max(0, next)))
+  }, [items.length, setIndex])
 
-  const scrollToIndex = (index: number) => {
-    const el = scrollerRef.current
-    if (!el) return
-    el.scrollTo({ left: index * el.clientWidth, behavior: "smooth" })
-    setActiveIndex(index)
-  }
+  const scrollToIndex = React.useCallback(
+    (index: number, behavior: ScrollBehavior = "smooth") => {
+      const el = scrollerRef.current
+      if (!el) return
+      el.scrollTo({ left: index * el.clientWidth, behavior })
+      setIndex(index)
+    },
+    [setIndex],
+  )
+
+  React.useEffect(() => {
+    if (items.length <= 1) return
+    const id = window.setInterval(() => {
+      if (autoSlidePausedRef.current) return
+      const next = (activeIndexRef.current + 1) % items.length
+      scrollToIndex(next)
+    }, MP_HOME_HERO_AUTO_SLIDE_MS)
+    return () => window.clearInterval(id)
+  }, [items.length, itemKeys, scrollToIndex])
 
   if (items.length === 1) {
     return (
@@ -140,6 +172,8 @@ function MemberPortalHeroCarousel({
         ref={scrollerRef}
         className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         onScroll={syncIndexFromScroll}
+        onPointerDown={() => pauseAutoSlide()}
+        onTouchStart={() => pauseAutoSlide()}
         aria-roledescription="carousel"
       >
         {items.map((item) => (
@@ -148,7 +182,6 @@ function MemberPortalHeroCarousel({
               item={item}
               fallbackTitle={fallbackTitle}
               ctaLabel={ctaLabel}
-              showDotsPadding
               onSelect={() => onSelectItem(item)}
               onCta={onCta}
             />
@@ -162,7 +195,10 @@ function MemberPortalHeroCarousel({
           <button
             key={row.contentKey}
             type="button"
-            onClick={() => scrollToIndex(dotIndex)}
+            onClick={() => {
+              pauseAutoSlide()
+              scrollToIndex(dotIndex)
+            }}
             className={`pointer-events-auto rounded-full transition-all ${
               dotIndex === activeIndex
                 ? "h-1.5 w-4 bg-white"

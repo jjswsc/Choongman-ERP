@@ -12,7 +12,7 @@ import { canUpdateReceivableReceiveCheck } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { findConsolidatedBankReceiveBlockingManualCheck } from '@/lib/receivable-manual-receive-guard'
-import { fetchUnallocatedBankReceiveTotalForStore } from '@/lib/receivable-unallocated-bank'
+import { fetchUnallocatedBankReceiveTotalForStore } from '@/lib/receivable-unallocated-bank-server'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
