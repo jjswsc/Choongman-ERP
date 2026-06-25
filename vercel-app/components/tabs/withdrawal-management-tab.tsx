@@ -168,6 +168,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const [transferKind, setTransferKind] = React.useState<TransferKind>("bank_to_petty")
   const [transferToCardAccountId, setTransferToCardAccountId] = React.useState<string>("")
+  const [transferBankAccountNo, setTransferBankAccountNo] = React.useState("")
+  const [transferBankRecipientName, setTransferBankRecipientName] = React.useState("")
+  const [transferToPettyStore, setTransferToPettyStore] = React.useState("")
   const [amount, setAmount] = React.useState("")
   const [transDate, setTransDate] = React.useState(todayStrBkk)
   const [memo, setMemo] = React.useState("")
@@ -239,7 +242,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const returnOpenRegisterTxIdParam = searchParams.get("openRegisterTxId")
 
   const effectivePaymentMethod = "bank" as const
-  const showBankAccountForTransfer = categoryMain !== "transfer" || !isBankLinkMode
+  const showBankAccountOutsideTransfer = categoryMain !== "transfer"
 
   React.useEffect(() => {
     if (categoryMain === "purchase") setExpensePayMode("later")
@@ -416,6 +419,51 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       setAccountSubjectId("")
     }
   }, [categoryMain, transferKind, accountSubjectId])
+
+  React.useEffect(() => {
+    if (categoryMain === "transfer" && transferKind === "bank_to_petty" && storeName) {
+      setTransferToPettyStore(storeName)
+    }
+  }, [categoryMain, transferKind, storeName])
+
+  const pettyCashStoreOptions = React.useMemo(
+    () => (stores || []).filter((s) => s && s !== "All"),
+    [stores]
+  )
+
+  const transferBankAccountsForStore = React.useMemo(() => {
+    const sn = String(storeName || "").trim()
+    if (!sn) return bankAccounts
+    return bankAccounts.filter((a) => storesMatchForGradeLookup(a.store, sn))
+  }, [bankAccounts, storeName])
+
+  const transferCardAccountsForStore = React.useMemo(() => {
+    const sn = String(storeName || "").trim()
+    if (!sn) return cardAccounts
+    return cardAccounts.filter((a) => {
+      const cardStore = String(a.store || "").trim()
+      return !cardStore || storesMatchForGradeLookup(cardStore, sn)
+    })
+  }, [cardAccounts, storeName])
+
+  React.useEffect(() => {
+    if (categoryMain !== "transfer") return
+    setAccountId((prev) => {
+      const list = transferBankAccountsForStore
+      const exists = list.some((a) => String(a.id) === prev)
+      if (exists) return prev
+      return list[0] ? String(list[0].id) : ""
+    })
+  }, [categoryMain, transferBankAccountsForStore])
+
+  React.useEffect(() => {
+    if (categoryMain !== "transfer" || transferKind !== "bank_to_card") return
+    setTransferToCardAccountId((prev) => {
+      if (!prev) return prev
+      const exists = transferCardAccountsForStore.some((a) => String(a.id) === prev)
+      return exists ? prev : ""
+    })
+  }, [categoryMain, transferKind, transferCardAccountsForStore])
 
   const pickOfficeStore = React.useCallback((list: string[]) => {
     if (list.length === 0) return ""
@@ -640,12 +688,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (!name) name = code
     } else if (categoryMain === "transfer") {
       if (transferKind === "bank_to_petty") {
-        if (!storeName) {
-          await appAlert(tt("expenseStoreSelect", "Please select a store."))
+        if (!transferToPettyStore.trim()) {
+          await appAlert(tt("wm_transferToPetty", "패티캐시 매장") + tt("msg_enter_required_suffix", " is required."))
           return
         }
-        code = storeName
-        name = `${storeName} · ${tt("wm_transferKindBankToPetty", "통장 → 패티캐시")}`
+        code = transferToPettyStore.trim()
+        name = `${transferToPettyStore.trim()} · ${tt("wm_transferKindBankToPetty", "통장 → 패티캐시")}`
       } else if (transferKind === "bank_to_card") {
         if (!transferToCardAccountId) {
           await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
@@ -953,8 +1001,22 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
-    if (categoryMain === "transfer" && transferKind === "bank_general" && !accountSubjectId) {
-      await appAlert(tt("wm_transferAccountSubjectRequired", "이체 계정과목을 선택해 주세요."))
+    if (categoryMain === "transfer" && transferKind === "bank_general") {
+      const hasExternal =
+        transferBankAccountNo.trim().length > 0 && transferBankRecipientName.trim().length > 0
+      const hasPartialExternal =
+        transferBankAccountNo.trim().length > 0 || transferBankRecipientName.trim().length > 0
+      if (hasPartialExternal && !hasExternal) {
+        await appAlert(tt("wm_transferBankRequired", "계좌번호와 받는 사람을 입력해 주세요."))
+        return
+      }
+      if (!hasExternal && !accountSubjectId) {
+        await appAlert(tt("wm_transferAccountSubjectRequired", "이체 계정과목을 선택해 주세요."))
+        return
+      }
+    }
+    if (categoryMain === "transfer" && transferKind === "bank_to_petty" && !transferToPettyStore.trim()) {
+      await appAlert(tt("wm_transferToPetty", "패티캐시 매장") + tt("msg_enter_required_suffix", " is required."))
       return
     }
 
@@ -998,13 +1060,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         accountSubjectId:
           categoryMain === "expense" && accountSubjectId
             ? Number(accountSubjectId)
-            : categoryMain === "transfer" && transferKind === "bank_general" && accountSubjectId
+            : categoryMain === "transfer" &&
+                transferKind === "bank_general" &&
+                accountSubjectId &&
+                !(transferBankAccountNo.trim() && transferBankRecipientName.trim())
               ? Number(accountSubjectId)
               : undefined,
         accountSubjectCode:
           categoryMain === "expense"
             ? subjects.find((s) => String(s.id) === accountSubjectId)?.code
-            : categoryMain === "transfer" && transferKind === "bank_general"
+            : categoryMain === "transfer" &&
+                transferKind === "bank_general" &&
+                !(transferBankAccountNo.trim() && transferBankRecipientName.trim())
               ? transferSubjects.find((s) => String(s.id) === accountSubjectId)?.code
               : undefined,
         accountSubjectName:
@@ -1013,13 +1080,34 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 const subject = subjects.find((s) => String(s.id) === accountSubjectId)
                 return subject ? getSubjectLabel(subject) : undefined
               })()
-            : categoryMain === "transfer" && transferKind === "bank_general"
+            : categoryMain === "transfer" &&
+                transferKind === "bank_general" &&
+                !(transferBankAccountNo.trim() && transferBankRecipientName.trim())
               ? (() => {
                   const subject = transferSubjects.find((s) => String(s.id) === accountSubjectId)
                   return subject ? getSubjectLabel(subject) : undefined
                 })()
               : undefined,
-        accountId: showBankAccountForTransfer ? Number(accountId) : undefined,
+        accountId:
+          (categoryMain === "transfer" || showBankAccountOutsideTransfer) && accountId
+            ? Number(accountId)
+            : undefined,
+        transferBankAccountNo:
+          categoryMain === "transfer" &&
+          transferKind === "bank_general" &&
+          transferBankAccountNo.trim()
+            ? transferBankAccountNo.trim()
+            : undefined,
+        transferBankRecipientName:
+          categoryMain === "transfer" &&
+          transferKind === "bank_general" &&
+          transferBankRecipientName.trim()
+            ? transferBankRecipientName.trim()
+            : undefined,
+        transferToPettyStore:
+          categoryMain === "transfer" && transferKind === "bank_to_petty" && transferToPettyStore.trim()
+            ? transferToPettyStore.trim()
+            : undefined,
         assetName: categoryMain === "fixed_asset" ? assetName || undefined : undefined,
         assetCode: categoryMain === "fixed_asset" ? assetCode || undefined : undefined,
         usefulLifeMonths: categoryMain === "fixed_asset" ? Number(usefulLifeMonths) || 60 : undefined,
@@ -2061,7 +2149,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   onValueChange={(v) => {
                     setTransferKind(v as TransferKind)
                     if (v !== "bank_to_card") setTransferToCardAccountId("")
-                    if (v !== "bank_general") setAccountSubjectId("")
+                    if (v !== "bank_general") {
+                      setAccountSubjectId("")
+                      setTransferBankAccountNo("")
+                      setTransferBankRecipientName("")
+                    }
+                    if (v !== "bank_to_petty") setTransferToPettyStore("")
                   }}
                 >
                   <SelectTrigger className="h-9 w-full max-w-xl mt-1">
@@ -2106,42 +2199,99 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </p>
               </div>
 
-              {showBankAccountForTransfer && (
+              <div className="max-w-md">
+                <Label className="text-xs text-muted-foreground">{tt("bankAccount", "Account")}</Label>
+                <Select value={accountId || "__none__"} onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)} disabled={isBankLinkMode}>
+                  <SelectTrigger className="h-9 w-full mt-1">
+                    <SelectValue placeholder={tt("bankAccount", "Select Account")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">—</SelectItem>
+                    {transferBankAccountsForStore.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>
+                        {a.bankName ? `[${a.bankName}] ` : ""}{a.name}{a.store ? ` (${a.store})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!storeName && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {tt("expenseStoreSelect", "매장을 먼저 선택하세요.")}
+                  </p>
+                )}
+              </div>
+
+              {transferKind === "bank_to_petty" && (
                 <div className="max-w-md">
-                  <Label className="text-xs text-muted-foreground">{tt("bankAccount", "Account")}</Label>
-                  <Select value={accountId || "__none__"} onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)} disabled={isBankLinkMode}>
-                    <SelectTrigger className="h-9 w-full mt-1">
-                      <SelectValue placeholder={tt("bankAccount", "Select Account")} />
+                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferToPetty", "패티캐시 매장")}</Label>
+                  <Select
+                    value={transferToPettyStore || "__none__"}
+                    onValueChange={(v) => setTransferToPettyStore(v === "__none__" ? "" : v)}
+                    disabled={isBankLinkMode}
+                  >
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder={tt("wm_transferToPetty", "패티캐시 매장")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
-                      {bankAccounts.map((a) => (
-                        <SelectItem key={a.id} value={String(a.id)}>
-                          {a.bankName ? `[${a.bankName}] ` : ""}{a.name}
-                        </SelectItem>
+                      {pettyCashStoreOptions.map((st) => (
+                        <SelectItem key={st} value={st}>{st}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
+                  </p>
                 </div>
               )}
 
               {transferKind === "bank_general" && (
-                <div className="max-w-md">
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferAccountSubject", "이체 계정과목")}</Label>
-                  <Select value={accountSubjectId || "__none__"} onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}>
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("wm_transferAccountSubjectPlaceholder", "이체 계정과목 선택")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {transferSubjects.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.code} {getSubjectLabel(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="max-w-md">
+                    <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferAccountSubject", "이체 계정과목")}</Label>
+                    <Select value={accountSubjectId || "__none__"} onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder={tt("wm_transferAccountSubjectPlaceholder", "이체 계정과목 선택")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        {transferSubjects.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {s.code} {getSubjectLabel(s)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                    <div>
+                      <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "계좌번호")}</Label>
+                      <Input
+                        value={transferBankAccountNo}
+                        onChange={(e) => setTransferBankAccountNo(e.target.value)}
+                        placeholder={tt("wm_transferAccountNoPlaceholder", "계좌번호 입력")}
+                        className="h-9"
+                        readOnly={isBankLinkMode}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "받는 사람")}</Label>
+                      <Input
+                        value={transferBankRecipientName}
+                        onChange={(e) => setTransferBankRecipientName(e.target.value)}
+                        placeholder={tt("wm_transferRecipientPlaceholder", "받는 사람 입력")}
+                        className="h-9"
+                        readOnly={isBankLinkMode}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {tt(
+                      "wm_transferGeneralInputHint",
+                      "계정과목으로 내부 이체하거나, 외부 계좌·받는 사람을 입력해 외부 이체로 등록할 수 있습니다."
+                    )}
+                  </p>
+                </>
               )}
 
               {transferKind === "bank_to_card" && !isBankLinkMode && (
@@ -2153,7 +2303,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
-                      {cardAccounts.map((a) => (
+                      {transferCardAccountsForStore.map((a) => (
                         <SelectItem key={a.id} value={String(a.id)}>
                           {a.name}{a.store ? ` (${a.store})` : ""}
                         </SelectItem>
@@ -2201,7 +2351,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
           <div className="border-t pt-4 space-y-3">
             <div className="flex flex-wrap items-end gap-3 max-w-6xl">
-              {!isLaterPayment && showBankAccountForTransfer && categoryMain !== "transfer" && (
+              {!isLaterPayment && showBankAccountOutsideTransfer && (
                 <div className="w-[220px]">
                   <Label>{tt("bankAccount", "Account")}</Label>
                   <Select value={accountId} onValueChange={setAccountId} disabled={isBankLinkMode}>
