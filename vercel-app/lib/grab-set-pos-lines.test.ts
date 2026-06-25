@@ -129,4 +129,112 @@ describe('mergeGrabSetChildLinesIntoPromoParents', () => {
     expect(items[1].grabSetChild).toBeUndefined()
     expect(items[1].name).toBe('Rice')
   })
+
+  it('GF-282T: same-label set parents each absorb their own child lines (pickled vs kimchi)', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'C022' },
+        { id: 7, name: 'RED HOT CHICKEN', code: 'C007' },
+        { id: 20, name: 'GOLDEN FRIED CHICKEN', code: 'C020' },
+      ],
+      [
+        { name: 'S - Boneless', optionCode: 'C007-1' },
+        { name: 'S - Boneless', optionCode: 'C020-1' },
+      ],
+      [
+        { id: '3', name: '[111] Set 3', code: 'SET3', items: [] },
+        { id: '1', name: '[111] Set 1', code: 'SET1', items: [] },
+      ]
+    )
+    const items = mergeGrabSetChildLinesIntoPromoParents(
+      [
+        {
+          id: 'p-set3-pickled',
+          name: '[111] Set 3',
+          price: 111,
+          qty: 1,
+          promoId: '3',
+          note: 'mods:Pickled Radish 30 g.',
+        },
+        {
+          id: 'c-set3-pickled-rice',
+          name: '[[111] Set 3] Rice',
+          price: 0,
+          qty: 1,
+          menuId1: '22',
+        },
+        {
+          id: 'c-set3-pickled-chicken',
+          name: '[[111] Set 3] RED HOT CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId1: '7',
+        },
+        {
+          id: 'p-set3-kimchi',
+          name: '[111] Set 3',
+          price: 111,
+          qty: 1,
+          promoId: '3',
+          note: 'mods:Kimchi 30 g.',
+        },
+        {
+          id: 'c-set3-kimchi-rice',
+          name: '[[111] Set 3] Rice',
+          price: 0,
+          qty: 1,
+          menuId1: '22',
+        },
+        {
+          id: 'c-set3-kimchi-chicken',
+          name: '[[111] Set 3] RED HOT CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId1: '7',
+        },
+        {
+          id: 'p-set1-pickled',
+          name: '[111] Set 1',
+          price: 111,
+          qty: 1,
+          promoId: '1',
+          note: 'mods:Pickled Radish 30 g.',
+        },
+        {
+          id: 'c-set1-pickled-chicken',
+          name: '[[111] Set 1] GOLDEN FRIED CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId1: '20',
+        },
+        {
+          id: 'p-set1-kimchi',
+          name: '[111] Set 1',
+          price: 111,
+          qty: 1,
+          promoId: '1',
+          note: 'mods:Kimchi 30 g.',
+        },
+        {
+          id: 'c-set1-kimchi-chicken',
+          name: '[[111] Set 1] GOLDEN FRIED CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId1: '20',
+        },
+      ],
+      catalog
+    )
+    const set3Pickled = items.find((it) => it.id === 'p-set3-pickled')
+    const set3Kimchi = items.find((it) => it.id === 'p-set3-kimchi')
+    const set1Pickled = items.find((it) => it.id === 'p-set1-pickled')
+    const set1Kimchi = items.find((it) => it.id === 'p-set1-kimchi')
+
+    expect(set3Pickled?.promoItems?.some((p) => p.menuName === 'RED HOT CHICKEN')).toBe(true)
+    expect(set3Kimchi?.promoItems?.some((p) => p.menuName === 'RED HOT CHICKEN')).toBe(true)
+    expect(set1Pickled?.promoItems?.some((p) => p.menuName === 'GOLDEN FRIED CHICKEN')).toBe(true)
+    expect(set1Kimchi?.promoItems?.some((p) => p.menuName === 'GOLDEN FRIED CHICKEN')).toBe(true)
+    expect(items.filter((it) => !it.grabSetChild && String(it.name ?? '').includes('Set 3'))).toHaveLength(2)
+    expect(items.filter((it) => !it.grabSetChild && String(it.name ?? '').includes('Set 1'))).toHaveLength(2)
+  })
 })

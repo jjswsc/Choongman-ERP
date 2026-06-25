@@ -86,11 +86,20 @@ function findPromoMetaByLabelExact(
   return {}
 }
 
+/** 동일 세트명 부모가 여러 줄일 때 자식에 가장 가까운 앞쪽 부모를 고른다(홀 영수증 mergeSetChildrenForReceipt 와 동일). */
+function pickClosestPrecedingParentIndex(candidates: number[], childIndex: number): number {
+  if (candidates.length === 0) return -1
+  const preceding = candidates.filter((i) => i < childIndex)
+  const pool = preceding.length > 0 ? preceding : candidates
+  return pool.reduce((best, cur) => (cur > best ? cur : best), pool[0])
+}
+
 function findParentLineIndex(params: {
   promoLabel: string
+  childIndex: number
   expectedPromoId?: string
   expectedPromoCode?: string
-  items: GrabSetPosLine[],
+  items: GrabSetPosLine[]
   skipIndices: Set<number>
 }): number {
   const labelKey = normalizePromoLookupText(params.promoLabel)
@@ -108,21 +117,25 @@ function findParentLineIndex(params: {
   }
 
   if (expectedPromoId || expectedPromoCode) {
+    const promoMatches: number[] = []
     for (const i of candidateIndexes) {
       const it = params.items[i]
       const pid = String(it.promoId ?? '').trim()
       const pcode = String(it.promoCode ?? '').trim().toUpperCase()
-      if (expectedPromoId && pid && pid === expectedPromoId) return i
-      if (expectedPromoCode && pcode && pcode === expectedPromoCode) return i
+      if (expectedPromoId && pid && pid === expectedPromoId) promoMatches.push(i)
+      else if (expectedPromoCode && pcode && pcode === expectedPromoCode) promoMatches.push(i)
     }
+    const fromPromo = pickClosestPrecedingParentIndex(promoMatches, params.childIndex)
+    if (fromPromo >= 0) return fromPromo
   }
 
+  const labelMatches: number[] = []
   for (const i of candidateIndexes) {
     const it = params.items[i]
     const nameKey = normalizePromoLookupText(it.name)
-    if (nameKey && nameKey === labelKey) return i
+    if (nameKey && nameKey === labelKey) labelMatches.push(i)
   }
-  return -1
+  return pickClosestPrecedingParentIndex(labelMatches, params.childIndex)
 }
 
 /** 세트 자식 ingest 후 `(맛 / 맛)`·`(L - Boneless)` 등이 name에 있으면 유지 */
@@ -207,6 +220,7 @@ export function mergeGrabSetChildLinesIntoPromoParents(
     const promoMeta = findPromoMetaByLabelExact(child.promoLabel, catalog)
     const parentIdx = findParentLineIndex({
       promoLabel: child.promoLabel,
+      childIndex: child.index,
       expectedPromoId: promoMeta.promoId,
       expectedPromoCode: promoMeta.promoCode,
       items: out,
