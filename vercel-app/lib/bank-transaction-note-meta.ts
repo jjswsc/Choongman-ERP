@@ -60,3 +60,16 @@ export function mergeCardBillQueueIntoBankNote(existingNote: string): string {
   const base = String(existingNote || '').trim()
   return base ? `${base} | ${CARD_BILL_QUEUE_MARKER}` : CARD_BILL_QUEUE_MARKER
 }
+
+/** 지출등록(이체) → 통장 패티캐시 보충 연동 대기열 표시용 */
+export const PETTY_CASH_QUEUE_MARKER = 'petty_cash_queue'
+
+export function hasPettyCashQueueMarker(note: string): boolean {
+  return new RegExp(`\\b${PETTY_CASH_QUEUE_MARKER}\\b`, 'i').test(String(note || ''))
+}
+
+export function mergePettyCashQueueIntoBankNote(existingNote: string): string {
+  if (hasPettyCashQueueMarker(existingNote)) return String(existingNote || '').trim()
+  const base = String(existingNote || '').trim()
+  return base ? `${base} | ${PETTY_CASH_QUEUE_MARKER}` : PETTY_CASH_QUEUE_MARKER
+}

@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('petty_cash_transactions', `id=eq.${id}`, {
       limit: 1,
-    })) as { id?: number; store?: string; trans_date?: string }[]
+      select: 'id,store,trans_date,bank_transaction_id,trans_type',
+    })) as { id?: number; store?: string; trans_date?: string; bank_transaction_id?: number | null; trans_type?: string }[]
 
     const row = rows?.[0]
     if (!row?.id) {
@@ -73,6 +74,10 @@ export async function POST(request: NextRequest) {
     }
 
     await deleteJournalEntriesBySource('petty_cash', id, {})
+    const bankTxId = Number(row.bank_transaction_id || 0)
+    if (bankTxId > 0 && String(row.trans_type || '').toLowerCase() === 'replenish') {
+      await deleteJournalEntriesBySource('bank_transaction', bankTxId, {})
+    }
     await deletePettyCashInputVatLedger(id)
 
     if ((payables || []).length > 0) {

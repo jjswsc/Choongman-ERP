@@ -102,6 +102,8 @@ const LEGACY_QUEUE_WHITELIST = new Set([
   '/api/registerExpenseFromBankTransaction',
   '/api/registerCardExpenseFromBankTransaction',
   '/api/markBankTransactionForCardBill',
+  '/api/markBankTransactionForPettyCash',
+  '/api/registerPettyReplenishFromBankTransaction',
   '/api/saveCardBillAllocation',
   '/api/registerPurchaseFromBankTransaction',
   '/api/addExpenseAccrual',

@@ -29,11 +29,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Camera, Download, Pencil, Save, Trash2, X } from "lucide-react"
+import { Search, Plus, Camera, Download, Pencil, Save, Trash2, X, Landmark, Link2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -52,10 +53,16 @@ import {
   updatePettyCashTransactionInvoice,
   getAccountSubjects,
   getAdminEmployeeList,
+  getBankAccounts,
+  getUnlinkedBankWithdrawalsForPetty,
+  registerPettyReplenishFromBankTransaction,
   type PettyCashItem,
   type PettyCashSummaryResult,
   type AccountSubjectItem,
+  type BankAccount,
+  type UnlinkedBankWithdrawalForPetty,
 } from "@/lib/api-client"
+import { formatBankAccountLabel } from "@/lib/bank-account-display"
 import { compressImageForUpload } from "@/lib/utils"
 import {
   accountingResultTableCn,
@@ -99,6 +106,14 @@ export function PettyCashTab({
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = useCallback(
+    (key: string, fallback: string) => {
+      const v = t(key)
+      if (!v || v === key) return fallback
+      return v
+    },
+    [t]
+  )
   const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
 
   const [stores, setStores] = useState<string[]>([])
@@ -164,6 +179,14 @@ export function PettyCashTab({
   const receiptCameraInputRef = useRef<HTMLInputElement>(null)
 
   const [editModalItem, setEditModalItem] = useState<PettyCashItem | null>(null)
+  const [bankAccountId, setBankAccountId] = useState("")
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [unlinkedBankRows, setUnlinkedBankRows] = useState<UnlinkedBankWithdrawalForPetty[]>([])
+  const [unlinkedBankLoading, setUnlinkedBankLoading] = useState(false)
+  const [bankLinkRow, setBankLinkRow] = useState<UnlinkedBankWithdrawalForPetty | null>(null)
+  const [bankLinkStore, setBankLinkStore] = useState("")
+  const [bankLinkMemo, setBankLinkMemo] = useState("")
+  const [bankLinkSaving, setBankLinkSaving] = useState(false)
   const [editDate, setEditDate] = useState(todayStr)
   const [editType, setEditType] = useState("expense")
   const [editAmount, setEditAmount] = useState("")
@@ -254,6 +277,69 @@ export function PettyCashTab({
       }
     })
   }, [auth?.store, auth?.role, canSearchAll])
+
+  useEffect(() => {
+    if (!adminEnhancedSearch || !canSearchAll) return
+    getBankAccounts({ userRole: auth?.role, userStore: auth?.store })
+      .then((rows) => setBankAccounts(rows || []))
+      .catch(() => setBankAccounts([]))
+  }, [adminEnhancedSearch, auth?.role, auth?.store, canSearchAll])
+
+  const pettyReplenishStoreOptions = useMemo(
+    () => stores.filter((s) => s && s !== "All"),
+    [stores]
+  )
+
+  const loadUnlinkedBank = useCallback(async () => {
+    const accountId = Number(bankAccountId || 0)
+    if (!accountId) return
+    setUnlinkedBankLoading(true)
+    try {
+      const res = await getUnlinkedBankWithdrawalsForPetty({
+        accountId,
+        startStr: listStart,
+        endStr: listEnd,
+      })
+      setUnlinkedBankRows(res.list || [])
+    } catch {
+      setUnlinkedBankRows([])
+    } finally {
+      setUnlinkedBankLoading(false)
+    }
+  }, [bankAccountId, listEnd, listStart])
+
+  const openBankLinkDialog = (row: UnlinkedBankWithdrawalForPetty) => {
+    setBankLinkRow(row)
+    setBankLinkMemo(row.memo || "")
+    setBankLinkStore(
+      listStore && listStore !== "All" ? listStore : (pettyReplenishStoreOptions[0] || "")
+    )
+  }
+
+  const handleRegisterBankLink = async () => {
+    if (!bankLinkRow?.id || !bankLinkStore.trim()) return
+    setBankLinkSaving(true)
+    try {
+      const res = await registerPettyReplenishFromBankTransaction({
+        bankTransactionId: bankLinkRow.id,
+        store: bankLinkStore.trim(),
+        memo: bankLinkMemo.trim() || undefined,
+        userName: auth?.user,
+        userRole: auth?.role,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
+      setBankLinkRow(null)
+      await loadUnlinkedBank()
+      loadList()
+      loadMonthly()
+      await appAlert(t("success") || "Saved.")
+    } finally {
+      setBankLinkSaving(false)
+    }
+  }
 
   useEffect(() => {
     Promise.all([
@@ -1253,6 +1339,100 @@ ${rows.map((row, ri) => {
 
   return (
     <div className="flex flex-col gap-4">
+      {adminEnhancedSearch && canSearchAll ? (
+        <Card className="shadow-md ring-1 ring-border/40">
+          <CardContent className="pt-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="font-semibold flex items-center gap-2">
+                  <Landmark className="h-4 w-4 text-muted-foreground" />
+                  {tt("pettyBankLinkTitle", "통장 패티캐시 연동")}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                  {tt(
+                    "pettyBankLinkHint",
+                    "지출등록(이체)에서 「통장 패티캐시 연동」으로 등록한 출금만 여기에 표시됩니다. 매장을 선택한 뒤 보충으로 등록하세요."
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-end gap-2 mb-3">
+              <div className="min-w-[min(100%,28rem)] flex-1">
+                <label className="text-xs text-muted-foreground block mb-0.5">
+                  {tt("cardManagementBankAccount", "통장 계좌")}
+                </label>
+                <Select value={bankAccountId || "__none__"} onValueChange={(v) => setBankAccountId(v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="w-full min-w-[280px] max-w-xl h-9">
+                    <SelectValue placeholder={tt("cardManagementBankAccount", "통장 계좌")} />
+                  </SelectTrigger>
+                  <SelectContent className="max-w-[min(100vw-2rem,36rem)]">
+                    {bankAccounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)} className="whitespace-normal">
+                        {formatBankAccountLabel(a)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9"
+                onClick={() => void loadUnlinkedBank()}
+                disabled={unlinkedBankLoading || !bankAccountId}
+              >
+                <Search className="h-4 w-4 mr-1" />
+                {unlinkedBankLoading ? "..." : tt("pettyBankLinkQuery", "대기 출금 조회")}
+              </Button>
+            </div>
+            {unlinkedBankLoading ? (
+              <p className="text-sm text-muted-foreground py-4">{t("loading")}</p>
+            ) : unlinkedBankRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">
+                {tt(
+                  "pettyNoQueuedBank",
+                  "대기열에 등록된 출금이 없습니다. 지출등록(이체)에서 「통장 패티캐시 연동」을 먼저 실행하세요."
+                )}
+              </p>
+            ) : (
+              <div className="rounded-lg border overflow-auto max-h-[220px]">
+                <table className="w-full text-sm min-w-[520px]">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="p-2 text-center">{tt("date", "Date")}</th>
+                      <th className="p-2 text-right">{t("pettyColAmount")}</th>
+                      <th className="p-2 text-left">{t("memo")}</th>
+                      <th className="p-2 text-center" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unlinkedBankRows.map((row) => (
+                      <tr key={row.id} className="border-t hover:bg-muted/30">
+                        <td className="p-2 text-center whitespace-nowrap">{row.transDate}</td>
+                        <td className="p-2 text-right tabular-nums font-medium">{fmt(row.amount)}</td>
+                        <td className="p-2 text-xs text-muted-foreground truncate max-w-[200px]">{row.memo || "—"}</td>
+                        <td className="p-2 text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 gap-1"
+                            onClick={() => openBankLinkDialog(row)}
+                            disabled={pettyReplenishStoreOptions.length === 0}
+                          >
+                            <Link2 className="h-3.5 w-3.5" />
+                            {tt("pettyBankLinkRegister", "보충 등록")}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="shadow-md ring-1 ring-border/40">
         <CardContent className="pt-5 sm:pt-6">
           <Tabs defaultValue="list" className="w-full">
@@ -1959,6 +2139,52 @@ ${rows.map((row, ri) => {
       </Card>
 
       {/* 영수증 사진 모달 - 출고 관리 order-tab imageModal과 동일한 구조 */}
+      <Dialog open={!!bankLinkRow} onOpenChange={(open) => { if (!open) setBankLinkRow(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tt("pettyBankLinkDialogTitle", "통장 출금 → 패티캐시 보충")}</DialogTitle>
+            <DialogDescription className="sr-only">{tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010)")}</DialogDescription>
+          </DialogHeader>
+          {bankLinkRow ? (
+            <div className="space-y-3 pt-1">
+              <div className="rounded-lg border p-3 text-sm space-y-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{tt("date", "Date")}</span>
+                  <span>{bankLinkRow.transDate}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{t("pettyColAmount")}</span>
+                  <span className="font-semibold tabular-nums">{fmt(bankLinkRow.amount)}</span>
+                </div>
+                {bankLinkRow.memo ? (
+                  <div className="text-xs text-muted-foreground pt-1 border-t">{bankLinkRow.memo}</div>
+                ) : null}
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">{tt("wm_transferToPetty", "패티캐시 매장")}</Label>
+                <Select value={bankLinkStore || "__none__"} onValueChange={(v) => setBankLinkStore(v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="mt-1 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pettyReplenishStoreOptions.map((st) => (
+                      <SelectItem key={st} value={st}>{st}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">{t("memo")}</Label>
+                <Input value={bankLinkMemo} onChange={(e) => setBankLinkMemo(e.target.value)} className="mt-1 h-9" />
+              </div>
+              <Button onClick={() => void handleRegisterBankLink()} disabled={bankLinkSaving || !bankLinkStore} className="w-full">
+                {bankLinkSaving ? "..." : tt("pettyBankLinkRegister", "보충 등록")}
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       {receiptModalUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"

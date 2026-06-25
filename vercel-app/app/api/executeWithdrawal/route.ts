@@ -111,6 +111,8 @@ export async function POST(request: NextRequest) {
     const paymentIsBankOrCard = paymentMethod === 'bank' || paymentMethod === 'card'
     if (category === 'transfer' && paymentIsBankOrCard && transferToCardAccountId) {
       category = 'transfer_to_card'
+    } else if (category === 'transfer' && paymentMethod === 'bank' && transferToPettyStore) {
+      category = 'transfer_to_petty'
     } else if (category === 'transfer' && paymentMethod === 'bank' && transferBankAccountNo && transferBankRecipientName) {
       category = 'transfer_external'
     } else if (category === 'transfer' && paymentMethod === 'petty') {
@@ -136,6 +138,9 @@ export async function POST(request: NextRequest) {
     }
     if (category === 'transfer_external' && (!transferBankAccountNo || !transferBankRecipientName)) {
       return NextResponse.json({ success: false, message: '계좌번호와 받는 사람을 입력해 주세요.' }, { status: 400, headers })
+    }
+    if (category === 'transfer_to_petty' && !transferToPettyStore) {
+      return NextResponse.json({ success: false, message: '패티캐시 보충 매장을 선택해 주세요.' }, { status: 400, headers })
     }
     if (category === 'transfer_from_petty' && !transferToAccountId && !transferToAccountNo) {
       return NextResponse.json({ success: false, message: '입금할 통장 계좌를 선택하거나 계좌번호를 입력해 주세요.' }, { status: 400, headers })

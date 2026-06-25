@@ -8,6 +8,7 @@ import {
   hasCardBillQueueMarker,
   mergeCardBillQueueIntoBankNote,
 } from '@/lib/bank-transaction-note-meta'
+import { collectLinkedBankTransactionIds } from '@/lib/petty-bank-expense-link-server'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
@@ -72,24 +73,7 @@ export async function getUnlinkedBankWithdrawalsForCard(params: {
 
   if (!rows?.length) return []
 
-  const [payableRows, cardRows] = await Promise.all([
-    supabaseSelectFilterAllPages('payable_transactions', 'bank_transaction_id=not.is.null', {
-      select: 'bank_transaction_id',
-      pageSize: 8000,
-      maxRows: LINKED_BANK_SCAN_MAX_ROWS,
-    }) as Promise<{ bank_transaction_id?: number }[]>,
-    supabaseSelectFilterAllPages('card_transactions', 'bank_transaction_id=not.is.null', {
-      select: 'bank_transaction_id',
-      pageSize: 8000,
-      maxRows: LINKED_BANK_SCAN_MAX_ROWS,
-    }) as Promise<{ bank_transaction_id?: number }[]>,
-  ])
-
-  const linkedIds = new Set<number>()
-  for (const r of [...(payableRows || []), ...(cardRows || [])]) {
-    const bid = Number(r.bank_transaction_id || 0)
-    if (bid > 0) linkedIds.add(bid)
-  }
+  const linkedIds = await collectLinkedBankTransactionIds()
 
   return (rows || [])
     .filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
@@ -123,27 +107,6 @@ function isTransferBankWithdrawal(row: { category?: string; note?: string }): bo
   if (cat === 'transfer' || cat.startsWith('transfer_')) return true
   const fromNote = extractWithdrawalCategoryFromNote(String(row.note || ''))
   return fromNote === 'transfer' || (fromNote?.startsWith('transfer_') ?? false)
-}
-
-async function collectLinkedBankTransactionIds(): Promise<Set<number>> {
-  const [payableRows, cardRows] = await Promise.all([
-    supabaseSelectFilterAllPages('payable_transactions', 'bank_transaction_id=not.is.null', {
-      select: 'bank_transaction_id',
-      pageSize: 8000,
-      maxRows: LINKED_BANK_SCAN_MAX_ROWS,
-    }) as Promise<{ bank_transaction_id?: number }[]>,
-    supabaseSelectFilterAllPages('card_transactions', 'bank_transaction_id=not.is.null', {
-      select: 'bank_transaction_id',
-      pageSize: 8000,
-      maxRows: LINKED_BANK_SCAN_MAX_ROWS,
-    }) as Promise<{ bank_transaction_id?: number }[]>,
-  ])
-  const linkedIds = new Set<number>()
-  for (const r of [...(payableRows || []), ...(cardRows || [])]) {
-    const bid = Number(r.bank_transaction_id || 0)
-    if (bid > 0) linkedIds.add(bid)
-  }
-  return linkedIds
 }
 
 /** 지출등록(이체)에서 카드대금 연동 대기열에 넣을 이체 출금 후보 */

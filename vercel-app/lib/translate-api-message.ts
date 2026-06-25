@@ -199,8 +199,21 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
 
   "카드대금 연동 대기열에 등록되었습니다.": "expenseRegisterCardBillQueued",
+  "패티캐시 연동 대기열에 등록되었습니다.": "expenseRegisterPettyQueued",
   "이체(transfer) 구분 출금만 카드대금 연동 대기열에 넣을 수 있습니다.":
     "cardApiTransferOnlyForQueue",
+  "이체(transfer) 구분 출금만 패티캐시 연동 대기열에 넣을 수 있습니다.":
+    "pettyApiTransferOnlyForQueue",
+  "이체(transfer) 구분 출금만 패티캐시 보충으로 연결할 수 있습니다.":
+    "pettyApiReplenishTransferOnly",
+  "통장 거래 ID와 매장이 필요합니다.": "pettyApiBankAndStoreRequired",
+  "이미 다른 내역과 연결된 통장 출금입니다.": "pettyApiAlreadyLinkedOther",
+  "패티캐시 보충 등록에 실패했습니다.": "pettyApiRegisterFailed",
+  "DB에 bank_transaction_id 컬럼이 없습니다. sql/petty_cash_bank_link.sql을 실행해 주세요.":
+    "pettyApiDbMigrationRequired",
+  "패티캐시 보충 매장을 선택해 주세요.": "pettyApiReplenishStoreRequired",
+  "이미 지출·매입·카드·패티캐시와 연결된 통장 거래입니다.":
+    "cardApiAlreadyLinkedAny",
   "이미 지출·매입 또는 카드와 연결된 통장 거래입니다.":
     "cardApiAlreadyLinkedAny",
   "통장 거래 ID와 카드가 필요합니다.": "cardApiBankAndCardRequired",

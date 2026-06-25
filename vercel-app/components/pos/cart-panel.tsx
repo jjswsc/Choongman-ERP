@@ -519,6 +519,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [discountReason, setDiscountReason] = useState('')
   const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
+  /** 할인 금액 입력 중 결제 수단 자동 덮어쓰기 effect가 키보드 포커스를 끊지 않도록 */
+  const discountInputFocusedRef = useRef(false)
+  const [discountPaymentSyncTick, setDiscountPaymentSyncTick] = useState(0)
+  const bumpDiscountPaymentSync = useCallback(() => {
+    setDiscountPaymentSyncTick((t) => t + 1)
+  }, [])
   const paymentMethodSectionRef = useRef<HTMLDivElement | null>(null)
   const dutchMenuPanelRef = useRef<HTMLDivElement | null>(null)
   const splitModePrevRef = useRef<'amount' | 'menu'>('amount')
@@ -2800,6 +2806,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   // 협업·수동 할인 등으로 합계가 바뀌면 일반 결제(더치 아님)는 입력 금액을 새 합계로 덮어씀
   useEffect(() => {
     if (!showPaymentModal || total <= 0 || showSplit || splitPaidSteps > 0) return
+    if (discountInputFocusedRef.current) return
     const newTotal = round2(total)
     resetPaymentInputs()
     if (activePaymentTab === 'cash') {
@@ -2833,7 +2840,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     showPaymentModal,
     total,
     discount,
-    discountValueInput,
     discountType,
     pointUsedNum,
     collabDiscountAmt,
@@ -2843,6 +2849,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     pricingAdjustments,
     activePaymentTab,
     useAdminPaymentLines,
+    discountPaymentSyncTick,
   ])
 
   /** 더치 패널 없이 할인만 바뀐 경우: 일부 결제 단계·누적 입력 초기화 (협업 할인 후 금액 이중 합산 방지) */
@@ -4085,13 +4092,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               onClick={() => {
                 setDiscountType('percent')
                 setDiscountValueInput(String(pct))
+                bumpDiscountPaymentSync()
               }}
             >
               {pct}%
             </Button>
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_7rem_1fr]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_minmax(5.5rem,8rem)_1fr]">
           <Button
             type="button"
             size="default"
@@ -4100,13 +4108,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             onClick={() => {
               setDiscountType('percent')
               setDiscountValueInput('')
+              bumpDiscountPaymentSync()
             }}
           >
             {tr('reset', '초기화')}
           </Button>
           <Select
             value={discountType}
-            onValueChange={(v) => setDiscountType(v as 'percent' | 'fixed')}
+            onValueChange={(v) => {
+              setDiscountType(v as 'percent' | 'fixed')
+              bumpDiscountPaymentSync()
+            }}
           >
             <SelectTrigger className="h-12 w-[5.5rem] rounded-xl">
               <SelectValue />
@@ -4126,6 +4138,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 : (t('posDiscount') || '할인') + ' ฿'
             }
             value={discountValueInput}
+            onFocus={() => {
+              discountInputFocusedRef.current = true
+            }}
+            onBlur={() => {
+              discountInputFocusedRef.current = false
+              bumpDiscountPaymentSync()
+            }}
             onChange={(e) =>
               setDiscountValueInput(
                 discountType === 'percent'
@@ -4133,7 +4152,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   : formatBahtInputDisplay(e.target.value)
               )
             }
-            className="h-11 text-sm rounded-xl px-2.5"
+            className="h-11 min-w-[5.5rem] text-right text-sm font-semibold tabular-nums rounded-xl px-2.5"
           />
           <Input
             placeholder={t('posDiscountReasonPh')}

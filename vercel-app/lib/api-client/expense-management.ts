@@ -566,6 +566,74 @@ export async function getBankWithdrawalsForCardBillQueueMark(params: {
   return jsonObjectWithList<UnlinkedBankWithdrawalForCard>(await res.json())
 }
 
+export type UnlinkedBankWithdrawalForPetty = {
+  id: number
+  transDate: string
+  amount: number
+  memo: string
+  likelyPettyCash: boolean
+}
+
+export async function getUnlinkedBankWithdrawalsForPetty(params: {
+  accountId: number
+  startStr: string
+  endStr: string
+}) {
+  const q = new URLSearchParams({
+    accountId: String(params.accountId),
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  const res = await apiFetchWithOffline(`/api/getUnlinkedBankWithdrawalsForPetty?${q}`)
+  return jsonObjectWithList<UnlinkedBankWithdrawalForPetty>(await res.json())
+}
+
+export async function getBankWithdrawalsForPettyQueueMark(params: {
+  accountId: number
+  startStr: string
+  endStr: string
+  amount?: number
+  transDate?: string
+}) {
+  const q = new URLSearchParams({
+    accountId: String(params.accountId),
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.amount != null && params.amount > 0) q.set('amount', formatMoneyAmountParam(params.amount))
+  if (params.transDate) q.set('transDate', params.transDate)
+  const res = await apiFetchWithOffline(`/api/getBankWithdrawalsForPettyQueueMark?${q}`)
+  return jsonObjectWithList<UnlinkedBankWithdrawalForPetty>(await res.json())
+}
+
+export async function markBankTransactionForPettyCash(params: {
+  bankTransactionId: number
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/markBankTransactionForPettyCash', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function registerPettyReplenishFromBankTransaction(params: {
+  bankTransactionId: number
+  store: string
+  memo?: string
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/registerPettyReplenishFromBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
 export type WithdrawalCategoryMain =
   | 'purchase'
   | 'expense'

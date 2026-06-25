@@ -41,7 +41,10 @@ import {
   saveBankTransactionInboundLinks,
   markBankTransactionForCardBill,
   getBankWithdrawalsForCardBillQueueMark,
+  markBankTransactionForPettyCash,
+  getBankWithdrawalsForPettyQueueMark,
   type UnlinkedBankWithdrawalForCard,
+  type UnlinkedBankWithdrawalForPetty,
   translateTexts,
   type AccountSubjectItem,
   type BankAccount,
@@ -193,6 +196,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [accountSubjectId, setAccountSubjectId] = React.useState<string>("")
   const [transferBankAccountNo, setTransferBankAccountNo] = React.useState("")
   const [transferBankRecipientName, setTransferBankRecipientName] = React.useState("")
+  const [transferBankDest, setTransferBankDest] = React.useState<"external" | "petty">("petty")
+  const [transferToPettyStore, setTransferToPettyStore] = React.useState("")
   const [transferToDept, setTransferToDept] = React.useState("")
   const [transferToEmployee, setTransferToEmployee] = React.useState("")
   const [transferToAccountNo, setTransferToAccountNo] = React.useState("")
@@ -226,6 +231,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [cardBillQueueLoading, setCardBillQueueLoading] = React.useState(false)
   const [cardBillQueueSaving, setCardBillQueueSaving] = React.useState(false)
   const [cardBillQueueRows, setCardBillQueueRows] = React.useState<UnlinkedBankWithdrawalForCard[]>([])
+  const [pettyQueueOpen, setPettyQueueOpen] = React.useState(false)
+  const [pettyQueueLoading, setPettyQueueLoading] = React.useState(false)
+  const [pettyQueueSaving, setPettyQueueSaving] = React.useState(false)
+  const [pettyQueueRows, setPettyQueueRows] = React.useState<UnlinkedBankWithdrawalForPetty[]>([])
   /** 수수료 빠른 입력 시 메인 폼 금액·VAT 해석 기준 */
   const [activeFeeVatMode, setActiveFeeVatMode] = React.useState<ExpenseFeeVatMode | null>(null)
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
@@ -260,6 +269,17 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const pettyTransferFirstSelectLabel = React.useMemo(
     () => (isOfficeStore(storeName) ? tt("wm_transferToJob", "Job") : tt("wm_transferToDept", "Department")),
     [storeName, tt]
+  )
+
+  React.useEffect(() => {
+    if (categoryMain === "transfer" && paymentMethod === "bank" && transferBankDest === "petty" && storeName) {
+      setTransferToPettyStore(storeName)
+    }
+  }, [categoryMain, paymentMethod, storeName, transferBankDest])
+
+  const pettyCashStoreOptions = React.useMemo(
+    () => stores.filter((s) => s && s !== "All"),
+    [stores]
   )
 
   const employeeSelectKey = React.useCallback((e: { employeeCode?: string; rowId?: number }) => {
@@ -990,9 +1010,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
-    if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && (!transferBankAccountNo.trim() || !transferBankRecipientName.trim())) {
-      await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
-      return
+    if (categoryMain === "transfer" && effectivePaymentMethod === "bank") {
+      if (transferBankDest === "petty") {
+        if (!transferToPettyStore.trim()) {
+          await appAlert(tt("wm_transferToPetty", "패티캐시 매장") + tt("msg_enter_required_suffix", " is required."))
+          return
+        }
+      } else if (!transferBankAccountNo.trim() || !transferBankRecipientName.trim()) {
+        await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
+        return
+      }
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
       await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
@@ -1065,8 +1092,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         })() : undefined,
         transferToAccountNo: categoryMain === "transfer" && effectivePaymentMethod === "petty" && transferToAccountNo.trim() ? transferToAccountNo.trim() : undefined,
         transferToCardAccountId: categoryMain === "transfer" && effectivePaymentMethod === "card" && transferToCardAccountId ? Number(transferToCardAccountId) : undefined,
-        transferBankAccountNo: categoryMain === "transfer" && effectivePaymentMethod === "bank" ? transferBankAccountNo.trim() : undefined,
-        transferBankRecipientName: categoryMain === "transfer" && effectivePaymentMethod === "bank" ? transferBankRecipientName.trim() : undefined,
+        transferBankAccountNo:
+          categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "external"
+            ? transferBankAccountNo.trim()
+            : undefined,
+        transferBankRecipientName:
+          categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "external"
+            ? transferBankRecipientName.trim()
+            : undefined,
+        transferToPettyStore:
+          categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "petty"
+            ? transferToPettyStore.trim()
+            : undefined,
         accountId: showBankAccountForTransfer ? Number(accountId) : undefined,
         assetName: categoryMain === "fixed_asset" ? assetName || undefined : undefined,
         assetCode: categoryMain === "fixed_asset" ? assetCode || undefined : undefined,
@@ -1206,6 +1243,85 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       router.push("/admin/expense-management?tab=card")
     },
     [handleMarkBankForCardBill, router]
+  )
+
+  const handleMarkBankForPetty = React.useCallback(
+    async (bankTransactionId: number) => {
+      setPettyQueueSaving(true)
+      try {
+        const res = await markBankTransactionForPettyCash({
+          bankTransactionId,
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return false
+        }
+        await appAlert(
+          translateApiMessage(res.message, t) ||
+            tt("expenseRegisterPettyQueued", "패티캐시 연동 대기열에 등록되었습니다. 패티 캐쉬 탭에서 연동하세요.")
+        )
+        return true
+      } finally {
+        setPettyQueueSaving(false)
+      }
+    },
+    [auth?.role, auth?.user, t, tt]
+  )
+
+  const openPettyQueueFlow = React.useCallback(async () => {
+    if (effectivePaymentMethod !== "bank") return
+    const btId = Number(bankTransactionIdParam || 0)
+    if (btId > 0) {
+      const ok = await handleMarkBankForPetty(btId)
+      if (ok) router.push("/admin/petty-cash")
+      return
+    }
+    if (!accountId) {
+      await appAlert(tt("expenseRegisterCardBillNeedAccount", "통장 계좌를 먼저 선택해 주세요."))
+      return
+    }
+    setPettyQueueOpen(true)
+    setPettyQueueLoading(true)
+    try {
+      const amt = parseMoneyAmount(amount)
+      const res = await getBankWithdrawalsForPettyQueueMark({
+        accountId: Number(accountId),
+        startStr: startStrParam || cardBillQueueRange.startStr,
+        endStr: endStrParam || cardBillQueueRange.endStr,
+        amount: amt > 0 ? amt : undefined,
+        transDate: transDate || undefined,
+      })
+      setPettyQueueRows(res.list || [])
+    } catch {
+      setPettyQueueRows([])
+    } finally {
+      setPettyQueueLoading(false)
+    }
+  }, [
+    accountId,
+    amount,
+    bankTransactionIdParam,
+    cardBillQueueRange.endStr,
+    cardBillQueueRange.startStr,
+    effectivePaymentMethod,
+    endStrParam,
+    handleMarkBankForPetty,
+    router,
+    startStrParam,
+    transDate,
+    tt,
+  ])
+
+  const handlePickPettyQueueRow = React.useCallback(
+    async (row: UnlinkedBankWithdrawalForPetty) => {
+      const ok = await handleMarkBankForPetty(row.id)
+      if (!ok) return
+      setPettyQueueOpen(false)
+      router.push("/admin/petty-cash")
+    },
+    [handleMarkBankForPetty, router]
   )
   const showAdvanceInstallments = categorySub === "advance" && (categoryMain === "purchase" || categoryMain === "expense")
   const deliveryFeeAccountSubjectId = React.useMemo(() => {
@@ -1688,9 +1804,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         return
       }
     }
-    if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && (!transferBankAccountNo.trim() || !transferBankRecipientName.trim())) {
-      await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
-      return
+    if (categoryMain === "transfer" && effectivePaymentMethod === "bank") {
+      if (transferBankDest === "petty") {
+        if (!transferToPettyStore.trim()) {
+          await appAlert(tt("wm_transferToPetty", "패티캐시 매장") + tt("msg_enter_required_suffix", " is required."))
+          return
+        }
+      } else if (!transferBankAccountNo.trim() || !transferBankRecipientName.trim()) {
+        await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
+        return
+      }
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
       await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
@@ -1710,7 +1833,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         ]
           .filter(Boolean)
           .join(" ") || memoText
-    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank") {
+    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "petty" && transferToPettyStore) {
+      classifyMemo =
+        [memoText, transferToPettyStore && `패티보충: ${transferToPettyStore}`].filter(Boolean).join(" / ") || memoText
+    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && transferBankDest === "external") {
       classifyMemo =
         [memoText, transferBankRecipientName && `받는사람: ${transferBankRecipientName}`, transferBankAccountNo && `계좌: ${transferBankAccountNo}`]
           .filter(Boolean)
@@ -2138,18 +2264,32 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </SelectContent>
               </Select>
               {effectivePaymentMethod === "bank" ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-9 gap-1"
-                  onClick={() => void openCardBillQueueFlow()}
-                  disabled={cardBillQueueSaving}
-                  title={tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}
-                >
-                  <CreditCard className="h-4 w-4 shrink-0" />
-                  {cardBillQueueSaving ? "..." : tt("expenseRegisterCardBillQueue", "통장 카드대금 연동")}
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1"
+                    onClick={() => void openPettyQueueFlow()}
+                    disabled={pettyQueueSaving}
+                    title={tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
+                  >
+                    <Wallet className="h-4 w-4 shrink-0" />
+                    {pettyQueueSaving ? "..." : tt("expenseRegisterPettyQueue", "통장 패티캐시 연동")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1"
+                    onClick={() => void openCardBillQueueFlow()}
+                    disabled={cardBillQueueSaving}
+                    title={tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}
+                  >
+                    <CreditCard className="h-4 w-4 shrink-0" />
+                    {cardBillQueueSaving ? "..." : tt("expenseRegisterCardBillQueue", "통장 카드대금 연동")}
+                  </Button>
+                </>
               ) : null}
             </div>
           )}
@@ -2191,26 +2331,58 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           {categoryMain === "transfer" && effectivePaymentMethod === "bank" && (
             <div className="space-y-2">
               <Label>{tt("wm_transferTo", "Transfer To")}</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                <div>
-                  <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "Account Number")}</Label>
-                  <Input
-                    value={transferBankAccountNo}
-                    onChange={(e) => setTransferBankAccountNo(e.target.value)}
-                    placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
-                    className="h-9"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "Recipient")}</Label>
-                  <Input
-                    value={transferBankRecipientName}
-                    onChange={(e) => setTransferBankRecipientName(e.target.value)}
-                    placeholder={tt("wm_transferRecipientPlaceholder", "Enter recipient name")}
-                    className="h-9"
-                  />
-                </div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <Label className="text-xs text-muted-foreground">{tt("wm_transferBankDest", "이체 대상")}</Label>
+                <Select value={transferBankDest} onValueChange={(v) => setTransferBankDest(v as "external" | "petty")}>
+                  <SelectTrigger className="h-9 w-[160px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="petty">{tt("wm_transferDestPetty", "패티캐시 보충")}</SelectItem>
+                    <SelectItem value="external">{tt("wm_transferDestExternal", "외부 계좌")}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              {transferBankDest === "petty" ? (
+                <div className="max-w-md">
+                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferToPetty", "패티캐시 매장")}</Label>
+                  <Select value={transferToPettyStore || "__none__"} onValueChange={(v) => setTransferToPettyStore(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder={tt("wm_transferToPetty", "패티캐시 매장")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {pettyCashStoreOptions.map((st) => (
+                        <SelectItem key={st} value={st}>{st}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "Account Number")}</Label>
+                    <Input
+                      value={transferBankAccountNo}
+                      onChange={(e) => setTransferBankAccountNo(e.target.value)}
+                      placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "Recipient")}</Label>
+                    <Input
+                      value={transferBankRecipientName}
+                      onChange={(e) => setTransferBankRecipientName(e.target.value)}
+                      placeholder={tt("wm_transferRecipientPlaceholder", "Enter recipient name")}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {categoryMain === "transfer" && effectivePaymentMethod === "card" && (
@@ -2755,6 +2927,42 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 >
                   <span className="text-sm whitespace-nowrap">
                     {row.transDate} · ฿{row.amount.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[240px]">{row.memo || "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pettyQueueOpen} onOpenChange={setPettyQueueOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{tt("expenseRegisterPettyPickTitle", "패티캐시 보충할 통장 출금 선택")}</DialogTitle>
+            <DialogDescription>
+              {tt("expenseRegisterPettyPickHint", "이체 구분 미연결 출금 중 패티캐시 보충으로 처리할 건을 선택하세요.")}
+            </DialogDescription>
+          </DialogHeader>
+          {pettyQueueLoading ? (
+            <p className="text-sm text-muted-foreground py-4">{t("loading")}</p>
+          ) : pettyQueueRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              {tt("expenseRegisterPettyPickEmpty", "대기열에 넣을 이체 출금이 없습니다.")}
+            </p>
+          ) : (
+            <div className="max-h-[280px] overflow-y-auto space-y-2">
+              {pettyQueueRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
+                  onClick={() => void handlePickPettyQueueRow(row)}
+                >
+                  <span className="text-sm whitespace-nowrap">
+                    {row.transDate} · ฿{row.amount.toLocaleString()}
+                    {row.likelyPettyCash ? (
+                      <span className="ml-1 text-[10px] text-amber-700">{tt("pettyLikelyReplenish", "보충 추정")}</span>
+                    ) : null}
                   </span>
                   <span className="text-xs text-muted-foreground truncate max-w-[240px]">{row.memo || "—"}</span>
                 </div>
