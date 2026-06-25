@@ -37,7 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check, AlertCircle } from "lucide-react"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { ReceivableAgingPanel } from "@/components/admin/receivable-aging-panel"
 import {
@@ -54,6 +54,7 @@ import {
   type ReceivableLedgerDatePair,
   type PayableLedgerDatePair,
 } from "@/lib/receivable-payable-period-totals"
+import { canManuallyToggleReceivableReceiveCheck } from "@/lib/receivable-unallocated-bank"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -1037,6 +1038,7 @@ export function ReceivablePayableTab() {
     let settlementSum = 0
     let balanceSum = 0
     let cumulativeSum = 0
+    let unallocatedBankSum = 0
     let count = 0
     for (const item of listData) {
       const allItems = item.items ?? []
@@ -1046,9 +1048,10 @@ export function ReceivablePayableTab() {
       balanceSum += period.periodNet
       const cumulativeBal = getCumulativeBalanceForItem(item)
       if (cumulativeBal != null) cumulativeSum += cumulativeBal
+      unallocatedBankSum += Number(item.unallocatedBankReceiveTotal || 0)
       count += 1
     }
-    return { accrualSum, settlementSum, balanceSum, cumulativeSum, count }
+    return { accrualSum, settlementSum, balanceSum, cumulativeSum, unallocatedBankSum, count }
   }, [listData, tab, getCumulativeBalanceForItem])
 
   const ledgerNoPeriodRowsHint =
@@ -1506,6 +1509,23 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       )}
                     </p>
                   ) : null}
+                  {hasSearchedList && !loading && listSearchTotals.unallocatedBankSum > 0.009 ? (
+                    <div className="text-xs text-amber-950 dark:text-amber-50 bg-amber-50 dark:bg-amber-950/50 border border-amber-300/80 dark:border-amber-700 rounded-md px-3 py-2.5 mb-3 leading-snug space-y-1">
+                      <p className="font-medium flex items-start gap-1.5">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+                        {tt(
+                          "recUnallocatedBankBanner",
+                          "통장 입금은 반영됐지만 인보이스 배분이 남아 있습니다. 수금확인 체크 대신 통장 거래 → 「미수 연결」을 사용하세요."
+                        )}
+                      </p>
+                      <p className="text-muted-foreground pl-5">
+                        {tt("recUnallocatedBankBannerTotal", "미할당 통장 입금 합계")}:{" "}
+                        <span className="font-semibold tabular-nums text-foreground">
+                          ฿{listSearchTotals.unallocatedBankSum.toLocaleString()}
+                        </span>
+                      </p>
+                    </div>
+                  ) : null}
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
                   ) : !hasSearchedList ? (
@@ -1572,6 +1592,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const cumulativeBal = getCumulativeBalanceForItem(item)
                           const priorBal = priorCumulativeBalance(cumulativeBal, period.periodNet)
                           const priorBalanceHint = formatPriorBalanceHint(priorBal)
+                          const unallocatedTotal = Number(item.unallocatedBankReceiveTotal || 0)
                           return (
                           <AccordionItem key={item.storeName!} value={item.storeName!}>
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:ml-2 [&>svg]:shrink-0">
@@ -1583,6 +1604,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         {t("vendor") || "거래처"}: {item.vendorName === item.vendorCode ? item.vendorCode : `${item.vendorName} (${item.vendorCode})`}
                                       </span>
                                     )}
+                                    {unallocatedTotal > 0.009 ? (
+                                      <span className="text-[10px] font-medium text-amber-800 dark:text-amber-200 leading-snug">
+                                        {tt("recUnallocatedBankStoreBadge", "미할당 통장 입금")}{" "}
+                                        <span className="tabular-nums">฿{unallocatedTotal.toLocaleString()}</span>
+                                      </span>
+                                    ) : null}
                                   </div>
                                   <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.salesSum)}</div>
                                   <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.receiveSum)}</div>
@@ -1604,6 +1631,32 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-4">
+                              {unallocatedTotal > 0.009 ? (
+                                <div className="mb-3 rounded-md border border-amber-200/80 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 px-3 py-2 text-xs leading-snug space-y-1.5">
+                                  <p>
+                                    {tt(
+                                      "recUnallocatedBankStoreHint",
+                                      "매장 잔액에는 반영됐지만 아래 인보이스에 아직 배분되지 않은 통장 입금입니다. 통장 거래에서 「미수 연결」로 배분하면 수금확인이 자동 반영됩니다."
+                                    )}
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(item.unallocatedBankDeposits || []).map((dep) => (
+                                      <Button
+                                        key={dep.bankTransactionId}
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-[11px] tabular-nums"
+                                        onClick={() =>
+                                          openBankTransactionFromReceivable(dep.bankTransactionId, dep.transDate)
+                                        }
+                                      >
+                                        {dep.transDate} · ฿{dep.amountAbs.toLocaleString()} · #{dep.bankTransactionId}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                               {tableItems.length === 0 ? (
                                 <p className="text-sm text-muted-foreground py-4 text-center">{ledgerNoPeriodRowsHint}</p>
                               ) : (
@@ -1623,7 +1676,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       {t("recColOrderNo") || "주문번호"}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
-                                    <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>
+                                    <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap" title={tt("recColReceiveCheckHint", "통장 수금은 「미수 연결」로 처리합니다. 체크는 통장 없는 수금(현금 등) 또는 연동 결과 표시용입니다.")}>
+                                      {t("recColReceiveCheck") || "수금확인"}
+                                    </th>
                                     <th className="text-center py-2 px-1 w-[76px] text-xs font-semibold whitespace-nowrap">
                                       {t("acct_rec_bank_link") || tt("acct_rec_bank_link", "통장")}
                                     </th>
@@ -1725,6 +1780,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       return 0
                                     })()
                                     const isBankHighlight = rowHighlightsBankTx(row)
+                                    const receiveCheckPolicy = canManuallyToggleReceivableReceiveCheck({
+                                      receiveChecked: !!row.receive_checked,
+                                      linkedBankTransactionId: linkedBankTxId,
+                                      unallocatedBankReceiveTotal: unallocatedTotal,
+                                    })
+                                    const receiveCheckDisabled =
+                                      !canEditReceiveCheck ||
+                                      updatingReceiveCheckId === row.id ||
+                                      !receiveCheckPolicy.allowed
+                                    const receiveCheckTitle =
+                                      receiveCheckPolicy.reason === "bank_linked"
+                                        ? tt(
+                                            "recReceiveCheckBankLinkedHint",
+                                            "통장 미수 연결로 수금됨 — 해제는 통장 거래에서"
+                                          )
+                                        : receiveCheckPolicy.reason === "unallocated_bank"
+                                          ? tt(
+                                              "recReceiveCheckUnallocatedHint",
+                                              "미할당 통장 입금이 있습니다 — 통장 거래 → 미수 연결 사용"
+                                            )
+                                          : row.receive_checked
+                                            ? (t("recCheckPaid") || "수금완료")
+                                            : (t("recCheckWait") || "수금대기")
                                     return (
                                     <React.Fragment key={row.id ?? recRowKey}>
                                     <tr
@@ -1818,14 +1896,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <div className="flex flex-col items-end gap-0.5">
                                             <Checkbox
                                               checked={!!row.receive_checked}
-                                              disabled={!canEditReceiveCheck || updatingReceiveCheckId === row.id}
-                                              title={
-                                                row.receive_checked
-                                                  ? (t("recCheckPaid") || "수금완료")
-                                                  : (t("recCheckWait") || "수금대기")
-                                              }
+                                              disabled={receiveCheckDisabled}
+                                              title={receiveCheckTitle}
                                               onCheckedChange={(v) => {
-                                                if (!canEditReceiveCheck || row.id == null) return
+                                                if (receiveCheckDisabled || !canEditReceiveCheck || row.id == null) return
                                                 if (v) {
                                                   openReceiveCheckDialog({
                                                     receivableId: row.id,
@@ -1845,10 +1919,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               }}
                                               className="mt-0.5"
                                             />
-                                            <span className="text-[10px] text-muted-foreground leading-none">
+                                            <span className="text-[10px] text-muted-foreground leading-none text-right max-w-[96px]">
                                               {row.receive_checked
-                                                ? (t("recCheckPaid") || "완료")
-                                                : (t("recCheckWait") || "대기")}
+                                                ? linkedBankTxId > 0
+                                                  ? tt("recCheckBankLinked", "통장연동")
+                                                  : (t("recCheckPaid") || "완료")
+                                                : receiveCheckPolicy.reason === "unallocated_bank"
+                                                  ? tt("recCheckUseBankLink", "미수연결")
+                                                  : (t("recCheckWait") || "대기")}
                                             </span>
                                           </div>
                                         ) : (

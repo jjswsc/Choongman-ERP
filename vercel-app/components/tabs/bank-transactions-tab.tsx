@@ -3982,6 +3982,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               ? `${receivablePickRow.transDate} · ฿${Math.abs(receivablePickRow.amount || 0).toLocaleString()}`
               : ""}
           </p>
+          <p className="text-xs text-muted-foreground mb-3 leading-snug">
+            {tt(
+              "bankReceivablePickWorkflowHint",
+              "매출 수령으로 매장 잔액은 이미 반영되었습니다. 아래에서 이 입금에 해당하는 인보이스를 선택하면 미수금 화면 수금확인에 자동 반영됩니다."
+            )}
+          </p>
           {receivablePickLoading ? (
             <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
           ) : receivablePickList.length === 0 ? (
@@ -3995,6 +4001,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   "bankReceivablePickMultiHint",
                   "여러 인보이스를 선택할 수 있습니다. 선택 합계가 통장 입금액과 일치해야 저장됩니다."
                 )}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {tt("bankReceivablePickListHint", "인보이스별 미수 잔액이 남은 건만 표시됩니다(장부 기준).")}
               </p>
               <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
                 {receivablePickList.map((p) => {

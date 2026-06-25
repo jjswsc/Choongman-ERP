@@ -1,5 +1,10 @@
 import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
+  listUnallocatedBankReceives,
+  sumUnallocatedBankReceiveByStoreGroup,
+  type UnallocatedBankReceiveItem,
+} from '@/lib/receivable-unallocated-bank'
+import {
   normalizeReceivableStoreKey,
   pickReceivableDisplayStoreName,
   receivableStoreGroupKey,
@@ -282,9 +287,12 @@ export function buildReceivableListWithCumulative(params: {
   vendorName?: string
   balance: number
   cumulativeBalance: number
+  unallocatedBankReceiveTotal: number
+  unallocatedBankDeposits: UnallocatedBankReceiveItem[]
   items: ReceivableTransactionRow[]
 }[] {
   const { periodRows, scopedRows, vendorMaps, attributionMaps, cumulativeByStoreGroup } = params
+  const unallocatedByGroup = sumUnallocatedBankReceiveByStoreGroup(scopedRows, attributionMaps)
   const periodGrouped = groupReceivableRowsByStore(
     periodRows,
     vendorMaps,
@@ -310,6 +318,8 @@ export function buildReceivableListWithCumulative(params: {
         vendorName: period?.vendorName ?? vendor?.name,
         balance: period?.balance ?? 0,
         cumulativeBalance: cumulativeByStoreGroup[groupKey] ?? 0,
+        unallocatedBankReceiveTotal: unallocatedByGroup[groupKey] ?? 0,
+        unallocatedBankDeposits: listUnallocatedBankReceives(scopedRows, attributionMaps, groupKey),
         items: period?.items ?? [],
       }
     })

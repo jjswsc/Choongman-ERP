@@ -11,6 +11,15 @@ export interface ReceivablePayableItem {
   balance: number
   /** 종료일까지 누적 잔액 (목록 API와 동일 집계) */
   cumulativeBalance?: number
+  /** 통장 매출 수령 후 인보이스 미배분 합계 */
+  unallocatedBankReceiveTotal?: number
+  /** 미배분 통장 입금 건별 내역 */
+  unallocatedBankDeposits?: {
+    bankTransactionId: number
+    transDate: string
+    amountAbs: number
+    memo?: string
+  }[]
   items: {
     id?: number
     trans_date?: string

@@ -12,6 +12,7 @@ import { canUpdateReceivableReceiveCheck } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { findConsolidatedBankReceiveBlockingManualCheck } from '@/lib/receivable-manual-receive-guard'
+import { fetchUnallocatedBankReceiveTotalForStore } from '@/lib/receivable-unallocated-bank'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -90,6 +91,17 @@ export async function POST(request: NextRequest) {
       if (amountAbs <= 0) {
         return NextResponse.json({ success: false, message: '매출 금액이 없습니다.' }, { headers })
       }
+      const unallocatedTotal = await fetchUnallocatedBankReceiveTotalForStore(storeName)
+      if (unallocatedTotal > 0.009) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'RECEIVABLE_UNALLOCATED_BANK_EXISTS',
+            message: `이 매장에 통장 미할당 입금(฿${unallocatedTotal.toLocaleString()})이 있습니다. 수금확인 대신 통장 거래 → 「미수 연결」로 인보이스를 배분해 주세요.`,
+          },
+          { status: 409, headers }
+        )
+      }
       const bankConsolidated = await findConsolidatedBankReceiveBlockingManualCheck(storeName, receiveDate)
       if (bankConsolidated) {
         return NextResponse.json(
@@ -126,6 +138,21 @@ export async function POST(request: NextRequest) {
       }
       await supabaseUpdate('receivable_transactions', id, { receive_checked: true })
     } else {
+      const linked = (await supabaseSelectFilter('receivable_transactions', linkedFilter, {
+        limit: 1,
+        select: 'id,bank_transaction_id',
+      })) as { id?: number; bank_transaction_id?: number | null }[] | null
+      const linkedBankId = Number(linked?.[0]?.bank_transaction_id || 0)
+      if (linkedBankId > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'RECEIVABLE_BANK_LINKED_UNCHECK_FORBIDDEN',
+            message: `통장 미수 연결(#${linkedBankId})로 수금된 건은 미수금 화면에서 해제할 수 없습니다. 통장 거래에서 수정하세요.`,
+          },
+          { status: 409, headers }
+        )
+      }
       await supabaseDeleteByFilter('receivable_transactions', linkedFilter)
       await supabaseUpdate('receivable_transactions', id, { receive_checked: false })
     }
