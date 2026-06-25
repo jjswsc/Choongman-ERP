@@ -130,6 +130,9 @@ export async function POST(request: NextRequest) {
       if (['expense', 'expense_advance'].includes(category) && !accountSubjectId) {
         return NextResponse.json({ success: false, message: '계정과목을 선택해 주세요.' }, { status: 400, headers })
       }
+      if (category === 'transfer' && !accountSubjectId) {
+        return NextResponse.json({ success: false, message: '이체 계정과목을 선택해 주세요.' }, { status: 400, headers })
+      }
       if (accountSubjectId) {
         const hdr = await assertAccountSubjectNotHeader(accountSubjectId)
         if (!hdr.ok) {

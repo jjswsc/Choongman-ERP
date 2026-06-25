@@ -145,6 +145,14 @@ export async function POST(request: NextRequest) {
     if (category === 'transfer_from_petty' && !transferToAccountId && !transferToAccountNo) {
       return NextResponse.json({ success: false, message: '입금할 통장 계좌를 선택하거나 계좌번호를 입력해 주세요.' }, { status: 400, headers })
     }
+    if (
+      category === 'transfer' &&
+      !transferToAccountId &&
+      (accountSubjectId == null || isNaN(Number(accountSubjectId))) &&
+      !accountSubjectCode
+    ) {
+      return NextResponse.json({ success: false, message: '이체 계정과목을 선택해 주세요.' }, { status: 400, headers })
+    }
     if (category === 'fixed_asset' && !assetName && !memo) {
       return NextResponse.json({ success: false, message: '자산명 또는 적요를 입력해 주세요.' }, { status: 400, headers })
     }

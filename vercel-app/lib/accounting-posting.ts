@@ -897,6 +897,19 @@ export async function postWithdrawalJournal(params: {
           { ...cash, side: 'debit', amount, memo: `이체입금(계좌${params.transferToAccountId})` },
           { ...cash, side: 'credit', amount, memo: '이체출금' },
         ]
+      } else if (expenseSubjectId != null || params.expenseAccountCode) {
+        const transferAcct = accountLine(params.expenseAccountCode || '1110', {
+          nameKo: params.expenseAccountName || '이체',
+        })
+        lines = [
+          {
+            ...transferAcct,
+            side: 'debit',
+            amount,
+            ...(expenseSubjectId != null ? { accountSubjectId: expenseSubjectId } : {}),
+          },
+          { ...cash, side: 'credit', amount, memo: params.memo || '이체출금' },
+        ]
       } else {
         return null
       }
