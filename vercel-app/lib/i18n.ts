@@ -1226,7 +1226,6 @@ export const i18n = {
     adminInbound: '입고 관리',
     adminInboundReg: '입고 등록',
     inFromPO: '발주서에서 불러옴',
-    inInboundDate: '입고일',
     inFromPoDateDialogTitle: '입고일 선택',
     inFromPoDateDialogDesc:
       '발주 {poNo}의 발주일은 {poDate}입니다. 실제 물품을 받은 날(입고일)을 선택해 주세요. 입고 내역 조회는 이 날짜 기준입니다.',
@@ -8375,7 +8374,6 @@ Only matters the employee must handle personally on a working day:
     adminInbound: 'Inbound',
     adminInboundReg: 'Register Inbound',
     inFromPO: 'From PO',
-    inInboundDate: 'Inbound date',
     inFromPoDateDialogTitle: 'Select inbound date',
     inFromPoDateDialogDesc:
       'PO {poNo} was ordered on {poDate}. Choose the date goods were actually received. Inbound history is filtered by this date.',
@@ -15481,7 +15479,6 @@ orderItemQty: 'จำนวน',
     inSummaryItemCol: 'สินค้า',
     inNewTitle: 'ลงทะเบียนรับเข้า',
     inFromPO: 'จากใบสั่งซื้อ',
-    inInboundDate: 'วันที่รับเข้า',
     inFromPoDateDialogTitle: 'เลือกวันที่รับเข้า',
     inFromPoDateDialogDesc:
       'ใบสั่งซื้อ {poNo} วันที่สั่ง {poDate} — เลือกวันที่รับสินค้าจริง ประวัติรับเข้าจะอิงตามวันนี้',
