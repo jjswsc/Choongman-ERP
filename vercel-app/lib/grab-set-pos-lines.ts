@@ -2,10 +2,16 @@ import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { normalizePromoLookupText } from '@/lib/pos-payment-receipt-from-order'
 import type { GrabPosCatalog } from '@/lib/grab-pos-order-enrich'
 import {
+  appendGrabModsToGrabItemNote,
+  collectGrabPrintOptionLines,
   enrichGrabPromoItemsWithDefaultSizeFromCatalog,
+  isGrabExplicitSizeOrPartLabel,
+  isGrabSidedishOrExtraOptionLabel,
   resolveGrabDeliveryLineNote,
+  resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import {
+  isLikelyBanbanSideOrExtraLabel,
   parseBanbanFlavorsFromDisplayName,
   parseBanbanFlavorsFromPersistedNote,
 } from '@/lib/pos-banban-utils'
@@ -92,6 +98,51 @@ function pickClosestPrecedingParentIndex(candidates: number[], childIndex: numbe
   const preceding = candidates.filter((i) => i < childIndex)
   const pool = preceding.length > 0 ? preceding : candidates
   return pool.reduce((best, cur) => (cur > best ? cur : best), pool[0])
+}
+
+/**
+ * 세트 자식 줄에만 있는 사이드(김치·단무지 등)를 부모 note로 옮긴다.
+ * 터미널이 `grabSetChild` 줄을 제거한 뒤에도 홀·주방 영수증에 사이드가 보이게 한다.
+ */
+export function mergeGrabSetChildAncillaryNoteIntoParent(
+  parent: { note?: string | null },
+  child: {
+    note?: string | null
+    name?: string | null
+    optionCode?: string | null
+    optionCode1?: string | null
+    optionCodes?: string[] | null
+  },
+  optionNameByCode?: Map<string, string> | Record<string, string>
+): string {
+  const parentNote = resolveGrabItemPrintNote(parent)
+  const childNote = resolveGrabItemPrintNote(child)
+  if (!childNote) return parentNote
+
+  const parentLines = collectGrabPrintOptionLines({ note: parentNote, optionNameByCode })
+  const parentKeys = new Set(parentLines.map((s) => s.toLowerCase()))
+  const childLines = collectGrabPrintOptionLines({ note: childNote, optionNameByCode })
+  const childParsed = parseGrabSetChildLineName(String(child.name ?? ''))
+  const childMenuKey = normalizePromoLookupText(
+    (childParsed?.childName ?? '').split('(')[0] ?? ''
+  )
+
+  const ancillary = childLines.filter((line) => {
+    const k = line.toLowerCase()
+    if (parentKeys.has(k)) return false
+    if (isGrabExplicitSizeOrPartLabel(line)) return false
+    const lineKey = normalizePromoLookupText(line.split('(')[0] ?? line)
+    if (
+      childMenuKey &&
+      lineKey &&
+      (lineKey === childMenuKey || childMenuKey.includes(lineKey) || lineKey.includes(childMenuKey))
+    ) {
+      return false
+    }
+    return isGrabSidedishOrExtraOptionLabel(line) || isLikelyBanbanSideOrExtraLabel(line)
+  })
+  if (ancillary.length === 0) return parentNote
+  return appendGrabModsToGrabItemNote(parentNote, ancillary)
 }
 
 function findParentLineIndex(params: {
@@ -270,7 +321,16 @@ export function mergeGrabSetChildLinesIntoPromoParents(
         list.push(promoLine)
       }
       const enrichedList = enrichGrabPromoItemsWithDefaultSizeFromCatalog(list, catalog) ?? list
-      out[parentIdx] = { ...parent, promoItems: enrichedList }
+      const mergedParentNote = mergeGrabSetChildAncillaryNoteIntoParent(
+        parent,
+        row,
+        catalog.optionNameByCode
+      )
+      out[parentIdx] = {
+        ...parent,
+        promoItems: enrichedList,
+        ...(mergedParentNote ? { note: mergedParentNote } : {}),
+      }
       out[child.index] = { ...row, grabSetChild: true }
       continue
     }

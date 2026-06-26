@@ -5,6 +5,7 @@ import {
   mergeSetChildrenForReceipt,
   resolveHallOrderReceiptDiscountAmt,
 } from '@/lib/pos-hall-order-receipt-document-html'
+import { mergeGrabSetChildLinesIntoPromoParents } from '@/lib/grab-set-pos-lines'
 
 type MergeSetTestItem = {
   id: string
@@ -571,6 +572,72 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('SPICY YANGNYEOM')
     expect(html).toContain('M - Drumette')
     expect(html).toContain('Kimchi 30g.')
+  })
+
+  it('GF-078 Grab Set 2 hall receipt shows sidedish after grabSetChild rows are removed', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'C022' },
+        { id: 11, name: 'SOY SAUCE CHICKEN', code: 'C011' },
+      ],
+      [
+        { name: 'S - Boneless', optionCode: 'C011-1' },
+        { name: 'Kimchi 30 g.', optionCode: 'C011-5' },
+      ],
+      [{ id: '2', name: '[111] Set 2', code: 'SET2', items: [] }]
+    )
+    const merged = mergeGrabSetChildLinesIntoPromoParents(
+      [
+        {
+          id: 'grab:p1',
+          name: '[111] Set 2',
+          price: 159,
+          qty: 1,
+          promoId: '2',
+          deliveryAppCode: 'grab',
+          note: 'eco:no plastic cutlery requested',
+          promoItems: [
+            { menuId: '22', menuName: 'Rice', optionId: null, quantity: 1 },
+            { menuId: '11', menuName: 'SOY SAUCE CHICKEN', optionId: null, quantity: 1 },
+          ],
+        },
+        {
+          id: 'grab:c1',
+          name: '[[111] Set 2] SOY SAUCE CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId1: '11',
+          note: 'mods:Kimchi 30 g. · optc:C011-5',
+        },
+        {
+          id: 'grab:soup',
+          name: 'KIMCHI SOUP With Rice',
+          price: 219,
+          qty: 1,
+        },
+      ],
+      catalog
+    )
+    const receiptItems = merged.filter((it) => !it.grabSetChild)
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: 'GF-078',
+        storeCode: 'CM Bangna',
+        orderType: 'delivery',
+        tableName: 'Grab #GF-078',
+        memo: 'grab_order:GF-078',
+        items: receiptItems,
+        subtotal: 378,
+        discountAmt: 48,
+        total: 330,
+      },
+      t: (k) => k,
+      lang: 'en',
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(html).toContain('[111] Set 2')
+    expect(html).toContain('Kimchi 30 g.')
+    expect(html).toContain('KIMCHI SOUP With Rice')
   })
 
   it('emphasizes channel order token (e.g. GF-268) only once on hall order receipt header', () => {

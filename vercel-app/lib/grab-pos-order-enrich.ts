@@ -484,6 +484,54 @@ export function collectGrabPrintOptionLines(input: {
   return out
 }
 
+/** Grab 세트·치킨 부가 옵션(김치·단무지 등) — 사이즈·파트 제외 */
+export function isGrabSidedishOrExtraOptionLabel(raw: string | null | undefined): boolean {
+  const lab = String(raw ?? '').trim().toLowerCase()
+  if (!lab) return false
+  if (lab.includes('kimchi') || lab.includes('pickled') || lab.includes('radish')) return true
+  if (lab.includes('김치') || lab.includes('단무지')) return true
+  if (/\bside\b|\bsidedish\b|side dish|เครื่องเคียง/.test(lab)) return true
+  return false
+}
+
+/** Grab 줄 note `mods:` 청크에 부가 옵션 라벨을 합친다 */
+export function appendGrabModsToGrabItemNote(parentNote: string, labels: string[]): string {
+  const toAdd = labels.map((s) => String(s ?? '').trim()).filter(Boolean)
+  if (toAdd.length === 0) return String(parentNote ?? '').trim()
+
+  const chunks = String(parentNote ?? '')
+    .trim()
+    .split('·')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const modsIdx = chunks.findIndex((c) => /^mods:/i.test(c))
+  const mergeIntoMods = (prev: string[]) => {
+    const seen = new Set(prev.map((s) => s.toLowerCase()))
+    for (const label of toAdd) {
+      const k = label.toLowerCase()
+      if (!seen.has(k)) {
+        prev.push(label)
+        seen.add(k)
+      }
+    }
+    return prev
+  }
+
+  if (modsIdx >= 0) {
+    const modMatch = /^mods:\s*(.*)$/i.exec(chunks[modsIdx])
+    const prev = modMatch?.[1]
+      ? modMatch[1]
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : []
+    chunks[modsIdx] = `mods:${mergeIntoMods(prev).join(',')}`
+  } else {
+    chunks.unshift(`mods:${toAdd.join(',')}`)
+  }
+  return chunks.join(' · ')
+}
+
 /** Grab 1회용 수저·포크 선택 — `eco:` note 청크 */
 export function isGrabEcoCutleryNoteChunk(chunk: string): boolean {
   return /^eco:/i.test(String(chunk ?? '').trim())

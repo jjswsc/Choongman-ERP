@@ -237,4 +237,46 @@ describe('mergeGrabSetChildLinesIntoPromoParents', () => {
     expect(items.filter((it) => !it.grabSetChild && String(it.name ?? '').includes('Set 3'))).toHaveLength(2)
     expect(items.filter((it) => !it.grabSetChild && String(it.name ?? '').includes('Set 1'))).toHaveLength(2)
   })
+
+  it('GF-078: copies sidedish from set child note onto parent before grabSetChild is dropped', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'C022' },
+        { id: 11, name: 'SOY SAUCE CHICKEN', code: 'C011' },
+      ],
+      [
+        { name: 'S - Boneless', optionCode: 'C011-1' },
+        { name: 'Kimchi 30 g.', optionCode: 'C011-5' },
+      ],
+      [{ id: '2', name: '[111] Set 2', code: 'SET2', items: [] }]
+    )
+    const items = mergeGrabSetChildLinesIntoPromoParents(
+      [
+        {
+          id: 'p1',
+          name: '[111] Set 2',
+          price: 159,
+          qty: 1,
+          promoId: '2',
+          note: 'eco:no plastic cutlery requested',
+          promoItems: [
+            { menuId: '22', menuName: 'Rice', optionId: null, quantity: 1 },
+            { menuId: '11', menuName: 'SOY SAUCE CHICKEN', optionId: null, quantity: 1 },
+          ],
+        },
+        {
+          id: 'c1',
+          name: '[[111] Set 2] SOY SAUCE CHICKEN',
+          price: 0,
+          qty: 1,
+          menuId1: '11',
+          note: 'mods:Kimchi 30 g. · optc:C011-5',
+        },
+      ],
+      catalog
+    )
+    const parent = items.find((it) => it.id === 'p1')
+    expect(parent?.note).toMatch(/Kimchi 30 g\./i)
+    expect(items.find((it) => it.id === 'c1')?.grabSetChild).toBe(true)
+  })
 })

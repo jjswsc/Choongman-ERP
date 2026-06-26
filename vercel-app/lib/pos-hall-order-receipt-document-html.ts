@@ -23,6 +23,7 @@ import {
   resolveGrabPrintNoteRequestWithoutEco,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
+import { mergeGrabSetChildAncillaryNoteIntoParent } from '@/lib/grab-set-pos-lines'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
@@ -344,7 +345,15 @@ function attachReceiptOrphanPromoLine(
   const parent = out[parentIdx]
   const list = Array.isArray(parent.promoItems) ? [...parent.promoItems] : []
   list.push(buildReceiptChildPromoLine(out[orphanIdx], opts))
-  out[parentIdx] = { ...parent, promoItems: list }
+  const mergedNote =
+    opts?.grabInbound
+      ? mergeGrabSetChildAncillaryNoteIntoParent(parent, out[orphanIdx], opts?.optionNameByCode)
+      : String(parent.note ?? '')
+  out[parentIdx] = {
+    ...parent,
+    promoItems: list,
+    ...(mergedNote ? { note: mergedNote } : {}),
+  }
   hide.add(orphanIdx)
 }
 
