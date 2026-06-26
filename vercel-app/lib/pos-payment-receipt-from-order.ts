@@ -1,5 +1,5 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
-import { orderUiItemsToPosOrderItems } from '@/lib/pos-order-item-map'
+import { orderUiItemsToPosOrderItems, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { posOrderPaymentSumFromAmounts, resolvePosOrderPaidAt } from '@/lib/pos-order-paid-at'
 import type { Order } from '@/lib/pos-types'
 import {
@@ -14,12 +14,13 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
-import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-domain'
+import { parseAppliedCouponsFromOrderRow, type PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import {
   posOrderToCheckoutDiscountSnapshot,
   resolveEffectivePosOrderDiscountAmt,
 } from '@/lib/pos-existing-order-checkout-discount'
 import { resolvePosOrderReceiptPrintTotal } from '@/lib/pos-order-save-discount'
+import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
 import {
   buildKitchenMenuNameLookup,
   resolveKitchenMenuNameFromLookup,
@@ -918,6 +919,134 @@ export function hallOrderReceiptPayloadFromOrderFields(
     otherFeeAmt: pricing.otherFeeAmt,
     otherFeeMode: pricing.otherFeeMode,
     ...(fields.guestCount != null ? { guestCount: fields.guestCount } : {}),
+  }
+}
+
+function checkoutPosItemsToReceiptLines(
+  items: Array<Record<string, unknown>> | unknown[]
+): ReceiptModalData['items'] {
+  return (items || []).map((raw) => {
+    const it = (raw ?? {}) as Record<string, unknown>
+    const qty = Math.max(1, resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }))
+    const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
+    const menuId = String(it.menuId ?? it.menu_id ?? '').trim()
+    const note = String(it.note ?? '').trim()
+    return {
+      id: String(it.id ?? ''),
+      name: String(it.name ?? ''),
+      price: Number(it.price ?? 0),
+      qty,
+      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
+      ...(menuId ? { menuId } : {}),
+      ...(note ? { note } : {}),
+    }
+  })
+}
+
+/** 결제 직후 카트 payload → 결제 영수증(쿠폰·품목 할인·합계 정합) */
+export function buildCheckoutPaymentReceiptModalData(params: {
+  orderNo: string
+  storeCode: string
+  orderType: string
+  tableName?: string
+  memo?: string
+  items: Array<Record<string, unknown>> | unknown[]
+  discountAmt?: number
+  couponDiscountAmt?: number
+  discountReason?: string
+  appliedCoupons?: PosAppliedCouponLine[]
+  deliveryFee?: number
+  packagingFee?: number
+  cardPaymentAmount?: number
+  paymentSum?: number
+  storedTotal?: number
+  adjustments: PosPricingAdjustments
+  paymentFields?: Partial<ReceiptModalData>
+  deliveryAppCode?: string
+  receiptAutoPrintContext?: ReceiptModalData['receiptAutoPrintContext']
+  suppressReceiptModalAutoPrint?: boolean
+  serverOrderId?: number
+}): ReceiptModalData {
+  const receiptItems = checkoutPosItemsToReceiptLines(params.items)
+  const subtotal =
+    receiptItems.reduce((sum, it) => sum + Math.max(0, Number(it.price) || 0) * Math.max(0, Number(it.qty) || 0), 0)
+  const appliedCoupons = Array.isArray(params.appliedCoupons)
+    ? params.appliedCoupons.filter((row) => String(row?.code ?? '').trim())
+    : []
+  const couponFromApplied = appliedCoupons.reduce(
+    (sum, row) => sum + Math.max(0, Number(row.discountAmt ?? 0) || 0),
+    0
+  )
+  const couponDiscountAmt = Math.max(
+    0,
+    Number(params.couponDiscountAmt ?? 0) || 0,
+    couponFromApplied
+  )
+  const rawDiscountAmt = Math.max(0, Number(params.discountAmt ?? 0) || 0)
+  const effectiveDiscountAmt = resolveEffectivePosOrderDiscountAmt({
+    snapshot: {
+      discountAmt: rawDiscountAmt,
+      couponDiscountAmt,
+      discountReason: params.discountReason,
+      subtotal,
+      total: Math.max(0, Number(params.storedTotal ?? 0) || 0),
+      deliveryFee: params.deliveryFee,
+      packagingFee: params.packagingFee,
+    },
+    items: receiptItems.map((it) => ({
+      price: Number(it.price) || 0,
+      qty: Math.max(0, Number(it.qty) || 0),
+      ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
+        ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }
+        : {}),
+    })),
+    adjustments: params.adjustments,
+  })
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt: effectiveDiscountAmt,
+    deliveryFee: Math.max(0, Number(params.deliveryFee ?? 0) || 0),
+    packagingFee: Math.max(0, Number(params.packagingFee ?? 0) || 0),
+    cardPaymentAmount: Math.max(0, Number(params.cardPaymentAmount ?? 0) || 0),
+    adjustments: params.adjustments,
+  })
+  const paymentSum = Math.max(0, Number(params.paymentSum ?? 0) || 0)
+  const total = resolvePosOrderReceiptPrintTotal({
+    storedTotal: Math.max(0, Number(params.storedTotal ?? 0) || 0),
+    pricingFinalTotal: pricing.finalTotal,
+    effectiveDiscountAmt,
+    paymentSum,
+  })
+  return {
+    orderNo: params.orderNo,
+    items: receiptItems,
+    subtotal,
+    discountAmt: effectiveDiscountAmt,
+    total,
+    storeCode: params.storeCode,
+    orderType: params.orderType,
+    ...(params.tableName ? { tableName: params.tableName } : {}),
+    ...(params.memo ? { memo: params.memo } : {}),
+    ...(params.discountReason ? { discountReason: params.discountReason } : {}),
+    ...(appliedCoupons.length ? { appliedCoupons } : {}),
+    vatFeeAmt: pricing.vatFeeAmt,
+    vatFeeMode: pricing.vatFeeMode,
+    ...receiptTaxDisplayFieldsFromPricing(pricing),
+    serviceFeeAmt: pricing.serviceFeeAmt,
+    serviceFeeMode: pricing.serviceFeeMode,
+    cardFeeAmt: pricing.cardFeeAmt,
+    cardFeeMode: pricing.cardFeeMode,
+    otherFeeAmt: pricing.otherFeeAmt,
+    otherFeeMode: pricing.otherFeeMode,
+    ...(params.deliveryAppCode ? { deliveryAppCode: params.deliveryAppCode } : {}),
+    ...(params.paymentFields ?? {}),
+    receiptAutoPrintContext: params.receiptAutoPrintContext ?? 'payment',
+    ...(params.suppressReceiptModalAutoPrint != null
+      ? { suppressReceiptModalAutoPrint: params.suppressReceiptModalAutoPrint }
+      : {}),
+    ...(params.serverOrderId != null && params.serverOrderId > 0
+      ? { serverOrderId: params.serverOrderId }
+      : {}),
   }
 }
 

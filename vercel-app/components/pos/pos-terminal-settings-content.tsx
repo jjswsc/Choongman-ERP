@@ -26,6 +26,7 @@ import { ClipboardCopy, Monitor, Smartphone, RefreshCw, UserX } from 'lucide-rea
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PosScreenConfigStoreAndCopyRow } from '@/components/pos/pos-screen-config-store-and-copy-row'
 import { AttendanceQrDevicesPanel } from '@/components/pos/attendance-qr-devices-panel'
+import { PosUsbScannerTestPanel } from '@/components/pos/pos-usb-scanner-test-panel'
 
 /** 마지막 접속 시각이 이 이내면 "최근 접속" 탭 (나머지는 과거 이력) */
 const DEVICE_RECENT_LAST_SEEN_MS = 7 * 24 * 60 * 60 * 1000
@@ -827,6 +828,8 @@ export function PosTerminalSettingsContent() {
           </li>
         </ul>
       </div>
+
+      {effectiveStore ? <PosUsbScannerTestPanel /> : null}
 
       {effectiveStore ? <AttendanceQrDevicesPanel storeCode={effectiveStore} /> : null}
     </div>

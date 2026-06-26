@@ -105,7 +105,11 @@ import {
   AccountingTh,
   AccountingTheadRow,
 } from "@/components/erp/accounting-data-table"
-import { bankRowNeedsAttention, countBankAttentionRows } from "@/lib/bank-transaction-attention"
+import {
+  bankRowNeedsAttention,
+  countBankAttentionRows,
+  resolveBankRowCategory,
+} from "@/lib/bank-transaction-attention"
 import {
   bankDepositNeedsReceivableOrderLink,
   receivablePickTotalMatchesBank,
@@ -1397,12 +1401,12 @@ export function BankTransactionsTab() {
 
   const filteredList = React.useMemo(() => {
     return list.filter((r) => {
+      const edits = r.id ? queryRowEdits[r.id] : undefined
       if (filterNeedsAttention) {
-        const edits = r.id ? queryRowEdits[r.id] : undefined
         if (!bankRowNeedsAttention(r, edits).needsAttention) return false
       }
       if (filterTransType && r.transType !== filterTransType) return false
-      if (filterCategory && r.category !== filterCategory) return false
+      if (filterCategory && resolveBankRowCategory(r, edits) !== filterCategory) return false
       if (filterVendorCode && String(r.vendorCode || "").trim() !== filterVendorCode) return false
       if (filterAccountSubjectId) {
         const subId = r.accountSubjectId ?? 0
@@ -1416,7 +1420,7 @@ export function BankTransactionsTab() {
         if (hasInvoice) return false
       }
       if (filterPlExpenseOnly && r.transType === "withdraw") {
-        const cat = String(r.category || "expense").toLowerCase()
+        const cat = resolveBankRowCategory(r, edits)
         if (
           ["transfer", "correction", "loan", "advance", "unclassified", "purchase_payment"].includes(
             cat
@@ -1503,8 +1507,10 @@ export function BankTransactionsTab() {
 
   const listForAccountSubjectOptions = React.useMemo(() => {
     if (!filterCategory) return listForCategoryOptions
-    return listForCategoryOptions.filter((r) => r.category === filterCategory)
-  }, [listForCategoryOptions, filterCategory])
+    return listForCategoryOptions.filter(
+      (r) => resolveBankRowCategory(r, r.id ? queryRowEdits[r.id] : undefined) === filterCategory
+    )
+  }, [listForCategoryOptions, filterCategory, queryRowEdits])
 
   const filterTransTypeOptions = React.useMemo(() => {
     const types = [...new Set(list.map((r) => r.transType).filter(Boolean))] as string[]
@@ -1512,9 +1518,15 @@ export function BankTransactionsTab() {
   }, [list])
 
   const filterCategoryOptions = React.useMemo(() => {
-    const cats = [...new Set(listForCategoryOptions.map((r) => r.category).filter(Boolean))] as string[]
+    const cats = [
+      ...new Set(
+        listForCategoryOptions
+          .map((r) => resolveBankRowCategory(r, r.id ? queryRowEdits[r.id] : undefined))
+          .filter(Boolean)
+      ),
+    ] as string[]
     return cats.sort((a, b) => a.localeCompare(b))
-  }, [listForCategoryOptions])
+  }, [listForCategoryOptions, queryRowEdits])
 
   const filterAccountSubjectOptionsFiltered = React.useMemo(() => {
     const ids = new Set(listForAccountSubjectOptions.map((r) => r.accountSubjectId).filter((id) => id != null && id !== 0))
@@ -1523,9 +1535,29 @@ export function BankTransactionsTab() {
   }, [listForAccountSubjectOptions, accountSubjectOptions, revenueAccountOptions])
 
   React.useEffect(() => {
-    if (filterCategory && !list.some((r) => (!filterTransType || r.transType === filterTransType) && r.category === filterCategory)) setFilterCategory("")
-    if (filterAccountSubjectId && !list.some((r) => (!filterTransType || r.transType === filterTransType) && (!filterCategory || r.category === filterCategory) && String(r.accountSubjectId ?? 0) === filterAccountSubjectId)) setFilterAccountSubjectId("")
-  }, [list, filterTransType, filterCategory, filterAccountSubjectId])
+    if (
+      filterCategory &&
+      !list.some(
+        (r) =>
+          (!filterTransType || r.transType === filterTransType) &&
+          resolveBankRowCategory(r, r.id ? queryRowEdits[r.id] : undefined) === filterCategory
+      )
+    ) {
+      setFilterCategory("")
+    }
+    if (
+      filterAccountSubjectId &&
+      !list.some(
+        (r) =>
+          (!filterTransType || r.transType === filterTransType) &&
+          (!filterCategory ||
+            resolveBankRowCategory(r, r.id ? queryRowEdits[r.id] : undefined) === filterCategory) &&
+          String(r.accountSubjectId ?? 0) === filterAccountSubjectId
+      )
+    ) {
+      setFilterAccountSubjectId("")
+    }
+  }, [list, filterTransType, filterCategory, filterAccountSubjectId, queryRowEdits])
 
   const getCategoryLabel = (cat: string, transType: string) => {
     const depositMap: Record<string, string> = {

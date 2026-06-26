@@ -119,6 +119,7 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
+import { posOrderCouponFieldsFromOrderRow, posOrderCouponFieldsFromPayload } from '@/lib/pos-order-coupon-fields'
 import { posOrderTierDiscountFieldsFromPayload } from '@/lib/pos-order-tier-discount-fields'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
@@ -210,6 +211,7 @@ import {
   receiptModalDataFromTerminalOrderTaxReprint,
   hallOrderReceiptPayloadFromPosOrder,
   hallOrderReceiptPayloadFromOrderFields,
+  buildCheckoutPaymentReceiptModalData,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
@@ -7170,8 +7172,7 @@ export default function PosTerminalPage() {
             : null,
         memberId: Number(taxInvoiceTargetOrder.memberId || 0),
         memberNo: String(taxInvoiceTargetOrder.memberNo || ''),
-        couponCode: String(taxInvoiceTargetOrder.couponCode || ''),
-        couponDiscountAmt: Number(taxInvoiceTargetOrder.couponDiscountAmt || 0),
+        ...posOrderCouponFieldsFromOrderRow(taxInvoiceTargetOrder),
         pointUsed: Number(taxInvoiceTargetOrder.pointUsed || 0),
         pointEarned: Number(taxInvoiceTargetOrder.pointEarned || 0),
         guestCount: Number(taxInvoiceTargetOrder.guestCount || 0),
@@ -8132,8 +8133,7 @@ export default function PosTerminalPage() {
                     serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
-                    couponCode: payload.couponCode,
-                    couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
@@ -8162,39 +8162,40 @@ export default function PosTerminalPage() {
                     })
                     if (!completedOk) return false
                   }
-                  const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                  const discountAmt = payload.discountAmt ?? 0
-                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                   await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
-                  const receiptPayload: ReceiptModalData = {
+                  const receiptPayload = buildCheckoutPaymentReceiptModalData({
                     orderNo: pendingReceiptOrderNo ?? '',
-                    items: itemsForPaymentSave,
-                    subtotal,
-                    discountAmt,
-                    total: pricing.finalTotal,
                     storeCode: currentStoreId,
                     orderType: 'delivery',
                     tableName: payload.orderLabel,
                     memo: memoWithKbank,
+                    items: itemsForPaymentSave,
+                    discountAmt: payload.discountAmt,
+                    couponDiscountAmt: payload.couponDiscountAmt,
                     discountReason: payload.discountReason,
-                    vatFeeAmt: pricing.vatFeeAmt,
-                    vatFeeMode: pricing.vatFeeMode,
-                    ...receiptTaxDisplayFieldsFromPricing(pricing),
-                    serviceFeeAmt: pricing.serviceFeeAmt,
-                    serviceFeeMode: pricing.serviceFeeMode,
-                    cardFeeAmt: pricing.cardFeeAmt,
-                    cardFeeMode: pricing.cardFeeMode,
-                    otherFeeAmt: pricing.otherFeeAmt,
-                    otherFeeMode: pricing.otherFeeMode,
-                    ...(String(deliveryApp ?? '').trim()
-                      ? { deliveryAppCode: String(deliveryApp).trim().toLowerCase() }
-                      : {}),
-                    ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
-                    receiptAutoPrintContext: 'payment',
+                    appliedCoupons: payload.appliedCoupons,
+                    cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment),
+                    paymentSum: payload.payment
+                      ? posOrderPaymentSum({
+                          paymentCash: payload.payment.paymentCash,
+                          paymentCard: payload.payment.paymentCard,
+                          paymentQr: payload.payment.paymentQr,
+                          paymentOther: payload.payment.paymentOther,
+                          paymentDeliveryApp: payload.payment.paymentDeliveryApp,
+                        } as PosOrder)
+                      : 0,
+                    adjustments: pricingAdjustments,
+                    paymentFields: payload.payment
+                      ? receiptPaymentFieldsFromSnapshot(payload.payment)
+                      : undefined,
+                    deliveryAppCode: String(deliveryApp ?? '').trim()
+                      ? String(deliveryApp).trim().toLowerCase()
+                      : undefined,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
-                  }
+                    serverOrderId: existingOrderId,
+                  })
                   const splitBatch = makeSplitPaymentReceiptBatch(
                     {
                       orderNo: receiptPayload.orderNo,
@@ -8302,8 +8303,7 @@ export default function PosTerminalPage() {
                     serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
-                    couponCode: payload.couponCode,
-                    couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
@@ -8332,36 +8332,37 @@ export default function PosTerminalPage() {
                     })
                     if (!completedOk) return false
                   }
-                  const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                  const discountAmt = payload.discountAmt ?? 0
-                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                   await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
-                  const receiptPayload: ReceiptModalData = {
+                  const receiptPayload = buildCheckoutPaymentReceiptModalData({
                     orderNo: pendingReceiptOrderNo ?? '',
-                    items: itemsForPaymentSave,
-                    subtotal,
-                    discountAmt,
-                    total: pricing.finalTotal,
                     storeCode: currentStoreId,
                     orderType: 'takeout',
                     tableName: payload.orderLabel,
                     memo: memoWithKbank,
+                    items: itemsForPaymentSave,
+                    discountAmt: payload.discountAmt,
+                    couponDiscountAmt: payload.couponDiscountAmt,
                     discountReason: payload.discountReason,
-                    vatFeeAmt: pricing.vatFeeAmt,
-                    vatFeeMode: pricing.vatFeeMode,
-                    ...receiptTaxDisplayFieldsFromPricing(pricing),
-                    serviceFeeAmt: pricing.serviceFeeAmt,
-                    serviceFeeMode: pricing.serviceFeeMode,
-                    cardFeeAmt: pricing.cardFeeAmt,
-                    cardFeeMode: pricing.cardFeeMode,
-                    otherFeeAmt: pricing.otherFeeAmt,
-                    otherFeeMode: pricing.otherFeeMode,
-                    ...(payload.payment ? receiptPaymentFieldsFromSnapshot(payload.payment) : {}),
-                    receiptAutoPrintContext: 'payment',
+                    appliedCoupons: payload.appliedCoupons,
+                    cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment),
+                    paymentSum: payload.payment
+                      ? posOrderPaymentSum({
+                          paymentCash: payload.payment.paymentCash,
+                          paymentCard: payload.payment.paymentCard,
+                          paymentQr: payload.payment.paymentQr,
+                          paymentOther: payload.payment.paymentOther,
+                          paymentDeliveryApp: payload.payment.paymentDeliveryApp,
+                        } as PosOrder)
+                      : 0,
+                    adjustments: pricingAdjustments,
+                    paymentFields: payload.payment
+                      ? receiptPaymentFieldsFromSnapshot(payload.payment)
+                      : undefined,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
-                  }
+                    serverOrderId: existingOrderId,
+                  })
                   const splitBatch = makeSplitPaymentReceiptBatch(
                     {
                       orderNo: receiptPayload.orderNo,
@@ -8671,8 +8672,7 @@ export default function PosTerminalPage() {
                     serviceAmt: payload.serviceAmt ?? 0,
                     serviceReason: payload.serviceReason ?? '',
                     ...addonMemberFields,
-                    couponCode: payload.couponCode,
-                    couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointEarned: 0,
                     guestCount: payload.guestCount ?? existingOrder.guestCount,
@@ -8711,8 +8711,7 @@ export default function PosTerminalPage() {
                     serviceReason: payload.serviceReason,
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
-                    couponCode: payload.couponCode,
-                    couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
@@ -9245,8 +9244,7 @@ export default function PosTerminalPage() {
                     serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
-                    couponCode: payload.couponCode,
-                    couponDiscountAmt: payload.couponDiscountAmt,
+                    ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
@@ -9284,8 +9282,7 @@ export default function PosTerminalPage() {
                       serviceReason: payload.serviceReason ?? '',
                       memberId: payload.memberId,
                       memberNo: payload.memberNo,
-                      couponCode: payload.couponCode,
-                      couponDiscountAmt: payload.couponDiscountAmt,
+                      ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
@@ -9313,8 +9310,7 @@ export default function PosTerminalPage() {
                       serviceReason: payload.serviceReason ?? '',
                       memberId: payload.memberId,
                       memberNo: payload.memberNo,
-                      couponCode: payload.couponCode,
-                      couponDiscountAmt: payload.couponDiscountAmt,
+                      ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
@@ -9352,39 +9348,35 @@ export default function PosTerminalPage() {
                     /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                     clearTableOrder(currentStoreId, payload.tableName)
                   }
-                  const subtotal = itemsForPaymentSave.reduce(
-                    (s, it) => s + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
-                    0
-                  )
-                  const discountAmt = payload.discountAmt ?? 0
-                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment), adjustments: pricingAdjustments })
                   await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
-                  const receiptPayload: ReceiptModalData = {
+                  const receiptPayload = buildCheckoutPaymentReceiptModalData({
                     orderNo,
-                    items: itemsForPaymentSave,
-                    subtotal,
-                    discountAmt,
-                    total: pricing.finalTotal,
                     storeCode: currentStoreId,
                     orderType: 'dine_in',
                     tableName: payload.tableName,
                     memo: memoWithKbank,
+                    items: itemsForPaymentSave,
+                    discountAmt: payload.discountAmt,
+                    couponDiscountAmt: payload.couponDiscountAmt,
                     discountReason: payload.discountReason,
-                    vatFeeAmt: pricing.vatFeeAmt,
-                    vatFeeMode: pricing.vatFeeMode,
-                    ...receiptTaxDisplayFieldsFromPricing(pricing),
-                    serviceFeeAmt: pricing.serviceFeeAmt,
-                    serviceFeeMode: pricing.serviceFeeMode,
-                    cardFeeAmt: pricing.cardFeeAmt,
-                    cardFeeMode: pricing.cardFeeMode,
-                    otherFeeAmt: pricing.otherFeeAmt,
-                    otherFeeMode: pricing.otherFeeMode,
-                    ...(pay ? receiptPaymentFieldsFromSnapshot(pay) : {}),
-                    receiptAutoPrintContext: 'payment',
+                    appliedCoupons: payload.appliedCoupons,
+                    cardPaymentAmount: resolveCardPaymentAmountForPricing(pay),
+                    paymentSum: pay
+                      ? posOrderPaymentSum({
+                          paymentCash: pay.paymentCash,
+                          paymentCard: pay.paymentCard,
+                          paymentQr: pay.paymentQr,
+                          paymentOther: pay.paymentOther,
+                          paymentDeliveryApp: pay.paymentDeliveryApp,
+                        } as PosOrder)
+                      : 0,
+                    adjustments: pricingAdjustments,
+                    paymentFields: pay ? receiptPaymentFieldsFromSnapshot(pay) : undefined,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
-                  }
+                    serverOrderId: orderIdToComplete ?? undefined,
+                  })
                   const splitBatch = makeSplitPaymentReceiptBatch(
                     {
                       orderNo: receiptPayload.orderNo,
@@ -9550,8 +9542,14 @@ export default function PosTerminalPage() {
                     serviceReason: String(hit!.serviceReason ?? payload.serviceReason ?? '').trim(),
                     memberId: hit!.memberId ?? payload.memberId,
                     memberNo: hit!.memberNo ?? payload.memberNo,
-                    couponCode: hit!.couponCode ?? payload.couponCode,
-                    couponDiscountAmt: Math.max(0, Number(hit!.couponDiscountAmt ?? payload.couponDiscountAmt ?? 0) || 0),
+                    ...posOrderCouponFieldsFromPayload({
+                      ...payload,
+                      couponCode: hit!.couponCode ?? payload.couponCode,
+                      couponDiscountAmt: Math.max(
+                        0,
+                        Number(hit!.couponDiscountAmt ?? payload.couponDiscountAmt ?? 0) || 0
+                      ),
+                    }),
                     pointUsed: Math.max(0, Math.trunc(Number(hit!.pointUsed ?? payload.pointUsed ?? 0) || 0)),
                     paymentCash: 0,
                     paymentCard: 0,
@@ -9727,8 +9725,7 @@ export default function PosTerminalPage() {
                   serviceReason: payload.serviceReason ?? '',
                   memberId: payload.memberId,
                   memberNo: payload.memberNo,
-                  couponCode: payload.couponCode,
-                  couponDiscountAmt: payload.couponDiscountAmt,
+                  ...posOrderCouponFieldsFromPayload(payload),
                   pointUsed: payload.pointUsed,
                   localOrderNo: posSaveClientKey,
                   items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -9814,6 +9811,32 @@ export default function PosTerminalPage() {
                   })
                 }
                 const receiptItems = cartLinesToPosOrderItems(payloadItemsNormalized)
+                const buildNonDineCheckoutPaymentReceipt = (): ReceiptModalData =>
+                  buildCheckoutPaymentReceiptModalData({
+                    orderNo,
+                    storeCode: currentStoreId,
+                    orderType: payload.orderType,
+                    tableName: payload.orderLabel,
+                    memo: memoWithKbank,
+                    items: receiptItems,
+                    discountAmt: payload.discountAmt,
+                    couponDiscountAmt: payload.couponDiscountAmt,
+                    discountReason: payload.discountReason,
+                    appliedCoupons: payload.appliedCoupons,
+                    cardPaymentAmount: resolveCardPaymentAmountForPricing(payload.payment),
+                    paymentSum: paymentSumBeforeSave,
+                    storedTotal: pricing.finalTotal,
+                    adjustments: pricingAdjustments,
+                    paymentFields: payload.payment
+                      ? receiptPaymentFieldsFromSnapshot(payload.payment)
+                      : undefined,
+                    deliveryAppCode:
+                      payload.orderType === 'delivery' && String(deliveryApp ?? '').trim()
+                        ? String(deliveryApp).trim().toLowerCase()
+                        : undefined,
+                    suppressReceiptModalAutoPrint,
+                    serverOrderId: newOrderId ?? undefined,
+                  })
                 const receiptPayloadSubmit = {
                   orderNo,
                   storeCode: currentStoreId,
@@ -9995,11 +10018,7 @@ export default function PosTerminalPage() {
                       newOrderId
                     )
                     dispatchCheckoutPaymentReceipt({
-                      receiptPayload: {
-                        ...receiptPayloadSubmit,
-                        receiptAutoPrintContext: 'payment',
-                        suppressReceiptModalAutoPrint,
-                      },
+                      receiptPayload: buildNonDineCheckoutPaymentReceipt(),
                       splitBatch,
                       orderId: newOrderId,
                     })
@@ -10109,14 +10128,7 @@ export default function PosTerminalPage() {
                         newOrderId
                       )
                       dispatchCheckoutPaymentReceipt({
-                        receiptPayload: {
-                          ...receiptPayloadSubmit,
-                          ...(payload.payment
-                            ? receiptPaymentFieldsFromSnapshot(payload.payment)
-                            : {}),
-                          receiptAutoPrintContext: 'payment',
-                          suppressReceiptModalAutoPrint,
-                        },
+                        receiptPayload: buildNonDineCheckoutPaymentReceipt(),
                         splitBatch,
                         orderId: newOrderId,
                       })

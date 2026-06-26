@@ -155,6 +155,36 @@ describe('resolveHallOrderReceiptDiscountAmt', () => {
     ).toBe(5)
   })
 
+  it('prefers lineDiscountAmt sum when explicit double-counts coupon', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 94,
+        couponDiscountAmt: 223,
+        items: [
+          { price: 219, qty: 1, lineDiscountAmt: 172.06 },
+          { price: 259, qty: 1, lineDiscountAmt: 50.94 },
+        ],
+        subtotal: 478,
+        total: 255,
+      })
+    ).toBe(223)
+  })
+
+  it('prefers lineDiscountAmt sum when it exceeds discount_amt without coupon field', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 94,
+        couponDiscountAmt: 0,
+        items: [
+          { price: 219, qty: 1, lineDiscountAmt: 172.06 },
+          { price: 259, qty: 1, lineDiscountAmt: 50.94 },
+        ],
+        subtotal: 478,
+        total: 255,
+      })
+    ).toBe(223)
+  })
+
   it('sums lineDiscountAmt when order discount_amt is zero', () => {
     expect(
       resolveHallOrderReceiptDiscountAmt({

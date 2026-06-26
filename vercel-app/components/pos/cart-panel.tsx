@@ -70,6 +70,7 @@ import { formatBahtAmountForField, formatBahtInputDisplay, formatIntegerInputDis
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
+import { appAlert } from '@/lib/app-message'
 import { useAuth } from '@/lib/auth-context'
 import {
   getPosMenuOptions,
@@ -102,7 +103,13 @@ import {
   normalizeCouponScanDelimiters,
   parseLooseMemberCouponScanInput,
 } from '@/lib/member-coupon-qr'
-import { playPosScanRecognizedBeep } from '@/lib/pos-scan-success-sound'
+import {
+  playPosScanBeep,
+  POS_SCAN_FIELD_FLASH_MS,
+  POS_SCAN_IDLE_REFOCUS_MS,
+  posScanFieldFlashClass,
+  type PosScanFieldFlash,
+} from '@/lib/pos-scan-feedback'
 import { isMemberPosScanPayload, parseMemberPosScanInput } from '@/lib/member-pos-qr'
 import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner-dialog'
 import {
@@ -488,6 +495,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const pendingMemberCouponQrRawRef = useRef<string | null>(null)
   const lastScanBeepAtRef = useRef(0)
   const couponUsbScanBufferRef = useRef({ chars: '', lastAt: 0 })
+  const memberScanInputRef = useRef<HTMLInputElement>(null)
+  const paymentMemberScanInputRef = useRef<HTMLInputElement>(null)
+  const couponScanInputRef = useRef<HTMLInputElement>(null)
+  const [memberScanFlash, setMemberScanFlash] = useState<PosScanFieldFlash>(null)
+  const [couponScanFlash, setCouponScanFlash] = useState<PosScanFieldFlash>(null)
+  const scanFieldFlashTimerRef = useRef<number | null>(null)
+  const lastPosActivityRef = useRef(Date.now())
+  const memberScanAutoSubmitRef = useRef<string | null>(null)
+  const couponScanAutoSubmitRef = useRef<string | null>(null)
   const [couponQuantityInput, setCouponQuantityInput] = useState('1')
   const couponQuantity = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
@@ -525,6 +541,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const bumpDiscountPaymentSync = useCallback(() => {
     setDiscountPaymentSyncTick((t) => t + 1)
   }, [])
+  const triggerScanFieldFeedback = useCallback(
+    (field: 'member' | 'coupon', outcome: 'success' | 'error') => {
+      playPosScanBeep(outcome, lastScanBeepAtRef)
+      const setter = field === 'member' ? setMemberScanFlash : setCouponScanFlash
+      setter(outcome)
+      if (scanFieldFlashTimerRef.current != null) {
+        window.clearTimeout(scanFieldFlashTimerRef.current)
+      }
+      scanFieldFlashTimerRef.current = window.setTimeout(() => {
+        setter(null)
+        scanFieldFlashTimerRef.current = null
+      }, POS_SCAN_FIELD_FLASH_MS)
+    },
+    []
+  )
   const paymentMethodSectionRef = useRef<HTMLDivElement | null>(null)
   const dutchMenuPanelRef = useRef<HTMLDivElement | null>(null)
   const splitModePrevRef = useRef<'amount' | 'menu'>('amount')
@@ -536,6 +567,35 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [collabQuantity, setCollabQuantity] = useState(1)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const refocusActiveScanInput = useCallback(() => {
+    window.setTimeout(() => {
+      if (couponQrScannerOpenRef.current) return
+      if (showPaymentModal) couponScanInputRef.current?.focus()
+      else memberScanInputRef.current?.focus()
+    }, 60)
+  }, [showPaymentModal])
+  const finishMemberScanInput = useCallback(
+    (outcome: 'success' | 'error') => {
+      triggerScanFieldFeedback('member', outcome)
+      setMemberKeyword('')
+      memberScanAutoSubmitRef.current = null
+      pendingMemberCouponQrRawRef.current = null
+      couponUsbScanBufferRef.current = { chars: '', lastAt: 0 }
+      refocusActiveScanInput()
+    },
+    [refocusActiveScanInput, triggerScanFieldFeedback]
+  )
+  const finishCouponScanInput = useCallback(
+    (outcome: 'success' | 'error') => {
+      triggerScanFieldFeedback('coupon', outcome)
+      couponScanAutoSubmitRef.current = null
+      pendingMemberCouponQrRawRef.current = null
+      couponUsbScanBufferRef.current = { chars: '', lastAt: 0 }
+      if (outcome === 'success') setCouponCode('')
+      refocusActiveScanInput()
+    },
+    [refocusActiveScanInput, triggerScanFieldFeedback]
+  )
   /** 결제 확정 직후: 현금 거스름 안내(확인 버튼으로만 닫음). 터미널은 onPostPaymentCashChange로 부모에 위임 */
   const [postPaymentCashChangeBaht, setPostPaymentCashChangeBaht] = useState<number | null>(null)
   const [paymentSubmitInFlight, setPaymentSubmitInFlight] = useState(false)
@@ -1066,6 +1126,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     () => () => {
       if (manualDiscountFlashTimerRef.current != null) {
         window.clearTimeout(manualDiscountFlashTimerRef.current)
+      }
+      if (scanFieldFlashTimerRef.current != null) {
+        window.clearTimeout(scanFieldFlashTimerRef.current)
       }
     },
     []
@@ -1744,11 +1807,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         )
         if (exact?.id) {
           setSelectedMemberId(String(exact.id))
-          const now = Date.now()
-          if (now - lastScanBeepAtRef.current > 350) {
-            playPosScanRecognizedBeep()
-            lastScanBeepAtRef.current = now
-          }
+          finishMemberScanInput('success')
+        } else {
+          finishMemberScanInput('error')
         }
       }
     } catch (e) {
@@ -1763,7 +1824,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const linkMemberByMemberNo = useCallback(
     async (
       memberNo: string,
-      opts?: { beep?: boolean }
+      _opts?: { beep?: boolean }
     ): Promise<{ id: number; name: string } | null> => {
       const keyword = String(memberNo || '').trim()
       if (!keyword) return null
@@ -1792,13 +1853,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           tierCode: match.tierCode || 'BRONZE',
         },
       }))
-      if (opts?.beep !== false) {
-        const now = Date.now()
-        if (now - lastScanBeepAtRef.current > 350) {
-          playPosScanRecognizedBeep()
-          lastScanBeepAtRef.current = now
-        }
-      }
       return { id: match.id, name }
     },
     []
@@ -1837,24 +1891,41 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
 
   const handleMemberSearch = useCallback(
-    async (rawOverride?: string) => {
+    async (rawOverride?: string, opts?: { fromScan?: boolean }): Promise<boolean> => {
       const raw = normalizeCouponScanDelimiters(String(rawOverride ?? memberKeyword).trim())
-      if (!raw) return
+      if (!raw) return false
+      const fromScan = opts?.fromScan === true
 
       if (isMemberCouponScanPayload(raw)) {
         const couponParsed = parseLooseMemberCouponScanInput(raw)
         if (couponParsed?.memberNo) {
-          await linkMemberByMemberNo(couponParsed.memberNo, { beep: true })
-          return
+          const linked = await linkMemberByMemberNo(couponParsed.memberNo, { beep: false })
+          if (linked) {
+            if (fromScan) finishMemberScanInput('success')
+            return true
+          }
+          if (fromScan) finishMemberScanInput('error')
+          return false
         }
       }
 
       const memberParsed = parseMemberPosScanInput(raw)
-      const searchKey = memberParsed?.memberNo ?? raw
+      if (memberParsed) {
+        const linked = await linkMemberByMemberNo(memberParsed.memberNo, { beep: false })
+        if (linked) {
+          if (fromScan) finishMemberScanInput('success')
+          return true
+        }
+        if (fromScan) finishMemberScanInput('error')
+        return false
+      }
+
+      const searchKey = raw
       setMemberKeyword(searchKey)
-      await loadMembers(searchKey, { autoSelectExactMemberNo: memberParsed?.memberNo })
+      await loadMembers(searchKey, { autoSelectExactMemberNo: undefined })
+      return false
     },
-    [linkMemberByMemberNo, memberKeyword]
+    [finishMemberScanInput, linkMemberByMemberNo, memberKeyword]
   )
 
   const handleMemberKeywordInput = (next: string) => {
@@ -3398,6 +3469,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         setCouponMessage(
           params.successNote || i18nTr(t, 'posCouponAppliedSuccess', { code: code.toUpperCase() })
         )
+        void appAlert(i18nTr(t, 'posCouponUseSuccessPopup', { code: code.toUpperCase() }))
         return true
       } catch (e) {
         console.error('validatePosCoupons:', e)
@@ -3431,12 +3503,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         return false
       }
 
-      const now = Date.now()
-      if (now - lastScanBeepAtRef.current > 350) {
-        playPosScanRecognizedBeep()
-        lastScanBeepAtRef.current = now
-      }
-
       let memberId: number | undefined
       let successNote: string | undefined
 
@@ -3465,10 +3531,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     [applyCouponWithParams, linkMemberByMemberNo, selectedMemberId, t]
   )
 
+  const runCouponScanPayload = useCallback(
+    async (raw: string) => {
+      const ok = await applyCouponFromQrPayload(raw)
+      finishCouponScanInput(ok ? 'success' : 'error')
+      return ok
+    },
+    [applyCouponFromQrPayload, finishCouponScanInput]
+  )
+
   const applyCouponCode = async (rawOverride?: string) => {
     const pendingQrRaw = pendingMemberCouponQrRawRef.current
     if (pendingQrRaw) {
-      const ok = await applyCouponFromQrPayload(pendingQrRaw)
+      const ok = await runCouponScanPayload(pendingQrRaw)
       if (ok) pendingMemberCouponQrRawRef.current = null
       return
     }
@@ -3481,25 +3556,29 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
     const memberOnly = parseMemberPosScanInput(raw)
     if (memberOnly) {
-      const linked = await linkMemberByMemberNo(memberOnly.memberNo, { beep: true })
+      const linked = await linkMemberByMemberNo(memberOnly.memberNo, { beep: false })
       if (linked) {
         setCouponCode('')
         setCouponMessage(i18nTr(t, 'posCouponQrMemberLinked', { name: linked.name }))
+        finishCouponScanInput('success')
       } else {
         setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
+        finishCouponScanInput('error')
       }
       return
     }
 
     const loose = parseLooseMemberCouponScanInput(raw)
     if (isMemberCouponQrPayload(raw) || loose) {
-      await applyCouponFromQrPayload(raw)
+      await runCouponScanPayload(raw)
       return
     }
-    await applyCouponWithParams({
+    const ok = await applyCouponWithParams({
       code: raw,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
     })
+    if (ok) finishCouponScanInput('success')
+    else finishCouponScanInput('error')
   }
 
   const sanitizeCouponCodeInput = (raw: string) =>
@@ -3555,7 +3634,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           e.stopPropagation()
           setCouponCode('')
           pendingMemberCouponQrRawRef.current = null
-          void applyCouponFromQrPayload(raw)
+          void runCouponScanPayload(raw)
         }
         return
       }
@@ -3573,11 +3652,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         lastKeyAt = now
         couponUsbScanBufferRef.current = { chars: buffer, lastAt: now }
 
+        const normalized = normalizeCouponScanDelimiters(buffer)
         const inScannerBurst = buffer.length >= 2 && gap <= 120
         if (inScannerBurst || isMemberCouponScanPayload(buffer)) {
           e.preventDefault()
           e.stopPropagation()
-          const normalized = normalizeCouponScanDelimiters(buffer)
+          if (isMemberCouponScanPayload(normalized)) {
+            resetBuffer()
+            setCouponCode('')
+            pendingMemberCouponQrRawRef.current = null
+            void runCouponScanPayload(normalized)
+            return
+          }
           const parsed = parseLooseMemberCouponScanInput(normalized)
           if (parsed) {
             pendingMemberCouponQrRawRef.current = normalized
@@ -3598,6 +3684,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       buffer += e.key
       couponUsbScanBufferRef.current = { chars: buffer, lastAt: now }
 
+      const normalizedGlobal = normalizeCouponScanDelimiters(buffer)
+      if (isMemberCouponScanPayload(normalizedGlobal)) {
+        resetBuffer()
+        e.preventDefault()
+        void runCouponScanPayload(normalizedGlobal)
+        return
+      }
+
       if (!isMemberCouponScanPayload(buffer) && buffer.length > 128) resetBuffer()
     }
 
@@ -3606,7 +3700,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       window.removeEventListener('keydown', onKeyDown, true)
       resetBuffer()
     }
-  }, [applyCouponFromQrPayload, couponQrScannerOpen, showPaymentModal])
+  }, [couponQrScannerOpen, runCouponScanPayload, showPaymentModal])
+
+  /** USB 스캐너(키보드 웨지): 회원·쿠폰 입력칸이 화면별로 분리되어 있으므로 해당 화면 진입 시 포커스 */
+  useEffect(() => {
+    if (showPaymentModal || couponQrScannerOpen) return
+    const id = window.setTimeout(() => {
+      memberScanInputRef.current?.focus()
+    }, 80)
+    return () => window.clearTimeout(id)
+  }, [couponQrScannerOpen, showPaymentModal])
+
+  useEffect(() => {
+    if (!showPaymentModal || couponQrScannerOpen) return
+    const id = window.setTimeout(() => {
+      if (!selectedMemberId) {
+        paymentMemberScanInputRef.current?.focus()
+      } else {
+        couponScanInputRef.current?.focus()
+      }
+    }, 120)
+    return () => window.clearTimeout(id)
+  }, [couponQrScannerOpen, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -3636,7 +3751,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         resetBuffer()
         if (raw && isMemberPosScanPayload(raw) && !isMemberCouponScanPayload(raw)) {
           e.preventDefault()
-          void handleMemberSearch(raw)
+          void handleMemberSearch(raw, { fromScan: true })
         }
         return
       }
@@ -3646,6 +3761,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (lastKeyAt > 0 && now - lastKeyAt > 120) resetBuffer()
       lastKeyAt = now
       buffer += e.key
+      const raw = buffer.trim()
+      if (isMemberPosScanPayload(raw) && !isMemberCouponScanPayload(raw)) {
+        resetBuffer()
+        e.preventDefault()
+        void handleMemberSearch(raw, { fromScan: true })
+        return
+      }
       if (!isMemberPosScanPayload(buffer) && buffer.length > 48) resetBuffer()
     }
 
@@ -3655,6 +3777,62 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       resetBuffer()
     }
   }, [couponQrScannerOpen, handleMemberSearch, showPaymentModal])
+
+  useEffect(() => {
+    if (showPaymentModal || couponQrScannerOpen) return
+    const raw = normalizeCouponScanDelimiters(memberKeyword.trim())
+    if (!raw || memberScanAutoSubmitRef.current === raw) return
+    const couponMember = isMemberCouponScanPayload(raw)
+      ? parseLooseMemberCouponScanInput(raw)?.memberNo
+      : null
+    const memberParsed = parseMemberPosScanInput(raw)
+    if (!couponMember && !memberParsed) return
+    memberScanAutoSubmitRef.current = raw
+    void handleMemberSearch(raw, { fromScan: true })
+  }, [couponQrScannerOpen, handleMemberSearch, memberKeyword, showPaymentModal])
+
+  useEffect(() => {
+    if (!showPaymentModal || couponQrScannerOpen) return
+    const raw = pendingMemberCouponQrRawRef.current
+    if (!raw || couponScanAutoSubmitRef.current === raw) return
+    if (!isMemberCouponScanPayload(raw)) return
+    couponScanAutoSubmitRef.current = raw
+    void runCouponScanPayload(raw)
+  }, [couponCode, couponQrScannerOpen, runCouponScanPayload, showPaymentModal])
+
+  useEffect(() => {
+    const bumpActivity = () => {
+      lastPosActivityRef.current = Date.now()
+    }
+    window.addEventListener('pointerdown', bumpActivity, true)
+    window.addEventListener('keydown', bumpActivity, true)
+    return () => {
+      window.removeEventListener('pointerdown', bumpActivity, true)
+      window.removeEventListener('keydown', bumpActivity, true)
+    }
+  }, [])
+
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      if (couponQrScannerOpen) return
+      if (guestDirectOpen || editingNoteItemId || discountInputFocusedRef.current) return
+      if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
+      const active = document.activeElement
+      if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement ||
+        (active instanceof HTMLElement && active.isContentEditable)
+      ) {
+        return
+      }
+      if (showPaymentModal) couponScanInputRef.current?.focus()
+      else memberScanInputRef.current?.focus()
+      lastPosActivityRef.current = Date.now()
+    }, 4000)
+    return () => window.clearInterval(tick)
+  }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, showPaymentModal])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
@@ -4596,6 +4774,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           {/* 1행: 회원검색 + 손님(테이블현황만) */}
           <div className="flex flex-nowrap items-center gap-1.5">
             <Input
+              ref={memberScanInputRef}
+              lang="en"
+              data-pos-member-scan="1"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              inputMode="text"
               placeholder={t('posMemberSearchPh') || '회원번호/이름/번호'}
               value={memberKeyword}
               onChange={(e) => handleMemberKeywordInput(e.target.value)}
@@ -4606,7 +4792,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 }
               }}
               onFocus={scrollIntoViewOnFocus}
-              className="h-8 flex-1 w-0 min-w-0 max-w-[9rem]"
+              className={cn(
+                'h-8 flex-1 w-0 min-w-0 max-w-[9rem] [ime-mode:disabled]',
+                posScanFieldFlashClass(memberScanFlash)
+              )}
+              style={{ imeMode: 'disabled' }}
             />
             <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0" onClick={() => void handleMemberSearch()} disabled={membersLoading}>
               {membersLoading ? '...' : (t('posSearch') || '검색')}
@@ -5100,6 +5290,102 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               t={t}
             />
 
+            <div className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-50/80 via-card to-card p-3 shadow-sm dark:from-amber-950/20 dark:via-card dark:to-card">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <div className="flex shrink-0 items-center gap-2 sm:min-w-[7.5rem]">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <p className="text-sm font-semibold leading-tight">
+                    {t('posPaymentSectionMember') || t('posMember') || '회원 검색'}
+                  </p>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  <Input
+                    ref={paymentMemberScanInputRef}
+                    lang="en"
+                    data-pos-member-scan="1"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    inputMode="text"
+                    placeholder={t('posMemberSearchPh') || '회원번호/이름/번호'}
+                    value={memberKeyword}
+                    onChange={(e) => handleMemberKeywordInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void handleMemberSearch(e.currentTarget.value)
+                      }
+                    }}
+                    className={cn(
+                      'h-10 min-w-0 flex-1 text-sm rounded-xl [ime-mode:disabled]',
+                      posScanFieldFlashClass(memberScanFlash)
+                    )}
+                    style={{ imeMode: 'disabled' }}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-10 shrink-0 rounded-xl px-4"
+                    onClick={() => void handleMemberSearch()}
+                    disabled={membersLoading}
+                  >
+                    {membersLoading ? '...' : t('posSearch') || '검색'}
+                  </Button>
+                </div>
+              </div>
+              {(selectedMemberId || memberOptions.length > 0) && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {selectedMemberId && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-lg px-2.5 text-xs"
+                      onClick={() => setSelectedMemberId('')}
+                    >
+                      {t('posMemberNone') || '비회원'}
+                    </Button>
+                  )}
+                  {memberOptions.map((m) => (
+                    <Button
+                      key={m.value}
+                      type="button"
+                      size="sm"
+                      variant={selectedMemberId === m.value ? 'default' : 'outline'}
+                      className="h-8 max-w-full rounded-lg px-2.5 text-xs"
+                      onClick={() => setSelectedMemberId(m.value)}
+                    >
+                      <span className="truncate">{m.label}</span>
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {selectedMemberId && selectedMemberDetail ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {selectedMemberDetail.name}
+                  {selectedMemberDetail.memberNo ? ` · ${selectedMemberDetail.memberNo}` : ''}
+                  {selectedMemberDetail.phone ? ` · ${selectedMemberDetail.phone}` : ''}
+                </p>
+              ) : null}
+              {selectedMemberId && tierDiscountAmt > 0 ? (
+                <p className="mt-1 text-[11px] font-medium text-violet-800 dark:text-violet-200">
+                  {tr('posTierDiscountExpected', '등급 할인 예상')}: -{formatBahtNum(tierDiscountAmt)} ฿ (
+                  {normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')}{' '}
+                  {(selectedMemberTierDiscountRate * 100).toFixed(1)}%)
+                </p>
+              ) : null}
+              {memberSearchEmpty && (
+                <p className="mt-2 text-xs text-amber-600">
+                  {t('posMemberSearchEmpty') ||
+                    '검색 결과가 없습니다. ERP 회원관리에서 회원을 먼저 등록해 주세요.'}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-3">
               {/* 협업 할인 — 항상 표시, 없음 선택 가능 */}
               <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-50/80 via-card to-card p-4 shadow-sm dark:from-violet-950/25 dark:via-card dark:to-card">
@@ -5178,6 +5464,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   </div>
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Input
+                      ref={couponScanInputRef}
                       lang="en"
                       data-pos-coupon-scan="1"
                       autoComplete="off"
@@ -5198,13 +5485,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           if (fromScanner && isMemberCouponScanPayload(fromScanner)) {
                             pendingMemberCouponQrRawRef.current = null
                             setCouponCode('')
-                            void applyCouponFromQrPayload(fromScanner)
+                            void runCouponScanPayload(fromScanner)
                             return
                           }
                           void applyCouponCode(e.currentTarget.value)
                         }
                       }}
-                      className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs [ime-mode:disabled]"
+                      className={cn(
+                        'h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs [ime-mode:disabled]',
+                        posScanFieldFlashClass(couponScanFlash)
+                      )}
                       style={{ imeMode: 'disabled' }}
                     />
                     <Input
@@ -6377,7 +6667,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       onOpenChange={setCouponQrScannerOpen}
       onScan={(raw) => {
         couponQrScannerClosingRef.current = true
-        void applyCouponFromQrPayload(raw).finally(() => {
+        void runCouponScanPayload(raw).finally(() => {
           window.setTimeout(() => {
             couponQrScannerClosingRef.current = false
           }, 400)

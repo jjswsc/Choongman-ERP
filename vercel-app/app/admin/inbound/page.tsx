@@ -1486,7 +1486,7 @@ export default function InboundPage() {
               onHistPurchaseSourceChange={setHistPurchaseSource}
               onSearch={fetchHistory}
             />
-            <div className="overflow-x-auto max-h-[500px]">
+            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] min-h-[320px]">
               <InboundTable
                 rows={inboundTableRows}
                 loading={historyLoading}

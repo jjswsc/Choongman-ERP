@@ -151,8 +151,12 @@ export function resolveHallOrderReceiptDiscountAmt(payload: {
     Math.max(0, Number(payload.couponDiscountAmt) || 0)
   )
   const lineSum = sumPosReceiptLineDiscountAmt(payload.items || [])
+  if (lineSum > 0.0001) {
+    if (explicit <= 0.0001) return lineSum
+    if (lineSum + 0.02 < explicit) return lineSum
+    return Math.max(explicit, lineSum)
+  }
   if (explicit > 0.0001) return explicit
-  if (lineSum > 0.0001) return lineSum
 
   const itemsGross = (payload.items || []).reduce(
     (sum, it) => sum + Math.max(0, Number(it.price) || 0) * Math.max(0, Number(it.qty) || 0),
