@@ -23,6 +23,15 @@ export function roundErp3(value: number): number {
   return Math.round(v * 1000) / 1000
 }
 
+/** DB·입력란용 — 소수 셋째 자리 반올림 후 불필요한 trailing 0 제거 */
+export function formatErpCostInputString(n: number | string | null | undefined): string {
+  const num = typeof n === 'number' ? n : parseFloat(String(n ?? '').replace(/,/g, ''))
+  if (!Number.isFinite(num)) return ''
+  const r = roundErp3(num)
+  if (Math.abs(r) < 1e-12) return ''
+  return r.toFixed(3).replace(/\.?0+$/, '')
+}
+
 /** ERP 금액·단가 표시 — 소수점 셋째자리까지 (불필요한 0은 생략) */
 export function formatErpNum(n: number | null | undefined): string {
   const v = roundErp3(Number(n ?? 0))

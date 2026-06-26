@@ -77,7 +77,7 @@ import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/in
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { cn, formatErpNum } from "@/lib/utils"
+import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/utils"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -347,7 +347,7 @@ export default function InboundPage() {
             name: String(c.name || "").trim() || String(c.code || "").trim(),
             spec: "",
             qty: String(c.qty ?? 0),
-            cost: String(c.price ?? 0),
+            cost: formatErpCostInputString(c.price ?? 0),
           }))
         if (prefill.length > 0) {
           setCart(prefill)
@@ -409,7 +409,7 @@ export default function InboundPage() {
         name: selectedItem.name,
         spec: selectedItem.spec || "",
         qty: inQty,
-        cost: String(selectedItem.cost ?? 0),
+        cost: formatErpCostInputString(selectedItem.cost ?? 0),
       },
     ])
     setSelectedItem(null)

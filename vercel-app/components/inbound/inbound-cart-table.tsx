@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 import { Package } from "lucide-react"
-import { formatErpNum, normalizeErpDecimalInput, roundErp3 } from "@/lib/utils"
+import { formatErpNum, normalizeErpDecimalInput, roundErp3, formatErpCostInputString } from "@/lib/utils"
 
 export type InboundCartLine = {
   date: string
@@ -106,6 +106,10 @@ export function InboundCartTable({
                         inputMode="decimal"
                         value={c.cost}
                         onChange={(e) => onUpdateCost(idx, normalizeErpDecimalInput(e.target.value))}
+                        onBlur={() => {
+                          const normalized = formatErpCostInputString(c.cost)
+                          if (normalized !== c.cost) onUpdateCost(idx, normalized)
+                        }}
                         className="h-8 w-full min-w-[80px] text-right text-sm"
                       />
                     </td>

@@ -3,6 +3,7 @@ import { supabaseInsert, supabaseInsertMany, supabaseSelect, supabaseSelectFilte
 import { deletePayableFromPO } from '@/lib/receivable-payable'
 import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/inbound-payable-amount'
 import { computeInboundRegisterTotals } from '@/lib/inbound-payable-sync'
+import { roundErp3 } from '@/lib/utils'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
         log_type: 'Inbound',
       }
       if (costVal != null && !isNaN(costVal) && costVal >= 0) {
-        row.unit_cost = costVal
+        row.unit_cost = roundErp3(costVal)
       }
       return row
     })

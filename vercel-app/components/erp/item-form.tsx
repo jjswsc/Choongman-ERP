@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { normalizeErpDecimalInput, roundErp3 } from "@/lib/utils"
 import {
   Select,
   SelectContent,
@@ -735,11 +736,12 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             <label className="text-xs font-semibold text-foreground">{t("itemsCost")}</label>
             <div className="relative">
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 placeholder="0"
                 className="h-10 pr-8 text-sm text-right tabular-nums"
                 value={formData.cost}
-                onChange={(e) => update("cost", e.target.value)}
+                onChange={(e) => update("cost", normalizeErpDecimalInput(e.target.value))}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">฿</span>
             </div>
@@ -754,8 +756,8 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                       setFormData((prev) => {
                         const num = Number(prev.cost) || 0
                         const next = { ...prev, costInputVatIncluded: checked }
-                        if (checked) next.cost = String(Math.round(num * 1.07 * 100) / 100)
-                        else next.cost = String(Math.round((num / 1.07) * 100) / 100)
+                        if (checked) next.cost = String(roundErp3(num * 1.07))
+                        else next.cost = String(roundErp3(num / 1.07))
                         return next
                       })
                     }}

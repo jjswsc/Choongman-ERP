@@ -80,13 +80,6 @@ export function CollabManagementDetailForm(props: {
     },
     [draft, onChange]
   )
-  const tr = React.useCallback(
-    (key: string, fallback: string) => {
-      const value = t(key)
-      return value && value !== key ? value : fallback
-    },
-    [t]
-  )
   const selectedMainSet = React.useMemo(
     () => new Set((draft.scopeMainCategories || []).map((x) => String(x).trim()).filter(Boolean)),
     [draft.scopeMainCategories]
@@ -188,11 +181,11 @@ export function CollabManagementDetailForm(props: {
     if (collabHasPosDiscount(draft) && hasScopeCoverageGap) {
       const mainPart =
         scopeCoverageGap.uncoveredMainTabs.length > 0
-          ? `${tr("marketingCollabScopeGapMainTabs", "빠진 대분류")}: ${scopeCoverageGap.uncoveredMainTabs.join(", ")}`
+          ? `${t("marketingCollabScopeGapMainTabs")}: ${scopeCoverageGap.uncoveredMainTabs.join(", ")}`
           : ""
       const subPart =
         scopeCoverageGap.uncoveredSubcategories.length > 0
-          ? `${tr("marketingCollabScopeGapSubcategories", "빠진 하위 카테고리")}: ${scopeCoverageGap.uncoveredSubcategories
+          ? `${t("marketingCollabScopeGapSubcategories")}: ${scopeCoverageGap.uncoveredSubcategories
               .map((row) => `${row.main} / ${row.category}`)
               .join(", ")}`
           : ""
@@ -203,7 +196,7 @@ export function CollabManagementDetailForm(props: {
       if (!ok) return
     }
     onSave()
-  }, [draft, hasScopeCoverageGap, onSave, scopeCoverageGap, t, tr])
+  }, [draft, hasScopeCoverageGap, onSave, scopeCoverageGap, t])
 
   return (
     <div className="space-y-6">
@@ -451,13 +444,13 @@ export function CollabManagementDetailForm(props: {
                 <p className="mt-1 text-amber-900/90 dark:text-amber-100/90">{t("marketingCollabScopeGapHint")}</p>
                 {scopeCoverageGap.uncoveredMainTabs.length > 0 ? (
                   <p className="mt-2">
-                    <span className="font-medium">{tr("marketingCollabScopeGapMainTabs", "빠진 대분류")}: </span>
+                    <span className="font-medium">{t("marketingCollabScopeGapMainTabs")}: </span>
                     {scopeCoverageGap.uncoveredMainTabs.join(", ")}
                   </p>
                 ) : null}
                 {scopeCoverageGap.uncoveredSubcategories.length > 0 ? (
                   <p className="mt-1">
-                    <span className="font-medium">{tr("marketingCollabScopeGapSubcategories", "빠진 하위 카테고리")}: </span>
+                    <span className="font-medium">{t("marketingCollabScopeGapSubcategories")}: </span>
                     {scopeCoverageGap.uncoveredSubcategories.map((row) => `${row.main} / ${row.category}`).join(", ")}
                   </p>
                 ) : null}
@@ -465,7 +458,7 @@ export function CollabManagementDetailForm(props: {
             ) : null}
             <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">{tr("marketingCollabScopeMainTitle", "1. 대분류 선택")}</p>
+                <p className="text-xs font-semibold">{t("marketingCollabScopeMainTitle")}</p>
                 {scopeCatalogLoading ? (
                   <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -473,7 +466,7 @@ export function CollabManagementDetailForm(props: {
                   </span>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">
-                    {tr("marketingCollabScopeSelectedCount", "선택")} {dynamicScopeCount}
+                    {t("marketingCollabScopeSelectedCount")} {dynamicScopeCount}
                   </span>
                 )}
               </div>
@@ -495,10 +488,10 @@ export function CollabManagementDetailForm(props: {
               </div>
 
               <div className="space-y-2 border-t border-border/50 pt-3">
-                <p className="text-xs font-semibold">{tr("marketingCollabScopeCategoryTitle", "2. 하위 카테고리 선택")}</p>
+                <p className="text-xs font-semibold">{t("marketingCollabScopeCategoryTitle")}</p>
                 {selectedScopeMainCategories.length <= 0 ? (
                   <p className="text-[11px] text-muted-foreground">
-                    {tr("marketingCollabScopePickMainFirst", "대분류를 먼저 선택하면 하위 카테고리를 고를 수 있습니다.")}
+                    {t("marketingCollabScopePickMainFirst")}
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -518,7 +511,7 @@ export function CollabManagementDetailForm(props: {
                               return scopeCheckbox(
                                 `collab-cat-${key}`,
                                 fromMenusOnly
-                                  ? `${cat} (${tr("marketingCollabScopeFromMenus", "메뉴 기준")})`
+                                  ? `${cat} (${t("marketingCollabScopeFromMenus")})`
                                   : cat,
                                 selectedCategoryKeySet.has(key),
                                 (checked) =>
@@ -537,24 +530,21 @@ export function CollabManagementDetailForm(props: {
 
               <div className="space-y-2 border-t border-border/50 pt-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs font-semibold">{tr("marketingCollabScopeMenuTitle", "3. 특정 메뉴 선택")}</p>
+                  <p className="text-xs font-semibold">{t("marketingCollabScopeMenuTitle")}</p>
                   <Input
                     value={menuSearch}
                     onChange={(e) => setMenuSearch(e.target.value)}
-                    placeholder={tr("marketingCollabScopeMenuSearch", "메뉴명/코드 검색")}
+                    placeholder={t("marketingCollabScopeMenuSearch")}
                     className="h-8 sm:w-64"
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {tr(
-                    "marketingCollabScopeMenuHint",
-                    "1·2·3단계를 함께 고르면 모두 맞는 메뉴만 할인됩니다. Snow Onion만 줄이려면 Chicken 전체 체크는 해제하고 SNOW·해당 메뉴만 선택하세요."
-                  )}
+                  {t("marketingCollabScopeMenuHint")}
                 </p>
                 <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2">
                   {visibleMenuRows.length <= 0 ? (
                     <p className="py-4 text-center text-xs text-muted-foreground">
-                      {tr("marketingCollabScopeMenuEmpty", "표시할 메뉴가 없습니다.")}
+                      {t("marketingCollabScopeMenuEmpty")}
                     </p>
                   ) : (
                     visibleMenuRows.map((menu) => {

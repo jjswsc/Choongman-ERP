@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { recordPriceChanges } from '@/lib/price-history'
+import { roundErp3 } from '@/lib/utils'
 
 function taxTypeToDb(taxType: string): string {
   if (taxType === 'exempt') return '면세'
@@ -157,8 +158,8 @@ export async function POST(request: NextRequest) {
       outbound_location: String(body.outboundLocation || '').trim(),
       spec: String(body.spec || '').trim(),
       unit: String(body.unit || '').trim(),
-      price: Number(body.price) || 0,
-      cost: Number(body.cost) || 0,
+      price: roundErp3(Number(body.price) || 0),
+      cost: roundErp3(Number(body.cost) || 0),
       total_quantity: body.totalQuantity != null && body.totalQuantity > 0 ? Number(body.totalQuantity) : null,
       image: String(body.imageUrl || '').trim(),
       description: String(body.description || '').trim() || null,

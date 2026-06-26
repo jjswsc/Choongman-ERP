@@ -33,6 +33,7 @@ import { useAuth } from "@/lib/auth-context"
 import { canToggleItemOrderDisabled } from "@/lib/permissions"
 import { isOfficeRole } from "@/lib/permissions"
 import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { roundErp3, formatErpCostInputString } from "@/lib/utils"
 
 export type Product = AdminItem
 
@@ -137,7 +138,7 @@ export default function ItemsPage() {
     const totalQtyRaw = parseFloat(searchParams.get("totalQty") || "")
     const totalQty = Number.isFinite(totalQtyRaw) && totalQtyRaw > 0 ? totalQtyRaw : 1000
     const batchRaw = parseFloat(searchParams.get("batchCost") || "")
-    const batchCost = Number.isFinite(batchRaw) && batchRaw >= 0 ? Math.round(batchRaw * 100) / 100 : 0
+    const batchCost = Number.isFinite(batchRaw) && batchRaw >= 0 ? roundErp3(batchRaw) : 0
     const sauceCode = (searchParams.get("sauceCode") || "").trim()
 
     setItemsTab("list")
@@ -188,7 +189,7 @@ export default function ItemsPage() {
           description: p.description ?? "",
           price: String(p.price),
           priceInputVatIncluded: false,
-          cost: String(p.cost),
+          cost: formatErpCostInputString(p.cost),
           costInputVatIncluded: false,
           purchaseSource: p.purchaseSource ?? "hq",
           stockBaseUnit: p.stockBaseUnit ?? "",
@@ -226,8 +227,8 @@ export default function ItemsPage() {
       : rawPrice
     const rawCost = Number(formData.cost) || 0
     const costToSave = formData.taxType === "taxable" && formData.costInputVatIncluded
-      ? Math.round((rawCost / 1.07) * 100) / 100
-      : rawCost
+      ? roundErp3(rawCost / 1.07)
+      : roundErp3(rawCost)
     const res = await saveItem({
       code,
       name,
@@ -319,7 +320,7 @@ export default function ItemsPage() {
       totalQuantity: firstRow ? String(firstRow.totalQuantity) : (product.totalQuantity != null ? String(product.totalQuantity) : ""),
       description: product.description ?? "",
       price: String(product.price),
-      cost: String(product.cost),
+      cost: formatErpCostInputString(product.cost),
       purchaseSource: product.purchaseSource ?? "hq",
       stockBaseUnit: product.stockBaseUnit ?? "",
       stockUnitOptions: Array.isArray(product.stockUnitOptions) ? product.stockUnitOptions : [],
