@@ -19,6 +19,14 @@ describe('computeInboundBatchAmounts', () => {
     expect(r.batchDateYmd).toBe('2026-06-15')
   })
 
+  it('rounds line net to 3 decimal places', () => {
+    const r = computeInboundBatchAmounts(
+      [{ code: 'A', qty: 180, unitCost: 1267.333, dateYmd: '2026-06-15' }],
+      taxableOnly
+    )
+    expect(r.netTotal).toBe(228_119.94)
+  })
+
   it('picks latest line date as batch date', () => {
     const r = computeInboundBatchAmounts(
       [

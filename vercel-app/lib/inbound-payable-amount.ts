@@ -2,6 +2,7 @@
  * 입고 배치 ↔ 미지급(Inbound) 금액·일자 — 입고 화면(공급가+VAT 합계)과 동일 기준
  */
 import { getBangkokStartOfDayUtcIso, getBangkokTodayDateString } from './bangkok-time'
+import { roundErp3 } from './utils'
 import {
   accumulateNetByItemTax,
   emptyNetVatBuckets,
@@ -60,7 +61,7 @@ export function computeInboundBatchAmounts(
     const qty = Math.max(0, Number(line.qty) || 0)
     const unit = Math.max(0, Number(line.unitCost) || 0)
     if (!code || qty <= 0) continue
-    const net = Math.round(qty * unit * 100) / 100
+    const net = roundErp3(qty * unit)
     accumulateNetByItemTax(buckets, code, net, taxByCode)
     const ymd = line.dateYmd ? parseInboundDateBangkokYmd(line.dateYmd) : ''
     if (ymd && (!batchDateYmd || ymd > batchDateYmd)) batchDateYmd = ymd

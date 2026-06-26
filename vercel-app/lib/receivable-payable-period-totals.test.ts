@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   pairReceivableLedgerDates,
   pairPayableLedgerDates,
+  groupReceivableLedgerRows,
+  groupPayableLedgerRows,
+  buildLedgerRowGroupMeta,
   periodTotalsReconcile,
   priorCumulativeBalance,
   sumReceivablePayablePeriodAmounts,
@@ -84,5 +87,50 @@ describe('pairPayableLedgerDates', () => {
       { id: 3, ref_type: 'Inbound', amount: 50000, trans_date: '2026-05-10' },
     ])
     expect(pairs.get(3)).toEqual({ purchaseDate: '2026-05-10' })
+  })
+})
+
+describe('groupReceivableLedgerRows', () => {
+  it('groups order and receive into one block', () => {
+    const groups = groupReceivableLedgerRows([
+      { id: 1, ref_type: 'Order', amount: 50000, trans_date: '2026-04-01' },
+      { id: 2, ref_type: 'Receive', ref_id: 1, amount: -50000, trans_date: '2026-04-20' },
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].status).toBe('settled')
+    expect(groups[0].accrual?.id).toBe(1)
+    expect(groups[0].settlements[0]?.id).toBe(2)
+  })
+
+  it('marks unmatched accrual as open', () => {
+    const groups = groupReceivableLedgerRows([
+      { id: 3, ref_type: 'Order', amount: 12000, trans_date: '2026-05-10' },
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].status).toBe('open')
+    expect(groups[0].openAmount).toBe(12000)
+  })
+})
+
+describe('groupPayableLedgerRows', () => {
+  it('groups inbound and payment into one block', () => {
+    const groups = groupPayableLedgerRows([
+      { id: 1, ref_type: 'Inbound', amount: 891124.04, trans_date: '2026-04-01' },
+      { id: 2, ref_type: 'Payment', amount: -891124.04, trans_date: '2026-04-10' },
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].status).toBe('settled')
+  })
+})
+
+describe('buildLedgerRowGroupMeta', () => {
+  it('maps accrual and settlement row ids to roles', () => {
+    const groups = groupReceivableLedgerRows([
+      { id: 1, ref_type: 'Order', amount: 100, trans_date: '2026-01-01' },
+      { id: 2, ref_type: 'Receive', ref_id: 1, amount: -100, trans_date: '2026-01-05' },
+    ])
+    const meta = buildLedgerRowGroupMeta(groups)
+    expect(meta.get(1)).toEqual({ groupId: 1, role: 'accrual' })
+    expect(meta.get(2)).toEqual({ groupId: 1, role: 'settlement' })
   })
 })

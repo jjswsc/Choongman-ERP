@@ -2,6 +2,8 @@
  * 입고 내역 브라우저 인쇄용 HTML (단일·일괄 공통 스타일)
  */
 
+import { formatErpNum } from '@/lib/utils'
+
 const BANGKOK_TZ = "Asia/Bangkok"
 
 export type InboundPrintLineItem = {
@@ -250,13 +252,13 @@ function renderMetaGrid(
 
 function renderLinesTable(
   batch: InboundPrintBatchInput,
-  locale: string,
+  _locale: string,
   supplyLabel: string,
   vatLabel: string,
   totalLabel: string,
   t: (k: string) => string
 ): string {
-  const nf = (n: number) => escapeHtml(n.toLocaleString(locale))
+  const nf = (n: number) => escapeHtml(formatErpNum(n))
   const rows = batch.items
     .map(
       (it, i) =>

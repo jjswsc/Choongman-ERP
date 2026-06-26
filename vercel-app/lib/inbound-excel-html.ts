@@ -31,7 +31,7 @@ function excelCss(): string {
   return `
 table.xl { border-collapse: collapse; width: 100%; font-family: Calibri, "Malgun Gothic", "Noto Sans KR", "Noto Sans Thai", Arial, sans-serif; font-size: 11pt; color: #0f172a; }
 table.xl td, table.xl th { border: 1px solid #94a3b8; padding: 6px 10px; vertical-align: middle; }
-table.xl td.num, table.xl th.num { text-align: right; mso-number-format: "\\#\\,\\#\\#0\\.00\\ "; }
+table.xl td.num, table.xl th.num { text-align: right; mso-number-format: "\\#\\,\\#\\#0\\.000\\ "; }
 table.xl td.num-int, table.xl th.num-int { text-align: right; mso-number-format: "0"; }
 .xl-band { background: #0f2744; color: #ffffff; font-size: 15pt; font-weight: 700; padding: 10px 14px; border-color: #0f2744; letter-spacing: -0.02em; }
 .xl-band-sub { background: #e2e8f0; color: #1e293b; font-size: 10pt; font-weight: 600; padding: 8px 14px; border-color: #cbd5e1; }

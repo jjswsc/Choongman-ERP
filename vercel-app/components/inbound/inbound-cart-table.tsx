@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 import { Package } from "lucide-react"
+import { formatErpNum, normalizeErpDecimalInput, roundErp3 } from "@/lib/utils"
 
 export type InboundCartLine = {
   date: string
@@ -91,7 +92,7 @@ export function InboundCartTable({
               cart.map((c, idx) => {
                 const qtyNum = parseFloat(String(c.qty).replace(/,/g, "")) || 0
                 const costNum = parseFloat(String(c.cost).replace(/,/g, "")) || 0
-                const amount = qtyNum * costNum
+                const amount = roundErp3(qtyNum * costNum)
                 return (
                   <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/20">
                     <td className="px-4 py-2.5">
@@ -101,16 +102,15 @@ export function InboundCartTable({
                     <td className={cnAmount()}>{c.qty}</td>
                     <td className="px-3 py-2.5">
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={c.cost}
-                        onChange={(e) => onUpdateCost(idx, e.target.value)}
+                        onChange={(e) => onUpdateCost(idx, normalizeErpDecimalInput(e.target.value))}
                         className="h-8 w-full min-w-[80px] text-right text-sm"
-                        min={0}
-                        step="0.01"
                       />
                     </td>
                     <td className={cnAmount()}>
-                      {amount.toLocaleString()}
+                      {formatErpNum(amount)}
                       {lang === "th" ? " THB" : ""}
                     </td>
                     <td className="px-2 py-2.5">

@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purchase-synthetic'
 import { escapeIlikePattern } from '@/lib/postgrest-ilike'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole } from '@/lib/permissions'
 import { createVendorNameResolver, resolveVendorFilterAliases } from '@/lib/vendor-name-normalizer'
 import { formatStockLogDateBangkokYmd } from '@/lib/inbound-payable-amount'
+import { roundErp3 } from '@/lib/utils'
 import { isItemVatExempt, normalizeItemTaxType } from '@/lib/income-statement-item-vat'
 
-/** 입고 내역 조회 - stock_logs log_type=Inbound (From HQ 제외) + 통장 매입 지급(품목 입고 없음) 보조 행 */
+/** 입고 내역 조회 - stock_logs log_type=Inbound (From HQ 제외) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -140,8 +140,6 @@ export async function GET(request: NextRequest) {
       invoice_no?: string | null
       invoice_received?: boolean
       po_created_at?: string | null
-      bank_transaction_id?: number
-      row_kind?: 'stock' | 'bank_purchase_payment'
     }[] = []
     for (const row of logs || []) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
@@ -166,7 +164,7 @@ export async function GET(request: NextRequest) {
       }
       const qty = Number(row.qty) || 0
       const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
-      const amount = unitCost * qty
+      const amount = roundErp3(unitCost * qty)
       const vatAmount = Math.round(amount * info.taxRate * 100) / 100
       list.push({
         date: formatStockLogDateBangkokYmd(row.log_date),
@@ -179,49 +177,7 @@ export async function GET(request: NextRequest) {
         code: code || undefined,
         purchaseSource: info.purchaseSource,
         inbound_batch_id: row.inbound_batch_id ?? undefined,
-        row_kind: 'stock',
       })
-    }
-
-    try {
-      const bankSynth = await fetchInboundBankPurchaseSyntheticRows({
-        startStr,
-        endStr,
-        storeFilter: storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장' ? storeFilter : undefined,
-        vendorFilter: undefined,
-        maxRows: 120,
-      })
-      for (const b of bankSynth) {
-        if (itemSearch) {
-          const q = itemSearch.toLowerCase()
-          const hit =
-            (b.name || '').toLowerCase().includes(q) ||
-            (b.spec || '').toLowerCase().includes(q) ||
-            (b.vendor || '').toLowerCase().includes(q)
-          if (!hit) continue
-        }
-        if (exactVendorAliases.size === 0 && vendorSearch) {
-          const vs = vendorSearch.toLowerCase()
-          if (!(b.vendor || '').toLowerCase().includes(vs)) continue
-        }
-        const normalizedBankVendor = resolveVendorName(String(b.vendor || ''))
-        if (exactVendorAliases.size > 0 && !exactVendorAliases.has(normalizedBankVendor)) continue
-        list.push({
-          date: b.date,
-          vendor: normalizedBankVendor,
-          name: b.name,
-          spec: b.spec,
-          qty: b.qty,
-          amount: b.amount,
-          vatAmount: b.vatAmount,
-          purchaseSource: b.purchaseSource,
-          inbound_batch_id: null,
-          bank_transaction_id: b.bank_transaction_id,
-          row_kind: 'bank_purchase_payment',
-        })
-      }
-    } catch (e) {
-      console.error('getInboundHistory bank synthetic:', e)
     }
 
     if (exactVendorAliases.size > 0) {

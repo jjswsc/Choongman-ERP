@@ -77,7 +77,7 @@ import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/in
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { cn } from "@/lib/utils"
+import { cn, formatErpNum } from "@/lib/utils"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -729,9 +729,8 @@ export default function InboundPage() {
   }
 
   const formatInboundLineName = React.useCallback(
-    (it: Pick<InboundHistoryItem, "name">) =>
-      it.name === "__BANK_PURCHASE_PAYMENT__" ? t("inBankPurchasePaymentLabel") : it.name || "",
-    [t]
+    (it: Pick<InboundHistoryItem, "name">) => it.name || "",
+    []
   )
 
   const filteredHistoryList = React.useMemo(() => {
@@ -743,8 +742,7 @@ export default function InboundPage() {
     const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; totalVat: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
     for (const i of filteredHistoryList) {
       const batchId = i.inbound_batch_id
-      const bankId = i.bank_transaction_id
-      const k = bankId ? `banktx-${bankId}` : batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
+      const k = batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
         g[k] = {
           date: i.date,
@@ -1232,8 +1230,8 @@ export default function InboundPage() {
     [t, lang, histStart, histEnd, isOffice, histStore, auth?.store]
   )
 
-  const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
-  const periodVatFormatted = `${periodVatTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
+  const periodTotalFormatted = `${formatErpNum(periodTotal)}${lang === "th" ? " THB" : ""}`
+  const periodVatFormatted = `${formatErpNum(periodVatTotal)}${lang === "th" ? " THB" : ""}`
 
   return (
     <div className="flex-1 overflow-auto">

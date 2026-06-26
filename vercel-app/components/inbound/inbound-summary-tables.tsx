@@ -5,6 +5,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { formatErpNum } from "@/lib/utils"
 import { BarChart3 } from "lucide-react"
 
 type VendorSummaryRow = { vendor: string; qty: number; amount: number }
@@ -74,11 +75,11 @@ export function InboundSummaryTables({
             cells: [
               row.vendor,
               row.qty.toLocaleString(),
-              row.amount.toLocaleString(),
+              formatErpNum(row.amount),
             ],
           }))}
           totalLabel={t("inv_total")}
-          totalCells={[vendorTotals.qty.toLocaleString(), vendorTotals.amount.toLocaleString()]}
+          totalCells={[vendorTotals.qty.toLocaleString(), formatErpNum(vendorTotals.amount)]}
         />
       </SummaryCard>
 
@@ -110,11 +111,11 @@ export function InboundSummaryTables({
             cells: [
               `${row.code ? `[${row.code}] ` : ""}${formatLineName(row.name)}${row.spec ? ` (${row.spec})` : ""}`,
               row.qty.toLocaleString(),
-              row.amount.toLocaleString(),
+              formatErpNum(row.amount),
             ],
           }))}
           totalLabel={t("inv_total")}
-          totalCells={[itemTotals.qty.toLocaleString(), itemTotals.amount.toLocaleString()]}
+          totalCells={[itemTotals.qty.toLocaleString(), formatErpNum(itemTotals.amount)]}
         />
       </SummaryCard>
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, PenLine, Trash2, Printer, FileSpreadsheet, FileCheck, Package } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatErpNum } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
@@ -419,9 +419,9 @@ function TableRow({
           </div>
         </td>
         <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{row.totalQty.toLocaleString()}</td>
-        <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{row.totalAmt.toLocaleString()}</td>
-        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{row.totalVat.toLocaleString()}</td>
-        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{(row.totalAmt + row.totalVat).toLocaleString()}</td>
+        <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{formatErpNum(row.totalAmt)}</td>
+        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{formatErpNum(row.totalVat)}</td>
+        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{formatErpNum(row.totalAmt + row.totalVat)}</td>
         <td className="px-2 py-2.5 text-center text-muted-foreground text-xs max-w-[140px]" onClick={(e) => e.stopPropagation()}>
           {franchiseTaxInvoicePreview ? (
             <button
@@ -531,9 +531,9 @@ function TableRow({
                       <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
                       <td className="px-4 py-2 text-center text-card-foreground font-medium tabular-nums">{d.qty.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{d.amount.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{d.vatAmount.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{(d.amount + d.vatAmount).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{formatErpNum(d.amount)}</td>
+                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{formatErpNum(d.vatAmount)}</td>
+                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{formatErpNum(d.amount + d.vatAmount)}</td>
                     </tr>
                   ))}
                 </tbody>

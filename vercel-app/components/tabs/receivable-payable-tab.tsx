@@ -51,9 +51,20 @@ import {
   sumReceivablePayablePeriodAmounts,
   pairReceivableLedgerDates,
   pairPayableLedgerDates,
+  groupReceivableLedgerRows,
+  groupPayableLedgerRows,
+  buildLedgerRowGroupMeta,
+  filterLedgerPairGroupsForDisplay,
+  sortLedgerPairGroupsDesc,
   type ReceivableLedgerDatePair,
   type PayableLedgerDatePair,
 } from "@/lib/receivable-payable-period-totals"
+import { getLedgerPairRowClass } from "@/lib/receivable-payable-ledger-pair-styles"
+import {
+  ReceivablePairedLedgerList,
+  PayablePairedLedgerList,
+  LedgerPairRowBadge,
+} from "@/components/tabs/receivable-payable-paired-ledger"
 import { canManuallyToggleReceivableReceiveCheck } from "@/lib/receivable-unallocated-bank"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -101,6 +112,7 @@ import type { InvoiceData } from "@/components/invoice"
 import type { InvoiceDataClient } from "@/lib/api-client"
 import { StorePurchaseJournalButton } from "@/components/erp/store-purchase-journal-dialog"
 import { useSearchParams, useRouter } from "next/navigation"
+import { useErpTabActive } from "@/lib/erp-page-visibility"
 
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
@@ -253,6 +265,24 @@ function renderPayableLedgerDateCell(
   return <span className="tabular-nums">{purchaseDate || paymentDate || fallback || "-"}</span>
 }
 
+/** forceMount 탭에서 비활성 패널·전환 중 무거운 원장 목록 렌더를 건너뜀 (INP) */
+function TabPanelHeavyContent({
+  ready,
+  pendingLabel,
+  children,
+}: {
+  ready: boolean
+  pendingLabel: string
+  children: React.ReactNode
+}) {
+  const tabActive = useErpTabActive()
+  if (!tabActive) return null
+  if (!ready) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">{pendingLabel}</p>
+  }
+  return <>{children}</>
+}
+
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -287,6 +317,18 @@ export function ReceivablePayableTab() {
   const showStorePurchaseJournalCol = canDeleteStorePurchaseJournal(auth?.role || "")
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
+  const [tabUi, setTabUi] = React.useState<"receivable" | "payable">("receivable")
+  const [, startTabTransition] = React.useTransition()
+  const contentTab = React.useDeferredValue(tab)
+  const applyTab = React.useCallback((next: "receivable" | "payable") => {
+    setTabUi(next)
+    startTabTransition(() => {
+      setTab(next)
+    })
+  }, [])
+  React.useEffect(() => {
+    setTabUi(tab)
+  }, [tab])
   // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
   const [salesOutletOptions, setSalesOutletOptions] = React.useState<{ code: string; name: string }[]>([])
@@ -308,6 +350,7 @@ export function ReceivablePayableTab() {
   })
   const [loading, setLoading] = React.useState(false)
   const [filterUnpaidOnly, setFilterUnpaidOnly] = React.useState(false)
+  const [ledgerViewMode, setLedgerViewMode] = React.useState<"ledger" | "paired">("ledger")
 
   const [addAmount, setAddAmount] = React.useState("")
   const [addDate, setAddDate] = React.useState(bangkokTodayStr)
@@ -589,8 +632,8 @@ export function ReceivablePayableTab() {
 
   // 매니저(회계권한 없을 때): 미지급금 탭 접근 불가 → receivable로 고정
   React.useEffect(() => {
-    if (!canSelectStores && isManager && tab === "payable") setTab("receivable")
-  }, [canSelectStores, isManager, tab])
+    if (!canSelectStores && isManager && tab === "payable") applyTab("receivable")
+  }, [canSelectStores, isManager, tab, applyTab])
 
   const loadList = React.useCallback(() => {
     setLoading(true)
@@ -724,7 +767,7 @@ export function ReceivablePayableTab() {
   const jumpToPayableForMatchedVendor = React.useCallback(() => {
     const v = purchaseVendorMatchForOutlet
     if (!v || !canSelectStores) return
-    setTab("payable")
+    applyTab("payable")
     setVendorFilter(v.code)
     setPayableStoreFilter("All")
     window.setTimeout(() => {
@@ -762,7 +805,7 @@ export function ReceivablePayableTab() {
         })
         .finally(() => setLoading(false))
     }, 0)
-  }, [purchaseVendorMatchForOutlet, canSelectStores, startStr, endStr, auth?.store, auth?.role])
+  }, [purchaseVendorMatchForOutlet, canSelectStores, startStr, endStr, auth?.store, auth?.role, applyTab])
 
   const [hasSearchedList, setHasSearchedList] = React.useState(false)
 
@@ -806,7 +849,7 @@ export function ReceivablePayableTab() {
       Boolean(bankTxParam)
     if (!hasDeepLink) return
     urlDeepLinkAppliedRef.current = true
-    if (typeParam === "receivable" || typeParam === "payable") setTab(typeParam)
+    if (typeParam === "receivable" || typeParam === "payable") applyTab(typeParam)
     if (startParam) setStartStr(startParam.slice(0, 10))
     if (endParam) setEndStr(endParam.slice(0, 10))
     if (storeParam && typeParam !== "payable") {
@@ -816,7 +859,7 @@ export function ReceivablePayableTab() {
       setHighlightBankTxId(Number(bankTxParam))
     }
     setPendingDeepLinkSearch(true)
-  }, [searchParams, resolveSalesOutletFilterFromStoreName])
+  }, [searchParams, resolveSalesOutletFilterFromStoreName, applyTab])
 
   React.useEffect(() => {
     if (!pendingDeepLinkSearch) return
@@ -1061,6 +1104,39 @@ export function ReceivablePayableTab() {
       "조회 기간 내 거래 내역이 없습니다. 누적 잔액은 종료일까지 전체 이력 기준입니다."
     )
 
+  const ledgerPairLabels = React.useMemo(
+    () => ({
+      statusSettled: t("ledgerPairStatusSettled") || tt("ledgerPairStatusSettled", "완결"),
+      statusOpen: t("ledgerPairStatusOpen") || tt("ledgerPairStatusOpen", "미결"),
+      statusPartial: t("ledgerPairStatusPartial") || tt("ledgerPairStatusPartial", "부분"),
+      statusStandalone: t("ledgerPairStatusStandalone") || tt("ledgerPairStatusStandalone", "단독"),
+      settlementPrefix: t("ledgerPairSettlementPrefix") || tt("ledgerPairSettlementPrefix", "↳"),
+      noSettlement: t("ledgerPairNoSettlement") || tt("ledgerPairNoSettlement", "정산 내역 없음"),
+      daysBetween: t("ledgerPairDaysBetween") || tt("ledgerPairDaysBetween", "{n}일"),
+      openRemain: t("ledgerPairOpenRemain") || tt("ledgerPairOpenRemain", "잔액"),
+      salesDate: t("recLedgerSalesDateShort") || tt("recLedgerSalesDateShort", "매출"),
+      receiveDate: t("recLedgerReceiveDateShort") || tt("recLedgerReceiveDateShort", "입금"),
+      purchaseDate: t("payLedgerPurchaseDateShort") || tt("payLedgerPurchaseDateShort", "매입"),
+      paymentDate: t("payLedgerPaymentDateShort") || tt("payLedgerPaymentDateShort", "지급"),
+    }),
+    [t, tt]
+  )
+
+  const ledgerViewModeSelect = (
+    <Select value={ledgerViewMode} onValueChange={(v) => setLedgerViewMode(v as "ledger" | "paired")}>
+      <SelectTrigger
+        className="h-9 w-[132px] max-w-full text-[13px] shrink-0"
+        title={tt("ledgerViewModePairedHint", "발생과 정산을 한 블록으로 묶어 표시합니다.")}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="ledger">{t("ledgerViewModeLedger") || tt("ledgerViewModeLedger", "전체 내역")}</SelectItem>
+        <SelectItem value="paired">{t("ledgerViewModePaired") || tt("ledgerViewModePaired", "짝짓기 보기")}</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+
   const ledgerAging = React.useMemo(
     () => computeLedgerAging(listData, tab, endStr),
     [listData, tab, endStr]
@@ -1263,8 +1339,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
     URL.revokeObjectURL(url)
   }
 
-  const isRec = tab === "receivable"
+  const isRec = contentTab === "receivable"
   const printTitle = isRec ? (t("receivableTab") || "Receivables (Sales)") : (t("payableTab") || "Payables (Purchase)")
+  const tabPanelPendingLabel = t("loadingItems") || "Loading..."
   const typeLabel = (ref: string) =>
     ref === "Opening"
       ? (t("recTypeOpening") || "Opening Balance")
@@ -1424,7 +1501,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         )}
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "receivable" | "payable")} className={adminTabsRootCn}>
+      <Tabs
+        value={tabUi}
+        onValueChange={(v) => applyTab(v as "receivable" | "payable")}
+        className={adminTabsRootCn}
+      >
         <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="receivable" className={adminTabsTriggerCn}>
@@ -1482,6 +1563,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
                       {t("recFilterUnpaidOnly") || "Unpaid Only"}
                     </label>
+                    {ledgerViewModeSelect}
                     <Button
                       size="sm"
                       onClick={handleLoadList}
@@ -1549,6 +1631,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       ) : null}
                     </div>
                   ) : (
+                    <TabPanelHeavyContent
+                      ready={contentTab === "receivable"}
+                      pendingLabel={tabPanelPendingLabel}
+                    >
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
                       <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
@@ -1585,6 +1671,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const receivableDatePairs = pairReceivableLedgerDates(allItems)
+                          const receivableAllGroups = groupReceivableLedgerRows(allItems)
+                          const receivableRowGroupMeta = buildLedgerRowGroupMeta(receivableAllGroups)
+                          const receivablePairGroups = sortLedgerPairGroupsDesc(
+                            filterLedgerPairGroupsForDisplay(receivableAllGroups, tableItems, filterUnpaidOnly)
+                          )
                           const receivableDateLabels = {
                             sales: t("recLedgerSalesDateShort") || tt("recLedgerSalesDateShort", "매출"),
                             receive: t("recLedgerReceiveDateShort") || tt("recLedgerReceiveDateShort", "입금"),
@@ -1659,6 +1750,38 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               ) : null}
                               {tableItems.length === 0 ? (
                                 <p className="text-sm text-muted-foreground py-4 text-center">{ledgerNoPeriodRowsHint}</p>
+                              ) : ledgerViewMode === "paired" ? (
+                                <ReceivablePairedLedgerList
+                                  groups={receivablePairGroups}
+                                  labels={ledgerPairLabels}
+                                  fmtBahtSigned={fmtBahtSigned}
+                                  getMemo={getMemo}
+                                  formatRefType={(refType) => {
+                                    if (refType === "Opening") return t("recTypeOpening") || "기초이월"
+                                    if (refType === "AccountingPO") return t("recTypeAccountingPO") || "회계발주"
+                                    if (refType === "ForceOutbound") return t("recTypeForceOutbound") || "강제출고"
+                                    if (refType === "Order") return t("recTypeOrder") || "주문"
+                                    if (refType === "Receive") return t("recTypeReceive") || "수령"
+                                    return refType || "—"
+                                  }}
+                                  formatOrderNo={(row) => {
+                                    if (row.ref_type === "AccountingPO") {
+                                      return row.invoice_no || (row.ref_id != null ? `APO#${row.ref_id}` : "-")
+                                    }
+                                    if (row.ref_type === "ForceOutbound") {
+                                      return row.invoice_no || (row.ref_id != null ? `IVF#${row.ref_id}` : "-")
+                                    }
+                                    if (row.ref_type === "Order") {
+                                      const orderId = orderIdFromReceivableOrderRow(row)
+                                      return (
+                                        row.invoice_no ||
+                                        (orderId != null ? `#${orderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
+                                        "-"
+                                      )
+                                    }
+                                    return "-"
+                                  }}
+                                />
                               ) : (
                               <div className={ledgerDetailTableWrapCn}>
                               <table className={ledgerDetailTableCn}>
@@ -1803,13 +1926,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           : row.receive_checked
                                             ? (t("recCheckPaid") || "수금완료")
                                             : (t("recCheckWait") || "수금대기")
+                                    const rowPairMeta =
+                                      row.id != null ? receivableRowGroupMeta.get(row.id) : undefined
                                     return (
                                     <React.Fragment key={row.id ?? recRowKey}>
                                     <tr
                                       className={cn(
                                         "border-b border-border/50",
                                         rowAgeDays > 0 ? agingRowToneClass(rowAgeDays) : "",
-                                        isBankHighlight && "bg-primary/10 ring-2 ring-inset ring-primary/50"
+                                        isBankHighlight && "bg-primary/10 ring-2 ring-inset ring-primary/50",
+                                        getLedgerPairRowClass(rowPairMeta)
                                       )}
                                     >
                                       <td
@@ -1821,15 +1947,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           if (canExpandRecLines) void toggleLineItemsExpand("rec", row)
                                         }}
                                       >
-                                        {canExpandRecLines ? (
-                                          recLinesLoading ? (
-                                            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                          ) : isRecExpanded ? (
-                                            <ChevronDown className="h-4 w-4 mx-auto" />
-                                          ) : (
-                                            <ChevronRight className="h-4 w-4 mx-auto" />
-                                          )
-                                        ) : null}
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <LedgerPairRowBadge meta={rowPairMeta} />
+                                          {canExpandRecLines ? (
+                                            recLinesLoading ? (
+                                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                            ) : isRecExpanded ? (
+                                              <ChevronDown className="h-4 w-4 mx-auto" />
+                                            ) : (
+                                              <ChevronRight className="h-4 w-4 mx-auto" />
+                                            )
+                                          ) : null}
+                                        </div>
                                       </td>
                                       <td className="py-1.5 px-4 w-[128px] min-w-[128px] align-top">
                                         {renderReceivableLedgerDateCell(
@@ -2175,6 +2304,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         </div>
                       ) : null}
                     </div>
+                    </TabPanelHeavyContent>
                   )}
               </div>
             </CardContent>
@@ -2241,6 +2371,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
                       {t("payFilterUnpaidOnly") || "미지급만"}
                     </label>
+                    {ledgerViewModeSelect}
                     <Button size="sm" onClick={handleLoadList} disabled={loading} className="h-9">
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
@@ -2268,6 +2399,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : listData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
                   ) : (
+                    <TabPanelHeavyContent
+                      ready={contentTab === "payable"}
+                      pendingLabel={tabPanelPendingLabel}
+                    >
                     <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
                       <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
@@ -2299,6 +2434,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const payableDatePairs = pairPayableLedgerDates(allItems)
+                          const payableAllGroups = groupPayableLedgerRows(allItems)
+                          const payableRowGroupMeta = buildLedgerRowGroupMeta(payableAllGroups)
+                          const payablePairGroups = sortLedgerPairGroupsDesc(
+                            filterLedgerPairGroupsForDisplay(payableAllGroups, tableItems, filterUnpaidOnly)
+                          )
                           const payableDateLabels = {
                             purchase: t("payLedgerPurchaseDateShort") || tt("payLedgerPurchaseDateShort", "매입"),
                             payment: t("payLedgerPaymentDateShort") || tt("payLedgerPaymentDateShort", "지급"),
@@ -2335,6 +2475,34 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             <AccordionContent className="px-4">
                               {tableItems.length === 0 ? (
                                 <p className="text-sm text-muted-foreground py-4 text-center">{ledgerNoPeriodRowsHint}</p>
+                              ) : ledgerViewMode === "paired" ? (
+                                <PayablePairedLedgerList
+                                  groups={payablePairGroups}
+                                  labels={ledgerPairLabels}
+                                  fmtBahtSigned={fmtBahtSigned}
+                                  getMemo={getMemo}
+                                  formatRefType={formatPayableRefTypeLabel}
+                                  formatStore={formatAttributedStoreLabel}
+                                  formatInvoiceCell={(row) =>
+                                    row.ref_type === "Inbound" || row.ref_type === "PO" ? (
+                                      row.invoice_received ? (
+                                        <span className="text-green-700 dark:text-green-400">
+                                          ✓{" "}
+                                          {row.invoice_no
+                                            ? String(row.invoice_no).slice(0, 12) +
+                                              (String(row.invoice_no).length > 12 ? "…" : "")
+                                            : t("poInvoiceReceived") || "수령"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-amber-700 dark:text-amber-400">
+                                          {t("poInvoiceNotReceived") || "미수령"}
+                                        </span>
+                                      )
+                                    ) : (
+                                      "—"
+                                    )
+                                  }
+                                />
                               ) : (
                               <div className={ledgerDetailTableWrapCn}>
                               <table className={ledgerDetailTableCn}>
@@ -2382,12 +2550,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       isPayAccrualRow && Number(row.amount ?? 0) > 0
                                         ? agingDaysBetween(endStr, row.trans_date || endStr)
                                         : 0
+                                    const rowPairMeta = row.id != null ? payableRowGroupMeta.get(row.id) : undefined
                                     return (
                                       <React.Fragment key={row.id ?? rowKey}>
                                         <tr
                                           className={cn(
                                             "border-b border-border/50",
-                                            payRowAgeDays > 0 ? agingRowToneClass(payRowAgeDays) : ""
+                                            payRowAgeDays > 0 ? agingRowToneClass(payRowAgeDays) : "",
+                                            getLedgerPairRowClass(rowPairMeta)
                                           )}
                                         >
                                           <td
@@ -2399,13 +2569,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               if (canExpand) void toggleLineItemsExpand("pay", row)
                                             }}
                                           >
-                                            {canExpand ? (
-                                              isLoading ? (
-                                                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                              ) : (
-                                                isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
-                                              )
-                                            ) : null}
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <LedgerPairRowBadge meta={rowPairMeta} />
+                                              {canExpand ? (
+                                                isLoading ? (
+                                                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                                ) : (
+                                                  isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                                                )
+                                              ) : null}
+                                            </div>
                                           </td>
                                           <td className="py-1.5 px-4 w-[128px] min-w-[128px] align-top">
                                             {renderPayableLedgerDateCell(
@@ -2585,6 +2758,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         </div>
                       ) : null}
                     </div>
+                    </TabPanelHeavyContent>
                   )}
             </CardContent>
           </Card>

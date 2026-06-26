@@ -11,7 +11,15 @@ import {
 
 function isOfficeStore(s: string): boolean {
   const x = String(s || '').trim()
-  return x === '본사' || x === 'Office' || x === '오피스' || x === '본점' || x.toLowerCase().includes('office')
+  const xl = x.toLowerCase()
+  return (
+    x === '본사' ||
+    x === 'Office' ||
+    x === '오피스' ||
+    x === '본점' ||
+    xl === 'hq' ||
+    xl.includes('office')
+  )
 }
 
 /** 통장 출금 입고 연동용 - 거래처별 입고 배치 목록 (vendor_code 또는 vendor_name으로 매칭)

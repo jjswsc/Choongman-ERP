@@ -208,3 +208,199 @@ export function pairPayableLedgerDates(
 
   return out
 }
+
+export type LedgerPairStatus = 'settled' | 'open' | 'partial' | 'standalone'
+
+export type LedgerPairGroup<T extends { id?: number }> = {
+  groupId: number
+  accrual: T | null
+  settlements: T[]
+  status: LedgerPairStatus
+  openAmount: number
+}
+
+export type LedgerRowGroupMeta = {
+  groupId: number
+  role: 'accrual' | 'settlement' | 'standalone'
+}
+
+function resolveLedgerPairStatus(
+  accrual: { amount?: number } | null,
+  settlements: { amount?: number }[]
+): { status: LedgerPairStatus; openAmount: number } {
+  const accrualAmt = accrual ? Math.max(0, Number(accrual.amount ?? 0)) : 0
+  const settledAmt = settlements.reduce((s, r) => s + Math.abs(Number(r.amount ?? 0)), 0)
+  if (!accrual) {
+    return { status: 'standalone', openAmount: 0 }
+  }
+  if (settlements.length === 0) {
+    return { status: 'open', openAmount: roundMoney(accrualAmt) }
+  }
+  if (settledAmt >= accrualAmt - 0.01) {
+    return { status: 'settled', openAmount: 0 }
+  }
+  if (settledAmt > 0.009) {
+    return { status: 'partial', openAmount: roundMoney(Math.max(0, accrualAmt - settledAmt)) }
+  }
+  return { status: 'open', openAmount: roundMoney(accrualAmt) }
+}
+
+type LedgerPairRow = {
+  id?: number
+  ref_type?: string
+  ref_id?: number
+  amount?: number
+  trans_date?: string
+}
+
+function groupLedgerRowsByAccrualSettlement(
+  rows: LedgerPairRow[],
+  isAccrual: (refType: string | undefined, amount: number) => boolean,
+  isSettlement: (refType: string | undefined, amount: number) => boolean,
+  linkByRefId: boolean
+): LedgerPairGroup<LedgerPairRow>[] {
+  const used = new Set<number>()
+  const groups: LedgerPairGroup<LedgerPairRow>[] = []
+  let nextGroupId = 1
+
+  const byId = new Map<number, LedgerPairRow>()
+  for (const r of rows) {
+    if (r.id != null) byId.set(r.id, r)
+  }
+
+  const pushGroup = (accrual: LedgerPairRow | null, settlements: LedgerPairRow[]) => {
+    const { status, openAmount } = resolveLedgerPairStatus(accrual, settlements)
+    groups.push({
+      groupId: nextGroupId++,
+      accrual,
+      settlements,
+      status,
+      openAmount,
+    })
+    if (accrual?.id != null) used.add(accrual.id)
+    for (const s of settlements) {
+      if (s.id != null) used.add(s.id)
+    }
+  }
+
+  if (linkByRefId) {
+    for (const recv of rows) {
+      if (String(recv.ref_type || '') !== 'Receive' || recv.ref_id == null || recv.id == null) continue
+      if (used.has(recv.id)) continue
+      const parent = byId.get(Number(recv.ref_id))
+      if (!parent || parent.id == null || used.has(parent.id)) continue
+      pushGroup(parent, [recv])
+    }
+  }
+
+  const settlementPool = new Map<number, LedgerPairRow[]>()
+  for (const r of rows) {
+    if (r.id != null && used.has(r.id)) continue
+    const amount = Number(r.amount ?? 0)
+    if (!isSettlement(r.ref_type, amount)) continue
+    const amt = roundMoney(Math.abs(amount))
+    if (amt <= 0) continue
+    if (!settlementPool.has(amt)) settlementPool.set(amt, [])
+    settlementPool.get(amt)!.push(r)
+  }
+  for (const pool of settlementPool.values()) {
+    pool.sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+  }
+
+  const accruals = rows
+    .filter((r) => {
+      if (r.id != null && used.has(r.id)) return false
+      return isAccrual(r.ref_type, Number(r.amount ?? 0))
+    })
+    .sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+
+  for (const acc of accruals) {
+    const amt = roundMoney(Math.abs(Number(acc.amount ?? 0)))
+    const pool = settlementPool.get(amt)
+    const settlement = pool?.shift()
+    pushGroup(acc, settlement ? [settlement] : [])
+  }
+
+  for (const pool of settlementPool.values()) {
+    for (const s of pool) {
+      if (s.id != null && !used.has(s.id)) pushGroup(null, [s])
+    }
+  }
+
+  for (const r of rows) {
+    if (r.id == null || used.has(r.id)) continue
+    const amount = Number(r.amount ?? 0)
+    if (isAccrual(r.ref_type, amount)) pushGroup(r, [])
+    else if (isSettlement(r.ref_type, amount)) pushGroup(null, [r])
+    else pushGroup(r, [])
+  }
+
+  return groups
+}
+
+/** 같은 매출처 그룹 내 매출·입금 행을 짝지어 블록 단위로 반환 */
+export function groupReceivableLedgerRows(
+  items: LedgerPairRow[] | undefined
+): LedgerPairGroup<LedgerPairRow>[] {
+  return groupLedgerRowsByAccrualSettlement(
+    items ?? [],
+    isReceivableAccrualRow,
+    isReceivableSettlementRow,
+    true
+  )
+}
+
+/** 같은 매입처 그룹 내 매입·지급 행을 짝지어 블록 단위로 반환 */
+export function groupPayableLedgerRows(
+  items: LedgerPairRow[] | undefined
+): LedgerPairGroup<LedgerPairRow>[] {
+  return groupLedgerRowsByAccrualSettlement(
+    items ?? [],
+    isPayableAccrualRow,
+    isPayableSettlementRow,
+    false
+  )
+}
+
+export function buildLedgerRowGroupMeta<T extends { id?: number }>(
+  groups: LedgerPairGroup<T>[]
+): Map<number, LedgerRowGroupMeta> {
+  const map = new Map<number, LedgerRowGroupMeta>()
+  for (const g of groups) {
+    if (g.accrual?.id != null) {
+      map.set(g.accrual.id, { groupId: g.groupId, role: 'accrual' })
+    }
+    for (const s of g.settlements) {
+      if (s.id != null) {
+        map.set(s.id, { groupId: g.groupId, role: g.accrual ? 'settlement' : 'standalone' })
+      }
+    }
+  }
+  return map
+}
+
+export function filterLedgerPairGroupsForDisplay<T extends { id?: number }>(
+  groups: LedgerPairGroup<T>[],
+  visibleRows: T[],
+  unpaidOnly: boolean
+): LedgerPairGroup<T>[] {
+  const visibleIds = new Set(
+    visibleRows.map((r) => r.id).filter((id): id is number => id != null && id > 0)
+  )
+  return groups.filter((g) => {
+    const accrualVisible = g.accrual?.id != null && visibleIds.has(g.accrual.id)
+    const settlementVisible = g.settlements.some((s) => s.id != null && visibleIds.has(s.id))
+    if (unpaidOnly) {
+      return accrualVisible && g.status !== 'settled'
+    }
+    return accrualVisible || settlementVisible
+  })
+}
+
+export function sortLedgerPairGroupsDesc<T extends { id?: number; trans_date?: string }>(
+  groups: LedgerPairGroup<T>[]
+): LedgerPairGroup<T>[] {
+  const primaryDate = (g: LedgerPairGroup<T>) =>
+    sliceYmd(g.accrual?.trans_date || g.settlements[0]?.trans_date)
+  return [...groups].sort((a, b) => primaryDate(b).localeCompare(primaryDate(a)))
+}

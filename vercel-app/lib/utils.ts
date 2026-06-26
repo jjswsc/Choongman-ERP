@@ -16,6 +16,43 @@ export function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, '&#39;')
 }
 
+/** ERP 입고·원가 — 소수 셋째 자리 반올림 */
+export function roundErp3(value: number): number {
+  const v = Number(value ?? 0)
+  if (!Number.isFinite(v)) return 0
+  return Math.round(v * 1000) / 1000
+}
+
+/** ERP 금액·단가 표시 — 소수점 셋째자리까지 (불필요한 0은 생략) */
+export function formatErpNum(n: number | null | undefined): string {
+  const v = roundErp3(Number(n ?? 0))
+  if (!Number.isFinite(v)) return '0'
+  return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 3 })
+}
+
+/** ERP 단가 입력 — 숫자·소수점만, 소수 셋째 자리까지 */
+export function normalizeErpDecimalInput(raw: string): string {
+  const cleaned = String(raw || '').replace(/,/g, '').replace(/[^\d.]/g, '')
+  if (cleaned === '') return ''
+  const firstDot = cleaned.indexOf('.')
+  let intRaw: string
+  let fracRaw: string
+  if (firstDot === -1) {
+    intRaw = cleaned
+    fracRaw = ''
+  } else {
+    intRaw = cleaned.slice(0, firstDot)
+    fracRaw = cleaned.slice(firstDot + 1).replace(/\./g, '')
+  }
+  fracRaw = fracRaw.slice(0, 3)
+  const endsWithDot = cleaned.endsWith('.') && fracRaw === '' && cleaned.includes('.')
+  if (intRaw === '' && fracRaw === '') return endsWithDot ? '0.' : ''
+  if (intRaw === '' && fracRaw !== '') return `0.${fracRaw}`
+  if (fracRaw !== '') return `${intRaw}.${fracRaw}`
+  if (endsWithDot) return `${intRaw}.`
+  return intRaw
+}
+
 /** POS/주문 등에서 사용할 금액 포맷 - 소수점 둘째자리까지 표시 (모바일과 통일) */
 export function formatBahtNum(n: number | null | undefined): string {
   const v = Number(n ?? 0)

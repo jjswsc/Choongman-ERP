@@ -7,8 +7,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { getPosMenuCategoriesConfig, getPosMenus, type PosMenu } from "@/lib/api-client"
+import { appConfirm } from "@/lib/app-message"
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { collabHasPosDiscount } from "@/lib/pos-collab-discount"
+import {
+  collabCategoryScopeKey,
+  findCollabScopeCoverageGaps,
+  mergeCollabScopeMainCategories,
+  subsForCollabScopeMain,
+} from "@/lib/pos-collab-scope-catalog"
 import { Loader2, Save } from "lucide-react"
 
 type Basics = {
@@ -39,10 +46,6 @@ function scopeCheckbox(
       </label>
     </div>
   )
-}
-
-function categoryScopeKey(main: string, category: string): string {
-  return `${String(main ?? "").trim()}::${String(category ?? "").trim()}`
 }
 
 function toggleListValue(list: string[], value: string, checked: boolean): string[] {
@@ -108,7 +111,7 @@ export function CollabManagementDetailForm(props: {
       .filter((m) => {
         const main = String(m.categoryMain ?? "").trim()
         const cat = String(m.category ?? "").trim()
-        const key = categoryScopeKey(main, cat)
+        const key = collabCategoryScopeKey(main, cat)
         if (activeMains.size > 0 && !activeMains.has(main) && !selectedCategoryKeySet.has(key)) return false
         if (!keyword) return true
         return `${m.code ?? ""} ${m.name ?? ""} ${main} ${cat}`.toLowerCase().includes(keyword)
@@ -124,12 +127,10 @@ export function CollabManagementDetailForm(props: {
         if (cancelled) return
         const mainsFromCfg = Array.isArray(cfg?.mainCategories) ? cfg.mainCategories : []
         const menuList = Array.isArray(menuRows) ? menuRows : []
-        const derivedMains = Array.from(
-          new Set(menuList.map((m) => String(m.categoryMain ?? "").trim()).filter(Boolean))
-        )
-        setMainCategories(mainsFromCfg.length > 0 ? mainsFromCfg : derivedMains)
+        const activeMenus = menuList.filter((m) => m.isActive !== false)
+        setMainCategories(mergeCollabScopeMainCategories(mainsFromCfg, activeMenus))
         setCategoriesByMain(cfg?.categoriesByMain || {})
-        setMenus(menuList.filter((m) => m.isActive !== false))
+        setMenus(activeMenus)
       })
       .finally(() => {
         if (!cancelled) setScopeCatalogLoading(false)
@@ -170,6 +171,39 @@ export function CollabManagementDetailForm(props: {
     mainCategories,
     set,
   ])
+
+  const scopeCoverageGap = React.useMemo(
+    () =>
+      findCollabScopeCoverageGaps({
+        detail: draft,
+        mainCategories,
+        menus,
+      }),
+    [draft, mainCategories, menus]
+  )
+  const hasScopeCoverageGap =
+    scopeCoverageGap.uncoveredMainTabs.length > 0 || scopeCoverageGap.uncoveredSubcategories.length > 0
+
+  const handleSave = React.useCallback(async () => {
+    if (collabHasPosDiscount(draft) && hasScopeCoverageGap) {
+      const mainPart =
+        scopeCoverageGap.uncoveredMainTabs.length > 0
+          ? `${tr("marketingCollabScopeGapMainTabs", "빠진 대분류")}: ${scopeCoverageGap.uncoveredMainTabs.join(", ")}`
+          : ""
+      const subPart =
+        scopeCoverageGap.uncoveredSubcategories.length > 0
+          ? `${tr("marketingCollabScopeGapSubcategories", "빠진 하위 카테고리")}: ${scopeCoverageGap.uncoveredSubcategories
+              .map((row) => `${row.main} / ${row.category}`)
+              .join(", ")}`
+          : ""
+      const detailText = [mainPart, subPart].filter(Boolean).join("\n")
+      const ok = await appConfirm(
+        `${t("marketingCollabScopeGapSaveConfirm")}\n\n${detailText}\n\n${t("marketingCollabScopeGapSaveConfirmProceed")}`
+      )
+      if (!ok) return
+    }
+    onSave()
+  }, [draft, hasScopeCoverageGap, onSave, scopeCoverageGap, t, tr])
 
   return (
     <div className="space-y-6">
@@ -411,6 +445,24 @@ export function CollabManagementDetailForm(props: {
             ) : null}
             <p className="text-[11px] font-medium text-foreground/90">{t("marketingCollabDetailSectionScope")}</p>
             <p className="text-[11px] text-muted-foreground">{t("marketingCollabDetailScopeHint")}</p>
+            {collabHasPosDiscount(draft) && hasScopeCoverageGap ? (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-50/90 px-3 py-2.5 text-[11px] text-amber-950 dark:bg-amber-950/25 dark:text-amber-100">
+                <p className="font-medium">{t("marketingCollabScopeGapTitle")}</p>
+                <p className="mt-1 text-amber-900/90 dark:text-amber-100/90">{t("marketingCollabScopeGapHint")}</p>
+                {scopeCoverageGap.uncoveredMainTabs.length > 0 ? (
+                  <p className="mt-2">
+                    <span className="font-medium">{tr("marketingCollabScopeGapMainTabs", "빠진 대분류")}: </span>
+                    {scopeCoverageGap.uncoveredMainTabs.join(", ")}
+                  </p>
+                ) : null}
+                {scopeCoverageGap.uncoveredSubcategories.length > 0 ? (
+                  <p className="mt-1">
+                    <span className="font-medium">{tr("marketingCollabScopeGapSubcategories", "빠진 하위 카테고리")}: </span>
+                    {scopeCoverageGap.uncoveredSubcategories.map((row) => `${row.main} / ${row.category}`).join(", ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold">{tr("marketingCollabScopeMainTitle", "1. 대분류 선택")}</p>
@@ -451,22 +503,23 @@ export function CollabManagementDetailForm(props: {
                 ) : (
                   <div className="space-y-3">
                     {selectedScopeMainCategories.map((main) => {
-                      const subs = categoriesByMain[main] || Array.from(new Set(
-                        menus
-                          .filter((m) => String(m.categoryMain ?? "").trim() === main)
-                          .map((m) => String(m.category ?? "").trim())
-                          .filter(Boolean)
-                      ))
+                      const subs = subsForCollabScopeMain(main, categoriesByMain, menus)
+                      const configSubs = new Set(
+                        (categoriesByMain[main] || []).map((s) => String(s).trim()).filter(Boolean)
+                      )
                       if (subs.length <= 0) return null
                       return (
                         <div key={main} className="rounded-md bg-background/70 p-2">
                           <p className="mb-2 text-[11px] font-medium text-muted-foreground">{main}</p>
                           <div className="grid gap-2 sm:grid-cols-2">
                             {subs.map((cat) => {
-                              const key = categoryScopeKey(main, cat)
+                              const key = collabCategoryScopeKey(main, cat)
+                              const fromMenusOnly = !configSubs.has(cat)
                               return scopeCheckbox(
                                 `collab-cat-${key}`,
-                                cat,
+                                fromMenusOnly
+                                  ? `${cat} (${tr("marketingCollabScopeFromMenus", "메뉴 기준")})`
+                                  : cat,
                                 selectedCategoryKeySet.has(key),
                                 (checked) =>
                                   set({
@@ -608,7 +661,7 @@ export function CollabManagementDetailForm(props: {
           </section>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="gap-1.5" disabled={saving} onClick={onSave}>
+            <Button type="button" className="gap-1.5" disabled={saving} onClick={() => void handleSave()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {t("marketingCollabDetailSave")}
             </Button>

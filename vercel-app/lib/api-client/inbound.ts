@@ -19,9 +19,6 @@ export interface InboundHistoryItem {
   po_created_at?: string | null
   code?: string
   purchaseSource?: 'hq' | 'store'
-  /** 통장 매입 지급만 등록된 건(stock_logs 없음) */
-  bank_transaction_id?: number
-  row_kind?: 'stock' | 'bank_purchase_payment'
 }
 
 export interface InboundBatchDetail {

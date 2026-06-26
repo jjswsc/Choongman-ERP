@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { formatErpNum } from "@/lib/utils"
 import type { InboundTableRow } from "./inbound-table"
 
 interface InboundEditDialogProps {
@@ -85,7 +86,7 @@ export function InboundEditDialog({
           <div className="space-y-4 py-2">
             {row && (
               <p className="text-xs text-muted-foreground">
-                {row.date} · {row.vendor} · ฿{row.totalAmt.toLocaleString()}
+                {row.date} · {row.vendor} · ฿{formatErpNum(row.totalAmt)}
               </p>
             )}
             <div>

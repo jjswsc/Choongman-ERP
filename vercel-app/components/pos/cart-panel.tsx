@@ -504,6 +504,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const lastPosActivityRef = useRef(Date.now())
   const memberScanAutoSubmitRef = useRef<string | null>(null)
   const couponScanAutoSubmitRef = useRef<string | null>(null)
+  const memberFieldCouponAutoRef = useRef<string | null>(null)
   const [couponQuantityInput, setCouponQuantityInput] = useState('1')
   const couponQuantity = Math.max(1, Math.min(99, parseIntegerInput(couponQuantityInput, 1)))
   const [appliedCoupons, setAppliedCoupons] = useState<PosAppliedCoupon[]>([])
@@ -1936,6 +1937,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       return
     }
     if (isMemberCouponScanPayload(sanitized)) {
+      // 정식 쿠폰 QR(CM|CPN 헤더)은 회원번호로 줄이지 않고 전체 페이로드를 유지한다.
+      // → 회원란에 잘못 스캔돼도 Enter에서 쿠폰 적용으로 라우팅할 수 있다.
+      if (isMemberCouponQrPayload(sanitized)) {
+        setMemberKeyword(sanitized)
+        return
+      }
       const couponParsed = parseLooseMemberCouponScanInput(sanitized)
       if (couponParsed?.memberNo) {
         setMemberKeyword(couponParsed.memberNo)
@@ -2796,6 +2803,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       splitPaymentsByPersonRef.current = []
       splitDraftAssignedRef.current = null
       menuSplitAutoAppliedKeyRef.current = ''
+      couponScanAutoSubmitRef.current = null
+      memberFieldCouponAutoRef.current = null
     }
   }, [showPaymentModal])
 
@@ -3799,6 +3808,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     couponScanAutoSubmitRef.current = raw
     void runCouponScanPayload(raw)
   }, [couponCode, couponQrScannerOpen, runCouponScanPayload, showPaymentModal])
+
+  // 결제 화면에서 쿠폰 QR이 (자동 포커스된) 회원 검색란에 잘못 스캔되면 쿠폰 적용으로 라우팅한다.
+  // Enter 유무와 상관없이 동작하며, ref로 같은 페이로드 중복 적용을 막는다.
+  useEffect(() => {
+    if (!showPaymentModal || couponQrScannerOpen) return
+    const raw = normalizeCouponScanDelimiters(memberKeyword.trim())
+    if (!raw || !isMemberCouponQrPayload(raw)) return
+    if (memberFieldCouponAutoRef.current === raw) return
+    memberFieldCouponAutoRef.current = raw
+    setMemberKeyword('')
+    void runCouponScanPayload(raw)
+  }, [couponQrScannerOpen, memberKeyword, runCouponScanPayload, showPaymentModal])
 
   useEffect(() => {
     const bumpActivity = () => {
@@ -5316,6 +5337,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
+                        // 결제 화면에서 쿠폰 QR이 회원란에 잘못 스캔되는 경우가 잦다.
+                        // 쿠폰 QR이면 회원 검색을 막고, 아래 effect가 쿠폰 적용으로 처리한다(회원 연결도 함께).
+                        const scanned = normalizeCouponScanDelimiters(e.currentTarget.value.trim())
+                        if (isMemberCouponQrPayload(scanned)) return
                         void handleMemberSearch(e.currentTarget.value)
                       }
                     }}
