@@ -143,6 +143,14 @@ export async function POST(request: NextRequest) {
     if (finalCategory === 'receivable_receive' && storeName !== undefined) {
       patch.store_name = finalStoreName
     }
+    if (finalCategoryLower === 'advance') {
+      if (storeName !== undefined) {
+        patch.store_name = String(storeName || '').trim() || null
+      }
+      if (vendorCode !== undefined) {
+        patch.vendor_code = String(vendorCode || '').trim() || null
+      }
+    }
     if (refType !== undefined) {
       const rt = String(refType || '').trim()
       patch.ref_type = rt || null

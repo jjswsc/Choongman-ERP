@@ -5,7 +5,11 @@
 import type { PosMenu, PosMenuOption, PosPrinterSettings } from '@/lib/api-client'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
-import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
+import {
+  resolveReceiptSubtotalPrintAmount,
+  resolveReceiptVatPrintAmount,
+  resolveTaxInvoiceSubtotalBeforeVatForPrint,
+} from '@/lib/pos-pricing'
 import { buildPosReceiptVatPrintLabelEscaped } from '@/lib/pos-receipt-vat-print-label'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import {
@@ -68,17 +72,27 @@ function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass 
   return `<div class="${cls}"><div class="receipt-pay-line-name">${nameInnerHtml}</div><div class="receipt-pay-line-amt">${amtInnerHtml}</div></div>`
 }
 
-function receiptSubtotalAndVatForPrint(receiptData: ReceiptModalData): { subtotalPrint: number; vatPrint: number } {
-  const subtotalPrint = resolveReceiptSubtotalPrintAmount({
-    subtotal: receiptData.subtotal,
-    vatFeeMode: receiptData.vatFeeMode,
-    receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
-    receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
-  })
+function receiptSubtotalAndVatForPrint(
+  receiptData: ReceiptModalData,
+  isTaxInvoice: boolean
+): { subtotalPrint: number; vatPrint: number } {
   const vatPrint = resolveReceiptVatPrintAmount({
     vatFeeAmt: receiptData.vatFeeAmt,
     receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
   })
+  let subtotalPrint = resolveReceiptSubtotalPrintAmount({
+    subtotal: receiptData.subtotal,
+    discountAmt: receiptData.discountAmt,
+    deliveryFee: receiptData.deliveryFee,
+    packagingFee: receiptData.packagingFee,
+    vatFeeMode: receiptData.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
+  })
+  if (isTaxInvoice && vatPrint > 0.0001) {
+    const beforeVat = resolveTaxInvoiceSubtotalBeforeVatForPrint(receiptData.total, vatPrint)
+    if (beforeVat != null) subtotalPrint = beforeVat
+  }
   return { subtotalPrint, vatPrint }
 }
 
@@ -561,7 +575,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     hour12: false,
   }).format(at)
   const isTaxInvoice = !!taxInvoice
-  const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(receiptData)
+  const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(receiptData, isTaxInvoice)
   const showVatRow = vatPrint > 0.0001
   const vatPrintLabelEscaped = buildPosReceiptVatPrintLabelEscaped({
     vatFeeMode: receiptData.vatFeeMode,

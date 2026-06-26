@@ -52,6 +52,7 @@ import {
   getAccountSubjects,
   getVendorsForPurchase,
   getVendorsForSales,
+  getCardAccounts,
   updateBankTransactionInvoice,
   updateBankTransaction,
   deleteExpenseRegisterItem,
@@ -116,6 +117,12 @@ import {
   roundReceivableMoney,
   sumOpenReceivablePickAmount,
 } from "@/lib/bank-receivable-link"
+import { BankAdvanceTargetCell } from "@/components/erp/bank-advance-target-cell"
+import {
+  formatBankAdvanceAccountSubjectLabel,
+  resolveBankAdvanceTargetLabel,
+  resolvePrepaymentAccountSubject,
+} from "@/lib/bank-advance-display"
 
 const BANK_EDIT_BTN_CN = `${ADMIN_BTN_XS_CN} shrink-0 h-7 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15`
 
@@ -316,6 +323,8 @@ export function BankTransactionsTab() {
   const [loading, setLoading] = React.useState(false)
 
   const [accountSubjectOptions, setAccountSubjectOptions] = React.useState<AccountSubjectItem[]>([])
+  const [assetAccountOptions, setAssetAccountOptions] = React.useState<AccountSubjectItem[]>([])
+  const [cardAccounts, setCardAccounts] = React.useState<{ id: number; name: string }[]>([])
   const [vendorOptions, setVendorOptions] = React.useState<{ code: string; name: string }[]>([])
   const [salesVendorOptions, setSalesVendorOptions] = React.useState<{ name: string }[]>([])
 
@@ -518,7 +527,6 @@ export function BankTransactionsTab() {
     if (!r.id) return
     const edits = overrideEdits ?? queryRowEdits[r.id]
     if (!edits || Object.keys(edits).length === 0) return
-    const nextCategory = edits.category !== undefined ? edits.category : r.category
     setQuerySavingId(r.id)
     try {
       const payload: Parameters<typeof updateBankTransaction>[0] = { bankTransactionId: r.id }
@@ -1039,12 +1047,49 @@ export function BankTransactionsTab() {
       getAccountSubjects({ forExpense: true, excludeHeaders: true }),
       getAccountSubjects({ forTransfer: true, excludeHeaders: true }),
       getAccountSubjects({ forRevenue: true, excludeHeaders: true }),
+      getAccountSubjects({ type: "asset", excludeHeaders: true }),
     ])
-      .then(([expense, transfer, revenue]) => {
+      .then(([expense, transfer, revenue, asset]) => {
         setAccountSubjectOptions([...transfer, ...(expense || [])])
         setRevenueAccountOptions(revenue || [])
+        setAssetAccountOptions(asset || [])
       })
-      .catch(() => setAccountSubjectOptions([]))
+      .catch(() => {
+        setAccountSubjectOptions([])
+        setAssetAccountOptions([])
+      })
+  }, [])
+
+  const prepaymentSubject = React.useMemo(
+    () =>
+      resolvePrepaymentAccountSubject([
+        ...assetAccountOptions,
+        ...accountSubjectOptions,
+        ...revenueAccountOptions,
+      ]),
+    [assetAccountOptions, accountSubjectOptions, revenueAccountOptions]
+  )
+
+  const patchCategoryEditsForAdvance = React.useCallback(
+    (edits: QueryRowEdit, category: string): QueryRowEdit => {
+      if (category !== "advance") return { ...edits, category }
+      const next: QueryRowEdit = { ...edits, category: "advance" }
+      if (prepaymentSubject?.id) next.accountSubjectId = String(prepaymentSubject.id)
+      return next
+    },
+    [prepaymentSubject]
+  )
+
+  React.useEffect(() => {
+    getCardAccounts()
+      .then((rows) =>
+        setCardAccounts(
+          (rows || [])
+            .map((c) => ({ id: Number(c.id), name: String(c.name || "").trim() }))
+            .filter((c) => c.id > 0 && c.name)
+        )
+      )
+      .catch(() => setCardAccounts([]))
   }, [])
 
   React.useEffect(() => {
@@ -1642,8 +1687,26 @@ export function BankTransactionsTab() {
     for (const r of filteredList) {
       const cat = r.category ?? "expense"
       const catLabel = getCategoryLabel(cat, r.transType || "withdraw")
-      const sub = (r.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === r.accountSubjectId)
-      const subLabel = sub ? `${sub.code} ${asDisplayName(sub)}` : "—"
+      const normalizedCat =
+        r.transType === "withdraw" && String(cat).toLowerCase() === "fixed" ? "expense" : String(cat).toLowerCase()
+      let subLabel = "—"
+      if (normalizedCat === "advance") {
+        const targetLabel = resolveBankAdvanceTargetLabel({
+          storeName: r.storeName,
+          vendorCode: r.vendorCode,
+          vendors: vendorOptions,
+          cardAccounts,
+          storeLabel: t("store") || "매장",
+          vendorLabel: t("vendor") || "거래처",
+          cardLabel: tt("bankAdvanceTargetCardGroup", "카드"),
+        })
+        subLabel = formatBankAdvanceAccountSubjectLabel(prepaymentSubject, targetLabel)
+      } else {
+        const sub = (r.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find(
+          (a) => a.id === r.accountSubjectId
+        )
+        subLabel = sub ? `${sub.code} ${asDisplayName(sub)}` : "—"
+      }
       const attrDate = r.transType === "deposit" && r.salesDate ? r.salesDate : r.transType === "withdraw" && r.expenseDate ? r.expenseDate : "—"
       const transType = r.transType || "withdraw"
       rows.push([
@@ -1674,7 +1737,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
     a.download = `bank_transactions_${startStr}_${endStr}.xls`
     a.click()
     URL.revokeObjectURL(url)
-  }, [filteredList, startStr, endStr, accountSubjectOptions, revenueAccountOptions, t])
+  }, [filteredList, startStr, endStr, accountSubjectOptions, revenueAccountOptions, vendorOptions, cardAccounts, prepaymentSubject, asDisplayName, t, tt, getCategoryLabel])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -1719,13 +1782,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
   const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId" | "note" | "salesDate" | "expenseDate" | "vendorCode" | "storeName", value: string) => {
     setImportRowEdits((prev) => {
       const isManualClassificationEdit = field === "category" || field === "accountSubjectId"
+      const nextRow: BankImportRowEdit = {
+        ...prev[idx],
+        [field]: value || undefined,
+        ...(isManualClassificationEdit ? { autoAssigned: false } : {}),
+      }
+      if (field === "category" && value === "advance" && prepaymentSubject?.id) {
+        nextRow.accountSubjectId = String(prepaymentSubject.id)
+      }
       return {
         ...prev,
-        [idx]: {
-          ...prev[idx],
-          [field]: value || undefined,
-          ...(isManualClassificationEdit ? { autoAssigned: false } : {}),
-        },
+        [idx]: nextRow,
       }
     })
   }
@@ -1842,7 +1909,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       }
 
       let accountSubjectId: number | undefined
-      if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
+      if (category === "advance" && prepaymentSubject?.id) {
+        accountSubjectId = prepaymentSubject.id
+      } else if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
       } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
@@ -1858,9 +1927,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           ? edit?.expenseDate || r.transDate
           : undefined
       const vendorCode =
-        r.transType === "withdraw" && category === "purchase_payment"
+        category === "advance"
           ? edit?.vendorCode?.trim() || undefined
-          : undefined
+          : r.transType === "withdraw" && category === "purchase_payment"
+            ? edit?.vendorCode?.trim() || undefined
+            : undefined
+      const advanceStoreName =
+        category === "advance" ? edit?.storeName?.trim() || undefined : undefined
+      const effectiveStoreName =
+        category === "advance"
+          ? advanceStoreName
+          : storeName
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -1872,7 +1949,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         salesDate,
         expenseDate,
         vendorCode,
-        storeName,
+        storeName: effectiveStoreName,
       }
     })
     setImportSaving(true)
@@ -2372,7 +2449,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className="p-2 align-middle">
                                 {r.transType === "withdraw" ? (
-                                  <Select value={cat} onValueChange={(v) => r.id && setQueryRowEdit(r.id, "category", v)}>
+                                  <Select
+                                    value={cat}
+                                    onValueChange={(v) => {
+                                      if (!r.id) return
+                                      const mergedEdits = patchCategoryEditsForAdvance(
+                                        { ...(queryRowEdits[r.id] || {}), category: v },
+                                        v
+                                      )
+                                      setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
+                                      if (v === "advance" && prepaymentSubject?.id) {
+                                        void handleQueryRowSave(r, mergedEdits)
+                                      }
+                                    }}
+                                  >
                                     <SelectTrigger className="h-8 text-xs">
                                       <SelectValue />
                                     </SelectTrigger>
@@ -2391,10 +2481,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     value={cat}
                                     onValueChange={(v) => {
                                       if (!r.id) return
-                                      const mergedEdits: QueryRowEdit = { ...(queryRowEdits[r.id] || {}), category: v }
+                                      const mergedEdits = patchCategoryEditsForAdvance(
+                                        { ...(queryRowEdits[r.id] || {}), category: v },
+                                        v
+                                      )
                                       setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
                                       const effectiveStoreName = (mergedEdits.storeName ?? r.storeName ?? "").trim()
                                       if (v === "receivable_receive" && effectiveStoreName) {
+                                        void handleQueryRowSave(r, mergedEdits)
+                                      } else if (v === "advance" && prepaymentSubject?.id) {
                                         void handleQueryRowSave(r, mergedEdits)
                                       }
                                     }}
@@ -2485,6 +2580,38 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         ))}
                                     </SelectContent>
                                   </Select>
+                                ) : cat === "advance" ? (
+                                  <BankAdvanceTargetCell
+                                    storeName={edits?.storeName ?? r.storeName}
+                                    vendorCode={edits?.vendorCode ?? r.vendorCode}
+                                    prepaymentSubject={prepaymentSubject}
+                                    stores={receivableOptions}
+                                    vendors={vendorOptions}
+                                    cardAccounts={cardAccounts}
+                                    storeSearch={queryStoreSearch}
+                                    onStoreSearchChange={setQueryStoreSearch}
+                                    vendorSearch={queryVendorSearch}
+                                    onVendorSearchChange={setQueryVendorSearch}
+                                    onVendorDropdownOpen={() => {
+                                      if (vendorOptions.length === 0) void loadPurchaseVendorOptions(true)
+                                    }}
+                                    asDisplayName={asDisplayName}
+                                    t={t}
+                                    tt={tt}
+                                    onChange={(next) => {
+                                      if (!r.id) return
+                                      const mergedEdits: QueryRowEdit = {
+                                        ...(queryRowEdits[r.id] || {}),
+                                        storeName: next.storeName,
+                                        vendorCode: next.vendorCode,
+                                        ...(prepaymentSubject?.id
+                                          ? { accountSubjectId: String(prepaymentSubject.id) }
+                                          : {}),
+                                      }
+                                      setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
+                                      void handleQueryRowSave(r, mergedEdits)
+                                    }}
+                                  />
                                 ) : r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(cat) ? (
                                   <Select
                                     value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}
@@ -2878,8 +3005,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </Button>
                   </>
                 )}
-                {((accounts.length === 0) || (accounts.length > 0 && isOffice)) && (
-                  <div className={`flex flex-wrap items-center gap-2 ${accounts.length > 0 ? "border-l pl-3 ml-1" : ""}`}>
+                <div className={`flex flex-wrap items-center gap-2 ${accounts.length > 0 ? "border-l pl-3 ml-1" : ""}`}>
                     <Input
                       placeholder={t("bankName") || "은행명"}
                       value={newAccountBankName}
@@ -2911,10 +3037,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       {t("bankAddAccount")}
                     </Button>
                   </div>
-                )}
               </div>
               {accounts.length === 0 && (
                 <p className="text-sm text-muted-foreground mb-4">{t("bankAddAccount")} - {t("bankNoAccountHintShort")}</p>
+              )}
+              {accounts.length > 0 && (
+                <p className="text-sm text-muted-foreground mb-4">{t("bankAddSecondAccountHint")}</p>
               )}
 
               {importPreview && (
@@ -3088,6 +3216,39 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ))}
                               </SelectContent>
                             </Select>
+                          ) : impCat === "advance" ? (
+                            <BankAdvanceTargetCell
+                              storeName={importRowEdits[idx]?.storeName}
+                              vendorCode={importRowEdits[idx]?.vendorCode}
+                              prepaymentSubject={prepaymentSubject}
+                              stores={receivableOptions}
+                              vendors={vendorOptions}
+                              cardAccounts={cardAccounts}
+                              storeSearch={importStoreSearch}
+                              onStoreSearchChange={setImportStoreSearch}
+                              vendorSearch={importVendorSearch}
+                              onVendorSearchChange={setImportVendorSearch}
+                              onVendorDropdownOpen={() => {
+                                if (vendorOptions.length === 0) void loadPurchaseVendorOptions(true)
+                              }}
+                              asDisplayName={asDisplayName}
+                              t={t}
+                              tt={tt}
+                              onChange={(next) => {
+                                setImportRowEdits((prev) => ({
+                                  ...prev,
+                                  [idx]: {
+                                    ...prev[idx],
+                                    storeName: next.storeName || undefined,
+                                    vendorCode: next.vendorCode || undefined,
+                                    ...(prepaymentSubject?.id
+                                      ? { accountSubjectId: String(prepaymentSubject.id) }
+                                      : {}),
+                                    autoAssigned: false,
+                                  },
+                                }))
+                              }}
+                            />
                           ) : r.transType === "withdraw" &&
                             !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(impCat) ? (
                             <Select
@@ -3533,6 +3694,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             <DialogTitle>{t("bankAccountManage")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-auto">
+            {accounts.length > 0 && (
+              <p className="text-xs text-muted-foreground">{t("bankAddSecondAccountHint")}</p>
+            )}
             {accounts.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">{t("bankNoAccountHintShort")}</p>
             ) : (

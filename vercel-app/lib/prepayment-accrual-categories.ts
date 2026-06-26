@@ -1,6 +1,9 @@
 /** 지급예정만 등록하고 통장 연동 시 전도금(1160) 분개가 나가는 유형 */
 export const PREPAYMENT_ACCRUAL_CATEGORIES = new Set(['transfer_to_petty', 'bank_card_bill'])
 
+/** 선급금(전도금) 계정 코드 — 카드 대금·통장 전도 */
+export const PREPAYMENT_ACCOUNT_CODE = '1160'
+
 export function isPrepaymentAccrualCategory(category: string | undefined | null): boolean {
   return PREPAYMENT_ACCRUAL_CATEGORIES.has(String(category || '').trim().toLowerCase())
 }

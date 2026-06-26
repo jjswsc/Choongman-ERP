@@ -79,6 +79,9 @@ export function splitVatInclusiveBahtForReceipt(anchorBaht: number, vatRatePerce
 /** 결제 영수증: 소계 금액(첫 행) */
 export function resolveReceiptSubtotalPrintAmount(r: {
   subtotal: number
+  discountAmt?: number
+  deliveryFee?: number
+  packagingFee?: number
   vatFeeMode?: PosFeeMode
   receiptExclusiveSubtotalDisplay?: number
   receiptTaxableGrossForDisplay?: number
@@ -86,12 +89,28 @@ export function resolveReceiptSubtotalPrintAmount(r: {
   if (
     r.vatFeeMode === 'included' &&
     typeof r.receiptExclusiveSubtotalDisplay === 'number' &&
-    typeof r.receiptTaxableGrossForDisplay === 'number' &&
-    Math.abs(r.subtotal - r.receiptTaxableGrossForDisplay) < 0.02
+    typeof r.receiptTaxableGrossForDisplay === 'number'
   ) {
-    return r.receiptExclusiveSubtotalDisplay
+    const discountAmt = Math.max(0, Number(r.discountAmt ?? 0) || 0)
+    const separateFees =
+      Math.max(0, Number(r.deliveryFee ?? 0) || 0) + Math.max(0, Number(r.packagingFee ?? 0) || 0)
+    const subtotalMatchesTaxableBase = Math.abs(r.subtotal - r.receiptTaxableGrossForDisplay) < 0.02
+    if (
+      separateFees <= 0.001 &&
+      (discountAmt <= 0.001 || subtotalMatchesTaxableBase)
+    ) {
+      return r.receiptExclusiveSubtotalDisplay
+    }
   }
   return r.subtotal
+}
+
+/** ใบกำกับภาษี(Tax Invoice): ยอดรวมย่อย = ราคาก่อน VAT (합계 − VAT) */
+export function resolveTaxInvoiceSubtotalBeforeVatForPrint(total: number, vatPrint: number): number | null {
+  const gross = Math.max(0, Number(total) || 0)
+  const vat = Math.max(0, Number(vatPrint) || 0)
+  if (gross <= 0.0001 || vat <= 0.0001) return null
+  return round2(gross - vat)
 }
 
 /** 결제 영수증: 부가세 금액 */

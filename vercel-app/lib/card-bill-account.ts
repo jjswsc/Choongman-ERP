@@ -1,7 +1,8 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { PREPAYMENT_ACCOUNT_CODE } from '@/lib/prepayment-accrual-categories'
 
 /** 신용카드 월 대금 — 선급금(전도금) 계정 코드 */
-export const CARD_BILL_ACCOUNT_CODE = '1160'
+export const CARD_BILL_ACCOUNT_CODE = PREPAYMENT_ACCOUNT_CODE
 
 /**
  * 카드 대금 통장 연동 시 기본 계정과목 ID (1160 선급금 / 전도금).

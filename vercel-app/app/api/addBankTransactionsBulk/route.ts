@@ -251,6 +251,7 @@ export async function POST(request: NextRequest) {
         !['correction', 'loan', 'advance', 'unclassified', 'receivable_receive'].includes(validCategory)
       const persistWithdrawSubject =
         transType === 'withdraw' && ['transfer', 'expense'].includes(validCategory)
+      const persistAdvance = validCategory === 'advance'
 
       const row: Record<string, unknown> = {
         account_id: accountId,
@@ -265,7 +266,7 @@ export async function POST(request: NextRequest) {
         user_employee_code: userEmployeeCode,
         category: validCategory,
       }
-      if ((persistDepositSubject || persistWithdrawSubject) && accountSubjectId != null) {
+      if ((persistDepositSubject || persistWithdrawSubject || persistAdvance) && accountSubjectId != null) {
         const asid = Number(accountSubjectId)
         if (!isNaN(asid)) {
           const hdr = await assertAccountSubjectNotHeader(asid)
@@ -288,6 +289,10 @@ export async function POST(request: NextRequest) {
       }
       if (transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {
         row.vendor_code = vendorCode
+      }
+      if (persistAdvance) {
+        if (storeNameForReceivable) row.store_name = storeNameForReceivable
+        if (vendorCode) row.vendor_code = vendorCode
       }
 
       let btInserted: { id?: number }[] = []
