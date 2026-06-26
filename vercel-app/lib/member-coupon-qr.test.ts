@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildMemberCouponQrPayload,
+  countMemberCouponQrBodyFields,
   expandTruncatedCouponCodeCandidates,
+  isLikelyIncompleteCouponQrScan,
   isMemberCouponQrPayload,
   isMemberCouponScanPayload,
   parseLooseMemberCouponScanInput,
@@ -71,5 +73,11 @@ describe('member-coupon-qr', () => {
   it('expands truncated coupon codes with CM prefix', () => {
     expect(expandTruncatedCouponCodeCandidates('HBDCOUPON')).toEqual(['HBDCOUPON', 'CMHBDCOUPON'])
     expect(expandTruncatedCouponCodeCandidates('CMHBDCOUPON')).toEqual(['CMHBDCOUPON'])
+  })
+
+  it('detects incomplete CM|CPN scan before issueId tail arrives', () => {
+    expect(countMemberCouponQrBodyFields('CM|CPN|M007359|CMHBDCOUPON')).toBe(2)
+    expect(isLikelyIncompleteCouponQrScan('CM|CPN|M007359|CMHBDCOUPON')).toBe(true)
+    expect(isLikelyIncompleteCouponQrScan('CM|CPN|M007359|CMHBDCOUPON|14')).toBe(false)
   })
 })

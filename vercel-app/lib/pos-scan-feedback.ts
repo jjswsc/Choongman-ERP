@@ -3,6 +3,8 @@
 export const POS_SCAN_FIELD_FLASH_MS = 900
 export const POS_SCAN_IDLE_REFOCUS_MS = 20_000
 export const POS_SCAN_BEEP_DEBOUNCE_MS = 350
+/** USB 웨지 스캔: 마지막 키 이후 이 시간이 지나면 스캔 완료로 본다 (issueId 꼬리 필드 대기) */
+export const POS_SCAN_IDLE_SUBMIT_MS = 150
 
 type MutableRef<T> = { current: T }
 

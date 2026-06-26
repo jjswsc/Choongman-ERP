@@ -60,11 +60,41 @@ export function buildPromoChoiceModifierId(
   return `${itemId}-pc-${grp}-${menuId}-${optId}-${code}-${sequence}`
 }
 
+/** ERP에 등록된 메뉴·옵션 표시명 (추론 없음) */
 export function promoChoiceModifierDisplayName(line: GrabPromoChoiceCatalogRow): string {
   const menu = String(line.menuName ?? '').trim()
   const opt = String(line.optionName ?? '').trim()
-  if (opt) return opt
-  return menu || 'Option'
+  const qty = Math.max(1, Number(line.quantity) || 1)
+  let base = ''
+  if (menu && opt) base = `${menu} (${opt})`
+  else if (menu) base = menu
+  else if (opt) base = opt
+  else base = 'Option'
+  return qty > 1 ? `${base} x${qty}` : base
+}
+
+/** Grab 손님 선택 수 = ERP 등록 quantity 합 (PEPSI MEGA 3 펩시 x2 등) */
+function totalRegisteredPromoBundlePickCount(items: GrabPromoChoiceCatalogRow[]): number {
+  return items.reduce((sum, line) => sum + Math.max(1, Number(line.quantity) || 1), 0)
+}
+
+/**
+ * quantity>1 인 구성 줄은 Grab에서 선택 개수만큼 펼친다(동일 메뉴 2회 선택).
+ * 표시명은 ERP quantity 를 반영한다.
+ */
+function expandRegisteredPromoLinesForGrabMenu(items: GrabPromoChoiceCatalogRow[]): GrabPromoChoiceCatalogRow[] {
+  const out: GrabPromoChoiceCatalogRow[] = []
+  for (const line of items) {
+    const qty = Math.max(1, Number(line.quantity) || 1)
+    if (qty <= 1) {
+      out.push(line)
+      continue
+    }
+    for (let i = 0; i < qty; i++) {
+      out.push({ ...line, quantity: 1 })
+    }
+  }
+  return out
 }
 
 /** Grab 그룹명 = ERP `choice_group` 키 그대로 (번역·한글 폴백 없음) */
@@ -73,34 +103,72 @@ export function promoChoiceGroupDisplayName(choiceGroup: string): string {
   return key || 'Options'
 }
 
-/** 프로모 choice_group → Grab modifierGroups (POS 세트 탭 선택 그룹과 동일) */
+function buildGrabModifierGroupFromPromoLines(params: {
+  itemId: string
+  groupKey: string
+  groupName: string
+  lines: GrabPromoChoiceCatalogRow[]
+  sequence: number
+  pickCount: number
+}): GrabPromoChoiceModifierGroup {
+  const pick = Math.max(1, Math.min(params.pickCount, params.lines.length))
+  const groupSlug = slugPart(params.groupKey, 'g')
+  return {
+    id: `${params.itemId}-pcg-${groupSlug}`,
+    name: params.groupName.slice(0, 60),
+    sequence: params.sequence,
+    availableStatus: 'AVAILABLE' as const,
+    selectionRangeMin: pick,
+    selectionRangeMax: pick,
+    modifiers: params.lines.map((line, idx) => ({
+      id: buildPromoChoiceModifierId(params.itemId, line, idx + 1),
+      name: promoChoiceModifierDisplayName(line),
+      sequence: idx + 1,
+      availableStatus: 'AVAILABLE' as const,
+      price: 0,
+    })),
+  }
+}
+
+/**
+ * 프로모 choice_group → Grab modifierGroups (POS 세트 탭 선택 그룹과 동일).
+ * choice_group 이 하나도 없으면 pos_promo_items 에 등록된 구성 줄을 그대로 노출한다(추론 없음).
+ */
 export function buildGrabPromoChoiceModifierGroups(params: {
   itemId: string
   items: GrabPromoChoiceCatalogRow[]
   sequenceStart: number
 }): GrabPromoChoiceModifierGroup[] {
   const { groups } = splitPromoChoiceGroups(params.items)
-  if (groups.length === 0) return []
 
-  return groups.map((group, gidx) => {
-    const pick = Math.max(1, Math.min(group.pickCount, group.lines.length))
-    const groupSlug = slugPart(group.key, `g${gidx + 1}`)
-    return {
-      id: `${params.itemId}-pcg-${groupSlug}`,
-      name: promoChoiceGroupDisplayName(group.key).slice(0, 60),
-      sequence: params.sequenceStart + gidx + 1,
-      availableStatus: 'AVAILABLE' as const,
-      selectionRangeMin: pick,
-      selectionRangeMax: pick,
-      modifiers: group.lines.map((line, idx) => ({
-        id: buildPromoChoiceModifierId(params.itemId, line, idx + 1),
-        name: promoChoiceModifierDisplayName(line as GrabPromoChoiceCatalogRow),
-        sequence: idx + 1,
-        availableStatus: 'AVAILABLE' as const,
-        price: 0,
-      })),
-    }
-  })
+  if (groups.length > 0) {
+    return groups.map((group, gidx) =>
+      buildGrabModifierGroupFromPromoLines({
+        itemId: params.itemId,
+        groupKey: group.key,
+        groupName: promoChoiceGroupDisplayName(group.key),
+        lines: group.lines as GrabPromoChoiceCatalogRow[],
+        sequence: params.sequenceStart + gidx + 1,
+        pickCount: group.pickCount,
+      })
+    )
+  }
+
+  if (params.items.length === 0) return []
+
+  const registeredLines = expandRegisteredPromoLinesForGrabMenu(params.items)
+  const pickCount = totalRegisteredPromoBundlePickCount(params.items)
+
+  return [
+    buildGrabModifierGroupFromPromoLines({
+      itemId: params.itemId,
+      groupKey: 'set-includes',
+      groupName: 'Set includes',
+      lines: registeredLines,
+      sequence: params.sequenceStart + 1,
+      pickCount,
+    }),
+  ]
 }
 
 function toPromoItemSnapshot(line: GrabPromoChoiceCatalogRow): GrabPromoItemSnapshot {

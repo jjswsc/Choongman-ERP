@@ -128,6 +128,29 @@ export function isMemberCouponScanPayload(raw: string): boolean {
   return isMemberCouponQrPayload(raw) || parseLooseMemberCouponScanInput(raw) != null
 }
 
+/** CM|CPN QR 본문 필드 수 (memberNo, couponCode, issueId…) */
+export function countMemberCouponQrBodyFields(raw: string): number {
+  const body = extractMemberCouponQrBody(raw)
+  if (body == null) return 0
+  return splitCouponScanFields(body).length
+}
+
+/**
+ * USB 웨지 스캔 중 CM|CPN QR이 memberNo+couponCode까지만 읽혀도 parse 가능해
+ * issueId(|14 등) 꼬리가 아직 오지 않았을 수 있다.
+ */
+export function isLikelyIncompleteCouponQrScan(raw: string): boolean {
+  const text = normalizeCouponScanDelimiters(String(raw ?? '').trim())
+  if (!isMemberCouponQrPayload(text)) return false
+  const fields = countMemberCouponQrBodyFields(text)
+  if (fields < 2) return true
+  const parsed = parseMemberCouponQrPayload(text)
+  if (!parsed?.memberNo || !parsed.couponCode) return true
+  // 발급 쿠폰 QR은 보통 3필드(memberNo|couponCode|issueId). 2필드만 있으면 꼬리 대기.
+  if (fields === 2 && !parsed.issueId) return true
+  return false
+}
+
 /** 스캐너가 앞 `CM` 접두를 잘랐을 때 검증 후보 */
 export function expandTruncatedCouponCodeCandidates(code: string): string[] {
   const normalized = String(code ?? '').trim().toUpperCase()
