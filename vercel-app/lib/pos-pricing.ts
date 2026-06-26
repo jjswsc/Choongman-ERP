@@ -113,6 +113,45 @@ export function resolveTaxInvoiceSubtotalBeforeVatForPrint(total: number, vatPri
   return round2(gross - vat)
 }
 
+/** VAT 포함 합계에서 공급가·세액 분해 (태국 POS 세금계산서 기본 7%) */
+export function splitThaiVatInclusiveGrossForReceipt(
+  gross: number,
+  vatRatePercent = 7
+): { exclusive: number; vat: number } | null {
+  const rate = Math.max(0, Number(vatRatePercent) || 0)
+  const g = Math.max(0, Number(gross) || 0)
+  if (g <= 0.0001 || rate <= 0) return null
+  const vat = round2((g * rate) / (100 + rate))
+  return { exclusive: round2(g - vat), vat }
+}
+
+/**
+ * 세금계산서 영수증: 공급가·VAT·합계 분해.
+ * 영수증 데이터에 VAT가 없으면 합계(VAT 포함)에서 7% 역산.
+ */
+export function resolveTaxInvoiceReceiptVatBreakdown(params: {
+  total: number
+  vatFeeAmt?: number
+  receiptVatDisplayAmt?: number
+  vatRatePercent?: number
+}): { subtotalBeforeVat: number; vat: number } | null {
+  const total = Math.max(0, Number(params.total) || 0)
+  if (total <= 0.0001) return null
+
+  const existingVat = resolveReceiptVatPrintAmount({
+    vatFeeAmt: params.vatFeeAmt,
+    receiptVatDisplayAmt: params.receiptVatDisplayAmt,
+  })
+  if (existingVat > 0.0001) {
+    const subtotalBeforeVat = resolveTaxInvoiceSubtotalBeforeVatForPrint(total, existingVat)
+    if (subtotalBeforeVat != null) return { subtotalBeforeVat, vat: existingVat }
+  }
+
+  const split = splitThaiVatInclusiveGrossForReceipt(total, params.vatRatePercent ?? 7)
+  if (!split) return null
+  return { subtotalBeforeVat: split.exclusive, vat: split.vat }
+}
+
 /** 결제 영수증: 부가세 금액 */
 export function resolveReceiptVatPrintAmount(r: { vatFeeAmt?: number; receiptVatDisplayAmt?: number }): number {
   return typeof r.receiptVatDisplayAmt === 'number' ? r.receiptVatDisplayAmt : Math.max(0, Number(r.vatFeeAmt ?? 0) || 0)

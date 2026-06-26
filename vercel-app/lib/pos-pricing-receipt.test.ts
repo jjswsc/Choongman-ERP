@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveReceiptSubtotalPrintAmount,
+  resolveTaxInvoiceReceiptVatBreakdown,
   resolveTaxInvoiceSubtotalBeforeVatForPrint,
+  splitThaiVatInclusiveGrossForReceipt,
 } from '@/lib/pos-pricing'
 
 describe('resolveTaxInvoiceSubtotalBeforeVatForPrint', () => {
@@ -11,6 +13,34 @@ describe('resolveTaxInvoiceSubtotalBeforeVatForPrint', () => {
 
   it('returns null when VAT is zero', () => {
     expect(resolveTaxInvoiceSubtotalBeforeVatForPrint(2690, 0)).toBeNull()
+  })
+})
+
+describe('resolveTaxInvoiceReceiptVatBreakdown', () => {
+  it('uses existing VAT when present on receipt data', () => {
+    expect(
+      resolveTaxInvoiceReceiptVatBreakdown({
+        total: 2690,
+        vatFeeAmt: 175.98,
+      })
+    ).toEqual({ subtotalBeforeVat: 2514.02, vat: 175.98 })
+  })
+
+  it('derives 7% VAT from inclusive total when receipt has no VAT line', () => {
+    expect(
+      resolveTaxInvoiceReceiptVatBreakdown({
+        total: 2590,
+      })
+    ).toEqual({ subtotalBeforeVat: 2420.56, vat: 169.44 })
+  })
+})
+
+describe('splitThaiVatInclusiveGrossForReceipt', () => {
+  it('splits gross into exclusive and VAT at 7%', () => {
+    expect(splitThaiVatInclusiveGrossForReceipt(2590)).toEqual({
+      exclusive: 2420.56,
+      vat: 169.44,
+    })
   })
 })
 
