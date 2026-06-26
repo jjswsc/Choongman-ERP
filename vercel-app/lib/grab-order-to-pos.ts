@@ -26,6 +26,8 @@ import {
   enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   grabSelectionIncludesExplicitSize,
   resolveGrabEcoCutleryNoteTokenFromOrder,
+  ensureGrabSidedishModifiersPreservedInNote,
+  grabPromoSnapshotIncludesModifierLabel,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
 import {
@@ -942,8 +944,12 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         )
         if (choiceNameKeys.size > 0) {
           for (let mi = modifierNamesForNote.length - 1; mi >= 0; mi--) {
-            const lab = String(modifierNamesForNote[mi] ?? '').trim().toLowerCase()
-            if (choiceNameKeys.has(lab)) modifierNamesForNote.splice(mi, 1)
+            const original = String(modifierNamesForNote[mi] ?? '').trim()
+            const lab = original.toLowerCase()
+            if (!choiceNameKeys.has(lab)) continue
+            if (grabPromoSnapshotIncludesModifierLabel(promoItemsSnapshot, original)) {
+              modifierNamesForNote.splice(mi, 1)
+            }
           }
         }
       }
@@ -992,6 +998,11 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     if (!banbanFlavorsToken) {
       itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
     }
+    ensureGrabSidedishModifiersPreservedInNote({
+      allModifierLabels: modifierNames,
+      modifierNamesForNote,
+      promoItems: promoItemsSnapshot,
+    })
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,

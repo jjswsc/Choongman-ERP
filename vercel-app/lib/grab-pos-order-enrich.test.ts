@@ -22,6 +22,9 @@ import {
   resolveGrabItemPrintNote,
   enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   grabSelectionIncludesExplicitSize,
+  ensureGrabSidedishModifiersPreservedInNote,
+  collectGrabHallReceiptOptionLines,
+  grabPromoSnapshotIncludesModifierLabel,
 } from '@/lib/grab-pos-order-enrich'
 
 describe('enrichGrabPromoItemsWithDefaultSizeFromCatalog', () => {
@@ -477,5 +480,54 @@ describe('grab-pos-order-enrich', () => {
       itemName: 'GARLIC + M - Boneless',
     })
     expect(unit).toBe(25900)
+  })
+})
+
+describe('ensureGrabSidedishModifiersPreservedInNote', () => {
+  it('keeps Pickled Radish in note when promo snapshot did not capture the choice', () => {
+    const modifierNamesForNote = ['S - Boneless']
+    ensureGrabSidedishModifiersPreservedInNote({
+      allModifierLabels: ['S - Boneless', 'Pickled Radish 30 g.'],
+      modifierNamesForNote,
+      promoItems: [
+        { menuName: 'Rice', quantity: 1 },
+        { menuName: 'GOLDEN FRIED CHICKEN', optionName: 'S - Boneless', quantity: 1 },
+      ],
+    })
+    expect(modifierNamesForNote).toContain('Pickled Radish 30 g.')
+  })
+
+  it('does not duplicate sidedish already represented in promo snapshot', () => {
+    const modifierNamesForNote: string[] = []
+    ensureGrabSidedishModifiersPreservedInNote({
+      allModifierLabels: ['Pickled Radish 30 g.'],
+      modifierNamesForNote,
+      promoItems: [{ menuName: 'Pickled Radish 30 g.', quantity: 1 }],
+    })
+    expect(modifierNamesForNote).toHaveLength(0)
+  })
+})
+
+describe('collectGrabHallReceiptOptionLines', () => {
+  it('resolves sidedish from optionCode when note only has eco token', () => {
+    const catalog = buildGrabPosCatalog([], [{ optionCode: 'C020-5', name: 'Pickled Radish 30 g.' }])
+    const lines = collectGrabHallReceiptOptionLines({
+      note: 'eco:no plastic cutlery requested',
+      optionCodes: ['C020-5'],
+      optionCode1: 'C020-5',
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(lines).toContain('Pickled Radish 30 g.')
+  })
+})
+
+describe('grabPromoSnapshotIncludesModifierLabel', () => {
+  it('matches fuzzy Pickled Radish labels', () => {
+    expect(
+      grabPromoSnapshotIncludesModifierLabel(
+        [{ menuName: 'Free Pickled Radish', quantity: 1 }],
+        'Pickled Radish 30 g.'
+      )
+    ).toBe(true)
   })
 })

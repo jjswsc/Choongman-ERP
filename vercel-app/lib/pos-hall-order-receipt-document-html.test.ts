@@ -640,6 +640,97 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('KIMCHI SOUP With Rice')
   })
 
+  it('GF-320 Grab Set 1 hall receipt shows Pickled Radish (parent-only line, optc only)', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 20, name: 'GOLDEN FRIED CHICKEN', code: 'C020' }],
+      [{ name: 'Pickled Radish 30 g.', optionCode: 'C020-5' }],
+      [{ id: '1', name: '[111] Set 1', code: 'SET1', items: [] }]
+    )
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: 'GF-320',
+        storeCode: 'CM MBK',
+        orderType: 'delivery',
+        tableName: 'Grab #GF-320',
+        memo: 'grab_order:GF-320',
+        items: [
+          {
+            id: 'grab:320',
+            name: '[111] Set 1 Golden Fried Chicken',
+            price: 159,
+            qty: 1,
+            deliveryAppCode: 'grab',
+            note: 'eco:no plastic cutlery requested',
+            optionCodes: ['C020-5'],
+            optionCode1: 'C020-5',
+          },
+          {
+            id: 'grab:t1',
+            name: 'Tteokbokki',
+            price: 219,
+            qty: 1,
+            deliveryAppCode: 'grab',
+          },
+        ],
+        subtotal: 378,
+        discountAmt: 48,
+        total: 330,
+      },
+      t: (k) => k,
+      lang: 'en',
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(html).toContain('[111] Set 1 Golden Fried Chicken')
+    expect(html).toContain('Pickled Radish 30 g.')
+    expect(html).toContain('Tteokbokki')
+  })
+
+  it('GF-320 Grab Set 1 hall receipt shows Pickled Radish from promoItems sidedish choice', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'C022' },
+        { id: 20, name: 'GOLDEN FRIED CHICKEN', code: 'C020' },
+      ],
+      [{ name: 'S - Boneless', optionCode: 'C020-1' }],
+      [{ id: '1', name: '[111] Set 1', code: 'SET1', items: [] }]
+    )
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: 'GF-320',
+        storeCode: 'CM MBK',
+        orderType: 'delivery',
+        memo: 'grab_order:GF-320',
+        items: [
+          {
+            id: 'grab:320',
+            name: '[111] Set 1 Golden Fried Chicken',
+            price: 159,
+            qty: 1,
+            deliveryAppCode: 'grab',
+            note: 'eco:no plastic cutlery requested',
+            promoItems: [
+              { menuId: '22', menuName: 'Rice', quantity: 1 },
+              {
+                menuId: '20',
+                menuName: 'GOLDEN FRIED CHICKEN',
+                optionName: 'S - Boneless',
+                quantity: 1,
+              },
+              { menuId: '8', menuName: 'Pickled Radish 30 g.', quantity: 1 },
+            ],
+          },
+        ],
+        subtotal: 159,
+        discountAmt: 48,
+        total: 111,
+      },
+      t: (k) => k,
+      lang: 'en',
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    expect(html).toContain('Pickled Radish 30 g.')
+  })
+
   it('emphasizes channel order token (e.g. GF-268) only once on hall order receipt header', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {

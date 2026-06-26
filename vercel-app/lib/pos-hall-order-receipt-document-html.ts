@@ -11,6 +11,7 @@ import {
   translatePosCustomerMemoForReceipt,
 } from '@/lib/pos-member-portal-takeout-label'
 import {
+  collectGrabHallReceiptOptionLines,
   collectGrabPrintOptionLines,
   enrichGrabPromoItemsForPrint,
   formatGrabOptionFragmentForPrint,
@@ -645,11 +646,33 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
             )
           : ''
       const grabPrintNote = grabInbound ? resolveGrabItemPrintNote(it) : String(it.note ?? '')
+      const lineMainForPromo = lineSplit.mainName || lineName
+      const promoRows =
+        Array.isArray(it.promoItems) && it.promoItems.length > 0
+          ? enrichGrabPromoItemsForPrint(
+              it.promoItems.slice(0, 8).map((p) => ({
+                menuId: String(p.menuId || ''),
+                optionId: p.optionId,
+                optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
+                optionName: (p as { optionName?: string | null }).optionName ?? null,
+                menuName:
+                  String((p as { menuName?: unknown }).menuName ?? '').trim() ||
+                  (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : ''),
+                quantity: Math.max(1, Number(p.quantity) || 1),
+              })),
+              { optionNameByCode, menuCodeByMenuId }
+            )
+          : []
       const grabOptionLines = grabInbound
-        ? collectGrabPrintOptionLines({
+        ? collectGrabHallReceiptOptionLines({
             note: grabPrintNote,
             optionFragment: lineSplit.optionLine,
             optionNameByCode,
+            optionCode: (it as { optionCode?: string | null }).optionCode,
+            optionCode1: (it as { optionCode1?: string | null }).optionCode1,
+            optionCode2: (it as { optionCode2?: string | null }).optionCode2,
+            optionCodes: (it as { optionCodes?: string[] | null }).optionCodes,
+            promoRows,
           }).map((opt) => translatePosMenuLineForReceipt(opt, (k) => t(k)))
         : []
       const banbanFlavorLines = banban
@@ -671,23 +694,6 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
           normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       const rawLineNoteLabel = tr('posLineNote', '메모')
       const lineNoteLabel = /^item\s*note$/i.test(rawLineNoteLabel) ? 'Item' : rawLineNoteLabel
-      const lineMainForPromo = lineSplit.mainName || lineName
-      const promoRows =
-        Array.isArray(it.promoItems) && it.promoItems.length > 0
-          ? enrichGrabPromoItemsForPrint(
-              it.promoItems.slice(0, 8).map((p) => ({
-                menuId: String(p.menuId || ''),
-                optionId: p.optionId,
-                optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
-                optionName: (p as { optionName?: string | null }).optionName ?? null,
-                menuName:
-                  String((p as { menuName?: unknown }).menuName ?? '').trim() ||
-                  (typeof menuNameById === 'function' ? menuNameById(String(p.menuId || '')) : ''),
-                quantity: Math.max(1, Number(p.quantity) || 1),
-              })),
-              { optionNameByCode, menuCodeByMenuId }
-            )
-          : []
       const promoComposeLines =
         promoRows.length > 0
           ? promoRows.flatMap((p) => {

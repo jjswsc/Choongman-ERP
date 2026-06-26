@@ -532,6 +532,86 @@ export function appendGrabModsToGrabItemNote(parentNote: string, labels: string[
   return chunks.join(' · ')
 }
 
+export function grabPromoSnapshotIncludesModifierLabel(
+  promoItems: Array<Record<string, unknown>> | undefined,
+  label: string
+): boolean {
+  const nk = normalizePromoLookupText(label)
+  if (!nk) return false
+  for (const p of promoItems ?? []) {
+    for (const part of [p.menuName, p.optionName]) {
+      const pk = normalizePromoLookupText(String(part ?? ''))
+      if (!pk) continue
+      if (pk === nk || pk.includes(nk) || nk.includes(pk)) return true
+      if (isGrabSidedishOrExtraOptionLabel(label) && isGrabSidedishOrExtraOptionLabel(String(part ?? ''))) {
+        const pickled = /pickled|radish|단무지/.test(nk) && /pickled|radish|단무지/.test(pk)
+        const kimchi = /kimchi|김치/.test(nk) && /kimchi|김치/.test(pk)
+        if (pickled || kimchi) return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Grab ingest: choice_group 노트 정리 후에도 promoItems 에 없는 사이드(김치·단무지)는 mods 에 남긴다.
+ */
+export function ensureGrabSidedishModifiersPreservedInNote(params: {
+  allModifierLabels: string[]
+  modifierNamesForNote: string[]
+  promoItems?: Array<Record<string, unknown>>
+}): void {
+  const noteKeys = new Set(params.modifierNamesForNote.map((s) => s.toLowerCase()))
+  for (const raw of params.allModifierLabels) {
+    const lab = String(raw ?? '').trim()
+    if (!lab || !isGrabSidedishOrExtraOptionLabel(lab)) continue
+    if (noteKeys.has(lab.toLowerCase())) continue
+    if (grabPromoSnapshotIncludesModifierLabel(params.promoItems, lab)) continue
+    params.modifierNamesForNote.push(lab)
+    noteKeys.add(lab.toLowerCase())
+  }
+}
+
+/** Grab 홀 영수증: note·optc·promoItems 에서 사이드 등 부가 옵션 줄을 모은다 */
+export function collectGrabHallReceiptOptionLines(input: {
+  note?: string | null
+  optionFragment?: string | null
+  optionNameByCode?: Map<string, string> | Record<string, string>
+  optionCode?: string | null
+  optionCode1?: string | null
+  optionCode2?: string | null
+  optionCodes?: string[] | null
+  promoRows?: Array<{ menuName?: string | null; optionName?: string | null }>
+}): string[] {
+  const grabPrintNote = resolveGrabItemPrintNote({
+    note: input.note,
+    optionCode: input.optionCode,
+    optionCode1: input.optionCode1,
+    optionCode2: input.optionCode2,
+    optionCodes: input.optionCodes,
+  })
+  const out = collectGrabPrintOptionLines({
+    note: grabPrintNote,
+    optionFragment: input.optionFragment,
+    optionNameByCode: input.optionNameByCode,
+  })
+  const seen = new Set(out.map((s) => s.toLowerCase()))
+  const pushSidedish = (raw: string) => {
+    const s = String(raw ?? '').trim()
+    if (!s || isGrabExplicitSizeOrPartLabel(s)) return
+    const k = s.toLowerCase()
+    if (seen.has(k)) return
+    if (!isGrabSidedishOrExtraOptionLabel(s)) return
+    seen.add(k)
+    out.push(s)
+  }
+  for (const p of input.promoRows ?? []) {
+    pushSidedish(String(p.menuName ?? ''))
+    pushSidedish(String(p.optionName ?? ''))
+  }
+  return out
+}
+
 /** Grab 1회용 수저·포크 선택 — `eco:` note 청크 */
 export function isGrabEcoCutleryNoteChunk(chunk: string): boolean {
   return /^eco:/i.test(String(chunk ?? '').trim())
