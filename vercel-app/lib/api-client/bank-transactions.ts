@@ -382,6 +382,33 @@ export async function deleteBankAccount(params: { id: number }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface BankAccountAuditLogItem {
+  id: number
+  actionType: string
+  decision: string
+  reasonCode: string | null
+  accountId: number | null
+  accountStore: string
+  accountName: string
+  bankName: string
+  actorName: string
+  actorRole: string
+  actorStore: string
+  actorEmployeeId: number | null
+  actorEmployeeCode: string | null
+  payload: Record<string, unknown> | null
+  createdAt: string | null
+}
+
+export async function getBankAccountAuditLogs(params?: { store?: string; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.store) q.set('store', params.store)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const suffix = q.toString()
+  const res = await apiFetch(`/api/getBankAccountAuditLogs${suffix ? `?${suffix}` : ''}`)
+  return res.json() as Promise<{ success: boolean; list: BankAccountAuditLogItem[]; message?: string }>
+}
+
 export interface OpenReceivableForBankItem {
   id: number
   refType: string

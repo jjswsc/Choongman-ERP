@@ -202,6 +202,15 @@ export function canManageReceivablePayableAllStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
 }
 
+/** 통장 계좌 삭제·감사 로그 조회 (본사 + 회계직원) */
+export function canDeleteBankAccount(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role)
+}
+
+export function canViewBankAccountAuditLogs(role: string): boolean {
+  return canDeleteBankAccount(role)
+}
+
 /** 매출 관리·전체 매출에서 API 전체 매장 목록·다중 매장 필터 (본사·회계·본사 소속) */
 export function canSelectAllStoresForPosSalesManagement(role: string, store: string): boolean {
   return hasOfficeStaffScope(role, store)

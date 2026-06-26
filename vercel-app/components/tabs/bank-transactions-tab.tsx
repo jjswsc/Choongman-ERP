@@ -28,7 +28,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, canDeleteBankAccount, canViewBankAccountAuditLogs } from "@/lib/permissions"
 import {
   BANK_ACCOUNT_HQ_STORE_LABEL,
   bankAccountStoreKeysMatch,
@@ -49,6 +49,8 @@ import {
   type OpenReceivableForBankItem,
   saveBankAccount,
   deleteBankAccount,
+  getBankAccountAuditLogs,
+  type BankAccountAuditLogItem,
   getAccountSubjects,
   getVendorsForPurchase,
   getVendorsForSales,
@@ -123,6 +125,10 @@ import {
   resolveBankAdvanceTargetLabel,
   resolvePrepaymentAccountSubject,
 } from "@/lib/bank-advance-display"
+import {
+  resolveBankQueryFilterAccountSubjects,
+  resolveBankQueryFilterCategories,
+} from "@/lib/bank-query-filter-options"
 
 const BANK_EDIT_BTN_CN = `${ADMIN_BTN_XS_CN} shrink-0 h-7 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15`
 
@@ -277,6 +283,8 @@ export function BankTransactionsTab() {
   const { posStores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
+  const canDeleteBankAccountUi = canDeleteBankAccount(auth?.role || "")
+  const canViewBankAccountAuditUi = canViewBankAccountAuditLogs(auth?.role || "")
   const [accounts, setAccounts] = React.useState<{
     id: number
     name: string
@@ -337,6 +345,8 @@ export function BankTransactionsTab() {
   const [editAccountForm, setEditAccountForm] = React.useState<{ name: string; bankName: string; store: string; openingBalance: string; openingBalanceDate: string }>({ name: "", bankName: "", store: "", openingBalance: "", openingBalanceDate: "" })
   const [accountManageSaving, setAccountManageSaving] = React.useState(false)
   const [accountDeletingId, setAccountDeletingId] = React.useState<number | null>(null)
+  const [accountAuditLogs, setAccountAuditLogs] = React.useState<BankAccountAuditLogItem[]>([])
+  const [accountAuditLoading, setAccountAuditLoading] = React.useState(false)
 
   const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
   const [importRowEdits, setImportRowEdits] = React.useState<Record<number, BankImportRowEdit>>({})
@@ -902,6 +912,19 @@ export function BankTransactionsTab() {
   }, [auth?.store, auth?.role])
 
   React.useEffect(() => {
+    if (!accountManageOpen || !canViewBankAccountAuditUi) {
+      if (!accountManageOpen) setAccountAuditLogs([])
+      return
+    }
+    const storeFilter = isOffice ? "" : String(auth?.store || "").trim()
+    setAccountAuditLoading(true)
+    getBankAccountAuditLogs({ store: storeFilter || undefined, limit: 40 })
+      .then((r) => setAccountAuditLogs(r.list || []))
+      .catch(() => setAccountAuditLogs([]))
+      .finally(() => setAccountAuditLoading(false))
+  }, [accountManageOpen, auth?.store, canViewBankAccountAuditUi, isOffice])
+
+  React.useEffect(() => {
     if (accounts.length > 0 && !accountId) {
       setAccountId(String(accounts[0].id))
     }
@@ -1352,7 +1375,15 @@ export function BankTransactionsTab() {
   }
 
   const handleDeleteAccount = async (id: number) => {
-    if (!await appConfirm(t("bankAccountDeleteConfirm") || "All transactions linked to this account will be deleted. Continue?")) return
+    if (!canDeleteBankAccountUi) {
+      await appAlert(t("bankAccountDeleteOfficeOnly"))
+      return
+    }
+    const confirmMsg = [
+      t("bankAccountDeleteConfirm"),
+      t("bankAccountDeleteAuditNote"),
+    ].filter(Boolean).join("\n\n")
+    if (!await appConfirm(confirmMsg)) return
     setAccountDeletingId(id)
     try {
       const res = await deleteBankAccount({ id })
@@ -1363,6 +1394,12 @@ export function BankTransactionsTab() {
         else if (String(accountId) === String(id)) setAccountId("")
         setEditingAccountId(null)
         setAccountManageOpen(false)
+        if (canViewBankAccountAuditUi) {
+          const storeFilter = isOffice ? "" : String(auth?.store || "").trim()
+          getBankAccountAuditLogs({ store: storeFilter || undefined, limit: 40 })
+            .then((r) => setAccountAuditLogs(r.list || []))
+            .catch(() => {})
+        }
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
@@ -1545,41 +1582,25 @@ export function BankTransactionsTab() {
   const depositsHiddenByFilter =
     listTypeCounts.deposits > 0 && listTypeCounts.shownDeposits === 0 && listTypeCounts.shownTotal > 0
 
-  const listForCategoryOptions = React.useMemo(() => {
-    if (!filterTransType) return list
-    return list.filter((r) => r.transType === filterTransType)
-  }, [list, filterTransType])
+  const filterCategoryOptions = React.useMemo(
+    () => resolveBankQueryFilterCategories(filterTransType),
+    [filterTransType]
+  )
 
-  const listForAccountSubjectOptions = React.useMemo(() => {
-    if (!filterCategory) return listForCategoryOptions
-    return listForCategoryOptions.filter(
-      (r) => resolveBankRowCategory(r, r.id ? queryRowEdits[r.id] : undefined) === filterCategory
-    )
-  }, [listForCategoryOptions, filterCategory, queryRowEdits])
-
-  const filterTransTypeOptions = React.useMemo(() => {
-    const types = [...new Set(list.map((r) => r.transType).filter(Boolean))] as string[]
-    return types
-  }, [list])
-
-  const filterCategoryOptions = React.useMemo(() => {
-    const cats = [
-      ...new Set(
-        listForCategoryOptions
-          .map((r) => resolveBankRowCategory(r, r.id ? queryRowEdits[r.id] : undefined))
-          .filter(Boolean)
-      ),
-    ] as string[]
-    return cats.sort((a, b) => a.localeCompare(b))
-  }, [listForCategoryOptions, queryRowEdits])
-
-  const filterAccountSubjectOptionsFiltered = React.useMemo(() => {
-    const ids = new Set(listForAccountSubjectOptions.map((r) => r.accountSubjectId).filter((id) => id != null && id !== 0))
-    const all = [...accountSubjectOptions, ...revenueAccountOptions]
-    return all.filter((a) => ids.has(a.id))
-  }, [listForAccountSubjectOptions, accountSubjectOptions, revenueAccountOptions])
+  const filterAccountSubjectOptionsFiltered = React.useMemo(
+    () =>
+      resolveBankQueryFilterAccountSubjects({
+        filterTransType,
+        filterCategory,
+        accountSubjectOptions,
+        revenueAccountOptions,
+        prepaymentSubject,
+      }),
+    [filterTransType, filterCategory, accountSubjectOptions, revenueAccountOptions, prepaymentSubject]
+  )
 
   React.useEffect(() => {
+    if (list.length === 0) return
     if (
       filterCategory &&
       !list.some(
@@ -2229,8 +2250,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__all__">— {t("pettyColType") || "유형"}</SelectItem>
-                        {filterTransTypeOptions.includes("deposit") && <SelectItem value="deposit">{t("bankDeposit")}</SelectItem>}
-                        {filterTransTypeOptions.includes("withdraw") && <SelectItem value="withdraw">{t("bankWithdraw")}</SelectItem>}
+                        <SelectItem value="deposit">{t("bankDeposit")}</SelectItem>
+                        <SelectItem value="withdraw">{t("bankWithdraw")}</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select
@@ -3798,21 +3819,77 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           >
                             <PenLine className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
-                            onClick={() => handleDeleteAccount(a.id)}
-                            disabled={accountDeletingId !== null}
-                          >
-                            {accountDeletingId === a.id ? "..." : <Trash2 className="h-3.5 w-3.5" />}
-                          </Button>
+                          {canDeleteBankAccountUi ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
+                              onClick={() => handleDeleteAccount(a.id)}
+                              disabled={accountDeletingId !== null}
+                            >
+                              {accountDeletingId === a.id ? "..." : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </>
                   )}
                 </div>
               ))
+            )}
+            {!canDeleteBankAccountUi && accounts.length > 0 && (
+              <p className="text-xs text-amber-800 dark:text-amber-200">{t("bankAccountDeleteOfficeOnly")}</p>
+            )}
+            {canViewBankAccountAuditUi && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-xs font-medium">{t("bankAccountAuditTitle")}</p>
+                {accountAuditLoading ? (
+                  <p className="text-xs text-muted-foreground">...</p>
+                ) : accountAuditLogs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{t("bankAccountAuditEmpty")}</p>
+                ) : (
+                  <ul className="space-y-2 max-h-[220px] overflow-auto pr-1">
+                    {accountAuditLogs.map((log) => {
+                      const actionKey =
+                        log.actionType === "create"
+                          ? "bankAccountAuditActionCreate"
+                          : log.actionType === "update"
+                            ? "bankAccountAuditActionUpdate"
+                            : log.actionType === "delete_denied"
+                              ? "bankAccountAuditActionDeleteDenied"
+                              : "bankAccountAuditActionDelete"
+                      const payload = log.payload || {}
+                      const txCount = payload.transactionCount != null ? Number(payload.transactionCount) : null
+                      const actor = [log.actorName, log.actorRole ? `(${log.actorRole})` : null, log.actorStore ? `@ ${log.actorStore}` : null]
+                        .filter(Boolean)
+                        .join(" ")
+                      const at = log.createdAt
+                        ? new Date(log.createdAt).toLocaleString("sv-SE", { timeZone: "Asia/Bangkok", hour12: false }).replace("T", " ")
+                        : "—"
+                      const accountLabel = [log.bankName ? `[${log.bankName}]` : null, log.accountName || (log.accountId ? `#${log.accountId}` : null)]
+                        .filter(Boolean)
+                        .join(" ")
+                      return (
+                        <li key={log.id} className="text-xs rounded-md border px-2 py-1.5 space-y-0.5">
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-between">
+                            <span className="font-medium">{t(actionKey)}</span>
+                            <span className="text-muted-foreground tabular-nums">{at}</span>
+                          </div>
+                          <div className="text-muted-foreground">
+                            {accountLabel}
+                            {log.accountStore ? ` · ${log.accountStore}` : ""}
+                            {txCount != null && log.actionType === "delete" ? ` · ${txCount}${tt("receivPayCount", "건")}` : ""}
+                          </div>
+                          <div>{actor || "—"}</div>
+                          {log.decision === "deny" && log.reasonCode ? (
+                            <div className="text-amber-700 dark:text-amber-300">{log.reasonCode}</div>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
         </DialogContent>
