@@ -435,7 +435,7 @@ export default function PosPrintersPage() {
   const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
   const [receiptBizOwner, setReceiptBizOwner] = React.useState("")
   const [receiptBizAddress, setReceiptBizAddress] = React.useState("")
-  const [receiptShowBizInfo, setReceiptShowBizInfo] = React.useState(false)
+  const [receiptShowBizAddress, setReceiptShowBizAddress] = React.useState(false)
   const [receiptBizPhone, setReceiptBizPhone] = React.useState("")
   const [receiptDesignStyle, setReceiptDesignStyle] = React.useState<'badge' | 'simple'>('badge')
   const [receiptLogoSize, setReceiptLogoSize] = React.useState<'sm' | 'md' | 'lg'>('md')
@@ -625,7 +625,7 @@ export default function PosPrintersPage() {
     setReceiptBizAbn(String(settings.receiptBizAbn || ""))
     setReceiptBizOwner(String(settings.receiptBizOwner || ""))
     setReceiptBizAddress(String(settings.receiptBizAddress || ""))
-    setReceiptShowBizInfo(Boolean(settings.receiptShowBizInfo))
+    setReceiptShowBizAddress(Boolean(settings.receiptShowBizAddress))
     setReceiptBizPhone(String(settings.receiptBizPhone || ""))
     setReceiptDesignStyle(settings.receiptDesignStyle === "simple" ? "simple" : "badge")
     setReceiptLogoSize(
@@ -855,7 +855,7 @@ export default function PosPrintersPage() {
         receiptBizAbn,
         receiptBizOwner,
         receiptBizAddress,
-        receiptShowBizInfo,
+        receiptShowBizAddress,
         receiptBizPhone,
         receiptDesignStyle,
         receiptLogoSize,
@@ -1130,7 +1130,7 @@ export default function PosPrintersPage() {
           "receiptBizAbn",
           "receiptBizOwner",
           "receiptBizAddress",
-          "receiptShowBizInfo",
+          "receiptShowBizAddress",
           "receiptBizPhone",
           "deliveryFee",
           "packagingFee",
@@ -1422,14 +1422,12 @@ export default function PosPrintersPage() {
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "주문 유형"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
           </div>
           <div class="receipt-divider"></div>
-          ${receiptShowBizInfo && (receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ""}
-          ${receiptShowBizInfo && receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
-          ${receiptShowBizInfo && receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "사업자번호"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
-          ${receiptShowBizInfo && receiptBizAbn ? `<div class="biz-line">${escapeHtml(tr("posBizAbnLabel", "POS ID"))}: ${escapeHtml(receiptBizAbn)}</div>` : ""}
-          ${receiptShowBizInfo && receiptBizOwner ? `<div class="biz-line">${escapeHtml(tr("posOwner", "대표"))}: ${escapeHtml(receiptBizOwner)}</div>` : ""}
-          ${receiptShowBizInfo && receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
-          ${receiptShowBizInfo && receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "전화"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
-          ${receiptShowBizInfo && (receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? "</div>" : ""}
+          ${(receiptBizName || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) ? '<div class="text-xs receipt-muted">' : ""}
+          ${receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
+          ${receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "사업자번호"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
+          ${receiptShowBizAddress && receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
+          ${receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "전화"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
+          ${(receiptBizName || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) ? "</div>" : ""}
           <div class="receipt-divider-strong"></div>
           <div class="receipt-item-head"><span>${escapeHtml(tr("posMenuName", "품목"))}</span><span>${escapeHtml(tr("amount", "금액"))}</span></div>
           ${lines}
@@ -1456,7 +1454,7 @@ export default function PosPrintersPage() {
         </body>
       </html>
     `
-  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptShowBizInfo, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t])
+  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptShowBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t])
 
   const buildKitchenSlipHtmlForSlip = React.useCallback(
     (slip: { label: string; items: { name: string; qty: number; note?: string }[] }) => {
@@ -2270,16 +2268,10 @@ export default function PosPrintersPage() {
             <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-lg border p-4 space-y-3">
                 <p className="text-sm font-medium">{tr("posBizInfoTab", "사업자 정보")}</p>
-                <ToggleRow
-                  label={tr("posReceiptShowBizInfoLabel", "손님 영수증에 사업장 정보 인쇄")}
-                  value={receiptShowBizInfo}
-                  onChange={setReceiptShowBizInfo}
-                  t={t}
-                />
                 <p className="text-[11px] text-muted-foreground">
                   {tr(
-                    "posReceiptShowBizInfoHint",
-                    "기본은 끔(용지 절약). 상호·Tax ID·주소·연락처가 모두 인쇄됩니다. Tax Invoice 요청 시 별도 블록은 유지됩니다."
+                    "posBizInfoPrintHint",
+                    "간이 영수증에는 상호·Tax ID·전화번호가 항상 인쇄됩니다. 주소만 아래 토글로 선택할 수 있습니다."
                   )}
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -2307,6 +2299,20 @@ export default function PosPrintersPage() {
                 <div>
                   <label className="text-xs text-muted-foreground">{tr("posBizAddressLabel", "사업장 주소")}</label>
                   <Input value={receiptBizAddress} onChange={(e) => setReceiptBizAddress(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizAddressPh", "예: Bangkok ... ")} />
+                  <div className="mt-2">
+                    <ToggleRow
+                      label={tr("posReceiptShowBizAddressLabel", "손님 영수증에 사업장 주소 인쇄")}
+                      value={receiptShowBizAddress}
+                      onChange={setReceiptShowBizAddress}
+                      t={t}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {tr(
+                        "posReceiptShowBizAddressHint",
+                        "기본은 끔(용지 절약). Tax Invoice 요청 시에는 별도 블록에 주소를 반드시 입력·인쇄합니다."
+                      )}
+                    </p>
+                  </div>
                 </div>
                 <p className="text-[11px] text-muted-foreground">{tr("posBizInfoHint", "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다.")}</p>
               </div>
@@ -2576,13 +2582,11 @@ export default function PosPrintersPage() {
                     <div className="my-1 flex items-center justify-between"><span>{t("posOrderType") || "Order Type"}</span><span>{previewData.orderType}</span></div>
                   </div>
                   <div className="my-2 border-t border-dashed border-black" />
-                  {receiptShowBizInfo && (receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) && (
+                  {(receiptBizName || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) && (
                     <div className="space-y-0.5 text-black">
                       {receiptBizName && <div className="font-semibold">{receiptBizName}</div>}
                       {receiptBizTaxId && <div>{tr("posTaxIdLabel", "사업자번호")}: {receiptBizTaxId}</div>}
-                      {receiptBizAbn && <div>{tr("posBizAbnLabel", "POS ID")}: {receiptBizAbn}</div>}
-                      {receiptBizOwner && <div>{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
-                      {receiptBizAddress && <div>{receiptBizAddress}</div>}
+                      {receiptShowBizAddress && receiptBizAddress && <div>{receiptBizAddress}</div>}
                       {receiptBizPhone && <div>{tr("posTelLabel", "전화")}: {receiptBizPhone}</div>}
                     </div>
                   )}

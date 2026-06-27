@@ -131,7 +131,7 @@ export function posPrinterSettingsToSaveParams(
     receiptBizOwner: String(s.receiptBizOwner ?? "").trim(),
     receiptBizAddress: String(s.receiptBizAddress ?? "").trim(),
     receiptBizPhone: String(s.receiptBizPhone ?? "").trim(),
-    receiptShowBizInfo: Boolean(s.receiptShowBizInfo),
+    receiptShowBizAddress: Boolean(s.receiptShowBizAddress),
     receiptDesignStyle: (String(s.receiptDesignStyle || "badge") === "simple" ? "simple" : "badge") as "badge" | "simple",
     receiptLogoSize,
     receiptShowTitle: s.receiptShowTitle !== false,

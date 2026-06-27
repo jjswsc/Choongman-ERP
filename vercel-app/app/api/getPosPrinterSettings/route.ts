@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
     receiptBizOwner: '',
     receiptBizAddress: '',
     receiptBizPhone: '',
-    receiptShowBizInfo: false,
+    receiptShowBizAddress: false,
     receiptDesignStyle: 'badge' as const,
     receiptLogoSize: 'md' as const,
     receiptShowTitle: true,
@@ -406,7 +406,7 @@ export async function GET(request: NextRequest) {
       receiptBizOwner: String(raw?.receipt_biz_owner || '').trim() || fallback.receiptBizOwner,
       receiptBizAddress: String(raw?.receipt_biz_address || '').trim() || fallback.receiptBizAddress,
       receiptBizPhone: String(raw?.receipt_biz_phone || '').trim() || fallback.receiptBizPhone,
-      receiptShowBizInfo: Boolean(raw?.receipt_show_biz_info),
+      receiptShowBizAddress: Boolean(raw?.receipt_show_biz_address ?? raw?.receipt_show_biz_info),
       receiptDesignStyle: String(raw?.receipt_design_style || 'badge') === 'simple' ? 'simple' : 'badge',
       receiptLogoSize:
         String(raw?.receipt_logo_size || 'md') === 'sm'
