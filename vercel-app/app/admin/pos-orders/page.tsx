@@ -393,31 +393,30 @@ export default function PosOrdersPage() {
     }
     if (/^\d{4}-\d{2}-\d{2}$/.test(qAuditStart)) setAuditStartStr(qAuditStart)
     if (/^\d{4}-\d{2}-\d{2}$/.test(qAuditEnd)) setAuditEndStr(qAuditEnd)
-    setAuditEmployeeFilter(qAuditEmployee)
-    setAuditOrderNoFilter(qAuditOrderNo)
+    /** URL에 값이 있을 때만 반영. 감사로그 탭에서 미조회 입력 중 날짜 URL 갱신 시 필드가 비워지는 것 방지 */
+    if (qAuditEmployee) setAuditEmployeeFilter(qAuditEmployee)
+    else if (qTab !== "auditTrail") setAuditEmployeeFilter("")
+    if (qAuditOrderNo) setAuditOrderNoFilter(qAuditOrderNo)
+    else if (qTab !== "auditTrail") setAuditOrderNoFilter("")
   }, [searchParams])
 
-  React.useEffect(() => {
+  /** 감사로그 직원·주문번호는 입력마다 URL을 바꾸지 않음(router.replace 깜빡임 방지). [조회]/Enter 시에만 반영. */
+  const commitAuditFiltersToUrl = React.useCallback(() => {
     const next = new URLSearchParams(searchParams.toString())
-    const prevQs = searchParams.toString()
-    if (activeTab === "orders") next.delete("tab")
-    else next.set("tab", activeTab)
-
+    next.set("tab", "auditTrail")
     if (/^\d{4}-\d{2}-\d{2}$/.test(auditStartStr)) next.set("auditStart", auditStartStr)
     else next.delete("auditStart")
     if (/^\d{4}-\d{2}-\d{2}$/.test(auditEndStr)) next.set("auditEnd", auditEndStr)
     else next.delete("auditEnd")
-
     if (auditEmployeeFilter.trim()) next.set("auditEmployee", auditEmployeeFilter.trim())
     else next.delete("auditEmployee")
     if (auditOrderNoFilter.trim()) next.set("auditOrderNo", auditOrderNoFilter.trim())
     else next.delete("auditOrderNo")
-
     const nextQs = next.toString()
+    const prevQs = searchParams.toString()
     if (nextQs === prevQs) return
     router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false })
   }, [
-    activeTab,
     auditStartStr,
     auditEndStr,
     auditEmployeeFilter,
@@ -426,6 +425,29 @@ export default function PosOrdersPage() {
     router,
     pathname,
   ])
+
+  React.useEffect(() => {
+    const next = new URLSearchParams(searchParams.toString())
+    const prevQs = searchParams.toString()
+    if (activeTab === "orders") next.delete("tab")
+    else next.set("tab", activeTab)
+
+    if (activeTab === "auditTrail") {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(auditStartStr)) next.set("auditStart", auditStartStr)
+      else next.delete("auditStart")
+      if (/^\d{4}-\d{2}-\d{2}$/.test(auditEndStr)) next.set("auditEnd", auditEndStr)
+      else next.delete("auditEnd")
+    } else {
+      next.delete("auditStart")
+      next.delete("auditEnd")
+      next.delete("auditEmployee")
+      next.delete("auditOrderNo")
+    }
+
+    const nextQs = next.toString()
+    if (nextQs === prevQs) return
+    router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false })
+  }, [activeTab, auditStartStr, auditEndStr, searchParams, router, pathname])
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   /** 목록 API에 넘길 매장: 본사(오피스)는 선택값·「전체」는 미지정, 매니저/가맹점주 등은 로그인 매장 고정 */
@@ -1065,6 +1087,7 @@ export default function PosOrdersPage() {
       return
     }
     if (activeTab === "auditTrail") {
+      commitAuditFiltersToUrl()
       setHasSearchedAudit(true)
       loadAuditTrail()
       return
@@ -1074,6 +1097,7 @@ export default function PosOrdersPage() {
   }, [
     activeTab,
     loadAttempts,
+    commitAuditFiltersToUrl,
     loadAuditTrail,
     loadGrabIntegrations,
     loadOrders,
@@ -1101,6 +1125,7 @@ export default function PosOrdersPage() {
       const now = Date.now()
       if (e.key === "Enter") {
         e.preventDefault()
+        commitAuditFiltersToUrl()
         setHasSearchedAudit(true)
         loadAuditTrail()
         return
@@ -1123,7 +1148,7 @@ export default function PosOrdersPage() {
         auditEscArmedAtRef.current = now
       }
     },
-    [loadAuditTrail]
+    [commitAuditFiltersToUrl, loadAuditTrail]
   )
 
   const applyAuditQuickFilter = React.useCallback(
@@ -1134,6 +1159,18 @@ export default function PosOrdersPage() {
       setAuditQuickSearchTick((v) => v + 1)
     },
     []
+  )
+
+  const handleActiveTabChange = React.useCallback(
+    (v: string) => {
+      const tab = v as "orders" | "cookTime" | "linkposFailed" | "grabIntegration" | "auditTrail"
+      if (tab === "auditTrail") {
+        setAuditStartStr(startStr)
+        setAuditEndStr(endStr)
+      }
+      setActiveTab(tab)
+    },
+    [startStr, endStr]
   )
 
   const toggleAuditExpanded = React.useCallback((rowId: number) => {
@@ -1395,10 +1432,11 @@ export default function PosOrdersPage() {
     if (auditQuickSearchTick <= 0) return
     setHasSearchedAudit(true)
     const timer = window.setTimeout(() => {
+      commitAuditFiltersToUrl()
       loadAuditTrail()
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [activeTab, auditQuickSearchTick, loadAuditTrail])
+  }, [activeTab, auditQuickSearchTick, commitAuditFiltersToUrl, loadAuditTrail])
 
   React.useEffect(() => {
     getPosMenus({ fresh: true }).then(setMenus).catch(() => setMenus([]))
@@ -1593,35 +1631,37 @@ export default function PosOrdersPage() {
 
         <AdminFilterBar className="mb-4 flex-col items-stretch gap-0 overflow-hidden p-0">
           <div className="flex flex-wrap items-end gap-3 border-b border-border/60 p-4">
-            <AdminFilterField label={t("posFilterPeriod") || "조회 기간"}>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={startStr}
-                  onChange={(e) => setStartStr(e.target.value)}
-                  className="h-9 w-[9.5rem] text-sm"
-                />
-                <span className="text-muted-foreground">~</span>
-                <Input
-                  type="date"
-                  value={endStr}
-                  onChange={(e) => setEndStr(e.target.value)}
-                  className="h-9 w-[9.5rem] text-sm"
-                />
-                <Button
-                  variant={isToday ? "secondary" : "outline"}
-                  size="sm"
-                  className="h-9 px-3 text-xs"
-                  onClick={() => {
-                    const d = new Date().toISOString().slice(0, 10)
-                    setStartStr(d)
-                    setEndStr(d)
-                  }}
-                >
-                  {t("posToday") || "오늘"}
-                </Button>
-              </div>
-            </AdminFilterField>
+            {activeTab !== "auditTrail" ? (
+              <AdminFilterField label={t("posFilterPeriod") || "조회 기간"}>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={startStr}
+                    onChange={(e) => setStartStr(e.target.value)}
+                    className="h-9 w-[9.5rem] text-sm"
+                  />
+                  <span className="text-muted-foreground">~</span>
+                  <Input
+                    type="date"
+                    value={endStr}
+                    onChange={(e) => setEndStr(e.target.value)}
+                    className="h-9 w-[9.5rem] text-sm"
+                  />
+                  <Button
+                    variant={isToday ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-9 px-3 text-xs"
+                    onClick={() => {
+                      const d = new Date().toISOString().slice(0, 10)
+                      setStartStr(d)
+                      setEndStr(d)
+                    }}
+                  >
+                    {t("posToday") || "오늘"}
+                  </Button>
+                </div>
+              </AdminFilterField>
+            ) : null}
             {canSearchAll ? (
               <AdminFilterField label={t("store") || "매장"}>
                 <Select value={storeFilter} onValueChange={setStoreFilter}>
@@ -1785,7 +1825,7 @@ export default function PosOrdersPage() {
             {activeTab === "auditTrail" && (
               <>
                 <AdminFilterField label={t("posFilterPeriod") || "조회 기간"}>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Input
                       type="date"
                       value={auditStartStr}
@@ -1793,6 +1833,7 @@ export default function PosOrdersPage() {
                       onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditStartStr(""))}
                       className="h-9 w-[150px] text-sm"
                     />
+                    <span className="text-muted-foreground">~</span>
                     <Input
                       type="date"
                       value={auditEndStr}
@@ -1800,6 +1841,19 @@ export default function PosOrdersPage() {
                       onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEndStr(""))}
                       className="h-9 w-[150px] text-sm"
                     />
+                    <Button
+                      variant={
+                        auditStartStr === todayStr && auditEndStr === todayStr ? "secondary" : "outline"
+                      }
+                      size="sm"
+                      className="h-9 px-3 text-xs"
+                      onClick={() => {
+                        setAuditStartStr(todayStr)
+                        setAuditEndStr(todayStr)
+                      }}
+                    >
+                      {t("posToday") || "오늘"}
+                    </Button>
                   </div>
                 </AdminFilterField>
                 <AdminFilterField label={t("posAuditEmployeeFilter") || "직원"}>
@@ -1894,11 +1948,7 @@ export default function PosOrdersPage() {
           </div>
         )}
 
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed" | "grabIntegration" | "auditTrail")}
-          className={adminTabsRootCn}
-        >
+        <Tabs value={activeTab} onValueChange={handleActiveTabChange} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="orders" className={adminTabsTriggerCn}>

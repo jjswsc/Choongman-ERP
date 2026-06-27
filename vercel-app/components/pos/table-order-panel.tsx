@@ -1,5 +1,5 @@
 'use client'
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -432,16 +432,14 @@ export function TableOrderPanel({
         storeCode,
         onAlert: appAlert,
         onConfirm: appConfirm,
+        onPrompt: appPrompt,
         failMessageFallback: t('processFail') || '처리 실패',
+        i18n: {
+          reasonPrompt: t('posCancelReasonPrompt') || '취소 사유를 입력하세요 (2자 이상, 메모에 기록됩니다)',
+          reasonTooShort: t('posReceiptPayCorrectReasonShort') || '사유를 2자 이상 입력해 주세요.',
+        },
       })
-      if (!outcome.ok) {
-        if (outcome.message) {
-          await appAlert(
-            localizeApiMessage(outcome.message, t, t('processFail') || '처리 실패', lang)
-          )
-        }
-        return
-      }
+      if (!outcome.ok) return
       const oid = outcome.serverId ?? (posOrderHasServerId(order.id) ? Number(order.id) : 0)
       if (order.items.length > 0) {
         const kitchenLines = order.items.map((it) =>

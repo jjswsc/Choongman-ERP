@@ -947,15 +947,28 @@ export function hallOrderReceiptPayloadFromOrderFields(
   }
 }
 
-function checkoutPosItemsToReceiptLines(
-  items: Array<Record<string, unknown>> | unknown[]
-): ReceiptModalData['items'] {
+function checkoutPosItemsToReceiptLines(items: Array<Record<string, unknown>> | unknown[]) {
   return (items || []).map((raw) => {
     const it = (raw ?? {}) as Record<string, unknown>
     const qty = Math.max(1, resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }))
     const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
-    const menuId = String(it.menuId ?? it.menu_id ?? '').trim()
+    const menuId = String(it.menuId ?? it.menu_id ?? it.menuId1 ?? it.menu_id1 ?? '').trim()
     const note = String(it.note ?? '').trim()
+    const promoId = pickPromoIdFromOrderLine(it)
+    const promoCode = coerceNonEmptyId(it.promoCode) ?? coerceNonEmptyId(it.promo_code)
+    const optionId =
+      coerceNonEmptyId(it.optionId) ??
+      coerceNonEmptyId(it.option_id) ??
+      coerceNonEmptyId(it.optionId1) ??
+      coerceNonEmptyId(it.option_id1)
+    const optionCode =
+      coerceNonEmptyId(it.optionCode) ??
+      coerceNonEmptyId(it.option_code) ??
+      coerceNonEmptyId(it.optionCode1) ??
+      coerceNonEmptyId(it.option_code1)
+    /** 세트 구성(promoItems) 스냅샷 보존 — 누락 시 결제 직후 영수증이 카탈로그 재생성으로
+     *  choice group(사이드 등)을 빠뜨리고 옵션명도 기본값으로 바뀐다(SP-682 The Street). */
+    const directPromo = pickPromoItemsFromOrderLine(it)
     return {
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
@@ -964,6 +977,13 @@ function checkoutPosItemsToReceiptLines(
       ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
       ...(menuId ? { menuId } : {}),
       ...(note ? { note } : {}),
+      ...(promoId ? { promoId } : {}),
+      ...(promoCode ? { promoCode } : {}),
+      ...(optionId ? { optionId } : {}),
+      ...(optionCode ? { optionCode } : {}),
+      ...(directPromo && directPromo.length > 0
+        ? { promoItems: normalizeReceiptPromoLines(directPromo) }
+        : {}),
     }
   })
 }

@@ -12,14 +12,21 @@ export type PosFullCancelOutcome =
 
 type AlertFn = (message: string) => Promise<void>
 type ConfirmFn = (message: string) => Promise<boolean>
+type PromptFn = (message: string) => Promise<string | null | undefined>
+
+const DEFAULT_REASON_PROMPT = '취소 사유를 입력하세요 (2자 이상, 메모에 기록됩니다)'
+const DEFAULT_REASON_TOO_SHORT = '사유를 2자 이상 입력해 주세요.'
 
 export async function executePosFullOrderCancel(params: {
   order: Order
   storeCode: string
   onAlert: AlertFn
   onConfirm: ConfirmFn
+  onPrompt: PromptFn
   failMessageFallback: string
   i18n?: {
+    reasonPrompt?: string
+    reasonTooShort?: string
     retryConfirm?: string
     sideEffectLabels?: {
       stock?: string
@@ -29,7 +36,17 @@ export async function executePosFullOrderCancel(params: {
     postProcessSuffix?: (steps: string) => string
   }
 }): Promise<PosFullCancelOutcome> {
-  const { order, storeCode, onAlert, onConfirm, failMessageFallback, i18n } = params
+  const { order, storeCode, onAlert, onConfirm, onPrompt, failMessageFallback, i18n } = params
+
+  const reasonPrompt = i18n?.reasonPrompt || DEFAULT_REASON_PROMPT
+  const reasonTooShort = i18n?.reasonTooShort || DEFAULT_REASON_TOO_SHORT
+
+  const reasonRaw = await onPrompt(reasonPrompt)
+  const memoAppend = String(reasonRaw ?? '').trim()
+  if (memoAppend.length < 2) {
+    await onAlert(reasonTooShort)
+    return { ok: false, message: reasonTooShort }
+  }
 
   let resolved = await resolvePosOrderServerIdForAction(order, storeCode)
 
@@ -55,7 +72,7 @@ export async function executePosFullOrderCancel(params: {
     return { ok: false, message: '주문을 찾을 수 없습니다.' }
   }
 
-  const first = await updatePosOrderStatus({ id: serverId, status: 'cancelled' })
+  const first = await updatePosOrderStatus({ id: serverId, status: 'cancelled', memoAppend })
   if (first.success) {
     return { ok: true, serverId, localOnly: false, result: first }
   }
@@ -70,9 +87,7 @@ export async function executePosFullOrderCancel(params: {
     return { ok: false, message: msg }
   }
 
-  if (
-    !(await onConfirm(`${msg}\n\n${i18n?.retryConfirm || '후속 처리를 다시 시도할까요?'}`))
-  ) {
+  if (!(await onConfirm(`${msg}\n\n${i18n?.retryConfirm || '후속 처리를 다시 시도할까요?'}`))) {
     return { ok: false, message: msg }
   }
 
@@ -80,6 +95,7 @@ export async function executePosFullOrderCancel(params: {
     id: serverId,
     status: 'cancelled',
     retrySideEffects: true,
+    memoAppend,
   })
   if (!retried.success) {
     const retryMsg = buildPosStatusFailureMessage(retried, failMessageFallback, {
