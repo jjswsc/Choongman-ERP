@@ -261,6 +261,8 @@ export async function GET(request: NextRequest) {
       receipt_biz_owner?: string
       receipt_biz_address?: string
       receipt_biz_phone?: string
+      receipt_show_biz_address?: boolean
+      receipt_show_biz_info?: boolean
       receipt_design_style?: string
       receipt_logo_size?: string
       receipt_show_title?: boolean
