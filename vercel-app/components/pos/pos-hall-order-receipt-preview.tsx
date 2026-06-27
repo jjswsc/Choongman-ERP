@@ -3,10 +3,9 @@
 import type { ReactNode } from 'react'
 import { cn, formatBahtNum } from '@/lib/utils'
 import {
-  escapeHtmlReceiptEmphasizeChannelToken,
-  escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
   formatPosReceiptOrderNoDisplay,
   pickPosChannelOrderNo,
+  resolveReceiptTableForPrint,
 } from '@/lib/pos-delivery-platform'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -89,14 +88,20 @@ export function PosHallOrderReceiptPreview({
       : otKey === 'takeout'
         ? tr('posOrderTypeTakeout', 'Takeaway')
         : tr('posOrderTypeDineIn', 'Dine In'))
+  const channelOrderPick = pickPosChannelOrderNo({ tableName, orderNo, memo })
   const orderNoForPrint = formatPosReceiptOrderNoDisplay({
     posOrderNo: orderNo,
     tableName,
     memo,
   })
-  const tableDisplay = tableName ? translateReceiptTableDisplayName(tableName, t) : ''
+  const tableDisplay = tableName
+    ? resolveReceiptTableForPrint({
+        tableName,
+        channelPick: channelOrderPick,
+        translate: (raw) => translateReceiptTableDisplayName(raw, t),
+      })
+    : ''
   const guestN = Math.max(0, Math.min(99, Math.trunc(Number(guestCount ?? 0) || 0)))
-  const channelOrderPick = pickPosChannelOrderNo({ tableName, orderNo, memo })
   const posOrderNoDigits = formatPosOrderNoDigitsOnly(orderNo)
 
   return (
@@ -118,23 +123,8 @@ export function PosHallOrderReceiptPreview({
       </div>
       <div className="receipt-divider border-t border-dashed border-black" />
       <div className="text-xs">
-        {tableDisplay ? (
-          <MetaRow
-            label={tr('posTable', '테이블')}
-            value={escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableDisplay)}
-          />
-        ) : null}
+        {tableDisplay ? <MetaRow label={tr('posTable', '테이블')} value={tableDisplay} /> : null}
         {guestN > 0 ? <MetaRow label={tr('posOrderGuestCount', 'Guests')} value={String(guestN)} /> : null}
-        {channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim() ? (
-          <MetaRow
-            label={tr('posChannelOrderNo', '채널 주문번호')}
-            value={
-              <>
-                #<ChannelTokenEmphasis token={channelOrderPick.text.trim()} />
-              </>
-            }
-          />
-        ) : null}
         <MetaRow label={tr('date', 'Date')} value={formatPosDateTimeMedium(at, lang)} />
         {posOrderNoDigits ? (
           <MetaRow label={tr('posOrderNo', '주문번호')} value={posOrderNoDigits} />

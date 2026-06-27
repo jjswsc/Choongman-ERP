@@ -1,9 +1,9 @@
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { isLangCode } from '@/lib/lang-context'
 import {
-  escapeHtmlReceiptEmphasizeChannelToken,
-  formatPosReceiptOrderNoDisplay,
+  buildReceiptChannelOrderNoHeaderHtml,
   pickPosChannelOrderNo,
+  resolveReceiptTableForPrint,
 } from '@/lib/pos-delivery-platform'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -548,8 +548,17 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   }).format(new Date())
   const parsedMemo = parsePosOrderMemo(payload.memo)
   const c = (tag: string) => '\u003c/' + tag + '>'
+  const channelOrderPick = pickPosChannelOrderNo({
+    tableName: payload.tableName,
+    orderNo: payload.orderNo,
+    memo: payload.memo,
+  })
   const tableDisplay = payload.tableName
-    ? translateReceiptTableDisplayName(payload.tableName, (k) => t(k))
+    ? resolveReceiptTableForPrint({
+        tableName: payload.tableName,
+        channelPick: channelOrderPick,
+        translate: (raw) => translateReceiptTableDisplayName(raw, (k) => t(k)),
+      })
     : ''
   const tableRow = tableDisplay
     ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
@@ -568,21 +577,6 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         c('span') +
         '<span class="receipt-meta-value">' +
         esc(String(guestN)) +
-        c('span') +
-        c('div')
-      : ''
-  const channelOrderPick = pickPosChannelOrderNo({
-    tableName: payload.tableName,
-    orderNo: payload.orderNo,
-    memo: payload.memo,
-  })
-  const channelOrderNoRow =
-    channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim()
-      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
-        esc(tr('posChannelOrderNo', '채널 주문번호')) +
-        c('span') +
-        '<span class="receipt-meta-value">' +
-        esc('#' + channelOrderPick.text.trim()) +
         c('span') +
         c('div')
       : ''
@@ -816,15 +810,12 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     (payload.packagingFee ?? 0) > 0
       ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${formatBahtNum(payload.packagingFee ?? 0)}</span></div>`
       : ''
-  const orderNoForPrint = formatPosReceiptOrderNoDisplay({
+  const orderNoHeaderHtml = buildReceiptChannelOrderNoHeaderHtml({
     posOrderNo: payload.orderNo,
     tableName: payload.tableName,
     memo: payload.memo,
+    esc,
   })
-  const orderNoHeaderHtml =
-    channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim()
-      ? esc('#') + escapeHtmlReceiptEmphasizeChannelToken(channelOrderPick.text.trim())
-      : esc('#') + esc(orderNoForPrint)
   const printContent =
     '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-order-label">' +
     esc(tr('posOrderNo', '주문')) +
@@ -838,7 +829,6 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '<div class="text-xs">' +
     tableRow +
     guestRow +
-    channelOrderNoRow +
     dateRow +
     posOrderNoRow +
     c('div') +

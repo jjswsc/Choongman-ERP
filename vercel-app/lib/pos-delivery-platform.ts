@@ -123,6 +123,76 @@ export function formatPosReceiptOrderNoDisplay(args: {
  * 채널 주문번호 토큰만 크게(2em). HTML 이스케이프 후 `.receipt-delivery-channel-no` span으로 감쌈.
  * `.receipt-delivery-channel-no`는 `pos-receipt-html` 등 영수증 CSS에 정의.
  */
+function escapeRegexForChannelToken(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** 상단에 이미 채널 주문번호가 있을 때 테이블 라벨에서 `#GF-636` 등 중복 토큰 제거 */
+export function stripRedundantChannelOrderNoFromTableDisplay(
+  tableLine: string,
+  channelToken: string
+): string {
+  const token = String(channelToken ?? '').trim()
+  let s = String(tableLine ?? '').trim()
+  if (!s || !token) return s
+  const pattern = new RegExp(`#\\s*${escapeRegexForChannelToken(token)}`, 'gi')
+  s = s.replace(pattern, '')
+  s = s.replace(/\s*·\s*·+/g, ' · ')
+  s = s.replace(/^\s*·\s*/g, '')
+  s = s.replace(/\s*·\s*$/g, '')
+  return s.replace(/\s{2,}/g, ' ').trim()
+}
+
+/** 배달앱 이름만 남은 테이블 라벨은 인쇄 생략(채널 번호는 상단 헤더에만) */
+export function isMeaningfulReceiptTableDisplay(display: string): boolean {
+  const s = String(display ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+  if (!s) return false
+  return !/^(grab|line\s*man|lineman|shopee\s*food|shopeefood|shopee)(\s*·\s*(delivery|deliver|pickup|take\s*out|takeout))?$/iu.test(
+    s
+  )
+}
+
+/** 채널 주문번호 dedupe 후 테이블(배달 라벨) 표시 문자열. 빈 문자열이면 행 생략 */
+export function resolveReceiptTableForPrint(args: {
+  tableName?: string
+  channelPick: PosChannelOrderNoPick
+  translate?: (raw: string) => string
+}): string {
+  const raw = String(args.tableName ?? '').trim()
+  if (!raw) return ''
+  let s = args.translate ? args.translate(raw) : raw
+  if (args.channelPick.kind !== 'pos_order' && args.channelPick.text.trim()) {
+    s = stripRedundantChannelOrderNoFromTableDisplay(s, args.channelPick.text)
+  }
+  return isMeaningfulReceiptTableDisplay(s) ? s : ''
+}
+
+/** 영수증·홀주문서 상단 주문번호 HTML — 채널 번호는 `.receipt-delivery-channel-no`(2em) */
+export function buildReceiptChannelOrderNoHeaderHtml(args: {
+  posOrderNo: string
+  tableName?: string
+  memo?: string
+  esc: (s: string) => string
+}): string {
+  const pick = pickPosChannelOrderNo({
+    tableName: args.tableName,
+    orderNo: args.posOrderNo,
+    memo: args.memo ?? '',
+  })
+  if (pick.kind !== 'pos_order' && pick.text.trim()) {
+    return args.esc('#') + escapeHtmlReceiptEmphasizeChannelToken(pick.text.trim())
+  }
+  return args.esc(
+    formatPosReceiptOrderNoDisplay({
+      posOrderNo: args.posOrderNo,
+      tableName: args.tableName,
+      memo: args.memo,
+    })
+  )
+}
+
 export function escapeHtmlReceiptEmphasizeChannelToken(token: string): string {
   const rest = String(token ?? '')
     .trim()

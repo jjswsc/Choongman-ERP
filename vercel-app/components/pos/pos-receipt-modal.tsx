@@ -248,6 +248,8 @@ export function PosReceiptModal({
       ...kitchenPromoLineEnrich,
       menus,
       optionNameByCode,
+      memo: receiptData.memo,
+      deliveryAppCode: receiptData.deliveryAppCode,
     })
     const isHallOrderPrint =
       receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'

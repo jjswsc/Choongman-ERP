@@ -19,9 +19,12 @@ import {
 } from '@/lib/pos-banban-utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
+  buildReceiptChannelOrderNoHeaderHtml,
   formatPosReceiptOrderNoDisplay,
+  pickPosChannelOrderNo,
   resolvePosReceiptOrderNoRaw,
   resolveReceiptDeliveryPaymentChannelCode,
+  resolveReceiptTableForPrint,
 } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
@@ -304,6 +307,7 @@ export type PosPaymentReceiptDesignResolved = {
   receiptBizOwner: string
   receiptBizAddress: string
   receiptBizPhone: string
+  receiptShowBizInfo: boolean
   receiptLogoSize: 'sm' | 'md' | 'lg'
   receiptShowTitle: boolean
   receiptShowPaidStamp: boolean
@@ -333,6 +337,7 @@ const DEFAULT_DESIGN: PosPaymentReceiptDesignResolved = {
   receiptBizOwner: '',
   receiptBizAddress: '',
   receiptBizPhone: '',
+  receiptShowBizInfo: false,
   receiptLogoSize: 'md',
   receiptShowTitle: true,
   receiptShowPaidStamp: true,
@@ -369,6 +374,7 @@ export function resolvePaymentReceiptDesign(
     receiptBizOwner: String(s?.receiptBizOwner ?? ''),
     receiptBizAddress: String(s?.receiptBizAddress ?? ''),
     receiptBizPhone: String(s?.receiptBizPhone ?? ''),
+    receiptShowBizInfo: Boolean(s?.receiptShowBizInfo),
     receiptLogoSize: logoSize,
     receiptShowTitle: s?.receiptShowTitle !== false,
     receiptShowPaidStamp: s?.receiptShowPaidStamp !== false,
@@ -486,9 +492,24 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     deliveryAppCode: receiptData.deliveryAppCode,
     items: receiptData.items,
   })
+  const channelOrderPick = pickPosChannelOrderNo({
+    tableName: receiptData.tableName,
+    orderNo: receiptData.orderNo,
+    memo: receiptData.memo,
+  })
   const tableForPrint = receiptData.tableName
-    ? translateReceiptTableDisplayName(receiptData.tableName, t)
+    ? resolveReceiptTableForPrint({
+        tableName: receiptData.tableName,
+        channelPick: channelOrderPick,
+        translate: (raw) => translateReceiptTableDisplayName(raw, t),
+      })
     : ''
+  const orderNoHeaderHtml = buildReceiptChannelOrderNoHeaderHtml({
+    posOrderNo: receiptData.orderNo,
+    tableName: receiptData.tableName,
+    memo: receiptData.memo,
+    esc,
+  })
   const parsedMemo = parsePosOrderMemo(receiptData.memo)
   const { plainMemo: plainMemoForPrint, splitBadgeLabel } = extractDutchSplitBadgeFromMemo(parsedMemo.plainMemo)
   const taxInvoice = parsedMemo.taxInvoice
@@ -496,6 +517,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const logoUrl = d.receiptLogoImageUrl || `${origin}/company-stamp.png`
   const isPaymentReceipt =
     !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
+  const showBizOnReceipt = isPaymentReceipt && d.receiptShowBizInfo
   const voidMode = Boolean(receiptData.voidReceiptMode)
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
@@ -649,7 +671,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
                 const optName =
                   String((pi as { optionName?: unknown }).optionName ?? '').trim() ||
-                  (optCode && !grabInbound
+                  (optCode
                     ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
                     : '')
                 return formatGrabPromoComposeLinesForPrint(
@@ -770,7 +792,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             ? `<div class="simple-tax-subtitle">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>`
             : ''
         }
-        <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: <span class="receipt-order-no-print">${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</span></div>
+        <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${orderNoHeaderHtml}</div>
         <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
         ${
           posOrderNoDigits
@@ -779,9 +801,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         }
         <div class="simple-line"><b>${esc(tr('posOrderType', 'Order Type'))}</b>: ${esc(orderTypeLabel)}</div>
         ${tableForPrint ? `<div class="simple-line"><b>${esc(tr('posTable', '테이블'))}</b>: ${esc(tableForPrint)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         ${taxInvoice ? buildPosTaxInvoiceThermalHtml({ taxInvoice, esc, tr }) : ''}
         ${voidBannerHtml}
         <div class="simple-divider"></div>
@@ -864,7 +886,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="text-xs">
           ${receiptMetaRowHtml(
             esc(tr('posOrderNo', '주문번호')),
-            `<span class="receipt-order-no-print">${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</span>`
+            orderNoHeaderHtml
           )}
           ${
             tableForPrint
@@ -887,19 +909,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         </div>
         <div class="receipt-divider"></div>
         ${
-          isPaymentReceipt &&
+          showBizOnReceipt &&
           (d.receiptBizName || d.receiptBizTaxId || d.receiptBizAbn || d.receiptBizOwner || d.receiptBizAddress || d.receiptBizPhone)
             ? '<div class="text-xs receipt-muted receipt-biz-wrap">'
             : ''
         }
-        ${isPaymentReceipt && d.receiptBizName ? `<div class="receipt-biz" style="color:#000;font-weight:600">${esc(d.receiptBizName)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(d.receiptBizTaxId)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizAbn ? `<div class="receipt-biz">${esc(tr('posBizAbnLabel', 'POS ID'))}: ${esc(d.receiptBizAbn)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizOwner ? `<div class="receipt-biz">${esc(tr('posOwner', '대표'))}: ${esc(d.receiptBizOwner)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizAddress ? `<div class="receipt-biz">${esc(d.receiptBizAddress)}</div>` : ''}
-        ${isPaymentReceipt && d.receiptBizPhone ? `<div class="receipt-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizName ? `<div class="receipt-biz" style="color:#000;font-weight:600">${esc(d.receiptBizName)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(d.receiptBizTaxId)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizAbn ? `<div class="receipt-biz">${esc(tr('posBizAbnLabel', 'POS ID'))}: ${esc(d.receiptBizAbn)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizOwner ? `<div class="receipt-biz">${esc(tr('posOwner', '대표'))}: ${esc(d.receiptBizOwner)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizAddress ? `<div class="receipt-biz">${esc(d.receiptBizAddress)}</div>` : ''}
+        ${showBizOnReceipt && d.receiptBizPhone ? `<div class="receipt-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         ${
-          isPaymentReceipt &&
+          showBizOnReceipt &&
           (d.receiptBizName || d.receiptBizTaxId || d.receiptBizAbn || d.receiptBizOwner || d.receiptBizAddress || d.receiptBizPhone)
             ? '</div>'
             : ''
@@ -961,7 +983,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
                     const optName =
                       String((pi as { optionName?: unknown }).optionName ?? '').trim() ||
-                      (optCode && !grabInbound
+                      (optCode
                         ? formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
                         : '')
                     return formatGrabPromoComposeLinesForPrint(

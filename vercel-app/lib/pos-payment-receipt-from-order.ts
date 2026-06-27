@@ -312,10 +312,26 @@ export function enrichPromoMenuNamesFromLineNote(
   })
 }
 
-/** 카탈로그 id-only 줄 + mergeSetChildrenForReceipt 이름 줄이 섞이면 이름 있는 줄만 남긴다 */
-function preferNamedReceiptPromoItems(promoItems: ReceiptPromoLine[]): ReceiptPromoLine[] {
-  const named = promoItems.filter((p) => String(p.menuName ?? '').trim())
-  return named.length > 0 ? named : promoItems
+/** merge 로 같은 menuId·옵션이 id-only·이름 줄로 중복될 때만 이름 있는 쪽 유지(id-only 유일 구성은 제거하지 않음) */
+function dedupeReceiptPromoItemsPreferNamedDuplicate(promoItems: ReceiptPromoLine[]): ReceiptPromoLine[] {
+  const byKey = new Map<string, ReceiptPromoLine>()
+  for (const p of promoItems) {
+    const menuId = String(p.menuId ?? '').trim()
+    const optKey =
+      String(p.optionId ?? '').trim() ||
+      String(p.optionCode ?? '').trim() ||
+      String(p.optionName ?? '').trim().toLowerCase()
+    const key = menuId ? `${menuId}::${optKey}` : `name::${String(p.menuName ?? '').trim().toLowerCase()}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, p)
+      continue
+    }
+    const existingNamed = String(existing.menuName ?? '').trim()
+    const curNamed = String(p.menuName ?? '').trim()
+    if (!existingNamed && curNamed) byKey.set(key, { ...existing, ...p })
+  }
+  return Array.from(byKey.values())
 }
 
 /** 프로모 카탈로그(서버 조인 menuName 포함) 에서 menuId → menuName 맵 구성 — 매장 스코프 무관 fallback */
@@ -600,7 +616,10 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
  */
 export function enrichReceiptModalItemsForPromoDisplay(
   items: ReceiptModalData['items'],
-  opts?: PosOrderReceiptLineOptions
+  opts?: PosOrderReceiptLineOptions & {
+    memo?: string | null
+    deliveryAppCode?: string | null
+  }
 ): ReceiptModalData['items'] {
   const enriched = enrichPosOrderLikeItemsWithPromoSnapshot(
     items as unknown as Record<string, unknown>[],
@@ -609,15 +628,21 @@ export function enrichReceiptModalItemsForPromoDisplay(
   const merged = mergeSetChildrenForReceipt(
     enriched as Parameters<typeof mergeSetChildrenForReceipt>[0],
     {
-      grabInbound: isGrabInboundPosOrder({ items: enriched }),
+      grabInbound: isGrabInboundPosOrder({
+        memo: opts?.memo,
+        deliveryAppCode: opts?.deliveryAppCode,
+        items: enriched,
+      }),
       optionNameByCode: opts?.optionNameByCode,
     }
   )
   return merged.map((it) => {
     const pi = (it as { promoItems?: ReceiptPromoLine[] }).promoItems
     if (!Array.isArray(pi) || pi.length === 0) return it
-    const coalesced = preferNamedReceiptPromoItems(pi)
-    return coalesced === pi ? it : { ...it, promoItems: coalesced }
+    const coalesced = dedupeReceiptPromoItemsPreferNamedDuplicate(pi)
+    return coalesced.length === pi.length && coalesced.every((row, i) => row === pi[i])
+      ? it
+      : { ...it, promoItems: coalesced }
   }) as ReceiptModalData['items']
 }
 

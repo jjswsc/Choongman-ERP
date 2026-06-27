@@ -676,6 +676,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const itemsForReceipt = enrichReceiptModalItemsForPromoDisplay(receiptData.items, {
         ...posReceiptLineOptsKitchen,
         optionNameByCode,
+        memo: receiptData.memo,
+        deliveryAppCode: receiptData.deliveryAppCode,
       })
       const fullHtml = buildPosHallOrderReceiptDocumentHtml({
         payload: {

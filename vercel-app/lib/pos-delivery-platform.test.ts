@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   isApiInboundDeliveryOrderMemo,
+  isMeaningfulReceiptTableDisplay,
   pickPosChannelOrderNo,
   resolveDefaultDeliveryPaymentChannel,
   resolveDeliveryPaymentChannelForSave,
   resolveReceiptDeliveryPaymentChannelCode,
+  resolveReceiptTableForPrint,
+  stripRedundantChannelOrderNoFromTableDisplay,
 } from '@/lib/pos-delivery-platform'
 
 describe('isApiInboundDeliveryOrderMemo', () => {
@@ -19,6 +22,52 @@ describe('isApiInboundDeliveryOrderMemo', () => {
     expect(isApiInboundDeliveryOrderMemo('  ')).toBe(false)
     expect(isApiInboundDeliveryOrderMemo('ไม่เผ็ด ห้ามถั่ว')).toBe(false)
     expect(isApiInboundDeliveryOrderMemo('Grab #123 ลูกค้ารอหน้าร้าน')).toBe(false)
+  })
+})
+
+describe('stripRedundantChannelOrderNoFromTableDisplay', () => {
+  it('removes #token from table label when header already shows channel no', () => {
+    expect(stripRedundantChannelOrderNoFromTableDisplay('Grab #GF-636 · Delivery · Name', 'GF-636')).toBe(
+      'Grab · Delivery · Name'
+    )
+    expect(stripRedundantChannelOrderNoFromTableDisplay('Grab #GF-636', 'GF-636')).toBe('Grab')
+  })
+})
+
+describe('resolveReceiptTableForPrint', () => {
+  it('omits table row when only platform name remains after dedupe', () => {
+    const pick = pickPosChannelOrderNo({
+      tableName: 'Grab #GF-636',
+      orderNo: 'POS-1',
+      memo: 'grab_order:GF-636',
+    })
+    expect(
+      resolveReceiptTableForPrint({
+        tableName: 'Grab #GF-636',
+        channelPick: pick,
+      })
+    ).toBe('')
+  })
+  it('keeps customer context without channel token', () => {
+    const pick = pickPosChannelOrderNo({
+      tableName: 'Grab #GF-636 · Delivery · Somchai',
+      orderNo: 'POS-1',
+      memo: 'grab_order:GF-636',
+    })
+    expect(
+      resolveReceiptTableForPrint({
+        tableName: 'Grab #GF-636 · Delivery · Somchai',
+        channelPick: pick,
+      })
+    ).toBe('Grab · Delivery · Somchai')
+  })
+})
+
+describe('isMeaningfulReceiptTableDisplay', () => {
+  it('treats platform-only labels as not worth printing', () => {
+    expect(isMeaningfulReceiptTableDisplay('Grab')).toBe(false)
+    expect(isMeaningfulReceiptTableDisplay('Grab · Delivery')).toBe(false)
+    expect(isMeaningfulReceiptTableDisplay('Grab · Delivery · Somchai')).toBe(true)
   })
 })
 

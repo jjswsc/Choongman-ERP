@@ -748,9 +748,32 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
       lang: 'th',
     })
     expect(html.match(/class="receipt-delivery-channel-no"/g)?.length ?? 0).toBe(1)
-    expect(html).toContain('Grab #GF-268')
+    expect(html.match(/GF-268/g)?.length ?? 0).toBe(1)
+    expect(html).not.toContain('posChannelOrderNo')
     expect(html).toContain('receipt-delivery-channel-no">GF-268</span>')
     expect(html).not.toContain('receipt-delivery-channel-no">Grab')
+  })
+
+  it('keeps Grab delivery context on hall receipt table row without repeating channel no', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '20260608033',
+        storeCode: 'CM Test',
+        orderType: 'delivery',
+        tableName: 'Grab #GF-636 · Delivery · Somchai · ID BUANUTVT',
+        memo: 'grab_order:GF-636',
+        items: [{ id: '1', name: 'Set 2', price: 189, qty: 1 }],
+        subtotal: 189,
+        discountAmt: 0,
+        total: 189,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html.match(/GF-636/g)?.length ?? 0).toBe(1)
+    expect(html).toContain('Somchai')
+    expect(html).toContain('BUANUTVT')
+    expect(html).not.toContain('Grab #GF-636')
   })
 
   it('replaces promo placeholder code with menu name on hall order receipt', () => {

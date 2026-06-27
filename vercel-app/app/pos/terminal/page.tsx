@@ -3832,11 +3832,42 @@ export default function PosTerminalPage() {
         return mergeGrabSetChildLinesIntoPromoParents(
           base as Parameters<typeof mergeGrabSetChildLinesIntoPromoParents>[0],
           grabCatalogForPrint
-        ).filter((it) => !(it as { grabSetChild?: boolean }).grabSetChild)
+        ) as typeof base
       })()
+      const enrichedItems = enrichPosOrderLikeItemsWithPromoSnapshot(itemsBase, posReceiptLineOpts)
+        .filter((it) => !(it as { grabSetChild?: boolean }).grabSetChild)
+        .map((it) => {
+          const promoItems = Array.isArray(it.promoItems)
+            ? enrichPromoItemsWithOptionName(
+                it.promoItems as {
+                  menuId: string
+                  optionId: string | null
+                  optionCode?: string | null
+                  quantity: number
+                }[]
+              )
+            : undefined
+          return {
+            ...it,
+            note: resolveGrabItemPrintNote({
+              note: String(it.note ?? ''),
+              optionCode: String((it as { optionCode?: string }).optionCode ?? '').trim() || undefined,
+              optionCode1: String((it as { optionCode1?: string }).optionCode1 ?? '').trim() || undefined,
+              optionCode2: String((it as { optionCode2?: string }).optionCode2 ?? '').trim() || undefined,
+              optionCodes: Array.isArray((it as { optionCodes?: string[] }).optionCodes)
+                ? (it as { optionCodes?: string[] }).optionCodes
+                : undefined,
+            }),
+            ...(promoItems ? { promoItems } : {}),
+          }
+        })
       const enriched = {
         ...dataForPrint,
-        items: enrichReceiptModalItemsForPromoDisplay(itemsBase, posReceiptLineOpts),
+        items: enrichReceiptModalItemsForPromoDisplay(enrichedItems, {
+          ...posReceiptLineOpts,
+          memo: dataForPrint.memo,
+          deliveryAppCode: dataForPrint.deliveryAppCode,
+        }),
       }
       const receiptHtml = buildPosPaymentReceiptDocumentHtml({
         receiptData: enriched,
@@ -7195,7 +7226,11 @@ export default function PosTerminalPage() {
         )
         const receiptData = {
           ...receiptBase,
-          items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, posReceiptLineOpts),
+          items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, {
+            ...posReceiptLineOpts,
+            memo: receiptBase.memo,
+            deliveryAppCode: receiptBase.deliveryAppCode,
+          }),
         }
         const receiptHtml = buildPosPaymentReceiptDocumentHtml({
           receiptData,

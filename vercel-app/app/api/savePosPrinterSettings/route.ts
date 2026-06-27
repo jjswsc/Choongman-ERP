@@ -235,6 +235,7 @@ export async function POST(req: NextRequest) {
     const receiptBizOwner = String(body?.receiptBizOwner ?? '').trim()
     const receiptBizAddress = String(body?.receiptBizAddress ?? '').trim()
     const receiptBizPhone = String(body?.receiptBizPhone ?? '').trim()
+    const receiptShowBizInfo = Boolean(body?.receiptShowBizInfo)
     const receiptDesignStyle = String(body?.receiptDesignStyle || 'badge') === 'simple' ? 'simple' : 'badge'
     const receiptLogoSizeRaw = String(body?.receiptLogoSize || 'md')
     const receiptLogoSize = receiptLogoSizeRaw === 'sm' ? 'sm' : receiptLogoSizeRaw === 'lg' ? 'lg' : 'md'
@@ -412,6 +413,7 @@ export async function POST(req: NextRequest) {
       receipt_biz_owner: receiptBizOwner,
       receipt_biz_address: receiptBizAddress,
       receipt_biz_phone: receiptBizPhone,
+      receipt_show_biz_info: receiptShowBizInfo,
       receipt_design_style: receiptDesignStyle,
       receipt_logo_size: receiptLogoSize,
       receipt_show_title: receiptShowTitle,

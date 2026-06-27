@@ -89,6 +89,8 @@ export interface PosPrinterSettings {
   receiptBizOwner?: string
   receiptBizAddress?: string
   receiptBizPhone?: string
+  /** true일 때만 손님 영수증에 상호·Tax ID·주소·연락처 등 사업장 정보 인쇄 (기본 off) */
+  receiptShowBizInfo?: boolean
   receiptDesignStyle?: 'badge' | 'simple'
   receiptLogoSize?: 'sm' | 'md' | 'lg'
   receiptShowTitle?: boolean
@@ -268,6 +270,8 @@ export async function savePosPrinterSettings(params: {
   receiptBizOwner?: string
   receiptBizAddress?: string
   receiptBizPhone?: string
+  /** true일 때만 손님 영수증에 상호·Tax ID·주소·연락처 등 사업장 정보 인쇄 (기본 off) */
+  receiptShowBizInfo?: boolean
   receiptDesignStyle?: 'badge' | 'simple'
   receiptLogoSize?: 'sm' | 'md' | 'lg'
   receiptShowTitle?: boolean
