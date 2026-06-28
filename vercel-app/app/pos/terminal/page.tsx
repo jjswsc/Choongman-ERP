@@ -142,7 +142,7 @@ import {
 import { escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
-import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
+import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import {
@@ -1290,6 +1290,35 @@ export default function PosTerminalPage() {
     return request
   }, [currentStoreId])
 
+  const kitchenSlipOrderTypeLabel = useCallback(
+    (
+      ctx: {
+        orderType?: string
+        tableName?: string
+        orderNo?: string
+        memo?: string
+        deliveryAppCode?: string
+        items?: Array<{ deliveryAppCode?: string } | Record<string, unknown>>
+      },
+      ki: ReturnType<typeof kitchenSlipPrintI18n>
+    ) =>
+      resolveKitchenSlipOrderTypeLabel(
+        {
+          orderType: ctx.orderType,
+          tableName: ctx.tableName,
+          orderNo: ctx.orderNo,
+          memo: ctx.memo,
+          deliveryAppCode: ctx.deliveryAppCode,
+          itemDeliveryAppCodes: ctx.items?.map(
+            (it) => (it as { deliveryAppCode?: string }).deliveryAppCode
+          ),
+        },
+        ki,
+        deliveryAppsFromApi
+      ),
+    [deliveryAppsFromApi]
+  )
+
   const printKitchenFromPosOrder = useCallback(
     async (
       order: PosOrder,
@@ -1330,8 +1359,7 @@ export default function PosTerminalPage() {
         const tablePart = order.tableName
           ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
           : ''
-        const orderTypeLabel =
-          ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
+        const orderTypeLabel = kitchenSlipOrderTypeLabel(order, ki)
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
           orderNo: order.orderNo ?? '',
@@ -1374,6 +1402,7 @@ export default function PosTerminalPage() {
       getPrinterSettingsForStore,
       kitchenItemsWithResolvedPromo,
       kitchenSlipItemsForPrint,
+      kitchenSlipOrderTypeLabel,
       lang,
       optionNameByCode,
       prepareOrderItemsForKitchenPrint,
@@ -2314,10 +2343,7 @@ export default function PosTerminalPage() {
               label: slip.label,
               orderNo,
               storeCode: printSettingsStoreCode,
-              orderTypeLabel:
-                ki.orderTypeLabels[normalizePosOrderTypeKey(orderTypeKey)] ||
-                ki.orderTypeLabels.dine_in ||
-                '매장',
+              orderTypeLabel: kitchenSlipOrderTypeLabel({ orderType: orderTypeKey }, ki),
               tablePart: tablePartR,
               dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
               items: kitchenSlipItemsForPrint(
@@ -2463,8 +2489,7 @@ export default function PosTerminalPage() {
               const tablePart = order.tableName
                 ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                 : ''
-              const orderTypeLabel =
-                ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
+              const orderTypeLabel = kitchenSlipOrderTypeLabel(order, ki)
               const html = buildKitchenSlipDocumentHtml({
                 label: slip.label,
                 orderNo: order.orderNo ?? '',
@@ -2648,8 +2673,7 @@ export default function PosTerminalPage() {
                       const tablePart = order.tableName
                         ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                         : ''
-                      const orderTypeLabel =
-                ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
+                      const orderTypeLabel = kitchenSlipOrderTypeLabel(order, ki)
                       const html = buildKitchenSlipDocumentHtml({
                         label: slip.label,
                         orderNo: order.orderNo ?? '',
@@ -4074,8 +4098,10 @@ export default function PosTerminalPage() {
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
           const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
-          const orderTypeLabelSlip =
-            ki.orderTypeLabels[normalizePosOrderTypeKey(channel)] || channel
+          const orderTypeLabelSlip = kitchenSlipOrderTypeLabel(
+            { orderType: channel, tableName, orderNo: orderNoStr, memo },
+            ki
+          )
           const tablePartR = tableName
             ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
             : ''
@@ -4243,8 +4269,17 @@ export default function PosTerminalPage() {
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
           const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
-          const otKey = normalizePosOrderTypeKey(po.orderType ?? channel)
-          const orderTypeLabelSlip = ki.orderTypeLabels[otKey] || orderTypeLabel
+          const orderTypeLabelSlip = kitchenSlipOrderTypeLabel(
+            {
+              orderType: po.orderType ?? channel,
+              tableName,
+              orderNo: orderNoStr,
+              memo,
+              deliveryAppCode: po.deliveryAppCode,
+              items: po.items,
+            },
+            ki
+          )
           const tablePartR = tableName
             ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
             : ''
@@ -4507,7 +4542,7 @@ export default function PosTerminalPage() {
                 label: slip.label,
                 orderNo,
                 storeCode,
-                orderTypeLabel: ki.orderTypeLabels[normalizePosOrderTypeKey(orderType)] || orderType,
+                orderTypeLabel: kitchenSlipOrderTypeLabel({ orderType, tableName, memo, orderNo }, ki),
                 tablePart: tablePartR,
                 dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                 items: kitchenSlipItemsForPrint(
@@ -5414,8 +5449,7 @@ export default function PosTerminalPage() {
                   const tablePart = order.tableName
                     ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                     : ''
-                  const orderTypeLabel =
-                ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
+                  const orderTypeLabel = kitchenSlipOrderTypeLabel(order, ki)
                   const html = buildKitchenSlipDocumentHtml({
                     label: slip.label,
                     orderNo: order.orderNo ?? '',
@@ -9960,9 +9994,16 @@ export default function PosTerminalPage() {
                       const tablePartR = payload.orderLabel
                         ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.orderLabel, ki.t)
                         : ''
-                      const orderTypeLabel =
-                        ki.orderTypeLabels[normalizePosOrderTypeKey(payload.orderType)] ||
-                        payload.orderType
+                      const orderTypeLabel = kitchenSlipOrderTypeLabel(
+                        {
+                          orderType: payload.orderType,
+                          tableName: payload.orderLabel,
+                          orderNo,
+                          memo: memoWithKbank,
+                          items: itemsForKitchen,
+                        },
+                        ki
+                      )
                       const printOne = (idx: number) => {
                         if (idx >= slips.length) return
                         const slip = slips[idx]

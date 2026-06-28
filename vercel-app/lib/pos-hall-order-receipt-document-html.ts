@@ -2,6 +2,7 @@ import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { isLangCode } from '@/lib/lang-context'
 import {
   buildReceiptChannelOrderNoHeaderHtml,
+  formatPosPrintOrderTypeLabel,
   pickPosChannelOrderNo,
   resolveReceiptTableForPrint,
 } from '@/lib/pos-delivery-platform'
@@ -36,7 +37,6 @@ import {
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
-import { resolvePosOrderTypeReceiptLabel } from '@/lib/pos-sales-order-type-filter'
 import {
   expandBanbanComposeLineForPrint,
   filterReceiptOptionLinesForBanban,
@@ -111,6 +111,8 @@ export type HallOrderPayload = {
   orderType: string
   tableName?: string
   memo?: string
+  /** pos_orders.delivery_app_code — 배달 플랫폼(Grab 등) 표기용 */
+  deliveryAppCode?: string
   items: HallOrderItem[]
   subtotal: number
   discountAmt: number
@@ -599,7 +601,17 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         c('span') +
         c('div')
       : ''
-  const orderTypeLabelText = resolvePosOrderTypeReceiptLabel(payload.orderType, (k) => tr(k, ''))
+  const orderTypeLabelText = formatPosPrintOrderTypeLabel({
+    orderType: payload.orderType,
+    tableName: payload.tableName,
+    orderNo: payload.orderNo,
+    memo: payload.memo,
+    deliveryAppCode: payload.deliveryAppCode,
+    itemDeliveryAppCodes: (payload.items || []).map(
+      (it) => (it as { deliveryAppCode?: string }).deliveryAppCode
+    ),
+    t: (k) => tr(k, ''),
+  })
   const orderTypeChipInline =
     '<span class="receipt-order-type-chip receipt-order-type-chip--inline"> ' +
     esc(orderTypeLabelText) +

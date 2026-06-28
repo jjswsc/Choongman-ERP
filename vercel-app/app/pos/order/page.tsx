@@ -85,7 +85,7 @@ import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { buildPromoRegularPriceById } from "@/lib/pos-promo-cut-price"
 import { PosPromoCutPriceLabel } from "@/components/pos/pos-promo-cut-price-label"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
-import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
+import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from "@/lib/pos-kitchen-slip-print-i18n"
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -149,7 +149,6 @@ import {
 import type { PosOrderReceiptLineOptions } from "@/lib/pos-payment-receipt-from-order"
 import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-receipt-document-html"
 import { PosHallOrderReceiptPreview } from "@/components/pos/pos-hall-order-receipt-preview"
-import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { resolvePromoTileImageSrc } from "@/lib/pos-menu-display-image"
@@ -1729,8 +1728,19 @@ export default function PosOrderPage() {
           label: slip.label,
           orderNo: kitchenOrderNoRaw,
           storeCode: receiptData.storeCode,
-          orderTypeLabel:
-            ki.orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType,
+          orderTypeLabel: resolveKitchenSlipOrderTypeLabel(
+            {
+              orderType: receiptData.orderType,
+              tableName: receiptData.tableName,
+              orderNo: kitchenOrderNoRaw,
+              memo: receiptData.memo,
+              deliveryAppCode: (receiptData as { deliveryAppCode?: string }).deliveryAppCode,
+              itemDeliveryAppCodes: itemsForKitchen.map(
+                (it) => (it as { deliveryAppCode?: string }).deliveryAppCode
+              ),
+            },
+            ki
+          ),
           tablePart,
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
           printTrackingId,

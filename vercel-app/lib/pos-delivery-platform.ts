@@ -1,5 +1,9 @@
 import type { PosDeliveryApp } from '@/lib/api-client'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
+import {
+  normalizePosOrderTypeKey,
+  resolvePosOrderTypeReceiptLabel,
+} from '@/lib/pos-sales-order-type-filter'
 import { escapeHtml } from '@/lib/utils'
 
 export type PosChannelOrderNoPick =
@@ -287,4 +291,98 @@ export function resolveDeliveryPaymentChannelForSave(
   const resolved = resolveReceiptDeliveryPaymentChannelCode(ctx)
   if (CANON_RECEIPT_DELIVERY_CODES.has(resolved)) return resolved
   return 'grab'
+}
+
+/** grab / lineman / shopee 코드 → 인쇄용 표시명 */
+export function posDeliveryCodeToDisplayLabel(code: string | undefined | null): string {
+  const c = String(code ?? '').trim().toLowerCase()
+  if (!c) return ''
+  if (c === 'grab') return 'Grab'
+  if (c === 'lineman' || c === 'line_man') return 'Line Man'
+  if (c === 'shopee') return 'Shopee'
+  return ''
+}
+
+export type PosPrintOrderTypeContext = {
+  orderType?: string | null
+  tableName?: string | null
+  orderNo?: string | null
+  memo?: string | null
+  deliveryAppCode?: string | null
+  itemDeliveryAppCodes?: Array<string | null | undefined>
+}
+
+/** 홀 주문서·주방전·목록 등 — 배달 플랫폼 표시명(Grab / Line Man / Shopee) */
+export function resolvePosDeliveryPlatformDisplayName(
+  ctx: PosPrintOrderTypeContext,
+  deliveryApps?: PosDeliveryApp[]
+): string {
+  const fromStoredCode = posDeliveryCodeToDisplayLabel(ctx.deliveryAppCode)
+  if (fromStoredCode) return fromStoredCode
+  for (const it of ctx.itemDeliveryAppCodes ?? []) {
+    const label = posDeliveryCodeToDisplayLabel(it)
+    if (label) return label
+  }
+  const fromKeywords = getPosDeliveryPlatformName(
+    {
+      tableName: ctx.tableName ?? undefined,
+      orderNo: ctx.orderNo ?? undefined,
+      memo: ctx.memo ?? undefined,
+    },
+    deliveryApps
+  ).trim()
+  if (fromKeywords) return fromKeywords
+  const channelCode = resolveReceiptDeliveryPaymentChannelCode({
+    deliveryAppCode: ctx.deliveryAppCode,
+    tableName: ctx.tableName,
+    memo: ctx.memo,
+    orderNo: ctx.orderNo,
+    itemDeliveryAppCodes: ctx.itemDeliveryAppCodes,
+  })
+  return posDeliveryCodeToDisplayLabel(channelCode)
+}
+
+function isDeliveryOrderForPrintLabel(ctx: PosPrintOrderTypeContext): boolean {
+  const key = normalizePosOrderTypeKey(ctx.orderType)
+  if (key === 'delivery') return true
+  if (key === 'takeout' || key === 'dine_in') return false
+  if (resolvePosDeliveryPlatformDisplayName(ctx)) return true
+  return /(?:grab_order|lineman_order|shopee_order|sf_order):/i.test(String(ctx.memo ?? ''))
+}
+
+/**
+ * 홀 주문서·주방전 chip — 배달이면 `เดลิเวอรี่ · Shopee`처럼 플랫폼까지 표기.
+ * `orderType`이 이미 번역 문자열이어도 memo·table_name·deliveryAppCode로 배달·플랫폼을 추론한다.
+ */
+export function formatPosPrintOrderTypeLabel(
+  ctx: PosPrintOrderTypeContext & {
+    t: (key: string) => string
+    deliveryApps?: PosDeliveryApp[]
+    /** 주방전(admin) chip 끝에 ` · #채널번호` 추가 */
+    includeChannelSuffix?: boolean
+  }
+): string {
+  const orderTypeRaw = String(ctx.orderType ?? '').trim()
+  const typeKey = normalizePosOrderTypeKey(orderTypeRaw)
+  const base =
+    typeKey === 'delivery' || typeKey === 'takeout' || typeKey === 'dine_in'
+      ? resolvePosOrderTypeReceiptLabel(typeKey, ctx.t)
+      : orderTypeRaw || resolvePosOrderTypeReceiptLabel('dine_in', ctx.t)
+
+  const isDelivery = isDeliveryOrderForPrintLabel(ctx)
+  const isTakeout = typeKey === 'takeout'
+  const channelSuffix =
+    ctx.includeChannelSuffix && (isDelivery || isTakeout)
+      ? formatPosOrderTypeChannelSuffix({
+          tableName: ctx.tableName ?? undefined,
+          orderNo: ctx.orderNo ?? undefined,
+          memo: ctx.memo ?? undefined,
+        })
+      : ''
+
+  if (!isDelivery) return `${base}${channelSuffix}`
+
+  const platform = resolvePosDeliveryPlatformDisplayName(ctx, ctx.deliveryApps)
+  const mid = platform ? `${base} · ${platform}` : base
+  return `${mid}${channelSuffix}`
 }

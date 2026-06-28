@@ -76,7 +76,7 @@ import {
   PosTaxInvoiceValidationAlert,
 } from '@/components/pos/pos-tax-invoice-form-ui'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
-import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
+import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import { addDaysYmd, getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
@@ -961,7 +961,17 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           label: slip.label,
           orderNo: String(o.orderNo ?? ''),
           storeCode: store,
-          orderTypeLabel: ki.orderTypeLabels[normalizePosOrderTypeKey(o.orderType)] || o.orderType,
+          orderTypeLabel: resolveKitchenSlipOrderTypeLabel(
+            {
+              orderType: o.orderType,
+              tableName: o.tableName,
+              orderNo: o.orderNo,
+              memo: o.memo,
+              deliveryAppCode: o.deliveryAppCode,
+              itemDeliveryAppCodes: (o.items || []).map((it) => it.deliveryAppCode),
+            },
+            ki
+          ),
           tablePart,
           dateStr,
           printTrackingId,

@@ -94,7 +94,7 @@ import {
 } from "@/lib/admin-ui-standards"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { useErpActiveSubscription, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
-import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
+import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from "@/lib/pos-kitchen-slip-print-i18n"
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -927,20 +927,23 @@ export default function PosOrdersPage() {
         : ""
       const dateStr = o.createdAt ? formatPosDateTimeMedium(new Date(o.createdAt), ki.lang) : "—"
       let shellIssueDetected = false
-      const formatKitchenOrderType = () => {
-        const base = ki.orderTypeLabels[String(o.orderType || "").toLowerCase()] || String(o.orderType || "")
-        const channelSuffix =
-          o.orderType === "delivery" || o.orderType === "takeout" ? formatPosOrderTypeChannelSuffix(o) : ""
-        if (o.orderType !== "delivery") return `${base}${channelSuffix}`
-        const s = String(o.storeCode || "").trim()
-        const apps =
-          (s && deliveryAppsByStore[s]?.length ? deliveryAppsByStore[s] : null) ||
-          deliveryAppsByStore.__default__ ||
-          []
-        const platform = getPosDeliveryPlatformName(o, apps)
-        const mid = platform ? `${base} · ${platform}` : base
-        return `${mid}${channelSuffix}`
-      }
+      const storeApps =
+        (String(o.storeCode || "").trim() && deliveryAppsByStore[String(o.storeCode || "").trim()]?.length
+          ? deliveryAppsByStore[String(o.storeCode || "").trim()]
+          : null) || deliveryAppsByStore.__default__ || []
+      const kitchenOrderTypeLabel = resolveKitchenSlipOrderTypeLabel(
+        {
+          orderType: o.orderType,
+          tableName: o.tableName,
+          orderNo: o.orderNo,
+          memo: o.memo,
+          deliveryAppCode: o.deliveryAppCode,
+          itemDeliveryAppCodes: (o.items || []).map((it) => it.deliveryAppCode),
+        },
+        ki,
+        storeApps,
+        { includeChannelSuffix: true }
+      )
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
@@ -958,7 +961,7 @@ export default function PosOrdersPage() {
           label: slip.label,
           orderNo: String(o.orderNo ?? ""),
           storeCode,
-          orderTypeLabel: formatKitchenOrderType(),
+          orderTypeLabel: kitchenOrderTypeLabel,
           tablePart,
           dateStr,
             printTrackingId,

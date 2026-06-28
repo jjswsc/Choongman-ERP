@@ -537,12 +537,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [discountReason, setDiscountReason] = useState('')
   const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
-  /** 할인 금액 입력 중 결제 수단 자동 덮어쓰기 effect가 키보드 포커스를 끊지 않도록 */
-  const discountInputFocusedRef = useRef(false)
+  /** 결제 모달 금액·할인·포인트 입력 중 자동 합계 덮어쓰기 effect가 키보드 포커스를 끊지 않도록 */
+  const paymentAmountInputFocusedRef = useRef(false)
   const [discountPaymentSyncTick, setDiscountPaymentSyncTick] = useState(0)
   const bumpDiscountPaymentSync = useCallback(() => {
     setDiscountPaymentSyncTick((t) => t + 1)
   }, [])
+  const markPaymentAmountInputFocused = useCallback(() => {
+    paymentAmountInputFocusedRef.current = true
+  }, [])
+  const bindPaymentAmountInputFocus = useCallback(
+    (opts?: { syncPaymentOnBlur?: boolean }) => ({
+      onPointerDown: markPaymentAmountInputFocused,
+      onFocus: markPaymentAmountInputFocused,
+      onBlur: () => {
+        paymentAmountInputFocusedRef.current = false
+        if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
+      },
+    }),
+    [bumpDiscountPaymentSync, markPaymentAmountInputFocused]
+  )
   const triggerScanFieldFeedback = useCallback(
     (field: 'member' | 'coupon', outcome: 'success' | 'error') => {
       playPosScanBeep(outcome, lastScanBeepAtRef)
@@ -2887,7 +2901,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   // 협업·수동 할인 등으로 합계가 바뀌면 일반 결제(더치 아님)는 입력 금액을 새 합계로 덮어씀
   useEffect(() => {
     if (!showPaymentModal || total <= 0 || showSplit || splitPaidSteps > 0) return
-    if (discountInputFocusedRef.current) return
+    if (paymentAmountInputFocusedRef.current) return
     const newTotal = round2(total)
     resetPaymentInputs()
     if (activePaymentTab === 'cash') {
@@ -3854,7 +3868,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     const tick = window.setInterval(() => {
       if (couponQrScannerOpen) return
-      if (guestDirectOpen || editingNoteItemId || discountInputFocusedRef.current) return
+      if (guestDirectOpen || editingNoteItemId || paymentAmountInputFocusedRef.current) return
       if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
       const active = document.activeElement
       if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
@@ -4355,20 +4369,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 : (t('posDiscount') || '할인') + ' ฿'
             }
             value={discountValueInput}
-            onFocus={() => {
-              discountInputFocusedRef.current = true
-            }}
-            onBlur={() => {
-              discountInputFocusedRef.current = false
-              bumpDiscountPaymentSync()
-            }}
-            onChange={(e) =>
+            {...bindPaymentAmountInputFocus({ syncPaymentOnBlur: true })}
+            onChange={(e) => {
+              markPaymentAmountInputFocused()
               setDiscountValueInput(
                 discountType === 'percent'
                   ? formatIntegerInputDisplay(e.target.value, 3)
                   : formatBahtInputDisplay(e.target.value)
               )
-            }
+            }}
             className="h-11 min-w-[5.5rem] text-right text-sm font-semibold tabular-nums rounded-xl px-2.5"
           />
           <Input
@@ -5624,7 +5633,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     inputMode="numeric"
                     autoComplete="off"
                     value={pointUsed}
-                    onChange={(e) => setPointUsed(formatIntegerInputDisplay(e.target.value))}
+                    {...bindPaymentAmountInputFocus()}
+                    onChange={(e) => {
+                      markPaymentAmountInputFocused()
+                      setPointUsed(formatIntegerInputDisplay(e.target.value))
+                    }}
                     className="h-10 w-full max-w-[12rem] text-sm rounded-xl sm:w-auto"
                   />
                 </div>
@@ -5727,7 +5740,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     inputMode="decimal"
                     autoComplete="off"
                     value={value}
-                    onChange={(e) => set(formatBahtInputDisplay(e.target.value))}
+                    {...bindPaymentAmountInputFocus()}
+                    onChange={(e) => {
+                      markPaymentAmountInputFocused()
+                      set(formatBahtInputDisplay(e.target.value))
+                    }}
                     className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                   />
                   <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
@@ -5780,7 +5797,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               inputMode="decimal"
                               autoComplete="off"
                               value={cashTendered}
-                              onChange={(e) => setCashTendered(formatBahtInputDisplay(e.target.value))}
+                              {...bindPaymentAmountInputFocus()}
+                              onChange={(e) => {
+                                markPaymentAmountInputFocused()
+                                setCashTendered(formatBahtInputDisplay(e.target.value))
+                              }}
                               className="h-10 rounded-lg border-sky-300/70 bg-sky-50/60 text-right tabular-nums text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100"
                               placeholder="0"
                             />
@@ -5892,7 +5913,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           inputMode="decimal"
                           autoComplete="off"
                           value={payDeliveryApp}
-                          onChange={(e) => setPayDeliveryApp(formatBahtInputDisplay(e.target.value))}
+                          {...bindPaymentAmountInputFocus()}
+                          onChange={(e) => {
+                            markPaymentAmountInputFocused()
+                            setPayDeliveryApp(formatBahtInputDisplay(e.target.value))
+                          }}
                           className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                         />
                         <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
@@ -5989,12 +6014,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                   inputMode="decimal"
                                   autoComplete="off"
                                   value={payAdminLineAmounts[item.id] ?? '0'}
-                                  onChange={(e) =>
+                                  {...bindPaymentAmountInputFocus()}
+                                  onChange={(e) => {
+                                    markPaymentAmountInputFocused()
                                     setPayAdminLineAmounts((prev) => ({
                                       ...prev,
                                       [item.id]: formatBahtInputDisplay(e.target.value),
                                     }))
-                                  }
+                                  }}
                                   className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
                                 />
                                 <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
@@ -6049,7 +6076,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               inputMode="decimal"
                               autoComplete="off"
                               value={value}
-                              onChange={(e) => set(formatBahtInputDisplay(e.target.value))}
+                              {...bindPaymentAmountInputFocus()}
+                              onChange={(e) => {
+                                markPaymentAmountInputFocused()
+                                set(formatBahtInputDisplay(e.target.value))
+                              }}
                               className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
                             />
                             <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>

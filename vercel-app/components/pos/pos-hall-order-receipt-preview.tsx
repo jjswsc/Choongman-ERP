@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { cn, formatBahtNum } from '@/lib/utils'
 import {
+  formatPosPrintOrderTypeLabel,
   formatPosReceiptOrderNoDisplay,
   pickPosChannelOrderNo,
   resolveReceiptTableForPrint,
@@ -80,14 +81,18 @@ export function PosHallOrderReceiptPreview({
   }
   const parsedMemo = parsePosOrderMemo(memo)
   const at = printedAt && !Number.isNaN(printedAt.getTime()) ? printedAt : new Date()
-  const otKey = normalizePosOrderTypeKey(orderType)
-  const orderTypeLabelText =
-    orderTypeLabels[otKey] ||
-    (otKey === 'delivery'
-      ? tr('posOrderTypeDelivery', 'Delivery')
-      : otKey === 'takeout'
-        ? tr('posOrderTypeTakeout', 'Takeaway')
-        : tr('posOrderTypeDineIn', 'Dine In'))
+  const orderTypeLabelText = formatPosPrintOrderTypeLabel({
+    orderType,
+    tableName,
+    orderNo,
+    memo,
+    t: (k) => {
+      if (k === 'posOrderTypeDelivery') return orderTypeLabels.delivery || tr('posOrderTypeDelivery', 'Delivery')
+      if (k === 'posOrderTypeTakeout') return orderTypeLabels.takeout || tr('posOrderTypeTakeout', 'Takeaway')
+      if (k === 'posOrderTypeDineIn') return orderTypeLabels.dine_in || tr('posOrderTypeDineIn', 'Dine In')
+      return orderTypeLabels[normalizePosOrderTypeKey(k)] || tr(k, '')
+    },
+  })
   const channelOrderPick = pickPosChannelOrderNo({ tableName, orderNo, memo })
   const orderNoForPrint = formatPosReceiptOrderNoDisplay({
     posOrderNo: orderNo,

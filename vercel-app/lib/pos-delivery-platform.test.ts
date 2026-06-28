@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatPosPrintOrderTypeLabel,
   isApiInboundDeliveryOrderMemo,
   isMeaningfulReceiptTableDisplay,
   pickPosChannelOrderNo,
   resolveDefaultDeliveryPaymentChannel,
   resolveDeliveryPaymentChannelForSave,
+  resolvePosDeliveryPlatformDisplayName,
   resolveReceiptDeliveryPaymentChannelCode,
   resolveReceiptTableForPrint,
   stripRedundantChannelOrderNoFromTableDisplay,
@@ -154,5 +156,60 @@ describe('resolveDeliveryPaymentChannelForSave', () => {
         paymentDeliveryApp: 240,
       })
     ).toBe('shopee')
+  })
+})
+
+describe('formatPosPrintOrderTypeLabel', () => {
+  const t = (k: string) =>
+    k === 'posOrderTypeDelivery' ? 'Delivery' : k === 'posOrderTypeTakeout' ? 'Takeaway' : k
+
+  it('appends Shopee platform for sf_order webhook delivery', () => {
+    expect(
+      formatPosPrintOrderTypeLabel({
+        orderType: 'delivery',
+        tableName: 'ShopeeFood #2278',
+        memo: 'sf_order:778899',
+        t,
+      })
+    ).toBe('Delivery · Shopee')
+  })
+
+  it('appends Line Man from lineman_order memo anchor', () => {
+    expect(
+      formatPosPrintOrderTypeLabel({
+        orderType: 'delivery',
+        memo: 'lineman_order:lm-5768',
+        t,
+      })
+    ).toBe('Delivery · Line Man')
+  })
+
+  it('infers platform when orderType is already translated Thai label', () => {
+    expect(
+      formatPosPrintOrderTypeLabel({
+        orderType: 'เดลิเวอรี่',
+        tableName: 'ShopeeFood #2278',
+        memo: 'sf_order:778899',
+        t: (k) => (k === 'posOrderTypeDelivery' ? 'เดลิเวอรี่' : k),
+      })
+    ).toBe('เดลิเวอรี่ · Shopee')
+  })
+
+  it('can append channel suffix for kitchen slip', () => {
+    expect(
+      formatPosPrintOrderTypeLabel({
+        orderType: 'delivery',
+        tableName: 'ShopeeFood #2278',
+        memo: 'sf_order:778899',
+        t,
+        includeChannelSuffix: true,
+      })
+    ).toBe('Delivery · Shopee · #2278')
+  })
+})
+
+describe('resolvePosDeliveryPlatformDisplayName', () => {
+  it('reads deliveryAppCode on order', () => {
+    expect(resolvePosDeliveryPlatformDisplayName({ deliveryAppCode: 'lineman' })).toBe('Line Man')
   })
 })

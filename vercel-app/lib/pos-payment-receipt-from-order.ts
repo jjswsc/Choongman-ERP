@@ -833,6 +833,9 @@ export function hallOrderReceiptPayloadFromPosOrder(
     orderType: opts?.orderTypeLabel ?? String(order.orderType ?? ''),
     ...(order.tableName ? { tableName: String(order.tableName) } : {}),
     ...(order.memo ? { memo: String(order.memo) } : {}),
+    ...(String(order.deliveryAppCode ?? '').trim()
+      ? { deliveryAppCode: String(order.deliveryAppCode).trim() }
+      : {}),
     items: hallOrderItemsFromReceiptLines(lines),
     subtotal,
     discountAmt: effectiveDiscountAmt,

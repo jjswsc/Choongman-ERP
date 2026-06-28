@@ -259,6 +259,35 @@ describe('buildPosHallOrderReceiptDocumentHtml — discount row', () => {
 })
 
 describe('buildPosHallOrderReceiptDocumentHtml', () => {
+  it('shows delivery platform on order type chip for ShopeeFood webhook orders', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '20260628015',
+        storeCode: 'CM Silom',
+        orderType: 'delivery',
+        tableName: 'ShopeeFood #2278',
+        memo: 'sf_order:778899',
+        items: [{ id: '1', name: 'Snow Onion Chicken Dosirak', price: 129, qty: 1, deliveryAppCode: 'shopee' }],
+        subtotal: 129,
+        discountAmt: 0,
+        total: 129,
+      },
+      t: (k) =>
+        k === 'posOrderTypeDelivery'
+          ? 'Delivery'
+          : k === 'posOrderNo'
+            ? 'Order No'
+            : k === 'posMenuName'
+              ? 'Menu'
+              : k === 'amount'
+                ? 'Amount'
+                : k,
+      lang: 'en',
+    })
+    expect(html).toContain('receipt-order-type-chip')
+    expect(html).toContain('Delivery · Shopee')
+  })
+
   it('prints per-line and total discount for Shopee-style line discounts', () => {
     const html = buildPosHallOrderReceiptDocumentHtml({
       payload: {

@@ -10,7 +10,7 @@ import type { PosMenu } from '@/lib/api-client'
 import { useLang } from '@/lib/lang-context'
 import { tr as i18nTr } from '@/lib/i18n'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
-import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
+import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import {
   buildKitchenSlipDocumentHtml,
   resolveKitchenSlipDesign,
@@ -36,7 +36,6 @@ import {
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
-import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { Button } from '@/components/ui/button'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import {
@@ -479,8 +478,19 @@ export function PosReceiptModal({
           label: slip.label,
           orderNo: kitchenOrderNoRaw,
           storeCode: receiptData.storeCode,
-          orderTypeLabel:
-            ki.orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType,
+          orderTypeLabel: resolveKitchenSlipOrderTypeLabel(
+            {
+              orderType: receiptData.orderType,
+              tableName: receiptData.tableName,
+              orderNo: kitchenOrderNoRaw,
+              memo: receiptData.memo,
+              deliveryAppCode: receiptData.deliveryAppCode,
+              itemDeliveryAppCodes: itemsForKitchen.map(
+                (it) => (it as { deliveryAppCode?: string }).deliveryAppCode
+              ),
+            },
+            ki
+          ),
           tablePart,
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
           items: mapKitchenSlipGroupItemsForPrint(slip.items, {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  computePosPricing,
   resolveReceiptSubtotalPrintAmount,
   resolveTaxInvoiceReceiptVatBreakdown,
   resolveTaxInvoiceSubtotalBeforeVatForPrint,
@@ -68,5 +69,37 @@ describe('resolveReceiptSubtotalPrintAmount', () => {
         receiptTaxableGrossForDisplay: 2600,
       })
     ).toBe(2500)
+  })
+})
+
+describe('computePosPricing payment total rounding', () => {
+  it('rounds fractional final total to whole baht (KTC 10% collab case)', () => {
+    const pricing = computePosPricing({
+      subtotal: 1071,
+      discountAmt: 101.01,
+      adjustments: { vatRate: 7, vatMode: 'included' },
+    })
+    expect(pricing.baseTotal).toBe(969.99)
+    expect(pricing.finalTotal).toBe(970)
+    expect(pricing.receiptVatDisplayAmt).toBe(63)
+    expect(pricing.receiptExclusiveSubtotalDisplay).toBe(907)
+  })
+
+  it('keeps whole baht total unchanged', () => {
+    const pricing = computePosPricing({
+      subtotal: 1071,
+      discountAmt: 101,
+      adjustments: { vatRate: 7, vatMode: 'included' },
+    })
+    expect(pricing.finalTotal).toBe(970)
+  })
+
+  it('skips rounding when roundPaymentTotalToWholeBaht is false', () => {
+    const pricing = computePosPricing({
+      subtotal: 1071,
+      discountAmt: 101.01,
+      adjustments: { vatRate: 7, vatMode: 'included', roundPaymentTotalToWholeBaht: false },
+    })
+    expect(pricing.finalTotal).toBe(969.99)
   })
 })

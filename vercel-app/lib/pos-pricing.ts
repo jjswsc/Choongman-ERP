@@ -11,6 +11,12 @@ export interface PosPricingAdjustments {
   cardBaseMode?: PosCardFeeBaseMode
   otherRate?: number
   otherMode?: PosFeeMode
+  /**
+   * 결제·영수증·EDC 합계를 정수 바트(Math.round)로 맞춤.
+   * 미설정 시 true(태국 현장·카드 단말기 정수 승인과 일치).
+   * 플랫폼 웹훅 합계 등 소수 유지가 필요하면 false.
+   */
+  roundPaymentTotalToWholeBaht?: boolean
 }
 
 export interface PosPricingResult {
@@ -41,6 +47,17 @@ export interface PosPricingResult {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+/** POS 결제·영수증 최종 합계 — 정수 바트(태국 1฿ 단위) */
+export function roundPosPaymentTotalBaht(n: number): number {
+  const v = Number(n)
+  if (!Number.isFinite(v) || v <= 0) return 0
+  return Math.round(v)
+}
+
+function shouldRoundPaymentTotalToWholeBaht(adjustments?: PosPricingAdjustments): boolean {
+  return adjustments?.roundPaymentTotalToWholeBaht !== false
 }
 
 function toNonNegative(n: unknown): number {
@@ -224,15 +241,25 @@ export function computePosPricing(params: {
     (cardMode === 'separate' ? cardFeeAmt : 0) +
     (otherMode === 'separate' ? otherFeeAmt : 0)
   )
-  const finalTotal = round2(baseTotal + separateTotal)
+  let finalTotal = round2(baseTotal + separateTotal)
 
   let receiptExclusiveSubtotalDisplay: number | undefined
   let receiptVatDisplayAmt: number | undefined
-  if (vatMode === 'included' && vatRate > 0) {
-    const split = splitVatInclusiveBahtForReceipt(baseTotal, vatRate)
+  const vatDisplayAnchor = (anchorBaht: number) => {
+    if (vatMode !== 'included' || vatRate <= 0) return
+    const split = splitVatInclusiveBahtForReceipt(anchorBaht, vatRate)
     if (split) {
       receiptExclusiveSubtotalDisplay = split.exclusive
       receiptVatDisplayAmt = split.vat
+    }
+  }
+  vatDisplayAnchor(baseTotal)
+
+  if (shouldRoundPaymentTotalToWholeBaht(params.adjustments)) {
+    const roundedTotal = roundPosPaymentTotalBaht(finalTotal)
+    if (Math.abs(roundedTotal - finalTotal) > 0.0001) {
+      finalTotal = roundedTotal
+      vatDisplayAnchor(finalTotal)
     }
   }
 
