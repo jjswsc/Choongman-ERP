@@ -275,42 +275,50 @@ export function DeliveryOrderPanel({
     return rows
   }
 
+  /** 부모 줄·취소 — order 스냅샷만 (takeout/table과 동일). displayItems 변경 시 덮어쓰지 않음 */
   useEffect(() => {
     if (!order?.items?.length) {
       setItemPackaged({})
-      setItemChildPackaged({})
       setItemCancelled({})
-    } else {
-      setItemPackaged((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.servedAt)
-        })
-        return next
-      })
-      setItemChildPackaged((prev) => {
-        const next = { ...prev }
-        const enriched = displayItems.length ? displayItems : order.items
-        enriched.forEach((it) => {
-          const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
-          if (!childKeys.length) return
-          const childState = readPosSetChildrenState(it.setChildrenState)
-          childKeys.forEach((key) => {
-            const raw = childState[key]
-            const done = Boolean(String(raw?.packedAt ?? raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
-            next[childStateMapKey(it.id, key)] = done
-          })
-        })
-        return next
-      })
-      setItemCancelled((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.cancelledAt)
-        })
-        return next
-      })
+      return
     }
+    setItemPackaged((prev) => {
+      const next = { ...prev }
+      order.items.forEach((it) => {
+        next[it.id] = Boolean(it.servedAt)
+      })
+      return next
+    })
+    setItemCancelled((prev) => {
+      const next = { ...prev }
+      order.items.forEach((it) => {
+        next[it.id] = Boolean(it.cancelledAt)
+      })
+      return next
+    })
+  }, [order?.id, order?.items])
+
+  /** 세트 하위 포장 — 카탈로그 보강(displayItems) 반영 */
+  useEffect(() => {
+    if (!order?.items?.length) {
+      setItemChildPackaged({})
+      return
+    }
+    setItemChildPackaged((prev) => {
+      const next = { ...prev }
+      const enriched = displayItems.length ? displayItems : order.items
+      enriched.forEach((it) => {
+        const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
+        if (!childKeys.length) return
+        const childState = readPosSetChildrenState(it.setChildrenState)
+        childKeys.forEach((key) => {
+          const raw = childState[key]
+          const done = Boolean(String(raw?.packedAt ?? raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
+          next[childStateMapKey(it.id, key)] = done
+        })
+      })
+      return next
+    })
   }, [order?.id, order?.items, displayItems])
 
   useEffect(() => {

@@ -12,7 +12,6 @@ import {
   Trash2,
   Download,
   PauseCircle,
-  XCircle,
   CheckCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -253,13 +252,6 @@ export function WorklogApproval({ onPendingChange }: Props) {
   const handleHold = (id: string) => {
     if (!canEdit) return
     void patchStatus(id, "보류")
-  }
-
-  const handleReject = async (id: string) => {
-    if (!canEdit) return
-    const reason = await appPrompt(t("workLogRejectPrompt"), "")
-    if (reason === null) return
-    void patchStatus(id, "반려", reason)
   }
 
   const handleAddComment = async (id: string, existingComment?: string) => {
@@ -605,7 +597,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
                   <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
                     {t("workLogColWorkType")}
                   </th>
-                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">{t("workLogColContent")}</th>
+                  <th className="min-w-[320px] px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">{t("workLogColContent")}</th>
                   <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
                     {t("workLogPriority")}
                   </th>
@@ -615,7 +607,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
                   <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
                     {t("workLogColReviewStatus")}
                   </th>
-                  <th className="px-4 py-2 text-center text-[11px] font-bold text-muted-foreground">
+                  <th className="w-[4.75rem] px-2 py-2 text-center text-[11px] font-bold text-muted-foreground">
                     {t("workLogColAction")}
                   </th>
                 </tr>
@@ -655,7 +647,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
                           {getWorkTypeLabel(it.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-2 min-w-[200px] max-w-md">
+                      <td className="px-4 py-2 min-w-[320px]">
                         <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">
                           {getTransContent(it.content || "")}
                         </p>
@@ -695,37 +687,35 @@ export function WorklogApproval({ onPendingChange }: Props) {
                           {getReviewStatusLabel(it)}
                         </span>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="w-[4.75rem] px-2 py-2">
                         {canEdit ? (
-                          <div className="flex flex-wrap items-center justify-center gap-1">
-                            {isPending && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-success"
-                                onClick={() => handleConfirm(it.id)}
-                                disabled={updating === it.id}
-                                title={t("workLogConfirmBtn")}
-                              >
-                                ✓
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-primary"
-                              onClick={() => void handleAddComment(it.id, it.managerComment)}
-                              disabled={updating === it.id}
-                              title={t("workLogCommentBtn")}
-                            >
-                              <MessageSquarePlus className="h-3.5 w-3.5" />
-                            </Button>
-                            {isPending && (
+                          <div className="mx-auto grid w-fit grid-cols-2 gap-1">
+                            {isPending ? (
                               <>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 px-2 text-warning"
+                                  className="h-7 w-7 shrink-0 p-0 text-success"
+                                  onClick={() => handleConfirm(it.id)}
+                                  disabled={updating === it.id}
+                                  title={t("workLogConfirmBtn")}
+                                >
+                                  ✓
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 shrink-0 p-0 text-primary"
+                                  onClick={() => void handleAddComment(it.id, it.managerComment)}
+                                  disabled={updating === it.id}
+                                  title={t("workLogCommentBtn")}
+                                >
+                                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 shrink-0 p-0 text-warning"
                                   onClick={() => handleHold(it.id)}
                                   disabled={updating === it.id}
                                   title={t("workLogHoldBtn")}
@@ -735,25 +725,38 @@ export function WorklogApproval({ onPendingChange }: Props) {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 px-2 text-destructive"
-                                  onClick={() => void handleReject(it.id)}
+                                  className="h-7 w-7 shrink-0 p-0 text-destructive"
+                                  onClick={() => void handleDelete(it.id)}
                                   disabled={updating === it.id}
-                                  title={t("workLogRejectBtn")}
+                                  title={t("workLogDeleteBtn")}
                                 >
-                                  <XCircle className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 shrink-0 p-0 text-primary"
+                                  onClick={() => void handleAddComment(it.id, it.managerComment)}
+                                  disabled={updating === it.id}
+                                  title={t("workLogCommentBtn")}
+                                >
+                                  <MessageSquarePlus className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 shrink-0 p-0 text-destructive"
+                                  onClick={() => void handleDelete(it.id)}
+                                  disabled={updating === it.id}
+                                  title={t("workLogDeleteBtn")}
+                                >
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               </>
                             )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-destructive"
-                              onClick={() => void handleDelete(it.id)}
-                              disabled={updating === it.id}
-                              title={t("workLogDeleteBtn")}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
                           </div>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">—</span>
