@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   bankDepositNeedsReceivableOrderLink,
   bankDepositReceivableLinkPending,
+  buildReceivableLinkAllocations,
   computeReceivableOpenAmount,
   receivablePickTotalMatchesBank,
   sumOpenReceivablePickAmount,
+  sumReceivableLinkAllocation,
 } from '@/lib/bank-receivable-link'
 
 describe('bank-receivable-link', () => {
@@ -64,5 +66,44 @@ describe('bank-receivable-link', () => {
         sumOpenReceivablePickAmount(list, [1, 2, 3])
       )
     ).toBe(true)
+  })
+
+  it('allocates bank and credit across multiple invoices', () => {
+    const targets = [
+      { accrualId: 1, remaining: 100000 },
+      { accrualId: 2, remaining: 171025.94 },
+    ]
+    const parts = buildReceivableLinkAllocations({
+      bankAmt: 270752.94,
+      storeCreditApply: 273,
+      targets,
+      absorbShortfall: true,
+    })
+    const sum = sumReceivableLinkAllocation(parts)
+    expect(sum.fromBank).toBe(270752.94)
+    expect(sum.fromCredit).toBe(273)
+    expect(sum.total).toBe(271025.94)
+  })
+
+  it('pays full invoice when bank deposit is slightly larger', () => {
+    const parts = buildReceivableLinkAllocations({
+      bankAmt: 5042,
+      storeCreditApply: 0,
+      targets: [{ accrualId: 1, remaining: 5041.38 }],
+      absorbShortfall: true,
+    })
+    expect(parts[0]?.fromBank).toBe(5041.38)
+    expect(parts[0]?.fromRounding).toBe(0)
+  })
+
+  it('absorbs small shortfall on last invoice', () => {
+    const parts = buildReceivableLinkAllocations({
+      bankAmt: 100,
+      storeCreditApply: 0,
+      targets: [{ accrualId: 1, remaining: 100.5 }],
+      absorbShortfall: true,
+    })
+    expect(parts[0]?.fromBank).toBe(100)
+    expect(parts[0]?.fromRounding).toBe(0.5)
   })
 })

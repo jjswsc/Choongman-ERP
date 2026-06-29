@@ -622,7 +622,12 @@ export function ExpenseManagementTab() {
         await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         return
       }
-      await appAlert(res.message || `${res.deletedCount ?? 0}건 삭제되었습니다.`)
+      await appAlert(
+        tt("expensePlanDeletedCount", "{count} item(s) deleted.").replace(
+          "{count}",
+          String(res.deletedCount ?? 0)
+        )
+      )
       await loadPlans()
     } finally {
       setCleaningNoStore(false)
@@ -1013,7 +1018,9 @@ export function ExpenseManagementTab() {
                                 ) : !canApproveByPolicy(r) && r.status === "rejected" ? (
                                   <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
                                 ) : r.status === "planned" && !approvalEditById[r.id] && !canApproveByPolicy(r) ? (
-                                  <span className="text-xs text-muted-foreground">-</span>
+                                  <span className="text-[10px] text-muted-foreground text-center leading-tight px-0.5" title={tt("expensePayAwaitApprovalHint", "Pay appears after approval")}>
+                                    {tt("expensePayAwaitApprovalShort", "Pending")}
+                                  </span>
                                 ) : null}
                               </div>
                             </td>
@@ -1248,7 +1255,11 @@ export function ExpenseManagementTab() {
                                     )}
                                     {!canApproveByPolicy(r) && r.status === "approved" && <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>}
                                     {!canApproveByPolicy(r) && r.status === "rejected" && <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>}
-                                    {r.status === "planned" && !canApproveByPolicy(r) && !approvalEditById[r.id] && <span className="text-xs text-muted-foreground">-</span>}
+                                    {r.status === "planned" && !canApproveByPolicy(r) && !approvalEditById[r.id] && (
+                                      <span className="text-[10px] text-muted-foreground text-center leading-tight px-0.5" title={tt("expensePayAwaitApprovalHint", "Pay appears after approval")}>
+                                        {tt("expensePayAwaitApprovalShort", "Pending")}
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

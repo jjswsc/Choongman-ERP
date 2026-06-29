@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadOpenReceivablesForBankTx } from '@/lib/bank-receivable-link-server'
+import { sumStoreCreditAvailable } from '@/lib/bank-receivable-store-credit'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -45,7 +46,9 @@ export async function GET(request: NextRequest) {
     }
 
     const list = await loadOpenReceivablesForBankTx(bankRow)
-    return NextResponse.json({ success: true, list }, { headers })
+    const bankStore = String(bankRow.store_name || bankRow.store || '').trim()
+    const storeCreditAvailable = bankStore ? await sumStoreCreditAvailable(bankStore) : 0
+    return NextResponse.json({ success: true, list, storeCreditAvailable }, { headers })
   } catch (e) {
     console.error('getOpenReceivablesForBankTx:', e)
     return NextResponse.json(

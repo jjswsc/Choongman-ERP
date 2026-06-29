@@ -1,9 +1,17 @@
 import {
+  buildReceivableLinkAllocations,
   computeReceivableOpenAmount,
   isReceivableAccrualRefType,
   receivableStoreMatchesBank,
   roundReceivableMoney,
+  sumReceivableLinkAllocation,
 } from '@/lib/bank-receivable-link'
+import {
+  canApproveReceivableBankMismatch,
+  classifyReceivableBankLinkMismatch,
+  validateReceivableBankLinkRequest,
+} from '@/lib/bank-receivable-link-policy'
+import { consumeStoreCreditFifo, sumStoreCreditAvailable } from '@/lib/bank-receivable-store-credit'
 import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
 import {
   supabaseDeleteByFilter,
@@ -133,6 +141,11 @@ export async function loadOpenReceivablesForBankTx(bankRow: BankTxRow): Promise<
 export async function linkReceivableAccrualsFromBankTransaction(params: {
   bankTransactionId: number
   receivableAccrualIds: number[]
+  storeCreditApplyAmount?: number
+  mismatchNote?: string
+  mismatchReason?: string
+  approvedByUser?: string
+  auth?: { role?: string; canManageOfficePayroll?: boolean }
 }): Promise<{ ok: true } | { ok: false; message: string; status?: number }> {
   const bankTransactionId = Number(params.bankTransactionId || 0)
   const receivableAccrualIds = [
@@ -237,11 +250,126 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
   }
 
   if (Math.abs(bankAmt - selectedTotal) > 0.01) {
-    return {
-      ok: false,
-      message: `통장 금액(฿${bankAmt.toLocaleString()})과 선택한 미수 잔액 합계(฿${selectedTotal.toLocaleString()})가 일치해야 합니다.`,
-      status: 400,
+    const storeCreditApply = roundReceivableMoney(
+      Math.max(0, Number(params.storeCreditApplyAmount) || 0)
+    )
+    const canApprove = canApproveReceivableBankMismatch({
+      role: params.auth?.role,
+      canManageOfficePayroll: params.auth?.canManageOfficePayroll,
+    })
+    const validation = validateReceivableBankLinkRequest({
+      bankAmt,
+      selectedTotal,
+      storeCreditApply,
+      mismatchNote: params.mismatchNote,
+      mismatchReason: params.mismatchReason,
+      canApproveMismatch: canApprove,
+    })
+    if (!validation.ok) {
+      return { ok: false, message: validation.message, status: 400 }
     }
+
+    if (storeCreditApply > 0.009) {
+      const available = await sumStoreCreditAvailable(bankStore)
+      if (storeCreditApply > available + 0.01) {
+        return {
+          ok: false,
+          message: `매장 선수금 잔액(฿${available.toLocaleString()})보다 많이 적용할 수 없습니다.`,
+          status: 400,
+        }
+      }
+    }
+
+    const { kind } = classifyReceivableBankLinkMismatch(bankAmt, selectedTotal, storeCreditApply)
+    const absorbShortfall = kind !== 'exact'
+    const allocations = buildReceivableLinkAllocations({
+      bankAmt,
+      storeCreditApply,
+      targets: linkTargets.map((t) => ({ accrualId: t.accrualId, remaining: t.remaining })),
+      absorbShortfall,
+    })
+    const allocSum = sumReceivableLinkAllocation(allocations)
+    if (Math.abs(allocSum.total - selectedTotal) > 0.02) {
+      return {
+        ok: false,
+        message: '차액 배분 계산이 맞지 않습니다. 선수금 적용액 또는 선택 인보이스를 확인하세요.',
+        status: 400,
+      }
+    }
+
+    await supabaseDeleteByFilter(
+      'receivable_transactions',
+      `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive`
+    )
+
+    const transDate = String(bankRow.trans_date || '').slice(0, 10)
+    const mismatchTag = params.mismatchNote
+      ? ` [차액:${validation.gap >= 0 ? '+' : ''}${validation.gap}] ${String(params.mismatchNote).trim()}`
+      : params.mismatchReason
+        ? ` [차액사유:${params.mismatchReason}]`
+        : ''
+    const approverTag = params.approvedByUser ? ` 승인:${params.approvedByUser}` : ''
+
+    for (let i = 0; i < linkTargets.length; i++) {
+      const { accrualId, accrual } = linkTargets[i]!
+      const alloc = allocations[i]!
+      const label = String(accrual.invoice_no || accrual.memo || '').trim()
+      const baseMemo = label ? `통장 수금 ${label}` : '통장 수금'
+
+      if (alloc.fromBank > 0.009) {
+        await supabaseInsert('receivable_transactions', {
+          store_name: String(accrual.store_name || bankStore),
+          amount: -roundReceivableMoney(alloc.fromBank),
+          ref_type: 'Receive',
+          ref_id: accrualId,
+          trans_date: transDate,
+          memo: `${baseMemo}${mismatchTag}${approverTag}`.slice(0, 240),
+          receive_checked: false,
+          bank_transaction_id: bankTransactionId,
+        })
+      }
+      if (alloc.fromCredit > 0.009) {
+        await supabaseInsert('receivable_transactions', {
+          store_name: String(accrual.store_name || bankStore),
+          amount: -roundReceivableMoney(alloc.fromCredit),
+          ref_type: 'Receive',
+          ref_id: accrualId,
+          trans_date: transDate,
+          memo: `선수금 상계 ${label || accrualId}${mismatchTag}`.slice(0, 240),
+          receive_checked: false,
+          bank_transaction_id: null,
+        })
+      }
+      if (alloc.fromRounding > 0.009) {
+        await supabaseInsert('receivable_transactions', {
+          store_name: String(accrual.store_name || bankStore),
+          amount: -roundReceivableMoney(alloc.fromRounding),
+          ref_type: 'Receive',
+          ref_id: accrualId,
+          trans_date: transDate,
+          memo: `차액 조정 ${label || accrualId}${mismatchTag}${approverTag}`.slice(0, 240),
+          receive_checked: false,
+          bank_transaction_id: null,
+        })
+      }
+
+      const paid = roundReceivableMoney(alloc.fromBank + alloc.fromCredit + alloc.fromRounding)
+      if (paid + 0.009 >= alloc.remaining) {
+        await supabaseUpdate('receivable_transactions', accrualId, { receive_checked: true })
+      }
+    }
+
+    if (storeCreditApply > 0.009) {
+      await consumeStoreCreditFifo({
+        storeName: bankStore,
+        amount: storeCreditApply,
+        transDate,
+        memo: `통장 #${bankTransactionId} 미수 연결 상계${mismatchTag}${approverTag}`.slice(0, 240),
+        bankTransactionId,
+      })
+    }
+
+    return { ok: true }
   }
 
   await supabaseDeleteByFilter(

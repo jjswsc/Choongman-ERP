@@ -1,7 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -46,6 +46,7 @@ import {
   registerExpenseFromBankTransaction,
   getOpenReceivablesForBankTx,
   linkReceivableFromBankTransaction,
+  addReceivableStoreCredit,
   type OpenReceivableForBankItem,
   saveBankAccount,
   deleteBankAccount,
@@ -115,10 +116,16 @@ import {
 } from "@/lib/bank-transaction-attention"
 import {
   bankDepositNeedsReceivableOrderLink,
-  receivablePickTotalMatchesBank,
+  canSaveReceivablePickWithMismatch,
   roundReceivableMoney,
   sumOpenReceivablePickAmount,
 } from "@/lib/bank-receivable-link"
+import {
+  RECEIVABLE_BANK_LINK_MISMATCH_REASONS,
+  canApproveReceivableBankMismatch,
+  classifyReceivableBankLinkMismatch,
+  computeReceivableLinkGap,
+} from "@/lib/bank-receivable-link-policy"
 import { BankAdvanceTargetCell } from "@/components/erp/bank-advance-target-cell"
 import {
   formatBankAdvanceAccountSubjectLabel,
@@ -272,6 +279,14 @@ function BankQuickMemoChipBar({
 export function BankTransactionsTab() {
   const router = useRouter()
   const { auth } = useAuth()
+  const canApproveReceivableMismatch = React.useMemo(
+    () =>
+      canApproveReceivableBankMismatch({
+        role: auth?.role,
+        canManageOfficePayroll: auth?.canManageOfficePayroll,
+      }),
+    [auth?.role, auth?.canManageOfficePayroll]
+  )
   const { lang } = useLang()
   const t = useT(lang)
   const tt = React.useCallback((key: string, fallback: string) => {
@@ -410,6 +425,10 @@ export function BankTransactionsTab() {
   const [receivablePickSelectedIds, setReceivablePickSelectedIds] = React.useState<number[]>([])
   const [receivablePickLoading, setReceivablePickLoading] = React.useState(false)
   const [receivablePickSaving, setReceivablePickSaving] = React.useState(false)
+  const [receivablePickStoreCreditAvailable, setReceivablePickStoreCreditAvailable] = React.useState(0)
+  const [receivablePickCreditApply, setReceivablePickCreditApply] = React.useState(0)
+  const [receivablePickMismatchReason, setReceivablePickMismatchReason] = React.useState("")
+  const [receivablePickMismatchNote, setReceivablePickMismatchNote] = React.useState("")
   const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   /** 미리보기 표의 메모 입력에 포커스가 있을 때의 행 인덱스 (빠른 메모 칩 삽입용) */
@@ -648,11 +667,17 @@ export function BankTransactionsTab() {
     setReceivablePickRow(row)
     setReceivablePickLoading(true)
     setReceivablePickSelectedIds([])
+    setReceivablePickCreditApply(0)
+    setReceivablePickMismatchReason("")
+    setReceivablePickMismatchNote("")
+    setReceivablePickStoreCreditAvailable(0)
     try {
       const res = await getOpenReceivablesForBankTx({ bankTransactionId: Number(row.id) })
       setReceivablePickList(res.list || [])
+      setReceivablePickStoreCreditAvailable(Math.max(0, Number(res.storeCreditAvailable) || 0))
     } catch {
       setReceivablePickList([])
+      setReceivablePickStoreCreditAvailable(0)
     } finally {
       setReceivablePickLoading(false)
     }
@@ -4095,7 +4120,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
           ) : approvedPickList.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">
-              {t("payableEmpty") || "해당 일자·매장 지급예정이 없습니다. 지출 등록 탭에서 먼저 등록해 주세요."}
+              {tt("expensePlanPickEmptyForBankLink", "No linkable payment plan for this date/store.")}
             </p>
           ) : (
             <div className="space-y-2">
@@ -4163,7 +4188,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 if (moneyEqual(bankAmt, remain)) return null
                 return (
                   <p className="text-xs text-destructive">
-                    통장 금액과 선택한 지급예정 잔액이 다릅니다. (통장 ฿{formatMoneyBaht(bankAmt)} / 잔액 ฿{formatMoneyBaht(remain)})
+                    {tt("bankPlanAmountMismatchDetail", "Bank amount differs from plan balance.")
+                      .replace("{bankAmount}", formatMoneyBaht(bankAmt))
+                      .replace("{remain}", formatMoneyBaht(remain))}
+                  </p>
+                )
+              })()}
+              {(() => {
+                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
+                if (!selected || selected.status !== "planned") return null
+                return (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {tt(
+                      "expensePlanPickPlannedNeedsApproval",
+                      "Selected item is pending approval. Saving will auto-approve; HQ items need Director/Secretary rights."
+                    )}
                   </p>
                 )
               })()}
@@ -4243,6 +4282,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             setReceivablePickRow(null)
             setReceivablePickList([])
             setReceivablePickSelectedIds([])
+            setReceivablePickCreditApply(0)
+            setReceivablePickMismatchReason("")
+            setReceivablePickMismatchNote("")
+            setReceivablePickStoreCreditAvailable(0)
           }
         }}
       >
@@ -4320,97 +4363,259 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   receivablePickList,
                   receivablePickSelectedIds
                 )
-                const matches = receivablePickTotalMatchesBank(bankAmt, selectedTotal)
-                const diff = roundReceivableMoney(bankAmt - selectedTotal)
+                const creditApply = roundReceivableMoney(Math.max(0, receivablePickCreditApply))
+                const gap = computeReceivableLinkGap(bankAmt, selectedTotal, creditApply)
+                const matches = Math.abs(gap) <= 0.01
+                const { kind } = classifyReceivableBankLinkMismatch(bankAmt, selectedTotal, creditApply)
+                const canSave =
+                  receivablePickSelectedIds.length > 0 &&
+                  canSaveReceivablePickWithMismatch({
+                    bankAmt,
+                    selectedTotal,
+                    storeCreditApply: creditApply,
+                    mismatchNote: receivablePickMismatchNote,
+                    mismatchReason: receivablePickMismatchReason,
+                    canApproveMismatch: canApproveReceivableMismatch,
+                  })
+                const showMismatchFields = receivablePickSelectedIds.length > 0 && !matches
+                const shortfall = Math.max(0, gap)
                 return (
-                  <div
-                    className={cn(
-                      "rounded-md border px-3 py-2 text-sm space-y-1",
-                      receivablePickSelectedIds.length === 0
-                        ? "border-border bg-muted/30"
-                        : matches
-                          ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
-                          : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
-                    )}
-                  >
-                    <div className="flex justify-between gap-2 tabular-nums">
-                      <span className="text-muted-foreground">
-                        {tt("bankReceivablePickBankAmount", "통장 입금")}
-                      </span>
-                      <span className="font-medium">฿{bankAmt.toLocaleString()}</span>
+                  <>
+                    <div
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-sm space-y-1",
+                        receivablePickSelectedIds.length === 0
+                          ? "border-border bg-muted/30"
+                          : matches
+                            ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                            : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
+                      )}
+                    >
+                      <div className="flex justify-between gap-2 tabular-nums">
+                        <span className="text-muted-foreground">
+                          {tt("bankReceivablePickBankAmount", "통장 입금")}
+                        </span>
+                        <span className="font-medium">฿{bankAmt.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between gap-2 tabular-nums">
+                        <span className="text-muted-foreground">
+                          {tt("bankReceivablePickSelectedTotal", "선택 합계")} ({receivablePickSelectedIds.length})
+                        </span>
+                        <span className="font-medium">฿{selectedTotal.toLocaleString()}</span>
+                      </div>
+                      {creditApply > 0.009 ? (
+                        <div className="flex justify-between gap-2 tabular-nums">
+                          <span className="text-muted-foreground">
+                            {tt("bankReceivablePickStoreCreditApply", "선수금 적용")}
+                          </span>
+                          <span className="font-medium">฿{creditApply.toLocaleString()}</span>
+                        </div>
+                      ) : null}
+                      {showMismatchFields ? (
+                        <p className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
+                          {tt("bankReceivablePickDiff", "차이")}: ฿{gap.toLocaleString()}
+                        </p>
+                      ) : null}
+                      {receivablePickSelectedIds.length > 0 && matches ? (
+                        <p className="text-xs text-green-800 dark:text-green-300">
+                          {tt("bankReceivablePickAmountOk", "금액이 일치합니다.")}
+                        </p>
+                      ) : null}
+                      {showMismatchFields && kind === "large" && !canApproveReceivableMismatch ? (
+                        <p className="text-xs text-destructive">
+                          {tt(
+                            "bankReceivablePickMismatchApprovalRequired",
+                            "큰 차액 — Director 또는 오피스 급여 담당 승인 필요"
+                          )}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="flex justify-between gap-2 tabular-nums">
-                      <span className="text-muted-foreground">
-                        {tt("bankReceivablePickSelectedTotal", "선택 합계")} ({receivablePickSelectedIds.length})
-                      </span>
-                      <span className="font-medium">฿{selectedTotal.toLocaleString()}</span>
+                    {receivablePickStoreCreditAvailable > 0.009 ? (
+                      <div className="rounded-md border border-border px-3 py-2 space-y-2 text-sm">
+                        <div className="flex justify-between gap-2 tabular-nums">
+                          <span className="text-muted-foreground">
+                            {tt("bankReceivablePickStoreCreditAvailable", "매장 선수금 잔액")}
+                          </span>
+                          <span className="font-medium">
+                            ฿{receivablePickStoreCreditAvailable.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="h-8 w-32 tabular-nums"
+                            value={creditApply || ""}
+                            onChange={(e) =>
+                              setReceivablePickCreditApply(
+                                roundReceivableMoney(Math.max(0, parseMoneyAmount(e.target.value)))
+                              )
+                            }
+                          />
+                          {shortfall > 0.009 ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              onClick={() =>
+                                setReceivablePickCreditApply(
+                                  roundReceivableMoney(
+                                    Math.min(shortfall, receivablePickStoreCreditAvailable)
+                                  )
+                                )
+                              }
+                            >
+                              {tt("bankReceivablePickStoreCreditApplyAll", "부족분 전액 적용")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                    {showMismatchFields ? (
+                      <div className="space-y-2 rounded-md border border-border px-3 py-2 text-sm">
+                        <p className="text-xs text-muted-foreground leading-snug">
+                          {tt(
+                            "bankReceivablePickMismatchHint",
+                            "금액이 다를 때는 사유를 선택하거나 หมายเหตุ를 입력하세요."
+                          )}
+                        </p>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1">
+                            {tt("bankReceivablePickMismatchReason", "차액 사유")}
+                          </label>
+                          <Select
+                            value={receivablePickMismatchReason || "__none__"}
+                            onValueChange={(v) =>
+                              setReceivablePickMismatchReason(v === "__none__" ? "" : v)
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">—</SelectItem>
+                              {RECEIVABLE_BANK_LINK_MISMATCH_REASONS.map((reason) => (
+                                <SelectItem key={reason} value={reason}>
+                                  {tt(`bankReceivableMismatchReason_${reason}`, reason)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1">
+                            {tt("bankReceivablePickMismatchNote", "หมายเหตุ")}
+                          </label>
+                          <Input
+                            value={receivablePickMismatchNote}
+                            onChange={(e) => setReceivablePickMismatchNote(e.target.value)}
+                            placeholder={tt(
+                              "bankReceivablePickMismatchNotePlaceholder",
+                              "예: 3월 인보이스 오류 과납 273บ. 상계"
+                            )}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    {canApproveReceivableMismatch && receivablePickRow?.storeName ? (
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            const memo = await appPrompt(
+                              tt("bankReceivablePickMismatchNote", "หมายเหตุ"),
+                              ""
+                            )
+                            if (memo === null) return
+                            const amountStr = await appPrompt(
+                              tt("bankReceivablePickStoreCreditAvailable", "매장 선수금 잔액"),
+                              shortfall > 0.009 ? String(shortfall) : ""
+                            )
+                            if (amountStr === null) return
+                            const amount = parseMoneyAmount(amountStr)
+                            if (amount <= 0) return
+                            const res = await addReceivableStoreCredit({
+                              storeName: String(receivablePickRow.storeName || ""),
+                              amount,
+                              transDate: String(receivablePickRow.transDate || "").slice(0, 10),
+                              memo: memo.trim(),
+                            })
+                            if (!res.success) {
+                              await appAlert(
+                                translateApiMessage(res.message, t) || res.message || t("processFail")
+                              )
+                              return
+                            }
+                            setReceivablePickStoreCreditAvailable((prev) =>
+                              roundReceivableMoney(prev + amount)
+                            )
+                            if (shortfall > 0.009) {
+                              setReceivablePickCreditApply(
+                                roundReceivableMoney(Math.min(shortfall, amount))
+                              )
+                            }
+                          }}
+                        >
+                          {tt("bankReceivablePickRegisterStoreCredit", "선수금 등록")}
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setReceivablePickRow(null)}>
+                        {t("cancel") || "취소"}
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (!receivablePickRow?.id || receivablePickSelectedIds.length === 0) return
+                          if (!canSave) {
+                            await appAlert(
+                              tt(
+                                "bankReceivableAmountMismatch",
+                                "통장 금액과 선택한 미수 잔액 합계가 일치해야 합니다."
+                              )
+                            )
+                            return
+                          }
+                          setReceivablePickSaving(true)
+                          try {
+                            const res = await linkReceivableFromBankTransaction({
+                              bankTransactionId: Number(receivablePickRow.id),
+                              receivableAccrualIds: receivablePickSelectedIds,
+                              storeCreditApplyAmount: creditApply > 0.009 ? creditApply : undefined,
+                              mismatchNote: receivablePickMismatchNote.trim() || undefined,
+                              mismatchReason: receivablePickMismatchReason || undefined,
+                            })
+                            if (!res.success) {
+                              await appAlert(
+                                translateApiMessage(res.message, t) || res.message || t("processFail")
+                              )
+                              return
+                            }
+                            setReceivablePickRow(null)
+                            setReceivablePickList([])
+                            setReceivablePickSelectedIds([])
+                            setReceivablePickCreditApply(0)
+                            setReceivablePickMismatchReason("")
+                            setReceivablePickMismatchNote("")
+                            loadData()
+                          } finally {
+                            setReceivablePickSaving(false)
+                          }
+                        }}
+                        disabled={
+                          receivablePickSelectedIds.length === 0 || receivablePickSaving || !canSave
+                        }
+                      >
+                        {receivablePickSaving ? "..." : (t("btnSave") || "저장")}
+                      </Button>
                     </div>
-                    {receivablePickSelectedIds.length > 0 && !matches ? (
-                      <p className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
-                        {tt("bankReceivablePickDiff", "차이")}: ฿{diff.toLocaleString()}
-                      </p>
-                    ) : null}
-                    {receivablePickSelectedIds.length > 0 && matches ? (
-                      <p className="text-xs text-green-800 dark:text-green-300">
-                        {tt("bankReceivablePickAmountOk", "금액이 일치합니다.")}
-                      </p>
-                    ) : null}
-                  </div>
+                  </>
                 )
               })()}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setReceivablePickRow(null)}>
-                  {t("cancel") || "취소"}
-                </Button>
-                <Button
-                  onClick={async () => {
-                    if (!receivablePickRow?.id || receivablePickSelectedIds.length === 0) return
-                    const bankAmt = Math.abs(Number(receivablePickRow.amount || 0))
-                    const selectedTotal = sumOpenReceivablePickAmount(
-                      receivablePickList,
-                      receivablePickSelectedIds
-                    )
-                    if (!receivablePickTotalMatchesBank(bankAmt, selectedTotal)) {
-                      await appAlert(
-                        tt(
-                          "bankReceivableAmountMismatch",
-                          "통장 금액과 선택한 미수 잔액 합계가 일치해야 합니다."
-                        )
-                      )
-                      return
-                    }
-                    setReceivablePickSaving(true)
-                    try {
-                      const res = await linkReceivableFromBankTransaction({
-                        bankTransactionId: Number(receivablePickRow.id),
-                        receivableAccrualIds: receivablePickSelectedIds,
-                      })
-                      if (!res.success) {
-                        await appAlert(
-                          translateApiMessage(res.message, t) || res.message || t("processFail")
-                        )
-                        return
-                      }
-                      setReceivablePickRow(null)
-                      setReceivablePickList([])
-                      setReceivablePickSelectedIds([])
-                      loadData()
-                    } finally {
-                      setReceivablePickSaving(false)
-                    }
-                  }}
-                  disabled={
-                    receivablePickSelectedIds.length === 0 ||
-                    receivablePickSaving ||
-                    !receivablePickTotalMatchesBank(
-                      Math.abs(Number(receivablePickRow?.amount || 0)),
-                      sumOpenReceivablePickAmount(receivablePickList, receivablePickSelectedIds)
-                    )
-                  }
-                >
-                  {receivablePickSaving ? "..." : (t("btnSave") || "저장")}
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>

@@ -425,13 +425,21 @@ export interface OpenReceivableForBankItem {
 export async function getOpenReceivablesForBankTx(params: { bankTransactionId: number }) {
   const q = new URLSearchParams({ bankTransactionId: String(params.bankTransactionId) })
   const res = await apiFetchWithOffline(`/api/getOpenReceivablesForBankTx?${q}`)
-  return res.json() as Promise<{ success: boolean; message?: string; list: OpenReceivableForBankItem[] }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    list: OpenReceivableForBankItem[]
+    storeCreditAvailable?: number
+  }>
 }
 
 export async function linkReceivableFromBankTransaction(params: {
   bankTransactionId: number
   receivableAccrualId?: number
   receivableAccrualIds?: number[]
+  storeCreditApplyAmount?: number
+  mismatchNote?: string
+  mismatchReason?: string
 }) {
   const ids =
     params.receivableAccrualIds && params.receivableAccrualIds.length > 0
@@ -445,7 +453,24 @@ export async function linkReceivableFromBankTransaction(params: {
     body: JSON.stringify({
       bankTransactionId: params.bankTransactionId,
       receivableAccrualIds: ids,
+      storeCreditApplyAmount: params.storeCreditApplyAmount,
+      mismatchNote: params.mismatchNote,
+      mismatchReason: params.mismatchReason,
     }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function addReceivableStoreCredit(params: {
+  storeName: string
+  amount: number
+  transDate: string
+  memo: string
+}) {
+  const res = await apiFetchWithOffline('/api/addReceivableStoreCredit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: number }>
 }

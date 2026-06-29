@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { linkReceivableAccrualsFromBankTransaction } from '@/lib/bank-receivable-link-server'
+import { canApproveReceivableBankMismatch } from '@/lib/bank-receivable-link-policy'
 import { requireAuth } from '@/lib/verify-auth'
 
 /** 통장 입금 ↔ 미수금(출고·주문) 연결 */
@@ -35,9 +36,28 @@ export async function POST(request: NextRequest) {
           return single > 0 ? [single] : []
         })()
 
+    const auth = authResult.auth
+    const mismatchNote = String(body.mismatchNote ?? body.mismatch_note ?? '').trim()
+    const mismatchReason = String(body.mismatchReason ?? body.mismatch_reason ?? '').trim()
+    const storeCreditApplyAmount = Number(
+      body.storeCreditApplyAmount ?? body.store_credit_apply_amount ?? 0
+    )
+    const canApprove = canApproveReceivableBankMismatch({
+      role: auth.role,
+      canManageOfficePayroll: auth.canManageOfficePayroll,
+    })
+
     const result = await linkReceivableAccrualsFromBankTransaction({
       bankTransactionId,
       receivableAccrualIds,
+      storeCreditApplyAmount: Number.isFinite(storeCreditApplyAmount) ? storeCreditApplyAmount : 0,
+      mismatchNote: mismatchNote || undefined,
+      mismatchReason: mismatchReason || undefined,
+      approvedByUser: canApprove ? String(auth.name || '').trim() || undefined : undefined,
+      auth: {
+        role: auth.role,
+        canManageOfficePayroll: auth.canManageOfficePayroll,
+      },
     })
     if (!result.ok) {
       return NextResponse.json(

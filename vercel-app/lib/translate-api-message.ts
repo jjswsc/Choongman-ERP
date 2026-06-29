@@ -3,6 +3,7 @@
  */
 
 import { ACCOUNT_SUBJECT_HEADER_MESSAGE_KO } from '@/lib/account-subject-header-messages'
+import { BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE } from '@/lib/bank-expense-via-expense-mgmt'
 
 /** API message(한글) -> i18n key 매핑 */
 const API_MESSAGE_TO_KEY: Record<string, string> = {
@@ -158,6 +159,24 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "관리자 승인 후 집행할 수 있습니다.": "approvalRequiredBeforeExecution",
   "반려된 지급 예정은 집행할 수 없습니다.": "rejectedPlanCannotExecute",
   "지급 처리되었습니다.": "paymentProcessed",
+  [BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE]: "bankExpenseViaExpenseMgmt",
+  "지출 발생 ID가 필요합니다.": "expenseAccrualIdRequired",
+  "지급 금액을 입력해 주세요.": "expensePaymentAmountRequired",
+  "지급 수단은 bank 또는 petty 이어야 합니다.": "expensePaymentMethodInvalid",
+  "지급일 형식이 올바르지 않습니다.": "expensePaymentDateInvalid",
+  "지출 발생 데이터를 찾을 수 없습니다.": "expenseAccrualNotFound",
+  "승인 상태를 확인할 수 없습니다.": "expenseAccrualStatusUnknown",
+  "이미 미지급에 지급(Payment) 행이 등록된 지급예정입니다. 중복 집행할 수 없습니다.":
+    "expenseDuplicatePaymentBlocked",
+  "전도금 보충·카드 대금 청구는 통장 연동으로만 집행할 수 있습니다.": "expensePrepayBankOnly",
+  "패티캐시 매장을 선택해 주세요.": "pettyStoreRequired",
+  "이미 연결된 통장 출금입니다.": "bankWithdrawAlreadyLinked",
+  "이미 다른 지출/매입과 연결된 통장 거래입니다.": "bankTxLinkedOtherExpense",
+  "통장 지급은 계좌를 선택해 주세요.": "bankPaymentAccountRequired",
+  "통장 출금 등록에 실패했습니다.": "bankWithdrawRegisterFailed",
+  "카드 정보가 없습니다. 지급예정을 다시 확인해 주세요.": "cardInfoMissingForPayment",
+  "패티 지급은 매장을 선택해 주세요.": "pettyPaymentStoreRequired",
+  "선택한 통장 거래를 찾을 수 없습니다.": "bankTxNotFound",
   [ACCOUNT_SUBJECT_HEADER_MESSAGE_KO]: "accountSubjectHeaderNotAllowed",
   "존재하지 않는 계정과목입니다.": "accountSubjectNotFound",
   "yearMonth(YYYY-MM)가 필요합니다.": "depYearMonthRequired",
@@ -256,9 +275,27 @@ export function translateApiMessage(
   if (trimmed.startsWith("action은 approve 또는 reject 이어야 합니다."))
     return t("approveRejectActionRequired")
   if (trimmed.startsWith("승인 권한이 없습니다."))
-    return t("expenseApprovalPermissionDenied")
-  if (trimmed.startsWith("부분 지급은 허용되지 않습니다."))
+    return t("expenseApprovalPermissionDeniedDetail")
+  if (trimmed.startsWith("부분 지급은 허용되지 않습니다.")) {
+    const remainMatch = trimmed.match(/잔액: ([\d,]+)\)/)
+    if (remainMatch)
+      return t("partialPaymentNotAllowedWithRemain").replace("{remain}", remainMatch[1]!)
     return t("partialPaymentNotAllowed")
+  }
+  const amountDetailMatch = trimmed.match(
+    /^금액이 일치하지 않습니다\. \(통장: ([\d,]+), 지급: ([\d,]+)\)$/
+  )
+  if (amountDetailMatch)
+    return t("amountMismatchDetail")
+      .replace("{bankAmount}", amountDetailMatch[1]!)
+      .replace("{paymentAmount}", amountDetailMatch[2]!)
+  const dateDetailMatch = trimmed.match(
+    /^날짜가 일치하지 않습니다\. \(통장: ([^,]+), 지급: ([^)]+)\)$/
+  )
+  if (dateDetailMatch)
+    return t("dateMismatchDetail")
+      .replace("{bankDate}", dateDetailMatch[1]!)
+      .replace("{paymentDate}", dateDetailMatch[2]!)
   if (trimmed.startsWith("금액이 일치하지 않습니다."))
     return t("amountMismatch")
   if (trimmed.startsWith("날짜가 일치하지 않습니다."))

@@ -75,3 +75,100 @@ export function sumOpenReceivablePickAmount(
 export function receivablePickTotalMatchesBank(bankAmount: number, selectedTotal: number): boolean {
   return Math.abs(Math.abs(Number(bankAmount) || 0) - Math.abs(Number(selectedTotal) || 0)) <= 0.01
 }
+
+export type ReceivableLinkAllocationPart = {
+  accrualId: number
+  remaining: number
+  fromBank: number
+  fromCredit: number
+  fromRounding: number
+}
+
+/** 통장·선수금·반올림으로 인보이스별 수금액 배분 */
+export function buildReceivableLinkAllocations(params: {
+  bankAmt: number
+  storeCreditApply: number
+  targets: { accrualId: number; remaining: number }[]
+  absorbShortfall: boolean
+}): ReceivableLinkAllocationPart[] {
+  const targets = params.targets || []
+  if (targets.length === 0) return []
+
+  let bankPool = roundReceivableMoney(Math.max(0, Number(params.bankAmt) || 0))
+  let creditPool = roundReceivableMoney(Math.max(0, Number(params.storeCreditApply) || 0))
+  const out: ReceivableLinkAllocationPart[] = []
+
+  for (let i = 0; i < targets.length; i++) {
+    const t = targets[i]!
+    const isLast = i === targets.length - 1
+    let left = roundReceivableMoney(Math.max(0, Number(t.remaining) || 0))
+
+    const fromBank = roundReceivableMoney(Math.min(left, bankPool))
+    bankPool = roundReceivableMoney(bankPool - fromBank)
+    left = roundReceivableMoney(left - fromBank)
+
+    const fromCredit = roundReceivableMoney(Math.min(left, creditPool))
+    creditPool = roundReceivableMoney(creditPool - fromCredit)
+    left = roundReceivableMoney(left - fromCredit)
+
+    let fromRounding = 0
+    if (left > 0.009) {
+      if (isLast && params.absorbShortfall) {
+        fromRounding = left
+      }
+    }
+
+    out.push({
+      accrualId: t.accrualId,
+      remaining: roundReceivableMoney(Math.max(0, Number(t.remaining) || 0)),
+      fromBank,
+      fromCredit,
+      fromRounding,
+    })
+  }
+
+  return out
+}
+
+export function sumReceivableLinkAllocation(parts: ReceivableLinkAllocationPart[]): {
+  fromBank: number
+  fromCredit: number
+  fromRounding: number
+  total: number
+} {
+  let fromBank = 0
+  let fromCredit = 0
+  let fromRounding = 0
+  for (const p of parts) {
+    fromBank = roundReceivableMoney(fromBank + p.fromBank)
+    fromCredit = roundReceivableMoney(fromCredit + p.fromCredit)
+    fromRounding = roundReceivableMoney(fromRounding + p.fromRounding)
+  }
+  return {
+    fromBank,
+    fromCredit,
+    fromRounding,
+    total: roundReceivableMoney(fromBank + fromCredit + fromRounding),
+  }
+}
+
+export function canSaveReceivablePickWithMismatch(params: {
+  bankAmt: number
+  selectedTotal: number
+  storeCreditApply: number
+  mismatchNote: string
+  mismatchReason: string
+  canApproveMismatch: boolean
+}): boolean {
+  const gap = roundReceivableMoney(
+    params.selectedTotal - params.bankAmt - params.storeCreditApply
+  )
+  if (Math.abs(gap) <= 0.01) return true
+  if (gap < -0.01) {
+    if (Math.abs(gap) <= 1) return Boolean(String(params.mismatchReason || '').trim())
+    return Boolean(String(params.mismatchNote || '').trim())
+  }
+  if (Math.abs(gap) <= 1) return Boolean(String(params.mismatchReason || '').trim())
+  if (!params.canApproveMismatch) return false
+  return Boolean(String(params.mismatchNote || '').trim())
+}
