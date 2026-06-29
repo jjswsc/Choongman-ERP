@@ -223,7 +223,8 @@ export function VisitStatsContent() {
       <HeatmapTable
         stores={crossMatrix.stores}
         purposes={crossMatrix.purposes}
-        matrix={crossMatrix.matrix}
+        matrixMin={crossMatrix.matrixMin}
+        matrixCount={crossMatrix.matrixCount}
       />
     </div>
   )

@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
-
-function parseOutboundMatrixYear(raw: string | number | null | undefined): number | null {
-  const n = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim())
-  if (!Number.isFinite(n) || n < 2000 || n > 2100) return null
-  return Math.floor(n)
-}
+import {
+  parseOutboundMatrixMonth,
+  parseOutboundMatrixYear,
+} from '@/lib/outbound-store-month-matrix'
 
 describe('parseOutboundMatrixYear', () => {
   it('accepts valid years', () => {
@@ -17,6 +15,20 @@ describe('parseOutboundMatrixYear', () => {
     expect(parseOutboundMatrixYear('')).toBeNull()
     expect(parseOutboundMatrixYear('1999')).toBeNull()
     expect(parseOutboundMatrixYear('abc')).toBeNull()
+  })
+})
+
+describe('parseOutboundMatrixMonth', () => {
+  it('accepts 1–12 and all/empty as null', () => {
+    expect(parseOutboundMatrixMonth('6')).toBe(6)
+    expect(parseOutboundMatrixMonth(12)).toBe(12)
+    expect(parseOutboundMatrixMonth('all')).toBeNull()
+    expect(parseOutboundMatrixMonth('')).toBeNull()
+  })
+
+  it('rejects invalid months', () => {
+    expect(parseOutboundMatrixMonth('0')).toBeNull()
+    expect(parseOutboundMatrixMonth('13')).toBeNull()
   })
 })
 

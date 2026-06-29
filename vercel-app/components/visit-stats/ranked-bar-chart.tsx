@@ -45,7 +45,7 @@ export function RankedBarChart({ title, color, data, yAxisWidth = 100, heightPx 
       </div>
       <ChartContainer config={chartConfig} className="w-full aspect-auto" style={{ height: heightPx }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 50, left: 0, bottom: 0 }}>
+          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 72, left: 0, bottom: 0 }}>
             <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
             <XAxis type="number" hide />
             <YAxis
@@ -76,8 +76,24 @@ export function RankedBarChart({ title, color, data, yAxisWidth = 100, heightPx 
               <LabelList
                 dataKey="totalMin"
                 position="right"
-                formatter={(v: number) => formatMinutesWithT(v, t)}
-                style={{ fontSize: 11, fill: "hsl(220, 8%, 46%)" }}
+                content={({ x, y, width, height, value, index }) => {
+                  const entry = data[index ?? 0]
+                  if (entry == null || value == null || x == null || y == null || width == null || height == null) {
+                    return null
+                  }
+                  const label = `${formatMinutesWithT(Number(value), t)} (${entry.visits}${t("visit_count_suffix")})`
+                  return (
+                    <text
+                      x={Number(x) + Number(width) + 4}
+                      y={Number(y) + Number(height) / 2}
+                      fill="hsl(220, 8%, 46%)"
+                      fontSize={11}
+                      dominantBaseline="middle"
+                    >
+                      {label}
+                    </text>
+                  )
+                }}
               />
             </Bar>
           </BarChart>

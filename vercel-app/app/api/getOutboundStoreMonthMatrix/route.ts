@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   buildOutboundStoreMonthMatrix,
+  parseOutboundMatrixMonth,
   parseOutboundMatrixYear,
 } from '@/lib/outbound-store-month-matrix'
 
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
   }
 
   const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim() || null
+  const month = parseOutboundMatrixMonth(searchParams.get('month'))
   const knownRaw = String(searchParams.get('knownStores') || '').trim()
   const knownStores = knownRaw
     ? knownRaw
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     const data = await buildOutboundStoreMonthMatrix({
       year,
+      month,
       storeFilter,
       knownStores,
     })

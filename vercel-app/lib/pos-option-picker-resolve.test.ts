@@ -121,4 +121,30 @@ describe("resolvePosOptionPickerMatch", () => {
     })
     expect(match?.name).toBe("M - Boneless - Pickled Radish")
   })
+
+  it("returns null when optional add step is skipped (Dosirak delivery add-on)", () => {
+    const addOnRow: PosMenuOption = {
+      id: "add-soup",
+      menuId: "dosirak-1",
+      name: "Small Kimchi Soup",
+      priceModifier: 30,
+      priceModifierDelivery: 30,
+      priceModifierPackaging: null,
+      sortOrder: 0,
+      optionType: "substitution",
+      optionStepValues: { add: "Small Kimchi Soup" },
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+    }
+    const match = resolvePosOptionPickerMatch({
+      menuCode: "K032",
+      groups: ["add"],
+      selections: {},
+      optionsWithSteps: [addOnRow],
+      allOptions: [addOnRow],
+      groupConfigByKey: new Map([["add", { required: false }]]),
+    })
+    expect(match).toBeNull()
+  })
 })

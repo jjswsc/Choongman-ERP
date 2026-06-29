@@ -1351,10 +1351,17 @@ export const i18n = {
     outTabSummary: '매입처/메뉴 집계',
     outTabStoreMonth: '매장·월별',
     outStoreMonthHint:
-      '본사 창고 실제 출고(stock_logs) 기준으로 매장별·월별 금액을 집계합니다. 출고 관리 「내역 조회」 기간 합계·손익 본사 출고와 동일한 공급가 규칙입니다.',
+      '본사 창고 실제 출고(stock_logs) 기준으로 매장별·월별 금액을 집계합니다. POS 완료 매출 대비 본사 매입(공급가) 비율을 함께 표시합니다. 출고 관리 「내역 조회」·손익 본사 출고와 동일한 공급가 규칙입니다.',
     outStoreMonthYear: '연도',
+    outStoreMonthMonth: '월',
+    outStoreMonthMonthAll: '전체',
     outStoreMonthMonthSuffix: '월',
-    outStoreMonthAmountLegend: '셀: 위=공급가, 아래 괄호=VAT 포함 합계. 금액 클릭 시 해당 매장·해당 월 「내역 조회」로 이동합니다.',
+    outStoreMonthPurchaseCol: '본사 매입',
+    outStoreMonthSales: 'POS 매출',
+    outStoreMonthPurchaseRatio: '매입/매출',
+    outStoreMonthSalesUnavailable: 'POS 매출 집계를 불러오지 못했습니다. 매입 금액만 표시합니다.',
+    outStoreMonthAmountLegend:
+      '매입: 위=공급가, 아래 괄호=VAT 포함. 연간 보기 월 셀에는 POS 매출·매입/매출%가 함께 표시됩니다. 금액 클릭 시 해당 매장·해당 월 「내역 조회」로 이동합니다.',
     outStoreMonthRowTotal: '행 합계',
     outStoreMonthColTotal: '열 합계',
     outStoreMonthHitRowCap:
@@ -8533,10 +8540,17 @@ Only matters the employee must handle personally on a working day:
     outTabSummary: 'Vendor/Menu Summary',
     outTabStoreMonth: 'Store by Month',
     outStoreMonthHint:
-      'Matrix of outbound amounts by franchise store and month (HQ warehouse stock_logs). Subtotal rules match Outbound History and P&L HQ outbound.',
+      'Matrix of HQ warehouse outbound (stock_logs) by store and month, with POS sales and purchase-to-sales ratio. Subtotal rules match Outbound History and P&L HQ outbound.',
     outStoreMonthYear: 'Year',
+    outStoreMonthMonth: 'Month',
+    outStoreMonthMonthAll: 'All months',
     outStoreMonthMonthSuffix: '',
-    outStoreMonthAmountLegend: 'Cell: top = subtotal, (bottom) = VAT-inclusive total. Click an amount to open History for that store and month.',
+    outStoreMonthPurchaseCol: 'HQ purchase',
+    outStoreMonthSales: 'POS sales',
+    outStoreMonthPurchaseRatio: 'Purchase / sales',
+    outStoreMonthSalesUnavailable: 'Could not load POS sales. Showing purchase amounts only.',
+    outStoreMonthAmountLegend:
+      'Purchase: top = subtotal, (bottom) = VAT-inclusive. Monthly cells also show POS sales and purchase/sales %. Click an amount to open History for that store and month.',
     outStoreMonthRowTotal: 'Row total',
     outStoreMonthColTotal: 'Column total',
     outStoreMonthHitRowCap:

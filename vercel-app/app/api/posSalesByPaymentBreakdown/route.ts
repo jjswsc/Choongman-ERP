@@ -51,41 +51,42 @@ async function loadLinkposTenderRules(): Promise<{
   const shared: LinkposTenderRule[] = []
   const byStore = new Map<string, LinkposTenderRule[]>()
   try {
-    const rows = (await supabaseSelectFilter('pos_linkpos_tender_rules', '', {
+    const rows = (await supabaseSelectFilter('pos_linkpos_tender_rules', 'is_active=eq.true', {
+      order: 'priority.asc',
       limit: 5000,
-      select: 'store_code,keyword,group,key,priority',
+      select: 'store_code,match_keyword,tender_group,tender_key,priority',
     })) as {
       store_code?: string | null
-      keyword?: string
-      group?: string
-      key?: string
+      match_keyword?: string
+      tender_group?: string
+      tender_key?: string
       priority?: number
     }[] | null
     for (const r of rows || []) {
-      const group = String(r.group ?? '').trim().toLowerCase()
+      const group = String(r.tender_group ?? '').trim().toLowerCase()
       if (group !== 'card' && group !== 'qr') continue
       const rule: LinkposTenderRule = {
-        storeCode: String(r.store_code ?? '').trim(),
-        keyword: normalizeToken(String(r.keyword ?? '')),
+        storeCode: String(r.store_code ?? '__shared__').trim(),
+        keyword: normalizeToken(String(r.match_keyword ?? '')),
         group,
-        key: String(r.key ?? '').trim() || 'Other',
-        priority: Number(r.priority) || 0,
+        key: String(r.tender_key ?? '').trim() || 'Other',
+        priority: Number(r.priority) || 100,
       }
       if (!rule.keyword) continue
-      if (rule.storeCode) {
-        const sk = normalizeToken(rule.storeCode)
-        const list = byStore.get(sk) || []
-        list.push(rule)
-        byStore.set(sk, list)
-      } else {
+      const storeToken = normalizeToken(rule.storeCode)
+      if (!storeToken || storeToken === normalizeToken('__shared__')) {
         shared.push(rule)
+      } else {
+        const list = byStore.get(storeToken) || []
+        list.push(rule)
+        byStore.set(storeToken, list)
       }
     }
-    shared.sort((a, b) => b.priority - a.priority)
+    shared.sort((a, b) => a.priority - b.priority || b.keyword.length - a.keyword.length)
     for (const [k, list] of byStore.entries()) {
       byStore.set(
         k,
-        [...list].sort((a, b) => b.priority - a.priority)
+        [...list].sort((a, b) => a.priority - b.priority || b.keyword.length - a.keyword.length)
       )
     }
   } catch {

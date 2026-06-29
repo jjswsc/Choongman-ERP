@@ -102,16 +102,24 @@ export function getWeeklyTrend(records: VisitRecord[]): { week: string; totalMin
 export function getStorePurposeMatrix(records: VisitRecord[]): {
   stores: string[]
   purposes: string[]
-  matrix: number[][]
+  /** 매장×목적별 투입 시간(분) */
+  matrixMin: number[][]
+  /** 매장×목적별 방문 건수 */
+  matrixCount: number[][]
 } {
   const stores = [...new Set(records.map((r) => r.store))].sort()
   const purposes = [...new Set(records.map((r) => r.purpose))].sort()
-  const matrix = stores.map((store) =>
+  const matrixMin = stores.map((store) =>
     purposes.map((purpose) =>
       records
         .filter((r) => r.store === store && r.purpose === purpose)
         .reduce((sum, r) => sum + r.durationMin, 0)
     )
   )
-  return { stores, purposes, matrix }
+  const matrixCount = stores.map((store) =>
+    purposes.map(
+      (purpose) => records.filter((r) => r.store === store && r.purpose === purpose).length
+    )
+  )
+  return { stores, purposes, matrixMin, matrixCount }
 }

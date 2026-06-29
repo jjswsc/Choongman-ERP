@@ -170,10 +170,13 @@ export type OutboundStoreMonthAmountCell = {
   subtotal: number
   vat: number
   grandTotal: number
+  salesTotal: number
+  purchaseToSalesPct: number | null
 }
 
 export type OutboundStoreMonthMatrixResult = {
   year: number
+  month: number | null
   months: string[]
   stores: string[]
   cells: Record<string, Record<string, OutboundStoreMonthAmountCell>>
@@ -182,15 +185,21 @@ export type OutboundStoreMonthMatrixResult = {
   grandTotal: OutboundStoreMonthAmountCell
   hitRowCap: boolean
   lineCount: number
+  salesLoaded: boolean
 }
 
 /** 출고 관리 — 매장×월별 금액 행렬 (공급가·VAT·합계, stock_logs 기준) */
 export async function getOutboundStoreMonthMatrix(params: {
   year: number
+  /** 1–12, 생략 또는 null = 연간 전체 */
+  month?: number | null
   storeFilter?: string
   knownStores?: string[]
 }) {
   const q = new URLSearchParams({ year: String(params.year) })
+  if (params.month != null && params.month >= 1 && params.month <= 12) {
+    q.set('month', String(params.month))
+  }
   if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
   if (params.knownStores?.length) q.set('knownStores', params.knownStores.join(','))
   const res = await apiFetchWithOffline(`/api/getOutboundStoreMonthMatrix?${q}`)

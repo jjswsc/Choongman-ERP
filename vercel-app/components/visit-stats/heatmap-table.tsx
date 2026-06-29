@@ -7,7 +7,28 @@ import { useT } from "@/lib/i18n"
 type HeatmapTableProps = {
   stores: string[]
   purposes: string[]
-  matrix: number[][]
+  matrixMin: number[][]
+  matrixCount: number[][]
+}
+
+function TimeAndCountCell({
+  min,
+  count,
+  t,
+}: {
+  min: number
+  count: number
+  t: (k: string) => string
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 leading-tight">
+      <span className="font-medium text-foreground">{formatMinutesWithT(min, t)}</span>
+      <span className="text-[10px] text-muted-foreground tabular-nums">
+        {count}
+        {t("visit_count_suffix")}
+      </span>
+    </div>
+  )
 }
 
 const PURPOSE_COLORS: Record<string, string> = {
@@ -42,10 +63,10 @@ function getPurposeColor(p: string): string {
   return PURPOSE_COLORS[p] || "#2563eb"
 }
 
-export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
+export function HeatmapTable({ stores, purposes, matrixMin, matrixCount }: HeatmapTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const allValues = matrix.flat().filter((v) => v > 0)
+  const allValues = matrixMin.flat().filter((v) => v > 0)
   const maxVal = Math.max(...allValues, 1)
 
   function getCellBg(val: number, purpose: string): string {
@@ -56,9 +77,11 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
     return `${base}${Math.round(opacity * 255).toString(16).padStart(2, "0")}`
   }
 
-  // Column totals
-  const colTotals = purposes.map((_, ci) =>
-    stores.reduce((sum, _, ri) => sum + matrix[ri][ci], 0)
+  const colTotalsMin = purposes.map((_, ci) =>
+    stores.reduce((sum, _, ri) => sum + matrixMin[ri][ci], 0)
+  )
+  const colTotalsCount = purposes.map((_, ci) =>
+    stores.reduce((sum, _, ri) => sum + matrixCount[ri][ci], 0)
   )
 
   return (
@@ -102,33 +125,33 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
           </thead>
           <tbody>
             {stores.map((store, ri) => {
-              const rowTotal = matrix[ri].reduce((s, v) => s + v, 0)
-              if (rowTotal === 0) return null
+              const rowTotalMin = matrixMin[ri].reduce((s, v) => s + v, 0)
+              const rowTotalCount = matrixCount[ri].reduce((s, v) => s + v, 0)
+              if (rowTotalMin === 0 && rowTotalCount === 0) return null
               return (
                 <tr key={store} className="hover:bg-accent/40 transition-colors">
                   <td className="p-2.5 font-medium text-foreground border-b border-border/50">
                     {store}
                   </td>
                   {purposes.map((purpose, ci) => {
-                    const val = matrix[ri][ci]
+                    const min = matrixMin[ri][ci]
+                    const count = matrixCount[ri][ci]
                     return (
                       <td
                         key={purpose}
-                        className="p-2.5 text-center border-b border-border/50"
-                        style={{ backgroundColor: getCellBg(val, purpose) }}
+                        className="p-2.5 text-center border-b border-border/50 min-w-[88px]"
+                        style={{ backgroundColor: getCellBg(min, purpose) }}
                       >
-                        {val > 0 ? (
-                          <span className="font-medium text-foreground">
-                            {formatMinutesWithT(val, t)}
-                          </span>
+                        {count > 0 ? (
+                          <TimeAndCountCell min={min} count={count} t={t} />
                         ) : (
                           <span className="text-muted-foreground/40">-</span>
                         )}
                       </td>
                     )
                   })}
-                  <td className="p-2.5 text-right font-bold text-foreground border-b border-border/50">
-                    {formatMinutesWithT(rowTotal, t)}
+                  <td className="p-2.5 text-right border-b border-border/50">
+                    <TimeAndCountCell min={rowTotalMin} count={rowTotalCount} t={t} />
                   </td>
                 </tr>
               )
@@ -139,17 +162,21 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
               <td className="p-2.5 font-semibold text-foreground border-t border-border">
                 {t("visit_heatmap_total")}
               </td>
-              {colTotals.map((total, ci) => (
+              {colTotalsMin.map((totalMin, ci) => (
                 <td
                   key={ci}
-                  className="p-2.5 text-center font-bold border-t border-border"
+                  className="p-2.5 text-center border-t border-border"
                   style={{ color: getPurposeColor(purposes[ci]) || "hsl(220, 13%, 18%)" }}
                 >
-                  {formatMinutesWithT(total, t)}
+                  <TimeAndCountCell min={totalMin} count={colTotalsCount[ci]} t={t} />
                 </td>
               ))}
-              <td className="p-2.5 text-right font-bold text-foreground border-t border-border">
-                {formatMinutesWithT(colTotals.reduce((s, v) => s + v, 0), t)}
+              <td className="p-2.5 text-right border-t border-border">
+                <TimeAndCountCell
+                  min={colTotalsMin.reduce((s, v) => s + v, 0)}
+                  count={colTotalsCount.reduce((s, v) => s + v, 0)}
+                  t={t}
+                />
               </td>
             </tr>
           </tfoot>

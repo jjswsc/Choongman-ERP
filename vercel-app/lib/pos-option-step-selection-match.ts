@@ -1,4 +1,4 @@
-/** 옵션 단계 선택 다이얼로그: 건너뛴(선택) 단계는 비교에서 제외 */
+/** 옵션 단계 선택 다이얼로그: 건너뛴(선택) 단계는 해당 그룹 값이 비어 있는 행만 일치 */
 export function posOptionRowMatchesPickerSelections(
   optionStepValues: Record<string, string> | null | undefined,
   groups: string[],
@@ -9,7 +9,10 @@ export function posOptionRowMatchesPickerSelections(
     const sel = selections[g]
     const cfg = groupConfigByKey.get(g)
     const optional = cfg?.required === false
-    if (optional && (sel === undefined || sel === null || String(sel).trim() === '')) return true
-    return String(optionStepValues?.[g] ?? '').trim() === String(sel ?? '').trim()
+    const rowVal = String(optionStepValues?.[g] ?? '').trim()
+    if (optional && (sel === undefined || sel === null || String(sel).trim() === '')) {
+      return rowVal === ''
+    }
+    return rowVal === String(sel ?? '').trim()
   })
 }
