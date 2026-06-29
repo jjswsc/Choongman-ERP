@@ -422,6 +422,49 @@ export interface OpenReceivableForBankItem {
   receiveChecked: boolean
 }
 
+export type LinkedReceivableForBankItem = {
+  accrualId: number
+  refType: string
+  refId?: number
+  storeName: string
+  transDate: string
+  invoiceNo?: string
+  memo?: string
+  paidFromBank: number
+  paidFromCredit: number
+  paidFromRounding: number
+  paidTotal: number
+}
+
+export type LinkedReceivableForBankSummary = {
+  bankAmount: number
+  linkedTotal: number
+  paidFromBank: number
+  paidFromCredit: number
+  paidFromRounding: number
+  storeCreditApplied: number
+}
+
+export async function getLinkedReceivablesForBankTx(params: { bankTransactionId: number }) {
+  const q = new URLSearchParams({ bankTransactionId: String(params.bankTransactionId) })
+  const res = await apiFetchWithOffline(`/api/getLinkedReceivablesForBankTx?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    items: LinkedReceivableForBankItem[]
+    summary: LinkedReceivableForBankSummary | null
+  }>
+}
+
+export async function unlinkReceivableFromBankTransaction(params: { bankTransactionId: number }) {
+  const res = await apiFetchWithOffline('/api/unlinkReceivableFromBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bankTransactionId: params.bankTransactionId }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; accrualIds?: number[] }>
+}
+
 export async function getOpenReceivablesForBankTx(params: { bankTransactionId: number }) {
   const q = new URLSearchParams({ bankTransactionId: String(params.bankTransactionId) })
   const res = await apiFetchWithOffline(`/api/getOpenReceivablesForBankTx?${q}`)

@@ -418,3 +418,261 @@ export async function bankTransactionHasReceivableOrderLink(bankTransactionId: n
   )) as { id?: number }[] | null
   return Boolean(rows?.length)
 }
+
+type ReceiveLinkRow = {
+  id?: number
+  store_name?: string
+  amount?: number
+  ref_type?: string
+  ref_id?: number | null
+  trans_date?: string
+  memo?: string
+  bank_transaction_id?: number | null
+}
+
+export type LinkedReceivableForBankItem = {
+  accrualId: number
+  refType: string
+  refId?: number
+  storeName: string
+  transDate: string
+  invoiceNo?: string
+  memo?: string
+  paidFromBank: number
+  paidFromCredit: number
+  paidFromRounding: number
+  paidTotal: number
+}
+
+export type LinkedReceivableForBankSummary = {
+  bankAmount: number
+  linkedTotal: number
+  paidFromBank: number
+  paidFromCredit: number
+  paidFromRounding: number
+  storeCreditApplied: number
+}
+
+function isCompanionReceiveMemoForBankLink(memo: string | undefined | null): boolean {
+  const m = String(memo || '').trim()
+  return m.startsWith('선수금 상계') || m.startsWith('차액 조정')
+}
+
+export async function loadLinkedReceivablesForBankTx(bankTransactionId: number): Promise<{
+  items: LinkedReceivableForBankItem[]
+  summary: LinkedReceivableForBankSummary
+} | null> {
+  const bankId = Number(bankTransactionId || 0)
+  if (!bankId) return null
+
+  const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankId}`, {
+    limit: 1,
+    select: 'id,trans_type,category,amount,trans_date,memo,store_name,store',
+  })) as BankTxRow[] | null
+  const bankRow = bankRows?.[0]
+  if (!bankRow?.id) return null
+
+  const bankAmt = roundReceivableMoney(Math.abs(Number(bankRow.amount || 0)))
+  const transDate = String(bankRow.trans_date || '').slice(0, 10)
+
+  const bankReceives = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.Receive&ref_id=not.is.null`,
+    {
+      select: 'id,store_name,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id',
+      order: 'id.asc',
+      limit: 500,
+    }
+  )) as ReceiveLinkRow[] | null
+
+  if (!bankReceives?.length) return null
+
+  const accrualIds = [
+    ...new Set(
+      bankReceives
+        .map((r) => Number(r.ref_id || 0))
+        .filter((id) => id > 0)
+    ),
+  ]
+
+  const companionByAccrual = new Map<number, ReceiveLinkRow[]>()
+  for (const accrualId of accrualIds) {
+    const companions = (await supabaseSelectFilter(
+      'receivable_transactions',
+      `ref_type=eq.Receive&ref_id=eq.${accrualId}&bank_transaction_id=is.null&trans_date=eq.${transDate}`,
+      {
+        select: 'id,store_name,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id',
+        limit: 20,
+      }
+    )) as ReceiveLinkRow[] | null
+    const scoped = (companions || []).filter((r) => isCompanionReceiveMemoForBankLink(r.memo))
+    if (scoped.length) companionByAccrual.set(accrualId, scoped)
+  }
+
+  const creditApplyRows = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.CreditApply`,
+    { select: 'amount', limit: 100 }
+  )) as { amount?: number }[] | null
+  const storeCreditApplied = roundReceivableMoney(
+    (creditApplyRows || []).reduce((sum, r) => sum + Math.abs(Number(r.amount) || 0), 0)
+  )
+
+  const accrualRows = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `id=in.(${accrualIds.join(',')})`,
+    {
+      select: 'id,store_name,amount,ref_type,ref_id,trans_date,memo,invoice_no',
+      limit: accrualIds.length,
+    }
+  )) as ReceivableAccrualRow[] | null
+  const accrualById = new Map<number, ReceivableAccrualRow>()
+  for (const row of accrualRows || []) {
+    const id = Number(row.id || 0)
+    if (id > 0) accrualById.set(id, row)
+  }
+
+  const items: LinkedReceivableForBankItem[] = []
+  let paidFromBank = 0
+  let paidFromCredit = 0
+  let paidFromRounding = 0
+
+  for (const accrualId of accrualIds) {
+    const accrual = accrualById.get(accrualId)
+    let bankPart = 0
+    let creditPart = 0
+    let roundingPart = 0
+
+    for (const row of bankReceives) {
+      if (Number(row.ref_id || 0) !== accrualId) continue
+      bankPart = roundReceivableMoney(bankPart + Math.abs(Number(row.amount) || 0))
+    }
+    for (const row of companionByAccrual.get(accrualId) || []) {
+      const amt = Math.abs(Number(row.amount) || 0)
+      const memo = String(row.memo || '')
+      if (memo.startsWith('선수금 상계')) {
+        creditPart = roundReceivableMoney(creditPart + amt)
+      } else if (memo.startsWith('차액 조정')) {
+        roundingPart = roundReceivableMoney(roundingPart + amt)
+      }
+    }
+
+    paidFromBank = roundReceivableMoney(paidFromBank + bankPart)
+    paidFromCredit = roundReceivableMoney(paidFromCredit + creditPart)
+    paidFromRounding = roundReceivableMoney(paidFromRounding + roundingPart)
+
+    items.push({
+      accrualId,
+      refType: String(accrual?.ref_type || ''),
+      refId: accrual?.ref_id != null ? Number(accrual.ref_id) : undefined,
+      storeName: String(accrual?.store_name || bankRow.store_name || bankRow.store || ''),
+      transDate: String(accrual?.trans_date || transDate).slice(0, 10),
+      invoiceNo: accrual?.invoice_no ? String(accrual.invoice_no) : undefined,
+      memo: accrual?.memo ? String(accrual.memo) : undefined,
+      paidFromBank: bankPart,
+      paidFromCredit: creditPart,
+      paidFromRounding: roundingPart,
+      paidTotal: roundReceivableMoney(bankPart + creditPart + roundingPart),
+    })
+  }
+
+  items.sort((a, b) => a.transDate.localeCompare(b.transDate) || a.accrualId - b.accrualId)
+
+  const linkedTotal = roundReceivableMoney(paidFromBank + paidFromCredit + paidFromRounding)
+  return {
+    items,
+    summary: {
+      bankAmount: bankAmt,
+      linkedTotal,
+      paidFromBank,
+      paidFromCredit,
+      paidFromRounding,
+      storeCreditApplied,
+    },
+  }
+}
+
+async function refreshReceivableAccrualReceiveChecked(accrualId: number): Promise<void> {
+  const accrualRows = (await supabaseSelectFilter('receivable_transactions', `id=eq.${accrualId}`, {
+    limit: 1,
+    select: 'id,amount',
+  })) as { id?: number; amount?: number }[] | null
+  const accrual = accrualRows?.[0]
+  if (!accrual?.id) return
+
+  const offsetRows = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `ref_type=eq.Receive&ref_id=eq.${accrualId}`,
+    { select: 'amount', limit: 100 }
+  )) as { amount?: number }[] | null
+  const open = computeReceivableOpenAmount(Number(accrual.amount || 0), offsetRows || [])
+  await supabaseUpdate('receivable_transactions', accrualId, {
+    receive_checked: open <= 0.009,
+  })
+}
+
+/** 통장 입금 ↔ 미수금(출고·주문) 연결 해제 — 동일 입금에 재연결 가능 */
+export async function unlinkReceivableAccrualsFromBankTransaction(
+  bankTransactionId: number
+): Promise<{ ok: true; accrualIds: number[] } | { ok: false; message: string; status?: number }> {
+  const bankId = Number(bankTransactionId || 0)
+  if (!bankId) {
+    return { ok: false, message: '통장 거래 ID가 필요합니다.', status: 400 }
+  }
+
+  const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankId}`, {
+    limit: 1,
+    select: 'id,trans_type,category,trans_date',
+  })) as BankTxRow[] | null
+  const bankRow = bankRows?.[0]
+  if (!bankRow?.id) {
+    return { ok: false, message: '통장 거래를 찾을 수 없습니다.', status: 404 }
+  }
+  if (String(bankRow.trans_type || '').toLowerCase() !== 'deposit') {
+    return { ok: false, message: '입금 거래만 연결 해제할 수 있습니다.', status: 400 }
+  }
+  if (String(bankRow.category || '').toLowerCase() !== 'receivable_receive') {
+    return { ok: false, message: '매출 수령(receivable_receive) 입금만 연결 해제할 수 있습니다.', status: 400 }
+  }
+
+  const linked = await loadLinkedReceivablesForBankTx(bankId)
+  if (!linked?.items.length) {
+    return { ok: false, message: '연결된 미수금(출고·주문)이 없습니다.', status: 404 }
+  }
+
+  const transDate = String(bankRow.trans_date || '').slice(0, 10)
+  const accrualIds = linked.items.map((item) => item.accrualId)
+
+  const companionDeleteIds: number[] = []
+  for (const accrualId of accrualIds) {
+    const companions = (await supabaseSelectFilter(
+      'receivable_transactions',
+      `ref_type=eq.Receive&ref_id=eq.${accrualId}&bank_transaction_id=is.null&trans_date=eq.${transDate}`,
+      { select: 'id,memo', limit: 20 }
+    )) as { id?: number; memo?: string }[] | null
+    for (const row of companions || []) {
+      if (!isCompanionReceiveMemoForBankLink(row.memo)) continue
+      const id = Number(row.id || 0)
+      if (id > 0) companionDeleteIds.push(id)
+    }
+  }
+
+  await supabaseDeleteByFilter(
+    'receivable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.Receive`
+  )
+  await supabaseDeleteByFilter(
+    'receivable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.CreditApply`
+  )
+
+  for (const id of companionDeleteIds) {
+    await supabaseDeleteByFilter('receivable_transactions', `id=eq.${id}`)
+  }
+
+  for (const accrualId of accrualIds) {
+    await refreshReceivableAccrualReceiveChecked(accrualId)
+  }
+
+  return { ok: true, accrualIds }
+}

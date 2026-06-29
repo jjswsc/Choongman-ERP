@@ -45,9 +45,13 @@ import {
   addBankTransactionsBulk,
   registerExpenseFromBankTransaction,
   getOpenReceivablesForBankTx,
+  getLinkedReceivablesForBankTx,
   linkReceivableFromBankTransaction,
+  unlinkReceivableFromBankTransaction,
   addReceivableStoreCredit,
   type OpenReceivableForBankItem,
+  type LinkedReceivableForBankItem,
+  type LinkedReceivableForBankSummary,
   saveBankAccount,
   deleteBankAccount,
   getBankAccountAuditLogs,
@@ -429,6 +433,12 @@ export function BankTransactionsTab() {
   const [receivablePickCreditApply, setReceivablePickCreditApply] = React.useState(0)
   const [receivablePickMismatchReason, setReceivablePickMismatchReason] = React.useState("")
   const [receivablePickMismatchNote, setReceivablePickMismatchNote] = React.useState("")
+  const [receivableLinkedRow, setReceivableLinkedRow] = React.useState<(typeof list)[0] | null>(null)
+  const [receivableLinkedList, setReceivableLinkedList] = React.useState<LinkedReceivableForBankItem[]>([])
+  const [receivableLinkedSummary, setReceivableLinkedSummary] =
+    React.useState<LinkedReceivableForBankSummary | null>(null)
+  const [receivableLinkedLoading, setReceivableLinkedLoading] = React.useState(false)
+  const [receivableLinkedUnlinking, setReceivableLinkedUnlinking] = React.useState(false)
   const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   /** 미리보기 표의 메모 입력에 포커스가 있을 때의 행 인덱스 (빠른 메모 칩 삽입용) */
@@ -680,6 +690,29 @@ export function BankTransactionsTab() {
       setReceivablePickStoreCreditAvailable(0)
     } finally {
       setReceivablePickLoading(false)
+    }
+  }, [])
+
+  const openReceivableLinkedView = React.useCallback(async (row: (typeof list)[0]) => {
+    if (!row?.id) return
+    setReceivableLinkedRow(row)
+    setReceivableLinkedLoading(true)
+    setReceivableLinkedList([])
+    setReceivableLinkedSummary(null)
+    try {
+      const res = await getLinkedReceivablesForBankTx({ bankTransactionId: Number(row.id) })
+      if (!res.success) {
+        setReceivableLinkedList([])
+        setReceivableLinkedSummary(null)
+        return
+      }
+      setReceivableLinkedList(res.items || [])
+      setReceivableLinkedSummary(res.summary)
+    } catch {
+      setReceivableLinkedList([])
+      setReceivableLinkedSummary(null)
+    } finally {
+      setReceivableLinkedLoading(false)
     }
   }, [])
 
@@ -980,6 +1013,34 @@ export function BankTransactionsTab() {
       })
       .finally(() => setLoading(false))
   }, [accountId, startStr, endStr])
+
+  const beginReceivableLinkEdit = React.useCallback(async () => {
+    const row = receivableLinkedRow
+    if (!row?.id) return
+    const ok = await appConfirm(
+      tt(
+        "bankReceivableLinkedUnlinkConfirm",
+        "이 통장 입금의 미수 연결을 해제하고 다시 선택하시겠습니까?"
+      )
+    )
+    if (!ok) return
+    setReceivableLinkedUnlinking(true)
+    try {
+      const res = await unlinkReceivableFromBankTransaction({ bankTransactionId: Number(row.id) })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
+      setReceivableLinkedRow(null)
+      setReceivableLinkedList([])
+      setReceivableLinkedSummary(null)
+      await invalidateReceivablePayableListCache()
+      loadData()
+      await openReceivablePick(row)
+    } finally {
+      setReceivableLinkedUnlinking(false)
+    }
+  }, [loadData, openReceivablePick, receivableLinkedRow, t, tt])
 
   const reloadBankTransactionsFresh = React.useCallback(async (): Promise<void> => {
     if (accountId) {
@@ -2861,16 +2922,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                             size="sm"
                                             variant="ghost"
                                             className={`${ADMIN_BTN_XS_CN} shrink-0 h-7 px-1.5`}
-                                            onClick={() => {
-                                              const q = new URLSearchParams({ type: "receivable" })
-                                              if (store) q.set("storeFilter", store)
-                                              q.set("startStr", startStr)
-                                              q.set("endStr", endStr)
-                                              if (r.id) q.set("bankTransactionId", String(r.id))
-                                              router.push(`/admin/receivable-payable?${q.toString()}`)
-                                            }}
+                                            onClick={() => void openReceivableLinkedView(r)}
                                           >
-                                            {t("adminReceivablePayable") || "미수금"}
+                                            {tt("bankReceivableLinkedView", "연결 보기")}
                                           </Button>
                                         </>
                                       )
@@ -4276,6 +4330,124 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       </Dialog>
 
       <Dialog
+        open={!!receivableLinkedRow}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReceivableLinkedRow(null)
+            setReceivableLinkedList([])
+            setReceivableLinkedSummary(null)
+          }
+        }}
+      >
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
+          <DialogHeader>
+            <DialogTitle>{tt("bankReceivableLinkedTitle", "미수 연결 내역")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mb-2">
+            {receivableLinkedRow
+              ? `${receivableLinkedRow.transDate} · ฿${Math.abs(receivableLinkedRow.amount || 0).toLocaleString()}`
+              : ""}
+          </p>
+          <p className="text-xs text-muted-foreground mb-3 leading-snug">
+            {tt(
+              "bankReceivableLinkedHint",
+              "이 통장 입금에 연결된 인보이스입니다. 잘못 연결했으면 「연결 수정」으로 해제 후 다시 연결하세요."
+            )}
+          </p>
+          {receivableLinkedLoading ? (
+            <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
+          ) : receivableLinkedList.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              {tt("bankReceivableLinkedEmpty", "연결된 미수금이 없습니다.")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
+                {receivableLinkedList.map((p) => {
+                  const label =
+                    p.invoiceNo ||
+                    (p.refId ? `#${p.refId}` : "") ||
+                    (p.memo ? p.memo.slice(0, 40) : "")
+                  return (
+                    <div key={p.accrualId} className="px-3 py-2 text-sm leading-snug">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex-1 min-w-0">
+                          <span className="font-medium tabular-nums">{p.transDate}</span>
+                          <span className="text-muted-foreground"> · {p.refType}</span>
+                          {label ? (
+                            <span className="block text-xs text-muted-foreground truncate">{label}</span>
+                          ) : null}
+                        </span>
+                        <span className="font-medium tabular-nums whitespace-nowrap shrink-0">
+                          ฿{p.paidTotal.toLocaleString()}
+                        </span>
+                      </div>
+                      {(p.paidFromCredit > 0.009 || p.paidFromRounding > 0.009) && (
+                        <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+                          {p.paidFromBank > 0.009
+                            ? `${tt("bankReceivableLinkedPaidFromBank", "통장")} ฿${p.paidFromBank.toLocaleString()}`
+                            : ""}
+                          {p.paidFromCredit > 0.009
+                            ? `${p.paidFromBank > 0.009 ? " · " : ""}${tt("bankReceivableLinkedPaidFromCredit", "선수금")} ฿${p.paidFromCredit.toLocaleString()}`
+                            : ""}
+                          {p.paidFromRounding > 0.009
+                            ? `${p.paidFromBank > 0.009 || p.paidFromCredit > 0.009 ? " · " : ""}${tt("bankReceivableLinkedPaidFromRounding", "차액")} ฿${p.paidFromRounding.toLocaleString()}`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {receivableLinkedSummary ? (
+                <div className="rounded-md border border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30 px-3 py-2 text-sm space-y-1">
+                  <div className="flex justify-between gap-2 tabular-nums">
+                    <span className="text-muted-foreground">
+                      {tt("bankReceivablePickBankAmount", "통장 입금")}
+                    </span>
+                    <span className="font-medium">
+                      ฿{receivableLinkedSummary.bankAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 tabular-nums">
+                    <span className="text-muted-foreground">
+                      {tt("bankReceivablePickSelectedTotal", "연결 합계")} ({receivableLinkedList.length})
+                    </span>
+                    <span className="font-medium">
+                      ฿{receivableLinkedSummary.linkedTotal.toLocaleString()}
+                    </span>
+                  </div>
+                  {receivableLinkedSummary.storeCreditApplied > 0.009 ? (
+                    <div className="flex justify-between gap-2 tabular-nums text-xs">
+                      <span className="text-muted-foreground">
+                        {tt("bankReceivableLinkedStoreCreditApplied", "선수금 사용")}
+                      </span>
+                      <span>
+                        ฿{receivableLinkedSummary.storeCreditApplied.toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReceivableLinkedRow(null)}>
+                  {t("cancel") || "취소"}
+                </Button>
+                <Button
+                  onClick={() => void beginReceivableLinkEdit()}
+                  disabled={receivableLinkedUnlinking}
+                >
+                  {receivableLinkedUnlinking
+                    ? "..."
+                    : tt("bankReceivableLinkedEdit", "연결 수정")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={!!receivablePickRow}
         onOpenChange={(open) => {
           if (!open) {
@@ -4601,6 +4773,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             setReceivablePickCreditApply(0)
                             setReceivablePickMismatchReason("")
                             setReceivablePickMismatchNote("")
+                            await invalidateReceivablePayableListCache()
                             loadData()
                           } finally {
                             setReceivablePickSaving(false)
