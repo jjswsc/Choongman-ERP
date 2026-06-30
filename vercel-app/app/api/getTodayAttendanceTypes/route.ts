@@ -15,6 +15,8 @@ const DEFAULT_ATTENDANCE_STATE = {
   canBreakStart: false,
   canBreakEnd: false,
   isOnBreak: false,
+  hasClockIn: false,
+  hasClockOut: false,
 }
 
 export async function GET(request: NextRequest) {
@@ -76,13 +78,16 @@ export async function GET(request: NextRequest) {
     const hasClockOut = !openSession && types.includes('퇴근')
     const canBreakStart = hasClockIn && !hasClockOut && !isOnBreak
     const canBreakEnd = hasClockIn && !hasClockOut && isOnBreak
+    const typesForClient = openSession ? types.filter((t) => t !== '퇴근') : types
 
     return NextResponse.json(
       {
-        types,
+        types: typesForClient,
         canBreakStart,
         canBreakEnd,
         isOnBreak,
+        hasClockIn,
+        hasClockOut,
       },
       { headers }
     )

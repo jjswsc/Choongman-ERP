@@ -9,6 +9,8 @@ export interface TodayAttendanceState {
   canBreakStart: boolean
   canBreakEnd: boolean
   isOnBreak: boolean
+  hasClockIn?: boolean
+  hasClockOut?: boolean
 }
 
 export async function getTodayAttendanceTypes(params: {
@@ -43,11 +45,16 @@ export async function getTodayAttendanceTypes(params: {
   }
   const o = raw as Record<string, unknown>
   const types = Array.isArray(o.types) ? o.types.filter((x): x is string => typeof x === 'string') : []
+  const hasClockIn =
+    o.hasClockIn === true || types.includes('출근') || o.canBreakStart === true || o.canBreakEnd === true
+  const hasClockOut = o.hasClockOut === true || (types.includes('퇴근') && !hasClockIn)
   return {
     types,
     canBreakStart: o.canBreakStart === true,
     canBreakEnd: o.canBreakEnd === true,
     isOnBreak: o.isOnBreak === true,
+    hasClockIn,
+    hasClockOut,
   }
 }
 

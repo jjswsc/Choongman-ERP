@@ -22,15 +22,12 @@ import {
   writePosCartItemsCache,
 } from '@/components/pos/cart-panel'
 import { replacePosCartItemsCache } from '@/lib/pos-cart-items-cache'
-import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
+import { PosTerminalDialogs, type KbankOutcomeState } from '@/components/pos/terminal/pos-terminal-dialogs'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
@@ -39,7 +36,7 @@ import {
   buildPosStoreCodeMatchVariants,
   posStoreCodeMatchesVariants,
 } from '@/lib/pos-store-code-match-variants'
-import { LayoutGrid, Bike, Package, Search, QrCode as QrCodeIcon } from 'lucide-react'
+import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
 import {
   getMembers,
   getPosMenus,
@@ -102,10 +99,7 @@ import {
   reconcilePayloadItemsWithTerminalCart,
 } from '@/lib/pos-terminal-order-items'
 import { OfflineBanner } from '@/components/offline-banner'
-import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
-import { PosPostPaymentCashChangeDialog } from '@/components/pos/pos-post-payment-cash-change-dialog'
-import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
-import { PosKbankPaymentOutcomeDialog } from '@/components/pos/pos-kbank-payment-outcome-dialog'
+import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { useAuth } from '@/lib/auth-context'
 import { isLangCode, useLang, type LangCode } from '@/lib/lang-context'
 import { tr, useT } from '@/lib/i18n'
@@ -134,11 +128,6 @@ import {
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
-import {
-  PosTaxInvoiceFieldLabel,
-  PosTaxInvoiceRequiredLegend,
-  PosTaxInvoiceValidationAlert,
-} from '@/components/pos/pos-tax-invoice-form-ui'
 import { escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -246,7 +235,6 @@ import {
   resolvePosOrderTypeReceiptLabel,
 } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
-import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import {
   extractKbankQrResponseMeta,
   extractKbankPaymentTxnNo,
@@ -341,7 +329,6 @@ import {
 } from '@/lib/pos-terminal-auto-print'
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
-import { taxInvoiceFromRecipientRow } from '@/lib/pos-terminal-tax-invoice'
 
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
@@ -369,16 +356,6 @@ type PendingPayRequest = {
   /** 기존 주문에 연결된 회원 — 결제 시 포인트 적립용 */
   orderMember?: PosExistingOrderCheckoutMember
 } | null
-
-type KbankOutcomeState = {
-  kind: 'success' | 'cancelled' | 'voided'
-  amount: number
-  refId: string
-  paymentMethod?: string
-  cardLabel?: string
-  approvalCode?: string
-  timeLabel?: string
-}
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
 const FLOOR_PREF_KEY = 'pos-terminal-floor:'
@@ -11169,529 +11146,169 @@ export default function PosTerminalPage() {
           )
         })()}
       </div>
-      <Dialog
-        open={taxInvoiceTargetOrder != null}
-        onOpenChange={(open) => {
-          if (!open) {
+      <PosTerminalDialogs
+        t={t}
+        tPrint={tPrint}
+        isPosDemo={isPosDemo}
+        taxInvoice={{
+          targetOrder: taxInvoiceTargetOrder,
+          onDismiss: () => {
             setTaxInvoiceTargetOrder(null)
             setTaxInvoiceSaving(false)
             setTaxSearchLoading(false)
             setTaxSearchRows([])
             setTaxSearchMessage('')
-          }
+          },
+          saving: taxInvoiceSaving,
+          searchField: taxSearchField,
+          onSearchFieldChange: setTaxSearchField,
+          searchKeyword: taxSearchKeyword,
+          onSearchKeywordChange: setTaxSearchKeyword,
+          searchLoading: taxSearchLoading,
+          searchRows: taxSearchRows,
+          searchMessage: taxSearchMessage,
+          onSearch: handleTaxRecipientSearch,
+          onApplyProfile: applyTaxInvoiceProfile,
+          branchRequired: taxBranchRequired,
+          formErrors: taxFormErrors,
+          customerType: tiCustomerType,
+          onCustomerTypeChange: setTiCustomerType,
+          memberNo: tiMemberNo,
+          onMemberNoChange: setTiMemberNo,
+          name: tiName,
+          onNameChange: setTiName,
+          taxId: tiTaxId,
+          onTaxIdChange: setTiTaxId,
+          branchNo: tiBranchNo,
+          onBranchNoChange: setTiBranchNo,
+          phone: tiPhone,
+          onPhoneChange: setTiPhone,
+          email: tiEmail,
+          onEmailChange: setTiEmail,
+          address: tiAddress,
+          onAddressChange: setTiAddress,
+          onSave: handleSaveTaxInvoiceForOrder,
         }}
-      >
-        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t('posReceiptTaxInvoice') || '세금계산서'}</DialogTitle>
-            <DialogDescription className="text-left">
-              <span className="font-mono text-foreground">{taxInvoiceTargetOrder?.orderNo || '-'}</span>
-              <span className="mt-2 block text-xs text-muted-foreground">
-                {t('posTaxInvoiceAfterPaymentHint') || '결제 완료 후에도 세금계산서 정보를 저장할 수 있습니다.'}
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <div className="grid grid-cols-[120px_minmax(0,1fr)_auto] gap-2">
-              <Select
-                value={taxSearchField}
-                onValueChange={(v) => setTaxSearchField(v as 'taxId' | 'name' | 'phone')}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="taxId">{t('posTaxIdLabel') || 'Tax ID'}</SelectItem>
-                  <SelectItem value="name">{t('company_name') || t('posName') || '이름'}</SelectItem>
-                  <SelectItem value="phone">{t('posPhone') || '전화번호'}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                className="h-9"
-                value={taxSearchKeyword}
-                onChange={(e) => setTaxSearchKeyword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    void handleTaxRecipientSearch()
-                  }
-                }}
-                placeholder={t('search') || '검색'}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9"
-                onClick={() => void handleTaxRecipientSearch()}
-                disabled={taxSearchLoading}
-              >
-                {t('search') || '검색'}
-              </Button>
-            </div>
-            {taxSearchRows.length > 0 && (
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
-                {taxSearchRows.map((row) => (
-                  <button
-                    key={row.id}
-                    type="button"
-                    className="w-full rounded border border-transparent px-2 py-1 text-left text-xs hover:border-border hover:bg-muted/40"
-                    onClick={() => applyTaxInvoiceProfile(taxInvoiceFromRecipientRow(row))}
-                  >
-                    <div className="font-medium">{row.name || '-'}</div>
-                    <div className="text-muted-foreground">
-                      {row.tax_id || '-'} · {row.phone || '-'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {taxSearchMessage && <p className="text-xs text-muted-foreground">{taxSearchMessage}</p>}
-            <PosTaxInvoiceRequiredLegend t={(key) => t(key)} />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <PosTaxInvoiceFieldLabel>{t('posTaxCustomerTypeLabel') || '구분'}</PosTaxInvoiceFieldLabel>
-                <Select
-                  value={tiCustomerType}
-                  onValueChange={(v) => setTiCustomerType(v === 'company' ? 'company' : 'person')}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="person">{t('posTaxCustomerIndividual') || '개인'}</SelectItem>
-                    <SelectItem value="company">{t('posTaxCustomerCorporate') || '법인'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <PosTaxInvoiceFieldLabel optional optionalText={t('posOptional')}>
-                  {t('member_no') || '회원번호'}
-                </PosTaxInvoiceFieldLabel>
-                <Input className="h-9" value={tiMemberNo} onChange={(e) => setTiMemberNo(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <PosTaxInvoiceFieldLabel required>{t('posName') || '이름'}</PosTaxInvoiceFieldLabel>
-              <Input className="h-9" value={tiName} onChange={(e) => setTiName(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <PosTaxInvoiceFieldLabel required>{t('posTaxIdLabel') || 'Tax ID'}</PosTaxInvoiceFieldLabel>
-                <Input
-                  className="h-9"
-                  inputMode="numeric"
-                  value={tiTaxId}
-                  onChange={(e) => setTiTaxId(e.target.value.replace(/\D/g, '').slice(0, 13))}
-                />
-              </div>
-              <div className="space-y-1">
-                <PosTaxInvoiceFieldLabel required={taxBranchRequired}>
-                  {t('posBranchLabel') || '지점'}
-                </PosTaxInvoiceFieldLabel>
-                <Input
-                  className="h-9"
-                  inputMode="numeric"
-                  value={tiBranchNo}
-                  onChange={(e) => setTiBranchNo(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <PosTaxInvoiceFieldLabel required>{t('posPhone') || '전화번호'}</PosTaxInvoiceFieldLabel>
-                <Input
-                  className="h-9"
-                  inputMode="tel"
-                  value={tiPhone}
-                  onChange={(e) => setTiPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                />
-              </div>
-              <div className="space-y-1">
-                <PosTaxInvoiceFieldLabel optional optionalText={t('posOptional')}>
-                  {t('posTaxEmailLabel') || 'E-mail'}
-                </PosTaxInvoiceFieldLabel>
-                <Input className="h-9" value={tiEmail} onChange={(e) => setTiEmail(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <PosTaxInvoiceFieldLabel required>{t('settings_address') || '주소'}</PosTaxInvoiceFieldLabel>
-              <Textarea value={tiAddress} onChange={(e) => setTiAddress(e.target.value)} rows={3} />
-            </div>
-            <PosTaxInvoiceValidationAlert errors={taxFormErrors} t={(key) => t(key)} />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setTaxInvoiceTargetOrder(null)} disabled={taxInvoiceSaving}>
-              {t('btnClose') || '닫기'}
-            </Button>
-            <Button type="button" onClick={() => void handleSaveTaxInvoiceForOrder()} disabled={taxInvoiceSaving || taxFormErrors.length > 0}>
-              {t('save') || '저장'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <PosKbankPaymentOutcomeDialog
-        open={kbankOutcomeState != null}
-        onOpenChange={(open) => {
-          if (!open) {
-            /** 취소/Void 후에도 패널·ID를 남겨 둬 Inquiry로 취소 상태를 조회할 수 있게 한다.
-             *  (정리는 직원 모니터의 "닫기" 버튼 또는 새 QR 생성 시) */
-            setKbankOutcomeState(null)
-          }
+        kbankOutcome={{
+          state: kbankOutcomeState,
+          onOpenChange: (open) => {
+            if (!open) setKbankOutcomeState(null)
+          },
+          onViewAllOrders: () => {
+            setActiveTab('tables')
+            setSelectedDeliveryTargetId(null)
+            setSelectedDeliveryTargetLabel('')
+            setSelectedTakeoutTargetId(null)
+            setSelectedTakeoutTargetLabel('')
+          },
+          onCreateNewQr: () => {
+            clearKbankQrSession()
+          },
         }}
-        kind={kbankOutcomeState?.kind || 'success'}
-        amount={Number(kbankOutcomeState?.amount || 0)}
-        refId={String(kbankOutcomeState?.refId || '')}
-        paymentMethod={kbankOutcomeState?.paymentMethod}
-        cardLabel={kbankOutcomeState?.cardLabel}
-        approvalCode={kbankOutcomeState?.approvalCode}
-        timeLabel={kbankOutcomeState?.timeLabel}
-        onViewAllOrders={() => {
-          setActiveTab('tables')
-          setSelectedDeliveryTargetId(null)
-          setSelectedDeliveryTargetLabel('')
-          setSelectedTakeoutTargetId(null)
-          setSelectedTakeoutTargetLabel('')
+        kbankStaffMonitor={{
+          visible: showKbankStaffMonitor,
+          tourAttr: isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined,
+          liveQrPayload: liveKbankQrPayload,
+          callbackState: kbankCallbackState,
+          effectiveQrAmount: effectiveStaffKbankQrAmount,
+          effectiveQrType: effectiveCustomerDisplayQrType,
+          qrTypeLabel: staffKbankQrTypeLabel,
+          sentQrTypeCode: kbankSentQrTypeCode,
+          linkposQrBridgeStatus: linkposQrBridgeStatus,
+          generateAuditText: kbankGenerateAuditText,
+          effectiveStaffQrPayload: effectiveStaffKbankQrPayload,
+          opsTxnUid: kbankOpsTxnUid,
+          opsOrigTxnUid: kbankOpsOrigTxnUid,
+          opsTxnNo: kbankOpsTxnNo,
+          onOpsTxnNoChange: setKbankOpsTxnNo,
+          opsTerminalId: kbankOpsTerminalId,
+          onOpsTerminalIdChange: setKbankOpsTerminalId,
+          opsBusy: kbankOpsBusy,
+          opsLastResult: kbankOpsLastResult,
+          apiPausedUntilMs: kbankApiPausedUntilMs,
+          isPilotStore: isKbankPilotStore,
+          onFollowupAction: runKbankFollowupAction,
+          onClearSession: clearKbankQrSession,
         }}
-        onCreateNewQr={() => {
-          clearKbankQrSession()
+        liveMenuSearch={{
+          open: liveSearchOpen,
+          onOpenChange: setLiveSearchOpen,
+          storeCode: currentStoreId,
+          onServedUpdated: refetchCurrentStore,
         }}
-      />
-      {showKbankStaffMonitor ? (
-        <div
-          className="pointer-events-auto fixed right-4 top-20 z-[70] flex max-h-[calc(100dvh-5.5rem)] w-[360px] flex-col overflow-y-auto overscroll-y-contain rounded-lg border bg-background/95 p-3 shadow-2xl backdrop-blur"
-          data-tour={isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">
-                {t('posPaymentQr') || 'QR 결제'} · {t('posStaffQrMonitor') || '직원 모니터'}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {String(liveKbankQrPayload || '').trim()
-                  ? t('posScanToPayHint') || '고객이 스캔해서 결제할 수 있게 이 화면을 보여주세요.'
-                  : t('posDemoBanner') || '데모 — 실제 주문·결제는 실데이터에 반영되지 않습니다.'}
-              </p>
-            </div>
-            {(() => {
-              if (isPosDemo && !String(liveKbankQrPayload || '').trim()) {
-                return (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
-                    DEMO
-                  </div>
-                )
-              }
-              if (kbankCallbackState === 'received') {
-                return (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
-                    {t('posKbankStatusPaid') || 'PAID'}
-                  </div>
-                )
-              }
-              if (kbankCallbackState === 'failed') {
-                return (
-                  <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700">
-                    {t('posKbankStatusCancelled') || 'CANCELLED'}
-                  </div>
-                )
-              }
-              return (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
-                  LIVE
-                </div>
-              )
-            })()}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {`QR ${(t('amount') || '금액')}: ${effectiveStaffKbankQrAmount.toFixed(2)} ฿`}
-          </p>
-          <p
-            className={`mt-1 text-xs font-semibold ${
-              effectiveCustomerDisplayQrType === 'CREDIT_CARD'
-                ? 'text-indigo-800 dark:text-indigo-300'
-                : 'text-sky-800 dark:text-sky-300'
-            }`}
-          >
-            {staffKbankQrTypeLabel}
-          </p>
-          {kbankSentQrTypeCode ? (
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              {(t('posKbankSentQrTypeCode') || 'Sent qrType')}: {kbankSentQrTypeCode}
-            </p>
-          ) : null}
-          {linkposQrBridgeStatus === 'ok' ? (
-            <p className="mt-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-              {t('posLinkposQrDisplayOk') || 'QR shown on EDC terminal'}
-            </p>
-          ) : linkposQrBridgeStatus === 'failed' ? (
-            <p className="mt-1 text-[10px] font-medium text-amber-800 dark:text-amber-200">
-              {t('posLinkposQrDisplayFailed') ||
-                'EDC QR not shown — use cashier or customer display QR.'}
-            </p>
-          ) : null}
-          {kbankGenerateAuditText ? (
-            <div className="mt-2 space-y-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 w-full text-[10px]"
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(kbankGenerateAuditText)
-                    .then(() => appAlert(t('posKbankAuditCopied') || 'Copied KBank message for support.'))
-                    .catch(() => appAlert(t('posTerminalDeviceIdCopyFail') || 'Copy failed'))
-                }}
-              >
-                {t('posKbankCopyAuditMessage') || 'Copy request/response for KBank'}
-              </Button>
-            </div>
-          ) : null}
-          <div className="mt-3 shrink-0 rounded-md border bg-white p-2">
-            <div className="flex justify-center overflow-hidden rounded-md border bg-white">
-              {String(effectiveStaffKbankQrPayload || '').trim().startsWith('000201') ? (
-                <PosQrGuidelineCard
-                  payload={String(effectiveStaffKbankQrPayload || '').trim()}
-                  kind={effectiveCustomerDisplayQrType}
-                  className="border-0"
-                />
-              ) : String(kbankOpsTxnUid || '').trim() ? (
-                <div className="flex min-h-[120px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
-                  <span>
-                    {kbankCallbackState === 'failed'
-                      ? t('posKbankStatusCancelled') || 'CANCELLED'
-                      : t('posPending') || 'Pending'}
-                    {' · '}
-                    {t('posKbankInquiry') || 'Inquiry'}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex min-h-[280px] flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
-                  <QrCodeIcon className="h-10 w-10 text-emerald-600" aria-hidden />
-                  <span>{t('posLoading') || '로딩 중'}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          {!isPosDemo && isKbankPilotStore ? (
-            <div className="mt-3 rounded-md border border-border/70 bg-card p-2">
-              <p className="text-[11px] font-semibold text-muted-foreground">
-                {t('posKbankFollowupTitle') || 'KBank 후속 처리 (현재 POS)'}
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {`${t('posKbankPartnerTxnUidLabel') || 'partnerTxnUid'}: ${kbankOpsTxnUid || '-'}`}
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {`Callback: ${
-                  kbankCallbackState === 'received'
-                    ? 'received'
-                    : kbankCallbackState === 'failed'
-                      ? 'failed'
-                      : kbankCallbackState === 'waiting'
-                        ? 'waiting'
-                        : 'idle'
-                }`}
-              </p>
-              {kbankCallbackState === 'waiting' && kbankOpsTxnUid ? (
-                <p className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-100">
-                  {t('posKbankCallbackWaitingHint') ||
-                    'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.'}
-                </p>
-              ) : null}
-              {kbankApiPausedUntilMs > Date.now() ? (
-                <p className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[11px] font-medium text-rose-900 dark:text-rose-100">
-                  {String(t('posKbankRateLimitAlert') || '')
-                    .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
-                    .replace('{label}', 'Inquiry') ||
-                    'KBank API rate limit — wait a few minutes, then tap Inquiry once.'}
-                </p>
-              ) : null}
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px]">{t('posKbankOrigTxnUidLabel') || 'origPartnerTxnUid'}</Label>
-                  <Input
-                    className="h-8 bg-muted/50 text-xs"
-                    readOnly
-                    value={kbankOpsTxnUid || kbankOpsOrigTxnUid}
-                    placeholder={t('posKbankOrigTxnUidHint') || 'QR 요청 TxnUid'}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px]">{t('posKbankTxnNoLabel') || 'txnNo'}</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    value={kbankOpsTxnNo}
-                    onChange={(e) => setKbankOpsTxnNo(e.target.value)}
-                    placeholder={t('posKbankTxnNoHint') || '결제 txnNo'}
-                  />
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-[11px]">{t('posKbankTerminalIdLabel') || 'terminalId (QR 카드 필수)'}</Label>
-                  <Input
-                    className="h-8 text-xs"
-                    value={kbankOpsTerminalId}
-                    onChange={(e) => setKbankOpsTerminalId(e.target.value)}
-                    placeholder={t('posKbankTerminalIdHint') || '예: 09000107'}
-                  />
-                </div>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
-                  onClick={() => void runKbankFollowupAction('inquiry')}
-                >
-                  {t('posKbankInquiry') || 'Inquiry'}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
-                  onClick={() => void runKbankFollowupAction('settlement')}
-                >
-                  {t('posKbankSettlement') || 'Settlement'}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
-                  onClick={() => void runKbankFollowupAction('cancel')}
-                >
-                  {t('posKbankCancel') || 'Cancel'}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  disabled={kbankOpsBusy || kbankCallbackState === 'received'}
-                  title={
-                    !String(kbankOpsTxnNo || '').trim()
-                      ? t('posKbankVoidNeedsTxnNo') ||
-                        'Void runs Inquiry first when txnNo is empty.'
-                      : undefined
-                  }
-                  onClick={() => void runKbankFollowupAction('void')}
-                >
-                  {t('posKbankVoid') || 'Void'}
-                </Button>
-              </div>
-              {kbankOpsLastResult ? (
-                <Textarea
-                  readOnly
-                  value={kbankOpsLastResult}
-                  className="mt-2 h-20 resize-none text-[10px]"
-                />
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="mt-2 h-8 w-full text-xs text-muted-foreground"
-                disabled={kbankOpsBusy}
-                onClick={() => clearKbankQrSession()}
-              >
-                {t('posKbankCloseSession') || 'Close'}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <LiveMenuSearchDialog
-        open={liveSearchOpen}
-        onOpenChange={setLiveSearchOpen}
-        storeCode={currentStoreId}
-        t={t}
-        isDemo={isPosDemo}
-        onServedUpdated={refetchCurrentStore}
-      />
-      <PosPostPaymentCashChangeDialog
-        amountBaht={postPaymentCashChangeBaht}
-        onDismiss={() => setPostPaymentCashChangeBaht(null)}
-        t={t}
-      />
-      <PosReceiptModal
-        onOpenChange={(open) => {
-          if (open) return
-          if (receiptData?.suppressReceiptModalAutoPrint) {
-            setReceiptData(null)
-            return
-          }
-          flushNextReceiptQueue()
+        postPaymentCashChange={{
+          amountBaht: postPaymentCashChangeBaht,
+          onDismiss: () => setPostPaymentCashChangeBaht(null),
         }}
-        onSuppressDismiss={() => setReceiptData(null)}
-        onAutoPrintComplete={flushNextReceiptQueue}
-        receiptData={receiptData}
-        menus={menus}
-        orderTypeLabels={{
-          dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
-          takeout: tPrint('posOrderTypeTakeout') ?? '포장',
-          delivery: tPrint('posOrderTypeDelivery') ?? '배달',
-        }}
-        t={tPrint}
-        autoPrintReceiptOnOrder={effectiveAutoPrintReceiptOnOrder}
-        autoPrintReceiptOnAddOrder={effectiveAutoPrintReceiptOnAddOrder}
-        autoPrintReceiptOnPayment={effectiveAutoPrintReceiptOnPayment}
-        autoPrintKitchenSlipOnOrder={effectiveAutoPrintKitchenSlipOnOrder}
-        receiptBizName={receiptBizName}
-        receiptBizTaxId={receiptBizTaxId}
-        receiptBizAbn={receiptBizAbn}
-        receiptBizOwner={receiptBizOwner}
-        receiptBizAddress={receiptBizAddress}
-        receiptBizPhone={receiptBizPhone}
-        receiptDesignStyle={receiptDesignStyle}
-        receiptLogoSize={receiptLogoSize}
-        receiptShowTitle={receiptShowTitle}
-        receiptShowPaidStamp={receiptShowPaidStamp}
-        receiptShowThankYou={receiptShowThankYou}
-        receiptShowCustomerCopy={receiptShowCustomerCopy}
-        receiptFooterPrimaryText={receiptFooterPrimaryText}
-        receiptFooterSecondaryText={receiptFooterSecondaryText}
-        receiptLogoImageUrl={receiptLogoImageUrl}
-        receiptStampImageUrl={receiptStampImageUrl}
-        receiptShowStamp={receiptShowStamp}
-        receiptStampOnlyTaxInvoice={receiptStampOnlyTaxInvoice}
-        receiptMembershipQrImageUrl={receiptMembershipQrImageUrl}
-        receiptMembershipQrLinkUrl={receiptMembershipQrLinkUrl}
-        receiptMembershipQrText={receiptMembershipQrText}
-        receiptShowMembershipQr={receiptShowMembershipQr}
-        signatureLine={signatureLine}
-        receiptBarcode={
-          receiptBarcode && receiptData?.receiptAutoPrintContext !== 'payment'
-        }
-        itemBarcode={
-          itemBarcode && receiptData?.receiptAutoPrintContext !== 'payment'
-        }
-        printerSettingsRef={posPrinterSettingsRef}
-        kitchenPromoLineEnrich={posReceiptLineOpts}
-        onPaymentVoidClick={() => void runKbankFollowupAction('void')}
-        paymentVoidEnabled={
-          Boolean(
+        receipt={{
+          data: receiptData,
+          onOpenChange: (open) => {
+            if (open) return
+            if (receiptData?.suppressReceiptModalAutoPrint) {
+              setReceiptData(null)
+              return
+            }
+            flushNextReceiptQueue()
+          },
+          onSuppressDismiss: () => setReceiptData(null),
+          onAutoPrintComplete: flushNextReceiptQueue,
+          menus,
+          orderTypeLabels: {
+            dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
+            takeout: tPrint('posOrderTypeTakeout') ?? '포장',
+            delivery: tPrint('posOrderTypeDelivery') ?? '배달',
+          },
+          autoPrintReceiptOnOrder: effectiveAutoPrintReceiptOnOrder,
+          autoPrintReceiptOnAddOrder: effectiveAutoPrintReceiptOnAddOrder,
+          autoPrintReceiptOnPayment: effectiveAutoPrintReceiptOnPayment,
+          autoPrintKitchenSlipOnOrder: effectiveAutoPrintKitchenSlipOnOrder,
+          receiptBizName,
+          receiptBizTaxId,
+          receiptBizAbn,
+          receiptBizOwner,
+          receiptBizAddress,
+          receiptBizPhone,
+          receiptDesignStyle,
+          receiptLogoSize,
+          receiptShowTitle,
+          receiptShowPaidStamp,
+          receiptShowThankYou,
+          receiptShowCustomerCopy,
+          receiptFooterPrimaryText,
+          receiptFooterSecondaryText,
+          receiptLogoImageUrl,
+          receiptStampImageUrl,
+          receiptShowStamp,
+          receiptStampOnlyTaxInvoice,
+          receiptMembershipQrImageUrl,
+          receiptMembershipQrLinkUrl,
+          receiptMembershipQrText,
+          receiptShowMembershipQr,
+          signatureLine,
+          receiptBarcode,
+          itemBarcode,
+          printerSettingsRef: posPrinterSettingsRef,
+          kitchenPromoLineEnrich: posReceiptLineOpts,
+          onPaymentVoidClick: () => void runKbankFollowupAction('void'),
+          paymentVoidEnabled: Boolean(
             isKbankPilotStore &&
-            receiptData?.receiptAutoPrintContext === 'payment' &&
-            String(kbankOpsTxnUid || '').trim()
-          )
-        }
-        paymentVoidBusy={kbankOpsBusy}
-      />
-      <DeliveryEditOrderNoDialog
-        open={deliveryEditOrderNoOpen}
-        onOpenChange={setDeliveryEditOrderNoOpen}
-        order={selectedDeliveryOrder}
-        value={deliveryEditOrderNoValue}
-        onValueChange={setDeliveryEditOrderNoValue}
-        onSaved={async (newTableName) => {
-          setSelectedDeliveryTargetLabel(newTableName)
-          await refetchCurrentStore()
+              receiptData?.receiptAutoPrintContext === 'payment' &&
+              String(kbankOpsTxnUid || '').trim()
+          ),
+          paymentVoidBusy: kbankOpsBusy,
         }}
-        t={t}
-        deliveryApps={deliveryAppsFromApi}
+        deliveryEditOrderNo={{
+          open: deliveryEditOrderNoOpen,
+          onOpenChange: setDeliveryEditOrderNoOpen,
+          order: selectedDeliveryOrder,
+          value: deliveryEditOrderNoValue,
+          onValueChange: setDeliveryEditOrderNoValue,
+          onSaved: async (newTableName) => {
+            setSelectedDeliveryTargetLabel(newTableName)
+            await refetchCurrentStore()
+          },
+          deliveryApps: deliveryAppsFromApi,
+        }}
       />
         </div>
       </div>

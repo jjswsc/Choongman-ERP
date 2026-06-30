@@ -7,7 +7,9 @@ import {
   attendanceStoreNamePostgrestFilter,
   getOpenBreakStartMs,
   hasUnclosedClockWorkSession,
+  addDayBangkok,
 } from '@/lib/attendance-utils'
+import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch-server'
 import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
 import { canEmployeeUseAttendanceQr, isAttendanceQrRequiredForAllStores } from '@/lib/attendance-qr-pilot'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -141,52 +143,17 @@ export async function POST(request: NextRequest) {
 
     const attendanceGuardTypes = ['출근', '퇴근', '휴식시작', '휴식종료']
     if (attendanceGuardTypes.includes(logType)) {
-      const storeIlike = encodeURIComponent(attendanceStoreIlikeFragment(storeName))
-      let logs: { log_at?: string; log_type?: string }[]
-      if (empId > 0) {
-        const byIdFilter = `store_name=ilike.${storeIlike}&employee_id=eq.${empId}`
-        const byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
-          order: 'log_at.desc',
-          limit: 100,
-          select: 'id,log_at,log_type',
-        })) as { id?: number; log_at?: string; log_type?: string }[]
-        if (empCodeNorm) {
-          try {
-            const codeLeg = `store_name=ilike.${storeIlike}&employee_code=eq.${encodeURIComponent(empCodeNorm)}`
-            const codeRows = (await supabaseSelectFilter('attendance_logs', codeLeg, {
-              order: 'log_at.desc',
-              limit: 100,
-              select: 'id,log_at,log_type',
-            })) as { id?: number; log_at?: string; log_type?: string }[]
-            const seen = new Set<number>()
-            const merged: { log_at?: string; log_type?: string }[] = []
-            const push = (r: { id?: number; log_at?: string; log_type?: string }) => {
-              const lid = r.id != null && Number.isFinite(Number(r.id)) ? Math.floor(Number(r.id)) : NaN
-              if (!Number.isNaN(lid)) {
-                if (seen.has(lid)) return
-                seen.add(lid)
-              }
-              merged.push({ log_at: r.log_at, log_type: r.log_type })
-            }
-            for (const r of byIdRows || []) push(r)
-            for (const r of codeRows || []) push(r)
-            merged.sort((a, b) => String(b.log_at || '').localeCompare(String(a.log_at || '')))
-            logs = merged.slice(0, 100)
-          } catch (e) {
-            const em = e instanceof Error ? e.message : String(e)
-            if (!/employee_code|42703|column/i.test(em)) throw e
-            logs = (byIdRows || []).map(({ log_at, log_type }) => ({ log_at, log_type }))
-          }
-        } else {
-          logs = (byIdRows || []).map(({ log_at, log_type }) => ({ log_at, log_type }))
-        }
-      } else {
-        logs = (await supabaseSelectFilter(
-          'attendance_logs',
-          `store_name=ilike.${storeIlike}&name=ilike.${encodeURIComponent(empName)}`,
-          { order: 'log_at.desc', limit: 100, select: 'log_at,log_type' }
-        )) as { log_at?: string; log_type?: string }[]
-      }
+      const logs = await fetchMergedAttendanceLogsForEmployee({
+        storeFilter: storeName,
+        employeeName: empName,
+        ...(empId > 0 ? { employeeId: empId } : {}),
+        ...(empCodeNorm ? { employeeCode: String(raw.employeeCode ?? empCodeNorm) } : {}),
+        startDate: addDayBangkok(todayStrVal, -1),
+        endDate: todayStrVal,
+        order: 'log_at.desc',
+        limit: 100,
+        select: 'id,log_at,log_type,employee_id,employee_code,name',
+      })
       const todayLogs = (logs || []).filter((r) => {
         const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
         return rowDate === todayStrVal

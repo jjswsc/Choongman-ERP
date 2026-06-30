@@ -378,8 +378,14 @@ export function HrTab() {
   }
 
   const todayTypes = todayAttendanceState.types || []
-  const hasClockIn = todayTypes.includes("출근")
-  const hasClockOut = todayTypes.includes("퇴근")
+  const hasClockIn =
+    todayAttendanceState.hasClockIn === true ||
+    todayTypes.includes("출근") ||
+    todayAttendanceState.canBreakStart ||
+    todayAttendanceState.canBreakEnd
+  const hasClockOut =
+    todayAttendanceState.hasClockOut === true ||
+    (todayTypes.includes("퇴근") && !hasClockIn)
   const canBreakStart = todayAttendanceState.canBreakStart
   const canBreakEnd = todayAttendanceState.canBreakEnd
 

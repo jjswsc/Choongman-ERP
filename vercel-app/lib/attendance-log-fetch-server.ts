@@ -4,7 +4,7 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
   addDayBangkok,
-  attendanceStoreNamePostgrestFilter,
+  attendanceStoreNamePostgrestVariantsFilter,
   bangkokDateRangeToUtc,
   todayStrBangkok,
 } from '@/lib/attendance-utils'
@@ -137,10 +137,9 @@ export async function fetchMergedAttendanceLogsForEmployee(
   const todayStr = todayStrBangkok()
   const startDate = (params.startDate || addDayBangkok(todayStr, -1)).trim().slice(0, 10)
   const endDate = (params.endDate || todayStr).trim().slice(0, 10)
-  const { startISO } = bangkokDateRangeToUtc(startDate, endDate)
-  const endISOExclusive = `${addDayBangkok(endDate, 1)}T00:00:00.000Z`
+  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
 
-  const storeQ = attendanceStoreNamePostgrestFilter(storeFilter)
+  const storeQ = attendanceStoreNamePostgrestVariantsFilter(storeFilter)
   const rangeParts = [
     storeQ,
     `log_at=gte.${encodeURIComponent(startISO)}`,
