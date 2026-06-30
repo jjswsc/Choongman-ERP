@@ -5,6 +5,7 @@ import QRCode from "qrcode"
 import { Button } from "@/components/ui/button"
 import { formatBaht } from "@/components/member-portal/portal-ui"
 import type { PortalCouponRow } from "@/components/member-portal/portal-ui"
+import { isMemberPortalCouponReady } from "@/lib/member-portal-coupon-status"
 import type { MemberSummary } from "@/lib/members-server"
 import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
@@ -169,7 +170,7 @@ export function MemberPortalCheckoutSheet({
       .then((j: { success?: boolean; rows?: PortalCouponRow[] }) => {
         if (j.success) {
           setCoupons(
-            (j.rows || []).filter((c) => String(c.status || "").toLowerCase() === "issued")
+            (j.rows || []).filter((c) => isMemberPortalCouponReady(String(c.status || "")))
           )
         }
       })

@@ -27,6 +27,7 @@ import {
   type PortalVisitRow,
 } from "@/components/member-portal/portal-ui"
 import { memberPortalPointKindLabel } from "@/lib/member-portal-i18n"
+import { isMemberPortalCouponReady } from "@/lib/member-portal-coupon-status"
 import { cn } from "@/lib/utils"
 
 type PrivilegeSection = "coupons" | "benefits" | "history"
@@ -141,11 +142,11 @@ export function MemberPortalPrivilegeTab({
   const [detailVisit, setDetailVisit] = React.useState<PortalVisitRow | null>(null)
 
   const activeCoupons = React.useMemo(
-    () => coupons.filter((c) => c.status === "issued"),
+    () => coupons.filter((c) => isMemberPortalCouponReady(c.status)),
     [coupons]
   )
   const usedCoupons = React.useMemo(
-    () => coupons.filter((c) => c.status !== "issued"),
+    () => coupons.filter((c) => !isMemberPortalCouponReady(c.status)),
     [coupons]
   )
   const claimableOffers = React.useMemo(

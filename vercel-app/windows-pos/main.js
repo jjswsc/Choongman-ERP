@@ -1353,12 +1353,23 @@ async function waitForHiddenWindowSettle(printWindow, baseSettleMs) {
   }
 }
 
+/**
+ * 영수증(printRole=receipt): 용지 부족 등으로 1차 무인쇄가 이미 나갔는데 실패로 잡히면
+ * 동일 HTML 재시도 시 홀·결제 영수증이 2장 나갈 수 있어 무인쇄 재시도·드라이버 기본값 자동 2차를 쓰지 않음.
+ */
+function resolvePrintHtmlSilentRetryMax(options) {
+  if (options && options.printRole === "receipt") return 0;
+  return PRINT_HTML_SILENT_RETRY_COUNT;
+}
+
 /** 영수증·주방전 HTML: 렌더러 iframe.print()는 Electron에서 무시되는 경우가 많아 메인에서 숨은 창으로 인쇄
  * @param {{ preferDialog?: boolean }} [options] preferDialog true면 무인쇄·열전사 최적화를 건너뛰고 시스템 인쇄 대화상자만 사용(프린터 선택·미리보기)
  */
 async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
   return queueHtmlPrintTask(async () => {
     const preferDialog = Boolean(options && options.preferDialog);
+    const isReceiptRole = Boolean(options && options.printRole === "receipt");
+    const silentRetryMax = resolvePrintHtmlSilentRetryMax(options);
     const tmpRoot = app.getPath("temp");
     const tmpPath = path.join(
       tmpRoot,
@@ -1465,7 +1476,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       // #endregion
       let r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
       let thermalAttempts = 1;
-      while (!r.success && thermalAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
+      while (!r.success && thermalAttempts <= silentRetryMax) {
         thermalAttempts += 1;
         await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
         await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
@@ -1477,13 +1488,13 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         failureReason: String(r.failureReason || ""),
       });
       // #endregion
-      if (!r.success && DEFAULT_PRINT_SILENT) {
+      if (!r.success && DEFAULT_PRINT_SILENT && !isReceiptRole) {
         printStage = "silent_driver_default";
         const driverDefaultOpts = getHtmlSilentDriverDefaultPrintOptions();
         if (resolvedDevice) driverDefaultOpts.deviceName = resolvedDevice;
         r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
         let driverAttempts = 1;
-        while (!r.success && driverAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
+        while (!r.success && driverAttempts <= silentRetryMax) {
           driverAttempts += 1;
           await delayMs(120 * driverAttempts + htmlPrintFailureStreak * 80);
           await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);

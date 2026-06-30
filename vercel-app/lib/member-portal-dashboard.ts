@@ -9,6 +9,7 @@ import {
   resolveMemberTierQualificationValue,
 } from '@/lib/members-server'
 import { computeTierProgress, loadMemberTierUpgradeBasis } from '@/lib/member-tier-policy'
+import { isMemberPortalCouponReady } from '@/lib/member-portal-coupon-status'
 import { normalizeMemberTierCode } from '@/lib/member-tier-public'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -61,7 +62,7 @@ export async function getMemberPortalDashboard(memberId: number): Promise<Member
   const visitTotal = visits.reduce((sum, row) => sum + Number(row.total || 0), 0)
   const lifetimeAmount = Math.max(Number(member.lifetimeAmount || 0), visitTotal)
   const avgTicket = visitCount > 0 ? Math.round(visitTotal / visitCount) : 0
-  const availableCoupons = coupons.filter((c) => toText(c.status) === 'issued').length
+  const availableCoupons = coupons.filter((c) => isMemberPortalCouponReady(toText(c.status))).length
   const pointsEarnedTotal = points.filter((p) => Number(p.points) > 0).reduce((s, p) => s + Number(p.points), 0)
   const tierQualificationPoints = await getMemberTierQualificationPoints(memberId)
   const qualificationRow = memberRow?.[0] || {}

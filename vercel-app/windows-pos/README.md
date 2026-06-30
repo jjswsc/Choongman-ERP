@@ -49,6 +49,7 @@ explorer $env:APPDATA\choongman-pos-windows
 - `printHtmlSettleMs`: HTML을 숨김 창에 `loadFile`한 뒤 `print` 전 대기(ms). 기본 **260**, 범위 **80~5000**(`main.js`의 `readConfigInt`). 너무 짧으면 무인쇄 실패·대화상자 폴백이 늘 수 있어 실패 시 내부 백오프로 보완.
 - `postHtmlPrintSpoolFlushMs`: HTML 인쇄 후 ESC/POS 절단 전 스풀 안정화 대기(ms). 기본 **350**.
 - `printHtmlQueueGapMs`: 하이브리드 셸 인쇄 큐의 작업 간 최소 간격(ms). 기본 **80**.
+- `printHtmlSilentRetryCount`: 무인쇄 실패 시 **동일 HTML** 재시도 횟수(기본 **1** → 최대 2번 인쇄). **주방전**에만 적용. **홀 주문서·결제 영수증**(`printRole: receipt`)은 용지 부족 시 1차가 나갔는데 실패로 잡히면 2장이 나갈 수 있어 **재시도·드라이버 기본값 2차 자동 인쇄를 하지 않음** — 실패 시 인쇄 대화상자로만 넘어감.
 - `print.silent`: `true`(기본)이면 영수증·주방 HTML 인쇄도 **무인쇄 우선**. `false`이면 **항상 인쇄 대화상자**가 먼저 뜸.
 - `print.deviceName`: 무인쇄·빠른 인쇄에 쓸 프린터 이름. Windows **정확한 표시 이름**과 일치해야 무인쇄 성공률이 높음 (비우면 Windows 기본 프린터).
 - **ESC/POS 절단(무인쇄 RAW)**: `WINDOWS_POS_PRINT_ESC_POS_CUT=0`이면 종류와 관계없이 절단 안 함. 그 외에는 종류별로 `print` 또는 환경 변수로 지정:

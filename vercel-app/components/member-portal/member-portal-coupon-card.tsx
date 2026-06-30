@@ -8,6 +8,7 @@ import type { PortalCouponRow } from "@/components/member-portal/portal-ui"
 import { formatDateTime } from "@/components/member-portal/portal-ui"
 import type { LangCode } from "@/lib/lang-context"
 import { memberPortalCouponStatusLabel, type MemberPortalKey } from "@/lib/member-portal-i18n"
+import { isMemberPortalCouponReady } from "@/lib/member-portal-coupon-status"
 import { resolveCouponBenefitDisplay } from "@/lib/member-portal-coupon-display"
 import { cn } from "@/lib/utils"
 
@@ -68,7 +69,7 @@ function CouponImageFallback({ headline, badge }: { headline: string; badge: str
 }
 
 export function MemberPortalCouponCard({ coupon, memberNo, lang, dateLocale, t }: MemberPortalCouponCardProps) {
-  const isActive = coupon.status === "issued"
+  const isActive = isMemberPortalCouponReady(coupon.status)
   const benefit = resolveCouponBenefitDisplay(coupon)
   const statusLabel = memberPortalCouponStatusLabel(lang, coupon.status)
   const displayName =

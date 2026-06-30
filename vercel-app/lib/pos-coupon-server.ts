@@ -481,6 +481,19 @@ export async function persistPosOrderCouponRedemptions(params: {
   const storeCode = String(params.storeCode ?? '').trim()
   if (!orderId || !storeCode || !params.appliedCoupons.length) return
 
+  let memberId = Math.max(0, Math.trunc(Number(params.memberId ?? 0) || 0)) || undefined
+  if (!memberId) {
+    try {
+      const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
+        limit: 1,
+        select: 'member_id',
+      })) as Array<{ member_id?: number | null }>
+      memberId = Math.max(0, Math.trunc(Number(orderRows?.[0]?.member_id ?? 0) || 0)) || undefined
+    } catch {
+      /* ignore */
+    }
+  }
+
   try {
     await supabaseDeleteByFilter('pos_order_coupon_redemptions', `order_id=eq.${orderId}`)
   } catch {
@@ -499,11 +512,19 @@ export async function persistPosOrderCouponRedemptions(params: {
 
     const { template, serial, memberIssue } = await resolveTemplateForCandidate(
       { code, quantity: qty, memberIssueId: memberCouponIssueId },
-      params.memberId
+      memberId
     )
     if (!couponId && template?.id) couponId = template.id
     if (!serialId && serial?.id) serialId = serial.id
     if (!memberCouponIssueId && memberIssue?.id) memberCouponIssueId = memberIssue.id
+    if (
+      !memberCouponIssueId &&
+      memberId &&
+      template?.redemptionMode === 'member_issue'
+    ) {
+      const fallback = await findMemberCouponIssue({ memberId, code })
+      if (fallback?.id) memberCouponIssueId = fallback.id
+    }
 
     await supabaseInsert('pos_order_coupon_redemptions', {
       order_id: orderId,

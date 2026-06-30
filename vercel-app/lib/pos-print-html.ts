@@ -85,6 +85,11 @@ function enqueuePosHtmlPrint<T>(task: () => Promise<T>): Promise<T> {
   return next
 }
 
+/** 하이브리드 셸이 이미 1회 시도했을 때 iframe 폴백 시 영수증 2장 방지 */
+function shouldSkipShellIframeFallback(opts?: PrintPosHtmlDocumentOptions): boolean {
+  return opts?.printReceiptKind === 'hall_order' || opts?.printReceiptKind === 'payment'
+}
+
 /** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
 export type PosPrintTargetRole = 'receipt' | 'kitchen'
 
@@ -198,14 +203,18 @@ async function printPosHtmlDocumentInner(
       if (opts?.suppressPrintError !== true) {
         void appAlert(getRuntimeUiString(uiLang, 'posPrintFailedWithReason', { reason }))
       }
-      await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      if (!shouldSkipShellIframeFallback(opts)) {
+        await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      }
       opts?.onAfterCleanup?.()
     } catch {
       opts?.onShellPrintResult?.({ ok: false, reason: 'shell_invoke_error' })
       if (opts?.suppressPrintError !== true) {
         void appAlert(getRuntimeUiString(getClientUiLang(), 'posPrintRequestError'))
       }
-      await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      if (!shouldSkipShellIframeFallback(opts)) {
+        await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+      }
       opts?.onAfterCleanup?.()
     }
     return
