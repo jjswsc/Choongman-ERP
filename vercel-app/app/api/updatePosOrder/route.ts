@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
       },
       'updatePosOrder'
     )) as {
@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
       member_no?: string | null
       coupon_code?: string | null
       coupon_discount_amt?: number
+      applied_coupons?: unknown
       point_used?: number
       guest_count?: number
       subtotal?: number
@@ -458,13 +459,27 @@ export async function POST(req: NextRequest) {
       if (ensured > 0) pointEarned = ensured
     }
 
-    if (appliedCoupons.length > 0 && paymentSum > 0) {
+    let couponsForRedeem = appliedCoupons
+    if (!couponsForRedeem.length && paymentSum > 0) {
+      couponsForRedeem = parseAppliedCouponsFromBody(current?.applied_coupons)
+      if (!couponsForRedeem.length) {
+        const legacyCode = String(current?.coupon_code ?? '').trim().toUpperCase()
+        const legacyAmt = Math.max(0, Number(current?.coupon_discount_amt ?? 0))
+        if (legacyCode) {
+          couponsForRedeem = [{ code: legacyCode, name: legacyCode, discountAmt: legacyAmt, quantity: 1 }]
+        }
+      }
+    }
+    const redeemMemberId =
+      memberId || Math.max(0, Math.trunc(Number(current?.member_id ?? 0) || 0)) || undefined
+
+    if (couponsForRedeem.length > 0 && paymentSum > 0) {
       try {
         await persistPosOrderCouponRedemptions({
           orderId: id,
           storeCode: String(current?.store_code ?? '').trim(),
-          appliedCoupons,
-          memberId: memberId || undefined,
+          appliedCoupons: couponsForRedeem,
+          memberId: redeemMemberId,
         })
       } catch (redeemErr) {
         console.error('updatePosOrder coupon redemptions:', redeemErr)

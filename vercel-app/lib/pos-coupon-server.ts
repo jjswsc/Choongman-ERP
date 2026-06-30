@@ -1,5 +1,6 @@
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { expandTruncatedCouponCodeCandidates } from '@/lib/member-coupon-qr'
+import { resolveMemberIdsSharingPhone } from '@/lib/members-server'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
   summarizeLegacyCouponFields,
@@ -471,6 +472,39 @@ export async function validatePosCouponApplicationList(params: {
   }
 }
 
+async function findMemberCouponIssueAcrossMembers(params: {
+  memberIds: number[]
+  code?: string
+  issueId?: number
+}): Promise<MemberIssueRow | null> {
+  const issueId = Math.max(0, Math.trunc(Number(params.issueId ?? 0) || 0))
+  const memberIds = params.memberIds.map((id) => Number(id || 0)).filter((id) => id > 0)
+  if (issueId > 0) {
+    const raw = await loadMemberCouponIssueRawById(issueId)
+    if (!raw) return null
+    if (memberIds.length && !memberIds.includes(Number(raw.member_id || 0))) return null
+    if (String(raw.status ?? '').toLowerCase() !== 'issued') return null
+    return raw
+  }
+  const code = normalizeCode(params.code ?? '')
+  if (!code || !memberIds.length) return null
+  for (const memberId of memberIds) {
+    const issue = await findMemberCouponIssue({ memberId, code })
+    if (issue?.id) return issue
+  }
+  return null
+}
+
+async function markMemberCouponIssueUsed(issueId: number, orderId: number): Promise<void> {
+  const id = Math.max(0, Math.trunc(Number(issueId) || 0))
+  if (!id) return
+  await supabaseUpdate('member_coupon_issues', id, {
+    status: 'used',
+    used_at: getBangkokDateTimeString(),
+    order_id: orderId,
+  })
+}
+
 export async function persistPosOrderCouponRedemptions(params: {
   orderId: number
   storeCode: string
@@ -493,6 +527,7 @@ export async function persistPosOrderCouponRedemptions(params: {
       /* ignore */
     }
   }
+  const memberIdsForRedeem = memberId ? await resolveMemberIdsSharingPhone(memberId) : []
 
   try {
     await supabaseDeleteByFilter('pos_order_coupon_redemptions', `order_id=eq.${orderId}`)
@@ -508,7 +543,18 @@ export async function persistPosOrderCouponRedemptions(params: {
 
     let serialId = row.serialId
     let couponId = row.couponId
-    let memberCouponIssueId = row.memberCouponIssueId
+    let memberCouponIssueId = Math.max(0, Math.trunc(Number(row.memberCouponIssueId ?? 0) || 0)) || undefined
+
+    if (memberCouponIssueId) {
+      const explicitIssue = await findMemberCouponIssueAcrossMembers({
+        memberIds: memberIdsForRedeem,
+        issueId: memberCouponIssueId,
+      })
+      if (explicitIssue?.id) {
+        await markMemberCouponIssueUsed(explicitIssue.id, orderId)
+        memberCouponIssueId = explicitIssue.id
+      }
+    }
 
     const { template, serial, memberIssue } = await resolveTemplateForCandidate(
       { code, quantity: qty, memberIssueId: memberCouponIssueId },
@@ -517,12 +563,12 @@ export async function persistPosOrderCouponRedemptions(params: {
     if (!couponId && template?.id) couponId = template.id
     if (!serialId && serial?.id) serialId = serial.id
     if (!memberCouponIssueId && memberIssue?.id) memberCouponIssueId = memberIssue.id
-    if (
-      !memberCouponIssueId &&
-      memberId &&
-      template?.redemptionMode === 'member_issue'
-    ) {
-      const fallback = await findMemberCouponIssue({ memberId, code })
+    if (!memberCouponIssueId && memberIdsForRedeem.length) {
+      const fallback = await findMemberCouponIssueAcrossMembers({
+        memberIds: memberIdsForRedeem,
+        code,
+        issueId: memberCouponIssueId,
+      })
       if (fallback?.id) memberCouponIssueId = fallback.id
     }
 
@@ -546,17 +592,9 @@ export async function persistPosOrderCouponRedemptions(params: {
     }
 
     if (memberCouponIssueId) {
-      await supabaseUpdate('member_coupon_issues', memberCouponIssueId, {
-        status: 'used',
-        used_at: getBangkokDateTimeString(),
-        order_id: orderId,
-      })
+      await markMemberCouponIssueUsed(memberCouponIssueId, orderId)
     } else if (memberIssue?.id) {
-      await supabaseUpdate('member_coupon_issues', memberIssue.id, {
-        status: 'used',
-        used_at: getBangkokDateTimeString(),
-        order_id: orderId,
-      })
+      await markMemberCouponIssueUsed(memberIssue.id, orderId)
     }
 
     if (couponId) {

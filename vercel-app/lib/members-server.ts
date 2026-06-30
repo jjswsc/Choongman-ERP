@@ -26,6 +26,7 @@ import {
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { resolveMemberPortalCouponStatus } from '@/lib/member-portal-coupon-status'
+import { buildUsedMemberCouponIssueMap } from '@/lib/member-portal-coupon-reconcile'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -1374,12 +1375,17 @@ export async function applyLoyaltyOnOrder(params: {
   if (toText(params.couponCode) && (shouldInsertUse || shouldInsertEarn)) {
     const couponCode = toText(params.couponCode).toUpperCase()
     const usedAt = getBangkokDateTimeString()
-    const issuedRows = (await supabaseSelectFilter(
-      'member_coupon_issues',
-      `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(couponCode)}&status=eq.issued`,
-      { order: 'id.asc', limit: 1 }
-    )) as Array<{ id?: number }>
-    const issuedId = Number(issuedRows?.[0]?.id || 0)
+    const memberIds = await resolveMemberIdsSharingPhone(memberId)
+    let issuedId = 0
+    for (const mid of memberIds) {
+      const issuedRows = (await supabaseSelectFilter(
+        'member_coupon_issues',
+        `member_id=eq.${mid}&coupon_code=eq.${encodeURIComponent(couponCode)}&status=eq.issued`,
+        { order: 'id.asc', limit: 1 }
+      )) as Array<{ id?: number }>
+      issuedId = Number(issuedRows?.[0]?.id || 0)
+      if (issuedId > 0) break
+    }
     if (issuedId > 0) {
       await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${issuedId}`, {
         status: 'used',
@@ -1452,63 +1458,38 @@ export async function resolveMemberIdsSharingPhone(memberId: number): Promise<nu
   return [...ids].sort((a, b) => a - b)
 }
 
-async function loadRedeemedMemberCouponIssueMeta(
-  issueIds: number[]
-): Promise<Map<number, { orderId: number | null }>> {
-  const meta = new Map<number, { orderId: number | null }>()
-  const ids = issueIds.map((id) => Number(id || 0)).filter((id) => id > 0)
-  if (!ids.length) return meta
-
-  const chunkSize = 80
-  for (let i = 0; i < ids.length; i += chunkSize) {
-    const chunk = ids.slice(i, i + chunkSize)
-    try {
-      const rows = (await supabaseSelectFilter(
-        'pos_order_coupon_redemptions',
-        `member_coupon_issue_id=in.(${chunk.join(',')})`,
-        { limit: chunk.length * 5, select: 'member_coupon_issue_id,order_id' }
-      )) as Array<{ member_coupon_issue_id?: number | null; order_id?: number | null }>
-      for (const row of rows || []) {
-        const issueId = Number(row.member_coupon_issue_id || 0)
-        if (!issueId) continue
-        meta.set(issueId, { orderId: Number(row.order_id || 0) || null })
-      }
-    } catch {
-      /* table may not exist on older DB */
-    }
-  }
-  return meta
-}
-
 async function reconcileMemberCouponIssueStatusesForPortal<
   T extends {
     id: number
+    memberId?: number
+    couponCode?: string
     status: string
     expiresAt?: string
     validTo?: string
     orderId?: number | null
     usedAt?: string
   },
->(rows: T[]): Promise<T[]> {
-  const issuedIds = rows
-    .filter((row) => String(row.status || '').toLowerCase() === 'issued')
-    .map((row) => Number(row.id || 0))
-    .filter((id) => id > 0)
-  if (!issuedIds.length) return rows
+>(rows: T[], memberIds: number[]): Promise<T[]> {
+  const issuedRows = rows.filter((row) => String(row.status || '').toLowerCase() === 'issued')
+  if (!issuedRows.length) return rows
 
-  const redeemedMeta = await loadRedeemedMemberCouponIssueMeta(issuedIds)
-  if (!redeemedMeta.size) {
-    return rows.map((row) => ({
-      ...row,
-      status: resolveMemberPortalCouponStatus(row),
-    }))
-  }
+  const usedMeta = await buildUsedMemberCouponIssueMap(
+    issuedRows.map((row) => ({
+      id: row.id,
+      memberId: row.memberId,
+      couponCode: row.couponCode,
+      status: row.status,
+      orderId: row.orderId,
+      usedAt: row.usedAt,
+    })),
+    memberIds
+  )
 
   const nowBangkok = getBangkokDateTimeString()
   return rows.map((row) => {
-    const resolved = resolveMemberPortalCouponStatus(row, new Set(redeemedMeta.keys()))
+    const resolved = resolveMemberPortalCouponStatus(row, new Set(usedMeta.keys()))
     if (resolved === 'used' && String(row.status || '').toLowerCase() === 'issued') {
-      const redemption = redeemedMeta.get(Number(row.id || 0))
+      const redemption = usedMeta.get(Number(row.id || 0))
       void supabaseUpdateByFilter('member_coupon_issues', `id=eq.${row.id}`, {
         status: 'used',
         used_at: toText(row.usedAt) || nowBangkok,
@@ -1532,7 +1513,7 @@ export async function listMemberCouponIssuesForPortalMember(
     memberIds.length <= 1
       ? await listMemberCouponIssues({ memberId: memberIds[0] || memberId, limit })
       : await listMemberCouponIssues({ memberIds, limit })
-  return reconcileMemberCouponIssueStatusesForPortal(rows)
+  return reconcileMemberCouponIssueStatusesForPortal(rows, memberIds)
 }
 
 export async function listMemberCouponIssues(params?: {
