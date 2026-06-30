@@ -145,8 +145,11 @@ export function resolveDineInKitchenSnapshotItemKey(
   },
   opts?: { formatNote?: (note: string) => string }
 ): string {
-  const id = normalizeCartLineIdForSave(item.id)
-  if (id && !isEphemeralPosCartLineId(id)) return id
+  const rawId = String(item.id ?? '').trim()
+  if (rawId && !isEphemeralPosCartLineId(rawId)) {
+    const id = normalizeCartLineIdForSave(item.id)
+    if (id && !isEphemeralPosCartLineId(id)) return id
+  }
   const formatNote = opts?.formatNote ?? ((note: string) => note.trim())
   const name = String(item.name ?? '').trim()
   const price = Number(item.price ?? 0) || 0
