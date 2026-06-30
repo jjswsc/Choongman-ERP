@@ -1,25 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { resolveMemberPortalCouponStatus } from '@/lib/member-portal-coupon-status'
+import { couponIssueEligibleForOrderTime } from '@/lib/member-portal-coupon-status'
 
-describe('member-portal-coupon-reconcile integration with status', () => {
-  it('marks issued row with redemption metadata as used', () => {
-    const usedIds = new Set([99])
-    expect(
-      resolveMemberPortalCouponStatus(
-        { id: 99, status: 'issued', couponCode: 'BIRTHDAY' },
-        usedIds
-      )
-    ).toBe('used')
+describe('member-portal-coupon-reconcile timing', () => {
+  it('allows matching when coupon was issued before POS use', () => {
+    expect(couponIssueEligibleForOrderTime('2026-06-30 13:05:00', '2026-06-30 13:06:00')).toBe(true)
   })
 
-  it('marks issued row with order linkage as used', () => {
-    expect(
-      resolveMemberPortalCouponStatus({
-        id: 12,
-        status: 'issued',
-        orderId: 5001,
-        usedAt: '2026-06-29 12:00:00',
-      })
-    ).toBe('used')
+  it('blocks matching when coupon was claimed after POS use (Jayle case)', () => {
+    expect(couponIssueEligibleForOrderTime('2026-06-30 13:08:00', '2026-06-30 13:06:00')).toBe(false)
+  })
+
+  it('blocks matching when issue or order time is missing', () => {
+    expect(couponIssueEligibleForOrderTime('', '2026-06-30 13:06:00')).toBe(false)
+    expect(couponIssueEligibleForOrderTime('2026-06-30 13:08:00', '')).toBe(false)
   })
 })

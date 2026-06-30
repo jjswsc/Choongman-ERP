@@ -1,5 +1,6 @@
 import { isPosCompletionStatus } from '@/lib/pos-order-policy'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-domain'
+import { couponIssueEligibleForOrderTime } from '@/lib/member-portal-coupon-status'
 import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -8,6 +9,7 @@ export type PortalCouponIssueRow = {
   memberId?: number
   couponCode?: string
   status: string
+  issuedAt?: string
   orderId?: number | null
   usedAt?: string
 }
@@ -31,10 +33,24 @@ type OrderRow = {
   payment_other?: number | null
   payment_delivery_app?: number | null
   paid_at?: string | null
+  created_at?: string | null
 }
 
 function normalizeCouponCode(code: string): string {
   return String(code || '').trim().toUpperCase()
+}
+
+function parseBangkokComparable(raw: string): string {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 23:59:59`
+  return text.replace('T', ' ').slice(0, 19)
+}
+
+function orderPaidAtComparable(order: OrderRow): string {
+  const paid = parseBangkokComparable(String(order.paid_at || ''))
+  if (paid) return paid
+  return parseBangkokComparable(String(order.created_at || ''))
 }
 
 function legacyCouponCodesFromOrderField(couponCode: string): string[] {
@@ -78,19 +94,25 @@ function pickIssuedRowForCodeInScope(
   issuedRows: PortalCouponIssueRow[],
   couponCode: string,
   scope: MemberPortalCouponScope,
-  used: Map<number, { orderId: number | null }>
+  used: Map<number, { orderId: number | null }>,
+  orderPaidAt: string
 ): PortalCouponIssueRow | null {
   const code = normalizeCouponCode(couponCode)
-  if (!code) return null
+  if (!code || !orderPaidAt) return null
   const candidates = issuedRows
     .filter((row) => {
       if (used.has(row.id)) return false
       if (normalizeCouponCode(row.couponCode || '') !== code) return false
       const rowMemberId = Number(row.memberId || 0)
-      return rowMemberId > 0 && scope.memberIds.includes(rowMemberId)
+      if (!(rowMemberId > 0 && scope.memberIds.includes(rowMemberId))) return false
+      return couponIssueEligibleForOrderTime(row.issuedAt, orderPaidAt)
     })
     .sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
   return candidates[0] ?? null
+}
+
+function orderCodeRedemptionKey(orderId: number, couponCode: string): string {
+  return `${orderId}|${normalizeCouponCode(couponCode)}`
 }
 
 async function loadRedemptionsByIssueIds(issueIds: number[]): Promise<Map<number, { orderId: number | null }>> {
@@ -161,7 +183,7 @@ async function loadRecentRedemptionsForCodes(codes: string[]): Promise<
 
 async function loadOrdersForMemberScope(scope: MemberPortalCouponScope): Promise<OrderRow[]> {
   const select =
-    'id,member_id,member_no,coupon_code,applied_coupons,status,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at'
+    'id,member_id,member_no,coupon_code,applied_coupons,status,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at,created_at'
   const byId = new Map<number, OrderRow>()
 
   const filterMemberIds = scope.memberIds.map((id) => Number(id || 0)).filter((id) => id > 0)
@@ -252,7 +274,7 @@ async function loadOrdersByIds(orderIds: number[]): Promise<OrderRow[]> {
       const rows = (await supabaseSelectFilter('pos_orders', `id=in.(${chunk.join(',')})`, {
         limit: chunk.length,
         select:
-          'id,member_id,member_no,coupon_code,applied_coupons,status,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at',
+          'id,member_id,member_no,coupon_code,applied_coupons,status,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at,created_at',
       })) as OrderRow[]
       out.push(...(rows || []))
     } catch {
@@ -267,16 +289,38 @@ function applyRedemptionMatch(
   issuedIds: number[],
   scope: MemberPortalCouponScope,
   used: Map<number, { orderId: number | null }>,
+  consumedOrderCodes: Set<string>,
   redemption: { orderId: number; issueId: number | null; couponCode: string },
   order: OrderRow | undefined
 ): void {
+  if (!order || !orderMatchesMemberScope(order, scope)) return
+  const orderPaidAt = orderPaidAtComparable(order)
+  if (!orderPaidAt) return
+
   if (redemption.issueId && issuedIds.includes(redemption.issueId)) {
-    used.set(redemption.issueId, { orderId: redemption.orderId })
+    const issue = issuedRows.find((row) => row.id === redemption.issueId)
+    if (issue && couponIssueEligibleForOrderTime(issue.issuedAt, orderPaidAt)) {
+      used.set(redemption.issueId, { orderId: redemption.orderId })
+      consumedOrderCodes.add(orderCodeRedemptionKey(redemption.orderId, redemption.couponCode))
+    }
     return
   }
-  if (!order || !redemption.couponCode || !orderMatchesMemberScope(order, scope)) return
-  const match = pickIssuedRowForCodeInScope(issuedRows, redemption.couponCode, scope, used)
-  if (match) used.set(match.id, { orderId: redemption.orderId })
+
+  if (!redemption.couponCode) return
+  const consumeKey = orderCodeRedemptionKey(redemption.orderId, redemption.couponCode)
+  if (consumedOrderCodes.has(consumeKey)) return
+
+  const match = pickIssuedRowForCodeInScope(
+    issuedRows,
+    redemption.couponCode,
+    scope,
+    used,
+    orderPaidAt
+  )
+  if (match) {
+    used.set(match.id, { orderId: redemption.orderId })
+    consumedOrderCodes.add(consumeKey)
+  }
 }
 
 /** POS 사용 기록·주문 이력으로 아직 issued 로 남은 쿠폰을 used 로 판정 */
@@ -290,6 +334,7 @@ export async function buildUsedMemberCouponIssueMap(
 
   const memberIds = scope.memberIds.map((id) => Number(id || 0)).filter((id) => id > 0)
   const memberNos = scope.memberNos.map((no) => normalizeCouponCode(no)).filter(Boolean)
+  const consumedOrderCodes = new Set<string>()
 
   for (const row of issuedRows) {
     if (Number(row.orderId || 0) > 0 && String(row.usedAt || '').trim()) {
@@ -299,7 +344,19 @@ export async function buildUsedMemberCouponIssueMap(
 
   const issuedIds = issuedRows.map((row) => Number(row.id || 0)).filter((id) => id > 0)
   const direct = await loadRedemptionsByIssueIds(issuedIds)
-  for (const [issueId, meta] of direct) used.set(issueId, meta)
+  for (const [issueId, meta] of direct) {
+    const issue = issuedRows.find((row) => row.id === issueId)
+    if (!issue) continue
+    if (meta.orderId) {
+      const orderRows = await loadOrdersByIds([meta.orderId])
+      const orderPaidAt = orderRows[0] ? orderPaidAtComparable(orderRows[0]) : ''
+      if (orderPaidAt && !couponIssueEligibleForOrderTime(issue.issuedAt, orderPaidAt)) continue
+    }
+    used.set(issueId, meta)
+    if (meta.orderId && issue.couponCode) {
+      consumedOrderCodes.add(orderCodeRedemptionKey(meta.orderId, issue.couponCode))
+    }
+  }
 
   if (!memberIds.length && !memberNos.length) return used
 
@@ -316,29 +373,59 @@ export async function buildUsedMemberCouponIssueMap(
   const redemptionRows = await loadRedemptionsByOrderIds(orderIds)
 
   for (const redemption of redemptionRows) {
-    applyRedemptionMatch(issuedRows, issuedIds, { memberIds, memberNos }, used, redemption, orderById.get(redemption.orderId))
+    applyRedemptionMatch(
+      issuedRows,
+      issuedIds,
+      { memberIds, memberNos },
+      used,
+      consumedOrderCodes,
+      redemption,
+      orderById.get(redemption.orderId)
+    )
   }
 
   for (const order of paidOrders) {
     const orderId = Number(order.id || 0)
     if (!orderId || !orderMatchesMemberScope(order, { memberIds, memberNos })) continue
+    const orderPaidAt = orderPaidAtComparable(order)
+    if (!orderPaidAt) continue
 
     const applied = parseAppliedCouponsFromOrderRow(order.applied_coupons)
     for (const line of applied) {
       const issueId = Number(line.memberCouponIssueId || 0)
       if (issueId > 0 && issuedIds.includes(issueId)) {
-        used.set(issueId, { orderId })
+        const issue = issuedRows.find((row) => row.id === issueId)
+        if (issue && couponIssueEligibleForOrderTime(issue.issuedAt, orderPaidAt)) {
+          used.set(issueId, { orderId })
+          consumedOrderCodes.add(orderCodeRedemptionKey(orderId, line.code))
+        }
         continue
       }
       const code = normalizeCouponCode(line.code)
       if (!code) continue
-      const match = pickIssuedRowForCodeInScope(issuedRows, code, { memberIds, memberNos }, used)
-      if (match) used.set(match.id, { orderId })
+      const consumeKey = orderCodeRedemptionKey(orderId, code)
+      if (consumedOrderCodes.has(consumeKey)) continue
+      const match = pickIssuedRowForCodeInScope(issuedRows, code, { memberIds, memberNos }, used, orderPaidAt)
+      if (match) {
+        used.set(match.id, { orderId })
+        consumedOrderCodes.add(consumeKey)
+      }
     }
 
     for (const legacyCode of legacyCouponCodesFromOrderField(String(order.coupon_code || ''))) {
-      const match = pickIssuedRowForCodeInScope(issuedRows, legacyCode, { memberIds, memberNos }, used)
-      if (match) used.set(match.id, { orderId })
+      const consumeKey = orderCodeRedemptionKey(orderId, legacyCode)
+      if (consumedOrderCodes.has(consumeKey)) continue
+      const match = pickIssuedRowForCodeInScope(
+        issuedRows,
+        legacyCode,
+        { memberIds, memberNos },
+        used,
+        orderPaidAt
+      )
+      if (match) {
+        used.set(match.id, { orderId })
+        consumedOrderCodes.add(consumeKey)
+      }
     }
   }
 
@@ -352,9 +439,16 @@ export async function buildUsedMemberCouponIssueMap(
 
   for (const redemption of codeRedemptions) {
     const order = orderById.get(redemption.orderId) || extraOrderById.get(redemption.orderId)
-    if (!order || !orderMatchesMemberScope(order, { memberIds, memberNos })) continue
-    if (!isPaidLikeOrder(order)) continue
-    applyRedemptionMatch(issuedRows, issuedIds, { memberIds, memberNos }, used, redemption, order)
+    if (!order || !isPaidLikeOrder(order)) continue
+    applyRedemptionMatch(
+      issuedRows,
+      issuedIds,
+      { memberIds, memberNos },
+      used,
+      consumedOrderCodes,
+      redemption,
+      order
+    )
   }
 
   return used

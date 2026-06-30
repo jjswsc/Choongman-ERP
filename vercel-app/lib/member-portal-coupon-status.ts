@@ -7,6 +7,14 @@ function parseBangkokComparable(raw: string): string {
   return text.replace('T', ' ').slice(0, 19)
 }
 
+/** 발급 시각이 주문(사용) 시각 이전이어야 같은 쿠폰코드로 매칭 가능 */
+export function couponIssueEligibleForOrderTime(issuedAt?: string | null, orderPaidAt?: string | null): boolean {
+  const issued = parseBangkokComparable(String(issuedAt || ''))
+  const paid = parseBangkokComparable(String(orderPaidAt || ''))
+  if (!issued || !paid) return false
+  return issued <= paid
+}
+
 export function isMemberCouponIssueExpired(expiresAt?: string | null, validTo?: string | null): boolean {
   const cutoff = parseBangkokComparable(String(expiresAt || validTo || ''))
   if (!cutoff) return false
