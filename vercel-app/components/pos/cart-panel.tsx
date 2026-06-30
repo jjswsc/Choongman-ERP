@@ -539,23 +539,42 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
   /** 결제 모달 금액·할인·포인트 입력 중 자동 합계 덮어쓰기 effect가 키보드 포커스를 끊지 않도록 */
   const paymentAmountInputFocusedRef = useRef(false)
+  const paymentAmountInputBlurTimerRef = useRef<number | null>(null)
+  const isPaymentAmountInputEl = useCallback(
+    (el: Element | null | undefined): el is HTMLInputElement =>
+      el instanceof HTMLInputElement && el.dataset.posPaymentAmount === '1',
+    []
+  )
   const [discountPaymentSyncTick, setDiscountPaymentSyncTick] = useState(0)
   const bumpDiscountPaymentSync = useCallback(() => {
     setDiscountPaymentSyncTick((t) => t + 1)
   }, [])
   const markPaymentAmountInputFocused = useCallback(() => {
+    if (paymentAmountInputBlurTimerRef.current != null) {
+      window.clearTimeout(paymentAmountInputBlurTimerRef.current)
+      paymentAmountInputBlurTimerRef.current = null
+    }
     paymentAmountInputFocusedRef.current = true
   }, [])
   const bindPaymentAmountInputFocus = useCallback(
     (opts?: { syncPaymentOnBlur?: boolean }) => ({
+      'data-pos-payment-amount': '1' as const,
       onPointerDown: markPaymentAmountInputFocused,
       onFocus: markPaymentAmountInputFocused,
       onBlur: () => {
-        paymentAmountInputFocusedRef.current = false
-        if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
+        if (paymentAmountInputBlurTimerRef.current != null) {
+          window.clearTimeout(paymentAmountInputBlurTimerRef.current)
+        }
+        // 태블릿·OSK: Dialog onFocusOutside 직후 잠깐 blur 되는 경우 합계 덮어쓰기·쿠폰 포커스가 끊기지 않게
+        paymentAmountInputBlurTimerRef.current = window.setTimeout(() => {
+          paymentAmountInputBlurTimerRef.current = null
+          if (isPaymentAmountInputEl(document.activeElement)) return
+          paymentAmountInputFocusedRef.current = false
+          if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
+        }, 120)
       },
     }),
-    [bumpDiscountPaymentSync, markPaymentAmountInputFocused]
+    [bumpDiscountPaymentSync, isPaymentAmountInputEl, markPaymentAmountInputFocused]
   )
   const triggerScanFieldFeedback = useCallback(
     (field: 'member' | 'coupon', outcome: 'success' | 'error') => {
@@ -630,6 +649,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [cashTendered, setCashTendered] = useState('')
   /** capture/스냅샷 시 setState 직후 값 누락 방지(더치·일부결제) */
   const cashTenderedRef = useRef('')
+  const cashTenderedInputRef = useRef<HTMLInputElement>(null)
   const [payCard, setPayCard] = useState('')
   const [payTrueMoney, setPayTrueMoney] = useState('')
   const [payWeChat, setPayWeChat] = useState('')
@@ -2148,6 +2168,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     cashTenderedRef.current = cashTendered
   }, [cashTendered])
+
+  /** 현금 권종 버튼: 누적 합산(100+100=200). 터치 POS에서 입력 포커스 유지 */
+  const addCashTenderedAmount = useCallback(
+    (amount: number) => {
+      markPaymentAmountInputFocused()
+      const next = formatBahtAmountForField((parseBahtAmount(cashTenderedRef.current) || 0) + amount)
+      cashTenderedRef.current = next
+      setCashTendered(next)
+      window.requestAnimationFrame(() => cashTenderedInputRef.current?.focus())
+    },
+    [markPaymentAmountInputFocused]
+  )
 
   const resetPaymentInputs = () => {
     setPayCash('')
@@ -3759,6 +3791,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     if (!showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
+      if (paymentAmountInputFocusedRef.current) return
+      if (isPaymentAmountInputEl(document.activeElement)) return
       if (!selectedMemberId) {
         paymentMemberScanInputRef.current?.focus()
       } else {
@@ -3766,7 +3800,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     }, 120)
     return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, selectedMemberId, showPaymentModal])
+  }, [couponQrScannerOpen, isPaymentAmountInputEl, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -5195,19 +5229,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
-          if (lockPaymentModalForTour || couponQrScannerOpen || isCouponQrScannerOverlayActive()) {
-            e.preventDefault()
-          }
+          // 터치 POS·가상 키보드 탭이 outside로 잡혀 금액 입력이 한 글자마다 끊기는 문제 방지
+          e.preventDefault()
         }}
         onInteractOutside={(e) => {
-          if (lockPaymentModalForTour || couponQrScannerOpen || isCouponQrScannerOverlayActive()) {
-            e.preventDefault()
-          }
+          e.preventDefault()
         }}
         onFocusOutside={(e) => {
-          if (lockPaymentModalForTour || couponQrScannerOpen || isCouponQrScannerOverlayActive()) {
-            e.preventDefault()
-          }
+          e.preventDefault()
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
       >
@@ -5793,6 +5822,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           </Label>
                           <div className="flex items-center gap-2">
                             <Input
+                              ref={cashTenderedInputRef}
                               type="text"
                               inputMode="decimal"
                               autoComplete="off"
@@ -5839,7 +5869,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             variant="outline"
                             size="sm"
                             className="h-8 rounded-md px-3 text-sm font-semibold tabular-nums justify-center"
-                            onClick={() => setCashTendered(formatBahtAmountForField(amount))}
+                            onPointerDown={(e) => e.preventDefault()}
+                            onClick={() => addCashTenderedAmount(amount)}
                           >
                             {amount}฿
                           </Button>
