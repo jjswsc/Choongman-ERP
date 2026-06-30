@@ -1,8 +1,12 @@
 /**
  * PO 매장 청구(로얄티·배달 GP·Grab) — POS 매출 스냅샷 집계 및 초안 라인 생성
+ * 기간·합계는 매출 관리(posSalesByDeliveryApp 등)와 동일한 영업일·total 기준.
  */
-import { resolveOrderDeliveryAppCode } from '@/lib/pos-delivery-order-meta'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+
+/** getPoBillingDraft fetch select — 영업일 필터용 created_at 포함 */
+export const PO_BILLING_ORDER_ROW_SELECT =
+  'created_at,store_code,status,order_type,total,delivery_app_code'
 
 const COMPLETED = new Set(['completed', 'paid', 'ready'])
 
@@ -50,6 +54,11 @@ export function isGrabDeliveryPlatformCode(code: string): boolean {
   return c.includes('grab')
 }
 
+/** 매출 관리 RPC delivery_platform 과 동일 — delivery_app_code 컬럼만 */
+function grabPlatformCodeForPoBilling(row: PoBillingOrderRow): string {
+  return String(row.delivery_app_code ?? '').trim().toLowerCase()
+}
+
 /** store 필터는 쿼리 단계에서 적용된 행만 넘긴다고 가정 */
 export function aggregatePoBillingSales(rows: PoBillingOrderRow[]): PoBillingSalesSnapshot {
   let totalSales = 0
@@ -65,7 +74,7 @@ export function aggregatePoBillingSales(rows: PoBillingOrderRow[]): PoBillingSal
     const k = normalizePosOrderTypeKey(r.order_type)
     if (k === 'delivery') {
       deliverySales += amt
-      if (isGrabDeliveryPlatformCode(resolveOrderDeliveryAppCode(r))) grabSales += amt
+      if (isGrabDeliveryPlatformCode(grabPlatformCodeForPoBilling(r))) grabSales += amt
     }
   }
   return { totalSales, deliverySales, grabSales }

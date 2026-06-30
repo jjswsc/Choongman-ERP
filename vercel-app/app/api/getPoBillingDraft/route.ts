@@ -1,13 +1,14 @@
 /**
  * 매장·기간 POS 매출 + po_billing_settings 로 청구 라인 초안 (발주 카트에 넣기용)
+ * 매출 관리(posSales*)와 동일: POS 영업일 라벨·완료 건·total 합산.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
-import { appendStoreCodeFilter, storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import {
   aggregatePoBillingSales,
   buildPoBillingDraftLines,
+  PO_BILLING_ORDER_ROW_SELECT,
   type PoBillingDraftMode,
   type PoBillingOrderRow,
   type PoBillingSettingRow,
@@ -18,8 +19,6 @@ function parseDraftMode(raw: string | null): PoBillingDraftMode {
   if (s === 'royalty' || s === 'delivery_gp' || s === 'grab_gp' || s === 'all') return s
   return 'all'
 }
-
-const FETCH_LIMIT = 1_000_000
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -41,22 +40,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
-    const baseTimeFilter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      startStr,
+      endStr,
+      storeCodes: [store],
+      select: PO_BILLING_ORDER_ROW_SELECT,
+      queryLabel: 'getPoBillingDraft',
+    })
+    const orderRows = rows as PoBillingOrderRow[]
 
-    let orderRows: PoBillingOrderRow[] = []
-    for (const storeVariant of storeCodeSearchVariants(store)) {
-      const filter = appendStoreCodeFilter(baseTimeFilter, [storeVariant])
-      orderRows = (await supabaseSelectFilterAllPages('pos_orders', filter, {
-        pageSize: 8000,
-        maxRows: FETCH_LIMIT,
-        select:
-          'order_type,total,status,store_code,delivery_app_code,delivery_payment_channel,items_json',
-      })) as PoBillingOrderRow[]
-      if (orderRows.length > 0) break
-    }
-
-    if (orderRows.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    if (truncated) headers.set('X-Sales-Truncated', '1')
 
     const snap = aggregatePoBillingSales(orderRows)
 
@@ -103,7 +96,7 @@ export async function GET(request: NextRequest) {
           grab_gp_pct: settings.grab_gp_pct,
         },
         lines,
-        truncated: orderRows.length >= FETCH_LIMIT,
+        truncated,
       },
       { headers }
     )
