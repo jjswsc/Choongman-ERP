@@ -40,8 +40,12 @@ export type CartLineForPosOrder = {
 export function normalizeCartLineIdForSave(id: unknown): string {
   const raw = String(id ?? '').trim()
   if (!raw) return ''
-  const matched = raw.match(/^cart-existing-\d+-(.+)$/)
-  return String(matched?.[1] ?? raw).trim()
+  const cartExisting = raw.match(/^cart-existing-\d+-(.+)$/)
+  if (cartExisting?.[1]) return String(cartExisting[1]).trim()
+  if (raw.toLowerCase().startsWith('cart-') && !raw.toLowerCase().startsWith('cart-existing-')) {
+    return raw.slice('cart-'.length).trim()
+  }
+  return raw
 }
 
 /** items_json / API 줄 단위 — qty·quantity 외 레거시/연동 키 보강 */

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 
 const CASH_ACTUAL_DENOM_KEYS = ['1000', '500', '100', '50', '20', '10', '5', '2', '1'] as const
 
@@ -33,8 +34,7 @@ function numOrNull(v: unknown): number | null {
 
 /** POS 결산 저장 */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     let body: Record<string, unknown>
@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
     const storeCode = String(body.storeCode ?? '').trim()
+    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!authGate.ok) return authGate.response
     const settleDate = String(body.settleDate ?? '').trim()
     const cashActual = body.cashActual != null ? numOrNull(body.cashActual) : null
     const cashAmt = numOrZero(body.cashAmt)
@@ -64,9 +66,6 @@ export async function POST(req: NextRequest) {
 
     if (!settleDate) {
       return NextResponse.json({ success: false, message: '결산일을 입력하세요.' }, { headers })
-    }
-    if (!storeCode) {
-      return NextResponse.json({ success: false, message: '매장(storeCode)이 필요합니다.' }, { headers })
     }
     const existing = (await supabaseSelectFilter(
       'pos_settlements',

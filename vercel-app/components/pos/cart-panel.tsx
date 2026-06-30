@@ -3960,21 +3960,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     tableName: string
     orderNo?: string
     existingOrderId?: number | null
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
-    const normalized = payload.items.map((i, idx) => ({
-      id: `cart-existing-${idx}-${i.id}`,
-      name: i.name,
-      price: i.price,
-      quantity: i.quantity,
-      ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
-      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
-    }))
+    const normalized = payload.items.map((i, idx) => {
+      const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      return {
+        id: `cart-existing-${idx}-${i.id}`,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        ...(menuId ? { menuId } : {}),
+        ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+      }
+    })
     resetCheckoutDiscountUiState({
       setDiscountType,
       setDiscountValueInput,
@@ -4012,7 +4015,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openTakeoutPaymentFromOrder = (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
@@ -4020,14 +4023,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
-    const normalized = payload.items.map((i, idx) => ({
-      id: `cart-existing-${idx}-${i.id}`,
-      name: i.name,
-      price: i.price,
-      quantity: i.quantity,
-      ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
-      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
-    }))
+    const normalized = payload.items.map((i, idx) => {
+      const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      return {
+        id: `cart-existing-${idx}-${i.id}`,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        ...(menuId ? { menuId } : {}),
+        ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+      }
+    })
     resetCheckoutDiscountUiState({
       setDiscountType,
       setDiscountValueInput,
@@ -4063,7 +4069,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openDeliveryPaymentFromOrder = async (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
@@ -4071,14 +4077,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
-    const normalized = payload.items.map((i, idx) => ({
-      id: `cart-existing-${idx}-${i.id}`,
-      name: i.name,
-      price: i.price,
-      quantity: i.quantity,
-      ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
-      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
-    }))
+    const normalized = payload.items.map((i, idx) => {
+      const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      return {
+        id: `cart-existing-${idx}-${i.id}`,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        ...(menuId ? { menuId } : {}),
+        ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+      }
+    })
     resetCheckoutDiscountUiState({
       setDiscountType,
       setDiscountValueInput,

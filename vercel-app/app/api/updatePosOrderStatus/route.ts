@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
-import { getVerifiedAuth } from '@/lib/verify-auth'
+import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
+import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
+import { requireAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { processPosStockDeduction, reversePosStockDeduction } from '@/lib/pos-stock-deduction'
 import {
@@ -64,11 +66,15 @@ function hasPositivePaymentAmount(order: {
 
 /** POS 주문 상태 변경 */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
-    const auth = await getVerifiedAuth(req)
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth!
     let body: Record<string, unknown>
     try {
       body = (await req.json()) as Record<string, unknown>
@@ -134,6 +140,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const prev = existing[0]
+
+    if (!(await authCanAccessPosStoreWrite(auth, String(prev?.store_code ?? '')))) {
+      return NextResponse.json(
+        { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+        { status: 403, headers }
+      )
+    }
+
     const prevStatus = String(prev?.status ?? '').trim().toLowerCase()
     const nextStatus = String(status).trim().toLowerCase()
     const failedSideEffects: SideEffectStep[] = []

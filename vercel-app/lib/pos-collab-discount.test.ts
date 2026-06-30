@@ -102,6 +102,49 @@ describe('pos-collab-discount exclusions', () => {
     expect(isCartLineEligibleForCollabDiscount(line, menuById, chickenOnly)).toBe(true)
   })
 
+  it('GARLIC Bar.B.Q는 Chicken 범위 협업에 포함된다', () => {
+    const amountCollab = detail({
+      posDiscountType: 'amount',
+      posDiscountValue: 100,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const line = { id: '9-opt', name: 'GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless)', price: 249, qty: 1, menuId: '9' }
+    expect(isCartLineEligibleForCollabDiscount(line, menuById, chickenOnly)).toBe(true)
+    expect(collabDiscountAmountForCart([line], menuById, amountCollab, 1)).toBe(100)
+  })
+
+  it('테이블 결제(cart-existing) 줄은 menuId 없어도 원본 id로 메뉴를 찾는다', () => {
+    const amountCollab = detail({
+      posDiscountType: 'amount',
+      posDiscountValue: 100,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const line = {
+      id: 'cart-existing-0-9-boneless',
+      name: 'GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless)',
+      price: 249,
+      quantity: 1,
+    }
+    expect(isCartLineEligibleForCollabDiscount(line, menuById, chickenOnly)).toBe(true)
+    expect(collabDiscountAmountForCart([line], menuById, amountCollab, 1)).toBe(100)
+  })
+
+  it('신규 장바구니(cart- 접두) 줄도 menuId 없이 메뉴를 찾는다', () => {
+    const amountCollab = detail({
+      posDiscountType: 'amount',
+      posDiscountValue: 100,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const line = {
+      id: 'cart-9-uuid-suffix',
+      name: 'GARLIC Bar.B.Q FRIED CHICKEN (M - Boneless)',
+      price: 249,
+      qty: 1,
+    }
+    expect(isCartLineEligibleForCollabDiscount(line, menuById, chickenOnly)).toBe(true)
+    expect(collabDiscountAmountForCart([line], menuById, amountCollab, 1)).toBe(100)
+  })
+
   it('promo- 접두 cart id가 다른 메뉴 id와 잘못 매칭되지 않는다', () => {
     const line = { id: 'promo-5-base', name: 'Choongman Festival Set 1', price: 111, qty: 1, promoId: '5' }
     expect(isCartLineEligibleForCollabDiscount(line, menuById, chickenOnly)).toBe(false)

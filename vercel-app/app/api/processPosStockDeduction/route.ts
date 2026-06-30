@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { posApiCorsHeaders, requirePosOrderWriteAuth } from '@/lib/pos-api-write-auth'
 
 /** POS 주문 완료 시 재고 차감 API (수동 호출용) */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     let body: Record<string, unknown>
@@ -14,6 +14,15 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
+    const orderId = Number(body?.orderId ?? body?.id)
+
+    if (!orderId) {
+      return NextResponse.json({ success: false, message: 'orderId required' }, { headers })
+    }
+
+    const authGate = await requirePosOrderWriteAuth(req, orderId, headers)
+    if (!authGate.ok) return authGate.response
+
     const idempotencyKey = String(
       req.headers.get('x-idempotency-key') ??
         body?.idempotencyKey ??
@@ -29,12 +38,6 @@ export async function POST(req: NextRequest) {
       if (duplicate) {
         return NextResponse.json({ success: true, duplicate: true, deductedCount: 0 }, { headers })
       }
-    }
-
-    const orderId = Number(body?.orderId ?? body?.id)
-
-    if (!orderId) {
-      return NextResponse.json({ success: false, message: 'orderId required' }, { headers })
     }
 
     const result = await processPosStockDeduction(orderId)

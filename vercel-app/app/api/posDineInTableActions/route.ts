@@ -9,6 +9,9 @@ import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
 import { appendPosOrderMergedAbsorbStamp } from '@/lib/pos-order-merge'
+import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
+import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 type PosOrderRow = {
   id?: number
@@ -129,11 +132,17 @@ async function hasOtherActiveOrderOnTable(
  * - merge: keep 주문에 absorb 주문 품목·인원·할인 등을 합친 뒤 absorb는 cancelled
  */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
   const isOfflineQueueSync = req.headers.get('X-CM-Offline-Queue-Sync') === '1'
 
   try {
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth!
+
     const body = await req.json()
     const action = String(body?.action ?? '').toLowerCase()
 
@@ -150,6 +159,12 @@ export async function POST(req: NextRequest) {
       const row = await fetchOrder(orderId)
       if (!row?.id) {
         return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+      }
+      if (!(await authCanAccessPosStoreWrite(auth, String(row.store_code ?? '')))) {
+        return NextResponse.json(
+          { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+          { status: 403, headers }
+        )
       }
       if (coercePosOrderTypeForDb(row.order_type) !== 'dine_in') {
         return NextResponse.json({ success: false, message: '매장(홀) 주문만 이동할 수 있습니다.' }, { headers })
@@ -199,6 +214,13 @@ export async function POST(req: NextRequest) {
       const absorb = await fetchOrder(absorbOrderId)
       if (!keep?.id || !absorb?.id) {
         return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+      }
+      const mergeStore = String(keep.store_code ?? '').trim()
+      if (!(await authCanAccessPosStoreWrite(auth, mergeStore))) {
+        return NextResponse.json(
+          { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+          { status: 403, headers }
+        )
       }
 
       const keepType = coercePosOrderTypeForDb(keep.order_type)

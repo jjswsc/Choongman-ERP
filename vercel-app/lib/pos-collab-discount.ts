@@ -1,5 +1,6 @@
 import type { PosMenu } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
+import { normalizeCartLineIdForSave } from '@/lib/pos-order-item-map'
 import {
   LEGACY_PROMOTION_MAIN_CATEGORY,
   PROMOTION_MAIN_CATEGORY,
@@ -98,8 +99,8 @@ export function menuMatchesCollabScope(menu: CollabMenuPick, detail: MarketingCo
 }
 
 function menuIdFromCartLineId(id: string): string {
-  const s = String(id ?? '')
-  if (s.toLowerCase().startsWith('promo-')) return ''
+  const s = normalizeCartLineIdForSave(String(id ?? ''))
+  if (!s || s.toLowerCase().startsWith('promo-')) return ''
   const i = s.indexOf('-')
   return (i >= 0 ? s.slice(0, i) : s).trim()
 }
@@ -223,14 +224,13 @@ function menuIdsForCollabLineWithCatalog(
   const explicit = menuIdsForCollabLine(line).filter((id) => menuById.has(id))
   if (explicit.length > 0) return explicit
 
-  const rawId = String(line.id ?? '').trim()
+  const rawId = normalizeCartLineIdForSave(String(line.id ?? ''))
   if (!rawId || rawId.toLowerCase().startsWith('promo-')) return []
   if (menuById.has(rawId)) return [rawId]
 
-  const cartPayloadId = rawId.startsWith('cart-') ? rawId.slice('cart-'.length) : rawId
   const matched: string[] = []
   for (const id of menuById.keys()) {
-    if (cartPayloadId === id || cartPayloadId.startsWith(`${id}-`)) matched.push(id)
+    if (rawId === id || rawId.startsWith(`${id}-`)) matched.push(id)
   }
   return matched
 }

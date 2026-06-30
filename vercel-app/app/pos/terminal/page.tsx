@@ -11057,14 +11057,17 @@ export default function PosTerminalPage() {
                 setPendingPayRequest({
                   tableName: servingTable.name,
                   existingOrderId: Number(servingTable.order.id),
-                  items: servingTable.order.items.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    ...(item.menuId ? { menuId: item.menuId } : {}),
-                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                  })),
+                  items: servingTable.order.items.map((item) => {
+                    const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
+                    return {
+                      id: item.id,
+                      name: item.name,
+                      price: item.price,
+                      quantity: item.quantity,
+                      ...(menuId ? { menuId } : {}),
+                      ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                    }
+                  }),
                   orderNo: servingTable.order.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...servingTable.order,

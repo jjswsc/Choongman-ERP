@@ -20,7 +20,7 @@ import {
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-server'
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
-import { getVerifiedAuth } from '@/lib/verify-auth'
+import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
@@ -160,13 +160,11 @@ async function runCompletionSideEffects(params: {
 
 /** POS 주문 저장 */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
   const startedAtMs = Date.now()
   let allocateOrderNoMs = 0
 
   try {
-    const auth = await getVerifiedAuth(req)
     let body: Record<string, unknown>
     try {
       body = (await req.json()) as Record<string, unknown>
@@ -249,6 +247,10 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'store_required' }, { headers })
     }
+
+    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!authGate.ok) return authGate.response
+    const auth = authGate.auth
 
     const openCheck = await assertPosBusinessOpenForOrderSave(storeCode)
     if (!openCheck.ok) {

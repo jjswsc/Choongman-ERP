@@ -91,20 +91,20 @@ export interface CartPanelHandle {
     tableName: string
     orderNo?: string
     existingOrderId?: number | null
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember

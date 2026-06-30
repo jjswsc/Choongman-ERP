@@ -6,6 +6,7 @@ import {
   type PosSetChildrenState,
 } from '@/lib/pos-set-children-state'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { posApiCorsHeaders, requirePosOrderWriteAuth } from '@/lib/pos-api-write-auth'
 
 function nowBangkokIso(): string {
   const dtf = new Intl.DateTimeFormat('sv-SE', {
@@ -31,8 +32,7 @@ function nowBangkokIso(): string {
 
 /** POS 주문 라인별 서빙/취소 상태 저장 (items_json servedAt/cancelledAt 등) */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     let body: Record<string, unknown>
@@ -55,6 +55,10 @@ export async function POST(req: NextRequest) {
     if (!id || Number.isNaN(id) || !itemId) {
       return NextResponse.json({ success: false, message: 'id, itemId required' }, { headers })
     }
+
+    const authGate = await requirePosOrderWriteAuth(req, id, headers)
+    if (!authGate.ok) return authGate.response
+
     if (idempotencyKey) {
       const duplicated = await reserveRequestIdempotencyKey({
         scope: `mark_pos_order_item_served:${id}`,

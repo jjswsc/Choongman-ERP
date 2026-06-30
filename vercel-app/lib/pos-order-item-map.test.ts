@@ -13,6 +13,10 @@ describe('normalizeCartLineIdForSave', () => {
     expect(normalizeCartLineIdForSave('cart-existing-2-line-abc')).toBe('line-abc')
     expect(normalizeCartLineIdForSave('line-abc')).toBe('line-abc')
   })
+
+  it('strips cart- prefix from live terminal cart line ids', () => {
+    expect(normalizeCartLineIdForSave('cart-9-k3j2x1')).toBe('9-k3j2x1')
+  })
 })
 
 describe('cartLinesToPosOrderItems', () => {

@@ -1,6 +1,13 @@
 import 'server-only'
 
 import { resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  hasOfficeStaffScope,
+  isAccountingRole,
+  isOfficeRole,
+} from '@/lib/permissions'
+import type { JwtPayload } from '@/lib/jwt-auth'
 import { normStoreKey } from '@/lib/store-list-keys'
 
 function normKeys(values: string[]): Set<string> {
@@ -44,4 +51,28 @@ export async function canAccessPosStoreForAuth(authStore: string, targetStoreCod
   if (!target) return false
   if (!auth) return true
   return posStoreCodesReferToSameStore(auth, target)
+}
+
+/** POS 주문·결산 등 쓰기 API — JWT 매장·allowedStores·본사 권한으로 대상 매장 접근 허용 여부 */
+export async function authCanAccessPosStoreWrite(
+  auth: JwtPayload,
+  targetStoreCode: string
+): Promise<boolean> {
+  const target = String(targetStoreCode || '').trim()
+  if (!target) return false
+  const role = String(auth.role || '')
+  const authStore = String(auth.store || '').trim()
+  if (hasOfficeStaffScope(role, authStore) || isOfficeRole(role) || isAccountingRole(role.toLowerCase())) {
+    return true
+  }
+  const candidates = [
+    authStore,
+    ...(Array.isArray(auth.allowedStores) ? auth.allowedStores : []).map((s) => String(s || '').trim()),
+  ].filter(Boolean)
+  if (candidates.length === 0) return false
+  for (const candidate of candidates) {
+    if (storesMatchForGradeLookup(candidate, target)) return true
+    if (await posStoreCodesReferToSameStore(candidate, target)) return true
+  }
+  return false
 }

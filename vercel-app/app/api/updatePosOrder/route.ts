@@ -5,7 +5,9 @@ import {
   supabaseUpdateByFilterWithPgrst204Fallback,
 } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder, ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
-import { getVerifiedAuth } from '@/lib/verify-auth'
+import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
+import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
+import { requireAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolvePosOrderPaidAtStampIso, posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { computePosPricing } from '@/lib/pos-pricing'
@@ -45,11 +47,15 @@ const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', '
 
 /** POS 주문 수정 (항목·메모·할인·주문번호 등) - completed 전까지 수정 가능 */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
-    const auth = await getVerifiedAuth(req)
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth!
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
     let body: Record<string, unknown>
@@ -152,6 +158,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const current = existing[0]
+
+    if (!(await authCanAccessPosStoreWrite(auth, String(current?.store_code ?? '')))) {
+      return NextResponse.json(
+        { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+        { status: 403, headers }
+      )
+    }
 
     const memberId =
       body?.memberId != null && body?.memberId !== ''
