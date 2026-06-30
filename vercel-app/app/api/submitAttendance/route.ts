@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
         })) as { id?: number; log_at?: string; log_type?: string }[]
         if (empCodeNorm) {
           try {
-            const codeLeg = `store_name=ilike.${storeIlike}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null`
+            const codeLeg = `store_name=ilike.${storeIlike}&employee_code=eq.${encodeURIComponent(empCodeNorm)}`
             const codeRows = (await supabaseSelectFilter('attendance_logs', codeLeg, {
               order: 'log_at.desc',
               limit: 100,

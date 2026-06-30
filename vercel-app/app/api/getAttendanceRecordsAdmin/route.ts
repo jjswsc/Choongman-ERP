@@ -137,7 +137,12 @@ export async function GET(request: NextRequest) {
   let employeeIdFilter =
     queryEmployeeIdRaw && Number.isFinite(Number(queryEmployeeIdRaw)) ? Math.floor(Number(queryEmployeeIdRaw)) : 0
   const employeeCodeNorm = normalizeEmployeeCodeForMatch(
-    String(searchParams.get('employeeCode') || searchParams.get('code') || '').trim()
+    String(
+      searchParams.get('employeeCode') ||
+        searchParams.get('code') ||
+        auth.employeeCode ||
+        ''
+    ).trim()
   )
   const hasEmployeeCodeFilter = employeeCodeNorm.length > 0
   const statusFilter = String(searchParams.get('statusFilter') || searchParams.get('status') || 'all').trim()
@@ -265,7 +270,7 @@ export async function GET(request: NextRequest) {
     let attRows: AttRow[]
     if (hasEmployeeIdFilter && employeeFilter.trim()) {
       const trimmedName = employeeFilter.trim()
-      // ① employee_id ② 이름+id NULL ③ 직원코드+id NULL(레거시)
+      // ① employee_id ② 이름+id NULL ③ 직원코드(employee_id 무관 — M0020 등)
       const idFilter = [...attLogFilterParts, `employee_id=eq.${employeeIdFilter}`].join('&')
       const legacyFilter = [
         ...attLogFilterParts,
@@ -276,11 +281,7 @@ export async function GET(request: NextRequest) {
       if (hasEmployeeCodeFilter) {
         fetches.push(
           fetchAttGrid(
-            [
-              ...attLogFilterParts,
-              `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`,
-              `employee_id=is.null`,
-            ].join('&')
+            [...attLogFilterParts, `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`].join('&')
           )
         )
       }
@@ -288,12 +289,11 @@ export async function GET(request: NextRequest) {
     } else if (hasEmployeeIdFilter) {
       const idFilter = [...attLogFilterParts, `employee_id=eq.${employeeIdFilter}`].join('&')
       if (hasEmployeeCodeFilter) {
-        const codeLegacyFilter = [
+        const codeFilter = [
           ...attLogFilterParts,
           `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`,
-          `employee_id=is.null`,
         ].join('&')
-        attRows = mergeAttByLogId(await Promise.all([fetchAttGrid(idFilter), fetchAttGrid(codeLegacyFilter)]))
+        attRows = mergeAttByLogId(await Promise.all([fetchAttGrid(idFilter), fetchAttGrid(codeFilter)]))
       } else {
         attRows = await fetchAttGrid(idFilter)
       }

@@ -32,9 +32,11 @@ import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image as ImageIcon, Upload } from "lucide-react"
 
 function getAttendanceDateRange() {
-  const now = new Date()
   const today = todayStrBangkok()
-  const bangkokHour = parseInt(now.toLocaleString("en-US", { timeZone: ATTENDANCE_TZ, hour: "2-digit", hour12: false }), 10)
+  const bangkokHour = parseInt(
+    new Date().toLocaleString("en-US", { timeZone: ATTENDANCE_TZ, hour: "2-digit", hour12: false }),
+    10
+  )
   if (bangkokHour >= 0 && bangkokHour <= 7) {
     return { startDate: daysAgoStrBangkok(1), endDate: today }
   }
