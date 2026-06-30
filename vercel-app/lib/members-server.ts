@@ -26,7 +26,7 @@ import {
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { resolveMemberPortalCouponStatus } from '@/lib/member-portal-coupon-status'
-import { buildUsedMemberCouponIssueMap } from '@/lib/member-portal-coupon-reconcile'
+import { buildUsedMemberCouponIssueMap, type MemberPortalCouponScope } from '@/lib/member-portal-coupon-reconcile'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -1458,6 +1458,17 @@ export async function resolveMemberIdsSharingPhone(memberId: number): Promise<nu
   return [...ids].sort((a, b) => a - b)
 }
 
+export async function resolveMemberPortalCouponScope(memberId: number): Promise<MemberPortalCouponScope> {
+  const memberIds = await resolveMemberIdsSharingPhone(memberId)
+  const memberNos = new Set<string>()
+  for (const id of memberIds) {
+    const member = await getMemberSummaryById(id)
+    const memberNo = toText(member?.memberNo).toUpperCase()
+    if (memberNo) memberNos.add(memberNo)
+  }
+  return { memberIds, memberNos: [...memberNos] }
+}
+
 async function reconcileMemberCouponIssueStatusesForPortal<
   T extends {
     id: number
@@ -1469,7 +1480,7 @@ async function reconcileMemberCouponIssueStatusesForPortal<
     orderId?: number | null
     usedAt?: string
   },
->(rows: T[], memberIds: number[]): Promise<T[]> {
+>(rows: T[], scope: MemberPortalCouponScope): Promise<T[]> {
   const issuedRows = rows.filter((row) => String(row.status || '').toLowerCase() === 'issued')
   if (!issuedRows.length) return rows
 
@@ -1482,26 +1493,34 @@ async function reconcileMemberCouponIssueStatusesForPortal<
       orderId: row.orderId,
       usedAt: row.usedAt,
     })),
-    memberIds
+    scope
   )
 
   const nowBangkok = getBangkokDateTimeString()
-  return rows.map((row) => {
+  const repaired: T[] = []
+  for (const row of rows) {
     const resolved = resolveMemberPortalCouponStatus(row, new Set(usedMeta.keys()))
     if (resolved === 'used' && String(row.status || '').toLowerCase() === 'issued') {
       const redemption = usedMeta.get(Number(row.id || 0))
-      void supabaseUpdateByFilter('member_coupon_issues', `id=eq.${row.id}`, {
-        status: 'used',
-        used_at: toText(row.usedAt) || nowBangkok,
-        ...(redemption?.orderId ? { order_id: redemption.orderId } : {}),
-      }).catch(() => {})
-      return { ...row, status: resolved, ...(redemption?.orderId ? { orderId: redemption.orderId } : {}) }
+      try {
+        await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${row.id}`, {
+          status: 'used',
+          used_at: toText(row.usedAt) || nowBangkok,
+          ...(redemption?.orderId ? { order_id: redemption.orderId } : {}),
+        })
+      } catch {
+        /* ignore */
+      }
+      repaired.push({ ...row, status: resolved, ...(redemption?.orderId ? { orderId: redemption.orderId } : {}) })
+      continue
     }
     if (resolved !== row.status) {
-      return { ...row, status: resolved }
+      repaired.push({ ...row, status: resolved })
+      continue
     }
-    return row
-  })
+    repaired.push(row)
+  }
+  return repaired
 }
 
 export async function listMemberCouponIssuesForPortalMember(
@@ -1509,11 +1528,12 @@ export async function listMemberCouponIssuesForPortalMember(
   limit = 100
 ): Promise<Awaited<ReturnType<typeof listMemberCouponIssues>>> {
   const memberIds = await resolveMemberIdsSharingPhone(memberId)
+  const scope = await resolveMemberPortalCouponScope(memberId)
   const rows =
     memberIds.length <= 1
       ? await listMemberCouponIssues({ memberId: memberIds[0] || memberId, limit })
       : await listMemberCouponIssues({ memberIds, limit })
-  return reconcileMemberCouponIssueStatusesForPortal(rows, memberIds)
+  return reconcileMemberCouponIssueStatusesForPortal(rows, scope)
 }
 
 export async function listMemberCouponIssues(params?: {
