@@ -358,6 +358,33 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function cancelMemberCouponIssue(params: { issueId: number }) {
+  const res = await apiFetchWithOffline('/api/member-coupons/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; cancelledCount?: number }>
+}
+
+export async function cancelMemberCouponIssueDuplicates(params: {
+  memberId: number
+  couponCode: string
+  keepNewest?: boolean
+}) {
+  const res = await apiFetchWithOffline('/api/member-coupons/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...params, keepNewest: params.keepNewest !== false }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    cancelledCount?: number
+    keptIssueId?: number
+  }>
+}
+
 export async function getMembersCursor(params?: { q?: string; afterId?: number; limit?: number }) {
   const q = new URLSearchParams()
   if (params?.q) q.set('q', params.q)

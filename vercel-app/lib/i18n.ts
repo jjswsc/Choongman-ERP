@@ -5728,6 +5728,14 @@ export const i18n = {
     crmCouponUsedAt: '사용',
     crmCouponOrderId: '주문',
     crmCouponHistoryEmpty: '이력이 없습니다.',
+    crmCouponColActions: '관리',
+    crmCouponCancelIssue: '발급 취소',
+    crmCouponCancelIssueConfirm: '이 쿠폰 발급을 취소할까요? 회원앱 「내 혜택」에서 사라집니다.',
+    crmCouponCancelIssueDone: '쿠폰 발급을 취소했습니다.',
+    crmCouponCancelDuplicates: '중복 취소 (최신 1장 유지)',
+    crmCouponCancelDuplicatesConfirm:
+      '이 회원·쿠폰의 사용 가능 발급 {count}건 중 최신 1장만 남기고 나머지를 취소할까요?',
+    crmCouponCancelDuplicatesDone: '{count}건의 중복 발급을 취소했습니다.',
     crmCouponScopeTitle: '적용 메뉴',
     crmCouponScopeHint: '비워 두면 전체 주문에 적용됩니다. 메뉴 또는 카테고리를 선택하세요.',
     crmCouponScopeClear: '전체 메뉴',
@@ -6814,7 +6822,7 @@ export const i18n = {
     helpSum_admin_crm_coupons:
       '쿠폰 정의·회원 지급·발급 이력을 한 화면에서 관리하고 POS·회원앱과 연동합니다.',
     helpHow_admin_crm_coupons:
-      '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다.\n② 「회원 지급」: 회원 검색 후 쿠폰을 즉시 지급합니다(회원앱 혜택 탭에 표시).\n③ 「발급·이력」: 발급·사용·주문 번호를 조회합니다.\n④ POS 결제 시 회원을 연결하면 발급 쿠폰이 자동 검증됩니다.',
+      '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다.\n② 「회원 지급」: 회원 검색 후 쿠폰을 즉시 지급합니다(회원앱 혜택 탭에 표시).\n③ 「발급·이력」: 발급·사용·주문 번호를 조회하고, 사용 가능(issued) 건은 「발급 취소」로 회원앱에서 제거할 수 있습니다.\n④ POS 결제 시 회원을 연결하면 발급 쿠폰이 자동 검증됩니다.',
     helpSum_admin_members_visits:
       '회원 방문·주문 이력과 방문 분석 KPI를 보는 화면입니다.',
     helpHow_admin_members_visits:
@@ -12955,6 +12963,14 @@ orderItemQty: 'Qty',
     crmCouponUsedAt: 'Used',
     crmCouponOrderId: 'Order',
     crmCouponHistoryEmpty: 'No history yet.',
+    crmCouponColActions: 'Actions',
+    crmCouponCancelIssue: 'Cancel issue',
+    crmCouponCancelIssueConfirm: 'Cancel this coupon issue? It will disappear from the member app.',
+    crmCouponCancelIssueDone: 'Coupon issue cancelled.',
+    crmCouponCancelDuplicates: 'Cancel duplicates (keep newest)',
+    crmCouponCancelDuplicatesConfirm:
+      'Cancel all but the newest of {count} ready-to-use issues for this member and coupon?',
+    crmCouponCancelDuplicatesDone: 'Cancelled {count} duplicate issue(s).',
     crmCouponScopeTitle: 'Applies to',
     crmCouponScopeHint: 'Leave empty for the whole order. Pick menus or categories.',
     crmCouponScopeClear: 'All menus',
@@ -14044,7 +14060,7 @@ orderItemQty: 'Qty',
     helpSum_admin_crm_coupons:
       'Define coupons, grant to members, and track POS and member-app usage in one hub.',
     helpHow_admin_crm_coupons:
-      '① Definitions: set benefit, validity, and redemption mode (member issue recommended).\n② Grant: search members and issue instantly (shows in member app Benefits).\n③ History: filter by status, coupon, or member.\n④ At POS, link the member so issued coupons validate automatically.',
+      '① Definitions: set benefit, validity, and redemption mode (member issue recommended).\n② Grant: search members and issue instantly (shows in member app Benefits).\n③ History: view issue/use/order details; cancel ready-to-use (issued) rows to remove them from the member app.\n④ At POS, link the member so issued coupons validate automatically.',
     helpSum_admin_members_visits:
       'Review member visit and order history plus visit analytics KPIs.',
     helpHow_admin_members_visits:
@@ -19714,6 +19730,14 @@ orderItemQty: 'จำนวน',
     crmCouponUsedAt: 'ใช้แล้ว',
     crmCouponOrderId: 'ออเดอร์',
     crmCouponHistoryEmpty: 'ยังไม่มีประวัติ',
+    crmCouponColActions: 'จัดการ',
+    crmCouponCancelIssue: 'ยกเลิกการออกคูปอง',
+    crmCouponCancelIssueConfirm: 'ยกเลิกการออกคูปองนี้หรือไม่? จะหายไปจากแอปสมาชิก',
+    crmCouponCancelIssueDone: 'ยกเลิกการออกคูปองแล้ว',
+    crmCouponCancelDuplicates: 'ยกเลิกซ้ำ (เก็บใบล่าสุด 1 ใบ)',
+    crmCouponCancelDuplicatesConfirm:
+      'ยกเลิกการออกคูปองที่พร้อมใช้ {count} ใบ เหลือใบล่าสุด 1 ใบสำหรับสมาชิกและคูปองนี้หรือไม่?',
+    crmCouponCancelDuplicatesDone: 'ยกเลิกการออกคูปองซ้ำ {count} ใบแล้ว',
     crmCouponScopeTitle: 'ใช้กับเมนู',
     crmCouponScopeHint: 'เว้นว่างเพื่อใช้กับทั้งออเดอร์ เลือกเมนูหรือหมวดหมู่',
     crmCouponScopeClear: 'เมนูทั้งหมด',

@@ -1872,6 +1872,89 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
   }
 }
 
+const ADMIN_COUPON_CANCEL_REASON = 'admin_cancel'
+
+async function loadMemberCouponIssueRow(issueId: number) {
+  const id = Number(issueId || 0)
+  if (!id) return null
+  const rows = (await supabaseSelectFilter('member_coupon_issues', `id=eq.${id}`, {
+    limit: 1,
+    select: 'id,member_id,coupon_code,status',
+  })) as Array<{ id?: number; member_id?: number; coupon_code?: string; status?: string }>
+  return rows?.[0] || null
+}
+
+export async function cancelMemberCouponIssue(issueId: number, reason = ADMIN_COUPON_CANCEL_REASON) {
+  const id = Number(issueId || 0)
+  if (!id) throw new Error('유효한 issueId가 필요합니다.')
+
+  const row = await loadMemberCouponIssueRow(id)
+  if (!row?.id) throw new Error('발급 건을 찾을 수 없습니다.')
+  if (String(row.status || '').trim().toLowerCase() !== 'issued') {
+    throw new Error('사용 가능(issued) 상태만 취소할 수 있습니다.')
+  }
+
+  const cancelledAt = getBangkokDateTimeString()
+  await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${id}`, {
+    status: 'cancelled',
+    restored_at: cancelledAt,
+    restore_reason: String(reason || ADMIN_COUPON_CANCEL_REASON).slice(0, 120),
+  })
+}
+
+export async function cancelMemberCouponIssuesAdmin(params: {
+  issueIds?: number[]
+  memberId?: number
+  couponCode?: string
+  keepNewest?: boolean
+  reason?: string
+}): Promise<{ cancelledCount: number; keptIssueId?: number }> {
+  const reason = String(params.reason || ADMIN_COUPON_CANCEL_REASON).slice(0, 120)
+  const issueIds = (params.issueIds || []).map((id) => Number(id || 0)).filter((id) => id > 0)
+  if (issueIds.length) {
+    let cancelledCount = 0
+    for (const id of issueIds) {
+      try {
+        await cancelMemberCouponIssue(id, reason)
+        cancelledCount += 1
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e || '')
+        if (!/사용 가능\(issued\)/.test(msg)) throw e
+      }
+    }
+    return { cancelledCount }
+  }
+
+  const memberId = Number(params.memberId || 0)
+  const couponCode = toText(params.couponCode).toUpperCase()
+  if (!memberId || !couponCode) {
+    throw new Error('memberId와 couponCode가 필요합니다.')
+  }
+
+  const rows = (await supabaseSelectFilter(
+    'member_coupon_issues',
+    `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(couponCode)}&status=eq.issued`,
+    { order: 'id.desc', limit: 500, select: 'id' }
+  )) as Array<{ id?: number }>
+  const ids = (rows || []).map((row) => Number(row.id || 0)).filter((id) => id > 0)
+  if (!ids.length) return { cancelledCount: 0 }
+
+  if (params.keepNewest) {
+    const [keepId, ...cancelIds] = ids
+    let cancelledCount = 0
+    for (const id of cancelIds) {
+      await cancelMemberCouponIssue(id, reason)
+      cancelledCount += 1
+    }
+    return { cancelledCount, keptIssueId: keepId }
+  }
+
+  for (const id of ids) {
+    await cancelMemberCouponIssue(id, reason)
+  }
+  return { cancelledCount: ids.length }
+}
+
 export async function getMemberVisits(params?: {
   memberId?: number
   limit?: number

@@ -9,7 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getMemberCoupons, getPosCoupons } from "@/lib/api-client"
+import {
+  cancelMemberCouponIssue,
+  cancelMemberCouponIssueDuplicates,
+  getMemberCoupons,
+  getPosCoupons,
+} from "@/lib/api-client"
+import { appAlert, appConfirm } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   couponIssueStatusLabel,
   filterMemberCouponIssues,
@@ -40,11 +47,20 @@ function toRow(raw: Awaited<ReturnType<typeof getMemberCoupons>>[number]): Membe
   }
 }
 
+type DuplicateGroup = {
+  memberId: number
+  memberNo?: string
+  couponCode: string
+  rows: MemberCouponIssueRow[]
+}
+
 export function CrmCouponHistoryPanel() {
   const { lang } = useLang()
   const t = useT(lang)
   const [rows, setRows] = React.useState<MemberCouponIssueRow[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [cancellingId, setCancellingId] = React.useState<number | null>(null)
+  const [cancellingDupKey, setCancellingDupKey] = React.useState<string | null>(null)
   const [q, setQ] = React.useState("")
   const [status, setStatus] = React.useState("all")
   const [couponCode, setCouponCode] = React.useState("all")
@@ -85,11 +101,76 @@ export function CrmCouponHistoryPanel() {
     [rows, q, status, couponCode]
   )
 
+  const duplicateGroups = React.useMemo(() => {
+    const map = new Map<string, DuplicateGroup>()
+    for (const row of displayRows) {
+      if (String(row.status || "").toLowerCase() !== "issued") continue
+      const key = `${row.memberId}:${row.couponCode}`
+      const existing = map.get(key)
+      if (existing) {
+        existing.rows.push(row)
+      } else {
+        map.set(key, {
+          memberId: row.memberId,
+          memberNo: row.memberNo,
+          couponCode: row.couponCode,
+          rows: [row],
+        })
+      }
+    }
+    return Array.from(map.values()).filter((group) => group.rows.length > 1)
+  }, [displayRows])
+
+  const handleCancelIssue = async (row: MemberCouponIssueRow) => {
+    const ok = await appConfirm(t("crmCouponCancelIssueConfirm"))
+    if (!ok) return
+    setCancellingId(row.id)
+    try {
+      const res = await cancelMemberCouponIssue({ issueId: row.id })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || t("processFail"))
+        return
+      }
+      await appAlert(t("crmCouponCancelIssueDone"))
+      await load()
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
+  const handleCancelDuplicates = async (group: DuplicateGroup) => {
+    const count = group.rows.length
+    const ok = await appConfirm(t("crmCouponCancelDuplicatesConfirm").replace("{count}", String(count)))
+    if (!ok) return
+    const dupKey = `${group.memberId}:${group.couponCode}`
+    setCancellingDupKey(dupKey)
+    try {
+      const res = await cancelMemberCouponIssueDuplicates({
+        memberId: group.memberId,
+        couponCode: group.couponCode,
+        keepNewest: true,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || t("processFail"))
+        return
+      }
+      await appAlert(t("crmCouponCancelDuplicatesDone").replace("{count}", String(res.cancelledCount || 0)))
+      await load()
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setCancellingDupKey(null)
+    }
+  }
+
   const statusBadgeClass = (st: string) => {
     const s = String(st || "").toLowerCase()
     if (s === "issued") return "bg-emerald-100 text-emerald-800"
     if (s === "used") return "bg-slate-200 text-slate-800"
     if (s === "expired") return "bg-amber-100 text-amber-900"
+    if (s === "cancelled") return "bg-rose-100 text-rose-800"
     return "bg-muted text-muted-foreground"
   }
 
@@ -116,6 +197,7 @@ export function CrmCouponHistoryPanel() {
               <SelectItem value="issued">{couponIssueStatusLabel("issued", t)}</SelectItem>
               <SelectItem value="used">{couponIssueStatusLabel("used", t)}</SelectItem>
               <SelectItem value="expired">{couponIssueStatusLabel("expired", t)}</SelectItem>
+              <SelectItem value="cancelled">{couponIssueStatusLabel("cancelled", t)}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -141,6 +223,32 @@ export function CrmCouponHistoryPanel() {
         </Button>
       </div>
 
+      {duplicateGroups.length > 0 ? (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+          <p className="text-xs font-medium text-amber-900">
+            {t("crmCouponCancelDuplicates")} — {duplicateGroups.length}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {duplicateGroups.map((group) => {
+              const dupKey = `${group.memberId}:${group.couponCode}`
+              const busy = cancellingDupKey === dupKey
+              return (
+                <Button
+                  key={dupKey}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border-amber-300 bg-white text-xs"
+                  disabled={busy || loading}
+                  onClick={() => handleCancelDuplicates(group)}
+                >
+                  {group.memberNo || group.memberId} · {group.couponCode} ({group.rows.length})
+                </Button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-xl border bg-card">
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <History className="h-4 w-4 text-sky-500" />
@@ -162,12 +270,13 @@ export function CrmCouponHistoryPanel() {
                 <th className="p-3 font-medium">{t("crmCouponUsedAt") || "사용"}</th>
                 <th className="p-3 font-medium">{t("crmCouponOrderId") || "주문"}</th>
                 <th className="p-3 font-medium">{t("crmCouponColStatus") || "상태"}</th>
+                <th className="p-3 font-medium">{t("crmCouponColActions") || "관리"}</th>
               </tr>
             </thead>
             <tbody>
               {displayRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="p-8 text-center text-muted-foreground">
                     {loading ? t("loading") : t("crmCouponHistoryEmpty") || "이력이 없습니다."}
                   </td>
                 </tr>
@@ -208,6 +317,21 @@ export function CrmCouponHistoryPanel() {
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(r.status)}`}>
                         {couponIssueStatusLabel(r.status, t)}
                       </span>
+                    </td>
+                    <td className="p-3">
+                      {String(r.status || "").toLowerCase() === "issued" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={cancellingId === r.id || loading}
+                          onClick={() => handleCancelIssue(r)}
+                        >
+                          {t("crmCouponCancelIssue")}
+                        </Button>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))
