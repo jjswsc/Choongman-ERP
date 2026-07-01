@@ -33,9 +33,10 @@ const tabs = [
 interface AppNavigationProps {
   activeTab: string
   onTabChange: (tab: string) => void
+  ordersBadge?: number
 }
 
-export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
+export function AppNavigation({ activeTab, onTabChange, ordersBadge = 0 }: AppNavigationProps) {
   const { lang } = useLang()
   const { auth } = useAuth()
   const t = useT(lang)
@@ -81,7 +82,14 @@ export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
               )}
             >
               <Icon className={cn("h-4 w-4", isActive && "text-primary")} />
-              <span>{t(tab.labelKey)}</span>
+              <span className="inline-flex items-center gap-1">
+                {t(tab.labelKey)}
+                {tab.id === "orders" && ordersBadge > 0 ? (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-none text-destructive-foreground">
+                    {ordersBadge > 99 ? "99+" : ordersBadge}
+                  </span>
+                ) : null}
+              </span>
               {isActive && (
                 <span className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-primary" />
               )}

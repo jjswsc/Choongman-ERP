@@ -24,6 +24,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { MarketingMaterialChecklistMobile } from "@/components/marketing/marketing-material-checklist-mobile"
 import {
   Dialog,
   DialogContent,
@@ -122,7 +123,13 @@ interface CartItem {
   taxType?: string
 }
 
-export function OrderTab() {
+export function OrderTab({
+  materialsPendingCount = 0,
+  onMaterialsDataChanged,
+}: {
+  materialsPendingCount?: number
+  onMaterialsDataChanged?: () => void
+} = {}) {
   const { auth } = useAuth()
   const { viewStore } = useStoreView()
   const { lang } = useLang()
@@ -727,6 +734,14 @@ export function OrderTab() {
               <TabsTrigger value="history" className={adminTabsTriggerCn}>
                 {t('ordHistory')}
               </TabsTrigger>
+              <TabsTrigger value="materials" className={cn(adminTabsTriggerCn, "relative gap-1.5")}>
+                {t('ordMaterials')}
+                {materialsPendingCount > 0 ? (
+                  <Badge variant="destructive" className="h-5 min-w-5 shrink-0 px-1 text-[10px]">
+                    {materialsPendingCount > 99 ? "99+" : materialsPendingCount}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
             </TabsList>
           </AdminTabsBarWithHelp>
 
@@ -1097,6 +1112,13 @@ export function OrderTab() {
             total={histTotal}
             onPageChange={(p) => loadHistory(p)}
             disabled={historyLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="materials" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
+          <MarketingMaterialChecklistMobile
+            storeName={effectiveStore}
+            onDataChanged={onMaterialsDataChanged}
           />
         </TabsContent>
       </Tabs>

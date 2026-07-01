@@ -6,11 +6,8 @@ import {
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 import {
-  isAccountingRole,
-  isFranchiseeRole,
-  isManagerRole,
-  isOfficeRole,
-} from '@/lib/permissions'
+  isMarketingMaterialStoreScopedRole,
+} from '@/lib/marketing-material-store-scope'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -35,7 +32,7 @@ function normalizeStoreName(val: unknown): string {
 }
 
 function isStoreScopedRole(role: string): boolean {
-  return isManagerRole(role) || isFranchiseeRole(role)
+  return isMarketingMaterialStoreScopedRole(role)
 }
 
 function mapRow(row: Record<string, unknown>) {
@@ -93,7 +90,7 @@ async function maybeCreateDeployment(params: {
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireAuth(req, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
@@ -106,8 +103,7 @@ export async function GET(req: NextRequest) {
       .map((s) => normalizeStoreName(s))
       .filter(Boolean)
       .concat(userStore)
-    const isScopedRole =
-      !isOfficeRole(userRole) && !isAccountingRole(userRole) && isStoreScopedRole(userRole)
+    const isScopedRole = isStoreScopedRole(userRole)
 
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
@@ -148,7 +144,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireAuth(req, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
@@ -184,7 +180,7 @@ export async function POST(req: NextRequest) {
     const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
     if (isStoreScopedRole(userRole) && !scopedStore) {
       return NextResponse.json(
-        { success: false, message: '매니저/가맹점주 저장에는 사용자 매장 정보가 필요합니다.' },
+        { success: false, message: '매장 직원 저장에는 사용자 매장 정보가 필요합니다.' },
         { headers }
       )
     }
@@ -192,7 +188,7 @@ export async function POST(req: NextRequest) {
     const requestedStoreName = normalizeStoreName(body.storeName)
     if (scopedStore && requestedStoreName && !storesMatchForGradeLookup(scopedStore, requestedStoreName)) {
       return NextResponse.json(
-        { success: false, message: `매니저/가맹점주는 본인 매장(${scopedStore})만 저장할 수 있습니다.` },
+        { success: false, message: `본인 매장(${scopedStore})만 저장할 수 있습니다.` },
         { status: 403, headers }
       )
     }
@@ -201,7 +197,7 @@ export async function POST(req: NextRequest) {
       const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeName))
       if (!allowed) {
         return NextResponse.json(
-          { success: false, message: '매니저/가맹점주는 본인 권한 매장만 저장할 수 있습니다.' },
+          { success: false, message: '본인 권한 매장만 저장할 수 있습니다.' },
           { status: 403, headers }
         )
       }

@@ -81,6 +81,100 @@ export function filterChecklistMaterials(
   })
 }
 
+export type StoreMaterialTaskPhase = 'waiting_production' | 'receive' | 'install' | 'done'
+
+export function resolveStoreMaterialTaskPhase(
+  material: Pick<MarketingMaterial, 'producedOn'>,
+  check: MarketingMaterialStoreCheck | undefined
+): StoreMaterialTaskPhase {
+  const produced = Boolean((material.producedOn || '').trim())
+  if (!produced) return 'waiting_production'
+  if (!check?.receivedOn) return 'receive'
+  if (!check?.installedOn) return 'install'
+  return 'done'
+}
+
+export function listStoreMaterialTasks(
+  materials: MarketingMaterial[],
+  checks: MarketingMaterialStoreCheck[],
+  storeName: string,
+  hqLabel: string,
+  options?: { types?: Set<string>; campaignId?: string; includeDone?: boolean }
+): Array<{
+  material: MarketingMaterial
+  phase: StoreMaterialTaskPhase
+  check?: MarketingMaterialStoreCheck
+}> {
+  const targetStore = String(storeName || '').trim()
+  if (!targetStore) return []
+  const filtered = filterChecklistMaterials(materials, {
+    types: options?.types,
+    campaignId: options?.campaignId,
+  })
+  const rows: Array<{
+    material: MarketingMaterial
+    phase: StoreMaterialTaskPhase
+    check?: MarketingMaterialStoreCheck
+  }> = []
+  for (const material of filtered) {
+    const targets = materialTargetStores(material, hqLabel)
+    if (!targets.some((s) => storesMatchForGradeLookup(s, targetStore))) continue
+    const check = findStoreCheckForBranch(checks, material.id, targetStore)
+    const phase = resolveStoreMaterialTaskPhase(material, check)
+    if (phase === 'done' && !options?.includeDone) continue
+    rows.push({ material, phase, check })
+  }
+  return rows
+}
+
+/** 수령·설치 대기 건수 (제작 대기 제외) */
+export function countPendingStoreMaterialTasks(
+  materials: MarketingMaterial[],
+  checks: MarketingMaterialStoreCheck[],
+  storeName: string,
+  hqLabel: string,
+  options?: { types?: Set<string>; campaignId?: string }
+): number {
+  return listStoreMaterialTasks(materials, checks, storeName, hqLabel, options).filter(
+    (row) => row.phase === 'receive' || row.phase === 'install'
+  ).length
+}
+
+type CampaignPickRow = { id: string; startDate?: string | null }
+
+/** 진행 중·미완료 항목이 있는 캠페인을 우선 선택 (startDate 최신) */
+export function pickCampaignIdWithPendingStoreTasks(
+  campaigns: CampaignPickRow[],
+  materials: MarketingMaterial[],
+  checks: MarketingMaterialStoreCheck[],
+  storeName: string,
+  hqLabel: string
+): string {
+  const targetStore = String(storeName || '').trim()
+  if (!targetStore || campaigns.length === 0) return ''
+
+  const scored = campaigns
+    .map((c) => {
+      const cid = String(c.id || '').trim()
+      if (!cid) return null
+      const pending = countPendingStoreMaterialTasks(materials, checks, targetStore, hqLabel, {
+        campaignId: cid,
+      })
+      return { id: cid, pending, startDate: String(c.startDate || '').trim() }
+    })
+    .filter((row): row is { id: string; pending: number; startDate: string } => Boolean(row))
+
+  const withPending = scored.filter((row) => row.pending > 0)
+  const pool = withPending.length > 0 ? withPending : scored.filter((row) => row.pending >= 0)
+  if (pool.length === 0) return ''
+
+  pool.sort((a, b) => {
+    if (b.pending !== a.pending) return b.pending - a.pending
+    return b.startDate.localeCompare(a.startDate)
+  })
+  return pool[0]?.id || ''
+}
+
 export function aggregateChecklistProgress(
   materials: MarketingMaterial[],
   checks: MarketingMaterialStoreCheck[],

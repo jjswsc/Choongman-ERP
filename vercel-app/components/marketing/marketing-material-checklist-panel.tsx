@@ -58,6 +58,10 @@ type Props = {
   hqLabel: string
   formatStoreLabel: (store: string) => string
   stores: string[]
+  /** 모바일 주문 탭 — 매장 할 일만, 본사 테이블 숨김 */
+  mobileMode?: boolean
+  /** 모바일·본사 매장 보기 시 체크 대상 매장 */
+  storeNameOverride?: string
 }
 
 export function MarketingMaterialChecklistPanel({
@@ -68,6 +72,8 @@ export function MarketingMaterialChecklistPanel({
   hqLabel,
   formatStoreLabel,
   stores,
+  mobileMode = false,
+  storeNameOverride = "",
 }: Props) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -85,8 +91,11 @@ export function MarketingMaterialChecklistPanel({
 
   const role = String(auth?.role || "")
   const userStore = String(auth?.store || "").trim()
-  const isHqView = isOfficeRole(role) || isAccountingRole(role)
-  const isStoreUser = isManagerRole(role) || isFranchiseeRole(role)
+  const effectiveStoreName = String(storeNameOverride || userStore).trim()
+  const isHqView = mobileMode ? false : isOfficeRole(role) || isAccountingRole(role)
+  const isStoreUser = mobileMode
+    ? Boolean(effectiveStoreName)
+    : isManagerRole(role) || isFranchiseeRole(role)
 
   const [loading, setLoading] = React.useState(true)
   const [materials, setMaterials] = React.useState<MarketingMaterial[]>([])
@@ -98,7 +107,10 @@ export function MarketingMaterialChecklistPanel({
     defaultMarketingMaterialPlacementOptions()
   )
   const [includeAllTypes, setIncludeAllTypes] = React.useState(false)
-  const [storeFilter, setStoreFilter] = React.useState(() => (isStoreUser ? userStore : ""))
+  const [storeFilter, setStoreFilter] = React.useState(() => {
+    if (mobileMode && effectiveStoreName) return effectiveStoreName
+    return isManagerRole(role) || isFranchiseeRole(role) ? userStore : ""
+  })
   const [expandedMaterialId, setExpandedMaterialId] = React.useState<string | null>(null)
   const [showDone, setShowDone] = React.useState(false)
   const [savingKey, setSavingKey] = React.useState("")
@@ -111,8 +123,12 @@ export function MarketingMaterialChecklistPanel({
   }, [])
 
   React.useEffect(() => {
+    if (mobileMode && effectiveStoreName) {
+      setStoreFilter(effectiveStoreName)
+      return
+    }
     if (isStoreUser && userStore) setStoreFilter(userStore)
-  }, [isStoreUser, userStore])
+  }, [mobileMode, effectiveStoreName, isStoreUser, userStore])
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
@@ -302,16 +318,10 @@ export function MarketingMaterialChecklistPanel({
     return rows
   }, [checklistMaterials, storeFilter, lookupCheck, hqLabel, showDone])
 
-  if (!campaignId.trim()) {
-    return (
-      <div className="rounded-xl border border-dashed bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
-        {t("marketingMaterialChecklistNeedCampaign")}
-      </div>
-    )
-  }
+  const hasCampaign = Boolean(campaignId.trim())
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", mobileMode && "space-y-3")}>
       <MarketingHubCampaignContextStrip
         value={campaignId}
         onChange={onCampaignIdChange}
@@ -319,12 +329,19 @@ export function MarketingMaterialChecklistPanel({
         allowEmpty
         emptyOptionLabel={tr("캠페인 선택…", "Select campaign…", "เลือกแคมเปญ…")}
         onRefresh={async () => {
+          if (!hasCampaign) return
           await loadData()
           await onRefreshParent?.()
         }}
         disabled={loading}
       />
 
+      {!hasCampaign ? (
+        <div className="rounded-xl border border-dashed bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
+          {t("marketingMaterialChecklistNeedCampaign")}
+        </div>
+      ) : (
+        <>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={() => void loadData()} disabled={loading}>
           <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -344,15 +361,17 @@ export function MarketingMaterialChecklistPanel({
             ))}
           </select>
         )}
-        {isStoreUser && userStore && (
+        {isStoreUser && effectiveStoreName && !mobileMode && (
           <span className="text-sm text-muted-foreground">
-            {tr("매장", "Store", "สาขา")}: <strong>{formatStoreLabel(userStore)}</strong>
+            {tr("매장", "Store", "สาขา")}: <strong>{formatStoreLabel(effectiveStoreName)}</strong>
           </span>
         )}
+        {!mobileMode && (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <Checkbox checked={includeAllTypes} onCheckedChange={(v) => setIncludeAllTypes(v === true)} />
           {t("marketingMaterialChecklistAllTypes")}
         </label>
+        )}
         {!isHqView && (
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Checkbox checked={showDone} onCheckedChange={(v) => setShowDone(v === true)} />
@@ -370,7 +389,7 @@ export function MarketingMaterialChecklistPanel({
         </div>
       )}
 
-      {isHqView && !storeFilter && (
+      {isHqView && !storeFilter && !mobileMode && (
         <div className="overflow-x-auto rounded-xl border bg-card">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
@@ -621,7 +640,7 @@ export function MarketingMaterialChecklistPanel({
         </div>
       )}
 
-      {isHqView && !storeFilter && checklistMaterials.length > 0 && (
+      {isHqView && !storeFilter && checklistMaterials.length > 0 && !mobileMode && (
         <p className="text-xs text-muted-foreground">
           <Link
             href={`/admin/marketing/materials?campaignId=${encodeURIComponent(campaignId)}&tab=checklist`}
@@ -631,6 +650,8 @@ export function MarketingMaterialChecklistPanel({
           </Link>
           {tr(" — 상단에서 매장을 선택하세요.", " — pick a store above.", " — เลือกสาขาด้านบน")}
         </p>
+      )}
+        </>
       )}
     </div>
   )

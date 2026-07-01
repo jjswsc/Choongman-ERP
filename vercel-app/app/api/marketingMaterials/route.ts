@@ -84,7 +84,7 @@ function isStoreScopedRole(role: string): boolean {
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireAuth(req, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse

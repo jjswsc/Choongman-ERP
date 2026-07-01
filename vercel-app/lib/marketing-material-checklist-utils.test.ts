@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  countPendingStoreMaterialTasks,
   findStoreCheckForBranch,
   materialChecklistProgress,
+  pickCampaignIdWithPendingStoreTasks,
 } from './marketing-material-checklist-utils'
 import type { MarketingMaterial } from './api-client/marketing-materials'
 import type { MarketingMaterialStoreCheck } from './api-client/marketing-material-store-checks'
@@ -69,5 +71,44 @@ describe('marketing-material-checklist-utils', () => {
     expect(p.storeCount).toBe(2)
     expect(p.receivedCount).toBe(1)
     expect(p.installedCount).toBe(1)
+  })
+
+  it('counts pending receive/install tasks for a store', () => {
+    const material = baseMaterial({ campaignId: '10' })
+    const checks: MarketingMaterialStoreCheck[] = []
+    expect(countPendingStoreMaterialTasks([material], checks, 'CM Bangkok', 'HQ-wide')).toBe(1)
+  })
+
+  it('picks campaign with pending tasks', () => {
+    const materials = [
+      baseMaterial({ id: '1', campaignId: '10' }),
+      baseMaterial({ id: '2', campaignId: '20', name: 'Poster' }),
+    ]
+    const checks: MarketingMaterialStoreCheck[] = [
+      {
+        id: '1',
+        materialId: '1',
+        campaignId: '10',
+        storeName: 'Bangkok',
+        receivedOn: '2026-07-02',
+        receivedBy: 'A',
+        installedOn: '2026-07-03',
+        installedBy: 'A',
+        installedPlacementSpot: 'counter',
+        note: '',
+        updatedAt: null,
+      },
+    ]
+    const picked = pickCampaignIdWithPendingStoreTasks(
+      [
+        { id: '10', startDate: '2026-06-01' },
+        { id: '20', startDate: '2026-07-01' },
+      ],
+      materials,
+      checks,
+      'CM Bangkok',
+      'HQ-wide'
+    )
+    expect(picked).toBe('20')
   })
 })

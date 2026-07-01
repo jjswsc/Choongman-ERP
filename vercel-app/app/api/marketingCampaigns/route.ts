@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   noStoreHeaders(headers)
-  const authResult = await requireAuth(req, 'manager')
+  const authResult = await requireAuth(req, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     noStoreHeaders(authResult.errorResponse.headers)

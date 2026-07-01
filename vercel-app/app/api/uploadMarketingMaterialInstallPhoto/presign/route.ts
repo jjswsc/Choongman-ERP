@@ -6,7 +6,7 @@ import {
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
-import { isFranchiseeRole, isManagerRole, isOfficeRole, isAccountingRole } from '@/lib/permissions'
+import { isMarketingMaterialStoreScopedRole } from '@/lib/marketing-material-store-scope'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
-  const authResult = await requireAuth(request, 'manager')
+  const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
@@ -60,8 +60,7 @@ export async function POST(request: NextRequest) {
 
     const userRole = String(auth.role || '')
     const userStore = String(auth.store || '').trim()
-    const isStoreScoped =
-      !isOfficeRole(userRole) && !isAccountingRole(userRole) && (isManagerRole(userRole) || isFranchiseeRole(userRole))
+    const isStoreScoped = isMarketingMaterialStoreScopedRole(userRole)
     if (isStoreScoped) {
       if (!userStore || !storesMatchForGradeLookup(userStore, storeName)) {
         return NextResponse.json(
