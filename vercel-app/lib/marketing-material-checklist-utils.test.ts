@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   countPendingStoreMaterialTasks,
+  filterCampaignsWithRegisteredMaterials,
+  filterCampaignsWithStoreChecklistMaterials,
   findStoreCheckForBranch,
   materialChecklistProgress,
   pickCampaignIdWithPendingStoreTasks,
@@ -110,5 +112,39 @@ describe('marketing-material-checklist-utils', () => {
       'HQ-wide'
     )
     expect(picked).toBe('20')
+  })
+
+  it('filters campaigns to those with registered checklist materials', () => {
+    const materials = [
+      baseMaterial({ id: '1', campaignId: '10' }),
+      baseMaterial({ id: '2', campaignId: '20', type: 'tentcard' }),
+    ]
+    const campaigns = [
+      { id: '10', startDate: '2026-06-01' },
+      { id: '20', startDate: '2026-07-01' },
+      { id: '30', startDate: '2026-08-01' },
+    ]
+    expect(filterCampaignsWithRegisteredMaterials(campaigns, materials).map((c) => c.id)).toEqual([
+      '10',
+    ])
+  })
+
+  it('filters campaigns for a store with assigned checklist materials', () => {
+    const materials = [
+      baseMaterial({ id: '1', campaignId: '10', branches: ['CM Bangkok'] }),
+      baseMaterial({ id: '2', campaignId: '20', branches: ['CM Chiang Mai'] }),
+    ]
+    const campaigns = [
+      { id: '10', startDate: '2026-06-01' },
+      { id: '20', startDate: '2026-07-01' },
+    ]
+    expect(
+      filterCampaignsWithStoreChecklistMaterials(
+        campaigns,
+        materials,
+        'CM Bangkok',
+        'HQ-wide'
+      ).map((c) => c.id)
+    ).toEqual(['10'])
   })
 })

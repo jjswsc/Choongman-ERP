@@ -142,6 +142,57 @@ export function countPendingStoreMaterialTasks(
 
 type CampaignPickRow = { id: string; startDate?: string | null }
 
+/** 홍보물(체크리스트 대상)이 등록된 campaign_id 집합 */
+export function campaignIdsWithRegisteredMaterials(
+  materials: MarketingMaterial[],
+  options?: { types?: Set<string> }
+): Set<string> {
+  const types = options?.types ?? CHECKLIST_DEFAULT_MATERIAL_TYPES
+  const ids = new Set<string>()
+  for (const m of materials) {
+    const cid = String(m.campaignId || '').trim()
+    if (!cid) continue
+    if (!types.has(String(m.type || '').trim().toLowerCase())) continue
+    ids.add(cid)
+  }
+  return ids
+}
+
+/** 홍보물이 등록된 캠페인만 (목록 축소용) */
+export function filterCampaignsWithRegisteredMaterials<T extends CampaignPickRow>(
+  campaigns: T[],
+  materials: MarketingMaterial[],
+  options?: { types?: Set<string> }
+): T[] {
+  const ids = campaignIdsWithRegisteredMaterials(materials, options)
+  if (ids.size === 0) return []
+  return campaigns.filter((c) => ids.has(String(c.id || '').trim()))
+}
+
+/** 이 매장에 체크리스트 대상 홍보물이 등록된 캠페인만 (모바일 매장용) */
+export function filterCampaignsWithStoreChecklistMaterials<T extends CampaignPickRow>(
+  campaigns: T[],
+  materials: MarketingMaterial[],
+  storeName: string,
+  hqLabel: string,
+  options?: { types?: Set<string> }
+): T[] {
+  const store = String(storeName || '').trim()
+  if (!store) return []
+  const ids = new Set<string>()
+  const types = options?.types ?? CHECKLIST_DEFAULT_MATERIAL_TYPES
+  for (const m of materials) {
+    const cid = String(m.campaignId || '').trim()
+    if (!cid) continue
+    if (!types.has(String(m.type || '').trim().toLowerCase())) continue
+    const targets = materialTargetStores(m, hqLabel)
+    if (!targets.some((s) => storesMatchForGradeLookup(s, store))) continue
+    ids.add(cid)
+  }
+  if (ids.size === 0) return []
+  return campaigns.filter((c) => ids.has(String(c.id || '').trim()))
+}
+
 /** 진행 중·미완료 항목이 있는 캠페인을 우선 선택 (startDate 최신) */
 export function pickCampaignIdWithPendingStoreTasks(
   campaigns: CampaignPickRow[],
