@@ -14,7 +14,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import { canManageOfficePayroll } from '@/lib/office-payroll-access'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 
 const CHUNK = 50
@@ -247,7 +247,8 @@ export async function POST(request: NextRequest) {
         return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
       })
     }
-    const officePayrollAllowed = canManageOfficePayroll(auth)
+    const payrollAuth = await resolveCanManageOfficePayrollAuth(auth)
+    const officePayrollAllowed = payrollAuth.canManageOfficePayroll === true
     const officeRows = list.filter((r) => isOfficeStore(String(r.store || '')))
     if (officeRows.length > 0 && !officePayrollAllowed) {
       return NextResponse.json(

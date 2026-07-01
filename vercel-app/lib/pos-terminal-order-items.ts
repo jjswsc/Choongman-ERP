@@ -103,3 +103,41 @@ export async function fetchPosOrderItemsForPaymentMerge(
   const hit = Array.isArray(rows) ? rows[0] : null
   return posOrderApiItemsToPosOrderItems(hit?.items)
 }
+
+/** 추가 주문 저장 직후 낙관적 스냅샷 — 서빙·취소 상태 포함 */
+export function mapPosOrderItemsToTerminalOrderSnapshot(
+  rows: PosOrderItem[]
+): Array<{
+  id: string
+  name: string
+  quantity: number
+  price: number
+  menuId?: string
+  note?: string
+  servedAt?: string
+  servedBy?: string
+  cancelledAt?: string
+  cancelledBy?: string
+  cancelReason?: string
+  setChildrenState?: OrderItem['setChildrenState']
+}> {
+  return rows.map((it, idx) => {
+    const quantity = resolveCartLineQuantityForSave(it)
+    const id = String(it.id ?? '').trim() || `line-${idx + 1}`
+    const menuId = String(it.menuId1 ?? (it as { menuId?: string }).menuId ?? '').trim()
+    return {
+      id,
+      name: String(it.name ?? '').trim() || id,
+      quantity,
+      price: Number(it.price ?? 0) || 0,
+      ...(menuId ? { menuId } : {}),
+      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
+      ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
+      ...(String(it.cancelledAt ?? '').trim() ? { cancelledAt: String(it.cancelledAt) } : {}),
+      ...(String(it.cancelledBy ?? '').trim() ? { cancelledBy: String(it.cancelledBy) } : {}),
+      ...(String(it.cancelReason ?? '').trim() ? { cancelReason: String(it.cancelReason) } : {}),
+      ...(it.setChildrenState ? { setChildrenState: it.setChildrenState } : {}),
+    }
+  })
+}

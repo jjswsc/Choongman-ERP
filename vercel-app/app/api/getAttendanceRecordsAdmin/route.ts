@@ -6,12 +6,15 @@ import {
 } from '@/lib/postgrest-narrow-select'
 import {
   attendanceStoreNamePostgrestFilter,
+  attendanceStoreNamePostgrestFilterFragments,
   bangkokDateRangeToUtc,
   parsePlanToMinutes,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
   scheduleDateKey,
 } from '@/lib/attendance-utils'
+import { resolveAttendanceEmployeeIdentity } from '@/lib/attendance-employee-resolve-server'
+import { attendanceLogRowMatchesEmployee } from '@/lib/attendance-log-fetch-server'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
 import {
   buildAttendanceDisplayMapsFromEmployees,
@@ -144,7 +147,6 @@ export async function GET(request: NextRequest) {
         ''
     ).trim()
   )
-  const hasEmployeeCodeFilter = employeeCodeNorm.length > 0
   const statusFilter = String(searchParams.get('statusFilter') || searchParams.get('status') || 'all').trim()
   const userStore = String(auth.store || '').trim()
   const userRole = String(auth.role || '').toLowerCase()
@@ -193,11 +195,12 @@ export async function GET(request: NextRequest) {
     const authEmployeeIdRaw = Number((auth as { employeeId?: unknown }).employeeId)
     const authEmployeeId =
       Number.isFinite(authEmployeeIdRaw) && authEmployeeIdRaw > 0 ? Math.floor(authEmployeeIdRaw) : 0
-    if (!String(auth.name || '').trim() || !userStore) {
+    const sessionName = String(employeeFilter || auth.name || '').trim()
+    if (!sessionName || !userStore) {
       return NextResponse.json([], { status: 403, headers })
     }
-    employeeFilter = String(auth.name || '').trim()
-    employeeIdFilter = authEmployeeId
+    employeeFilter = sessionName
+    employeeIdFilter = authEmployeeId > 0 ? authEmployeeId : employeeIdFilter
     storeFilter = userStore
   }
   const hasEmployeeIdFilter = employeeIdFilter > 0
@@ -259,50 +262,84 @@ export async function GET(request: NextRequest) {
       return merged
     }
 
-    const attLogFilterParts = [
+    let effectiveEmployeeId = employeeIdFilter
+    let effectiveEmployeeFilter = employeeFilter
+    let effectiveEmployeeCodeNorm = employeeCodeNorm
+    const employeeCodeRaw = String(
+      searchParams.get('employeeCode') || searchParams.get('code') || auth.employeeCode || ''
+    ).trim()
+
+    if (!isAllEmployees) {
+      const resolved = await resolveAttendanceEmployeeIdentity({
+        storeName: storeFilter || userStore,
+        name: effectiveEmployeeFilter || String(auth.name || '').trim(),
+        ...(effectiveEmployeeId > 0 ? { employeeId: effectiveEmployeeId } : {}),
+        ...(employeeCodeRaw ? { employeeCode: employeeCodeRaw } : {}),
+      })
+      if (resolved.employeeId > 0) effectiveEmployeeId = resolved.employeeId
+      if (resolved.employeeName) effectiveEmployeeFilter = resolved.employeeName
+      if (resolved.employeeCodeNorm) effectiveEmployeeCodeNorm = resolved.employeeCodeNorm
+    }
+
+    const employeeMatchTarget = {
+      employeeId: effectiveEmployeeId,
+      employeeCodeNorm: effectiveEmployeeCodeNorm,
+      employeeName: effectiveEmployeeFilter,
+    }
+    const effHasEmployeeId = effectiveEmployeeId > 0
+    const effHasEmployeeCode = effectiveEmployeeCodeNorm.length > 0
+
+    const dateRangeParts = [
       `log_at=gte.${encodeURIComponent(startISO)}`,
       `log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
     ]
-    if (!isAllStores && storeFilter) {
-      attLogFilterParts.unshift(attendanceStoreNamePostgrestFilter(storeFilter))
+    const storeFragments =
+      !isAllStores && storeFilter ? attendanceStoreNamePostgrestFilterFragments(storeFilter) : []
+    const attLogBases = (): string[][] => {
+      if (storeFragments.length === 0) return [dateRangeParts]
+      return storeFragments.map((sf) => [sf, ...dateRangeParts])
+    }
+    const fetchAttGridForEmployeeParts = async (employeeParts: string[]): Promise<AttRow[]> => {
+      const chunks: AttRow[][] = []
+      for (const ep of employeeParts) {
+        for (const base of attLogBases()) {
+          chunks.push(await fetchAttGrid([...base, ep].join('&')))
+        }
+      }
+      return mergeAttByLogId(chunks)
     }
 
     let attRows: AttRow[]
-    if (hasEmployeeIdFilter && employeeFilter.trim()) {
-      const trimmedName = employeeFilter.trim()
-      // ① employee_id ② 이름+id NULL ③ 직원코드(employee_id 무관 — M0020 등)
-      const idFilter = [...attLogFilterParts, `employee_id=eq.${employeeIdFilter}`].join('&')
-      const legacyFilter = [
-        ...attLogFilterParts,
-        `name=eq.${encodeURIComponent(trimmedName)}`,
-        `employee_id=is.null`,
-      ].join('&')
-      const fetches: Promise<AttRow[]>[] = [fetchAttGrid(idFilter), fetchAttGrid(legacyFilter)]
-      if (hasEmployeeCodeFilter) {
-        fetches.push(
-          fetchAttGrid(
-            [...attLogFilterParts, `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`].join('&')
-          )
-        )
+    if (effHasEmployeeId && effectiveEmployeeFilter.trim()) {
+      const trimmedName = effectiveEmployeeFilter.trim()
+      const employeeParts = [
+        `employee_id=eq.${effectiveEmployeeId}`,
+        `name=eq.${encodeURIComponent(trimmedName)}&employee_id=is.null`,
+      ]
+      if (effHasEmployeeCode) {
+        employeeParts.push(`employee_code=eq.${encodeURIComponent(effectiveEmployeeCodeNorm)}`)
       }
-      attRows = mergeAttByLogId(await Promise.all(fetches))
-    } else if (hasEmployeeIdFilter) {
-      const idFilter = [...attLogFilterParts, `employee_id=eq.${employeeIdFilter}`].join('&')
-      if (hasEmployeeCodeFilter) {
-        const codeFilter = [
-          ...attLogFilterParts,
-          `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`,
-        ].join('&')
-        attRows = mergeAttByLogId(await Promise.all([fetchAttGrid(idFilter), fetchAttGrid(codeFilter)]))
-      } else {
-        attRows = await fetchAttGrid(idFilter)
+      attRows = await fetchAttGridForEmployeeParts(employeeParts)
+    } else if (effHasEmployeeId) {
+      const employeeParts = [`employee_id=eq.${effectiveEmployeeId}`]
+      if (effHasEmployeeCode) {
+        employeeParts.push(`employee_code=eq.${encodeURIComponent(effectiveEmployeeCodeNorm)}`)
       }
+      attRows = await fetchAttGridForEmployeeParts(employeeParts)
     } else {
-      const parts = [...attLogFilterParts]
-      if (!isAllEmployeesByName && employeeFilter) {
-        parts.push(`name=eq.${encodeURIComponent(employeeFilter)}`)
+      const employeeParts: string[] = []
+      if (!isAllEmployeesByName && effectiveEmployeeFilter) {
+        employeeParts.push(`name=eq.${encodeURIComponent(effectiveEmployeeFilter)}`)
       }
-      attRows = await fetchAttGrid(parts.join('&'))
+      if (employeeParts.length === 0) {
+        const chunks: AttRow[][] = []
+        for (const base of attLogBases()) {
+          chunks.push(await fetchAttGrid(base.join('&')))
+        }
+        attRows = mergeAttByLogId(chunks)
+      } else {
+        attRows = await fetchAttGridForEmployeeParts(employeeParts)
+      }
     }
 
     // 조정 이력(원본 보존): 최초 before + 최신 after를 log_id/metric 별로 구성
@@ -510,7 +547,7 @@ export async function GET(request: NextRequest) {
       }
       const rowStore = String(r.store_name || '').trim()
       const name = String(r.name || '').trim()
-      if (!isAllEmployees && !hasEmployeeIdFilter && name !== employeeFilter) continue
+      if (!isAllEmployees && !attendanceLogRowMatchesEmployee(r, employeeMatchTarget)) continue
 
       const eid =
         r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0

@@ -72,6 +72,8 @@ export interface TableOrderPanelProps {
   takeoutMergePeers?: Table[]
   onServed?: () => void
   onAddOrder?: () => void
+  /** 추가 주문 입력 중 — 「추가 주문」 버튼 숨김(서빙 체크는 유지) */
+  addOrderModeActive?: boolean
   onPay?: () => void
   onOpenTaxInvoice?: () => void
   /** 선불 결제 후 손님 퇴장 시 (테이블 초기화) */
@@ -107,6 +109,7 @@ export function TableOrderPanel({
   allTables = [],
   onServed,
   onAddOrder,
+  addOrderModeActive = false,
   onPay,
   onOpenTaxInvoice,
   onLeaveTable,
@@ -880,13 +883,15 @@ export function TableOrderPanel({
                 <span>{t('posInputTotal') || '합계'}</span>
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={onAddOrder}
-                >
-                  {t('posAddOrderButton') || '추가 주문'}
-                </Button>
+              <div className={cn('grid gap-2', addOrderModeActive ? 'grid-cols-1' : 'grid-cols-2')}>
+                {!addOrderModeActive && onAddOrder ? (
+                  <Button
+                    className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={onAddOrder}
+                  >
+                    {t('posAddOrderButton') || '추가 주문'}
+                  </Button>
+                ) : null}
                 <Button className="h-11 text-base font-semibold" onClick={handlePayClick}>
                   {t('posPayButton') || '결제'}
                 </Button>
@@ -1082,13 +1087,15 @@ export function TableOrderPanel({
                   ? t('posTableStatusServed') || '서빙 완료'
                   : `${t('posTableStatusServed') || '서빙 완료'} (${servedCount}/${activeItems.length || order.items.length})`}
               </Button>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={onAddOrder}
-                >
-                  {t('posAddOrderButton') || '추가 주문'}
-                </Button>
+              <div className={cn('grid gap-2', addOrderModeActive ? 'grid-cols-1' : 'grid-cols-2')}>
+                {!addOrderModeActive && onAddOrder ? (
+                  <Button
+                    className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={onAddOrder}
+                  >
+                    {t('posAddOrderButton') || '추가 주문'}
+                  </Button>
+                ) : null}
                 <Button className="h-11 text-base font-semibold" onClick={handlePayClick}>
                   {t('posPayButton') || '결제'}
                 </Button>

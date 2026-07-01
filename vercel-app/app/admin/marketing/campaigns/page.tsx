@@ -27,6 +27,7 @@ import {
   getMarketingInfluencers,
   getPosPromos,
   getMarketingMaterials,
+  getMarketingMaterialStoreChecks,
   saveMarketingMaterial,
   deleteMarketingMaterial,
   getMarketingMaterialGifts,
@@ -37,8 +38,13 @@ import {
   type MarketingInfluencer,
   type MarketingMaterial,
   type MarketingMaterialGift,
+  type MarketingMaterialStoreCheck,
 } from "@/lib/api-client"
 import { computedGiftRemaining, giftRowQtyMismatch } from "@/lib/marketing-material-gift-inventory"
+import {
+  aggregateChecklistProgress,
+  materialChecklistProgress,
+} from "@/lib/marketing-material-checklist-utils"
 import { cn } from "@/lib/utils"
 import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
@@ -437,6 +443,7 @@ export default function MarketingCampaignsPage() {
 
   // 홍보물 인라인
   const [materials, setMaterials] = React.useState<MarketingMaterial[]>([])
+  const [materialStoreChecks, setMaterialStoreChecks] = React.useState<MarketingMaterialStoreCheck[]>([])
   const [matForm, setMatForm] = React.useState({ ...defaultMatForm })
   const [savingMat, setSavingMat] = React.useState(false)
   const [materialGifts, setMaterialGifts] = React.useState<MarketingMaterialGift[]>([])
@@ -622,6 +629,9 @@ export default function MarketingCampaignsPage() {
     getMarketingMaterials({ campaignId: id })
       .then(setMaterials)
       .catch(() => setMaterials([]))
+    getMarketingMaterialStoreChecks({ campaignId: id })
+      .then(setMaterialStoreChecks)
+      .catch(() => setMaterialStoreChecks([]))
     getMarketingMaterialGifts({ campaignId: id })
       .then(setMaterialGifts)
       .catch(() => setMaterialGifts([]))
@@ -640,6 +650,7 @@ export default function MarketingCampaignsPage() {
       setLinkedCounts(null)
       setLinkedInfluencers([])
       setMaterials([])
+      setMaterialStoreChecks([])
       setMaterialGifts([])
       setExpandedGiftMatId(null)
       setEditingGiftId(null)
@@ -1250,6 +1261,17 @@ export default function MarketingCampaignsPage() {
   const giftsForMaterial = React.useCallback(
     (materialId: string) => materialGifts.filter((g) => g.materialId === materialId),
     [materialGifts]
+  )
+
+  const hqLabelChecklist = tr("본사공용", "HQ-wide", "ส่วนกลางสำนักงานใหญ่")
+  const materialsChecklistAgg = React.useMemo(
+    () =>
+      editingId
+        ? aggregateChecklistProgress(materials, materialStoreChecks, hqLabelChecklist, {
+            campaignId: editingId,
+          })
+        : { received: 0, receivedTotal: 0, installed: 0, installedTotal: 0 },
+    [materials, materialStoreChecks, hqLabelChecklist, editingId]
   )
 
   const reloadMaterialGifts = React.useCallback(() => {
@@ -2263,8 +2285,25 @@ export default function MarketingCampaignsPage() {
                           {tr("합계", "Total", "รวม")}: ฿{materials.reduce((s, m) => s + m.quantity * m.unitCost, 0).toLocaleString()}
                         </span>
                       </div>
+                      {materialsChecklistAgg.receivedTotal > 0 && editingId && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+                          <span>
+                            {tr("체크리스트", "Checklist", "เช็กลิสต์")}: {tr("수령", "Received", "รับ")}{" "}
+                            {materialsChecklistAgg.received}/{materialsChecklistAgg.receivedTotal} ·{" "}
+                            {tr("설치", "Installed", "ติดตั้ง")} {materialsChecklistAgg.installed}/
+                            {materialsChecklistAgg.installedTotal}
+                          </span>
+                          <Link
+                            href={`/admin/marketing/materials?campaignId=${encodeURIComponent(editingId)}&tab=checklist`}
+                            className="text-primary underline-offset-2 hover:underline"
+                          >
+                            {tr("체크리스트 열기", "Open checklist", "เปิดเช็กลิสต์")}
+                          </Link>
+                        </div>
+                      )}
                       {materials.map((mat) => {
                         const gf = giftsForMaterial(mat.id)
+                        const clProgress = materialChecklistProgress(mat, materialStoreChecks, hqLabelChecklist)
                         const giftSum = gf.reduce(
                           (a, g) => ({
                             alloc: a.alloc + g.allocatedQty,
@@ -2287,6 +2326,15 @@ export default function MarketingCampaignsPage() {
                                   <span className="text-xs text-muted-foreground">
                                     {materialTypeLabel(mat.type)}
                                   </span>
+                                  {clProgress.storeCount > 0 && editingId && (
+                                    <Link
+                                      href={`/admin/marketing/materials?campaignId=${encodeURIComponent(editingId)}&tab=checklist`}
+                                      className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:underline"
+                                    >
+                                      {tr("수령", "Recv", "รับ")} {clProgress.receivedCount}/{clProgress.storeCount} ·{" "}
+                                      {tr("설치", "Inst", "ติด")} {clProgress.installedCount}/{clProgress.storeCount}
+                                    </Link>
+                                  )}
                                 </div>
                                 <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
                                   <span>{mat.quantity}{tr("개", "", " ชิ้น")}</span>

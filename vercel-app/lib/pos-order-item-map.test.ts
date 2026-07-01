@@ -5,6 +5,7 @@ import {
   isDineInAddonOnlyIncomingCart,
   mergeDineInAddonCartPosItemsWithExisting,
   mergeDineInPaymentCartWithServerItems,
+  mergeOrderUiItemsPreserveLineState,
   normalizeCartLineIdForSave,
 } from '@/lib/pos-order-item-map'
 
@@ -78,6 +79,24 @@ describe('mergeDineInAddonCartPosItemsWithExisting', () => {
       { id: 'line-b', name: 'Kimchi Soup', price: 30, qty: 1, quantity: 1 },
       { id: 'line-c', name: 'Cheese Cream Kimchi Rice', price: 249, qty: 1, quantity: 1 },
       { id: 'line-pepsi', name: 'Pepsi', price: 30, qty: 1, quantity: 1 },
+    ])
+  })
+})
+
+describe('mergeOrderUiItemsPreserveLineState', () => {
+  it('keeps servedAt from fallback when primary line omits it', () => {
+    const primary = [{ id: 'line-a', name: 'Rice', quantity: 1, price: 25 }]
+    const fallback = [
+      {
+        id: 'line-a',
+        name: 'Rice',
+        quantity: 1,
+        price: 25,
+        servedAt: '2026-07-01T12:00:00+07:00',
+      },
+    ]
+    expect(mergeOrderUiItemsPreserveLineState(primary, fallback)).toMatchObject([
+      { id: 'line-a', servedAt: '2026-07-01T12:00:00+07:00' },
     ])
   })
 })

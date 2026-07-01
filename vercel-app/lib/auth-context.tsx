@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { canAccessPosOrder } from '@/lib/permissions'
+import { readJwtCanManageOfficePayroll } from '@/lib/jwt-payload-client'
 
 export interface AuthState {
   company?: string
@@ -94,6 +95,9 @@ function loadAuth(): AuthState | null {
       try {
         canManageOfficePayroll = sessionStorage.getItem(CM_OFFICE_PAYROLL_KEY) === '1'
       } catch {}
+      if (!canManageOfficePayroll && token) {
+        canManageOfficePayroll = readJwtCanManageOfficePayroll(token)
+      }
       return {
         ...(sessionStorage.getItem('cm_company') ? { company: sessionStorage.getItem('cm_company') || undefined } : {}),
         ...(sessionStorage.getItem('cm_tenant_id')
@@ -149,6 +153,10 @@ export function loadOfflineResumeAuth(): AuthState | null {
     }
     const snapEid = o.employeeId != null && Number.isFinite(Number(o.employeeId)) ? Math.floor(Number(o.employeeId)) : 0
     const snapCode = o.employeeCode != null ? String(o.employeeCode).trim() : ''
+    let canManageOfficePayroll = o.canManageOfficePayroll === true
+    if (!canManageOfficePayroll && token) {
+      canManageOfficePayroll = readJwtCanManageOfficePayroll(token)
+    }
     return {
       ...(o.company ? { company: String(o.company).trim() } : {}),
       ...(o.tenantId ? { tenantId: String(o.tenantId).trim() } : {}),
@@ -159,7 +167,7 @@ export function loadOfflineResumeAuth(): AuthState | null {
       ...(snapEid > 0 ? { employeeId: snapEid } : {}),
       ...(snapCode ? { employeeCode: snapCode } : {}),
       allowedStores,
-      ...(o.canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
+      ...(canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
     }
   } catch {
     return null

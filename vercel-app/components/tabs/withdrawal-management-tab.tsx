@@ -616,6 +616,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }, 0)
   }, [inboundLinkAmounts])
 
+  const resolvePurchaseVendorPayee = React.useCallback(
+    (codeRaw: string) => {
+      const code = String(codeRaw || "").trim()
+      if (!code) return { code: "", name: "" }
+      const found = vendors.find((v) => v.code === code)
+      return { code, name: found?.name || code }
+    },
+    [vendors]
+  )
+
   const resolveWithdrawalCategory = React.useCallback((main: string, sub: string): string => {
     if (main === "purchase") return sub === "advance" ? "purchase_advance" : "purchase_payment"
     if (main === "expense") return sub === "advance" ? "expense_advance" : "expense"
@@ -674,11 +684,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
         return
       }
-      code = vendorCode.trim()
-      if (!name) {
-        const found = vendors.find((v) => v.code === code)
-        name = found?.name || code
-      }
+      const resolved = resolvePurchaseVendorPayee(vendorCode)
+      code = resolved.code
+      name = resolved.name
     } else if (categoryMain === "expense") {
       if (!code && !name) {
         await appAlert(tt("expensePayeeRequired", "Please select or enter a payee."))
@@ -872,6 +880,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setMemo("")
         setPayeeCode("")
         setPayeeName("")
+        setVendorCode("")
         setAccrualAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
@@ -970,6 +979,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const handleSubmit = async () => {
     if (isEditMode) {
       await handleEditSubmit()
+      return
+    }
+    if (isEditAccrualMode) {
+      await handleRegisterAccrual()
       return
     }
     if (isBankLinkMode) {
@@ -1916,7 +1929,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 <div className="flex items-end gap-2">
                   <div className="flex items-end gap-2">
                     <Label className="pb-2.5 shrink-0">{tt("vendor", "Vendor")}</Label>
-                    <Select value={vendorCode} onValueChange={(v) => setVendorCode(v)}>
+                    <Select
+                      value={vendorCode}
+                      onValueChange={(v) => {
+                        setVendorCode(v)
+                        const resolved = resolvePurchaseVendorPayee(v)
+                        if (resolved.code) {
+                          setPayeeCode(resolved.code)
+                          setPayeeName(resolved.name)
+                          setPayeeManual(false)
+                        }
+                      }}
+                    >
                       <SelectTrigger className="h-9 w-[220px]">
                         <SelectValue placeholder={tt("vendor", "Select Vendor")} />
                       </SelectTrigger>
@@ -2533,7 +2557,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       ? tt("wm_transferLinkBank", "통장 연동")
                       : tt("btnSave", "Save")
                     : isLaterPayment
-                      ? tt("wm_registerAccrual", "Register Accrual")
+                      ? isEditAccrualMode
+                        ? tt("btnSave", "Save")
+                        : tt("wm_registerAccrual", "Register Accrual")
                       : tt("wm_execute", "Register Withdrawal")}
               </Button>
               <Button

@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     const dueDate = dueDateRaw ? dueDateRaw.slice(0, 10) : null
     const memo = String(body.memo || '').trim()
     const payeeCodeInput = String(body.payeeCode || body.payee_code || '').trim()
-    const payeeName = String(body.payeeName || body.payee_name || '').trim()
+    let payeeName = String(body.payeeName || body.payee_name || '').trim()
     const storeName = String(body.storeName || body.store_name || '').trim()
     const accountSubjectIdRaw = body.accountSubjectId ?? body.account_subject_id
     const accountSubjectId = accountSubjectIdRaw != null && !isNaN(Number(accountSubjectIdRaw))
@@ -217,6 +217,15 @@ export async function POST(request: NextRequest) {
 
     const decoded = decodePayeeCode(row.payee_code)
     const payeeCode = payeeCodeInput || decoded.payeeCode
+    if (payeeCode) {
+      const vendorRows = (await supabaseSelectFilter('vendors', `code=eq.${payeeCode}`, {
+        select: 'code,name',
+        limit: 1,
+      })) as { code?: string; name?: string }[] | null
+      const vendorName = String(vendorRows?.[0]?.name || '').trim()
+      if (vendorName) payeeName = vendorName
+    }
+    if (!payeeName) payeeName = payeeCode
     const withdrawalCategory =
       withdrawalCategoryInput && ['expense', 'expense_advance', 'purchase_payment', 'purchase_advance', 'fixed_asset', 'transfer', 'transfer_to_petty', 'bank_card_bill', 'loan_repayment', 'loan_given', 'tax_vat', 'tax_withholding', 'tax_corporate', 'correction', 'dividend'].includes(withdrawalCategoryInput)
         ? withdrawalCategoryInput

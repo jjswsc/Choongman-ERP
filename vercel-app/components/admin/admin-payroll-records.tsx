@@ -25,7 +25,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
-import { filterStoresHidingOfficePayroll } from "@/lib/office-payroll-access"
+import { buildPayrollStoreSelectOptions } from "@/lib/office-payroll-access"
+import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
 import { apiFetch, useStoreList, sendNotice } from "@/lib/api-client"
 import { Megaphone, FileSpreadsheet, Calendar, Clock, ChevronDown } from "lucide-react"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
@@ -126,6 +127,7 @@ export function AdminPayrollRecords() {
   const searchParams = useSearchParams()
   const isManager = isManagerRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
+  useSyncOfficePayrollAccess()
 
   const [monthStr, setMonthStr] = useState(toMonthStr())
   const [storeFilter, setStoreFilter] = useState(isManager && userStore ? userStore : "All")
@@ -141,11 +143,11 @@ export function AdminPayrollRecords() {
   const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    const base = ["All", ...storeList.filter((s) => s !== "All")]
     setStores(
-      filterStoresHidingOfficePayroll(base, {
+      buildPayrollStoreSelectOptions(storeList, {
         role: auth?.role || "",
         canManageOfficePayroll: auth?.canManageOfficePayroll,
+        store: auth?.store || "",
       })
     )
   }, [auth?.store, auth?.role, auth?.canManageOfficePayroll, storeList])

@@ -13,6 +13,8 @@ import {
 } from '@/lib/marketing-expense-accrual-sync'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
+import { getBangkokDateStr } from '@/lib/pos-business-day'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -118,6 +120,7 @@ export async function GET(req: NextRequest) {
       displayEndDate: parseDate(row.display_end_date),
       placementSpots: parsePlacementSpots(row.placement_spots),
       status: String(row.status ?? 'planning'),
+      producedOn: parseDate(row.produced_on),
       note: String(row.note ?? ''),
       expenseAccrualId:
         row.expense_accrual_id != null && row.expense_accrual_id !== ''
@@ -165,6 +168,7 @@ export async function POST(req: NextRequest) {
       displayEndDate?: string | null
       placementSpots?: string[]
       status?: string
+      producedOn?: string | null
       note?: string
       userRole?: string
       userName?: string
@@ -243,6 +247,17 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
+    const canEditProduction =
+      !scopedStore && (isOfficeRole(userRole) || isAccountingRole(userRole))
+    const statusVal = String(body.status ?? 'planning').trim()
+    if (canEditProduction) {
+      if (body.producedOn !== undefined) {
+        row.produced_on = parseDate(body.producedOn)
+      } else if (!editingId && (statusVal === 'completed' || statusVal === 'distributed')) {
+        row.produced_on = getBangkokDateStr()
+      }
+    }
+
     let recordId = editingId || ''
     let expenseSyncMessage: string | undefined
 
@@ -252,18 +267,37 @@ export async function POST(req: NextRequest) {
         `id=eq.${encodeURIComponent(editingId)}`,
         { limit: 1 }
       )) as { id?: number }[] | null
-      if (existing?.length) {
-        await supabaseUpdateByFilter('marketing_materials', `id=eq.${editingId}`, row)
-        recordId = editingId
-      } else {
+      if (!existing?.length) {
         return NextResponse.json({ success: false, message: '수정할 항목을 찾을 수 없습니다.' }, { headers })
       }
-    } else {
-      const inserted = (await supabaseInsert('marketing_materials', row)) as { id?: number }[]
+    }
+
+    const persistMaterialRow = async (payload: Record<string, unknown>) => {
+      if (editingId) {
+        await supabaseUpdateByFilter('marketing_materials', `id=eq.${editingId}`, payload)
+        return editingId
+      }
+      const inserted = (await supabaseInsert('marketing_materials', payload)) as { id?: number }[]
       const created = Array.isArray(inserted) ? inserted[0] : inserted
-      recordId = created?.id != null ? String(created.id) : ''
-      if (!recordId) {
-        return NextResponse.json({ success: false, message: '저장 후 ID를 확인할 수 없습니다.' }, { headers })
+      const id = created?.id != null ? String(created.id) : ''
+      if (!id) {
+        throw new Error('저장 후 ID를 확인할 수 없습니다.')
+      }
+      return id
+    }
+
+    try {
+      recordId = await persistMaterialRow(row)
+    } catch (e) {
+      if (isColumnSchemaError(e) && 'produced_on' in row) {
+        const { produced_on: _drop, ...rowWithoutProduced } = row
+        recordId = await persistMaterialRow(rowWithoutProduced)
+        expenseSyncMessage =
+          'produced_on 컬럼이 없습니다. sql/marketing_materials_produced_on.sql 을 실행하세요.'
+      } else if (e instanceof Error && e.message === '저장 후 ID를 확인할 수 없습니다.') {
+        return NextResponse.json({ success: false, message: e.message }, { headers })
+      } else {
+        throw e
       }
     }
 

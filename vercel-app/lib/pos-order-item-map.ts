@@ -119,6 +119,35 @@ function normPosOrderItemId(id: unknown): string {
   return normalizeCartLineIdForSave(id)
 }
 
+/** 낙관적 스냅샷·refetch 병합 시 줄 id 기준 서빙/취소 상태 유지 */
+export function mergeOrderUiItemsPreserveLineState<T extends OrderItem>(
+  primary: T[],
+  fallback: OrderItem[]
+): T[] {
+  if (!primary.length || !fallback.length) return primary
+  const fallbackById = new Map<string, OrderItem>()
+  for (const row of fallback) {
+    const key = normPosOrderItemId(row.id)
+    if (key) fallbackById.set(key, row)
+  }
+  return primary.map((row) => {
+    const key = normPosOrderItemId(row.id)
+    const prev = key ? fallbackById.get(key) : undefined
+    if (!prev) return row
+    return {
+      ...row,
+      servedAt: row.servedAt ?? prev.servedAt ?? null,
+      servedBy: row.servedBy ?? prev.servedBy ?? null,
+      cancelledAt: row.cancelledAt ?? prev.cancelledAt ?? null,
+      cancelledBy: row.cancelledBy ?? prev.cancelledBy ?? null,
+      cancelReason: row.cancelReason ?? prev.cancelReason ?? null,
+      ...(row.setChildrenState || prev.setChildrenState
+        ? { setChildrenState: row.setChildrenState ?? prev.setChildrenState }
+        : {}),
+    }
+  })
+}
+
 /** 테이블·조회용 `OrderItem` → `updatePosOrder` / 병합용 `PosOrderItem` */
 export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
   return items.map((i) => {

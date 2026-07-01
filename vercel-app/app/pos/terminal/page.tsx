@@ -96,6 +96,7 @@ import {
 } from '@/lib/pos-order-item-map'
 import {
   fetchPosOrderItemsForPaymentMerge,
+  mapPosOrderItemsToTerminalOrderSnapshot,
   reconcilePayloadItemsWithTerminalCart,
 } from '@/lib/pos-terminal-order-items'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -567,6 +568,12 @@ export default function PosTerminalPage() {
         menuId?: string
         optionId?: string
         note?: string
+        servedAt?: string | null
+        servedBy?: string | null
+        cancelledAt?: string | null
+        cancelledBy?: string | null
+        cancelReason?: string | null
+        setChildrenState?: OrderItem['setChildrenState']
       }>
       queuedWithoutServerId?: boolean
     }) => {
@@ -1997,8 +2004,13 @@ export default function PosTerminalPage() {
     (
       (activeTab === 'delivery' && Boolean(selectedDeliveryOrder)) ||
       (activeTab === 'takeout' && Boolean(selectedTakeoutOrder)) ||
-      (activeTab === 'tables' && Boolean(servingTable?.order))
+      (activeTab === 'tables' && Boolean(servingTable?.order) && !pendingDineInOrderId)
     )
+  const isDineInAddOrderMode =
+    activeTab === 'tables' &&
+    Boolean(pendingDineInOrderId) &&
+    Boolean(selectedTableId) &&
+    Boolean(servingTable?.order)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
   const posSessionStartedAtRef = useRef<number>(Date.now())
@@ -8619,6 +8631,29 @@ export default function PosTerminalPage() {
                 }
               }
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
+              if (isAddOrder && existingOrderId > 0) {
+                try {
+                  const serverItemsForMerge = await fetchPosOrderItemsForPaymentMerge(
+                    existingOrderId,
+                    currentStoreId
+                  )
+                  if (serverItemsForMerge.length > 0) {
+                    existingOrder = {
+                      ...(existingOrder ?? {
+                        id: String(existingOrderId),
+                        type: 'dine-in' as const,
+                        items: [],
+                        total: 0,
+                        status: 'pending' as const,
+                        createdAt: new Date(),
+                      }),
+                      items: mapPosOrderItemsToTerminalOrderSnapshot(serverItemsForMerge) as OrderItem[],
+                    }
+                  }
+                } catch (e) {
+                  console.warn('refresh existing dine-in lines before add-order merge failed:', e)
+                }
+              }
               try {
                 if (isPosDemo) {
                   const tid = selectedTableId
@@ -9207,13 +9242,7 @@ export default function PosTerminalPage() {
                   orderNo: savedOrderNo,
                   serverOrderId: savedOrderId,
                   total: mergeSubtotal - (payload.discountAmt ?? 0),
-                  items: receiptPrintItems.map((it) => ({
-                    id: it.id,
-                    name: it.name,
-                    quantity: it.qty,
-                    price: it.price,
-                    ...(it.note ? { note: it.note } : {}),
-                  })),
+                  items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
                   queuedWithoutServerId,
                 })
               } catch (e) {
@@ -10882,6 +10911,126 @@ export default function PosTerminalPage() {
           </Tabs>
         </div>
         {showSidePanel && (() => {
+          const dineInTableOrderPanel = servingTable?.order ? (
+            <TableOrderPanel
+              tableName={servingTable.name}
+              order={servingTable.order}
+              storeCode={currentStoreId}
+              menus={menus}
+              allTables={currentStore?.tables ?? []}
+              takeoutMergePeers={takeoutMergePeerTables}
+              isDemo={isPosDemo}
+              addOrderModeActive={isDineInAddOrderMode}
+              onDemoOrderReplace={
+                isPosDemo && demoDineInOrder?.tableId === servingTableId && servingTableId
+                  ? (next) => setDemoDineInOrder({ tableId: servingTableId, order: next })
+                  : undefined
+              }
+              onServed={refetchCurrentStore}
+              onAfterPartialLineRemoved={
+                isPosDemo
+                  ? undefined
+                  : async (orderId, detail) => {
+                      await runAfterPartialLineCancelPrints(orderId, 'dine_in', detail)
+                    }
+              }
+              onAfterFullOrderKitchenReprint={
+                isPosDemo
+                  ? undefined
+                  : async (orderId, detail) => {
+                      await runAfterFullOrderCancelKitchenPrints(orderId, 'dine_in', detail)
+                    }
+              }
+              onAfterTableTransfer={
+                isPosDemo
+                  ? undefined
+                  : async (keepOrderId) => {
+                      await runAfterTableTransferHallReprint(keepOrderId)
+                    }
+              }
+              onBeforeTableMerge={
+                isPosDemo
+                  ? undefined
+                  : (keepOrderId) => {
+                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                        keepOrderId,
+                        Date.now() + 15_000
+                      )
+                    }
+              }
+              onBeforeTableMove={
+                isPosDemo
+                  ? undefined
+                  : (orderId) => {
+                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                        orderId,
+                        Date.now() + 15_000
+                      )
+                    }
+              }
+              onTableMovedFrom={
+                isPosDemo ? undefined : (sourceTableName) => clearTableOrder(currentStoreId, sourceTableName)
+              }
+              onAddOrder={() => {
+                if (!servingTableId) return
+                clearCartFromTerminal()
+                if (servingTable?.order?.id != null) {
+                  const sid = Number(servingTable.order.id)
+                  if (Number.isFinite(sid) && sid > 0) {
+                    setPendingDineInOrderId(sid)
+                    pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
+                  }
+                }
+                setSelectedTableId(servingTableId)
+              }}
+              onPay={() => {
+                if (isPosDemo && demoDineInOrder?.tableId === servingTableId) {
+                  void appAlert(t('posDemoTablePaySkipped') || '')
+                  return
+                }
+                if (!servingTableId || !servingTable?.order) return
+                setPendingDineInOrderId(Number(servingTable.order.id))
+                pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
+                setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
+                setPendingPayRequest({
+                  tableName: servingTable.name,
+                  existingOrderId: Number(servingTable.order.id),
+                  items: servingTable.order.items.map((item) => {
+                    const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
+                    return {
+                      id: item.id,
+                      name: item.name,
+                      price: item.price,
+                      quantity: item.quantity,
+                      ...(menuId ? { menuId } : {}),
+                      ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                    }
+                  }),
+                  orderNo: servingTable.order.orderNo,
+                  orderDiscount: posOrderToCheckoutDiscountSnapshot({
+                    ...servingTable.order,
+                    items: servingTable.order.items,
+                  }),
+                  orderMember: posOrderToCheckoutMemberSnapshot(servingTable.order),
+                })
+                setServingTableId(null)
+              }}
+              onOpenTaxInvoice={() => openTaxInvoiceEditorForOrder(servingTable?.order)}
+              onLeaveTable={async () => {
+                if (!servingTable?.order || !servingTable?.name) return
+                clearTableOrder(currentStoreId, servingTable.name)
+                setServingTableId(null)
+                await refetchCurrentStore()
+              }}
+              onCancel={refetchCurrentStore}
+              onOrderDismissed={dismissTerminalOrder}
+              onClose={() => {
+                setServingTableId(null)
+                setDemoDineInOrder(null)
+              }}
+              t={t}
+            />
+          ) : null
           const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
               orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
@@ -10951,124 +11100,23 @@ export default function PosTerminalPage() {
               t={t}
             />
           ) : activeTab === 'tables' && servingTable?.order ? (
-            <TableOrderPanel
-              tableName={servingTable.name}
-              order={servingTable.order}
-              storeCode={currentStoreId}
-              menus={menus}
-              allTables={currentStore?.tables ?? []}
-              takeoutMergePeers={takeoutMergePeerTables}
-              isDemo={isPosDemo}
-              onDemoOrderReplace={
-                isPosDemo && demoDineInOrder?.tableId === servingTableId && servingTableId
-                  ? (next) => setDemoDineInOrder({ tableId: servingTableId, order: next })
-                  : undefined
-              }
-              onServed={refetchCurrentStore}
-              onAfterPartialLineRemoved={
-                isPosDemo
-                  ? undefined
-                  : async (orderId, detail) => {
-                      await runAfterPartialLineCancelPrints(orderId, 'dine_in', detail)
-                    }
-              }
-              onAfterFullOrderKitchenReprint={
-                isPosDemo
-                  ? undefined
-                  : async (orderId, detail) => {
-                      await runAfterFullOrderCancelKitchenPrints(orderId, 'dine_in', detail)
-                    }
-              }
-              onAfterTableTransfer={
-                isPosDemo
-                  ? undefined
-                  : async (keepOrderId) => {
-                      await runAfterTableTransferHallReprint(keepOrderId)
-                    }
-              }
-              onBeforeTableMerge={
-                isPosDemo
-                  ? undefined
-                  : (keepOrderId) => {
-                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
-                        keepOrderId,
-                        Date.now() + 15_000
-                      )
-                    }
-              }
-              onBeforeTableMove={
-                isPosDemo
-                  ? undefined
-                  : (orderId) => {
-                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
-                        orderId,
-                        Date.now() + 15_000
-                      )
-                    }
-              }
-              onTableMovedFrom={
-                isPosDemo ? undefined : (sourceTableName) => clearTableOrder(currentStoreId, sourceTableName)
-              }
-              onAddOrder={() => {
-                if (!servingTableId) return
-                clearCartFromTerminal()
-                if (servingTable?.order?.id != null) {
-                  const sid = Number(servingTable.order.id)
-                  if (Number.isFinite(sid) && sid > 0) {
-                    setPendingDineInOrderId(sid)
-                    pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
-                  }
-                }
-                setServingTableId(null)
-                setSelectedTableId(servingTableId)
-              }}
-              onPay={() => {
-                if (isPosDemo && demoDineInOrder?.tableId === servingTableId) {
-                  void appAlert(t('posDemoTablePaySkipped') || '')
-                  return
-                }
-                if (!servingTableId || !servingTable?.order) return
-                setPendingDineInOrderId(Number(servingTable.order.id))
-                pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
-                setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
-                setPendingPayRequest({
-                  tableName: servingTable.name,
-                  existingOrderId: Number(servingTable.order.id),
-                  items: servingTable.order.items.map((item) => {
-                    const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
-                    return {
-                      id: item.id,
-                      name: item.name,
-                      price: item.price,
-                      quantity: item.quantity,
-                      ...(menuId ? { menuId } : {}),
-                      ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                    }
-                  }),
-                  orderNo: servingTable.order.orderNo,
-                  orderDiscount: posOrderToCheckoutDiscountSnapshot({
-                    ...servingTable.order,
-                    items: servingTable.order.items,
-                  }),
-                  orderMember: posOrderToCheckoutMemberSnapshot(servingTable.order),
-                })
-                setServingTableId(null)
-              }}
-              onOpenTaxInvoice={() => openTaxInvoiceEditorForOrder(servingTable?.order)}
-              onLeaveTable={async () => {
-                if (!servingTable?.order || !servingTable?.name) return
-                clearTableOrder(currentStoreId, servingTable.name)
-                setServingTableId(null)
-                await refetchCurrentStore()
-              }}
-              onCancel={refetchCurrentStore}
-              onOrderDismissed={dismissTerminalOrder}
-              onClose={() => {
-                setServingTableId(null)
-                setDemoDineInOrder(null)
-              }}
-              t={t}
-            />
+            isDineInAddOrderMode ? (
+              <div className="flex flex-col flex-1 min-h-0">
+                <div
+                  className={cn(
+                    'min-h-0 overflow-hidden',
+                    isNarrowViewport ? 'max-h-[46%] shrink-0' : 'flex-1'
+                  )}
+                >
+                  {dineInTableOrderPanel}
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden border-t border-border">
+                  {renderTerminalCartPanel('side-panel')}
+                </div>
+              </div>
+            ) : (
+              dineInTableOrderPanel
+            )
           ) : activeTab === 'takeout' && selectedTakeoutOrder ? (
             <TakeoutOrderPanel
               orderLabel={resolveTakeoutOrderBarLabel(selectedTakeoutOrder)}
@@ -11137,7 +11185,9 @@ export default function PosTerminalPage() {
                 isNarrowViewport
                   ? shouldFullscreenOrderDetailOnNarrow
                     ? 'flex-1 min-h-0 border-t'
-                    : 'border-t min-h-[180px] max-h-[50vh]'
+                    : isDineInAddOrderMode
+                      ? 'flex-1 min-h-0 border-t'
+                      : 'border-t min-h-[180px] max-h-[50vh]'
                   : 'w-72 border-l min-h-0'
               )}
             >

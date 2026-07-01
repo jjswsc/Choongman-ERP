@@ -4,7 +4,7 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
   addDayBangkok,
-  attendanceStoreNamePostgrestVariantsFilter,
+  attendanceStoreNamePostgrestFilterFragments,
   bangkokDateRangeToUtc,
   todayStrBangkok,
 } from '@/lib/attendance-utils'
@@ -139,12 +139,11 @@ export async function fetchMergedAttendanceLogsForEmployee(
   const endDate = (params.endDate || todayStr).trim().slice(0, 10)
   const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
 
-  const storeQ = attendanceStoreNamePostgrestVariantsFilter(storeFilter)
-  const rangeParts = [
-    storeQ,
+  const dateRangeParts = [
     `log_at=gte.${encodeURIComponent(startISO)}`,
     `log_at=lt.${encodeURIComponent(endISOExclusive)}`,
   ]
+  const storeFragments = attendanceStoreNamePostgrestFilterFragments(storeFilter)
   const order = params.order || 'log_at.desc'
   const limit = params.limit ?? 100
   const select = params.select || DEFAULT_SELECT
@@ -152,23 +151,20 @@ export async function fetchMergedAttendanceLogsForEmployee(
 
   const fetches: Promise<AttendanceLogFetchRow[]>[] = []
 
+  const pushForStoreFragments = (employeePart: string) => {
+    const bases = storeFragments.length > 0 ? storeFragments.map((sf) => [sf, ...dateRangeParts]) : [dateRangeParts]
+    for (const base of bases) {
+      fetches.push(selectLogs([...base, employeePart].join('&'), selectOpts))
+    }
+  }
+
   if (employeeId > 0) {
-    fetches.push(selectLogs([...rangeParts, `employee_id=eq.${employeeId}`].join('&'), selectOpts))
+    pushForStoreFragments(`employee_id=eq.${employeeId}`)
   }
   if (employeeCodeNorm) {
-    fetches.push(
-      selectLogs(
-        [...rangeParts, `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`].join('&'),
-        selectOpts
-      )
-    )
+    pushForStoreFragments(`employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`)
   }
-  fetches.push(
-    selectLogs(
-      [...rangeParts, `name=ilike.${encodeURIComponent(employeeName)}`].join('&'),
-      selectOpts
-    )
-  )
+  pushForStoreFragments(`name=ilike.${encodeURIComponent(employeeName)}`)
 
   const chunks = await Promise.all(fetches)
   const merged = mergeAttendanceLogRows(chunks, target)

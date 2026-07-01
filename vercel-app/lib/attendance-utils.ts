@@ -103,6 +103,16 @@ export function attendanceStoreNamePostgrestVariantsFilter(storeFilter: string):
   return `or=(${fragments.map((f) => `store_name.ilike.${encodeURIComponent(f)}`).join(',')})`
 }
 
+/**
+ * PostgREST `or=(…)` 대신 매장 변형별 단일 `store_name=ilike` 조각 배열.
+ * fetchMergedAttendanceLogsForEmployee 등에서 변형마다 병렬 조회 후 합칠 때 사용.
+ */
+export function attendanceStoreNamePostgrestFilterFragments(storeFilter: string): string[] {
+  return uniqueIlikeWildcardFragmentsForStore(storeFilter).map(
+    (f) => `store_name=ilike.${encodeURIComponent(f)}`
+  )
+}
+
 /** leave_requests.store 등 — 위와 동일 변형 OR */
 export function employeeStorePostgrestVariantsFilter(storeFilter: string): string {
   const fragments = uniqueIlikeWildcardFragmentsForStore(storeFilter)

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.marketing_materials (
   display_end_date DATE NULL,                    -- 홍보물 게시 종료일
   placement_spots JSONB NOT NULL DEFAULT '[]',   -- counter | tv | table | entrance
   status     TEXT NOT NULL DEFAULT 'planning',  -- planning | producing | completed | distributed
+  produced_on DATE NULL,                       -- 제작 완료일 (체크리스트)
   note       TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -27,6 +28,8 @@ ALTER TABLE public.marketing_materials
   ADD COLUMN IF NOT EXISTS display_end_date DATE NULL;
 ALTER TABLE public.marketing_materials
   ADD COLUMN IF NOT EXISTS placement_spots JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE public.marketing_materials
+  ADD COLUMN IF NOT EXISTS produced_on DATE NULL;
 
 CREATE INDEX IF NOT EXISTS idx_marketing_materials_campaign_id
   ON public.marketing_materials(campaign_id);

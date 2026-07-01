@@ -84,9 +84,25 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
   helpSum_admin_marketing_influencers: '인플루언서 섭외·제공 메뉴·게시 일정을 관리합니다.',
   helpHow_admin_marketing_influencers:
     '① 캠페인을 선택하고 인플루언서 정보·제공 메뉴·게시일을 등록합니다.\n② 디렉터리·조회 탭에서 전체 목록을 검색합니다.',
-  helpSum_admin_marketing_materials: '홍보물·매장 배치·사은품을 캠페인과 연결해 관리합니다.',
+  helpSum_admin_marketing_materials: '홍보물·제작 완료·매장 수령/설치 확인·사은품을 캠페인과 연결해 관리합니다.',
   helpHow_admin_marketing_materials:
-    '① 캠페인별 홍보물을 등록하고 매장 배치·수량을 기록합니다.\n② 사은품 탭에서 배정·배포·재고 불일치를 점검합니다.',
+    '① 캠페인별 홍보물을 등록하고 매장 배치·수량을 기록합니다.\n② 체크리스트 탭: 본사는 스탠디/포스터 제작 완료일, 매장은 수령→설치(사진 첨부 가능) 2단계 확인.\n③ 사은품 탭에서 배정·배포·재고 불일치를 점검합니다.',
+  marketingMaterialChecklistTab: '체크리스트',
+  marketingMaterialChecklistNeedCampaign: '체크리스트를 보려면 캠페인을 선택하세요.',
+  marketingMaterialChecklistAllTypes: '스탠디/포스터 외 전체 종류 포함',
+  marketingMaterialChecklistShowDone: '완료 항목 표시',
+  marketingMaterialChecklistHint:
+    '본사: 제작 완료일을 입력하면 매장에서 수령·설치 확인이 가능합니다. 매장: 제작 완료 후 수령 → 설치 순으로 확인하세요.',
+  marketingMaterialChecklistEmpty: '체크리스트 대상 홍보물이 없습니다. (스탠디·포스터, 배포 매장 지정)',
+  marketingMaterialChecklistStoreTasks: '확인할 홍보물',
+  marketingMaterialChecklistStoreEmpty: '확인할 항목이 없습니다.',
+  marketingMaterialChecklistWaitingProduction: '본사 제작 대기',
+  marketingMaterialChecklistDone: '완료',
+  marketingMaterialChecklistConfirmReceived: '수령 확인',
+  marketingMaterialChecklistConfirmInstalled: '설치 확인',
+  marketingMaterialChecklistInstallPhoto: '설치 사진',
+  marketingMaterialChecklistInstallPhotoHint: '현장에 게시한 모습을 촬영해 올려 주세요. 본사에서 체크리스트에서 확인할 수 있습니다.',
+  marketingMaterialChecklistInstallPhotoOptional: '선택',
   helpSum_admin_marketing_calendar: '마케팅 관련 일정을 방콕 기준 통합 캘린더로 봅니다.',
   helpHow_admin_marketing_calendar:
     '① 레이어(캠페인·광고·프로모 등)를 켜고 끕니다.\n② 날짜를 클릭해 당일 이벤트 상세를 봅니다.\n③ 캠페인·매장 필터로 범위를 좁힙니다.',
@@ -183,9 +199,26 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
   helpSum_admin_marketing_influencers: 'Manage influencer hires, menus, and publish dates.',
   helpHow_admin_marketing_influencers:
     '① Select campaign and register influencer, menus, and dates.\n② Directory/overview tabs for search.',
-  helpSum_admin_marketing_materials: 'Materials, deployments, and gifts linked to campaigns.',
+  helpSum_admin_marketing_materials: 'Materials, production completion, store receive/install checks, and gifts.',
   helpHow_admin_marketing_materials:
-    '① Register materials per campaign and store deployments.\n② Gifts tab for allocation and inventory checks.',
+    '① Register materials per campaign and store deployments.\n② Checklist tab: HQ sets production date; stores confirm receive then install (optional photo).\n③ Gifts tab for allocation and inventory checks.',
+  marketingMaterialChecklistTab: 'Checklist',
+  marketingMaterialChecklistNeedCampaign: 'Select a campaign to view the checklist.',
+  marketingMaterialChecklistAllTypes: 'Include all material types (not only standee/poster)',
+  marketingMaterialChecklistShowDone: 'Show completed items',
+  marketingMaterialChecklistHint:
+    'HQ: enter production completion date so stores can confirm. Stores: confirm receive, then install.',
+  marketingMaterialChecklistEmpty: 'No checklist materials (standee/poster with assigned stores).',
+  marketingMaterialChecklistStoreTasks: 'Items to confirm',
+  marketingMaterialChecklistStoreEmpty: 'Nothing to confirm.',
+  marketingMaterialChecklistWaitingProduction: 'Awaiting HQ production',
+  marketingMaterialChecklistDone: 'Done',
+  marketingMaterialChecklistConfirmReceived: 'Confirm received',
+  marketingMaterialChecklistConfirmInstalled: 'Confirm installed',
+  marketingMaterialChecklistInstallPhoto: 'Install photo',
+  marketingMaterialChecklistInstallPhotoHint:
+    'Take a photo of the display on site. HQ can review it on the checklist.',
+  marketingMaterialChecklistInstallPhotoOptional: 'Optional',
   helpSum_admin_marketing_calendar: 'Integrated Bangkok calendar for marketing schedules.',
   helpHow_admin_marketing_calendar:
     '① Toggle layers (campaign, ad, promo, etc.).\n② Click a day for details.\n③ Filter by campaign or store.',
@@ -275,9 +308,26 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
   helpSum_admin_marketing_influencers: 'จัดการอินฟลู เมนูที่ให้ และวันเผยแพร่',
   helpHow_admin_marketing_influencers:
     '① เลือกแคมเปญและลงทะเบียนอินฟลู เมนู วันที่\n② ไดเรกทอรี/ภาพรวมสำหรับค้นหา',
-  helpSum_admin_marketing_materials: 'สื่อ การติดตั้งร้าน และของแถมตามแคมเปญ',
+  helpSum_admin_marketing_materials: 'สื่อ ผลิตเสร็จ รับ/ติดตั้งร้าน และของแถมตามแคมเปญ',
   helpHow_admin_marketing_materials:
-    '① ลงทะเบียนสื่อและการติดตั้งร้าน\n② แท็บของแถมสำหรับการจัดสรรและสต็อก',
+    '① ลงทะเบียนสื่อและการติดตั้งร้าน\n② แท็บเช็กลิสต์: สำนักงานใหญ่บันทึกวันผลิตเสร็จ ร้านยืนยันรับแล้วติดตั้ง (แนบรูปได้)\n③ แท็บของแถมสำหรับการจัดสรรและสต็อก',
+  marketingMaterialChecklistTab: 'เช็กลิสต์',
+  marketingMaterialChecklistNeedCampaign: 'เลือกแคมเปญเพื่อดูเช็กลิสต์',
+  marketingMaterialChecklistAllTypes: 'รวมทุกประเภทสื่อ (ไม่เฉพาะสแตนดี้/โปสเตอร์)',
+  marketingMaterialChecklistShowDone: 'แสดงรายการที่เสร็จแล้ว',
+  marketingMaterialChecklistHint:
+    'สำนักงานใหญ่: กรอกวันผลิตเสร็จเพื่อให้ร้านยืนยันได้ ร้าน: ยืนยันรับแล้วติดตั้งตามลำดับ',
+  marketingMaterialChecklistEmpty: 'ไม่มีสื่อในเช็กลิสต์ (สแตนดี้/โปสเตอร์ที่มีร้านกำหนด)',
+  marketingMaterialChecklistStoreTasks: 'รายการที่ต้องยืนยัน',
+  marketingMaterialChecklistStoreEmpty: 'ไม่มีรายการที่ต้องยืนยัน',
+  marketingMaterialChecklistWaitingProduction: 'รอผลิตจากสำนักงานใหญ่',
+  marketingMaterialChecklistDone: 'เสร็จแล้ว',
+  marketingMaterialChecklistConfirmReceived: 'ยืนยันรับแล้ว',
+  marketingMaterialChecklistConfirmInstalled: 'ยืนยันติดตั้งแล้ว',
+  marketingMaterialChecklistInstallPhoto: 'รูปติดตั้ง',
+  marketingMaterialChecklistInstallPhotoHint:
+    'ถ่ายรูปหน้างานที่ติดตั้งแล้ว สำนักงานใหญ่ดูได้ในเช็กลิสต์',
+  marketingMaterialChecklistInstallPhotoOptional: 'ไม่บังคับ',
   helpSum_admin_marketing_calendar: 'ปฏิทินรวมตารางการตลาด (เวลากรุงเทพ)',
   helpHow_admin_marketing_calendar:
     '① เปิด/ปิดเลเยอร์ (แคมเปญ โฆษณา โปรโม ฯลฯ)\n② คลิกวันที่ดูรายละเอียด\n③ กรองตามแคมเปญ/ร้าน',

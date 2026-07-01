@@ -17,10 +17,8 @@ import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-setti
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import {
-  canManageOfficePayroll,
-  isOfficePayrollStoreFilter,
-} from '@/lib/office-payroll-access'
+import { isOfficePayrollStoreFilter } from '@/lib/office-payroll-access'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -317,9 +315,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const isDirector = canManageOfficePayroll(auth)
+  const payrollAuth = await resolveCanManageOfficePayrollAuth(auth)
+  const canSeeOffice = payrollAuth.canManageOfficePayroll === true
   const isOffice = isOfficePayrollStoreFilter(storeFilter)
-  if (isOffice && !isDirector) {
+  if (isOffice && !canSeeOffice) {
     return NextResponse.json({ success: true, list: [] }, { headers })
   }
 
@@ -384,7 +383,7 @@ export async function GET(request: NextRequest) {
     }
     if (empLoadErr) throw empLoadErr
 
-    if (!isDirector) {
+    if (!canSeeOffice) {
       empRows = empRows.filter((e) => !isOfficeStore(String(e.store || '')))
     }
 

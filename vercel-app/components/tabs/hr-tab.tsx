@@ -147,8 +147,8 @@ export function HrTab() {
   }, [])
 
   const loadButtonState = useCallback(() => {
-    if (!auth?.store || !auth?.user) return
-    getTodayAttendanceTypes({
+    if (!auth?.store || !auth?.user) return Promise.resolve()
+    return getTodayAttendanceTypes({
       storeName: auth.store,
       name: auth.user,
       ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
@@ -157,9 +157,9 @@ export function HrTab() {
   }, [auth?.store, auth?.user, auth?.employeeId, auth?.employeeCode])
 
   const loadTodayLog = useCallback(() => {
-    if (!auth?.store || !auth?.user) return
+    if (!auth?.store || !auth?.user) return Promise.resolve()
     const { startDate, endDate } = getAttendanceDateRange()
-    getAttendanceRecordsAdmin({
+    return getAttendanceRecordsAdmin({
       startDate,
       endDate,
       storeFilter: auth.store,
@@ -174,8 +174,8 @@ export function HrTab() {
   }, [auth?.store, auth?.user, auth?.role, auth?.employeeId, auth?.employeeCode])
 
   const loadLeaveInfo = useCallback(() => {
-    if (!auth?.store || !auth?.user) return
-    getMyLeaveInfo({
+    if (!auth?.store || !auth?.user) return Promise.resolve()
+    return getMyLeaveInfo({
       store: auth.store,
       name: auth.user,
       ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
@@ -215,10 +215,7 @@ export function HrTab() {
       return
     }
     setLoading(true)
-    loadButtonState()
-    loadTodayLog()
-    loadLeaveInfo()
-    setLoading(false)
+    Promise.all([loadButtonState(), loadTodayLog(), loadLeaveInfo()]).finally(() => setLoading(false))
   }, [auth?.store, auth?.user, loadButtonState, loadTodayLog, loadLeaveInfo])
 
   useEffect(() => {
@@ -251,6 +248,7 @@ export function HrTab() {
         if (isDuplicate) {
           await appAlert(t("attDuplicateOnce"))
           loadButtonState()
+          loadTodayLog()
           return
         }
         if (!res.success) {

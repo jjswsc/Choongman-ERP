@@ -14,6 +14,7 @@ import {
   Pencil,
   Settings2,
   Package,
+  ClipboardCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,7 @@ import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketi
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingMaterialPicklistsDialog } from "@/components/marketing/marketing-material-picklists-dialog"
 import { MarketingMaterialDeploymentEditor } from "@/components/marketing/marketing-material-deployment-editor"
+import { MarketingMaterialChecklistPanel } from "@/components/marketing/marketing-material-checklist-panel"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
 import {
   defaultMarketingMaterialTypeOptions,
@@ -101,7 +103,7 @@ function defaultMaterialAddForm() {
 }
 
 type ViewMode = "store" | "material"
-type MainTab = "overview" | "gifts"
+type MainTab = "overview" | "gifts" | "checklist"
 type MaterialsBrowseTab = "register" | "browse" | "all"
 type MaterialDeploymentDraft = {
   storeName: string
@@ -119,12 +121,18 @@ export default function MarketingMaterialsPage() {
   const t = useT(lang)
   const { auth } = useAuth()
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
-  const mainTab: MainTab = searchParams.get("tab") === "gifts" ? "gifts" : "overview"
+  const mainTab: MainTab =
+    searchParams.get("tab") === "gifts"
+      ? "gifts"
+      : searchParams.get("tab") === "checklist"
+        ? "checklist"
+        : "overview"
 
   const setMainTab = React.useCallback(
     (tab: MainTab) => {
       const p = new URLSearchParams(searchParams.toString())
       if (tab === "gifts") p.set("tab", "gifts")
+      else if (tab === "checklist") p.set("tab", "checklist")
       else p.delete("tab")
       const qs = p.toString()
       router.replace(qs ? `/admin/marketing/materials?${qs}` : "/admin/marketing/materials")
@@ -844,6 +852,19 @@ export default function MarketingMaterialsPage() {
           </button>
           <button
             type="button"
+            onClick={() => setMainTab("checklist")}
+            className={cn(
+              "flex flex-1 items-center justify-center rounded-md py-2.5 transition-colors",
+              mainTab === "checklist"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0" />
+            {t("marketingMaterialChecklistTab")}
+          </button>
+          <button
+            type="button"
             onClick={() => setMainTab("gifts")}
             className={cn(
               "flex flex-1 items-center justify-center rounded-md py-2.5 transition-colors",
@@ -856,7 +877,20 @@ export default function MarketingMaterialsPage() {
           </button>
         </div>
 
-        {mainTab === "gifts" ? (
+        {mainTab === "checklist" ? (
+          <MarketingMaterialChecklistPanel
+            campaignId={activeCampaignId}
+            onCampaignIdChange={setCampaignFilter}
+            campaigns={campaigns}
+            hqLabel={hqLabel}
+            formatStoreLabel={formatStoreLabel}
+            stores={stores}
+            onRefreshParent={async () => {
+              await loadData()
+              await loadInquiryMaterials()
+            }}
+          />
+        ) : mainTab === "gifts" ? (
           campaignFilter || campaignIdFromQuery ? (
             <MarketingMaterialGiftsPanel
               syncCampaignId={campaignFilter || campaignIdFromQuery}

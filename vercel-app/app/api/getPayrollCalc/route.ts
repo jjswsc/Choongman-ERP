@@ -29,11 +29,8 @@ import {
 } from '@/lib/attendance-adjustment-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
-import {
-  canManageOfficePayroll,
-  filterPayrollRowsHidingOffice,
-  isOfficePayrollStoreFilter,
-} from '@/lib/office-payroll-access'
+import { isOfficePayrollStoreFilter } from '@/lib/office-payroll-access'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   bangkokDateRangeToUtc,
@@ -755,7 +752,8 @@ export async function GET(request: NextRequest) {
   const normMonth = monthStr.slice(0, 7)
   const isAll = !storeFilter || storeFilter === 'All' || storeFilter === '전체'
   const isOffice = isOfficePayrollStoreFilter(storeFilter)
-  const canSeeOffice = canManageOfficePayroll(auth)
+  const payrollAuth = await resolveCanManageOfficePayrollAuth(auth)
+  const canSeeOffice = payrollAuth.canManageOfficePayroll === true
 
   if (isOffice && !canSeeOffice) {
     return NextResponse.json({ success: true, list: [] }, { headers })

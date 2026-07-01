@@ -3,6 +3,7 @@ import {
   canManageOfficePayroll,
   filterPayrollRowsHidingOffice,
   filterStoresHidingOfficePayroll,
+  buildPayrollStoreSelectOptions,
   isEmployeeOfficePayrollManagerFlag,
   isOfficePayrollStoreFilter,
 } from './office-payroll-access'
@@ -43,5 +44,15 @@ describe('office-payroll-access', () => {
         auth
       )
     ).toEqual([{ store: 'CM Tower', name: 'B' }])
+  })
+
+  it('buildPayrollStoreSelectOptions injects office store for payroll managers', () => {
+    const auth = { role: 'accounting', canManageOfficePayroll: true, store: 'Office' }
+    expect(buildPayrollStoreSelectOptions(['CM Tower', 'CM Rama2'], auth)).toEqual([
+      'All',
+      'CM Tower',
+      'CM Rama2',
+      'Office',
+    ])
   })
 })

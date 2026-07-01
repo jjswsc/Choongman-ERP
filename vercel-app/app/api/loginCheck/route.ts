@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterEmployeesByNameForLogin } from '@/lib/employees-compat'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
@@ -103,7 +104,18 @@ export async function POST(req: NextRequest) {
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
-    const canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(row.can_manage_office_payroll)
+    let canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(row.can_manage_office_payroll)
+    if (!canManageOfficePayroll && empIdRaw > 0) {
+      try {
+        const flagRows = (await supabaseSelectFilter('employees', `id=eq.${empIdRaw}`, {
+          limit: 1,
+          select: 'can_manage_office_payroll',
+        })) as { can_manage_office_payroll?: unknown }[]
+        canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(flagRows?.[0]?.can_manage_office_payroll)
+      } catch {
+        /* 컬럼 미배포 DB */
+      }
+    }
     const tokenPayload: Parameters<typeof signToken>[0] = { store: storeName, name: userName, role: finalRole }
     if (empIdRaw > 0) tokenPayload.employeeId = empIdRaw
     if (empCodeRaw) tokenPayload.employeeCode = empCodeRaw

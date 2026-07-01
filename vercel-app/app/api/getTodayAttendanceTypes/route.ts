@@ -5,7 +5,7 @@ import {
   todayStrBangkok,
 } from '@/lib/attendance-utils'
 import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch-server'
-import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
+import { resolveAttendanceEmployeeIdentity } from '@/lib/attendance-employee-resolve-server'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -34,29 +34,41 @@ export async function GET(request: NextRequest) {
   const queryStoreName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
   const queryName = String(searchParams.get('name') || '').trim()
   const queryEmployeeIdRaw = String(searchParams.get('employeeId') || '').trim()
-  const storeName = String(isScopedRole ? auth.store : queryStoreName || auth.store || '').trim()
-  const name = String(isScopedRole ? auth.name : queryName || auth.name || '').trim()
+  const storeName = String(
+    isScopedRole ? queryStoreName || auth.store : queryStoreName || auth.store || ''
+  ).trim()
+  const name = String(queryName || auth.name || '').trim()
   const employeeIdRaw = String(
-    isScopedRole ? auth.employeeId || queryEmployeeIdRaw : queryEmployeeIdRaw || auth.employeeId || ''
+    isScopedRole
+      ? queryEmployeeIdRaw || auth.employeeId || ''
+      : queryEmployeeIdRaw || auth.employeeId || ''
   ).trim()
   const employeeId =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
-  const employeeCodeRaw = isScopedRole
-    ? String(auth.employeeCode || searchParams.get('employeeCode') || searchParams.get('code') || '').trim()
-    : String(searchParams.get('employeeCode') || searchParams.get('code') || auth.employeeCode || '').trim()
-  const employeeCodeNorm = normalizeEmployeeCodeForMatch(employeeCodeRaw)
+  const employeeCodeRaw = String(
+    searchParams.get('employeeCode') ||
+      searchParams.get('code') ||
+      auth.employeeCode ||
+      ''
+  ).trim()
 
   if (!storeName || !name) {
     return NextResponse.json(DEFAULT_ATTENDANCE_STATE, { headers })
   }
 
   try {
+    const resolved = await resolveAttendanceEmployeeIdentity({
+      storeName,
+      name,
+      ...(employeeId > 0 ? { employeeId } : {}),
+      ...(employeeCodeRaw ? { employeeCode: employeeCodeRaw } : {}),
+    })
     const todayStr = todayStrBangkok()
     const logs = await fetchMergedAttendanceLogsForEmployee({
       storeFilter: storeName,
-      employeeName: name,
-      ...(employeeId > 0 ? { employeeId } : {}),
-      ...(employeeCodeNorm ? { employeeCode: employeeCodeRaw } : {}),
+      employeeName: resolved.employeeName || name,
+      ...(resolved.employeeId > 0 ? { employeeId: resolved.employeeId } : {}),
+      ...(resolved.employeeCodeNorm ? { employeeCode: resolved.employeeCode } : {}),
       order: 'log_at.desc',
       limit: 100,
       select: 'id,log_at,log_type,employee_id,employee_code,name',

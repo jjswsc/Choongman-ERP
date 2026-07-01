@@ -9,6 +9,7 @@ export type MarketingMaterialTypeOption = { value: string; label: string }
 export const DEFAULT_MARKETING_MATERIAL_TYPES: MarketingMaterialTypeOption[] = [
   { value: "tentcard", label: "텐트카드" },
   { value: "standee", label: "스탠디" },
+  { value: "poster", label: "포스터" },
   { value: "coupon", label: "쿠폰/전단" },
   { value: "flyer", label: "플라이어" },
   { value: "banner", label: "배너" },
@@ -92,6 +93,8 @@ export function builtInMaterialTypeLabel(
       return tr("텐트카드", "Tent Card", "เทนท์การ์ด")
     case "standee":
       return tr("스탠디", "Standee", "สแตนดี้")
+    case "poster":
+      return tr("포스터", "Poster", "โปสเตอร์")
     case "coupon":
       return tr("쿠폰/전단", "Coupon/Flyer", "คูปอง/ใบปลิว")
     case "flyer":

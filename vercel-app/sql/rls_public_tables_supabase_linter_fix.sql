@@ -171,6 +171,15 @@ CREATE POLICY "Allow all marketing_campaign_design_tasks"
   USING (true)
   WITH CHECK (true);
 
+-- marketing_material_store_checks
+ALTER TABLE IF EXISTS public.marketing_material_store_checks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all marketing_material_store_checks" ON public.marketing_material_store_checks;
+CREATE POLICY "Allow all marketing_material_store_checks"
+  ON public.marketing_material_store_checks
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
 -- pos_payment_attempts
 ALTER TABLE IF EXISTS public.pos_payment_attempts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all pos_payment_attempts" ON public.pos_payment_attempts;

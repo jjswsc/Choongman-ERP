@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { Store, Table, Order } from '@/lib/pos-types'
+import type { Store, Table, Order, OrderItem } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
@@ -29,7 +29,7 @@ import {
   isMemberPortalTakeoutKitchenOpen,
   resolveMemberPortalTakeoutTableDisplay,
 } from '@/lib/pos-member-portal-takeout-label'
-import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { mergeOrderUiItemsPreserveLineState, resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import {
   combineOrdersForTerminalMerge,
   isActiveTerminalListOrder,
@@ -371,6 +371,12 @@ type OptimisticOrderInput = {
     menuId?: string
     optionId?: string
     note?: string
+    servedAt?: string | null
+    servedBy?: string | null
+    cancelledAt?: string | null
+    cancelledBy?: string | null
+    cancelReason?: string | null
+    setChildrenState?: OrderItem['setChildrenState']
   }>
 }
 
@@ -412,8 +418,13 @@ function shouldPreferPrevOrderSnapshot(prev: Order, next: Order): boolean {
 }
 
 function mergeFetchedOrderWithPendingLocal(fetched: Order, pending: Order): Order {
+  const mergedItems = mergeOrderUiItemsPreserveLineState(
+    Array.isArray(pending.items) ? pending.items : [],
+    Array.isArray(fetched.items) ? fetched.items : []
+  )
   return {
     ...pending,
+    items: mergedItems.length > 0 ? mergedItems : pending.items,
     status: fetched.status,
     total: Math.max(Number(pending.total ?? 0) || 0, Number(fetched.total ?? 0) || 0),
     pendingListSync: true,
@@ -1166,6 +1177,12 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         ...(String(it.menuId ?? '').trim() ? { menuId: String(it.menuId).trim() } : {}),
         ...(String(it.optionId ?? '').trim() ? { optionId: String(it.optionId).trim() } : {}),
         ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+        ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
+        ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
+        ...(String(it.cancelledAt ?? '').trim() ? { cancelledAt: String(it.cancelledAt) } : {}),
+        ...(String(it.cancelledBy ?? '').trim() ? { cancelledBy: String(it.cancelledBy) } : {}),
+        ...(String(it.cancelReason ?? '').trim() ? { cancelReason: String(it.cancelReason) } : {}),
+        ...(it.setChildrenState ? { setChildrenState: it.setChildrenState } : {}),
       }
     })
     if (safeItems.length === 0) return
@@ -1238,7 +1255,19 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
                 { id: tbl.id, name: tbl.name, floor },
                 { layoutPeers: peers }
               )
-              return matched ? { ...tbl, order: optimistic, isOccupied: true } : tbl
+              return matched
+                ? {
+                    ...tbl,
+                    order: {
+                      ...optimistic,
+                      items: mergeOrderUiItemsPreserveLineState(
+                        optimistic.items,
+                        Array.isArray(tbl.order?.items) ? tbl.order.items : []
+                      ),
+                    },
+                    isOccupied: true,
+                  }
+                : tbl
             }),
           }
         })

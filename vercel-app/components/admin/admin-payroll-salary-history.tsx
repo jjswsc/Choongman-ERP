@@ -15,7 +15,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
-import { filterStoresHidingOfficePayroll } from "@/lib/office-payroll-access"
+import { buildPayrollStoreSelectOptions } from "@/lib/office-payroll-access"
+import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
 import { apiFetch, useStoreList } from "@/lib/api-client"
 
 type SalaryHistoryRow = {
@@ -61,6 +62,7 @@ export function AdminPayrollSalaryHistory() {
   const t = useT(lang)
   const isManager = isManagerRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
+  useSyncOfficePayrollAccess()
 
   const [storeFilter, setStoreFilter] = useState(isManager && userStore ? userStore : "All")
   const [nameFilter, setNameFilter] = useState("")
@@ -75,11 +77,11 @@ export function AdminPayrollSalaryHistory() {
   const { posStores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    const base = ["All", ...storeList.filter((s) => s !== "All")]
     setStores(
-      filterStoresHidingOfficePayroll(base, {
+      buildPayrollStoreSelectOptions(storeList, {
         role: auth?.role || "",
         canManageOfficePayroll: auth?.canManageOfficePayroll,
+        store: auth?.store || "",
       })
     )
   }, [auth?.store, auth?.role, auth?.canManageOfficePayroll, storeList])

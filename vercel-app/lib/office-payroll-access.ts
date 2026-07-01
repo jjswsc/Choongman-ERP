@@ -27,6 +27,24 @@ export function filterStoresHidingOfficePayroll(stores: string[], auth: OfficePa
   return stores.filter((s) => s === 'All' || !isOfficeStore(s))
 }
 
+/** 급여 계산·명세·급여변경 탭 매장 드롭다운 — 오피스 담당자에게 본인 매장(Office) 보강 */
+export function buildPayrollStoreSelectOptions(
+  storeCodes: string[],
+  auth: OfficePayrollAuth & { store?: string }
+): string[] {
+  const merged = new Set<string>()
+  for (const s of storeCodes) {
+    const t = String(s || '').trim()
+    if (t && t !== 'All') merged.add(t)
+  }
+  if (canManageOfficePayroll(auth)) {
+    const userStore = String(auth.store || '').trim()
+    if (userStore) merged.add(userStore)
+  }
+  const base = ['All', ...Array.from(merged)]
+  return filterStoresHidingOfficePayroll(base, auth)
+}
+
 /** 확정 급여·계산 결과에서 오피스 직원 행 제외 */
 export function filterPayrollRowsHidingOffice<T extends { store?: string }>(
   rows: T[],

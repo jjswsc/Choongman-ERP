@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   attendanceStoreNamePostgrestFilter,
+  attendanceStoreNamePostgrestFilterFragments,
   attendanceStoreNamePostgrestVariantsFilter,
   employeeStorePostgrestFilter,
 } from '@/lib/attendance-utils'
@@ -36,5 +37,15 @@ describe('attendanceStoreNamePostgrestVariantsFilter', () => {
     expect(q).toContain('or=(')
     expect(q).toContain('store_name.ilike.' + encodeURIComponent('*Office*'))
     expect(q).toContain('store_name.ilike.' + encodeURIComponent('*CM Office*'))
+  })
+})
+
+describe('attendanceStoreNamePostgrestFilterFragments', () => {
+  it('CM Office 는 변형별 단일 ilike 조각', () => {
+    const frags = attendanceStoreNamePostgrestFilterFragments('CM Office')
+    expect(frags.length).toBeGreaterThan(1)
+    expect(frags.some((f) => f.includes(encodeURIComponent('*CM Office*')))).toBe(true)
+    expect(frags.some((f) => f.includes(encodeURIComponent('*Office*')))).toBe(true)
+    expect(frags.every((f) => !f.startsWith('or=('))).toBe(true)
   })
 })

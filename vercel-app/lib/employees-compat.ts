@@ -53,20 +53,20 @@ export async function supabaseSelectEmployeesForLoginList(): Promise<unknown> {
 
 function loginCheckSelectAttempts(): { select: string }[] {
   const legacy = isLegacyChoongmanErpSupabase()
-  if (legacy) {
-    return [
-      { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL },
-      { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY },
-      { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL },
-      { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY },
-    ]
-  }
-  return [
-    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL },
-    { select: EMPLOYEES_LOGIN_CHECK_WITH_COMPANY },
-    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL },
-    { select: EMPLOYEES_LOGIN_CHECK_NO_COMPANY },
+  const withCompany = [
+    EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL,
+    EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL_NO_EXTRA,
+    EMPLOYEES_LOGIN_CHECK_WITH_COMPANY,
+    EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_NO_EXTRA,
   ]
+  const noCompany = [
+    EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL,
+    EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL_NO_EXTRA,
+    EMPLOYEES_LOGIN_CHECK_NO_COMPANY,
+    EMPLOYEES_LOGIN_CHECK_NO_COMPANY_NO_EXTRA,
+  ]
+  const ordered = legacy ? [...noCompany, ...withCompany] : [...withCompany, ...noCompany]
+  return ordered.map((select) => ({ select }))
 }
 
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY =
@@ -77,10 +77,23 @@ const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL =
   'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL =
   'id,employee_code,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
+const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL_NO_EXTRA =
+  'id,employee_code,company,store,name,password,role,job,resign_date,can_manage_office_payroll' as const
+const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL_NO_EXTRA =
+  'id,employee_code,store,name,password,role,job,resign_date,can_manage_office_payroll' as const
+const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_NO_EXTRA =
+  'id,employee_code,company,store,name,password,role,job,resign_date' as const
+const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_NO_EXTRA =
+  'id,employee_code,store,name,password,role,job,resign_date' as const
+
+function isMissingEmployeesExtraStoresColumn(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err)
+  return /extra_stores|column\s+employees\.extra_stores/i.test(m)
+}
 
 function isMissingEmployeesOfficePayrollColumn(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err)
-  return /42703|can_manage_office_payroll|column.*does not exist/i.test(m)
+  return /can_manage_office_payroll|column\s+employees\.can_manage_office_payroll/i.test(m)
 }
 
 export async function supabaseSelectFilterEmployeesByNameForLogin(name: string): Promise<unknown> {
@@ -95,7 +108,13 @@ export async function supabaseSelectFilterEmployeesByNameForLogin(name: string):
       })
     } catch (e) {
       lastErr = e
-      if (isMissingEmployeesCompanyColumn(e) || isMissingEmployeesOfficePayrollColumn(e)) continue
+      if (
+        isMissingEmployeesCompanyColumn(e) ||
+        isMissingEmployeesOfficePayrollColumn(e) ||
+        isMissingEmployeesExtraStoresColumn(e)
+      ) {
+        continue
+      }
       throw e
     }
   }

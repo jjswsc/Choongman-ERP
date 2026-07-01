@@ -14,6 +14,7 @@ import {
   mergeJobOptionsFromCatalogAndEmployees,
 } from '@/lib/employee-job-catalog'
 import { loadEmployeeJobCatalog } from '@/lib/employee-job-catalog-server'
+import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -183,10 +184,7 @@ export async function GET(req: NextRequest) {
         taxId: r.tax_id != null ? String(r.tax_id).trim() : '',
         ssoNumber: r.sso_number != null ? String(r.sso_number).trim() : '',
         ssoExempt: r.sso_exempt === true || r.sso_exempt === 'true' || r.sso_exempt === 1,
-        canManageOfficePayroll:
-          r.can_manage_office_payroll === true ||
-          r.can_manage_office_payroll === 'true' ||
-          r.can_manage_office_payroll === 1,
+        canManageOfficePayroll: isEmployeeOfficePayrollManagerFlag(r.can_manage_office_payroll),
         address: r.address != null ? String(r.address).trim() : '',
         bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
         accountNumber: r.account_number != null ? String(r.account_number).trim() : '',

@@ -21,6 +21,7 @@ export interface MarketingMaterial {
   displayEndDate: string | null
   placementSpots: string[]
   status: string
+  producedOn: string | null
   note: string
   expenseAccrualId?: string | null
 }
@@ -60,6 +61,7 @@ export async function saveMarketingMaterial(params: {
   displayEndDate?: string | null
   placementSpots?: string[]
   status?: string
+  producedOn?: string | null
   note?: string
   vendorCode?: string
   userRole?: string
