@@ -27,7 +27,7 @@ import {
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { resolveMemberPortalCouponStatus } from '@/lib/member-portal-coupon-status'
 import { buildUsedMemberCouponIssueMap, type MemberPortalCouponScope } from '@/lib/member-portal-coupon-reconcile'
-import { couponIssueEligibleForOrderTime } from '@/lib/member-portal-coupon-status'
+import { repairFalsePositiveAndDuplicateUsedCouponIssues } from '@/lib/member-portal-coupon-repair'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -1470,74 +1470,6 @@ export async function resolveMemberPortalCouponScope(memberId: number): Promise<
   return { memberIds, memberNos: [...memberNos] }
 }
 
-async function revertFalsePositiveUsedCouponIssues<
-  T extends {
-    id: number
-    status: string
-    issuedAt?: string
-    orderId?: number | null
-    usedAt?: string
-  },
->(rows: T[]): Promise<T[]> {
-  const suspects = rows.filter((row) => {
-    if (String(row.status || '').toLowerCase() !== 'used') return false
-    return Number(row.orderId || 0) > 0 && String(row.issuedAt || '').trim()
-  })
-  if (!suspects.length) return rows
-
-  const orderIds = [...new Set(suspects.map((row) => Number(row.orderId || 0)).filter((id) => id > 0))]
-  const orderPaidAtById = new Map<number, string>()
-  const chunkSize = 80
-  for (let i = 0; i < orderIds.length; i += chunkSize) {
-    const chunk = orderIds.slice(i, i + chunkSize)
-    try {
-      const orderRows = (await supabaseSelectFilter('pos_orders', `id=in.(${chunk.join(',')})`, {
-        limit: chunk.length,
-        select: 'id,paid_at,created_at',
-      })) as Array<{ id?: number; paid_at?: string | null; created_at?: string | null }>
-      for (const order of orderRows || []) {
-        const id = Number(order.id || 0)
-        if (!id) continue
-        const paid = toText(order.paid_at)
-        const created = toText(order.created_at)
-        const comparable = paid || created
-        if (comparable) orderPaidAtById.set(id, comparable.replace('T', ' ').slice(0, 19))
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const revertIds = new Set<number>()
-  for (const row of suspects) {
-    const orderId = Number(row.orderId || 0)
-    const orderPaidAt = orderPaidAtById.get(orderId) || ''
-    if (!orderPaidAt) continue
-    if (!couponIssueEligibleForOrderTime(row.issuedAt, orderPaidAt)) {
-      revertIds.add(Number(row.id || 0))
-    }
-  }
-  if (!revertIds.size) return rows
-
-  for (const id of revertIds) {
-    try {
-      await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${id}`, {
-        status: 'issued',
-        used_at: null,
-        order_id: null,
-      })
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return rows.map((row) =>
-    revertIds.has(Number(row.id || 0))
-      ? { ...row, status: 'issued', usedAt: '', orderId: null }
-      : row
-  )
-}
-
 async function reconcileMemberCouponIssueStatusesForPortal<
   T extends {
     id: number
@@ -1604,8 +1536,8 @@ export async function listMemberCouponIssuesForPortalMember(
     memberIds.length <= 1
       ? await listMemberCouponIssues({ memberId: memberIds[0] || memberId, limit })
       : await listMemberCouponIssues({ memberIds, limit })
-  const reverted = await revertFalsePositiveUsedCouponIssues(rows)
-  return reconcileMemberCouponIssueStatusesForPortal(reverted, scope)
+  const repaired = await repairFalsePositiveAndDuplicateUsedCouponIssues(rows)
+  return reconcileMemberCouponIssueStatusesForPortal(repaired, scope)
 }
 
 export async function listMemberCouponIssues(params?: {
@@ -1890,13 +1822,16 @@ export async function cancelMemberCouponIssue(issueId: number, reason = ADMIN_CO
 
   const row = await loadMemberCouponIssueRow(id)
   if (!row?.id) throw new Error('발급 건을 찾을 수 없습니다.')
-  if (String(row.status || '').trim().toLowerCase() !== 'issued') {
-    throw new Error('사용 가능(issued) 상태만 취소할 수 있습니다.')
+  const status = String(row.status || '').trim().toLowerCase()
+  if (status !== 'issued' && status !== 'used') {
+    throw new Error('사용 가능(issued) 또는 사용 완료(used) 상태만 취소할 수 있습니다.')
   }
 
   const cancelledAt = getBangkokDateTimeString()
   await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${id}`, {
     status: 'cancelled',
+    used_at: null,
+    order_id: null,
     restored_at: cancelledAt,
     restore_reason: String(reason || ADMIN_COUPON_CANCEL_REASON).slice(0, 120),
   })
@@ -1919,7 +1854,7 @@ export async function cancelMemberCouponIssuesAdmin(params: {
         cancelledCount += 1
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e || '')
-        if (!/사용 가능\(issued\)/.test(msg)) throw e
+        if (!/사용 가능\(issued\) 또는 사용 완료\(used\)/.test(msg)) throw e
       }
     }
     return { cancelledCount }

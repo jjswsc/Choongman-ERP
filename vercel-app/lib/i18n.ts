@@ -5732,6 +5732,9 @@ export const i18n = {
     crmCouponCancelIssue: '발급 취소',
     crmCouponCancelIssueConfirm: '이 쿠폰 발급을 취소할까요? 회원앱 「내 혜택」에서 사라집니다.',
     crmCouponCancelIssueDone: '쿠폰 발급을 취소했습니다.',
+    crmCouponCancelUsedConfirm:
+      '이 사용 완료 이력을 취소(삭제)할까요? 회원앱에서도 제거됩니다. 잘못 연결된 중복 이력 정리용입니다.',
+    crmCouponCancelUsedDone: '쿠폰 이력을 취소했습니다.',
     crmCouponCancelDuplicates: '중복 취소 (최신 1장 유지)',
     crmCouponCancelDuplicatesConfirm:
       '이 회원·쿠폰의 사용 가능 발급 {count}건 중 최신 1장만 남기고 나머지를 취소할까요?',
@@ -12967,6 +12970,9 @@ orderItemQty: 'Qty',
     crmCouponCancelIssue: 'Cancel issue',
     crmCouponCancelIssueConfirm: 'Cancel this coupon issue? It will disappear from the member app.',
     crmCouponCancelIssueDone: 'Coupon issue cancelled.',
+    crmCouponCancelUsedConfirm:
+      'Cancel this used record? It will be removed from the member app. Use for cleaning duplicate/wrong links.',
+    crmCouponCancelUsedDone: 'Coupon record cancelled.',
     crmCouponCancelDuplicates: 'Cancel duplicates (keep newest)',
     crmCouponCancelDuplicatesConfirm:
       'Cancel all but the newest of {count} ready-to-use issues for this member and coupon?',
@@ -19734,6 +19740,9 @@ orderItemQty: 'จำนวน',
     crmCouponCancelIssue: 'ยกเลิกการออกคูปอง',
     crmCouponCancelIssueConfirm: 'ยกเลิกการออกคูปองนี้หรือไม่? จะหายไปจากแอปสมาชิก',
     crmCouponCancelIssueDone: 'ยกเลิกการออกคูปองแล้ว',
+    crmCouponCancelUsedConfirm:
+      'ยกเลิกประวัติที่ใช้แล้วนี้หรือไม่? จะหายจากแอปสมาชิก — ใช้ลบรายการซ้ำ/ผิดออเดอร์',
+    crmCouponCancelUsedDone: 'ยกเลิกประวัติคูปองแล้ว',
     crmCouponCancelDuplicates: 'ยกเลิกซ้ำ (เก็บใบล่าสุด 1 ใบ)',
     crmCouponCancelDuplicatesConfirm:
       'ยกเลิกการออกคูปองที่พร้อมใช้ {count} ใบ เหลือใบล่าสุด 1 ใบสำหรับสมาชิกและคูปองนี้หรือไม่?',

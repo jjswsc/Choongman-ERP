@@ -121,25 +121,6 @@ export function CrmCouponHistoryPanel() {
     return Array.from(map.values()).filter((group) => group.rows.length > 1)
   }, [displayRows])
 
-  const handleCancelIssue = async (row: MemberCouponIssueRow) => {
-    const ok = await appConfirm(t("crmCouponCancelIssueConfirm"))
-    if (!ok) return
-    setCancellingId(row.id)
-    try {
-      const res = await cancelMemberCouponIssue({ issueId: row.id })
-      if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || t("processFail"))
-        return
-      }
-      await appAlert(t("crmCouponCancelIssueDone"))
-      await load()
-    } catch (e) {
-      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setCancellingId(null)
-    }
-  }
-
   const handleCancelDuplicates = async (group: DuplicateGroup) => {
     const count = group.rows.length
     const ok = await appConfirm(t("crmCouponCancelDuplicatesConfirm").replace("{count}", String(count)))
@@ -319,19 +300,44 @@ export function CrmCouponHistoryPanel() {
                       </span>
                     </td>
                     <td className="p-3">
-                      {String(r.status || "").toLowerCase() === "issued" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          disabled={cancellingId === r.id || loading}
-                          onClick={() => handleCancelIssue(r)}
-                        >
-                          {t("crmCouponCancelIssue")}
-                        </Button>
-                      ) : (
-                        "—"
-                      )}
+                      {(() => {
+                        const st = String(r.status || "").toLowerCase()
+                        if (st !== "issued" && st !== "used") return "—"
+                        const confirmKey =
+                          st === "used" ? "crmCouponCancelUsedConfirm" : "crmCouponCancelIssueConfirm"
+                        return (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            disabled={cancellingId === r.id || loading}
+                            onClick={async () => {
+                              const ok = await appConfirm(t(confirmKey))
+                              if (!ok) return
+                              setCancellingId(r.id)
+                              try {
+                                const res = await cancelMemberCouponIssue({ issueId: r.id })
+                                if (!res.success) {
+                                  await appAlert(translateApiMessage(res.message, t) || t("processFail"))
+                                  return
+                                }
+                                await appAlert(
+                                  st === "used" ? t("crmCouponCancelUsedDone") : t("crmCouponCancelIssueDone")
+                                )
+                                await load()
+                              } catch (e) {
+                                await appAlert(
+                                  t("processFail") + ": " + (e instanceof Error ? e.message : String(e))
+                                )
+                              } finally {
+                                setCancellingId(null)
+                              }
+                            }}
+                          >
+                            {t("crmCouponCancelIssue")}
+                          </Button>
+                        )
+                      })()}
                     </td>
                   </tr>
                 ))
