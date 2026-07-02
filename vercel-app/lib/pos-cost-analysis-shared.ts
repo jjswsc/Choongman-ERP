@@ -126,6 +126,12 @@ export function computePosCostRowMetrics(
   }
 }
 
+/** 목록·KPI와 동일 — BOM 베이스에 미세(mise) % 적용 */
+export function applyPosCostListMise(base: number, misePercent: number = MISE_DEFAULT): number {
+  const miseMult = 1 + misePercent / 100
+  return Math.round(base * miseMult * 10) / 10
+}
+
 export type PosCostListSummary = {
   n: number
   nHall: number

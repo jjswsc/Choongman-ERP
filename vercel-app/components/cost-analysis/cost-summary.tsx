@@ -19,6 +19,9 @@ interface CostSummaryProps {
   onDeliveryPercentChange?: (percent: number) => void
   /** true면 품목별 미세가 이미 foodSubTotal에 포함됨 (메뉴 레벨 미세 미적용) */
   miseIncludedInFood?: boolean
+  /** 목록 API 원가 베이스 — 제공 시 총원가를 목록 열(미세 포함)과 동일하게 */
+  listAlignedCostHall?: number
+  listAlignedCostDelivery?: number
   /** 가격 편집 가능 (메뉴 관리 연동) */
   editablePrice?: boolean
   /** 가격 변경 시 (priceHall, priceDelivery) - 저장 시 메뉴 관리에 반영 */
@@ -38,6 +41,8 @@ export function CostSummary({
   deliveryPercent,
   onDeliveryPercentChange,
   miseIncludedInFood = false,
+  listAlignedCostHall,
+  listAlignedCostDelivery,
   editablePrice: _editablePrice = false,
   onPriceChange: _onPriceChange,
   basePriceHall: _basePriceHall,
@@ -45,12 +50,44 @@ export function CostSummary({
 }: CostSummaryProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const foodCost = foodSubTotal
-  const miseCost = miseIncludedInFood ? 0 : foodSubTotal * (misePercent / 100)
-  const totalFoodCost = foodSubTotal + miseCost
-  const deliveryPackageCost = packagingSubTotal
-  const totalCost =
-    serviceType === "Delivery"
+
+  const useListAligned =
+    listAlignedCostHall != null &&
+    Number.isFinite(listAlignedCostHall) &&
+    listAlignedCostHall >= 0
+
+  const baseHall = useListAligned ? listAlignedCostHall! : foodSubTotal
+  const baseDel = useListAligned
+    ? (listAlignedCostDelivery ?? listAlignedCostHall!)
+    : foodSubTotal + (serviceType === "Delivery" ? packagingSubTotal : 0)
+  const packagingBase = useListAligned
+    ? Math.max(0, baseDel - baseHall)
+    : packagingSubTotal
+
+  const costWithMiseHall = useListAligned
+    ? Math.round(baseHall * (1 + misePercent / 100) * 10) / 10
+    : null
+  const costWithMiseDel = useListAligned
+    ? Math.round(baseDel * (1 + misePercent / 100) * 10) / 10
+    : null
+
+  const foodCost = baseHall
+  const miseCost = useListAligned
+    ? (serviceType === "Delivery" ? costWithMiseDel! : costWithMiseHall!) - (serviceType === "Delivery" ? baseDel : baseHall)
+    : miseIncludedInFood
+      ? 0
+      : foodSubTotal * (misePercent / 100)
+  const totalFoodCost = useListAligned
+    ? serviceType === "Delivery"
+      ? baseHall
+      : costWithMiseHall!
+    : foodSubTotal + (miseIncludedInFood ? 0 : miseCost)
+  const deliveryPackageCost = serviceType === "Delivery" ? packagingBase : 0
+  const totalCost = useListAligned
+    ? serviceType === "Delivery"
+      ? costWithMiseDel!
+      : costWithMiseHall!
+    : serviceType === "Delivery"
       ? totalFoodCost + deliveryPackageCost
       : totalFoodCost
 
@@ -165,7 +202,9 @@ export function CostSummary({
             label={miseIncludedInFood ? t("posCostFoodCostInclMise") : t("posCostFoodCost")}
             value={foodCost}
           />
-          {!miseIncludedInFood && misePercent > 0 && (
+          {!miseIncludedInFood &&
+            misePercent > 0 &&
+            (serviceType !== "Delivery" || !useListAligned || packagingBase <= 0) && (
             <CostRow
               label={`${t("posCostMiseEnPlace")} (${misePercent}%)`}
               value={miseCost}
@@ -184,6 +223,13 @@ export function CostSummary({
             <>
               <div className="border-t border-dashed border-border my-2" />
               <CostRow label={t("posCostDeliveryPackageCost")} value={deliveryPackageCost} />
+              {useListAligned && misePercent > 0 && packagingBase > 0 ? (
+                <CostRow
+                  label={`${t("posCostMiseEnPlace")} (${misePercent}%)`}
+                  value={miseCost}
+                  indent
+                />
+              ) : null}
               <div className="flex items-center justify-between text-sm gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-muted-foreground pl-4 shrink-0">{t("posCostAppFee")}</span>
@@ -216,7 +262,7 @@ export function CostSummary({
             </>
           )}
 
-          {!miseIncludedInFood && (
+          {!miseIncludedInFood && !useListAligned && (
             <>
               <div className="border-t border-border my-2" />
               <CostRow label={t("posCostSubTotal")} value={foodCost} />

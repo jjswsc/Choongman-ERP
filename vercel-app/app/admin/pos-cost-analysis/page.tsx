@@ -262,6 +262,7 @@ export default function PosCostAnalysisPage() {
             <CostCalculatorTab
               canEdit={canEdit}
               initialLoadFromRow={selectedForCalculator}
+              listMisePercent={settings.misePercent}
               onClearLoad={() => setSelectedForCalculator(null)}
               onSaveSuccess={() => {
                 void refreshRows({ summary: true }).then((arr) => {

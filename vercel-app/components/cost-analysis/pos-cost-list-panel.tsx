@@ -622,15 +622,24 @@ export function PosCostListPanel({
                                       ))}
                                     </tbody>
                                   </table>
-                                  <div className="flex justify-between border-t bg-muted/20 px-3 py-2 text-xs">
+                                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t bg-muted/20 px-3 py-2 text-xs">
                                     <span>
                                       {t("posCostFood")}: {(r.costHall ?? 0).toFixed(1)}
                                     </span>
                                     <span className="text-amber-600">
                                       {t("posCostPackaging")}: {((r.costDelivery ?? 0) - (r.costHall ?? 0)).toFixed(1)}
                                     </span>
+                                    <span>
+                                      {t("posCostSubTotal")}: {(r.costDelivery ?? 0).toFixed(1)}
+                                    </span>
+                                    {settings.misePercent > 0 ? (
+                                      <span>
+                                        {t("posCostMiseEnPlace")} ({settings.misePercent}%):{" "}
+                                        {(m.costDMise - (r.costDelivery ?? 0)).toFixed(1)}
+                                      </span>
+                                    ) : null}
                                     <span className="font-semibold">
-                                      {t("posMenuCost")}: {(r.costDelivery ?? 0).toFixed(1)}
+                                      {t("posMenuCost")}: {m.costDMise.toFixed(1)}
                                     </span>
                                   </div>
                                 </div>

@@ -16,6 +16,8 @@ export interface RecipeItem {
   savedItemCode?: string
   /** 원가 계산기 입력 단위 (예 g::1, ml::1, kg::1000). DB quantity_unit_key와 동기 */
   quantityUnitKey?: string
+  /** API breakdown에서 불러온 행 원가 — 목록·서버 합계와 동일하게 유지 */
+  savedLineCost?: number
 }
 
 export interface MenuItem {
@@ -611,6 +613,10 @@ export function getQuantityFactorToDisplay(code: number, unitKey: string): numbe
 }
 
 export function calculateItemCost(item: RecipeItem): number {
+  const saved = item.savedLineCost
+  if (saved != null && Number.isFinite(saved)) {
+    return Math.round(saved * 10) / 10
+  }
   const ingredient = getIngredient(item.ingredientCode)
   if (!ingredient) return 0
   const baseCost = ingredient.bahtPerUnit * item.quantity

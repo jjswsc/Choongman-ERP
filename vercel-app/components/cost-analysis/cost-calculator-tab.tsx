@@ -51,6 +51,8 @@ interface CostCalculatorTabProps {
   onReloadMenu?: (row: PosMenuCostAnalysisRow) => void
   /** POS 메뉴 목록 (카테고리 목록 추출·검색용) */
   menuRows?: PosMenuCostAnalysisRow[]
+  /** 목록·KPI와 동일한 미세(mise) % */
+  listMisePercent?: number
   /** 메뉴 검색에서 선택 시 (목록 로드) */
   onMenuSelect?: (row: PosMenuCostAnalysisRow) => void
 }
@@ -100,6 +102,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
         quantity: Number(b.quantity) || 0,
         misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
         savedItemCode: itemCode,
+        savedLineCost: Number(b.costTotal) || undefined,
       }
       if (cat === "packaging") packaging.push(item)
       else food.push(item)
@@ -116,6 +119,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
       misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
       savedItemCode: itemCode || undefined,
       quantityUnitKey: unitKey,
+      savedLineCost: Number(b.costTotal) || undefined,
     }
     if (cat === "packaging") packaging.push(item)
     else food.push(item)
@@ -199,7 +203,7 @@ function savePayloadOptionId(row: PosMenuCostAnalysisRow): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect, listMisePercent = MISE_DEFAULT }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
@@ -209,6 +213,8 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
   const [, bumpAfterRuntimeLoad] = useReducer((n: number) => n + 1, 0)
   const [runtimeReady, setRuntimeReady] = useState(false)
   const [sauceRowsFull, setSauceRowsFull] = useState<SauceRow[]>([])
+  /** getMenuCost 서버 합계 — 목록 열과 총원가 일치 */
+  const [listCostBases, setListCostBases] = useState<{ costHall: number; costDelivery: number } | null>(null)
 
   const storeUseSauceRowsForDialog = useMemo(
     () =>
@@ -254,8 +260,11 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
       setMenuItem(emptyMenuItem)
       setFoodItems(emptyFoodRecipe)
       setPackagingItems(emptyPackagingRecipe)
+      setListCostBases(null)
       return
     }
+
+    setListCostBases(null)
 
     const priceHall = row.priceHall ?? 0
     const priceDelivery = row.priceDelivery ?? null
@@ -274,6 +283,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
       priceDelivery,
       deliveryPercent,
       cookingTimeMin: row.cookingTimeMin ?? null,
+      misePercent: listMisePercent,
     })
 
     if (!runtimeReady) return
@@ -290,6 +300,10 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
         const menuCost = await getMenuCost({ menuId: menuIdStr, optionId: opt })
         if (cancelled) return
         if ((menuCost.breakdown ?? []).length > 0) {
+          setListCostBases({
+            costHall: menuCost.costHall ?? 0,
+            costDelivery: menuCost.costDelivery ?? menuCost.cost ?? 0,
+          })
           const { food, packaging } = breakdownToRecipeItems({
             ...row,
             breakdown: menuCostBreakdownToAnalysis(menuCost.breakdown),
@@ -320,10 +334,20 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
     return () => {
       cancelled = true
     }
-  }, [initialLoadFromRow, runtimeReady])
+  }, [initialLoadFromRow, runtimeReady, listMisePercent])
 
   const foodSubTotal = useMemo(() => calculateSubTotal(foodItems), [foodItems])
   const packagingSubTotal = useMemo(() => calculateSubTotal(packagingItems), [packagingItems])
+
+  const handleFoodItemsChange = useCallback((items: RecipeItem[]) => {
+    setListCostBases(null)
+    setFoodItems(items)
+  }, [])
+
+  const handlePackagingItemsChange = useCallback((items: RecipeItem[]) => {
+    setListCostBases(null)
+    setPackagingItems(items)
+  }, [])
 
   const categoriesFromMenus = useMemo(() => {
     const set = new Set(menuRows.map((r) => r.category).filter(Boolean))
@@ -363,6 +387,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
     setMenuItem(emptyMenuItem)
     setFoodItems(emptyFoodRecipe)
     setPackagingItems(emptyPackagingRecipe)
+    setListCostBases(null)
   }, [onClearLoad])
 
   const [saving, setSaving] = useState(false)
@@ -576,7 +601,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
               title={t("posCostFoodIngredients")}
               type="food"
               items={foodItems}
-              onItemsChange={setFoodItems}
+              onItemsChange={handleFoodItemsChange}
               costTextDark
               addSauceDialogStoreUseRows={storeUseSauceRowsForDialog}
               ingredientPickerHideSauceUsageKinds={["store_use"]}
@@ -587,7 +612,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
               title={t("posCostPackagingDelivery")}
               type="packaging"
               items={packagingItems}
-              onItemsChange={setPackagingItems}
+              onItemsChange={handlePackagingItemsChange}
               addDialogRequireStandardUnits={false}
               costTextDark
               refreshApiItemsBeforeAddDialog={refreshApiItemsForCostRuntime}
@@ -600,7 +625,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
           <CostSummary
             foodSubTotal={foodSubTotal}
             packagingSubTotal={packagingSubTotal}
-            misePercent={menuItem.misePercent}
+            misePercent={listMisePercent}
             inclVat={menuItem.inclVat}
             vatIncluded={menuItem.vatIncluded !== false}
             serviceType={menuItem.serviceType}
@@ -608,7 +633,9 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
             onDeliveryPercentChange={
               canEdit ? (v) => setMenuItem((prev) => ({ ...prev, deliveryPercent: v })) : undefined
             }
-            miseIncludedInFood
+            miseIncludedInFood={false}
+            listAlignedCostHall={listCostBases?.costHall}
+            listAlignedCostDelivery={listCostBases?.costDelivery}
             editablePrice={canEdit && !!initialLoadFromRow}
             onPriceChange={
               canEdit && initialLoadFromRow
@@ -637,7 +664,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
           <CostChart
             foodItems={foodItems}
             packagingItems={packagingItems}
-            misePercent={0}
+            misePercent={listCostBases ? listMisePercent : 0}
             serviceType={menuItem.serviceType}
           />
           {initialLoadFromRow ? (
@@ -649,7 +676,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
               vatIncluded={menuItem.vatIncluded !== false}
               deliveryFeePercent={menuItem.deliveryPercent}
               serviceType={menuItem.serviceType}
-              misePercent={menuItem.misePercent}
+              misePercent={listMisePercent}
             />
           ) : null}
         </div>
