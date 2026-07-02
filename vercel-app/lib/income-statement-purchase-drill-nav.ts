@@ -35,10 +35,17 @@ export type ParsedPurchaseDrillNav = {
   filterPlExpenseOnly?: boolean
   /** 패티 목록 — trans_type (예: expense) */
   filterPettyTransType?: string
+  /** 패티 목록 — 매출원가(cost) 계정만 */
+  filterPlCostPurchaseOnly?: boolean
+  /** 패티 목록 — 거래처 코드 없음(손익 __pl_petty_cash__ 묶음) */
+  filterPettyNoVendor?: boolean
 }
 
 /** 손익 비용 상세 API·드릴다운용 — 계정 미지정 행 */
 export const PL_EXPENSE_UNCLASSIFIED_SUBJECT = '__unclassified__'
+
+/** 손익 매입 — 거래처 없는 패티캐시 매출원가(원가) 지출 묶음 */
+export const PL_PETTY_CASH_PURCHASE_VENDOR_KEY = '__pl_petty_cash__'
 
 function readDate(sp: URLSearchParams, key: string): string | undefined {
   const v = sp.get(key)?.trim() ?? ''
@@ -65,6 +72,8 @@ export function parsePurchaseDrillNav(searchParams: URLSearchParams): ParsedPurc
   const filterAccountSubjectUnclassified = searchParams.get('filterAccountSubjectUnclassified') === '1'
   const filterPlExpenseOnly = searchParams.get('filterPlExpenseOnly') === '1'
   const filterPettyTransType = searchParams.get('filterPettyTransType')?.trim() || undefined
+  const filterPlCostPurchaseOnly = searchParams.get('filterPlCostPurchaseOnly') === '1'
+  const filterPettyNoVendor = searchParams.get('filterPettyNoVendor') === '1'
   return {
     fromPlDrill: true,
     startStr,
@@ -82,13 +91,15 @@ export function parsePurchaseDrillNav(searchParams: URLSearchParams): ParsedPurc
     filterAccountSubjectUnclassified,
     filterPlExpenseOnly,
     filterPettyTransType,
+    filterPlCostPurchaseOnly,
+    filterPettyNoVendor,
   }
 }
 
 export function buildPurchaseDrillAdminHref(
   path: string,
   ctx: PurchaseDrillNavContext,
-  target: 'outbound' | 'orders' | 'bank' | 'inbound'
+  target: 'outbound' | 'orders' | 'bank' | 'inbound' | 'petty'
 ): string {
   const q = new URLSearchParams()
   q.set(PL_DRILL_QUERY_FLAG, '1')
@@ -122,6 +133,13 @@ export function buildPurchaseDrillAdminHref(
       break
     case 'inbound':
       q.set('tab', 'hist')
+      break
+    case 'petty':
+      q.set('filterPettyTransType', 'expense')
+      if (vk === PL_PETTY_CASH_PURCHASE_VENDOR_KEY) {
+        q.set('filterPlCostPurchaseOnly', '1')
+        q.set('filterPettyNoVendor', '1')
+      }
       break
   }
 

@@ -15,6 +15,11 @@ export type PettyCashClientFilterOpts = {
   filterInvoiceStatus?: PettyInvoiceFilter
   /** PP30 매입 VAT 대상: 지출 + VAT 금액 > 0 */
   filterPp30VatOnly?: boolean
+  /** 손익 매입 드릴다운 — 매출원가(cost) 계정만 */
+  filterPlCostPurchaseOnly?: boolean
+  filterPlCostSubjectIds?: ReadonlySet<number>
+  /** 손익 __pl_petty_cash__ — vendor_code 없는 행만 */
+  filterPettyNoVendor?: boolean
 }
 
 export type PettyCashPeriodSummary = {
@@ -42,6 +47,17 @@ export function applyPettyCashClientFilters(
     if (opts.filterPettyTransType) {
       const ty = String(r.trans_type ?? '').toLowerCase()
       if (ty !== opts.filterPettyTransType.toLowerCase()) return false
+    }
+
+    if (opts.filterPlCostPurchaseOnly) {
+      const sid = r.accountSubjectId ?? r.account_subject_id
+      const n = sid != null ? Number(sid) : NaN
+      if (!Number.isFinite(n) || !opts.filterPlCostSubjectIds?.has(n)) return false
+    }
+
+    if (opts.filterPettyNoVendor) {
+      const vc = String((r as { vendor_code?: string | null }).vendor_code ?? '').trim()
+      if (vc) return false
     }
 
     if (memoNeedle) {

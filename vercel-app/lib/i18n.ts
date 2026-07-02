@@ -4539,6 +4539,9 @@ export const i18n = {
     pL_expenseDetailOff: '지출 상세 OFF',
     pL_purchaseHqOrders: '본사 창고 출고(매입)',
     pL_vendorUnknown: '거래처 미지정',
+    pL_purchasePettyCash: '패티캐시 매입',
+    pL_purchaseDrillPetty: '패티캐시 매입',
+    pL_purchaseDrillLinkPetty: '패티캐시',
     pL_purchaseDrillTitle: '매입 상세',
     pL_purchaseDrillLoading: '불러오는 중…',
     pL_purchaseDrillTruncated:
@@ -11786,6 +11789,9 @@ Only matters the employee must handle personally on a working day:
     pL_expenseDetailOff: 'Expense Details OFF',
     pL_purchaseHqOrders: 'HQ warehouse outbound (purchases)',
     pL_vendorUnknown: 'Vendor not set',
+    pL_purchasePettyCash: 'Petty cash purchases',
+    pL_purchaseDrillPetty: 'Petty cash purchases',
+    pL_purchaseDrillLinkPetty: 'Petty cash',
     pL_purchaseDrillTitle: 'Purchase detail',
     pL_purchaseDrillLoading: 'Loading…',
     pL_purchaseDrillTruncated:

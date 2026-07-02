@@ -308,6 +308,18 @@ export type IncomeStatementPurchaseDrillHqOutboundRow = {
   lineAmount: number
 }
 
+export type IncomeStatementPurchaseDrillPettyRow = {
+  kind: 'petty'
+  id: number
+  transDate: string
+  amount: number
+  store: string | null
+  memo: string | null
+  accountSubjectId: number | null
+  accountSubjectCode: string | null
+  accountSubjectName: string | null
+}
+
 export type IncomeStatementPurchaseDrillDown = {
   vendorKey: string
   yearMonth: string
@@ -319,7 +331,8 @@ export type IncomeStatementPurchaseDrillDown = {
   hqOrders: IncomeStatementPurchaseDrillOrderRow[]
   inbound: IncomeStatementPurchaseDrillInboundRow[]
   bankPayments: IncomeStatementPurchaseDrillBankRow[]
-  truncated: { inbound: boolean; bank: boolean; orders: boolean }
+  pettyCash: IncomeStatementPurchaseDrillPettyRow[]
+  truncated: { inbound: boolean; bank: boolean; orders: boolean; petty: boolean }
   error?: string
 }
 

@@ -76,6 +76,7 @@ import {
 } from '@/lib/income-statement-item-vat'
 import { loadItemTaxTypeMap } from '@/lib/income-statement-item-vat-server'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
+import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purchase-drill-nav'
 
 export {
   buildHqVendorMatchIndex,
@@ -725,7 +726,7 @@ function addPettyCashRowToPl(params: {
     return
   }
   params.onPurchase(amt)
-  const vKey = String(params.row.vendor_code || '').trim() || '__pl_petty_cash__'
+  const vKey = String(params.row.vendor_code || '').trim() || PL_PETTY_CASH_PURCHASE_VENDOR_KEY
   params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
 }
 
@@ -1786,6 +1787,18 @@ export type IncomeStatementPurchaseDrillHqOutboundRow = {
   lineAmount: number
 }
 
+export type IncomeStatementPurchaseDrillPettyRow = {
+  kind: 'petty'
+  id: number
+  transDate: string
+  amount: number
+  store: string | null
+  memo: string | null
+  accountSubjectId: number | null
+  accountSubjectCode: string | null
+  accountSubjectName: string | null
+}
+
 export type IncomeStatementPurchaseDrillDownResult = {
   vendorKey: string
   yearMonth: string
@@ -1800,7 +1813,8 @@ export type IncomeStatementPurchaseDrillDownResult = {
   hqOrders: IncomeStatementPurchaseDrillOrderRow[]
   inbound: IncomeStatementPurchaseDrillInboundRow[]
   bankPayments: IncomeStatementPurchaseDrillBankRow[]
-  truncated: { inbound: boolean; bank: boolean; orders: boolean }
+  pettyCash: IncomeStatementPurchaseDrillPettyRow[]
+  truncated: { inbound: boolean; bank: boolean; orders: boolean; petty: boolean }
 }
 
 function drillVendorMatchesInboundRow(
@@ -1834,6 +1848,74 @@ async function loadItemCostMapForDrill(): Promise<Record<string, number>> {
   return itemCostMap
 }
 
+async function listPettyCashPurchaseDrillRows(params: {
+  startStr: string
+  endStr: string
+  storeFilter: string
+  isHQ: boolean
+  subjectMeta: Map<number, AccountSubjectMetaRow>
+  /** 미지정 시 거래처 없는 패티 매입만 */
+  vendorKey?: string
+  vendorPurchaseKeyIndex?: VendorPurchaseKeyIndex
+}): Promise<{ rows: IncomeStatementPurchaseDrillPettyRow[]; truncated: boolean }> {
+  let pettyFilter = `trans_date=gte.${params.startStr}&trans_date=lte.${params.endStr}&trans_type=eq.expense`
+  if (!params.isHQ && params.storeFilter !== 'All') {
+    pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', params.storeFilter)}`
+  }
+  const pettyRaw = (await supabaseSelectFilter('petty_cash_transactions', pettyFilter, {
+    select: 'id,trans_date,amount,store,memo,trans_type,account_subject_id,vendor_code',
+    limit: BASE_LIMIT,
+    order: 'trans_date.desc',
+  })) as {
+    id?: number
+    trans_date?: string
+    amount?: number
+    store?: string
+    memo?: string | null
+    trans_type?: string
+    account_subject_id?: number | null
+    vendor_code?: string | null
+  }[] | null
+
+  const acc: IncomeStatementPurchaseDrillPettyRow[] = []
+  const vk = String(params.vendorKey || PL_PETTY_CASH_PURCHASE_VENDOR_KEY).trim()
+  for (const r of pettyRaw || []) {
+    if ((r.trans_type || '').toLowerCase() !== 'expense') continue
+    const st = String(r.store || '').trim()
+    if (params.isHQ) {
+      if (!isHqAccountingStoreRow(st)) continue
+    }
+    if (isPlExpenseAccountSubject(r.account_subject_id, params.subjectMeta)) continue
+    const vendorCode = String(r.vendor_code || '').trim()
+    if (vk === PL_PETTY_CASH_PURCHASE_VENDOR_KEY) {
+      if (vendorCode) continue
+    } else if (params.vendorPurchaseKeyIndex) {
+      if (!drillVendorMatchesBankRow(vk, vendorCode || null, params.vendorPurchaseKeyIndex)) continue
+    }
+    const pid = Number(r.id)
+    if (!pid) continue
+    const sid =
+      r.account_subject_id != null && !isNaN(Number(r.account_subject_id))
+        ? Number(r.account_subject_id)
+        : null
+    const meta = sid != null ? params.subjectMeta.get(sid) : undefined
+    acc.push({
+      kind: 'petty',
+      id: pid,
+      transDate: String(r.trans_date || '').slice(0, 10),
+      amount: Math.abs(Number(r.amount) || 0),
+      store: r.store != null ? String(r.store) : null,
+      memo: r.memo != null ? String(r.memo) : null,
+      accountSubjectId: sid,
+      accountSubjectCode: meta?.code ?? null,
+      accountSubjectName: meta?.name ?? null,
+    })
+  }
+  const truncated = (pettyRaw?.length || 0) >= BASE_LIMIT || acc.length > PURCHASE_DRILL_LIMIT
+  const rows = truncated ? acc.slice(0, PURCHASE_DRILL_LIMIT) : acc
+  return { rows, truncated }
+}
+
 /** 손익 매입 거래처 행 클릭 시 — 직접입고·통장 매입지급·(매장만) 본사승인 발주 */
 export async function computeIncomeStatementPurchaseDrillDown(
   input: IncomeScopeInput & { vendorKey: string }
@@ -1852,9 +1934,27 @@ export async function computeIncomeStatementPurchaseDrillDown(
     hqOrders: [],
     inbound: [],
     bankPayments: [],
-    truncated: { inbound: false, bank: false, orders: false },
+    pettyCash: [],
+    truncated: { inbound: false, bank: false, orders: false, petty: false },
   }
   if (!vendorKey) return empty
+
+  if (vendorKey === PL_PETTY_CASH_PURCHASE_VENDOR_KEY) {
+    const subjectMeta = await loadAccountSubjectMeta()
+    const { rows, truncated } = await listPettyCashPurchaseDrillRows({
+      startStr,
+      endStr,
+      storeFilter,
+      isHQ,
+      subjectMeta,
+      vendorKey,
+    })
+    return {
+      ...empty,
+      pettyCash: rows,
+      truncated: { ...empty.truncated, petty: truncated },
+    }
+  }
 
   if (vendorKey === '__pl_hq_orders__') {
     if (isHQ) return { ...empty, isHqOrders: true }
@@ -2061,6 +2161,17 @@ export async function computeIncomeStatementPurchaseDrillDown(
   const bankTruncated = bankAcc.length > PURCHASE_DRILL_LIMIT
   const bankPayments = bankTruncated ? bankAcc.slice(0, PURCHASE_DRILL_LIMIT) : bankAcc
 
+  const subjectMetaDrill = await loadAccountSubjectMeta()
+  const { rows: pettyCash, truncated: pettyTruncated } = await listPettyCashPurchaseDrillRows({
+    startStr,
+    endStr,
+    storeFilter,
+    isHQ,
+    subjectMeta: subjectMetaDrill,
+    vendorKey,
+    vendorPurchaseKeyIndex: vendorPurchaseKeyIndexDrill,
+  })
+
   return {
     vendorKey,
     yearMonth,
@@ -2072,7 +2183,8 @@ export async function computeIncomeStatementPurchaseDrillDown(
     hqOrders: [],
     inbound,
     bankPayments,
-    truncated: { inbound: inboundTruncated, bank: bankTruncated, orders: false },
+    pettyCash,
+    truncated: { inbound: inboundTruncated, bank: bankTruncated, orders: false, petty: pettyTruncated },
   }
 }
 

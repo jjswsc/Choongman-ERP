@@ -125,6 +125,8 @@ export function PettyCashTab({
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = useState(false)
   const [filterAccountSubjectId, setFilterAccountSubjectId] = useState("")
   const [filterPettyTransType, setFilterPettyTransType] = useState("")
+  const [filterPlCostPurchaseOnly, setFilterPlCostPurchaseOnly] = useState(false)
+  const [filterPettyNoVendor, setFilterPettyNoVendor] = useState(false)
   const [filterMemoKeyword, setFilterMemoKeyword] = useState("")
   const [filterInvoiceStatus, setFilterInvoiceStatus] = useState<PettyInvoiceFilter>("")
   const [filterPp30VatOnly, setFilterPp30VatOnly] = useState(false)
@@ -217,6 +219,8 @@ export function PettyCashTab({
     if (nav.filterAccountSubjectId) setFilterAccountSubjectId(nav.filterAccountSubjectId)
     if (nav.filterAccountSubjectUnclassified) setFilterAccountSubjectEmpty(true)
     if (nav.filterPettyTransType) setFilterPettyTransType(nav.filterPettyTransType)
+    setFilterPlCostPurchaseOnly(nav.filterPlCostPurchaseOnly === true)
+    setFilterPettyNoVendor(nav.filterPettyNoVendor === true)
     setPlDrillFetchPending(true)
   }, [searchParams, canSearchAll])
 
@@ -354,11 +358,25 @@ export function PettyCashTab({
   /** 저장된 원문 그대로 표시(관리자·모바일 동일, 브라우저 검색·대사 가능) */
   const formatMemo = (memo: string) => String(memo || "").trim() || "-"
 
+  const plCostSubjectIds = useMemo(
+    () =>
+      new Set(
+        accountSubjectOptions
+          .filter((a) => a.pAndLSection === "cost")
+          .map((a) => a.id)
+          .filter((id): id is number => id != null)
+      ),
+    [accountSubjectOptions]
+  )
+
   const clientFilterOpts = useMemo(
     () => ({
       filterAccountSubjectEmpty: showAccountSubjectEmptyFilter ? filterAccountSubjectEmpty : false,
       filterAccountSubjectId,
       filterPettyTransType,
+      filterPlCostPurchaseOnly,
+      filterPlCostSubjectIds: plCostSubjectIds,
+      filterPettyNoVendor,
       filterMemoKeyword: adminEnhancedSearch ? filterMemoKeyword : "",
       filterInvoiceStatus: adminEnhancedSearch ? filterInvoiceStatus : ("" as PettyInvoiceFilter),
       filterPp30VatOnly: adminEnhancedSearch ? filterPp30VatOnly : false,
@@ -368,6 +386,9 @@ export function PettyCashTab({
       filterAccountSubjectEmpty,
       filterAccountSubjectId,
       filterPettyTransType,
+      filterPlCostPurchaseOnly,
+      plCostSubjectIds,
+      filterPettyNoVendor,
       filterMemoKeyword,
       filterInvoiceStatus,
       filterPp30VatOnly,

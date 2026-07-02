@@ -94,6 +94,7 @@ import {
   buildExpenseDrillAdminHref,
   buildPurchaseDrillAdminHref,
   expenseDrillNavContextFromDrill,
+  PL_PETTY_CASH_PURCHASE_VENDOR_KEY,
   purchaseDrillNavContextFromDrill,
 } from "@/lib/income-statement-purchase-drill-nav"
 import {
@@ -115,7 +116,7 @@ function lineDisplayAmount(
 
 function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
   if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사 창고 출고(매입)'
-  if (row.key === '__pl_petty_cash__') return t('pL_purchasePettyCash') || '패티캐시 매입'
+  if (row.key === PL_PETTY_CASH_PURCHASE_VENDOR_KEY) return t('pL_purchasePettyCash') || '패티캐시 매입'
   if (row.key === '__pl_vendor_unknown__') return t('pL_vendorUnknown') || '거래처 미지정'
   const n = String(row.label || '').trim()
   return n || row.key
@@ -411,12 +412,15 @@ function IncomePurchaseDrillDialog({
           <div className="space-y-4 text-sm">
             {(purchaseDrillData.truncated.inbound ||
               purchaseDrillData.truncated.bank ||
-              purchaseDrillData.truncated.orders) && (
+              purchaseDrillData.truncated.orders ||
+              purchaseDrillData.truncated.petty) && (
               <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-md px-2 py-1.5">
                 {t("pL_purchaseDrillTruncated")}
               </p>
             )}
             <div className="flex flex-wrap gap-3 text-xs">
+              {purchaseDrillData.vendorKey !== PL_PETTY_CASH_PURCHASE_VENDOR_KEY && (
+                <>
               <Link
                 href={
                   drillNavCtx
@@ -456,6 +460,19 @@ function IncomePurchaseDrillDialog({
               >
                 <ExternalLink className="h-3 w-3" />
                 {t("pL_purchaseDrillLinkInbound")}
+              </Link>
+                </>
+              )}
+              <Link
+                href={
+                  drillNavCtx
+                    ? buildPurchaseDrillAdminHref("/admin/petty-cash", drillNavCtx, "petty")
+                    : "/admin/petty-cash"
+                }
+                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("pL_purchaseDrillLinkPetty")}
               </Link>
             </div>
 
@@ -611,11 +628,50 @@ function IncomePurchaseDrillDialog({
               </div>
             )}
 
+            {(purchaseDrillData.pettyCash?.length || 0) > 0 && (
+              <div>
+                <p className="font-medium mb-1">{t("pL_purchaseDrillPetty") || t("pL_expenseDrillPetty") || "패티캐시"}</p>
+                <div className="overflow-x-auto rounded border">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
+                        <th className="text-left p-2">{t("pL_accountSubject") || "계정과목"}</th>
+                        <th className="text-right p-2">{t("amount")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColMemo")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseDrillData.pettyCash!.map((r) => (
+                        <tr key={r.id} className="border-b border-border/60">
+                          <td className="p-2 font-mono">{r.id}</td>
+                          <td className="p-2 whitespace-nowrap">{r.transDate}</td>
+                          <td className="p-2 max-w-[120px] truncate">{r.store || "—"}</td>
+                          <td className="p-2 max-w-[160px] truncate" title={r.accountSubjectName || ""}>
+                            {r.accountSubjectCode
+                              ? `${r.accountSubjectCode} ${r.accountSubjectName || ""}`.trim()
+                              : "—"}
+                          </td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.amount)}</td>
+                          <td className="p-2 max-w-[220px] truncate" title={r.memo || ""}>
+                            {r.memo || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {!(
               (purchaseDrillData.isHqOrders && (purchaseDrillData.hqOutbounds?.length || 0) > 0) ||
               (purchaseDrillData.isHqOrders && (purchaseDrillData.hqOrders?.length || 0) > 0) ||
               purchaseDrillData.inbound.length > 0 ||
-              purchaseDrillData.bankPayments.length > 0
+              purchaseDrillData.bankPayments.length > 0 ||
+              (purchaseDrillData.pettyCash?.length || 0) > 0
             ) && (
               <p className="text-sm text-muted-foreground py-4">{t("pL_purchaseDrillEmpty")}</p>
             )}
