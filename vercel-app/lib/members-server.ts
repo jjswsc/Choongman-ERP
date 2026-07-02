@@ -1373,46 +1373,9 @@ export async function applyLoyaltyOnOrder(params: {
       created_at: getBangkokDateTimeString(),
     })
   }
-  if (toText(params.couponCode) && (shouldInsertUse || shouldInsertEarn)) {
-    const couponCode = toText(params.couponCode).toUpperCase()
-    const usedAt = getBangkokDateTimeString()
-    const memberIds = await resolveMemberIdsSharingPhone(memberId)
-    let issuedId = 0
-    for (const mid of memberIds) {
-      const issuedRows = (await supabaseSelectFilter(
-        'member_coupon_issues',
-        `member_id=eq.${mid}&coupon_code=eq.${encodeURIComponent(couponCode)}&status=eq.issued`,
-        { order: 'id.asc', limit: 1 }
-      )) as Array<{ id?: number }>
-      issuedId = Number(issuedRows?.[0]?.id || 0)
-      if (issuedId > 0) break
-    }
-    if (issuedId > 0) {
-      await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${issuedId}`, {
-        status: 'used',
-        used_at: usedAt,
-        order_id: orderId || null,
-      })
-    } else if (orderId) {
-      const memberIdFilter =
-        memberIds.length > 1 ? `member_id=in.(${memberIds.join(',')})` : `member_id=eq.${memberId}`
-      const existingCoupon = (await supabaseSelectFilter(
-        'member_coupon_issues',
-        `${memberIdFilter}&order_id=eq.${orderId}&coupon_code=eq.${encodeURIComponent(couponCode)}`,
-        { limit: 1 }
-      )) as Array<{ id?: number }>
-      if (!existingCoupon?.length) {
-        await supabaseInsert('member_coupon_issues', {
-          member_id: memberId,
-          coupon_code: couponCode,
-          issued_at: usedAt,
-          used_at: usedAt,
-          order_id: orderId,
-          status: 'used',
-        })
-      }
-    }
-  }
+  // 쿠폰 사용(issued→used) 처리는 redemption 기록을 남기는
+  // persistPosOrderCouponRedemptions 한 곳에서만 수행한다. 여기서 중복 처리하면
+  // 결제·재처리마다 phantom used 행이 쌓여 회원앱에 중복 쿠폰이 남는다.
 
   const nextTierPoints =
     Math.max(0, Math.trunc(Number(member.tier_points || 0)), Math.trunc(Number(member.line_tier_points || 0))) +
