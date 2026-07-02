@@ -38,7 +38,7 @@ import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
-import { getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients } from "@/lib/api-client"
+import { getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients, getMenuCost, type MenuCostBreakdown } from "@/lib/api-client"
 import { syncCostAnalysisRuntime } from "@/lib/cost-analysis-runtime"
 
 interface CostCalculatorTabProps {
@@ -170,6 +170,23 @@ function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: Rec
   return { food, packaging }
 }
 
+function menuCostBreakdownToAnalysis(
+  lines: MenuCostBreakdown[]
+): PosMenuCostAnalysisRow["breakdown"] {
+  return lines.map((b) => ({
+    itemCode: b.itemCode,
+    itemName: b.itemName,
+    unit: b.unit ?? "",
+    costPerUnit: b.costPerUnit,
+    quantity: b.quantity,
+    lossRate: b.lossRate,
+    costTotal: b.costTotal,
+    source: b.source ?? "hq",
+    ingredientType: b.ingredientType ?? "food",
+    quantityUnitKey: b.quantityUnitKey,
+  }))
+}
+
 /** getPosMenuIngredients 쿼리: 기본 행은 파라미터 생략(null·0 병합 조회와 일치) */
 function ingredientsQueryOptionId(row: PosMenuCostAnalysisRow): string | undefined {
   if (isCostAnalysisBaseRow(row)) return undefined
@@ -261,14 +278,6 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
 
     if (!runtimeReady) return
 
-    const breakdown = row.breakdown
-    if (breakdown.length > 0) {
-      const { food, packaging } = breakdownToRecipeItems(row)
-      setFoodItems(reResolveRecipeItems(food))
-      setPackagingItems(reResolveRecipeItems(packaging))
-      return
-    }
-
     setFoodItems(emptyFoodRecipe)
     setPackagingItems(emptyPackagingRecipe)
     const menuIdStr = String(row.menuId ?? "").trim()
@@ -276,6 +285,23 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
 
     let cancelled = false
     void (async () => {
+      try {
+        const opt = ingredientsQueryOptionId(row)
+        const menuCost = await getMenuCost({ menuId: menuIdStr, optionId: opt })
+        if (cancelled) return
+        if ((menuCost.breakdown ?? []).length > 0) {
+          const { food, packaging } = breakdownToRecipeItems({
+            ...row,
+            breakdown: menuCostBreakdownToAnalysis(menuCost.breakdown),
+          })
+          setFoodItems(reResolveRecipeItems(food))
+          setPackagingItems(reResolveRecipeItems(packaging))
+          return
+        }
+      } catch {
+        /* getMenuCost 실패 시 BOM API 폴백 */
+      }
+
       try {
         const opt = ingredientsQueryOptionId(row)
         const ings = await getPosMenuIngredients({ menuId: menuIdStr, optionId: opt })

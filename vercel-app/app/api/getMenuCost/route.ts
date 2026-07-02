@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bomStoredToDisplay, normalizeQuantityUnitKey } from '@/lib/pos-menu-ingredient-quantity-unit'
+import {
+  loadPosCostItemLookup,
+  posCostLineCostPerUnit,
+  resolvePosCostItemInfo,
+} from '@/lib/pos-menu-cost-item-lookup-server'
 
 /** POS 메뉴 원가 계산 (로스율 적용, 소수점 첫째자리) - 대체형/추가형 옵션 지원 */
 export async function GET(request: NextRequest) {
@@ -10,28 +16,26 @@ export async function GET(request: NextRequest) {
   const optionId = searchParams.get('optionId')?.trim()
 
   if (!menuId) {
-    return NextResponse.json({ cost: 0, breakdown: [] }, { headers })
+    return NextResponse.json({ cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }, { headers })
   }
 
   try {
-    type ItemRow = { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; name?: string; category?: string }
-    const itemRows = (await supabaseSelectAllPages('items', {
-      order: 'code.asc',
-      pageSize: 8000,
-      maxRows: 1_000_000,
-      select: 'code,cost,price,total_quantity,unit,name,category',
-    })) as ItemRow[] | null
+    const itemLookup = await loadPosCostItemLookup()
 
-    const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
-    const itemByCode: Record<string, ItemRow> = {}
-    for (const r of itemRows || []) {
-      const code = String(r.code ?? '').trim()
-      if (code) itemByCode[code] = r
+    type BreakdownRow = {
+      itemCode: string
+      itemName: string
+      unit: string
+      costPerUnit: number
+      quantity: number
+      lossRate: number
+      costTotal: number
+      source: 'hq' | 'store'
+      ingredientType: 'food' | 'packaging'
+      quantityUnitKey?: string
     }
 
-    const breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] = []
-    let totalCost = 0
-
+    const breakdown: BreakdownRow[] = []
     let optionType = 'substitution'
     let optionItemCode: string | null = null
     let additiveSourceMenuId: number | null = null
@@ -42,7 +46,12 @@ export async function GET(request: NextRequest) {
         const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
           limit: 1,
           select: 'option_type,item_code,additive_source_menu_id,quantity',
-        })) as { option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number }[] | null
+        })) as {
+          option_type?: string
+          item_code?: string | null
+          additive_source_menu_id?: number | null
+          quantity?: number
+        }[] | null
         const opt = optRows?.[0]
         if (opt) {
           optionType = (opt.option_type || 'substitution') as string
@@ -72,10 +81,23 @@ export async function GET(request: NextRequest) {
 
     const fetchIng = (filter: string) =>
       supabaseSelectFilter('pos_menu_ingredients', filter, { order: 'id.asc', limit: 200 }) as Promise<
-        { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string; option_id?: unknown }[] | null
+        {
+          item_code?: string
+          quantity?: number
+          loss_rate?: number
+          ingredient_type?: string
+          option_id?: unknown
+          quantity_unit_key?: string | null
+        }[] | null
       >
 
-    let ingRows: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null = null
+    let ingRows: {
+      item_code?: string
+      quantity?: number
+      loss_rate?: number
+      ingredient_type?: string
+      quantity_unit_key?: string | null
+    }[] | null = null
     const midEnc = encodeURIComponent(menuId)
     try {
       if (optionId && optionId !== 'null' && optionType === 'substitution') {
@@ -112,34 +134,66 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const ingredients = ingRows || []
-    let foodCost = 0
-    let packageCost = 0
-
-    for (const ing of ingredients) {
+    const addIngredientRow = (
+      ing: {
+        item_code?: string
+        quantity?: number
+        loss_rate?: number
+        ingredient_type?: string
+        quantity_unit_key?: string | null
+      },
+      qtyMultiplier = 1,
+      additive = false
+    ): { food: number; packaging: number } => {
       const code = String(ing.item_code ?? '').trim()
-      const qty = Number(ing.quantity) ?? 1
+      if (!code) return { food: 0, packaging: 0 }
       const lossRate = Number(ing.loss_rate) ?? 0
-      const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
-      const item = itemByCode[code]
-      const costPerUnit = item ? getItemCostPerUnit(item, itype === 'packaging') : 0
-      const costTotal = costPerUnit * qty * (1 + lossRate / 100)
-      if (itype === 'packaging') packageCost += costTotal
-      else foodCost += costTotal
-      totalCost += costTotal
+      const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? ('packaging' as const) : ('food' as const)
+      const info = resolvePosCostItemInfo(code, itemLookup)
+      const costPerUnit = posCostLineCostPerUnit(info, itype === 'packaging')
+      const baseStored = (Number(ing.quantity) ?? 1) * qtyMultiplier
+      const key = String(ing.quantity_unit_key ?? '').trim() || null
+      const itemMeta = info?.raw
+        ? { unit: info.raw.unit, totalQuantity: info.raw.total_quantity, category: info.raw.category }
+        : undefined
+      const { quantity, unit } = bomStoredToDisplay(baseStored, key, itype, itemMeta)
+      const storedQty = baseStored
+      const costTotal = additive
+        ? costPerUnit * storedQty
+        : costPerUnit * storedQty * (1 + lossRate / 100)
       breakdown.push({
         itemCode: code,
-        itemName: item?.name ?? code,
-        quantity: qty,
-        lossRate,
+        itemName: info?.name ?? code,
+        unit,
         costPerUnit,
+        quantity,
+        lossRate: additive ? 0 : lossRate,
         costTotal: Math.round(costTotal * 10) / 10,
+        source: info ? info.purchaseSource : 'store',
+        ingredientType: itype,
+        quantityUnitKey: normalizeQuantityUnitKey(key, itype),
       })
+      if (itype === 'packaging') return { food: 0, packaging: costTotal }
+      return { food: costTotal, packaging: 0 }
+    }
+
+    let foodCost = 0
+    let packageCost = 0
+    for (const ing of ingRows || []) {
+      const line = addIngredientRow(ing)
+      foodCost += line.food
+      packageCost += line.packaging
     }
 
     if (optionType === 'additive' && optionId && optionId !== 'null') {
       if (additiveSourceMenuId) {
-        let addIng: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null
+        let addIng: {
+          item_code?: string
+          quantity?: number
+          loss_rate?: number
+          ingredient_type?: string
+          quantity_unit_key?: string | null
+        }[] | null
         try {
           addIng = (await supabaseSelectFilter(
             'pos_menu_ingredients',
@@ -150,50 +204,46 @@ export async function GET(request: NextRequest) {
           addIng = null
         }
         for (const ing of addIng || []) {
-          const code = String(ing.item_code ?? '').trim()
-          if (!code) continue
-          const qty = (Number(ing.quantity) ?? 1) * optionQty
-          const lossRate = Number(ing.loss_rate) ?? 0
-          const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
-          const item = itemByCode[code]
-          const costPerUnit = item ? getItemCostPerUnit(item, itype === 'packaging') : 0
-          const costTotal = costPerUnit * qty * (1 + lossRate / 100)
-          if (itype === 'packaging') packageCost += costTotal
-          else foodCost += costTotal
-          totalCost += costTotal
-          breakdown.push({
-            itemCode: code,
-            itemName: item?.name ?? code,
-            quantity: qty,
-            lossRate,
-            costPerUnit,
-            costTotal: Math.round(costTotal * 10) / 10,
-          })
+          const line = addIngredientRow(ing, optionQty)
+          foodCost += line.food
+          packageCost += line.packaging
         }
       } else if (optionItemCode) {
-        const optItem = itemByCode[optionItemCode]
-        const costPerUnit = optItem ? getItemCostPerUnit(optItem, false) : 0
+        const info = resolvePosCostItemInfo(optionItemCode, itemLookup)
+        const costPerUnit = posCostLineCostPerUnit(info, false)
         const costTotal = costPerUnit * optionQty
         foodCost += costTotal
-        totalCost += costTotal
         breakdown.push({
           itemCode: optionItemCode,
-          itemName: optItem?.name ?? optionItemCode,
+          itemName: info?.name ?? optionItemCode,
+          unit: info?.unit ?? '',
+          costPerUnit,
           quantity: optionQty,
           lossRate: 0,
-          costPerUnit,
           costTotal: Math.round(costTotal * 10) / 10,
+          source: info ? info.purchaseSource : 'store',
+          ingredientType: 'food',
         })
+      }
+      try {
+        const optIng = await fetchIng(`menu_id=eq.${midEnc}&option_id=eq.${encodeURIComponent(optionId)}`)
+        for (const ing of optIng || []) {
+          const line = addIngredientRow(ing)
+          foodCost += line.food
+          packageCost += line.packaging
+        }
+      } catch {
+        /* ignore */
       }
     }
 
-    const cost = Math.round(totalCost * 10) / 10
     const costHall = Math.round(foodCost * 10) / 10
     const costDelivery = Math.round((foodCost + packageCost) * 10) / 10
+    const cost = costDelivery
 
     return NextResponse.json({ cost, costHall, costDelivery, breakdown }, { headers })
   } catch (e) {
     console.error('getMenuCost:', e)
-    return NextResponse.json({ cost: 0, breakdown: [] }, { headers })
+    return NextResponse.json({ cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }, { headers })
   }
 }

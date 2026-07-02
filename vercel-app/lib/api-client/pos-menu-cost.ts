@@ -91,10 +91,14 @@ export async function replacePosMenuIngredients(
 export interface MenuCostBreakdown {
   itemCode: string
   itemName: string
+  unit?: string
   quantity: number
   lossRate: number
   costPerUnit: number
   costTotal: number
+  source?: 'hq' | 'store'
+  ingredientType?: 'food' | 'packaging'
+  quantityUnitKey?: string
 }
 
 export async function getMenuCost(params: { menuId: string; optionId?: string }) {
@@ -104,11 +108,14 @@ export async function getMenuCost(params: { menuId: string; optionId?: string })
   const res = await apiFetch('/api/getMenuCost?' + q.toString())
   const raw: unknown = await res.json()
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { cost: 0, breakdown: [] }
+    return { cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }
   }
   const o = raw as Record<string, unknown>
+  const cost = Number(o.cost) || 0
   return {
-    cost: Number(o.cost) || 0,
+    cost,
+    costHall: Number(o.costHall) || cost,
+    costDelivery: Number(o.costDelivery) || cost,
     breakdown: jsonAsArray<MenuCostBreakdown>(o.breakdown),
   }
 }

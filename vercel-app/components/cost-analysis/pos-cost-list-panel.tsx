@@ -268,13 +268,14 @@ export function PosCostListPanel({
         ? data.breakdown.map((b) => ({
             itemCode: b.itemCode,
             itemName: b.itemName,
-            unit: "",
+            unit: b.unit ?? "",
             costPerUnit: b.costPerUnit,
             quantity: b.quantity,
             lossRate: b.lossRate,
             costTotal: b.costTotal,
-            source: "hq" as const,
-            ingredientType: "food" as const,
+            source: b.source ?? ("hq" as const),
+            ingredientType: b.ingredientType ?? ("food" as const),
+            quantityUnitKey: b.quantityUnitKey,
           }))
         : []
       if (breakdown.length > 0 && onRowsPatched) {
@@ -282,7 +283,14 @@ export function PosCostListPanel({
           const same =
             String(row.menuId) === String(r.menuId) &&
             String(row.optionId ?? "") === String(r.optionId ?? "")
-          return same ? { ...row, breakdown, costHall: data.cost ?? row.costHall } : row
+          return same
+            ? {
+                ...row,
+                breakdown,
+                costHall: data.costHall ?? row.costHall,
+                costDelivery: data.costDelivery ?? row.costDelivery,
+              }
+            : row
         })
         onRowsPatched(next)
       }
