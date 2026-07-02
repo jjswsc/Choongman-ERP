@@ -2567,6 +2567,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
                                       if (v === "advance" && prepaymentSubject?.id) {
                                         void handleQueryRowSave(r, mergedEdits)
+                                      } else if (v === "purchase_payment") {
+                                        const effectiveVendor = String(mergedEdits.vendorCode ?? r.vendorCode ?? "").trim()
+                                        if (effectiveVendor) void handleQueryRowSave(r, mergedEdits)
                                       }
                                     }}
                                   >
@@ -2622,7 +2625,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 {r.transType === "withdraw" && cat === "purchase_payment" ? (
                                   <Select
                                     value={(edits?.vendorCode ?? r.vendorCode ?? "") || "__none__"}
-                                    onValueChange={(v) => r.id && setQueryRowEdit(r.id, "vendorCode", v === "__none__" ? "" : v)}
+                                    onValueChange={(v) => {
+                                      if (!r.id) return
+                                      const vendorCode = v === "__none__" ? "" : v
+                                      const mergedEdits: QueryRowEdit = { ...(queryRowEdits[r.id] || {}), vendorCode }
+                                      setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
+                                      if (vendorCode) void handleQueryRowSave(r, mergedEdits)
+                                    }}
                               onOpenChange={(open) => {
                                 if (!open) {
                                   setQueryVendorSearch("")
