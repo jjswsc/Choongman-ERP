@@ -7,6 +7,7 @@
  * (안내 시트 `README_SSO_eForm` 참고)
  */
 import * as XLSX from "xlsx"
+import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
 
 /** A–L 헤더(태국어) — SSO_eForm 안내(คอลัมน์ J/K/L)와 열 위치를 맞춤 */
@@ -143,11 +144,11 @@ function readmeRows(ym: string): string[][] {
   ]
 }
 
-export function downloadThaiSsoEformV15FromPayrollXlsx(params: {
+export async function downloadThaiSsoEformV15FromPayrollXlsx(params: {
   yearMonth: string
   payrollRows: Record<string, unknown>[]
   filingWageMode?: SsoFilingWageMode
-}): void {
+}): Promise<void> {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
   const filingWageMode = params.filingWageMode || "contributable"
   const wb = XLSX.utils.book_new()
@@ -168,5 +169,5 @@ export function downloadThaiSsoEformV15FromPayrollXlsx(params: {
   XLSX.utils.book_append_sheet(wb, wsData, SHEET_DATA)
 
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
-  XLSX.writeFile(wb, `thai-sso-eform-v15-data-${safeYm}.xlsx`)
+  await writeErpXlsxWorkbook(wb, `thai-sso-eform-v15-data-${safeYm}.xlsx`)
 }

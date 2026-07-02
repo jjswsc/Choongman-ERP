@@ -2,6 +2,7 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
@@ -1537,24 +1538,14 @@ export default function OutboundPage() {
         if (sumLen > maxLen) maxLen = sumLen
         return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
       })
-      const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
-<body>
-<table>
+      const tableBody = `<table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 <tr class="head">${headers.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
 ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>`).join("")}
 <tr class="head">${summaryRow.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>
-</table>
-</body>
-</html>`
-      const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.xls`
-      a.click()
-      URL.revokeObjectURL(url)
+</table>`
+      const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true }))
+      triggerErpExcelHtmlDownload(html, `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.xls`)
     },
     []
   )

@@ -8,6 +8,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { Tags, Settings, FileSpreadsheet, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import * as XLSX from "xlsx"
+import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
@@ -460,7 +461,7 @@ export default function ItemsPage() {
       day: "2-digit",
     }).format(new Date()).replace(/-/g, "")
 
-    XLSX.writeFile(wb, `items-${bangkokDate}.xlsx`)
+    await writeErpXlsxWorkbook(wb, `items-${bangkokDate}.xlsx`)
   }
 
   const filteredProducts = React.useMemo(() => {
@@ -472,6 +473,7 @@ export default function ItemsPage() {
         p.name.toLowerCase().includes(q) ||
         p.code.toLowerCase().includes(q) ||
         (p.category || "").toLowerCase().includes(q) ||
+        (p.vendor || "").toLowerCase().includes(q) ||
         (p.spec || "").toLowerCase().includes(q) ||
         (p.description || "").toLowerCase().includes(q)
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter

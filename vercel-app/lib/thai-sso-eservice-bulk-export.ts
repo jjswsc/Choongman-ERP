@@ -4,6 +4,7 @@
  * Compare row 1 with the latest template from www.sso.go.th/eservices before upload.
  */
 import * as XLSX from "xlsx"
+import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import {
   type SsoFilingWageMode,
   resolveSsoFilingWageBaht,
@@ -159,12 +160,12 @@ function buildUploadWorksheet(
 }
 
 /** e-Service 통합본 — 업로드 시트(1)·사업장(2)·README(3) */
-export function downloadThaiSsoEserviceBulkFromPayrollXlsx(params: {
+export async function downloadThaiSsoEserviceBulkFromPayrollXlsx(params: {
   yearMonth: string
   payrollRows: Record<string, unknown>[]
   employer?: Sps110EmployerInfo
   filingWageMode?: SsoFilingWageMode
-}): void {
+}): Promise<void> {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
   const rows = params.payrollRows || []
   const totals = computeSps110Part2Totals(rows)
@@ -185,5 +186,5 @@ export function downloadThaiSsoEserviceBulkFromPayrollXlsx(params: {
 
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
   const storeSlug = storeSlugFromEmployer(params.employer)
-  XLSX.writeFile(wb, `thai-sso-eservice-bulk-${storeSlug}-${safeYm}.xlsx`)
+  await writeErpXlsxWorkbook(wb, `thai-sso-eservice-bulk-${storeSlug}-${safeYm}.xlsx`)
 }

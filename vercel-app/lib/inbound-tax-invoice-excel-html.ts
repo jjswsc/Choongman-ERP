@@ -4,6 +4,7 @@
  */
 
 import type { InvoiceData } from "@/components/invoice"
+import { erpExcelRichTableCss } from "@/lib/erp-excel-export"
 
 const BANGKOK_TZ = "Asia/Bangkok"
 
@@ -27,23 +28,6 @@ function excelGeneratedAt(d: Date, locale: string): string {
   })
 }
 
-function excelCss(): string {
-  return `
-table.xl { border-collapse: collapse; width: 100%; font-family: Calibri, "Malgun Gothic", "Noto Sans KR", "Noto Sans Thai", Arial, sans-serif; font-size: 11pt; color: #0f172a; }
-table.xl td, table.xl th { border: 1px solid #94a3b8; padding: 6px 10px; vertical-align: middle; }
-table.xl td.num, table.xl th.num { text-align: right; mso-number-format: "\\#\\,\\#\\#0\\.00\\ "; }
-table.xl td.num-int, table.xl th.num-int { text-align: right; mso-number-format: "0"; }
-.xl-band { background: #0f2744; color: #ffffff; font-size: 15pt; font-weight: 700; padding: 10px 14px; border-color: #0f2744; }
-.xl-band-sub { background: #e2e8f0; color: #1e293b; font-size: 10pt; font-weight: 600; padding: 8px 14px; }
-.xl-meta-k { background: #f1f5f9; font-weight: 600; color: #475569; width: 140px; font-size: 10pt; }
-.xl-meta-v { background: #ffffff; color: #0f172a; font-size: 10pt; }
-.xl-thead th { background: #1e293b; color: #ffffff; font-weight: 700; font-size: 10pt; border-color: #334155; }
-.xl-body td { border-color: #e2e8f0; font-size: 10pt; }
-.xl-tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #0f2744 !important; font-size: 10pt; }
-.xl-foot { font-size: 9pt; color: #64748b; padding: 10px 4px 4px 4px; border: none !important; }
-`
-}
-
 function xmlEscapeText(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
 }
@@ -61,7 +45,7 @@ function excelShell(innerTables: string, title: string): string {
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"/>
 <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>${sheet}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-<style>${excelCss()}</style>
+<style>${erpExcelRichTableCss()}</style>
 </head><body>${innerTables}</body></html>`
 }
 

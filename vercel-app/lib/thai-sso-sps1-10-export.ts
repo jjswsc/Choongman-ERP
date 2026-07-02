@@ -4,6 +4,7 @@
  * Not a government-signed file; compare with www.sso.go.th before filing.
  */
 import * as XLSX from "xlsx"
+import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
 
 const SHEET_PART1 = "สปส1-10_ส่วนที่1"
@@ -244,12 +245,12 @@ function buildPart2Sheet(
   return [...headerBlock, ...lines, [""], totalRow]
 }
 
-export function downloadThaiSsoSps110FromPayrollXlsx(params: {
+export async function downloadThaiSsoSps110FromPayrollXlsx(params: {
   yearMonth: string
   payrollRows: Record<string, unknown>[]
   employer?: Sps110EmployerInfo
   filingWageMode?: SsoFilingWageMode
-}): void {
+}): Promise<void> {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
   const rows = params.payrollRows || []
   const filingWageMode = params.filingWageMode || "contributable"
@@ -279,5 +280,5 @@ export function downloadThaiSsoSps110FromPayrollXlsx(params: {
   XLSX.utils.book_append_sheet(wb, ws2, SHEET_PART2)
 
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
-  XLSX.writeFile(wb, `thai-sso-sps1-10-${safeYm}.xlsx`)
+  await writeErpXlsxWorkbook(wb, `thai-sso-sps1-10-${safeYm}.xlsx`)
 }

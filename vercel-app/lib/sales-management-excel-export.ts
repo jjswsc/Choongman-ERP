@@ -1,6 +1,7 @@
 /** 매출 관리 조회 결과 → Excel(.xlsx) 다운로드 */
 
 import type { WorkSheet } from 'xlsx'
+import { writeErpXlsxWorkbook } from '@/lib/erp-excel-export'
 
 export type SalesExcelColFormat = 'text' | 'integer' | 'money' | 'percent'
 
@@ -166,5 +167,5 @@ export async function downloadSalesManagementXlsx(filename: string, sheets: Sale
     applySheetLayout(ws, sheet.headers, sheet.rows)
     XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(sheet.name))
   }
-  XLSX.writeFile(wb, filename)
+  await writeErpXlsxWorkbook(wb, filename)
 }

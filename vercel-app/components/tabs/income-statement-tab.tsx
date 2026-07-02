@@ -115,6 +115,7 @@ function lineDisplayAmount(
 
 function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
   if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사 창고 출고(매입)'
+  if (row.key === '__pl_petty_cash__') return t('pL_purchasePettyCash') || '패티캐시 매입'
   if (row.key === '__pl_vendor_unknown__') return t('pL_vendorUnknown') || '거래처 미지정'
   const n = String(row.label || '').trim()
   return n || row.key
@@ -2214,7 +2215,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     return rows
   }, [data, view, lang, t, vatDisplayMode, showEbitda])
 
-  const handleDownloadXlsx = React.useCallback(() => {
+  const handleDownloadXlsx = React.useCallback(async () => {
     if (!data || !view) return
     const headerLines = [
       t("incomeStatementTitle"),
@@ -2227,7 +2228,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         : []),
     ]
     const fname = `income-statement-${sanitizeFilenamePart(data.yearMonth)}-${sanitizeFilenamePart(storeFilter)}.xlsx`
-    downloadIncomeStatementXlsx(fname, headerLines, [t("pL_colItem"), t("pL_colAmount") || "Amount", t("pL_pctOfSales")], buildXlsxRows())
+    await downloadIncomeStatementXlsx(fname, headerLines, [t("pL_colItem"), t("pL_colAmount") || "Amount", t("pL_pctOfSales")], buildXlsxRows())
   }, [data, view, storeLabel, storeFilter, t, buildXlsxRows])
 
   const handleDownloadPdf = React.useCallback(async () => {

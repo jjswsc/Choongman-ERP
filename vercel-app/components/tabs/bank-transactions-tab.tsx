@@ -2,6 +2,7 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -1828,22 +1829,15 @@ export function BankTransactionsTab() {
         stripWithdrawalCategoryMetaFromNote(r.note || ""),
       ])
     }
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td,th{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse;width:100%}</style></head>
-<body>
-<table>
+    const tableBody = `<table>
 <tr class="head">${rows[0].map((c) => `<th>${escapeXml(String(c))}</th>`).join("")}</tr>
 ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}</td>`).join("")}</tr>`).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `bank_transactions_${startStr}_${endStr}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+</table>`
+    const html = buildErpExcelHtmlDocument(
+      tableBody,
+      erpExcelSimpleTableStyle({ includeTh: true, withHead: true })
+    )
+    triggerErpExcelHtmlDownload(html, `bank_transactions_${startStr}_${endStr}.xls`)
   }, [filteredList, startStr, endStr, accountSubjectOptions, revenueAccountOptions, vendorOptions, cardAccounts, prepaymentSubject, asDisplayName, t, tt, getCategoryLabel])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

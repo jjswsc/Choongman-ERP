@@ -18,15 +18,13 @@ export type SalesStorePickerProps = {
   storePickerRef: React.RefObject<HTMLDivElement | null>
   storePickerPlaceholder: string
   selectedStores: string[]
-  setSelectedStores: React.Dispatch<React.SetStateAction<string[]>>
+  allStoreOptions: string[]
+  onStoresChange: (stores: string[], meta?: { clearedAll?: boolean }) => void
   posBizDayStoreChoices: string[]
-  posOptions: string[]
   posStoreDisplayName: (code: string) => string
   filteredStoreOptions: string[]
   storeSearch: string
   setStoreSearch: React.Dispatch<React.SetStateAction<string>>
-  onSelectAll: () => void
-  onClearAll: () => void
   singleStoreLabel?: string
 }
 
@@ -41,16 +39,32 @@ export function SalesStorePicker({
   storePickerRef,
   storePickerPlaceholder,
   selectedStores,
-  setSelectedStores,
+  allStoreOptions,
+  onStoresChange,
   posBizDayStoreChoices,
   posStoreDisplayName,
   filteredStoreOptions,
   storeSearch,
   setStoreSearch,
-  onSelectAll,
-  onClearAll,
   singleStoreLabel,
 }: SalesStorePickerProps) {
+  const handleSelectAll = React.useCallback(() => {
+    const q = storeSearch.trim()
+    const targets = q ? filteredStoreOptions : allStoreOptions
+    const merged = normalizeStoreCodes([...new Set([...selectedStores, ...targets])])
+    onStoresChange(merged)
+  }, [allStoreOptions, filteredStoreOptions, onStoresChange, selectedStores, storeSearch])
+
+  const handleClearAll = React.useCallback(() => {
+    const q = storeSearch.trim()
+    if (q) {
+      const remove = new Set(filteredStoreOptions)
+      onStoresChange(normalizeStoreCodes(selectedStores.filter((s) => !remove.has(s))))
+      return
+    }
+    onStoresChange([], { clearedAll: true })
+  }, [filteredStoreOptions, onStoresChange, selectedStores, storeSearch])
+
   if (singleStoreLabel) {
     return (
       <Button type="button" size="sm" variant="default" disabled>
@@ -101,10 +115,10 @@ export function SalesStorePicker({
             className="mb-2 h-8"
           />
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={onSelectAll}>
+            <Button type="button" size="sm" variant="outline" onClick={handleSelectAll}>
               {tr("salesStoreSelectAll", "전체 선택")}
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onClearAll}>
+            <Button type="button" size="sm" variant="outline" onClick={handleClearAll}>
               {tr("salesStoreDeselectAll", "전체 해제")}
             </Button>
             <Button
@@ -128,11 +142,11 @@ export function SalesStorePicker({
                   <Checkbox
                     checked={checked}
                     onCheckedChange={() => {
-                      setSelectedStores((prev) => {
-                        const exists = prev.includes(p)
-                        const next = exists ? prev.filter((x) => x !== p) : [...prev, p]
-                        return normalizeStoreCodes(next)
-                      })
+                      const exists = selectedStores.includes(p)
+                      const next = exists
+                        ? selectedStores.filter((x) => x !== p)
+                        : [...selectedStores, p]
+                      onStoresChange(normalizeStoreCodes(next))
                     }}
                   />
                   <span className="text-sm">{posStoreDisplayName(p)}</span>

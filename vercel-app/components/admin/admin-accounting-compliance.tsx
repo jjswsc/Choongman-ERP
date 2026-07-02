@@ -2275,7 +2275,7 @@ export function AdminAccountingCompliance({
         appAlert(t("accCompSsoOfficialUploadMissingBranch"))
       }
 
-      downloadThaiSsoOfficialUploadFromPayrollXlsx({
+      await downloadThaiSsoOfficialUploadFromPayrollXlsx({
         yearMonth: taxMonth,
         sheets,
         filingWageMode: ssoFilingWageMode,
@@ -2301,7 +2301,7 @@ export function AdminAccountingCompliance({
       const rows = ssoPayrollRows.length ? ssoPayrollRows : await fetchSsoPayrollRows()
       if (!rows || rows.length === 0) return
       const employer = await resolveSsoEmployerHeader()
-      downloadThaiSsoSps110FromPayrollXlsx({
+      await downloadThaiSsoSps110FromPayrollXlsx({
         yearMonth: taxMonth,
         payrollRows: rows,
         employer,

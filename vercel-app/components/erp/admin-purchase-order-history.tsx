@@ -1,5 +1,6 @@
 "use client"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -460,26 +461,16 @@ export function AdminPurchaseOrderHistory() {
       headerPadded.length > 0 &&
       headerPadded.every((cell, i) => String(allRows[ri][i] ?? "") === String(cell))
     const footerCount = 3 + (Number(po.withholding_tax_amount) > 0 ? 2 : 0)
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
-<body>
-<table>
+    const tableBody = `<table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 ${allRows.map((row, ri) => {
       const cells = row.map((c) => escapeXml(c))
       const isHead = ri === 0 || isHeaderDataRow(ri) || ri >= allRows.length - footerCount
       return `<tr${isHead ? ' class="head"' : ""}>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`
     }).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `PO_${poNo}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+</table>`
+    const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true, fullWidth: false }))
+    triggerErpExcelHtmlDownload(html, `PO_${poNo}.xls`)
   }
 
   const printPo = async (po: PurchaseOrderRow) => {

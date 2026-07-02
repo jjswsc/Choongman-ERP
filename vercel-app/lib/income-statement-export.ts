@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { writeErpXlsxWorkbook } from '@/lib/erp-excel-export'
 
 export type IncomeStatementXlsxRow = {
   label: string
@@ -6,12 +7,12 @@ export type IncomeStatementXlsxRow = {
   pct: string
 }
 
-export function downloadIncomeStatementXlsx(
+export async function downloadIncomeStatementXlsx(
   filename: string,
   headerLines: string[],
   colLabels: [string, string, string],
   rows: IncomeStatementXlsxRow[]
-): void {
+): Promise<void> {
   const aoa: (string | number)[][] = headerLines.map((line) => [line])
   aoa.push([])
   aoa.push([colLabels[0], colLabels[1], colLabels[2]])
@@ -22,7 +23,7 @@ export function downloadIncomeStatementXlsx(
   ws['!cols'] = [{ wch: 40 }, { wch: 18 }, { wch: 14 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'P&L')
-  XLSX.writeFile(wb, filename)
+  await writeErpXlsxWorkbook(wb, filename)
 }
 
 export function sanitizeFilenamePart(s: string): string {

@@ -6,6 +6,7 @@
  * 공식 e-Service **SampleExcel** 6열 업로드는 `thai-sso-official-upload-export.ts`를 사용한다.
  */
 import * as XLSX from "xlsx"
+import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
 
 /** UI 표·문서용 — 열 설명 (공식 สปส.1-10·e-Service 일괄파일과 1:1이 아닐 수 있음) */
@@ -143,11 +144,11 @@ export function mapPayrollCalcRowToSsoDataRow(
   ]
 }
 
-export function downloadThaiSsoFilingFromPayrollXlsx(params: {
+export async function downloadThaiSsoFilingFromPayrollXlsx(params: {
   yearMonth: string
   payrollRows: Record<string, unknown>[]
   filingWageMode?: SsoFilingWageMode
-}): void {
+}): Promise<void> {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
   const filingWageMode = params.filingWageMode || "contributable"
   const wb = XLSX.utils.book_new()
@@ -156,5 +157,5 @@ export function downloadThaiSsoFilingFromPayrollXlsx(params: {
   )
   appendSheets(wb, ym, "payroll", lines.length ? lines : [THAI_SSO_TEMPLATE_COLUMN_HELP.map(() => "")])
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
-  XLSX.writeFile(wb, `thai-sso-from-payroll-${safeYm}.xlsx`)
+  await writeErpXlsxWorkbook(wb, `thai-sso-from-payroll-${safeYm}.xlsx`)
 }

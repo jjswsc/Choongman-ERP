@@ -3200,7 +3200,8 @@ export default function PosMenusPage() {
       })
         .format(new Date())
         .replace(/-/g, "")
-      XLSX.writeFile(wb, `pos-menus-${bangkokDate}.xlsx`)
+      const { writeErpXlsxWorkbook } = await import("@/lib/erp-excel-export")
+      await writeErpXlsxWorkbook(wb, `pos-menus-${bangkokDate}.xlsx`)
     } catch (e) {
       await appAlert(String(e instanceof Error ? e.message : e))
     }
@@ -3332,7 +3333,8 @@ export default function PosMenusPage() {
       })
         .format(new Date())
         .replace(/-/g, "")
-      XLSX.writeFile(wb, `pos-menus-all-detailed-${bangkokDate}.xlsx`)
+      const { writeErpXlsxWorkbook } = await import("@/lib/erp-excel-export")
+      await writeErpXlsxWorkbook(wb, `pos-menus-all-detailed-${bangkokDate}.xlsx`)
     } catch (e) {
       await appAlert(String(e instanceof Error ? e.message : e))
     }

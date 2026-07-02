@@ -192,6 +192,9 @@ export function TotalSalesTab() {
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
   const storePickerRef = React.useRef<HTMLDivElement | null>(null)
+  /** 사용자가「전체 해제」한 경우 자동 전체 선택·URL 복원 억제 */
+  const skipDefaultStoreAutoSelectRef = React.useRef(false)
+  const defaultStoresHydratedRef = React.useRef(false)
   const storePickerListId = React.useId()
   const storePickerBtnId = React.useId()
 
@@ -353,8 +356,62 @@ export function TotalSalesTab() {
     [selectedStores]
   )
 
+  const applyStoreSelection = React.useCallback(
+    (next: string[], meta?: { clearedAll?: boolean }) => {
+      const normalized = normalizeStoreCodes(next)
+      if (meta?.clearedAll) skipDefaultStoreAutoSelectRef.current = true
+      else skipDefaultStoreAutoSelectRef.current = false
+      setSelectedStores(normalized)
+    },
+    []
+  )
+
+  const handleStoreSelectAll = React.useCallback(() => {
+    const q = storeSearch.trim()
+    const targets = q ? filteredStoreOptions : storeChoices
+    applyStoreSelection([...new Set([...selectedStores, ...targets])])
+  }, [applyStoreSelection, filteredStoreOptions, selectedStores, storeChoices, storeSearch])
+
+  const handleStoreClearAll = React.useCallback(() => {
+    const q = storeSearch.trim()
+    if (q) {
+      const remove = new Set(filteredStoreOptions)
+      applyStoreSelection(selectedStores.filter((s) => !remove.has(s)))
+      return
+    }
+    applyStoreSelection([], { clearedAll: true })
+  }, [applyStoreSelection, filteredStoreOptions, selectedStores, storeSearch])
+
+  React.useEffect(() => {
+    if (defaultStoresHydratedRef.current) return
+    if (!canMultiStorePicker) {
+      defaultStoresHydratedRef.current = true
+      return
+    }
+
+    const qStores = normalizeStoreCodes(
+      (searchParams.get("stores") ?? "").split(",")
+    )
+    if (qStores.length > 0) {
+      defaultStoresHydratedRef.current = true
+      return
+    }
+
+    if (skipDefaultStoreAutoSelectRef.current) {
+      defaultStoresHydratedRef.current = true
+      return
+    }
+
+    const base = normalizeStoreCodes(storeChoices)
+    if (base.length === 0) return
+
+    defaultStoresHydratedRef.current = true
+    setSelectedStores(base)
+  }, [canMultiStorePicker, storeChoices, searchParams])
+
   React.useEffect(() => {
     if (canSearchAll) return
+    if (skipDefaultStoreAutoSelectRef.current) return
     if (isFranchiseeRole(auth?.role || "")) {
       const codes = resolveFranchiseePosSalesFetchStoreCodes(auth, viewStore)
       const normalized = normalizeStoreCodes(
@@ -587,7 +644,7 @@ export function TotalSalesTab() {
     tr,
   ])
 
-  const handleExportExcel = React.useCallback(() => {
+  const handleExportExcel = React.useCallback(async () => {
     if (!levelsData) return
     setExporting(true)
     try {
@@ -625,7 +682,7 @@ export function TotalSalesTab() {
         sales: tr("pL_sales", "매출"),
       }
       if (compareChannels && compareByLevel) {
-        downloadTotalSalesChannelCompareXlsx({
+        await downloadTotalSalesChannelCompareXlsx({
           filename,
           metaRows,
           sheetNames,
@@ -635,7 +692,7 @@ export function TotalSalesTab() {
           compareByLevel,
         })
       } else {
-        downloadTotalSalesHierarchyXlsx({
+        await downloadTotalSalesHierarchyXlsx({
           filename,
           metaRows,
           sheetNames,
@@ -822,7 +879,7 @@ export function TotalSalesTab() {
                         size="sm"
                         variant="outline"
                         className={ADMIN_BTN_XS_CN}
-                        onClick={() => setSelectedStores(normalizeStoreCodes([...storeChoices]))}
+                        onClick={handleStoreSelectAll}
                       >
                         {tr("salesStoreSelectAll", "전체 선택")}
                       </Button>
@@ -831,7 +888,7 @@ export function TotalSalesTab() {
                         size="sm"
                         variant="outline"
                         className={ADMIN_BTN_XS_CN}
-                        onClick={() => setSelectedStores([])}
+                        onClick={handleStoreClearAll}
                       >
                         {tr("salesStoreDeselectAll", "전체 해제")}
                       </Button>
@@ -854,10 +911,11 @@ export function TotalSalesTab() {
                           <Checkbox
                             checked={selectedStores.includes(code)}
                             onCheckedChange={() => {
-                              setSelectedStores((prev) => {
-                                const exists = prev.includes(code)
-                                return exists ? prev.filter((v) => v !== code) : [...prev, code]
-                              })
+                              applyStoreSelection(
+                                selectedStores.includes(code)
+                                  ? selectedStores.filter((v) => v !== code)
+                                  : [...selectedStores, code]
+                              )
                             }}
                           />
                           <span className="text-sm">{posStoreDisplayName(code)}</span>

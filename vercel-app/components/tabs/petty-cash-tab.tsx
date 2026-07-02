@@ -2,6 +2,7 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
@@ -1316,25 +1317,15 @@ export function PettyCashTab({
       }
       return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 280))
     })
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
-<body>
-<table>
+    const tableBody = `<table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 ${rows.map((row, ri) => {
   const isHead = ri < 4 || ri === 4
   return `<tr${isHead ? ' class="head"' : ""}>${row.map((c) => `<td>${escapeXml(String(c ?? ""))}</td>`).join("")}</tr>`
 }).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `petty_monthly_${monthlyStore === "All" ? "all" : monthlyStore}_${monthlyYm}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+</table>`
+    const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true, fullWidth: false }))
+    triggerErpExcelHtmlDownload(html, `petty_monthly_${monthlyStore === "All" ? "all" : monthlyStore}_${monthlyYm}.xls`)
   }
 
   return (

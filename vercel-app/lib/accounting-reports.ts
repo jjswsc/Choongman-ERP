@@ -43,6 +43,7 @@ import {
   mergeIncomeStatementReports,
 } from '@/lib/accounting-income-statement-merge'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { isOfficeStore } from '@/lib/permissions'
 import {
   buildStoreFieldOrIlikeFragment,
   sqlIlikeContains,
@@ -84,7 +85,6 @@ export {
   vendorRowIsHeadOffice,
 } from '@/lib/accounting-reports-purchase-hq-dedupe'
 
-const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 const BASE_LIMIT = 20000
 const ACCOUNTING_ROWS_MAX = 1_000_000
 const DELIVERY_APP_FEE_VENDOR_CODES = new Set([
@@ -250,9 +250,11 @@ export type BalanceSheetReport = {
   unpostedBankWithdrawals: UnpostedBankTransaction[]
 }
 
-export function isOfficeStore(s: string): boolean {
-  const x = String(s || '').trim()
-  return OFFICE_STORES.some((o) => x === o || x.toLowerCase().includes('office'))
+/** 손익 본사 집계 — bank_accounts.store·petty_cash.store 등 (HQ·Head Office·Office-부서 포함) */
+export function isHqAccountingStoreRow(store: string): boolean {
+  const s = String(store || '').trim()
+  if (!s) return false
+  return isOfficeStore(s) || isHeadOfficeLikeStoreName(s) || s.startsWith('Office-')
 }
 
 export { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
@@ -414,7 +416,7 @@ async function fetchBankPurchasePaymentsByVendor(params: {
         | { id?: number; store?: string }[]
         | null
       accountIds = (bankAccRows || [])
-        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .filter((a) => isHqAccountingStoreRow(String(a.store || '')))
         .map((a) => Number(a.id))
         .filter((id) => !isNaN(id) && id > 0)
     } else if (storeFilter !== 'All') {
@@ -451,7 +453,7 @@ async function fetchBankPurchasePaymentsByVendor(params: {
     if (storeFilter !== 'All') {
       const bts = String(r.store || '').trim()
       if (isHQ) {
-        if (bts && !isOfficeStore(bts) && !bts.startsWith('Office-')) continue
+        if (bts && !isHqAccountingStoreRow(bts)) continue
       } else {
         if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
       }
@@ -486,7 +488,7 @@ export function normalizeIncomeScope(input: IncomeScopeInput): {
   }
   const storeFilter = resolveAccountingStoreFilterFromAuth(input.storeFilter, authScope)
   const { yearMonth, startStr, endStr } = getBangkokMonthRange(input.yearMonth)
-  const isHQ = isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter)
+  const isHQ = isHqAccountingStoreRow(storeFilter)
   const multi = parseCommaSeparatedStoreFilter(storeFilter)
   const selectedStoresOnly = multi && multi.length > 1 ? multi : undefined
   const allowedStoresOnly =
@@ -531,7 +533,7 @@ async function getDirectInboundPurchasesByVendor(
     const vendorTarget = r.vendor_target
     const referenceNo = r.reference_no
     if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInbound, hqIndex)) continue
-    if (excludeHqLocations && (r.location === INBOUND_HQ_LOCATION || isOfficeStore(r.location))) continue
+    if (excludeHqLocations && (r.location === INBOUND_HQ_LOCATION || isHqAccountingStoreRow(r.location))) continue
     const code = r.item_code
     if (!code) continue
     const line = r.line_amount
@@ -575,7 +577,7 @@ async function getFixedExpensesAggregate(
       if (!active) continue
       const st = String(r.store || '').trim()
       if (isHQ) {
-        if (!isOfficeStore(st) && !st.startsWith('Office-')) continue
+        if (!isHqAccountingStoreRow(st)) continue
       } else if (storeFilter !== 'All') {
         if (!storeMatchesIncomeFilter(st, storeFilter)) continue
       }
@@ -683,8 +685,77 @@ function isExpenseRoutedItem(
   if (!meta) return { isExpense: false, subjectId: sid }
   const isExpenseType = meta.type === 'expense'
   const isCostSection = meta.pAndLSection === 'cost'
-  // cost(매출원가) 분류는 기존 매입 흐름 유지, 그 외 expense 계정은 비용으로 분리
   return { isExpense: isExpenseType && !isCostSection, subjectId: sid }
+}
+
+/**
+ * 패티캐시·통장 지출의 손익 반영 구간 — expense 계정과목 중 매출원가(cost)는 매입.
+ * 계정 미지정은 기존과 같이 비용.
+ */
+export function isPlExpenseAccountSubject(
+  subjectId: number | null | undefined,
+  accountSubjectMeta: Map<number, AccountSubjectMetaRow>
+): boolean {
+  const sid = subjectId != null && !isNaN(Number(subjectId)) ? Number(subjectId) : null
+  if (!sid || sid <= 0) return true
+  const meta = accountSubjectMeta.get(sid)
+  if (!meta || meta.type !== 'expense') return true
+  return meta.pAndLSection !== 'cost'
+}
+
+function addPettyCashRowToPl(params: {
+  row: {
+    amount?: number
+    trans_type?: string
+    account_subject_id?: number | null
+    vendor_code?: string | null
+  }
+  subjectMeta: Map<number, AccountSubjectMetaRow>
+  purchaseVendorMap: Record<string, number>
+  expenseBySubjectMap: Map<number | null, number>
+  onExpense: (amt: number) => void
+  onPurchase: (amt: number) => void
+}) {
+  if ((params.row.trans_type || '').toLowerCase() !== 'expense') return
+  const amt = Math.abs(Number(params.row.amount) || 0)
+  if (!amt) return
+  if (isPlExpenseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
+    params.onExpense(amt)
+    addToSubjectMap(params.expenseBySubjectMap, params.row.account_subject_id, amt)
+    return
+  }
+  params.onPurchase(amt)
+  const vKey = String(params.row.vendor_code || '').trim() || '__pl_petty_cash__'
+  params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+}
+
+function addBankExpenseWithdrawToPl(params: {
+  row: {
+    amount?: number
+    account_subject_id?: number | null
+    vendor_code?: string | null
+    memo?: string | null
+  }
+  subjectMeta: Map<number, AccountSubjectMetaRow>
+  purchaseVendorMap: Record<string, number>
+  expenseBySubjectMap: Map<number | null, number>
+  onExpense: (amt: number) => void
+  onPurchase: (amt: number) => void
+  onDeliveryFee?: (amt: number) => void
+  onCardFee?: (amt: number) => void
+}) {
+  const amt = Math.abs(Number(params.row.amount) || 0)
+  if (!amt) return
+  if (isPlExpenseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
+    params.onExpense(amt)
+    if (params.onDeliveryFee && isDeliveryAppFeeWithdrawRow(params.row)) params.onDeliveryFee(amt)
+    if (params.onCardFee && isCardFeeWithdrawRow(params.row)) params.onCardFee(amt)
+    addToSubjectMap(params.expenseBySubjectMap, params.row.account_subject_id, amt)
+    return
+  }
+  params.onPurchase(amt)
+  const vKey = String(params.row.vendor_code || '').trim() || '__pl_vendor_unknown__'
+  params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
 }
 
 function mergeExpenseSubjectMaps(
@@ -694,6 +765,13 @@ function mergeExpenseSubjectMaps(
   for (const [k, v] of source) {
     target.set(k, (target.get(k) || 0) + v)
   }
+}
+
+/** 계정별 비용 맵 합계 — 펼침 행 합과 손익 비용 총액을 일치시킴 */
+export function sumExpenseSubjectAmounts(map: Map<number | null, number>): number {
+  let total = 0
+  for (const v of map.values()) total += Number(v) || 0
+  return round2(total)
 }
 
 function buildExpenseByAccountList(
@@ -732,7 +810,7 @@ function isExcludedHqStockLocation(location: string): boolean {
   const n = String(location || '').trim().toLowerCase()
   if (!n) return true
   if (n === INBOUND_HQ_LOCATION.toLowerCase()) return true
-  return isOfficeStore(location)
+  return isHqAccountingStoreRow(location)
 }
 
 async function resolveInventoryLocationPatterns(
@@ -921,7 +999,7 @@ async function getDirectInboundPurchaseVatBuckets(
     const vendorTarget = r.vendor_target
     const referenceNo = r.reference_no
     if (shouldSkipStoreInboundForHqPurchase(vendorTarget, referenceNo, excludeFromHqInbound, hqIndex)) continue
-    if (excludeHqLocations && (r.location === INBOUND_HQ_LOCATION || isOfficeStore(r.location))) continue
+    if (excludeHqLocations && (r.location === INBOUND_HQ_LOCATION || isHqAccountingStoreRow(r.location))) continue
     const code = r.item_code
     if (!code) continue
     const line = r.line_amount
@@ -964,7 +1042,7 @@ async function sumDepreciationForIncomeStatement(
       if (aid == null) continue
       const st = storeByAsset.get(aid) || ''
       if (isHQ) {
-        if (st && !isOfficeStore(st) && !st.startsWith('Office-')) continue
+        if (st && !isHqAccountingStoreRow(st)) continue
       } else if (storeFilter !== 'All') {
         if (st && !storeMatchesIncomeFilter(st, storeFilter)) continue
       }
@@ -1112,23 +1190,37 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const pettyAll = (await supabaseSelectFilter(
       'petty_cash_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`,
-      { select: 'store,amount,trans_type,account_subject_id', limit: BASE_LIMIT }
-    )) as { store?: string; amount?: number; trans_type?: string; account_subject_id?: number | null }[] | null
+      { select: 'store,amount,trans_type,account_subject_id,vendor_code', limit: BASE_LIMIT }
+    )) as {
+      store?: string
+      amount?: number
+      trans_type?: string
+      account_subject_id?: number | null
+      vendor_code?: string | null
+    }[] | null
     for (const r of pettyAll || []) {
-      if ((r.trans_type || '').toLowerCase() !== 'expense') continue
       const st = String(r.store || '').trim()
-      if (isOfficeStore(st) || st.startsWith('Office-')) {
-        const amt = Math.abs(Number(r.amount) || 0)
-        pettyCashExpense += amt
-        addToSubjectMap(expenseBySubjectMap, r.account_subject_id, amt)
-      }
+      if (!isHqAccountingStoreRow(st)) continue
+      addPettyCashRowToPl({
+        row: r,
+        subjectMeta,
+        purchaseVendorMap: purchaseVendorMapHq,
+        expenseBySubjectMap,
+        onExpense: (amt) => {
+          pettyCashExpense += amt
+        },
+        onPurchase: (amt) => {
+          purchasesBankGross += amt
+          purchases += amt
+        },
+      })
     }
     limits.petty_cash = { fetched: pettyAll?.length || 0, limit: BASE_LIMIT }
 
     try {
       const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 2000 })) as { id?: number; store?: string }[] | null
       const hqAccountIds = (bankAccRows || [])
-        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .filter((a) => isHqAccountingStoreRow(String(a.store || '')))
         .map((a) => a.id)
         .filter((id): id is number => id != null)
       if (hqAccountIds.length > 0) {
@@ -1153,11 +1245,25 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           const transDate = String(r.trans_date || '').slice(0, 10)
           const inRange = (d: string) => d >= startStr && d <= endStr
           if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
-            const amt = Math.abs(Number(r.amount) || 0)
-            bankWithdrawExpense += amt
-            if (isDeliveryAppFeeWithdrawRow(r)) deliveryAppFeeExpense += amt
-            if (isCardFeeWithdrawRow(r)) cardFeeExpense += amt
-            addToSubjectMap(expenseBySubjectMap, r.account_subject_id, amt)
+            addBankExpenseWithdrawToPl({
+              row: r,
+              subjectMeta,
+              purchaseVendorMap: purchaseVendorMapHq,
+              expenseBySubjectMap,
+              onExpense: (amt) => {
+                bankWithdrawExpense += amt
+              },
+              onPurchase: (amt) => {
+                purchasesBankGross += amt
+                purchases += amt
+              },
+              onDeliveryFee: (amt) => {
+                deliveryAppFeeExpense += amt
+              },
+              onCardFee: (amt) => {
+                cardFeeExpense += amt
+              },
+            })
           }
         }
         limits.bank_withdraw = { fetched: btRows?.length || 0, limit: BASE_LIMIT }
@@ -1342,14 +1448,28 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
     }
     const pettyRows = (await supabaseSelectFilter('petty_cash_transactions', pettyFilter, {
-      select: 'amount,trans_type,account_subject_id',
+      select: 'amount,trans_type,account_subject_id,vendor_code',
       limit: BASE_LIMIT,
-    })) as { amount?: number; trans_type?: string; account_subject_id?: number | null }[] | null
+    })) as {
+      amount?: number
+      trans_type?: string
+      account_subject_id?: number | null
+      vendor_code?: string | null
+    }[] | null
     for (const r of pettyRows || []) {
-      if ((r.trans_type || '').toLowerCase() !== 'expense') continue
-      const amt = Math.abs(Number(r.amount) || 0)
-      pettyCashExpense += amt
-      addToSubjectMap(expenseBySubjectMap, r.account_subject_id, amt)
+      addPettyCashRowToPl({
+        row: r,
+        subjectMeta,
+        purchaseVendorMap: purchaseVendorMapStore,
+        expenseBySubjectMap,
+        onExpense: (amt) => {
+          pettyCashExpense += amt
+        },
+        onPurchase: (amt) => {
+          purchasesBankGross += amt
+          purchases += amt
+        },
+      })
     }
     limits.petty_cash = { fetched: pettyRows?.length || 0, limit: BASE_LIMIT }
 
@@ -1384,11 +1504,25 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           const transDate = String(r.trans_date || '').slice(0, 10)
           const inRange = (d: string) => d >= startStr && d <= endStr
           if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
-            const amt = Math.abs(Number(r.amount) || 0)
-            bankWithdrawExpense += amt
-            if (isDeliveryAppFeeWithdrawRow(r)) deliveryAppFeeExpense += amt
-            if (isCardFeeWithdrawRow(r)) cardFeeExpense += amt
-            addToSubjectMap(expenseBySubjectMap, r.account_subject_id, amt)
+            addBankExpenseWithdrawToPl({
+              row: r,
+              subjectMeta,
+              purchaseVendorMap: purchaseVendorMapStore,
+              expenseBySubjectMap,
+              onExpense: (amt) => {
+                bankWithdrawExpense += amt
+              },
+              onPurchase: (amt) => {
+                purchasesBankGross += amt
+                purchases += amt
+              },
+              onDeliveryFee: (amt) => {
+                deliveryAppFeeExpense += amt
+              },
+              onCardFee: (amt) => {
+                cardFeeExpense += amt
+              },
+            })
           }
         }
         limits.bank_withdraw = { fetched: btRows?.length || 0, limit: BASE_LIMIT }
@@ -1437,12 +1571,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     }
   }
 
-  const expenses = pettyCashExpense + bankWithdrawExpense + fixedExpenses
+  const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
+  /** petty·통장·고정비 외 입고(비용 계정 품목)·본사 출고(매장) 등도 expenseBySubjectMap에 포함 */
+  const expenses = sumExpenseSubjectAmounts(expenseBySubjectMap)
   const cogs = beginningInventory + purchases - endingInventory
   const grossProfit = sales - cogs
   const netProfit = grossProfit - expenses
-
-  const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
 
   const begInvNet = beginningInventory
   const endInvNet = endingInventory
@@ -1813,7 +1947,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
     if (
       !isHQ &&
       storeFilter === 'All' &&
-      (r.location === '입고등록' || isOfficeStore(String(r.location || '')))
+      (r.location === '입고등록' || isHqAccountingStoreRow(String(r.location || '')))
     ) {
       continue
     }
@@ -1847,7 +1981,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
         | { id?: number; store?: string }[]
         | null
       accountIds = (bankAccRows || [])
-        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .filter((a) => isHqAccountingStoreRow(String(a.store || '')))
         .map((a) => Number(a.id))
         .filter((id) => !isNaN(id) && id > 0)
     } else if (storeFilter !== 'All') {
@@ -1896,7 +2030,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
       if (storeFilter !== 'All') {
         const bts = String(r.store || '').trim()
         if (isHQ) {
-          if (bts && !isOfficeStore(bts) && !bts.startsWith('Office-')) continue
+          if (bts && !isHqAccountingStoreRow(bts)) continue
         } else {
           if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
         }
@@ -1979,7 +2113,7 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
     if (isHQ) {
       bankAccounts = ((await supabaseSelect('bank_accounts', { select: 'id,store,opening_balance', limit: 2000 })) as
         | { id?: number; store?: string; opening_balance?: number }[]
-        | null)?.filter((x) => isOfficeStore(String(x.store || '')) || String(x.store || '').startsWith('Office-')) || []
+        | null)?.filter((x) => isHqAccountingStoreRow(String(x.store || ''))) || []
     } else if (storeFilter !== 'All') {
       bankAccounts =
         ((await supabaseSelectFilter(
@@ -2179,7 +2313,7 @@ async function resolveBankAccountIdsForIncomeScope(
         | { id?: number; store?: string }[]
         | null
       return (bankAccRows || [])
-        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .filter((a) => isHqAccountingStoreRow(String(a.store || '')))
         .map((a) => Number(a.id))
         .filter((id) => !isNaN(id) && id > 0)
     }
@@ -2272,6 +2406,8 @@ export async function computeIncomeStatementExpenseDrillDown(
   }
   if (wantSubjectId != null && isNaN(wantSubjectId)) return empty
 
+  const subjectMeta = await loadAccountSubjectMeta()
+
   let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
   if (!isHQ && storeFilter !== 'All') {
     pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
@@ -2294,9 +2430,10 @@ export async function computeIncomeStatementExpenseDrillDown(
   for (const r of pettyRaw || []) {
     const st = String(r.store || '').trim()
     if (isHQ) {
-      if (!isOfficeStore(st) && !st.startsWith('Office-')) continue
+      if (!isHqAccountingStoreRow(st)) continue
     }
     if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
+    if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
     const pid = Number(r.id)
     if (!pid) continue
     petty.push({
@@ -2340,6 +2477,7 @@ export async function computeIncomeStatementExpenseDrillDown(
       if (!bankWithdrawCountsTowardPlExpense(r.category)) continue
       if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
       if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
+      if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
       const bid = Number(r.id)
       if (!bid) continue
       bankAcc.push({
@@ -2379,7 +2517,7 @@ export async function computeIncomeStatementExpenseDrillDown(
       if (!active) continue
       const st = String(r.store || '').trim()
       if (isHQ) {
-        if (!isOfficeStore(st) && !st.startsWith('Office-')) continue
+        if (!isHqAccountingStoreRow(st)) continue
       } else if (storeFilter !== 'All') {
         if (!storeMatchesIncomeFilter(st, storeFilter)) continue
       }

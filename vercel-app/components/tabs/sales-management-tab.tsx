@@ -228,8 +228,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
   const storePickerRef = React.useRef<HTMLDivElement | null>(null)
-  /** 본사: URL·프리셋으로 매장 0개를 유지할 때만 사용(자동 1매장 선택 없음) */
-  const skipDefaultStoreAutoSelectRef = React.useRef(true)
+  /** 본사: URL·프리셋으로 매장 0개를 유지할 때만 true(자동 전체 선택·URL 복원 억제) */
+  const skipDefaultStoreAutoSelectRef = React.useRef(false)
+  const defaultStoresHydratedRef = React.useRef(false)
   /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
   const [compareStores, setCompareStores] = React.useState(false)
@@ -1125,6 +1126,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     compare?: boolean
   }>({})
 
+  const applyStoreSelection = React.useCallback(
+    (next: string[], meta?: { clearedAll?: boolean }) => {
+      const normalized = normalizeStoreCodes(next)
+      if (meta?.clearedAll) {
+        skipDefaultStoreAutoSelectRef.current = true
+        userSelectedRef.current.storesKey = ""
+      } else {
+        skipDefaultStoreAutoSelectRef.current = false
+        userSelectedRef.current.storesKey = normalized.join(",")
+      }
+      setSelectedStores(normalized)
+    },
+    []
+  )
+
   const saveCurrentPreset = React.useCallback(() => {
     const name = window.prompt(tr("salesPresetPrompt", "프리셋 이름을 입력하세요."), "")
     const trimmed = String(name || "").trim()
@@ -1742,7 +1758,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (
       qStoresKey &&
       qStoresKey !== selectedStoresKey &&
-      userSelectedRef.current.storesKey !== selectedStoresKey
+      userSelectedRef.current.storesKey !== selectedStoresKey &&
+      !skipDefaultStoreAutoSelectRef.current
     ) {
       setSelectedStores(qStores)
     }
@@ -1904,7 +1921,44 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [loadPosOptions, canSearchAll])
 
   React.useEffect(() => {
+    if (defaultStoresHydratedRef.current) return
+    if (!canMultiStorePicker) {
+      defaultStoresHydratedRef.current = true
+      return
+    }
+
+    const qStores = normalizeStoreCodes(
+      (searchParams.get("stores") ?? searchParams.get("pos") ?? "").split(",")
+    )
+    if (qStores.length > 0) {
+      defaultStoresHydratedRef.current = true
+      return
+    }
+
+    if (skipDefaultStoreAutoSelectRef.current) {
+      defaultStoresHydratedRef.current = true
+      return
+    }
+
+    const base = normalizeStoreCodes(
+      canSearchAll ? posOptions : posBizDayStoreChoices
+    )
+    if (base.length === 0) return
+
+    defaultStoresHydratedRef.current = true
+    userSelectedRef.current.storesKey = base.join(",")
+    setSelectedStores(base)
+  }, [
+    canMultiStorePicker,
+    canSearchAll,
+    posOptions,
+    posBizDayStoreChoices,
+    searchParams,
+  ])
+
+  React.useEffect(() => {
     if (canSearchAll) return
+    if (skipDefaultStoreAutoSelectRef.current) return
     if (isFranchiseeRole(auth?.role || "")) {
       const codes = resolveFranchiseePosSalesFetchStoreCodes(auth, viewStore)
       const normalized = normalizeStoreCodes(
@@ -2514,34 +2568,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 storePickerRef={storePickerRef}
                 storePickerPlaceholder={storePickerPlaceholder}
                 selectedStores={selectedStores}
-                setSelectedStores={(action) => {
-                  skipDefaultStoreAutoSelectRef.current = false
-                  setSelectedStores((prev) => {
-                    const next = typeof action === "function" ? action(prev) : action
-                    const normalized = normalizeStoreCodes(next)
-                    userSelectedRef.current.storesKey = normalized.join(",")
-                    return normalized
-                  })
-                }}
+                allStoreOptions={posBizDayStoreChoices}
+                onStoresChange={applyStoreSelection}
                 posBizDayStoreChoices={posBizDayStoreChoices}
-                posOptions={posOptions}
                 posStoreDisplayName={posStoreDisplayName}
                 filteredStoreOptions={filteredStoreOptions}
                 storeSearch={storeSearch}
                 setStoreSearch={setStoreSearch}
-                onSelectAll={() => {
-                  skipDefaultStoreAutoSelectRef.current = false
-                  const all = normalizeStoreCodes(
-                    canSearchAll ? [...posOptions] : [...posBizDayStoreChoices]
-                  )
-                  userSelectedRef.current.storesKey = all.join(",")
-                  setSelectedStores(all)
-                }}
-                onClearAll={() => {
-                  skipDefaultStoreAutoSelectRef.current = true
-                  userSelectedRef.current.storesKey = ""
-                  setSelectedStores([])
-                }}
                 singleStoreLabel={
                   canMultiStorePicker
                     ? undefined

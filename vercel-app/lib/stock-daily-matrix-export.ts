@@ -2,6 +2,7 @@
  * 본사 창고 일별 입출고 — XLSX / CSV보내기
  */
 import * as XLSX from 'xlsx'
+import { writeErpXlsxWorkbook } from '@/lib/erp-excel-export'
 import type {
   HqWarehouseDailyItemRow,
   HqWarehouseDayInvoice,
@@ -44,7 +45,7 @@ function formatNum(n: number, maxFrac = 2): string {
   return Number(n.toFixed(maxFrac)).toLocaleString()
 }
 
-export function exportStockDailyMatrixXlsx(params: {
+export async function exportStockDailyMatrixXlsx(params: {
   items: HqWarehouseDailyItemRow[]
   columns: HqWarehouseMovementColumn[]
   dayInvoices: HqWarehouseDayInvoice[]
@@ -120,5 +121,5 @@ export function exportStockDailyMatrixXlsx(params: {
   const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows, ...invoiceRows])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'DailyStock')
-  XLSX.writeFile(wb, `hq_daily_stock_${startStr}_${endStr}.xlsx`)
+  await writeErpXlsxWorkbook(wb, `hq_daily_stock_${startStr}_${endStr}.xlsx`)
 }

@@ -243,9 +243,9 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
     setStartStr(addBangkokCalendarDays(end, -6))
   }
 
-  const handleExportXlsx = () => {
+  const handleExportXlsx = async () => {
     if (!data || !displayMatrix) return
-    exportStockDailyMatrixXlsx({
+    await exportStockDailyMatrixXlsx({
       items: filteredItems,
       columns: displayMatrix.columns,
       dayInvoices: data.dayInvoices,

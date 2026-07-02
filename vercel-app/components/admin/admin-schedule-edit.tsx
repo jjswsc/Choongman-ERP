@@ -1,5 +1,6 @@
 "use client"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import * as React from "react"
 import { RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet, CalendarDays } from "lucide-react"
@@ -754,25 +755,15 @@ export function AdminScheduleEdit({
       dataRows.push(workRow)
       dataRows.push(breakRow)
     }
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
-<body>
-<table>
+    const tableBody = `<table>
 <tr><td class="head">${escapeXml(t("scheduleWeek") || "주간 시간표")}</td><td colspan="7">${escapeXml(weekRangeStr)}</td></tr>
 <tr><td class="head">${escapeXml(t("scheduleStorePlaceholder") || "매장")}</td><td colspan="7">${escapeXml(store)}</td></tr>
 <tr></tr>
 <tr class="head">${headers.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>
 ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>`).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `schedule_${store}_${monday}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+</table>`
+    const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true }))
+    triggerErpExcelHtmlDownload(html, `schedule_${store}_${monday}.xls`)
   }
 
   if (!store) {

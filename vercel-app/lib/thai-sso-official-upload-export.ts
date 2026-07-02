@@ -3,6 +3,7 @@
  * 시트 1장 · 6열(A–F) · 시트 이름 = 사회보험청 지정 지점 순번 6자리(ลำดับที่สาขา).
  */
 import * as XLSX from "xlsx"
+import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import { splitEmployeeNameForThaiSsoEform } from "@/lib/thai-sso-eform-v15"
 import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
 import { citizenDigits13Only } from "@/lib/thai-sso-sps1-10-export"
@@ -131,11 +132,11 @@ function uniqueSheetName(base: string, used: Set<string>): string {
 }
 
 /** 공식 6열 업로드 파일 — 지점별 시트(탭 이름 = 6자리 ลำดับที่สาขา) */
-export function downloadThaiSsoOfficialUploadFromPayrollXlsx(params: {
+export async function downloadThaiSsoOfficialUploadFromPayrollXlsx(params: {
   yearMonth: string
   sheets: SsoOfficialUploadSheet[]
   filingWageMode?: SsoFilingWageMode
-}): void {
+}): Promise<void> {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
   const filingWageMode = params.filingWageMode || "contributable"
   const wb = XLSX.utils.book_new()
@@ -155,5 +156,5 @@ export function downloadThaiSsoOfficialUploadFromPayrollXlsx(params: {
 
   const primaryBranch = normalizeSsoOfficialSheetName(nonEmpty[0]?.branchCode || "000000")
   const safeYm = ym.replace(/[/\\?%*:|"<>]/g, "-")
-  XLSX.writeFile(wb, `thai-sso-official-upload-${primaryBranch}-${safeYm}.xlsx`)
+  await writeErpXlsxWorkbook(wb, `thai-sso-official-upload-${primaryBranch}-${safeYm}.xlsx`)
 }

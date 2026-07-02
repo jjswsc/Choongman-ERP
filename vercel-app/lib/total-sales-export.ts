@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { writeErpXlsxWorkbook } from '@/lib/erp-excel-export'
 import type { PosSalesHierarchyLevel, PosSalesHierarchyRow } from '@/lib/api-client'
 import { sanitizeFilenamePart } from '@/lib/income-statement-export'
 import type { PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
@@ -14,7 +15,7 @@ export function buildTotalSalesExportFilename(parts: {
   return `total-sales_${sanitizeFilenamePart(parts.startStr)}_${sanitizeFilenamePart(parts.endStr)}_${sanitizeFilenamePart(parts.storePart)}.xlsx`
 }
 
-export function downloadTotalSalesHierarchyXlsx(params: {
+export async function downloadTotalSalesHierarchyXlsx(params: {
   filename: string
   metaRows: string[][]
   sheetNames: Record<PosSalesHierarchyLevel, string>
@@ -27,7 +28,7 @@ export function downloadTotalSalesHierarchyXlsx(params: {
     sales: string
   }
   levels: Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]>
-}): void {
+}): Promise<void> {
   const wb = XLSX.utils.book_new()
 
   for (const level of LEVEL_ORDER) {
@@ -70,10 +71,10 @@ export function downloadTotalSalesHierarchyXlsx(params: {
     XLSX.utils.book_append_sheet(wb, ws, params.sheetNames[level].slice(0, 31))
   }
 
-  XLSX.writeFile(wb, params.filename)
+  await writeErpXlsxWorkbook(wb, params.filename)
 }
 
-export function downloadTotalSalesChannelCompareXlsx(params: {
+export async function downloadTotalSalesChannelCompareXlsx(params: {
   filename: string
   metaRows: string[][]
   sheetNames: Record<PosSalesHierarchyLevel, string>
@@ -88,7 +89,7 @@ export function downloadTotalSalesChannelCompareXlsx(params: {
   channelLabels: Record<PosOrderTypeValue, string>
   channels: PosOrderTypeValue[]
   compareByLevel: Record<PosSalesHierarchyLevel, TotalSalesChannelCompareRow[]>
-}): void {
+}): Promise<void> {
   const wb = XLSX.utils.book_new()
 
   for (const level of LEVEL_ORDER) {
@@ -119,5 +120,5 @@ export function downloadTotalSalesChannelCompareXlsx(params: {
     XLSX.utils.book_append_sheet(wb, ws, `${params.sheetNames[level]}`.slice(0, 31))
   }
 
-  XLSX.writeFile(wb, params.filename)
+  await writeErpXlsxWorkbook(wb, params.filename)
 }

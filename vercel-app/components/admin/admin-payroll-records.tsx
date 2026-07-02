@@ -1,5 +1,6 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
@@ -105,18 +106,6 @@ function escapeXml(s: string): string {
     .replace(/"/g, "&quot;")
 }
 
-function triggerBlobDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  a.rel = "noopener"
-  a.style.display = "none"
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
-}
 
 export function AdminPayrollRecords() {
   const { auth } = useAuth()
@@ -395,10 +384,7 @@ export function AdminPayrollRecords() {
       }
       return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 220))
     })
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}.total{font-weight:bold;background:#e8f4ff}table{border-collapse:collapse}</style></head>
-<body>
-<table>
+    const tableBody = `<table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 ${rows.map((row, ri) => {
   const isHead = ri === 0
@@ -406,11 +392,12 @@ ${rows.map((row, ri) => {
   const cls = isHead ? "head" : isTotal ? "total" : ""
   return `<tr${cls ? ` class="${cls}"` : ""}>${row.map((c) => `<td>${escapeXml(String(c ?? ""))}</td>`).join("")}</tr>`
 }).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    triggerBlobDownload(blob, `payroll_${monthStr}_${storeFilter === "All" ? "all" : storeFilter}.xls`)
+</table>`
+    const html = buildErpExcelHtmlDocument(
+      tableBody,
+      erpExcelSimpleTableStyle({ withHead: true, withTotal: true })
+    )
+    triggerErpExcelHtmlDownload(html, `payroll_${monthStr}_${storeFilter === "All" ? "all" : storeFilter}.xls`)
   }
 
   const handleSendNotice = async () => {

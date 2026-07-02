@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 import {
   Search,
   BarChart3,
@@ -147,11 +148,7 @@ export function StockTable({
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
     const colWidths = [80, 180, 70, 70, 70, 100, 55]
     const headerCells = [t("stockColCode"), t("stockColName"), t("stockColSpec"), t("stockColQty"), t("stockColSafeQty"), t("stockColAmount"), t("stockColStatus")]
-    const html = `
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
-<body>
-<table>
+    const tableBody = `<table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 <tr><td class="head">${escapeXml(t("stockColDate"))}</td><td colspan="6">${escapeXml(dateStr)}</td></tr>
 <tr><td class="head">${escapeXml(t("stockFilterStore"))}</td><td colspan="6">${escapeXml(storeFilter || t("stockFilterStoreAll"))}</td></tr>
@@ -164,16 +161,9 @@ ${filteredList.map((r) => {
   const isLow = r.safeQty > 0 && r.qty < r.safeQty
   return `<tr><td>${escapeXml(r.code)}</td><td>${escapeXml(r.name)}</td><td>${escapeXml(r.spec)}</td><td>${r.qty}</td><td>${r.safeQty > 0 ? r.safeQty : ""}</td><td>${amount.toLocaleString()}</td><td>${escapeXml(isLow ? t("stockLow") : "-")}</td></tr>`
 }).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `stock_${storeFilter || "all"}_${dateStr}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+</table>`
+    const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true }))
+    triggerErpExcelHtmlDownload(html, `stock_${storeFilter || "all"}_${dateStr}.xls`)
   }
 
   const colCount = 8 + (canAdjust || onToggleOrderDisabled ? 1 : 0)

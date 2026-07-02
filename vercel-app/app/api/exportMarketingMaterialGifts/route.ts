@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { writeErpXlsxWorkbookToBuffer } from '@/lib/erp-excel-export'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import type { MarketingMaterialGift } from '@/lib/api-client'
 import { aggregateGiftInventoryGroups, computedGiftRemaining } from '@/lib/marketing-material-gift-inventory'
@@ -181,7 +182,7 @@ export async function GET(req: NextRequest) {
           ]
     )
     XLSX.utils.book_append_sheet(wb, ws2, '재고요약')
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    const buf = await writeErpXlsxWorkbookToBuffer(wb)
 
     const fname = campaignId
       ? `marketing-material-gifts-campaign-${campaignId}.xlsx`
