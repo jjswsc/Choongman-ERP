@@ -39,6 +39,18 @@ function encodeExpensePayeeCode(base: string): string {
   return `${b}::wm::expense`
 }
 
+/** payable_transactions.vendor_code NOT NULL — 거래처 미지정 시 마케팅 payee 코드 사용 */
+export function resolvePayableVendorCodeForMarketing(
+  vendorCode: string | undefined,
+  payeeCode: string
+): string {
+  const fromVendor = normalizeVendorCode(vendorCode)
+  if (fromVendor) return fromVendor
+  const fromPayee = normalizeVendorCode(payeeCode)
+  if (fromPayee) return fromPayee
+  return 'mkt_expense'
+}
+
 export function isOfficeRoleForMarketingExpenseSync(userRole: string): boolean {
   const r = String(userRole || '').toLowerCase()
   return ['director', 'secretary', 'officer', 'ceo', 'hr'].some((x) => r.includes(x))
@@ -128,7 +140,7 @@ async function updatePlannedAccrual(
   }
   await assertAccountingDateOpen(params.expenseDate)
   const encoded = encodeExpensePayeeCode(params.payeeCode)
-  const payableVendorCode = normalizeVendorCode(params.vendorCode)
+  const payableVendorCode = resolvePayableVendorCodeForMarketing(params.vendorCode, params.payeeCode)
   const accountSubjectId = row.account_subject_id != null ? Number(row.account_subject_id) : null
 
   await supabaseUpdate('expense_accruals', expenseAccrualId, {
@@ -151,7 +163,7 @@ async function updatePlannedAccrual(
     const a = Number(p.amount || 0)
     if (a <= 0) continue
     await supabaseUpdate('payable_transactions', p.id, {
-      vendor_code: payableVendorCode || null,
+      vendor_code: payableVendorCode,
       amount: params.amount,
       trans_date: params.expenseDate,
       memo: params.memo ? `지출발생: ${params.memo.slice(0, 200)}` : '지출발생',
@@ -197,7 +209,7 @@ async function createPlannedAccrual(params: {
   userName?: string
 }): Promise<number> {
   const encoded = encodeExpensePayeeCode(params.payeeCode)
-  const payableVendorCode = normalizeVendorCode(params.vendorCode)
+  const payableVendorCode = resolvePayableVendorCodeForMarketing(params.vendorCode, params.payeeCode)
   const inserted = (await supabaseInsert('expense_accruals', {
     payee_code: encoded,
     payee_name: params.payeeName,
@@ -213,7 +225,7 @@ async function createPlannedAccrual(params: {
   if (!expenseAccrualId) throw new Error('지급예정 등록에 실패했습니다.')
 
   await supabaseInsert('payable_transactions', {
-    vendor_code: payableVendorCode || null,
+    vendor_code: payableVendorCode,
     amount: Math.abs(params.amount),
     ref_type: 'Expense',
     ref_id: null,
