@@ -11102,16 +11102,16 @@ export default function PosTerminalPage() {
           ) : activeTab === 'tables' && servingTable?.order ? (
             isDineInAddOrderMode ? (
               <div className="flex flex-col flex-1 min-h-0">
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  {renderTerminalCartPanel('side-panel')}
+                </div>
                 <div
                   className={cn(
-                    'min-h-0 overflow-hidden',
+                    'min-h-0 overflow-hidden border-t border-border',
                     isNarrowViewport ? 'max-h-[46%] shrink-0' : 'flex-1'
                   )}
                 >
                   {dineInTableOrderPanel}
-                </div>
-                <div className="min-h-0 flex-1 overflow-hidden border-t border-border">
-                  {renderTerminalCartPanel('side-panel')}
                 </div>
               </div>
             ) : (

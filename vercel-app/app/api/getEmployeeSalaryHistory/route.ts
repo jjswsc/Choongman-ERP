@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { filterPayrollRowsHidingOffice } from '@/lib/office-payroll-access'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 export interface SalaryHistoryRow {
   id: number
   employee_id: number
@@ -59,22 +61,27 @@ export async function GET(request: NextRequest) {
       limit: 500,
     })
 
-    const list = (rows || []).map((r: Record<string, unknown>) => ({
-      id: Number(r.id) || 0,
-      employee_id: Number(r.employee_id) || 0,
-      store: String(r.store || ''),
-      name: String(r.name || ''),
-      old_sal_type: String(r.old_sal_type || ''),
-      new_sal_type: String(r.new_sal_type || ''),
-      old_sal_amt: Number(r.old_sal_amt) || 0,
-      new_sal_amt: Number(r.new_sal_amt) || 0,
-      old_position_allowance: Number(r.old_position_allowance) || 0,
-      new_position_allowance: Number(r.new_position_allowance) || 0,
-      old_haz_allow: Number(r.old_haz_allow) || 0,
-      new_haz_allow: Number(r.new_haz_allow) || 0,
-      changed_at: String(r.changed_at || ''),
-      changed_by: String(r.changed_by || ''),
-    }))
+    const payrollAuth = await resolveCanManageOfficePayrollAuth(auth)
+
+    const list = filterPayrollRowsHidingOffice(
+      (rows || []).map((r: Record<string, unknown>) => ({
+        id: Number(r.id) || 0,
+        employee_id: Number(r.employee_id) || 0,
+        store: String(r.store || ''),
+        name: String(r.name || ''),
+        old_sal_type: String(r.old_sal_type || ''),
+        new_sal_type: String(r.new_sal_type || ''),
+        old_sal_amt: Number(r.old_sal_amt) || 0,
+        new_sal_amt: Number(r.new_sal_amt) || 0,
+        old_position_allowance: Number(r.old_position_allowance) || 0,
+        new_position_allowance: Number(r.new_position_allowance) || 0,
+        old_haz_allow: Number(r.old_haz_allow) || 0,
+        new_haz_allow: Number(r.new_haz_allow) || 0,
+        changed_at: String(r.changed_at || ''),
+        changed_by: String(r.changed_by || ''),
+      })),
+      payrollAuth
+    )
 
     return NextResponse.json({ success: true, list }, { headers })
   } catch (e) {

@@ -42,6 +42,16 @@ export function workLogWorkTypeBadgeClass(status: string): string {
   return "bg-muted text-muted-foreground"
 }
 
+/** 업무 검토·목록 정렬: 완료 → 이월 → 오늘 */
+export function workLogWorkTypeSortRank(status: string, progress?: number): number {
+  const s = (status || "").trim()
+  const p = Number(progress) || 0
+  if (p >= 100 || s === "Finish") return 0
+  if (s === "Continue" || s === "Carry Over") return 1
+  if (s === "Today") return 2
+  return 3
+}
+
 export function workLogReviewBadgeClass(managerCheck: string, hasComment: boolean): string {
   if (managerCheck === "승인") {
     return hasComment ? "bg-primary/10 text-primary" : "bg-success/10 text-success"

@@ -53,3 +53,72 @@ export function filterPayrollRowsHidingOffice<T extends { store?: string }>(
   if (canManageOfficePayroll(auth)) return rows
   return rows.filter((r) => !isOfficeStore(String(r.store || '')))
 }
+
+/** 오피스(본사) 매장 직원의 급여·계좌 정보 조회 가능 여부 */
+export function canViewOfficeEmployeePayroll(auth: OfficePayrollAuth, employeeStore: string): boolean {
+  if (!isOfficeStore(String(employeeStore || '').trim())) return true
+  return canManageOfficePayroll(auth)
+}
+
+export type OfficeEmployeePayrollFields = {
+  salType?: string
+  salAmt?: number
+  positionAllowance?: number
+  riskAllowance?: number
+  attendanceAllowance?: number
+  bankName?: string
+  accountNumber?: string
+}
+
+/** 비권한자에게 내려주는 오피스 직원 급여 필드 — 목록·폼에서 금액 미노출 */
+export function redactedOfficeEmployeePayrollFields(): OfficeEmployeePayrollFields {
+  return {
+    salType: '',
+    salAmt: 0,
+    positionAllowance: 0,
+    riskAllowance: 0,
+    attendanceAllowance: 0,
+    bankName: '',
+    accountNumber: '',
+  }
+}
+
+export function redactOfficeEmployeePayrollIfNeeded<T extends OfficeEmployeePayrollFields & { store?: string }>(
+  row: T,
+  auth: OfficePayrollAuth
+): T {
+  if (canViewOfficeEmployeePayroll(auth, String(row.store || ''))) return row
+  return { ...row, ...redactedOfficeEmployeePayrollFields() }
+}
+
+/** 저장 요청 payload에서 오피스 급여 필드를 기존 DB 값으로 되돌림 */
+export function preserveOfficeEmployeePayrollOnSave(
+  payload: Record<string, unknown>,
+  auth: OfficePayrollAuth,
+  employeeStore: string,
+  existing?: {
+    sal_type?: unknown
+    sal_amt?: unknown
+    position_allowance?: unknown
+    haz_allow?: unknown
+    attendance_allowance?: unknown
+    bank_name?: unknown
+    account_number?: unknown
+  } | null
+): void {
+  if (canViewOfficeEmployeePayroll(auth, employeeStore)) return
+  const redacted = redactedOfficeEmployeePayrollFields()
+  payload.sal_type = existing?.sal_type != null ? String(existing.sal_type).trim() || 'Monthly' : redacted.salType || 'Monthly'
+  payload.sal_amt = existing?.sal_amt != null ? Number(existing.sal_amt) || 0 : 0
+  payload.position_allowance =
+    existing?.position_allowance != null ? Number(existing.position_allowance) || 0 : 0
+  payload.haz_allow = existing?.haz_allow != null ? Number(existing.haz_allow) || 0 : 0
+  if ('attendance_allowance' in payload) {
+    payload.attendance_allowance =
+      existing?.attendance_allowance != null && existing.attendance_allowance !== ''
+        ? Number(existing.attendance_allowance)
+        : 500
+  }
+  payload.bank_name = existing?.bank_name != null ? String(existing.bank_name).trim() : ''
+  payload.account_number = existing?.account_number != null ? String(existing.account_number).trim() : ''
+}

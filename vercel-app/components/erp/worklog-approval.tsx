@@ -47,6 +47,7 @@ import {
   formatWorkLogDateMonthDay,
   workLogReviewBadgeClass,
   workLogWorkTypeBadgeClass,
+  workLogWorkTypeSortRank,
 } from "@/lib/work-log-shared"
 
 type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string }
@@ -321,6 +322,9 @@ export function WorklogApproval({ onPendingChange }: Props) {
       if (pendingA !== pendingB) return pendingA - pendingB
       const dateCmp = (a.date || "").localeCompare(b.date || "")
       if (dateCmp !== 0) return dateCmp
+      const typeCmp =
+        workLogWorkTypeSortRank(a.status, a.progress) - workLogWorkTypeSortRank(b.status, b.progress)
+      if (typeCmp !== 0) return typeCmp
       const deptCmp = (a.dept || "").localeCompare(b.dept || "")
       if (deptCmp !== 0) return deptCmp
       return (a.name || "").localeCompare(b.name || "")

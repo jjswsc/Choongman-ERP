@@ -27,6 +27,8 @@ import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 import { EMPLOYEE_NAME_TITLE_CANONICAL } from "@/lib/employee-display-name"
 import { labelForStore } from "@/lib/store-list-keys"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
+import { isOfficeStore } from "@/lib/permissions"
+import { canViewOfficeEmployeePayroll, type OfficePayrollAuth } from "@/lib/office-payroll-access"
 import { IdCardCaptureDialog } from "@/components/employees/id-card-capture-dialog"
 import { ID_CARD_ASPECT } from "@/lib/id-card-image"
 
@@ -261,6 +263,8 @@ interface EmployeeFormProps {
   franchiseeMultiMaxStores?: number
   /** Sheet 등 외부 컨테이너에 넣을 때 — 카드 헤더·테두리 제거 */
   embedded?: boolean
+  /** 오피스(본사) 직원 급여·계좌 편집 권한 */
+  officePayrollAuth?: OfficePayrollAuth
 }
 
 const DEFAULT_JOB_OPTIONS = ["Service", "Kitchen", "Franchise", "Officer", "Director", "Logistic"]
@@ -283,6 +287,7 @@ export function EmployeeForm({
   allStoresForFranchiseePick = [],
   franchiseeMultiMaxStores = 5,
   embedded = false,
+  officePayrollAuth,
 }: EmployeeFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -316,6 +321,10 @@ export function EmployeeForm({
     canEditFranchiseeExtraStores &&
     franchiseeMultiEnabled &&
     (roleLower.includes("franchisee") || form.role.includes("가맹") || form.role.includes("점주"))
+  const hideOfficePayrollFields =
+    !!officePayrollAuth &&
+    isOfficeStore(String(form.store || "").trim()) &&
+    !canViewOfficeEmployeePayroll(officePayrollAuth, String(form.store || ""))
 
   const toggleExtraStore = (storeName: string) => {
     const s = String(storeName || "").trim()
@@ -757,6 +766,11 @@ export function EmployeeForm({
                 {t("emp_section_accounting")}
               </AccordionTrigger>
               <AccordionContent className="pb-3">
+                {hideOfficePayrollFields ? (
+                  <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                    {t("emp_office_payroll_hidden_hint")}
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 gap-x-1.5 gap-y-2 sm:grid-cols-2">
                   <FormField label={t("emp_label_sal_type")} variant="amount">
                     <Select value={form.salType} onValueChange={(v) => update("salType", v)}>
@@ -864,6 +878,7 @@ export function EmployeeForm({
                     />
                   </FormField>
                 </div>
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>

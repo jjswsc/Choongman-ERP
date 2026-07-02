@@ -69,6 +69,8 @@ import { HrPageShell } from "@/components/hr/hr-page-shell"
 import { EmployeeCsvImportDialog } from "@/components/employees/employee-csv-import-dialog"
 import { useErpBackHandler } from "@/lib/erp-navigation"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
+import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
+import type { OfficePayrollAuth } from "@/lib/office-payroll-access"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
@@ -197,6 +199,14 @@ export default function EmployeesPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { auth } = useAuth()
+  useSyncOfficePayrollAccess()
+  const officePayrollAuth = React.useMemo<OfficePayrollAuth>(
+    () => ({
+      role: auth?.role,
+      canManageOfficePayroll: auth?.canManageOfficePayroll,
+    }),
+    [auth?.role, auth?.canManageOfficePayroll]
+  )
   const { posStores: storeListFromApi, storeLabels: erpStoreLabels, resolveStoreKey } = useStoreList()
   const userStore = (auth?.store || "").trim()
   const userRole = (auth?.role || "").trim()
@@ -728,6 +738,7 @@ export default function EmployeesPage() {
                   t={t}
                   statusFilter={statusFilter}
                   selectedRowId={form.row}
+                  officePayrollAuth={officePayrollAuth}
                 />
               )}
             </div>
@@ -765,6 +776,7 @@ export default function EmployeesPage() {
                     canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
                     canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
                     canAssignOfficePayrollManager={canAssignEmployeeDirectorRole(userRole)}
+                    officePayrollAuth={officePayrollAuth}
                     franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
                     canEditFranchiseeExtraStores={isOffice}
                     allStoresForFranchiseePick={storesForFilter}

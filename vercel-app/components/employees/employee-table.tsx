@@ -5,6 +5,8 @@ import { CalendarClock, Pencil, Palmtree, Trash2, Wallet } from "lucide-react"
 import { displayLabelShort } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
+import { isOfficeStore } from "@/lib/permissions"
+import { canViewOfficeEmployeePayroll, type OfficePayrollAuth } from "@/lib/office-payroll-access"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
 function roleBadgeStyle(role: string): string {
@@ -112,6 +114,8 @@ interface EmployeeTableProps {
   statusFilter?: string
   /** 좌측 폼에서 편집 중인 직원 row id */
   selectedRowId?: number
+  /** 오피스(본사) 직원 급여 열람 권한 — 미지정 시 전체 허용 */
+  officePayrollAuth?: OfficePayrollAuth
 }
 
 export function EmployeeTable({
@@ -122,6 +126,7 @@ export function EmployeeTable({
   t,
   statusFilter,
   selectedRowId = 0,
+  officePayrollAuth,
 }: EmployeeTableProps) {
   const todayStr = bangkokTodayYmd()
   const hasNewHireRows = rows.some(
@@ -197,7 +202,11 @@ export function EmployeeTable({
                 const isNewHire =
                   !showResignedHighlight && isJoinedWithin3Months(String(e.join || ""), todayStr)
                 const salAmt = Number(e.salAmt)
-                const salDisplay = salAmt > 0 ? salAmt.toLocaleString() : "—"
+                const officePayrollHidden =
+                  !!officePayrollAuth &&
+                  isOfficeStore(String(e.store || "")) &&
+                  !canViewOfficeEmployeePayroll(officePayrollAuth, String(e.store || ""))
+                const salDisplay = officePayrollHidden ? "—" : salAmt > 0 ? salAmt.toLocaleString() : "—"
                 const nick = displayLabelShort(e.nick) || "—"
                 const zebra = idx % 2 === 1 ? "bg-muted/20" : "bg-card"
 
@@ -258,7 +267,9 @@ export function EmployeeTable({
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="font-semibold tabular-nums text-card-foreground">{salDisplay}</div>
-                      <div className="text-[11px] text-muted-foreground">{salTypeShort(e.salType, t)}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {officePayrollHidden ? "—" : salTypeShort(e.salType, t)}
+                      </div>
                     </td>
                     <td className="px-3 py-2.5 text-center" onClick={(ev) => ev.stopPropagation()}>
                       <div className="flex items-center justify-center gap-0.5">

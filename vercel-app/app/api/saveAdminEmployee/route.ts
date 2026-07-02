@@ -26,7 +26,8 @@ import {
   sanitizeEmployeeAuditRow,
   writeEmployeeAudit,
 } from '@/lib/employee-audit'
-import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
+import { isEmployeeOfficePayrollManagerFlag, preserveOfficeEmployeePayrollOnSave } from '@/lib/office-payroll-access'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
@@ -219,6 +220,7 @@ export async function POST(req: NextRequest) {
     const userRole = String(auth.role || '').toLowerCase()
     const jwt = auth
     const effectiveRole = String(jwt?.role || userRole).toLowerCase()
+    const payrollAuth = await resolveCanManageOfficePayrollAuth(auth)
 
     const isTop =
       ['director', 'secretary', 'officer', 'ceo', 'hr'].some((r) => effectiveRole.includes(r)) || isAccountingRole(effectiveRole)
@@ -484,6 +486,7 @@ export async function POST(req: NextRequest) {
     const auditActor = actorFromJwt(auth, userName)
 
     if (rowId === 0) {
+      preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, null)
       payload.password = passwordValue || ''
       if (!codeRaw) {
         payload.employee_code = await buildNextEmployeeCodeForStore(newStore)
@@ -611,6 +614,7 @@ export async function POST(req: NextRequest) {
       }[]
     }
     const old = existing?.[0]
+    preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, old)
     const oldStore = old ? String(old.store || '').trim() : ''
     const oldName = old ? String(old.name || '').trim() : ''
     const oldCode = old ? String(old.employee_code || '').trim() : ''
@@ -625,9 +629,9 @@ export async function POST(req: NextRequest) {
     const oldPhone = old ? String(old.phone || '').trim() : ''
     const oldResignDate = old ? toDateStr(old.resign_date) || '' : ''
     const oldEmploymentStatus = normalizeEmploymentStatus(old?.employment_status, old?.resign_date)
-    const newSalType = String(d.salType || 'Monthly').trim()
-    const newSalAmt = Number(d.salAmt) || 0
-    const newPosAllow = d.positionAllowance != null ? Number(d.positionAllowance) : 0
+    const newSalType = String(payload.sal_type || 'Monthly').trim()
+    const newSalAmt = Number(payload.sal_amt) || 0
+    const newPosAllow = payload.position_allowance != null ? Number(payload.position_allowance) : 0
     const newHazAllow = Number(payload.haz_allow) || 0
     const newJob = String(payload.job || '').trim()
     const newRole = String(payload.role || '').trim()

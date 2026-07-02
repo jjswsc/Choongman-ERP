@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   canManageOfficePayroll,
+  canViewOfficeEmployeePayroll,
   filterPayrollRowsHidingOffice,
   filterStoresHidingOfficePayroll,
   buildPayrollStoreSelectOptions,
   isEmployeeOfficePayrollManagerFlag,
   isOfficePayrollStoreFilter,
+  redactOfficeEmployeePayrollIfNeeded,
 } from './office-payroll-access'
 
 describe('office-payroll-access', () => {
@@ -54,5 +56,33 @@ describe('office-payroll-access', () => {
       'CM Rama2',
       'Office',
     ])
+  })
+
+  it('redacts office employee payroll fields for non-managers', () => {
+    const auth = { role: 'officer' }
+    expect(canViewOfficeEmployeePayroll(auth, 'Office')).toBe(false)
+    expect(canViewOfficeEmployeePayroll(auth, 'CM Tower')).toBe(true)
+    expect(
+      redactOfficeEmployeePayrollIfNeeded(
+        {
+          store: 'Office',
+          salType: 'Monthly',
+          salAmt: 45000,
+          positionAllowance: 3000,
+          bankName: 'SCB',
+          accountNumber: '123',
+        },
+        auth
+      )
+    ).toEqual({
+      store: 'Office',
+      salType: '',
+      salAmt: 0,
+      positionAllowance: 0,
+      riskAllowance: 0,
+      attendanceAllowance: 0,
+      bankName: '',
+      accountNumber: '',
+    })
   })
 })

@@ -2,8 +2,8 @@
 
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { Suspense } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Wallet } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
@@ -37,23 +37,22 @@ function isPayrollTab(v: string | null): v is PayrollTab {
 function PayrollPageInner() {
   const { auth } = useAuth()
   const t = useT(useLang().lang)
-  const router = useRouter()
-  const pathname = usePathname()
   const searchParams = useSearchParams()
   const canAccessPayroll = isOfficeRole(auth?.role || "") || isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
 
-  const rawTab = searchParams.get("tab")
-  const tabValue: PayrollTab = isPayrollTab(rawTab) ? rawTab : "calc"
+  /** 탭은 URL과 분리(입고·출고와 동일). ?tab= 변경 시 keep-alive가 href별로 페이지를 나눠 계산 탭 편집 상태가 사라짐. */
+  const [tabValue, setTabValue] = useState<PayrollTab>("calc")
+  const tabFromUrlAppliedRef = useRef(false)
+
+  useEffect(() => {
+    if (tabFromUrlAppliedRef.current) return
+    const rawTab = searchParams.get("tab")
+    if (isPayrollTab(rawTab)) setTabValue(rawTab)
+    tabFromUrlAppliedRef.current = true
+  }, [searchParams])
 
   const setTab = (v: string) => {
-    const p = new URLSearchParams(searchParams.toString())
-    if (v === "calc") {
-      p.delete("tab")
-    } else {
-      p.set("tab", v)
-    }
-    const qs = p.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    if (isPayrollTab(v)) setTabValue(v)
   }
 
   if (!canAccessPayroll) {
