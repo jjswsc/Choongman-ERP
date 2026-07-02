@@ -199,6 +199,8 @@ export async function getReceivablePayableListWithCache(params: {
   endStr: string
   userStore?: string
   userRole?: string
+  /** true: SW·IDB 캐시 우회 후 네트워크 우선 (검색·저장 후 재조회) */
+  fresh?: boolean
 }): Promise<{ type: string; list: ReceivablePayableItem[] }> {
   const key = cacheKey('erp:recPay', {
     type: params.type,
@@ -208,7 +210,7 @@ export async function getReceivablePayableListWithCache(params: {
     end: params.endStr,
   })
   const fallback: { type: string; list: ReceivablePayableItem[] } = { type: params.type, list: [] }
-  return fetchWithCache(key, async () => {
+  const fetcher = async () => {
     const q = new URLSearchParams({
       type: params.type,
       startStr: params.startStr,
@@ -218,9 +220,20 @@ export async function getReceivablePayableListWithCache(params: {
     if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
     if (params.userStore) q.set('userStore', params.userStore)
     if (params.userRole) q.set('userRole', params.userRole)
+    if (params.fresh) q.set('_t', String(Date.now()))
     const res = await apiFetch(`/api/getReceivablePayableList?${q}`)
     return res.json() as Promise<{ type: string; list: ReceivablePayableItem[] }>
-  }, fallback)
+  }
+  if (params.fresh) {
+    try {
+      const data = await fetcher()
+      await setErpCache(key, data)
+      return data ?? fallback
+    } catch {
+      return fallback
+    }
+  }
+  return fetchWithCache(key, fetcher, fallback)
 }
 
 /** 미수/미지급 목록 캐시 무효화 (통장 거래 수정/삭제 후 즉시 재조회 반영용) */

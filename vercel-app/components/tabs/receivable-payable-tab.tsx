@@ -98,6 +98,7 @@ import {
   deleteManualBalanceTransaction,
   updateReceivableReceiveCheck,
   translateTexts,
+  invalidateReceivablePayableListCache,
   type ReceivablePayableItem,
   type PayableTransactionItem,
   type OrderInvoiceTotals,
@@ -179,6 +180,12 @@ function buildCumulativeByKey(
     byKey[key] = (byKey[key] || 0) + Number(row.balance ?? 0)
   }
   return byKey
+}
+
+type ReceivablePayableListLoadOverrides = {
+  type?: "receivable" | "payable"
+  storeFilter?: string
+  vendorFilter?: string
 }
 
 function isOfficeLikeLabel(label: string): boolean {
@@ -383,6 +390,7 @@ export function ReceivablePayableTab() {
   const [highlightBankTxId, setHighlightBankTxId] = React.useState<number | null>(null)
   const [pendingDeepLinkSearch, setPendingDeepLinkSearch] = React.useState(false)
   const urlDeepLinkAppliedRef = React.useRef(false)
+  const listLoadSeqRef = React.useRef(0)
 
   const showReceivableManualActions = !(tab === "receivable" && isManagerOnly)
   const showPayableManualActions = canSelectStores
@@ -635,51 +643,70 @@ export function ReceivablePayableTab() {
     if (!canSelectStores && isManager && tab === "payable") applyTab("receivable")
   }, [canSelectStores, isManager, tab, applyTab])
 
-  const loadList = React.useCallback(() => {
-    setLoading(true)
-    const listParams = {
-      type: tab as "receivable" | "payable",
-      storeFilter:
-        tab === "receivable" && recStoreFilter !== "All"
-          ? recStoreFilter
-          : tab === "payable" && payStoreFilter !== "All"
-            ? payStoreFilter
-            : undefined,
-      vendorFilter: tab === "payable" && vendorFilter !== "All" ? vendorFilter : undefined,
-      startStr,
-      endStr,
-      userStore: auth?.store || undefined,
-      userRole: auth?.role || undefined,
-    }
-    const summaryParams = {
-      type: tab as "receivable" | "payable",
-      endStr,
-      storeFilter:
-        tab === "receivable" && recStoreFilter !== "All"
-          ? recStoreFilter
-          : tab === "payable" && payStoreFilter !== "All"
-            ? payStoreFilter
-            : undefined,
-      vendorFilter: tab === "payable" && vendorFilter !== "All" ? vendorFilter : undefined,
-      userStore: auth?.store || undefined,
-      userRole: auth?.role || undefined,
-    }
-    Promise.all([getReceivablePayableList(listParams), getReceivablePayableSummary(summaryParams)])
-      .then(([listRes, summaryRes]) => {
+  const loadList = React.useCallback(
+    async (opts?: { fresh?: boolean; overrides?: ReceivablePayableListLoadOverrides }) => {
+      const seq = ++listLoadSeqRef.current
+      const effectiveTab = opts?.overrides?.type ?? tab
+      const storeFilterVal =
+        opts?.overrides?.storeFilter !== undefined
+          ? opts.overrides.storeFilter
+          : effectiveTab === "receivable" && recStoreFilter !== "All"
+            ? recStoreFilter
+            : effectiveTab === "payable" && payStoreFilter !== "All"
+              ? payStoreFilter
+              : undefined
+      const vendorFilterVal =
+        opts?.overrides?.vendorFilter !== undefined
+          ? opts.overrides.vendorFilter
+          : effectiveTab === "payable" && vendorFilter !== "All"
+            ? vendorFilter
+            : undefined
+      const listParams = {
+        type: effectiveTab,
+        storeFilter: storeFilterVal,
+        vendorFilter: vendorFilterVal,
+        startStr,
+        endStr,
+        userStore: auth?.store || undefined,
+        userRole: auth?.role || undefined,
+        fresh: opts?.fresh,
+      }
+      const summaryParams = {
+        type: effectiveTab,
+        endStr,
+        storeFilter: storeFilterVal,
+        vendorFilter: vendorFilterVal,
+        userStore: auth?.store || undefined,
+        userRole: auth?.role || undefined,
+        fresh: opts?.fresh,
+      }
+      setLoading(true)
+      try {
+        if (opts?.fresh) {
+          await invalidateReceivablePayableListCache()
+        }
+        const [listRes, summaryRes] = await Promise.all([
+          getReceivablePayableList(listParams),
+          getReceivablePayableSummary(summaryParams),
+        ])
+        if (seq !== listLoadSeqRef.current) return
         setListData(listRes.list || [])
-        const byKey = buildCumulativeByKey(tab, summaryRes.list || [])
+        const byKey = buildCumulativeByKey(effectiveTab, summaryRes.list || [])
         const totalAmount = Object.values(byKey).reduce((sum, v) => sum + v, 0)
         setCumulativeSummary({
           totalAmount,
           byKey,
         })
-      })
-      .catch(() => {
+      } catch {
+        if (seq !== listLoadSeqRef.current) return
         setListData([])
         setCumulativeSummary({ totalAmount: 0, byKey: {} })
-      })
-      .finally(() => setLoading(false))
-  }, [tab, recStoreFilter, payStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
+      } finally {
+        if (seq === listLoadSeqRef.current) setLoading(false)
+      }
+    },
+    [tab, recStoreFilter, payStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role]
+  )
 
   const handleManualBalanceSave = React.useCallback(async () => {
     if (!manualEdit) return
@@ -709,7 +736,7 @@ export function ReceivablePayableTab() {
       })
       if (res.success) {
         setManualEdit(null)
-        loadList()
+        loadList({ fresh: true })
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message)
       }
@@ -735,7 +762,7 @@ export function ReceivablePayableTab() {
         const res = await deleteManualBalanceTransaction({ type: ledger, id })
         if (res.success) {
           setManualEdit(null)
-          loadList()
+          loadList({ fresh: true })
         } else {
           await appAlert(translateApiMessage(res.message, t) || res.message)
         }
@@ -770,48 +797,18 @@ export function ReceivablePayableTab() {
     applyTab("payable")
     setVendorFilter(v.code)
     setPayableStoreFilter("All")
-    window.setTimeout(() => {
-      setLoading(true)
-      setHasSearchedList(true)
-      const listParams = {
-        type: "payable" as const,
-        storeFilter: undefined,
-        vendorFilter: v.code,
-        startStr,
-        endStr,
-        userStore: auth?.store || undefined,
-        userRole: auth?.role || undefined,
-      }
-      const summaryParams = {
-        type: "payable" as const,
-        endStr,
-        vendorFilter: v.code,
-        userStore: auth?.store || undefined,
-        userRole: auth?.role || undefined,
-      }
-      Promise.all([getReceivablePayableList(listParams), getReceivablePayableSummary(summaryParams)])
-        .then(([listRes, summaryRes]) => {
-          setListData(listRes.list || [])
-          const byKey = buildCumulativeByKey("payable", summaryRes.list || [])
-          const totalAmount = Object.values(byKey).reduce((sum, v) => sum + v, 0)
-          setCumulativeSummary({
-            totalAmount,
-            byKey,
-          })
-        })
-        .catch(() => {
-          setListData([])
-          setCumulativeSummary({ totalAmount: 0, byKey: {} })
-        })
-        .finally(() => setLoading(false))
-    }, 0)
-  }, [purchaseVendorMatchForOutlet, canSelectStores, startStr, endStr, auth?.store, auth?.role, applyTab])
+    setHasSearchedList(true)
+    void loadList({
+      fresh: true,
+      overrides: { type: "payable", vendorFilter: v.code, storeFilter: undefined },
+    })
+  }, [purchaseVendorMatchForOutlet, canSelectStores, loadList, applyTab])
 
   const [hasSearchedList, setHasSearchedList] = React.useState(false)
 
   const handleLoadList = React.useCallback(() => {
     setHasSearchedList(true)
-    loadList()
+    void loadList({ fresh: true })
   }, [loadList])
 
   const resolveSalesOutletFilterFromStoreName = React.useCallback(
@@ -865,8 +862,16 @@ export function ReceivablePayableTab() {
     if (!pendingDeepLinkSearch) return
     setPendingDeepLinkSearch(false)
     setHasSearchedList(true)
-    loadList()
+    void loadList({ fresh: true })
   }, [pendingDeepLinkSearch, loadList])
+
+  React.useEffect(() => {
+    listLoadSeqRef.current += 1
+    setHasSearchedList(false)
+    setListData([])
+    setCumulativeSummary({ totalAmount: 0, byKey: {} })
+    setLoading(false)
+  }, [tab])
 
   const bankTxLinkedAccrualIds = React.useMemo(() => {
     const byBank = new Map<number, Set<number>>()
@@ -951,7 +956,7 @@ export function ReceivablePayableTab() {
         })
         if (res.success) {
           setReceiveCheckDialog(null)
-          loadList()
+          loadList({ fresh: true })
         } else {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "Failed")
         }
@@ -973,10 +978,6 @@ export function ReceivablePayableTab() {
     },
     []
   )
-
-  React.useEffect(() => {
-    setHasSearchedList(false)
-  }, [tab])
 
   React.useEffect(() => {
     setExpandedPayableRowId(null)
@@ -1011,7 +1012,7 @@ export function ReceivablePayableTab() {
       if (res.success) {
         setAddAmount("")
         setAddMemo("")
-        loadList()
+        loadList({ fresh: true })
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message)
       }
@@ -2788,8 +2789,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
             {addIsOpening && (
               <p className="text-xs text-muted-foreground mb-3">
                 {tab === "receivable"
-                  ? "기존 회계에서 이월할 미수금 잔액을 매장별로 입력하세요. (2월 말 기준 권장)"
-                  : "기존 회계에서 이월할 미지급금 잔액을 거래처별로 입력하세요. (2월 말 기준 권장)"}
+                  ? tt("recOpeningBalanceHintReceivable", "기존 회계에서 이월할 미수금 잔액을 매장별로 입력하세요. (2월 말 기준 권장)")
+                  : tt("recOpeningBalanceHintPayable", "기존 회계에서 이월할 미지급금 잔액을 거래처별로 입력하세요. (2월 말 기준 권장)")}
               </p>
             )}
             <div className="flex flex-wrap items-end gap-3">
@@ -2799,7 +2800,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                 </label>
                 <Select value={addEntity} onValueChange={setAddEntity}>
                   <SelectTrigger className="w-[180px] h-9">
-                    <SelectValue placeholder={tab === "receivable" ? "매장 선택" : "거래처 선택"} />
+                    <SelectValue
+                      placeholder={
+                        tab === "receivable"
+                          ? tt("recAddEntitySelectReceivable", "매장 선택")
+                          : tt("recAddEntitySelectPayable", "거래처 선택")
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {tab === "receivable"
@@ -2827,7 +2834,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">{t("memo") || "메모"}</label>
                 <Input
-                  placeholder={tab === "receivable" ? "수령 메모" : "지급 메모"}
+                  placeholder={
+                    tab === "receivable"
+                      ? tt("recReceiveMemoPh", "수령 메모")
+                      : tt("recPayMemoPh", "지급 메모")
+                  }
                   value={addMemo}
                   onChange={(e) => setAddMemo(e.target.value)}
                   className="w-[160px] h-9"
@@ -2988,8 +2999,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     manualEdit.refType === "Opening"
                       ? t("recTypeOpening") || "기초이월"
                       : manualEdit.ledger === "receivable"
-                        ? "수령 메모"
-                        : "지급 메모"
+                        ? tt("recReceiveMemoPh", "수령 메모")
+                        : tt("recPayMemoPh", "지급 메모")
                   }
                 />
               </div>

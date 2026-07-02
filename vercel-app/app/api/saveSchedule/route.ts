@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter, supabaseInsertMany } from '@/lib/supabase-server'
+import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 import {
-  findStaffForScheduleSlotName,
-  formatEmployeeDisplayName,
-  normalizeEmployeeCodeForMatch,
-  normalizeEmployeeNameFields,
-  type StaffRowForScheduleMatch,
-} from '@/lib/employee-display-name'
+  buildScheduleEmployeeRoster,
+  resolveScheduleSavePayloadFromSlot,
+  type ScheduleEmployeeRowInput,
+} from '@/lib/schedule-employee-slot'
 
 /** 타임존 영향 없이 로컬 날짜만 사용 (toISOString 시 UTC로 밀릴 수 있음 방지) */
 function addDays(dateStr: string, days: number): string {
@@ -56,89 +55,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    type EmpRow = { id?: number; name?: string; nick?: string; name_title?: string; employee_code?: string | null }
     const empSelectCandidates = [
       'id,name,nick,name_title,employee_code',
       'id,name,nick,name_title',
       'id,name,nick',
       'id,name',
     ] as const
-    let employeeRows: EmpRow[] = []
+    let employeeRows: ScheduleEmployeeRowInput[] = []
     for (const sel of empSelectCandidates) {
       try {
         employeeRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(store)}`, {
           select: sel,
           limit: 5000,
           order: 'id.asc',
-        })) as EmpRow[]
+        })) as ScheduleEmployeeRowInput[]
         break
       } catch {
         continue
       }
     }
 
-    function toStaffLite(e: EmpRow): StaffRowForScheduleMatch {
-      const rawName = String(e.name || '').trim()
-      const rawTitle = String(e.name_title || '').trim()
-      const { name: normName } = normalizeEmployeeNameFields(rawName, rawTitle)
-      const nickVal = String(e.nick || normName || rawName).trim() || rawName
-      return { name: normName || rawName, nick: nickVal }
-    }
+    const roster = buildScheduleEmployeeRoster(employeeRows)
 
-    const nameKeyToId = new Map<string, number>()
-    const idByCode = new Map<string, number>()
-    const roster: { id: number; lite: StaffRowForScheduleMatch }[] = []
-    for (const e of employeeRows || []) {
-      const idNum = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
-      if (idNum <= 0) continue
-      const rawName = String(e.name || '').trim()
-      const rawTitle = String(e.name_title || '').trim()
-      const { name: normName } = normalizeEmployeeNameFields(rawName, rawTitle)
-      const lite = toStaffLite(e)
-      roster.push({ id: idNum, lite })
-      const addNameKey = (k: string) => {
-        const lo = String(k || '').trim().toLowerCase()
-        if (!lo) return
-        if (!nameKeyToId.has(lo)) nameKeyToId.set(lo, idNum)
-      }
-      addNameKey(rawName)
-      addNameKey(normName)
-      addNameKey(formatEmployeeDisplayName(normName, rawTitle))
-      const nickOnly = String(e.nick || '').trim()
-      if (nickOnly) addNameKey(nickOnly)
-      const ck = normalizeEmployeeCodeForMatch(String(e.employee_code ?? ''))
-      if (ck) idByCode.set(ck, idNum)
-    }
-
-    function resolveEmployeeId(slotName: string): number | null {
-      const n = String(slotName || '').trim()
-      if (!n) return null
-      const lo = n.toLowerCase()
-      if (nameKeyToId.has(lo)) return nameKeyToId.get(lo)!
-      const ck = normalizeEmployeeCodeForMatch(n)
-      if (ck && idByCode.has(ck)) return idByCode.get(ck)!
-      const hit = findStaffForScheduleSlotName(
-        roster.map((r) => r.lite),
-        n
-      )
-      if (!hit) return null
-      const row = roster.find((r) => r.lite.name === hit.name && r.lite.nick === hit.nick)
-      return row ? row.id : null
-    }
-
-    // (schedule_date, store_name, name) 유니크: 한 직원은 같은 날 주방 또는 서비스 한 곳만 배정 가능
+    // (schedule_date, store, 직원) 유니크: 코드 우선, 없으면 이름
     const seen = new Map<string, string>()
     const duplicates: { name: string; date: string }[] = []
     for (const s of rows) {
       const dateStr = String(s.date || '').trim().slice(0, 10)
       if (!dateStr) continue
-      const name = String(s.name || '').trim()
-      if (!name) continue
-      const key = `${dateStr}|${store}|${name}`
+      const slotKey = String(s.employeeCode || s.name || '').trim()
+      if (!slotKey) continue
+      const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
+      const dedupeId =
+        resolved.employeeCode ||
+        (resolved.employeeId != null ? `#${resolved.employeeId}` : '') ||
+        resolved.name ||
+        slotKey
+      const key = `${dateStr}|${store}|${dedupeId}`
       const area = String(s.remark || s.memo || '').trim() || ''
+      const label = resolved.name || slotKey
       if (seen.has(key)) {
-        if (!duplicates.some((d) => d.name === name && d.date === dateStr)) {
-          duplicates.push({ name, date: dateStr })
+        if (!duplicates.some((d) => d.name === label && d.date === dateStr)) {
+          duplicates.push({ name: label, date: dateStr })
         }
       } else {
         seen.set(key, area)
@@ -161,13 +119,18 @@ export async function POST(request: NextRequest) {
     for (const s of rows) {
       const dateStr = String(s.date || '').trim().slice(0, 10)
       if (!dateStr) continue
-      const name = String(s.name || '').trim()
-      if (!name) continue
+      const slotKey = String(s.employeeCode || s.name || '').trim()
+      if (!slotKey) continue
+      const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
+      const name = resolved.name || slotKey
+      const employeeCode =
+        resolved.employeeCode || normalizeEmployeeCodeForMatch(String(s.employeeCode ?? ''))
       toInsert.push({
         schedule_date: dateStr,
         store_name: store,
         name,
-        employee_id: resolveEmployeeId(name) || null,
+        employee_id: resolved.employeeId,
+        ...(employeeCode ? { employee_code: employeeCode } : {}),
         plan_in: String(s.pIn || s.plan_in || '09:00').trim(),
         plan_out: String(s.pOut || s.plan_out || '18:00').trim(),
         break_start: String(s.pBS || s.break_start || '').trim(),
@@ -181,17 +144,27 @@ export async function POST(request: NextRequest) {
       const CHUNK = 50
       for (let k = 0; k < toInsert.length; k += CHUNK) {
         const chunk = toInsert.slice(k, k + CHUNK)
-        try {
-          await supabaseInsertMany('schedules', chunk)
-        } catch (e) {
-          const em = e instanceof Error ? e.message : String(e)
-          if (/employee_id|42703|column/i.test(em)) {
-            const fallbackChunk = chunk.map((r) => {
-              const { employee_id: _eid, ...rest } = r
-              return rest
-            })
-            await supabaseInsertMany('schedules', fallbackChunk)
-          } else {
+        let payload = chunk
+        for (;;) {
+          try {
+            await supabaseInsertMany('schedules', payload)
+            break
+          } catch (e) {
+            const em = e instanceof Error ? e.message : String(e)
+            if (/employee_code|42703|column/i.test(em) && payload.some((r) => 'employee_code' in r)) {
+              payload = payload.map((r) => {
+                const { employee_code: _c, ...rest } = r
+                return rest
+              })
+              continue
+            }
+            if (/employee_id|42703|column/i.test(em) && payload.some((r) => 'employee_id' in r)) {
+              payload = payload.map((r) => {
+                const { employee_id: _eid, ...rest } = r
+                return rest
+              })
+              continue
+            }
             throw e
           }
         }

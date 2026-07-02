@@ -355,7 +355,8 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     const rawName = String(r.name || "").trim()
     const { name: normName } = normalizeEmployeeNameFields(rawName, "")
     const canonical = (normName || rawName).trim() || rawName
-    const mergeKey = `${st}|${canonical}`
+    const empCode = String(r.employeeCode || "").trim()
+    const mergeKey = `${st}|${empCode || canonical}`
     if (!byPerson[mergeKey]) {
       byPerson[mergeKey] = {
         name: String(r.nick || canonical || rawName).trim() || rawName,

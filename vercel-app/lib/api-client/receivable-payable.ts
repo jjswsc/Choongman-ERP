@@ -54,6 +54,8 @@ export async function getReceivablePayableSummary(params: {
   endStr?: string
   storeFilter?: string
   vendorFilter?: string
+  /** true: SW 캐시 우회용 타임스탬프 쿼리 */
+  fresh?: boolean
 }) {
   const q = new URLSearchParams({ type: params.type })
   if (params.userStore) q.set('userStore', params.userStore)
@@ -62,6 +64,7 @@ export async function getReceivablePayableSummary(params: {
   if (params.endStr) q.set('endStr', params.endStr)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  if (params.fresh) q.set('_t', String(Date.now()))
   const res = await apiFetchWithOffline(`/api/getReceivablePayableSummary?${q}`)
   const data = await res.json()
   return data as { type: string; list: ReceivablePayableSummaryItem[]; totalAmount?: number }
@@ -110,6 +113,7 @@ export async function getReceivablePayableList(params: {
   endStr: string
   userStore?: string
   userRole?: string
+  fresh?: boolean
 }) {
   return getReceivablePayableListWithCache(params)
 }

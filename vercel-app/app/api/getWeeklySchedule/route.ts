@@ -3,11 +3,16 @@ import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import {
   findStaffForScheduleSlotName,
-  formatEmployeeDisplayName,
   normalizeEmployeeCodeForMatch,
-  normalizeEmployeeNameFields,
   type StaffRowForScheduleMatch,
 } from '@/lib/employee-display-name'
+import {
+  buildScheduleEmployeeRoster,
+  buildScheduleNameNickMaps,
+  resolveScheduleDisplayNickFromMaps,
+  toScheduleStaffLite,
+  type ScheduleEmployeeRowInput,
+} from '@/lib/schedule-employee-slot'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { storeMatches } from '@/lib/admin-employee-store-access'
 import {
@@ -38,23 +43,10 @@ function formatTime(v: string | null | undefined): string {
   return s.length >= 5 && s.charAt(2) === ':' ? s.substring(0, 5) : s
 }
 
-type EmpRow = {
-  id?: number
-  name?: string
-  nick?: string
+type EmpRow = ScheduleEmployeeRowInput & {
   store?: string
   job?: string
-  name_title?: string
   extra_stores?: unknown
-  employee_code?: string | null
-}
-
-function toStaffLite(e: EmpRow): StaffRowForScheduleMatch {
-  const rawName = String(e.name || '').trim()
-  const rawTitle = String(e.name_title || '').trim()
-  const { name: normName } = normalizeEmployeeNameFields(rawName, rawTitle)
-  const nickVal = String(e.nick || normName || rawName).trim() || rawName
-  return { name: normName || rawName, nick: nickVal }
 }
 
 /** 휴가/스케줄 매장이 직원의 소속(또는 extra_stores)과 맞는지 */
@@ -108,6 +100,7 @@ export async function GET(request: NextRequest) {
       store_name?: string
       name?: string
       employee_id?: number | null
+      employee_code?: string | null
       plan_in?: string
       plan_out?: string
       break_start?: string
@@ -142,22 +135,32 @@ export async function GET(request: NextRequest) {
         continue
       }
     }
-    const nameToNick: Record<string, string> = {}
     const storeNameToJob: Record<string, string> = {}
-    const empIdToNick = new Map<number, string>()
-    const codeToNick = new Map<string, string>()
     const staffAtStoreCache = new Map<string, StaffRowForScheduleMatch[]>()
+    const nickMaps = buildScheduleNameNickMaps(empList || [])
 
     const getStaffAtStore = (storeName: string): StaffRowForScheduleMatch[] => {
       const key = String(storeName || '').trim()
       let v = staffAtStoreCache.get(key)
       if (v) return v
-      v = (empList || []).filter((e) => empWorksAtStore(e, key)).map(toStaffLite)
+      v = (empList || []).filter((e) => empWorksAtStore(e, key)).map(toScheduleStaffLite)
       staffAtStoreCache.set(key, v)
       return v
     }
 
-    const findEmpForScheduleRow = (slotStore: string, slotName: string, employeeId: unknown): EmpRow | undefined => {
+    const findEmpForScheduleRow = (
+      slotStore: string,
+      slotName: string,
+      employeeId: unknown,
+      employeeCode: unknown
+    ): EmpRow | undefined => {
+      const rowCode = normalizeEmployeeCodeForMatch(String(employeeCode ?? ''))
+      if (rowCode) {
+        const byCode = (empList || []).find(
+          (e) => normalizeEmployeeCodeForMatch(String(e.employee_code ?? '')) === rowCode
+        )
+        if (byCode) return byCode
+      }
       const eid = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
       if (eid > 0) {
         const hit = (empList || []).find((e) => e.id != null && Math.floor(Number(e.id)) === eid)
@@ -167,48 +170,18 @@ export async function GET(request: NextRequest) {
       const match = findStaffForScheduleSlotName(roster, String(slotName || '').trim())
       if (!match) return undefined
       return (empList || []).find((e) => {
-        const lite = toStaffLite(e)
+        const lite = toScheduleStaffLite(e)
         return lite.name === match.name && lite.nick === match.nick
       })
     }
 
-    const resolveScheduleDisplayNick = (slotStore: string, slotName: string, slotEmployeeId: unknown): string => {
-      const nm = String(slotName || '').trim()
-      if (!nm) return ''
-      const eid = slotEmployeeId != null && Number.isFinite(Number(slotEmployeeId)) ? Math.floor(Number(slotEmployeeId)) : 0
-      if (eid > 0) {
-        const byId = empIdToNick.get(eid)
-        if (byId) return byId
-      }
-      const ck = normalizeEmployeeCodeForMatch(nm)
-      if (ck) {
-        const byCode = codeToNick.get(ck)
-        if (byCode) return byCode
-      }
-      const roster = getStaffAtStore(slotStore)
-      const hit = findStaffForScheduleSlotName(roster, nm)
-      if (hit) return hit.nick
-      return nameToNick[nm] || nm
-    }
-
     for (const e of empList || []) {
-      const rawName = String(e.name || '').trim()
-      const rawTitle = String(e.name_title || '').trim()
-      const { name: normName } = normalizeEmployeeNameFields(rawName, rawTitle)
       const st = String(e.store || '').trim()
-      const nickVal = String(e.nick || normName || rawName).trim() || rawName
-      const lite = toStaffLite(e)
-      const idNum = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
-      if (idNum > 0) empIdToNick.set(idNum, lite.nick)
+      const rawName = String(e.name || '').trim()
       const codeKey = normalizeEmployeeCodeForMatch(String(e.employee_code ?? ''))
-      if (codeKey) codeToNick.set(codeKey, lite.nick)
-      const keys = new Set<string>()
-      if (rawName) keys.add(rawName)
-      if (normName) keys.add(normName)
-      const displayFull = formatEmployeeDisplayName(normName, rawTitle).trim()
-      if (displayFull) keys.add(displayFull)
+      const keys = [rawName, ...(codeKey ? [codeKey] : [])]
       for (const k of keys) {
-        nameToNick[k] = nickVal
+        if (!k) continue
         if (st) storeNameToJob[st + '|' + k] = String(e.job || '').trim()
       }
     }
@@ -244,20 +217,28 @@ export async function GET(request: NextRequest) {
       // 휴가 신청 매장에 실제 소속(또는 extra_stores)인 직원만 병합 — 소속이 다른 매장으로 잘못 신청된 휴가는 단일 매장 조회에서 제외
       const rosterAtLeaveStore = (empList || []).filter((e) => empWorksAtStore(e, leaveStoreStr))
       const matchedEmp = rosterAtLeaveStore.find(
-        (e) => findStaffForScheduleSlotName([toStaffLite(e)], name) !== undefined
+        (e) => findStaffForScheduleSlotName([toScheduleStaffLite(e)], name) !== undefined
       )
       if (!isAll && !matchedEmp) continue
 
       const area = matchedEmp
         ? canonicalAreaFromText(matchedEmp.job || '')
         : canonicalAreaFromText(storeNameToJob[leaveStoreStr + '|' + name] || '')
-      const nickOut = resolveScheduleDisplayNick(leaveStoreStr, name, matchedEmp?.id ?? null)
+      const leaveCode = normalizeEmployeeCodeForMatch(String(matchedEmp?.employee_code ?? ''))
+      const nickOut = resolveScheduleDisplayNickFromMaps(
+        name,
+        matchedEmp?.id ?? null,
+        leaveCode,
+        nickMaps,
+        getStaffAtStore(leaveStoreStr)
+      )
 
       leaveMerged.push({
         date,
         store: leaveStoreStr,
         name,
         nick: nickOut,
+        ...(leaveCode ? { employeeCode: leaveCode } : {}),
         pIn: '09:00',
         pOut: '18:00',
         pBS: '',
@@ -273,6 +254,8 @@ export async function GET(request: NextRequest) {
       store: string
       name: string
       nick: string
+      employeeCode?: string
+      employeeId?: number
       pIn: string
       pOut: string
       pBS: string
@@ -286,13 +269,24 @@ export async function GET(request: NextRequest) {
     let list: RowWithMemo[] = (scheduleRows || []).map((r) => {
       const st = String(r.store_name || '').trim()
       const nm = String(r.name || '').trim()
-      const matched = findEmpForScheduleRow(st, nm, r.employee_id)
+      const matched = findEmpForScheduleRow(st, nm, r.employee_id, r.employee_code)
       const area = primaryAreaForDisplay(r.memo, matched?.job)
+      const rowCode =
+        normalizeEmployeeCodeForMatch(String(r.employee_code ?? '')) ||
+        normalizeEmployeeCodeForMatch(String(matched?.employee_code ?? ''))
+      const eid =
+        r.employee_id != null && Number.isFinite(Number(r.employee_id))
+          ? Math.floor(Number(r.employee_id))
+          : matched?.id != null && Number.isFinite(Number(matched.id))
+            ? Math.floor(Number(matched.id))
+            : 0
       return {
         date: toDateStr(r.schedule_date),
         store: st,
         name: nm,
-        nick: resolveScheduleDisplayNick(st, nm, r.employee_id),
+        nick: resolveScheduleDisplayNickFromMaps(nm, eid || null, rowCode || null, nickMaps, getStaffAtStore(st)),
+        ...(rowCode ? { employeeCode: rowCode } : {}),
+        ...(eid > 0 ? { employeeId: eid } : {}),
         pIn: formatTime(r.plan_in) || '09:00',
         pOut: formatTime(r.plan_out) || '18:00',
         pBS: formatTime(r.break_start),

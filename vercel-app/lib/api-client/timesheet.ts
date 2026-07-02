@@ -74,7 +74,17 @@ export async function getWeeklySchedule(params: {
 export async function saveSchedule(params: {
   store: string
   monday: string
-  rows: { date: string; name: string; pIn?: string; pOut?: string; pBS?: string; pBE?: string; remark?: string; plan_in_prev_day?: boolean }[]
+  rows: {
+    date: string
+    name: string
+    employeeCode?: string
+    pIn?: string
+    pOut?: string
+    pBS?: string
+    pBE?: string
+    remark?: string
+    plan_in_prev_day?: boolean
+  }[]
 }) {
   const res = await apiFetchWithOffline('/api/saveSchedule', {
     method: 'POST',
