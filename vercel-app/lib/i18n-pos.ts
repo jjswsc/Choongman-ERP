@@ -459,7 +459,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptPaymentChannelUnspecified: '결제 수단: 시스템에 기록되지 않음(현금/카드 등 미입력)',
     posReceiptPayCorrect: '결제 수단 정정',
     posReceiptPayCorrectHint:
-      '당일·전일 영업일(매장 영업시간 기준) 완료·결제완료 주문만. 주문 합계를 바꿀 수 있으며(할인·배달비 등은 비율로 맞춤), 현금·카드·QR·기타·배달앱 금액은 직접 입력하거나 이동 버튼으로 정정합니다. 기타는 세부 수단을 선택할 수 있습니다. 필요 시 같은 화면에서 주문 취소(같은 조건)를 할 수 있습니다. 사유는 필수입니다.',
+      '당일·전일 영업일(매장 영업시간 기준) 완료·결제완료 주문만. 주문 합계를 바꿀 수 있으며(할인·배달비 등은 비율로 맞춤), 현금·카드·QR·기타·배달앱 금액은 직접 입력하거나 이동 버튼으로 정정합니다. 기타는 세부 수단을 선택할 수 있습니다. 저장 시 POS 프린터 설정(자동 인쇄)에 따라 주방·홀·손님 영수증을 순서대로 출력합니다. 필요 시 같은 화면에서 주문 취소(같은 조건)를 할 수 있습니다. 사유는 필수입니다.',
     posReceiptPayCorrectReason: '정정 사유',
     posReceiptPayCorrectReasonPh: '예: 카드로 잘못 눌렀음 → 실제는 현금',
     posReceiptPayCorrectLinkposWarn:
@@ -475,7 +475,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptPayCorrectMismatch: '결제 합계가 주문 합계와 같아야 합니다.',
     posReceiptPayCorrectForbidden: '이 매장 주문만 정정할 수 있습니다.',
     posReceiptPayCorrectReasonShort: '사유를 2자 이상 입력해 주세요.',
-    posReceiptPayCorrectSaved: '결제 수단을 저장했습니다. 손님 영수증을 다시 출력해 주세요.',
+    posReceiptPayCorrectSaved: '결제 수단을 저장했습니다. 프린터 설정에 따라 주방·홀·손님 영수증을 자동 출력합니다.',
     posReceiptPayCorrectUnauthorized: '로그인이 필요합니다.',
     posReceiptPayCorrectConfirm: '이대로 저장할까요?',
     posReceiptPayCorrectOtherDetail: '「기타」세부(합계는 기타 금액과 같아야 함)',
@@ -3568,7 +3568,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptPaymentChannelUnspecified: 'Payment channel: not recorded (cash/card/QR not saved)',
     posReceiptPayCorrect: 'Correct payment split',
     posReceiptPayCorrectHint:
-      'Today/yesterday (store operating day) paid or completed orders only. You may change the order total (discounts/fees scale proportionally), type or move payment amounts across cash / card / QR / other / delivery-app, and cancel the order from this dialog when needed. For “other”, pick a detail channel. A reason is required.',
+      'Today/yesterday (store operating day) paid or completed orders only. You may change the order total (discounts/fees scale proportionally), type or move payment amounts across cash / card / QR / other / delivery-app, and cancel the order from this dialog when needed. For “other”, pick a detail channel. On save, kitchen / hall / customer receipts auto-print per POS printer settings. A reason is required.',
     posReceiptPayCorrectReason: 'Reason',
     posReceiptPayCorrectReasonPh: 'e.g. Tapped card by mistake — was cash',
     posReceiptPayCorrectLinkposWarn:
@@ -3584,7 +3584,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptPayCorrectMismatch: 'Payment lines must add up to the order total.',
     posReceiptPayCorrectForbidden: 'You can only correct orders for your store.',
     posReceiptPayCorrectReasonShort: 'Enter a reason (at least 2 characters).',
-    posReceiptPayCorrectSaved: 'Payment split saved. Reprint the customer receipt if needed.',
+    posReceiptPayCorrectSaved: 'Payment split saved. Kitchen / hall / customer receipts print automatically per printer settings.',
     posReceiptPayCorrectUnauthorized: 'Sign-in required.',
     posReceiptPayCorrectConfirm: 'Save this correction?',
     posReceiptPayCorrectOtherDetail: '“Other” breakdown (must match the Other total)',
@@ -7698,7 +7698,7 @@ export const I18N_POS_TH: Record<string, string> = {
       'ช่องทางชำระ: ระบบไม่มีบันทึก (ยังไม่ได้บันทึกเงินสด/บัตร/QR ฯลฯ)',
     posReceiptPayCorrect: 'แก้ช่องทางชำระ',
     posReceiptPayCorrectHint:
-      'ใช้ได้เฉพาะบิลของวันทำการนี้/วันก่อนหน้า (ตามเวลาเปิดร้านของสาขา) ที่ชำระแล้วหรือปิดบิลแล้ว แก้ยอดรวมบิลได้ (ส่วนลด/ค่าส่ง ปรับตามสัดส่วน) พิมพ์ยอดช่องทางชำระเองหรือกด “ย้าย” ระหว่างช่อง เงินสด / บัตร / QR / แอปเดลิเวอรี / อื่นๆ ยกเลิกบิลจากหน้านี้ได้เมื่อจำเป็น ก่อนบันทึกต้องกรอกเหตุผลอย่างน้อย 2 ตัวอักษร',
+      'ใช้ได้เฉพาะบิลของวันทำการนี้/วันก่อนหน้า (ตามเวลาเปิดร้านของสาขา) ที่ชำระแล้วหรือปิดบิลแล้ว แก้ยอดรวมบิลได้ (ส่วนลด/ค่าส่ง ปรับตามสัดส่วน) พิมพ์ยอดช่องทางชำระเองหรือกด “ย้าย” ระหว่างช่อง เงินสด / บัตร / QR / แอปเดลิเวอรี / อื่นๆ บันทึกแล้วระบบพิมพ์ใบครัว·หน้าร้าน·ใบเสร็จลูกค้าตามการตั้งค่าเครื่องพิมพ์ POS ยกเลิกบิลจากหน้านี้ได้เมื่อจำเป็น ก่อนบันทึกต้องกรอกเหตุผลอย่างน้อย 2 ตัวอักษร',
     posReceiptPayCorrectReason: 'เหตุผล',
     posReceiptPayCorrectReasonPh: 'เช่น กดบัตรผิด — จริงๆ เป็นเงินสด',
     posReceiptPayCorrectLinkposWarn:
@@ -7714,7 +7714,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptPayCorrectMismatch: 'ยอดรวมช่องทางต้องเท่ากับยอดบิล',
     posReceiptPayCorrectForbidden: 'แก้ได้เฉพาะบิลของสาขาคุณเท่านั้น',
     posReceiptPayCorrectReasonShort: 'กรอกเหตุผลอย่างน้อย 2 ตัวอักษร',
-    posReceiptPayCorrectSaved: 'บันทึกการแก้ช่องทางชำระแล้ว หากต้องการให้พิมพ์ใบเสร็จลูกค้าใหม่อีกครั้ง',
+    posReceiptPayCorrectSaved: 'บันทึกการแก้ช่องทางชำระแล้ว ระบบพิมพ์ใบครัว·หน้าร้าน·ใบเสร็จลูกค้าตามการตั้งค่าเครื่องพิมพ์',
     posReceiptPayCorrectUnauthorized: 'ต้องเข้าสู่ระบบ',
     posReceiptPayCorrectConfirm: 'บันทึกการแก้ไขนี้?',
     posReceiptPayCorrectOtherDetail: 'เลือกรายละเอียด “อื่นๆ” ให้ตรงการชำระ (ต้องสอดคล้องกับยอดในช่องอื่นๆ เมื่อบันทึก)',

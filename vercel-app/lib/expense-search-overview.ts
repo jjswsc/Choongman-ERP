@@ -21,6 +21,11 @@ export interface ExpenseSearchOverviewRow {
   accountSubjectId?: number | null
   vendorCode?: string
   plannedAmount?: number
+  grossAmount?: number
+  vatAmount?: number
+  withholdingTaxAmount?: number
+  paidAmount?: number
+  accrualStatus?: string
   remainingAmount?: number
   bankAmount?: number
   expenseDate?: string
@@ -295,9 +300,9 @@ export async function buildExpenseSearchOverview(params: {
     const accrualId = Number(p.expense_accrual_id || 0)
     const bankId = Number(p.bank_transaction_id || 0)
     const pettyId = Number(p.petty_cash_transaction_id || 0)
-    const amt = Math.abs(Number(p.amount || 0))
-    if (accrualId > 0 && amt > 0) {
-      paymentByAccrual.set(accrualId, (paymentByAccrual.get(accrualId) || 0) + amt)
+    const amt = Number(p.amount || 0)
+    if (accrualId > 0 && amt < 0) {
+      paymentByAccrual.set(accrualId, (paymentByAccrual.get(accrualId) || 0) + Math.abs(amt))
     }
     if (accrualId > 0 && bankId > 0) {
       bankByAccrual.set(accrualId, bankId)
@@ -313,6 +318,10 @@ export async function buildExpenseSearchOverview(params: {
   const mappedAccruals: Array<{
     row: ExpenseAccrualRow
     decoded: ReturnType<typeof decodePayeeCode>
+    gross: number
+    vatAmt: number
+    wht: number
+    paid: number
     planned: number
     remaining: number
     planStatus: 'planned' | 'approved' | 'paid' | 'rejected'
@@ -333,13 +342,14 @@ export async function buildExpenseSearchOverview(params: {
     accrualIdsInRange.add(id)
 
     const gross = Math.abs(Number(r.amount || 0))
+    const vatAmt = Math.max(0, Math.abs(Number(r.vat_amount ?? 0) || 0))
     const wht = Math.max(0, Math.abs(Number(r.withholding_tax_amount ?? 0) || 0))
     const planned = expenseAccrualNetPayable(gross, wht)
     const paid = paymentByAccrual.get(id) || 0
     const remaining = Math.max(0, planned - paid)
     const planStatus = resolvePlanStatus(r.status, remaining)
 
-    mappedAccruals.push({ row: r, decoded, planned, remaining, planStatus })
+    mappedAccruals.push({ row: r, decoded, gross, vatAmt, wht, paid, planned, remaining, planStatus })
   }
 
   const linkedBankIds = new Set<number>(
@@ -356,7 +366,7 @@ export async function buildExpenseSearchOverview(params: {
   const rows: ExpenseSearchOverviewRow[] = []
   const representedBankIds = new Set<number>()
 
-  for (const { row, decoded, planned, remaining, planStatus } of mappedAccruals) {
+  for (const { row, decoded, gross, vatAmt, wht, paid, planned, remaining, planStatus } of mappedAccruals) {
     const accrualId = Number(row.id || 0)
     const bankId = bankByAccrual.get(accrualId) || 0
     const hasBank = bankId > 0
@@ -380,6 +390,11 @@ export async function buildExpenseSearchOverview(params: {
       accountSubjectId: row.account_subject_id ?? null,
       vendorCode,
       plannedAmount: planned,
+      grossAmount: gross,
+      vatAmount: vatAmt,
+      withholdingTaxAmount: wht,
+      paidAmount: paid,
+      accrualStatus: String(row.status || '').toLowerCase() || 'planned',
       remainingAmount: remaining,
       bankAmount: bank ? Math.abs(Number(bank.amount) || 0) : undefined,
       expenseDate: row.expense_date ? String(row.expense_date).slice(0, 10) : undefined,

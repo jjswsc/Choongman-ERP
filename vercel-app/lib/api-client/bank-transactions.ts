@@ -122,6 +122,11 @@ export interface ExpenseSearchOverviewRow {
   accountSubjectId?: number | null
   vendorCode?: string
   plannedAmount?: number
+  grossAmount?: number
+  vatAmount?: number
+  withholdingTaxAmount?: number
+  paidAmount?: number
+  accrualStatus?: string
   remainingAmount?: number
   bankAmount?: number
   expenseDate?: string

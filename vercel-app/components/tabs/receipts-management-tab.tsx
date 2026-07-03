@@ -95,8 +95,10 @@ import {
   POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
   printPosHtmlDocument,
+  resolveAfterKitchenToReceiptDelayMs,
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
+import { storeAutoPrintFlagsFromSettings } from '@/lib/pos-terminal-auto-print'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { printPosVoidReceiptForOrder } from '@/lib/print-pos-void-receipt'
 import { isPosReversalStatus } from '@/lib/pos-order-policy'
@@ -737,7 +739,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         ),
         optionNameByCode,
       })
-      printPosHtmlDocument(fullHtml, {
+      await printPosHtmlDocument(fullHtml, {
         title: t('posHallOrder') || '홀 주문서',
         printDelayMs: 0,
         fallbackCleanupMs: 120_000,
@@ -1021,6 +1023,52 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: msg }))
     }
   }
+
+  const sleepMs = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+
+  /** 결제 수단 정정 저장 후: 매장 프린터 설정(자동 인쇄)에 따라 주방·홀·손님 영수증 순서 출력 */
+  const runAutoPrintAfterPayCorrect = React.useCallback(
+    async (order: PosOrder) => {
+      const store = String(order.storeCode ?? '').trim()
+      if (!store || !order.items?.length) return
+      let flags
+      try {
+        const settings = await getPosPrinterSettings({ storeCode: store })
+        flags = storeAutoPrintFlagsFromSettings(settings)
+      } catch {
+        return
+      }
+      if (!flags.kitchenOnOrder && !flags.receiptOnOrder && !flags.receiptOnPayment) return
+
+      const initialDelayMs = 180
+      let gapMs = initialDelayMs
+
+      if (flags.kitchenOnOrder) {
+        await sleepMs(gapMs)
+        await handlePrintKitchenSlip(order)
+        gapMs =
+          flags.receiptOnOrder || flags.receiptOnPayment
+            ? resolveAfterKitchenToReceiptDelayMs()
+            : 0
+      } else if (flags.receiptOnOrder || flags.receiptOnPayment) {
+        gapMs = initialDelayMs
+      }
+
+      if (flags.receiptOnOrder) {
+        if (gapMs > 0) await sleepMs(gapMs)
+        await handlePrintHallOrderSlip(order)
+        gapMs = flags.receiptOnPayment ? resolveAfterKitchenToReceiptDelayMs() : 0
+      } else if (flags.receiptOnPayment) {
+        gapMs = initialDelayMs
+      }
+
+      if (flags.receiptOnPayment) {
+        if (gapMs > 0) await sleepMs(gapMs)
+        await handlePrintCustomerReceipt(order)
+      }
+    },
+    [handlePrintKitchenSlip, handlePrintHallOrderSlip, handlePrintCustomerReceipt]
+  )
 
   /**
    * 정정 가능: 결제·주방 진행 중이거나 완료된 당일(POS 영업일) 주문.
@@ -1402,12 +1450,37 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       if (!ok) return
     }
     setPayCorrectSaving(true)
+    const savedOrder = payCorrectOrder
+    const savedStoreCode = String(savedOrder.storeCode ?? '').trim()
     try {
       const res = await correctPosOrderPayment(payload)
       if (!res.success) {
         await appAlert(resolvePayCorrectErrorMessage(String(res.message ?? '')))
         return
       }
+      let orderForPrint: PosOrder = {
+        ...savedOrder,
+        total: payCorrectOrderTotal,
+        paymentCash: payload.paymentCash,
+        paymentCard: payload.paymentCard,
+        paymentQr: payload.paymentQr,
+        paymentOther: payload.paymentOther,
+        ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
+        paymentDeliveryApp: payload.paymentDeliveryApp,
+        deliveryPaymentChannel: payDelChannel ?? undefined,
+      }
+      if (savedStoreCode) {
+        try {
+          const freshList = await getPosOrders({
+            orderId: savedOrder.id,
+            storeCode: savedStoreCode,
+          })
+          if (freshList[0]?.items?.length) orderForPrint = freshList[0]
+        } catch {
+          /* merged local snapshot */
+        }
+      }
+      void runAutoPrintAfterPayCorrect(orderForPrint)
       await appAlert(t('posReceiptPayCorrectSaved'))
       setPayCorrectOrder(null)
       setPayCorrectReason('')

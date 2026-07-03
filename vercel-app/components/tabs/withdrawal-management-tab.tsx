@@ -64,10 +64,6 @@ import {
   ExpenseDocumentAttachPanel,
   type ExpenseOcrFieldPayload,
 } from "@/components/erp/expense-document-attach-panel"
-import {
-  ExpenseRegisterStepNav,
-  type ExpenseRegisterStepId,
-} from "@/components/erp/expense-register-step-nav"
 import { ExpenseRecurringTemplatesBar } from "@/components/erp/expense-recurring-templates-bar"
 import { suggestAccountSubjectId, suggestVendorFromHint } from "@/lib/expense-ocr-suggestions"
 
@@ -213,7 +209,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [invoiceNo, setInvoiceNo] = React.useState("")
   /** 경비·매입 — 인보이스·영수증 첨부 (이미지/PDF, 최대 3개) */
   const [expenseAttachmentFiles, setExpenseAttachmentFiles] = React.useState<File[]>([])
-  const [registerStep, setRegisterStep] = React.useState<ExpenseRegisterStepId>("basics")
   const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
   const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
   const [saving, setSaving] = React.useState(false)
@@ -388,6 +383,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
       if (invoiceReceivedParam === "1" || invoiceReceivedParam === "true") setInvoiceReceived(true)
       if (invoiceNoParam) setInvoiceNo(invoiceNoParam)
+      if (editAccrualId) {
+        setExpensePayMode("later")
+      }
     }
   }, [searchParams, mapCategoryToMainSub])
 
@@ -627,15 +625,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     isTransferPrepaymentAccrual ||
     ((categoryMain === "purchase" || categoryMain === "expense") && expensePayMode === "later")
 
-  const useRegisterSteps = categoryMain === "purchase" || categoryMain === "expense"
-  const registerStepVisible = React.useCallback(
-    (step: ExpenseRegisterStepId) => !useRegisterSteps || registerStep === step,
-    [registerStep, useRegisterSteps]
-  )
-
-  React.useEffect(() => {
-    setRegisterStep("basics")
-  }, [categoryMain])
+  const showRecurringTemplatesBar = categoryMain === "purchase" || categoryMain === "expense"
 
   const handleExpenseOcrFields = React.useCallback(
     (f: ExpenseOcrFieldPayload) => {
@@ -1947,51 +1937,40 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
-          {useRegisterSteps ? (
-            <>
-              <ExpenseRegisterStepNav
-                active={registerStep}
-                onChange={setRegisterStep}
-                labels={{
-                  basics: tt("expenseRegisterStepBasics", "기본"),
-                  amount: tt("expenseRegisterStepAmount", "금액"),
-                  evidence: tt("expenseRegisterStepEvidence", "증빙"),
-                }}
-              />
-              <ExpenseRecurringTemplatesBar
-                canSave={!!categoryMain && (categoryMain === "purchase" || categoryMain === "expense")}
-                onApply={(tpl) => {
-                  setCategoryMain(tpl.categoryMain)
-                  if (tpl.payeeCode) {
-                    setPayeeCode(tpl.payeeCode)
-                    setPayeeManual(false)
-                  }
-                  if (tpl.payeeName) setPayeeName(tpl.payeeName)
-                  if (tpl.categoryMain === "purchase" && tpl.payeeCode) setVendorCode(tpl.payeeCode)
-                  if (tpl.accountSubjectId) setAccountSubjectId(String(tpl.accountSubjectId))
-                  if (tpl.memo) setMemo(tpl.memo)
-                  if (tpl.amount) setAmount(tpl.amount)
-                  if (tpl.vatAmount) setAccrualVatAmount(tpl.vatAmount)
-                }}
-                onSaveCurrent={() => {
-                  if (categoryMain !== "purchase" && categoryMain !== "expense") return null
-                  const label =
-                    payeeName.trim() ||
-                    vendors.find((v) => v.code === payeeCode)?.name ||
-                    (categoryMain === "purchase" ? tt("wm_purchase", "Purchase") : tt("wm_expense", "Expense"))
-                  return {
-                    label,
-                    categoryMain,
-                    payeeCode: payeeCode || undefined,
-                    payeeName: payeeName || undefined,
-                    accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
-                    memo: memo || undefined,
-                    amount: amount || undefined,
-                    vatAmount: accrualVatAmount || undefined,
-                  }
-                }}
-              />
-            </>
+          {showRecurringTemplatesBar ? (
+            <ExpenseRecurringTemplatesBar
+              canSave={!!categoryMain}
+              onApply={(tpl) => {
+                setCategoryMain(tpl.categoryMain)
+                if (tpl.payeeCode) {
+                  setPayeeCode(tpl.payeeCode)
+                  setPayeeManual(false)
+                }
+                if (tpl.payeeName) setPayeeName(tpl.payeeName)
+                if (tpl.categoryMain === "purchase" && tpl.payeeCode) setVendorCode(tpl.payeeCode)
+                if (tpl.accountSubjectId) setAccountSubjectId(String(tpl.accountSubjectId))
+                if (tpl.memo) setMemo(tpl.memo)
+                if (tpl.amount) setAmount(tpl.amount)
+                if (tpl.vatAmount) setAccrualVatAmount(tpl.vatAmount)
+              }}
+              onSaveCurrent={() => {
+                if (categoryMain !== "purchase" && categoryMain !== "expense") return null
+                const label =
+                  payeeName.trim() ||
+                  vendors.find((v) => v.code === payeeCode)?.name ||
+                  (categoryMain === "purchase" ? tt("wm_purchase", "Purchase") : tt("wm_expense", "Expense"))
+                return {
+                  label,
+                  categoryMain,
+                  payeeCode: payeeCode || undefined,
+                  payeeName: payeeName || undefined,
+                  accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
+                  memo: memo || undefined,
+                  amount: amount || undefined,
+                  vatAmount: accrualVatAmount || undefined,
+                }
+              }}
+            />
           ) : null}
 
           {hasTaxSub && (
@@ -2024,7 +2003,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
-          {registerStepVisible("basics") ? (
           <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
             <div className="flex flex-wrap items-end gap-2 w-full">
@@ -2430,7 +2408,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
           </div>
-          ) : null}
 
           {categoryMain === "fixed_asset" && (
             <div className="flex flex-wrap items-end gap-3">
@@ -2465,7 +2442,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
-          {registerStepVisible("amount") ? (
           <div className="border-t pt-4 space-y-3">
             <div className="flex flex-wrap items-end gap-3 max-w-6xl">
               {!isLaterPayment && showBankAccountOutsideTransfer && (
@@ -2572,9 +2548,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               </div>
             )}
           </div>
-          ) : null}
 
-          {registerStepVisible("evidence") && (categoryMain === "purchase" || categoryMain === "expense") ? (
+          {(categoryMain === "purchase" || categoryMain === "expense") ? (
             <ExpenseDocumentAttachPanel
               files={expenseAttachmentFiles}
               onFilesChange={setExpenseAttachmentFiles}
@@ -2587,30 +2562,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             />
           ) : null}
 
-          {useRegisterSteps && registerStep !== "evidence" ? (
-            <div className="flex flex-wrap gap-2">
-              {registerStep !== "basics" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setRegisterStep(registerStep === "amount" ? "basics" : "amount")}
-                >
-                  {tt("btnPrev", "이전")}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                onClick={() =>
-                  setRegisterStep(registerStep === "basics" ? "amount" : "evidence")
-                }
-              >
-                {tt("btnNext", "다음")}
-              </Button>
-            </div>
-          ) : null}
-
-          {(!useRegisterSteps || registerStep === "evidence") ? (
-            <div className="flex flex-wrap items-center gap-2 pb-20 md:pb-0">
+          <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={handleSubmit}
                 disabled={
@@ -2658,40 +2610,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 {tt("wm_backToBank", "Back to Bank Screen")}
               </Button>
             </div>
-          ) : null}
         </CardContent>
       </Card>
-
-      {useRegisterSteps ? (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-3 md:hidden safe-area-pb">
-          <div className="flex gap-2 max-w-lg mx-auto">
-            {registerStep !== "basics" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setRegisterStep(registerStep === "amount" ? "basics" : "amount")}
-              >
-                {tt("btnPrev", "이전")}
-              </Button>
-            ) : null}
-            {registerStep !== "evidence" ? (
-              <Button
-                type="button"
-                className="flex-1"
-                onClick={() => setRegisterStep(registerStep === "basics" ? "amount" : "evidence")}
-              >
-                {tt("btnNext", "다음")}
-              </Button>
-            ) : (
-              <Button className="flex-1" onClick={handleSubmit} disabled={saving || !categoryMain}>
-                <Wallet className="h-4 w-4 mr-1" />
-                {saving ? tt("loading", "...") : tt("btnSave", "Save")}
-              </Button>
-            )}
-          </div>
-        </div>
-      ) : null}
 
       <Dialog open={deliveryFeeDialogOpen} onOpenChange={setDeliveryFeeDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

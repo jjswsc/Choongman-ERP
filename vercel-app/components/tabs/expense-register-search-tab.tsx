@@ -40,6 +40,7 @@ import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
+import { canEditExpenseAccrualPlan } from "@/lib/expense-accrual-approve-policy"
 
 function getCategoryLabel(cat: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
@@ -372,6 +373,30 @@ export function ExpenseRegisterSearchTab() {
 
   const planDateLabel = (r: ExpenseSearchOverviewRow) => r.dueDate || r.expenseDate || null
 
+  const navigateToEditAccrual = React.useCallback(
+    (r: ExpenseSearchOverviewRow) => {
+      if (!r.accrualId) return
+      const q = new URLSearchParams()
+      q.set("tab", "expenseRegister")
+      q.set("editAccrualId", String(r.accrualId))
+      q.set("amount", String(r.grossAmount ?? r.plannedAmount ?? 0))
+      if (Number(r.vatAmount || 0) > 0) q.set("accrualVat", String(r.vatAmount))
+      if (Number(r.withholdingTaxAmount || 0) > 0) q.set("accrualWht", String(r.withholdingTaxAmount))
+      if (r.expenseDate) q.set("transDate", r.expenseDate)
+      if (r.payeeCode) q.set("payeeCode", r.payeeCode)
+      if (r.payeeName) q.set("payeeName", r.payeeName)
+      if (r.vendorCode) q.set("vendorCode", r.vendorCode)
+      if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
+      if (r.category) q.set("category", r.category)
+      if (r.storeName) q.set("storeName", r.storeName)
+      if (r.memo) q.set("memo", r.memo)
+      if (r.invoiceReceived) q.set("invoiceReceived", "1")
+      if (r.invoiceNo) q.set("invoiceNo", r.invoiceNo)
+      router.push(`/admin/expense-management?${q.toString()}`)
+    },
+    [router]
+  )
+
   const renderPlanCell = (r: ExpenseSearchOverviewRow) => {
     if (!r.accrualId) return <span className="text-muted-foreground">—</span>
     const amount = r.plannedAmount != null ? fmt(r.plannedAmount) : "-"
@@ -566,7 +591,14 @@ export function ExpenseRegisterSearchTab() {
                 <tbody>
                   {filteredList.map((r) => {
                     const canEditBank = Boolean(r.bankTransactionId)
-                    const canEditPlan = Boolean(r.accrualId && !r.bankTransactionId && r.planStatus === "planned")
+                    const canEditPlan = Boolean(
+                      r.accrualId &&
+                        !r.bankTransactionId &&
+                        canEditExpenseAccrualPlan({
+                          status: r.accrualStatus ?? r.planStatus,
+                          paidAmount: r.paidAmount,
+                        })
+                    )
                     const invoiceTargetId = r.bankTransactionId ?? r.accrualId
                     return (
                       <tr key={r.rowKey} className="border-t align-top">
@@ -647,21 +679,7 @@ export function ExpenseRegisterSearchTab() {
                                 variant="outline"
                                 className="h-8 w-8"
                                 title={tt("btnEdit", "Edit")}
-                                onClick={() => {
-                                  const q = new URLSearchParams()
-                                  q.set("tab", "expenseRegister")
-                                  q.set("editAccrualId", String(r.accrualId))
-                                  if (r.plannedAmount != null) q.set("amount", String(r.plannedAmount))
-                                  if (r.expenseDate) q.set("transDate", r.expenseDate)
-                                  if (r.payeeCode) q.set("payeeCode", r.payeeCode)
-                                  if (r.payeeName) q.set("payeeName", r.payeeName)
-                                  if (r.vendorCode) q.set("vendorCode", r.vendorCode)
-                                  if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
-                                  if (r.category) q.set("category", r.category)
-                                  if (r.storeName) q.set("storeName", r.storeName)
-                                  if (r.memo) q.set("memo", r.memo)
-                                  router.push(`/admin/expense-management?${q.toString()}`)
-                                }}
+                                onClick={() => navigateToEditAccrual(r)}
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
