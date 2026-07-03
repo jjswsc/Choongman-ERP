@@ -10,6 +10,15 @@ export const ERP_KEEP_ALIVE_EXCLUDED_PATH_PREFIXES = [
   "/admin/interior",
 ] as const
 
+/**
+ * 쿼리(?menu=&topic=&stores= 등)마다 keep-alive 캐시가 갈라지면
+ * router.replace 시 이전·다음 URL 슬롯이 번갈아 보이며 화면이 깜박일 수 있다.
+ * 매출 관리처럼 필터를 URL에 두는 화면은 pathname만 캐시 키로 쓴다.
+ */
+export const ERP_KEEP_ALIVE_QUERY_AGNOSTIC_PATH_PREFIXES = [
+  "/admin/sales-management",
+] as const
+
 export function normalizeErpPathOnly(href: string): string {
   const raw = (href || "").trim()
   if (!raw) return ""
@@ -25,4 +34,17 @@ export function isErpKeepAliveExcluded(href: string): boolean {
   return ERP_KEEP_ALIVE_EXCLUDED_PATH_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`)
   )
+}
+
+export function isErpKeepAliveQueryAgnostic(href: string): boolean {
+  const path = normalizeErpPathOnly(href)
+  return ERP_KEEP_ALIVE_QUERY_AGNOSTIC_PATH_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+  )
+}
+
+/** keep-alive Map 키 — 쿼리 무시 대상은 pathname만 사용 */
+export function resolveErpKeepAliveCacheHref(href: string): string {
+  if (isErpKeepAliveQueryAgnostic(href)) return normalizeErpPathOnly(href)
+  return href
 }

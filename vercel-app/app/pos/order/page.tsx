@@ -2450,7 +2450,12 @@ export default function PosOrderPage() {
 
       {/* 분할 결제 모달 */}
       <Dialog open={showPaymentModal} onOpenChange={(open) => !open && setShowPaymentModal(false)}>
-        <DialogContent className="max-w-xs sm:max-w-sm">
+        <DialogContent
+          className="max-w-xs sm:max-w-sm"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          onFocusOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{t("posSplitPayment") || "결제 수단 입력"}</DialogTitle>
           </DialogHeader>

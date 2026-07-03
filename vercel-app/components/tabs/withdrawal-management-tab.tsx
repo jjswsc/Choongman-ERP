@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Wallet, Camera, ArrowLeft } from "lucide-react"
+import { Wallet, ArrowLeft } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
@@ -60,6 +60,16 @@ import {
   resolveExpenseFeeAmounts,
   type ExpenseFeeVatMode,
 } from "@/lib/expense-fee-vat"
+import {
+  ExpenseDocumentAttachPanel,
+  type ExpenseOcrFieldPayload,
+} from "@/components/erp/expense-document-attach-panel"
+import {
+  ExpenseRegisterStepNav,
+  type ExpenseRegisterStepId,
+} from "@/components/erp/expense-register-step-nav"
+import { ExpenseRecurringTemplatesBar } from "@/components/erp/expense-recurring-templates-bar"
+import { suggestAccountSubjectId, suggestVendorFromHint } from "@/lib/expense-ocr-suggestions"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -79,6 +89,21 @@ async function fileToAccrualAttachmentDataUrl(file: File): Promise<string> {
     r.onerror = () => reject(new Error("read_fail"))
     r.readAsDataURL(file)
   })
+}
+
+async function processExpenseAttachmentFiles(
+  files: File[]
+): Promise<{ attachmentUrls: string[]; invoicePhotoUrl?: string }> {
+  const urls: string[] = []
+  let invoicePhotoUrl: string | undefined
+  for (const f of files.slice(0, 3)) {
+    const url = await fileToAccrualAttachmentDataUrl(f)
+    urls.push(url)
+    if (!invoicePhotoUrl && f.type.startsWith("image/")) {
+      invoicePhotoUrl = url
+    }
+  }
+  return { attachmentUrls: urls, invoicePhotoUrl }
 }
 
 const IGNORED_STORE_OPTION_VALUES = new Set(["store", "매장명"])
@@ -186,9 +211,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [usefulLifeMonths, setUsefulLifeMonths] = React.useState("60")
   const [invoiceReceived, setInvoiceReceived] = React.useState(false)
   const [invoiceNo, setInvoiceNo] = React.useState("")
-  const [invoicePhotoFile, setInvoicePhotoFile] = React.useState<File | null>(null)
-  /** 지출 등록(지급 예정만) 시 첨부 — 인보이스·영수증 이미지/PDF */
-  const [accrualAttachmentFiles, setAccrualAttachmentFiles] = React.useState<File[]>([])
+  /** 경비·매입 — 인보이스·영수증 첨부 (이미지/PDF, 최대 3개) */
+  const [expenseAttachmentFiles, setExpenseAttachmentFiles] = React.useState<File[]>([])
+  const [registerStep, setRegisterStep] = React.useState<ExpenseRegisterStepId>("basics")
   const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
   const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
   const [saving, setSaving] = React.useState(false)
@@ -602,12 +627,67 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     isTransferPrepaymentAccrual ||
     ((categoryMain === "purchase" || categoryMain === "expense") && expensePayMode === "later")
 
+  const useRegisterSteps = categoryMain === "purchase" || categoryMain === "expense"
+  const registerStepVisible = React.useCallback(
+    (step: ExpenseRegisterStepId) => !useRegisterSteps || registerStep === step,
+    [registerStep, useRegisterSteps]
+  )
+
+  React.useEffect(() => {
+    setRegisterStep("basics")
+  }, [categoryMain])
+
+  const handleExpenseOcrFields = React.useCallback(
+    (f: ExpenseOcrFieldPayload) => {
+      if (f.amount && f.amount > 0) {
+        setAmount(moneyInputStringFromAmount(f.amount))
+      }
+      if (f.vatAmount && f.vatAmount > 0) {
+        setAccrualVatAmount(moneyInputStringFromAmount(f.vatAmount))
+      }
+      if (f.withholdingTaxAmount && f.withholdingTaxAmount > 0) {
+        setAccrualWithholdingTax(moneyInputStringFromAmount(f.withholdingTaxAmount))
+      }
+      if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate)) {
+        setTransDate(f.expenseDate)
+      }
+      if (f.invoiceNo) {
+        setInvoiceNo(f.invoiceNo)
+        setInvoiceReceived(true)
+      }
+      if (f.vendorNameHint) {
+        const vendor = suggestVendorFromHint(vendors, f.vendorNameHint)
+        if (vendor) {
+          setPayeeCode(vendor.code)
+          setPayeeName(vendor.name)
+          setPayeeManual(false)
+          if (categoryMain === "purchase") setVendorCode(vendor.code)
+        } else if (!payeeName.trim()) {
+          setPayeeName(f.vendorNameHint)
+          setPayeeManual(true)
+        }
+      }
+      if (categoryMain === "expense" && !accountSubjectId) {
+        const subjectOpts = subjects
+          .filter((s) => s.id != null)
+          .map((s) => ({ id: s.id!, code: s.code, name: s.name, nameEn: s.nameEn }))
+        const sid = suggestAccountSubjectId(subjectOpts, {
+          vendorName: f.vendorNameHint || payeeName,
+          memo,
+          vendorCode: payeeCode,
+        })
+        if (sid) setAccountSubjectId(String(sid))
+      }
+    },
+    [accountSubjectId, categoryMain, memo, payeeCode, payeeName, subjects, vendors]
+  )
+
   const accrualNetPreview = React.useMemo(() => {
-    if (!isLaterPayment || (categoryMain !== "purchase" && categoryMain !== "expense")) return null
+    if (categoryMain !== "purchase" && categoryMain !== "expense") return null
     const g = parseMoneyAmount(amount)
     const w = Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0))
     return Math.max(0, g - w)
-  }, [isLaterPayment, categoryMain, amount, accrualWithholdingTax])
+  }, [categoryMain, amount, accrualWithholdingTax])
 
   const sumInboundLinkAmounts = React.useCallback(() => {
     return Object.values(inboundLinkAmounts).reduce((sum, raw) => {
@@ -762,16 +842,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       return
     }
     let attachmentUrls: string[] | undefined
+    let accrualInvoicePhotoUrl: string | undefined
     if (
       (categoryMain === "purchase" || categoryMain === "expense") &&
-      accrualAttachmentFiles.length > 0
+      expenseAttachmentFiles.length > 0
     ) {
       try {
-        const urls: string[] = []
-        for (const f of accrualAttachmentFiles.slice(0, 3)) {
-          urls.push(await fileToAccrualAttachmentDataUrl(f))
-        }
-        attachmentUrls = urls
+        const processed = await processExpenseAttachmentFiles(expenseAttachmentFiles)
+        attachmentUrls = processed.attachmentUrls
+        accrualInvoicePhotoUrl = processed.invoicePhotoUrl
       } catch (e) {
         const msg =
           e instanceof Error && e.message === "FILE_TOO_LARGE"
@@ -779,18 +858,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             : tt("expenseAccrualAttachFail", "Failed to process attachment.")
         await appAlert(msg)
         return
-      }
-    }
-
-    let accrualInvoicePhotoUrl: string | undefined
-    if (
-      (categoryMain === "purchase" || categoryMain === "expense") &&
-      invoicePhotoFile
-    ) {
-      try {
-        accrualInvoicePhotoUrl = await compressImageForUpload(invoicePhotoFile, 1024, 0.7)
-      } catch {
-        accrualInvoicePhotoUrl = undefined
       }
     }
 
@@ -835,12 +902,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setMemo("")
         setPayeeCode("")
         setPayeeName("")
-        setAccrualAttachmentFiles([])
+        setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
         setInvoiceReceived(false)
         setInvoiceNo("")
-        setInvoicePhotoFile(null)
         setActiveFeeVatMode(null)
         hasAppliedParams.current = false
         onAccrualSaved?.({ expenseDate: transDate })
@@ -881,14 +947,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setPayeeCode("")
         setPayeeName("")
         setVendorCode("")
-        setAccrualAttachmentFiles([])
+        setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
         setInvoiceReceived(false)
         setInvoiceNo("")
-        setInvoicePhotoFile(null)
         setActiveFeeVatMode(null)
-        setInvoicePhotoFile(null)
         if (queued) {
           await appAlert(
             tt(
@@ -935,9 +999,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }
 
     let invoicePhotoUrl: string | undefined
-    if (invoicePhotoFile && (categoryMain === "purchase" || categoryMain === "expense")) {
+    if (
+      expenseAttachmentFiles.length > 0 &&
+      (categoryMain === "purchase" || categoryMain === "expense")
+    ) {
       try {
-        invoicePhotoUrl = await compressImageForUpload(invoicePhotoFile, 1024, 0.7)
+        const processed = await processExpenseAttachmentFiles(expenseAttachmentFiles)
+        invoicePhotoUrl = processed.invoicePhotoUrl
       } catch {
         invoicePhotoUrl = undefined
       }
@@ -1014,6 +1082,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
+    if (categoryMain === "expense") {
+      const code = payeeCode.trim()
+      const name = payeeName.trim()
+      if (!code && !name) {
+        await appAlert(tt("expensePayeeRequired", "Please select or enter a payee."))
+        return
+      }
+    }
     if (categoryMain === "transfer" && transferKind === "bank_general") {
       const hasExternal =
         transferBankAccountNo.trim().length > 0 && transferBankRecipientName.trim().length > 0
@@ -1034,11 +1110,22 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }
 
     let invoicePhotoUrl: string | undefined
-    if (invoicePhotoFile && (categoryMain === "purchase" || categoryMain === "expense")) {
+    let attachmentUrls: string[] | undefined
+    if (
+      expenseAttachmentFiles.length > 0 &&
+      (categoryMain === "purchase" || categoryMain === "expense")
+    ) {
       try {
-        invoicePhotoUrl = await compressImageForUpload(invoicePhotoFile, 1024, 0.7)
-      } catch {
-        invoicePhotoUrl = undefined
+        const processed = await processExpenseAttachmentFiles(expenseAttachmentFiles)
+        attachmentUrls = processed.attachmentUrls
+        invoicePhotoUrl = processed.invoicePhotoUrl
+      } catch (e) {
+        const msg =
+          e instanceof Error && e.message === "FILE_TOO_LARGE"
+            ? tt("expenseAccrualAttachTooLarge", "Attachment is too large. Please upload PDF files under 1.5MB.")
+            : tt("expenseAccrualAttachFail", "Failed to process attachment.")
+        await appAlert(msg)
+        return
       }
     }
 
@@ -1048,6 +1135,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const submitVat = feeResolved
       ? feeResolved.vat
       : Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
+    const submitWht =
+      categoryMain === "purchase" || categoryMain === "expense"
+        ? Math.max(0, Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0)
+        : 0
+    if ((categoryMain === "purchase" || categoryMain === "expense") && submitAmt - submitWht <= 0) {
+      await appAlert(tt("expenseAccrualNetPositiveRequired", "Net payable amount must be greater than 0. Check total and withholding tax."))
+      return
+    }
     const submitInvoiceReceived = feeResolved ? feeResolved.invoiceReceived : invoiceReceived
 
     setSaving(true)
@@ -1131,6 +1226,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           categoryMain === "purchase" || categoryMain === "expense"
             ? submitVat > 0 ? submitVat : undefined
             : undefined,
+        withholdingTaxAmount:
+          categoryMain === "purchase" || categoryMain === "expense"
+            ? submitWht > 0 ? submitWht : undefined
+            : undefined,
+        ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
         userName: auth?.user,
         userRole: auth?.role,
         userStore: auth?.store,
@@ -1158,7 +1258,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
       setAmount("")
       setMemo("")
-      setInvoicePhotoFile(null)
+      setExpenseAttachmentFiles([])
       setInboundLinkAmounts({})
       setActiveFeeVatMode(null)
       if (res.fixedAssetId) {
@@ -1599,9 +1699,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
 
       let invoicePhotoUrl: string | undefined
-      if (invoicePhotoFile) {
+      if (expenseAttachmentFiles.length > 0) {
         try {
-          invoicePhotoUrl = await compressImageForUpload(invoicePhotoFile, 1024, 0.7)
+          const processed = await processExpenseAttachmentFiles(expenseAttachmentFiles)
+          invoicePhotoUrl = processed.invoicePhotoUrl
         } catch {
           invoicePhotoUrl = undefined
         }
@@ -1846,6 +1947,53 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
+          {useRegisterSteps ? (
+            <>
+              <ExpenseRegisterStepNav
+                active={registerStep}
+                onChange={setRegisterStep}
+                labels={{
+                  basics: tt("expenseRegisterStepBasics", "기본"),
+                  amount: tt("expenseRegisterStepAmount", "금액"),
+                  evidence: tt("expenseRegisterStepEvidence", "증빙"),
+                }}
+              />
+              <ExpenseRecurringTemplatesBar
+                canSave={!!categoryMain && (categoryMain === "purchase" || categoryMain === "expense")}
+                onApply={(tpl) => {
+                  setCategoryMain(tpl.categoryMain)
+                  if (tpl.payeeCode) {
+                    setPayeeCode(tpl.payeeCode)
+                    setPayeeManual(false)
+                  }
+                  if (tpl.payeeName) setPayeeName(tpl.payeeName)
+                  if (tpl.categoryMain === "purchase" && tpl.payeeCode) setVendorCode(tpl.payeeCode)
+                  if (tpl.accountSubjectId) setAccountSubjectId(String(tpl.accountSubjectId))
+                  if (tpl.memo) setMemo(tpl.memo)
+                  if (tpl.amount) setAmount(tpl.amount)
+                  if (tpl.vatAmount) setAccrualVatAmount(tpl.vatAmount)
+                }}
+                onSaveCurrent={() => {
+                  if (categoryMain !== "purchase" && categoryMain !== "expense") return null
+                  const label =
+                    payeeName.trim() ||
+                    vendors.find((v) => v.code === payeeCode)?.name ||
+                    (categoryMain === "purchase" ? tt("wm_purchase", "Purchase") : tt("wm_expense", "Expense"))
+                  return {
+                    label,
+                    categoryMain,
+                    payeeCode: payeeCode || undefined,
+                    payeeName: payeeName || undefined,
+                    accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
+                    memo: memo || undefined,
+                    amount: amount || undefined,
+                    vatAmount: accrualVatAmount || undefined,
+                  }
+                }}
+              />
+            </>
+          ) : null}
+
           {hasTaxSub && (
             <div className="flex items-center gap-2">
               <Label>{tt("wm_subType", "Detail")}</Label>
@@ -1876,6 +2024,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
+          {registerStepVisible("basics") ? (
           <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
             <div className="flex flex-wrap items-end gap-2 w-full">
@@ -2029,137 +2178,79 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </div>
               )}
               {categoryMain === "expense" && (
-                <>
-                  <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
-                    {expensePayMode === "immediate" && (
+                <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+                  <div className="flex items-end gap-2">
+                    <Label className="pb-2.5 shrink-0">{tt("vendor", "Payee")}</Label>
+                    <Select
+                      value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
+                      onValueChange={(v) => {
+                        if (v === "__manual__") {
+                          setPayeeManual(true)
+                          setPayeeCode("")
+                          setPayeeName("")
+                        } else if (v !== "__none__") {
+                          setPayeeManual(false)
+                          setPayeeCode(v)
+                          const found = vendors.find((x) => x.code === v)
+                          setPayeeName(found?.name || v)
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-[180px] h-9">
+                        <SelectValue placeholder={tt("vendor", "Payee")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
+                        <SelectItem value="__none__">-</SelectItem>
+                        {vendors.map((v) => (
+                          <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {payeeManual ? (
                       <>
-                        {isBankLinkMode && (
-                          <div className="flex items-end gap-2">
-                            <Label className="pb-2.5 shrink-0">{tt("vendor", "Payee")}</Label>
-                            <Select
-                              value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
-                              onValueChange={(v) => {
-                                if (v === "__manual__") { setPayeeManual(true); setPayeeCode(""); setPayeeName("") }
-                                else if (v !== "__none__") {
-                                  setPayeeManual(false)
-                                  setPayeeCode(v)
-                                  const found = vendors.find((x) => x.code === v)
-                                  setPayeeName(found?.name || v)
-                                }
-                              }}
-                            >
-                              <SelectTrigger className="h-9 w-[180px]">
-                                <SelectValue placeholder={tt("vendor", "Payee")} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
-                                <SelectItem value="__none__">-</SelectItem>
-                                {vendors.map((v) => (
-                                  <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {payeeManual ? (
-                              <>
-                                <Input value={payeeCode} onChange={(e) => setPayeeCode(e.target.value)} placeholder={tt("expensePayeeCode", "Code")} className="h-9 w-[100px]" />
-                                <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder={tt("expensePayeeName", "Payee Name")} className="h-9 w-[140px]" />
-                              </>
-                            ) : (
-                              <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder={tt("expensePayeeName", "Payee Name")} className="h-9 w-[140px]" />
-                            )}
-                          </div>
-                        )}
-                        <div className="flex items-end gap-2">
-                          <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>
-                          <Select value={accountSubjectId} onValueChange={setAccountSubjectId}>
-                            <SelectTrigger className="h-9 w-[200px]">
-                              <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {subjects.map((s) => (
-                                <SelectItem key={s.id} value={String(s.id)}>
-                                  {s.code} {getSubjectLabel(s)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <Input
+                          className="w-[120px] h-9"
+                          value={payeeCode}
+                          onChange={(e) => setPayeeCode(e.target.value)}
+                          placeholder={tt("expensePayeeCode", "Code")}
+                        />
+                        <Input
+                          className="w-[160px] h-9"
+                          value={payeeName}
+                          onChange={(e) => setPayeeName(e.target.value)}
+                          placeholder={tt("expensePayeeName", "Payee Name")}
+                        />
                       </>
-                    )}
-                    {expensePayMode === "later" && (
-                      <>
-                        <div className="flex items-end gap-2">
-                          <Label className="pb-2.5 shrink-0">{tt("vendor", "Payee")}</Label>
-                          <Select
-                            value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
-                            onValueChange={(v) => {
-                              if (v === "__manual__") {
-                                setPayeeManual(true)
-                                setPayeeCode("")
-                                setPayeeName("")
-                              } else if (v !== "__none__") {
-                                setPayeeManual(false)
-                                setPayeeCode(v)
-                                const found = vendors.find((x) => x.code === v)
-                                setPayeeName(found?.name || v)
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-[180px] h-9">
-                              <SelectValue placeholder={tt("vendor", "Payee")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
-                              <SelectItem value="__none__">-</SelectItem>
-                              {vendors.map((v) => (
-                                <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {payeeManual ? (
-                            <>
-                              <Input
-                                className="w-[120px] h-9"
-                                value={payeeCode}
-                                onChange={(e) => setPayeeCode(e.target.value)}
-                                placeholder={tt("expensePayeeCode", "Code")}
-                              />
-                              <Input
-                                className="w-[160px] h-9"
-                                value={payeeName}
-                                onChange={(e) => setPayeeName(e.target.value)}
-                                placeholder={tt("expensePayeeName", "Payee Name")}
-                              />
-                            </>
-                          ) : (
-                            <Input
-                              className="w-[160px] h-9"
-                              value={payeeName}
-                              onChange={(e) => setPayeeName(e.target.value)}
-                              placeholder={tt("expensePayeeName", "Payee Name")}
-                            />
-                          )}
-                        </div>
-                        <div className="flex items-end gap-2">
-                          <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>
-                          <Select value={accountSubjectId || "__none__"} onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}>
-                            <SelectTrigger className="h-9 w-[200px]">
-                              <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">-</SelectItem>
-                              {subjects.map((s) => (
-                                <SelectItem key={s.id} value={String(s.id)}>
-                                  {s.code} {getSubjectLabel(s)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
+                    ) : (
+                      <Input
+                        className="w-[160px] h-9"
+                        value={payeeName}
+                        onChange={(e) => setPayeeName(e.target.value)}
+                        placeholder={tt("expensePayeeName", "Payee Name")}
+                      />
                     )}
                   </div>
-                </>
+                  <div className="flex items-end gap-2">
+                    <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>
+                    <Select
+                      value={accountSubjectId || "__none__"}
+                      onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger className="h-9 w-[200px]">
+                        <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {isLaterPayment ? <SelectItem value="__none__">-</SelectItem> : null}
+                        {subjects.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {s.code} {getSubjectLabel(s)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               )}
             </>
           )}
@@ -2339,6 +2430,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
           </div>
+          ) : null}
 
           {categoryMain === "fixed_asset" && (
             <div className="flex flex-wrap items-end gap-3">
@@ -2373,6 +2465,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           )}
 
+          {registerStepVisible("amount") ? (
           <div className="border-t pt-4 space-y-3">
             <div className="flex flex-wrap items-end gap-3 max-w-6xl">
               {!isLaterPayment && showBankAccountOutsideTransfer && (
@@ -2396,7 +2489,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 <Label>
                   {activeFeeVatMode && categoryMain === "expense"
                     ? feeAmountFieldLabel(activeFeeVatMode)
-                    : isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense")
+                    : categoryMain === "purchase" || categoryMain === "expense"
                       ? tt("expenseAccrualGrossTotal", "Total (incl. tax)")
                       : tt("amount", "Amount")}
                 </Label>
@@ -2459,8 +2552,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     className="h-9 mt-1"
                   />
                 </div>
-                {isLaterPayment ? (
-                  <>
                 <div className="w-[110px]">
                   <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "Withholding Tax")}</Label>
                   <Input
@@ -2478,64 +2569,48 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     ฿{(accrualNetPreview ?? 0).toLocaleString()}
                   </span>
                 </div>
-                  </>
-                ) : null}
               </div>
             )}
-            {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
-              <div className="max-w-xl space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
-                <Label className="text-sm font-medium">
-                  {tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {tt("expenseAccrualAttachHint", "Images or PDF, up to 3 files (non-image files recommended under 1.5MB each)")}
-                </p>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1"
-                  onChange={(e) => setAccrualAttachmentFiles(Array.from(e.target.files || []).slice(0, 3))}
-                />
-                {accrualAttachmentFiles.length > 0 ? (
-                  <ul className="list-disc pl-5 text-xs text-muted-foreground">
-                    {accrualAttachmentFiles.map((f, i) => (
-                      <li key={`${f.name}-${i}`}>{f.name}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            )}
-            {(categoryMain === "purchase" || categoryMain === "expense") && (
-              <div className="space-y-2 p-3 rounded-lg border bg-muted/20">
-                <div className="text-sm font-medium">{tt("poInvoice", "Invoice")}</div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={invoiceReceived} onCheckedChange={(c) => setInvoiceReceived(c === true)} />
-                    <span className="text-sm">{tt("poInvoiceReceived", "Invoice Received")}</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">{tt("wm_invoiceNoLabel", "Invoice Number")}</Label>
-                    <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"} className="w-[140px] h-9" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">{tt("bankInvoicePhotoUpload", "Invoice Image")}</Label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      id="wm-invoice-photo"
-                      onChange={(e) => setInvoicePhotoFile(e.target.files?.[0] || null)}
-                    />
-                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("wm-invoice-photo")?.click()} className="h-9">
-                      <Camera className="h-4 w-4 mr-1" />
-                      {invoicePhotoFile ? invoicePhotoFile.name.slice(0, 12) + "..." : tt("wm_invoicePhotoSelect", "Select")}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
+          </div>
+          ) : null}
+
+          {registerStepVisible("evidence") && (categoryMain === "purchase" || categoryMain === "expense") ? (
+            <ExpenseDocumentAttachPanel
+              files={expenseAttachmentFiles}
+              onFilesChange={setExpenseAttachmentFiles}
+              invoiceReceived={invoiceReceived}
+              onInvoiceReceivedChange={setInvoiceReceived}
+              invoiceNo={invoiceNo}
+              onInvoiceNoChange={setInvoiceNo}
+              onOcrFields={handleExpenseOcrFields}
+              disabled={saving}
+            />
+          ) : null}
+
+          {useRegisterSteps && registerStep !== "evidence" ? (
+            <div className="flex flex-wrap gap-2">
+              {registerStep !== "basics" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRegisterStep(registerStep === "amount" ? "basics" : "amount")}
+                >
+                  {tt("btnPrev", "이전")}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                onClick={() =>
+                  setRegisterStep(registerStep === "basics" ? "amount" : "evidence")
+                }
+              >
+                {tt("btnNext", "다음")}
+              </Button>
+            </div>
+          ) : null}
+
+          {(!useRegisterSteps || registerStep === "evidence") ? (
+            <div className="flex flex-wrap items-center gap-2 pb-20 md:pb-0">
               <Button
                 onClick={handleSubmit}
                 disabled={
@@ -2583,9 +2658,40 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 {tt("wm_backToBank", "Back to Bank Screen")}
               </Button>
             </div>
-          </div>
+          ) : null}
         </CardContent>
       </Card>
+
+      {useRegisterSteps ? (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-3 md:hidden safe-area-pb">
+          <div className="flex gap-2 max-w-lg mx-auto">
+            {registerStep !== "basics" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setRegisterStep(registerStep === "amount" ? "basics" : "amount")}
+              >
+                {tt("btnPrev", "이전")}
+              </Button>
+            ) : null}
+            {registerStep !== "evidence" ? (
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={() => setRegisterStep(registerStep === "basics" ? "amount" : "evidence")}
+              >
+                {tt("btnNext", "다음")}
+              </Button>
+            ) : (
+              <Button className="flex-1" onClick={handleSubmit} disabled={saving || !categoryMain}>
+                <Wallet className="h-4 w-4 mr-1" />
+                {saving ? tt("loading", "...") : tt("btnSave", "Save")}
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <Dialog open={deliveryFeeDialogOpen} onOpenChange={setDeliveryFeeDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

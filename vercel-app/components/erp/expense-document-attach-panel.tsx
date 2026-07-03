@@ -1,0 +1,358 @@
+"use client"
+
+import * as React from "react"
+import dynamic from "next/dynamic"
+import { Camera, ScanLine } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
+import { extractExpenseDocument } from "@/lib/api-client"
+import { fileToExpenseAttachmentDataUrl } from "@/lib/expense-document-upload"
+import { isScannableImageFile } from "@/lib/document-scanner-client"
+import {
+  readExpenseDocOcrAutoFill,
+  readExpenseDocScanSkip,
+  writeExpenseDocOcrAutoFill,
+  writeExpenseDocScanSkip,
+} from "@/lib/expense-doc-prefs"
+
+const ExpenseDocumentScanDialog = dynamic(
+  () =>
+    import("@/components/erp/expense-document-scan-dialog").then((m) => m.ExpenseDocumentScanDialog),
+  { ssr: false }
+)
+
+export type ExpenseOcrFieldPayload = {
+  amount?: number
+  vatAmount?: number
+  withholdingTaxAmount?: number
+  expenseDate?: string
+  invoiceNo?: string
+  vendorNameHint?: string
+}
+
+export type ExpenseDocumentAttachPanelProps = {
+  files: File[]
+  onFilesChange: (files: File[]) => void
+  maxFiles?: number
+  invoiceReceived: boolean
+  onInvoiceReceivedChange: (v: boolean) => void
+  invoiceNo: string
+  onInvoiceNoChange: (v: string) => void
+  onOcrFields?: (fields: ExpenseOcrFieldPayload) => void
+  disabled?: boolean
+  variant?: "full" | "receiptOnly"
+  className?: string
+}
+
+export function ExpenseDocumentAttachPanel({
+  files,
+  onFilesChange,
+  maxFiles = 3,
+  invoiceReceived,
+  onInvoiceReceivedChange,
+  invoiceNo,
+  onInvoiceNoChange,
+  onOcrFields,
+  disabled,
+  variant = "full",
+  className,
+}: ExpenseDocumentAttachPanelProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const tt = React.useCallback(
+    (key: string, fallback: string) => {
+      const v = t(key)
+      return !v || v === key ? fallback : v
+    },
+    [t]
+  )
+
+  const cameraRef = React.useRef<HTMLInputElement>(null)
+  const fileRef = React.useRef<HTMLInputElement>(null)
+  const scanQueueRef = React.useRef<File[]>([])
+  const [scanFile, setScanFile] = React.useState<File | null>(null)
+  const [scanOpen, setScanOpen] = React.useState(false)
+  const [ocrLoading, setOcrLoading] = React.useState(false)
+  const [ocrAutoFill, setOcrAutoFill] = React.useState(true)
+  const [scanSkip, setScanSkip] = React.useState(false)
+  const [ocrHint, setOcrHint] = React.useState<string | null>(null)
+  const [thumbUrls, setThumbUrls] = React.useState<string[]>([])
+
+  React.useEffect(() => {
+    setOcrAutoFill(readExpenseDocOcrAutoFill())
+    setScanSkip(readExpenseDocScanSkip())
+  }, [])
+
+  React.useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f))
+    setThumbUrls(urls)
+    return () => urls.forEach((u) => URL.revokeObjectURL(u))
+  }, [files])
+
+  const runOcr = React.useCallback(
+    async (file: File, opts?: { silent?: boolean }) => {
+      if (!onOcrFields) return false
+      setOcrLoading(true)
+      setOcrHint(null)
+      try {
+        const dataUrl = await fileToExpenseAttachmentDataUrl(file)
+        const res = await extractExpenseDocument({ dataUrl, fileName: file.name })
+        if (!res.success || !res.fields) {
+          if (!opts?.silent) {
+            setOcrHint(tt("expenseDocOcrNoFields", "인식된 항목이 없습니다. 직접 입력해 주세요."))
+          }
+          return false
+        }
+        onOcrFields(res.fields)
+        setOcrHint(tt("expenseDocOcrApplied", "문서에서 항목을 채웠습니다. 확인 후 수정하세요."))
+        return true
+      } catch {
+        if (!opts?.silent) {
+          setOcrHint(tt("expenseDocOcrFail", "문서 인식에 실패했습니다."))
+        }
+        return false
+      } finally {
+        setOcrLoading(false)
+      }
+    },
+    [onOcrFields, tt]
+  )
+
+  const commitFile = React.useCallback(
+    async (file: File) => {
+      if (files.length >= maxFiles) return
+      onFilesChange([...files, file].slice(0, maxFiles))
+      if (ocrAutoFill && onOcrFields) await runOcr(file, { silent: true })
+    },
+    [files, maxFiles, ocrAutoFill, onFilesChange, onOcrFields, runOcr]
+  )
+
+  const startNextScan = React.useCallback(() => {
+    const next = scanQueueRef.current.shift()
+    if (next) {
+      setScanFile(next)
+      setScanOpen(true)
+    } else {
+      setScanFile(null)
+      setScanOpen(false)
+    }
+  }, [])
+
+  const ingestPicked = React.useCallback(
+    (picked: File[]) => {
+      if (!picked.length || disabled) return
+      const room = Math.max(0, maxFiles - files.length)
+      if (room <= 0) return
+      const batch = picked.slice(0, room)
+      const images: File[] = []
+      const others: File[] = []
+      for (const f of batch) {
+        if (isScannableImageFile(f)) images.push(f)
+        else others.push(f)
+      }
+      for (const f of others) void commitFile(f)
+      if (!images.length) return
+      if (scanSkip) {
+        for (const f of images) void commitFile(f)
+        return
+      }
+      if (scanOpen || scanFile) {
+        scanQueueRef.current.push(...images)
+        return
+      }
+      scanQueueRef.current.push(...images.slice(1))
+      setScanFile(images[0])
+      setScanOpen(true)
+    },
+    [commitFile, disabled, files.length, maxFiles, scanFile, scanOpen, scanSkip]
+  )
+
+  const showInvoice = variant === "full"
+
+  return (
+    <div className={className ?? "max-w-2xl space-y-3 rounded-lg border border-border/60 bg-muted/15 p-3"}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Label className="text-sm font-medium">{tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          {ocrLoading ? (
+            <span className="text-xs text-muted-foreground">{tt("expenseDocOcrRunning", "문서 인식 중…")}</span>
+          ) : null}
+          {onOcrFields ? (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer rounded-md border border-border/60 bg-background/80 px-2 py-1">
+                <Checkbox
+                  checked={ocrAutoFill}
+                  onCheckedChange={(c) => {
+                    const on = c === true
+                    setOcrAutoFill(on)
+                    writeExpenseDocOcrAutoFill(on)
+                  }}
+                  disabled={disabled}
+                />
+                <span className="text-xs whitespace-nowrap">{tt("expenseDocOcrAutoFill", "업로드 시 자동 입력")}</span>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={disabled || ocrLoading || files.length === 0}
+                onClick={() => {
+                  const last = files[files.length - 1]
+                  if (last) void runOcr(last)
+                }}
+              >
+                <ScanLine className="h-3.5 w-3.5 mr-1" />
+                {tt("expenseDocOcrRunNow", "지금 인식")}
+              </Button>
+            </>
+          ) : null}
+          <label className="flex items-center gap-2 cursor-pointer rounded-md border border-border/60 bg-background/80 px-2 py-1">
+            <Checkbox
+              checked={scanSkip}
+              onCheckedChange={(c) => {
+                const on = c === true
+                setScanSkip(on)
+                writeExpenseDocScanSkip(on)
+              }}
+              disabled={disabled}
+            />
+            <span className="text-xs whitespace-nowrap">{tt("expenseDocScanSkip", "스캔 보정 건너뛰기")}</span>
+          </label>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {ocrAutoFill && onOcrFields
+          ? tt(
+              "expenseDocAttachUnifiedHint",
+              "이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며 금액·일자 등을 자동 채웁니다(확인 후 수정 가능)."
+            )
+          : tt(
+              "expenseDocAttachUnifiedHintManualOcr",
+              "이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부됩니다. 자동 입력이 꺼져 있으면 「지금 인식」을 누르세요."
+            )}
+      </p>
+      {ocrHint ? <p className="text-xs text-primary/90">{ocrHint}</p> : null}
+
+      {showInvoice ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox
+              checked={invoiceReceived}
+              onCheckedChange={(c) => onInvoiceReceivedChange(c === true)}
+              disabled={disabled}
+            />
+            <span className="text-sm">{tt("poInvoiceReceived", "Invoice Received")}</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <Label className="text-sm shrink-0">{tt("wm_invoiceNoLabel", "Invoice Number")}</Label>
+            <Input
+              value={invoiceNo}
+              onChange={(e) => onInvoiceNoChange(e.target.value)}
+              placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
+              className="w-[140px] h-9"
+              disabled={disabled}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*,application/pdf"
+          capture="environment"
+          className="sr-only"
+          onChange={(e) => {
+            ingestPicked(Array.from(e.target.files || []))
+            e.target.value = ""
+          }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf"
+          multiple={maxFiles > 1}
+          className="sr-only"
+          onChange={(e) => {
+            ingestPicked(Array.from(e.target.files || []))
+            e.target.value = ""
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={disabled || files.length >= maxFiles || ocrLoading || scanOpen}
+          onClick={() => cameraRef.current?.click()}
+        >
+          <Camera className="h-4 w-4 mr-1" />
+          {tt("expenseDocTakePhoto", "사진 촬영")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9"
+          disabled={disabled || files.length >= maxFiles || ocrLoading || scanOpen}
+          onClick={() => fileRef.current?.click()}
+        >
+          {tt("chooseFile", "파일 선택")}
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {files.length}/{maxFiles}
+        </span>
+      </div>
+
+      {files.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {files.map((f, i) => (
+            <li
+              key={`${f.name}-${i}`}
+              className="flex items-center gap-2 rounded border bg-background/80 px-2 py-1 text-xs max-w-full"
+            >
+              {thumbUrls[i] && f.type.startsWith("image/") ? (
+                <img src={thumbUrls[i]} alt="" className="h-10 w-10 rounded object-cover border shrink-0" />
+              ) : null}
+              <span className="truncate max-w-[120px]">{f.name}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[11px] shrink-0"
+                disabled={disabled}
+                onClick={() => onFilesChange(files.filter((_, j) => j !== i))}
+              >
+                {tt("btnDelete", "삭제")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <ExpenseDocumentScanDialog
+        open={scanOpen}
+        file={scanFile}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScanOpen(false)
+            setScanFile(null)
+            scanQueueRef.current = []
+          } else setScanOpen(true)
+        }}
+        onConfirm={(file) => {
+          void commitFile(file).finally(() => startNextScan())
+        }}
+        onUseOriginal={(file) => {
+          void commitFile(file).finally(() => startNextScan())
+        }}
+      />
+    </div>
+  )
+}

@@ -20,6 +20,11 @@ function isMissingIdentityColumnError(e: unknown): boolean {
   )
 }
 
+function isMissingBankEvidenceColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('attachment_urls') || (msg.includes('vat_amount') && /column|does not exist|42703/i.test(msg))
+}
+
 function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
   const next = { ...row }
   delete next.user_employee_id
@@ -27,13 +32,30 @@ function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
   return next
 }
 
+function stripBankEvidenceColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.attachment_urls
+  delete next.vat_amount
+  return next
+}
+
 async function insertBankTransactionWithIdentityFallback(row: Record<string, unknown>) {
-  try {
-    return (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
-  } catch (e) {
-    if (!isMissingIdentityColumnError(e)) throw e
-    return (await supabaseInsert('bank_transactions', stripIdentityColumns(row))) as { id?: number }[]
+  const attempts = [
+    row,
+    stripIdentityColumns({ ...row }),
+    stripBankEvidenceColumns(stripIdentityColumns({ ...row })),
+    stripBankEvidenceColumns({ ...row }),
+  ]
+  let lastErr: unknown
+  for (const attempt of attempts) {
+    try {
+      return (await supabaseInsert('bank_transactions', attempt)) as { id?: number }[]
+    } catch (e) {
+      lastErr = e
+      if (!isMissingIdentityColumnError(e) && !isMissingBankEvidenceColumnError(e)) throw e
+    }
   }
+  throw lastErr
 }
 
 async function insertPettyTransactionWithIdentityFallback(row: Record<string, unknown>) {
@@ -93,6 +115,25 @@ export async function POST(request: NextRequest) {
     const invoiceNo = String(body.invoiceNo || body.invoice_no || '').trim()
     const invoicePhotoUrl = String(body.invoicePhotoUrl || body.invoice_photo_url || '').trim()
     const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
+    const withholdingTaxAmount = Math.max(
+      0,
+      Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0)
+    )
+    const grossAmount = amount
+    const netWithdrawAmount =
+      withholdingTaxAmount > 0 ? Math.max(0, grossAmount - withholdingTaxAmount) : grossAmount
+    if (withholdingTaxAmount > 0 && netWithdrawAmount <= 0) {
+      return NextResponse.json(
+        { success: false, message: '실제 지급액이 0보다 커야 합니다. 총액·원천징수를 확인해 주세요.' },
+        { status: 400, headers }
+      )
+    }
+    const attachmentUrlsRaw = body.attachmentUrls ?? body.attachment_urls
+    let attachmentUrlsJson: string | null = null
+    if (Array.isArray(attachmentUrlsRaw) && attachmentUrlsRaw.length > 0) {
+      const urls = attachmentUrlsRaw.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 3)
+      if (urls.length > 0) attachmentUrlsJson = JSON.stringify(urls)
+    }
     const accountSubjectCode = String(body.accountSubjectCode || '').trim()
     const accountSubjectName = String(body.accountSubjectName || '').trim()
     const transferToAccountId = body.transferToAccountId ?? body.transfer_to_account_id
@@ -180,7 +221,7 @@ export async function POST(request: NextRequest) {
         account_id: accountId,
         trans_date: transDate,
         trans_type: 'withdraw',
-        amount: -amount,
+        amount: -netWithdrawAmount,
         memo: memo || null,
         note: `withdrawal_category:${category};${INTERNAL_BANK_SOURCE_MARKER}`,
         store: store || null,
@@ -195,6 +236,9 @@ export async function POST(request: NextRequest) {
       if (typeof invoiceReceived === 'boolean') row.invoice_received = invoiceReceived
       if (invoiceNo) row.invoice_no = invoiceNo
       if (invoicePhotoUrl) row.invoice_photo_url = invoicePhotoUrl
+      if (vatAmount > 0) row.vat_amount = vatAmount
+      if (withholdingTaxAmount > 0) row.withholding_tax_amount = withholdingTaxAmount
+      if (attachmentUrlsJson) row.attachment_urls = attachmentUrlsJson
       if (category === 'transfer_external') {
         const extMemo = [memo, `받는사람: ${transferBankRecipientName}`, `계좌: ${transferBankAccountNo}`].filter(Boolean).join(' / ')
         row.memo = extMemo
@@ -249,7 +293,7 @@ export async function POST(request: NextRequest) {
         store: pettyStore,
         trans_date: transDate,
         trans_type: 'expense',
-        amount: -amount,
+        amount: -netWithdrawAmount,
         memo: memo || null,
         user_name: userName || null,
         user_employee_id: userEmployeeId,
@@ -261,6 +305,7 @@ export async function POST(request: NextRequest) {
       if (invoiceNo) row.invoice_no = invoiceNo
       if (invoicePhotoUrl) row.invoice_photo_url = invoicePhotoUrl
       if (vatAmount > 0) row.vat_amount = vatAmount
+      if (withholdingTaxAmount > 0) row.withholding_tax_amount = withholdingTaxAmount
 
       const inserted = await insertPettyTransactionWithIdentityFallback(row)
       pettyCashTransactionId = Number(inserted?.[0]?.id || 0) || null
@@ -298,7 +343,7 @@ export async function POST(request: NextRequest) {
       if (category === 'purchase_payment' && vendorCode && pettyCashTransactionId) {
         await supabaseInsert('payable_transactions', {
           vendor_code: vendorCode,
-          amount: -amount,
+          amount: -netWithdrawAmount,
           ref_type: 'Payment',
           ref_id: null,
           trans_date: transDate,
@@ -351,7 +396,7 @@ export async function POST(request: NextRequest) {
         sourceId: paymentMethod === 'bank' ? bankTransactionId : pettyCashTransactionId,
         category,
         accountingDate: transDate,
-        amountAbs: amount,
+        amountAbs: netWithdrawAmount,
         memo: memo || undefined,
         storeName: store || undefined,
         postedBy: userName || undefined,

@@ -29,6 +29,8 @@ import { Search, Wallet, Link2, Check, X, Pencil, Trash2, Paperclip } from "luci
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ExpensePlanStatusBadge } from "@/components/erp/expense-plan-status-badge"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -142,6 +144,8 @@ export function ExpenseManagementTab() {
   const [unlinkedLoading, setUnlinkedLoading] = React.useState(false)
   const [approvingAll, setApprovingAll] = React.useState(false)
   const [rejectingAll, setRejectingAll] = React.useState(false)
+  const [payingAll, setPayingAll] = React.useState(false)
+  const [planDetailRow, setPlanDetailRow] = React.useState<ExpenseAccrualPlanItem | null>(null)
   const [cleaningNoStore, setCleaningNoStore] = React.useState(false)
   const [attachmentPreview, setAttachmentPreview] = React.useState<{ urls: string[]; title: string } | null>(null)
   const [updatingInvoiceAccrualId, setUpdatingInvoiceAccrualId] = React.useState<number | null>(null)
@@ -492,6 +496,14 @@ export function ExpenseManagementTab() {
     })
   }, [filteredExpensePlans, filteredPurchasePlans, canApproveByPolicy, startStr])
 
+  const payablePlansForDay = React.useMemo(() => {
+    const combined = [...(filteredExpensePlans || []), ...(filteredPurchasePlans || [])]
+    return combined.filter((r) => {
+      const rowDate = String(r.dueDate || r.expenseDate || "").slice(0, 10)
+      return r.status === "approved" && (r.remainingAmount || 0) > 0 && rowDate === startStr
+    })
+  }, [filteredExpensePlans, filteredPurchasePlans, startStr])
+
   const handleApprove = React.useCallback(async (row: ExpenseAccrualPlanItem, action: "approve" | "reject") => {
     const note = action === "reject"
       ? await appPrompt(tt("memo", "Memo"), "") || ""
@@ -661,7 +673,84 @@ export function ExpenseManagementTab() {
     } finally {
       setApprovingAll(false)
     }
-  }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr])
+  }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr, tt])
+
+  const handlePayAllForDay = React.useCallback(async () => {
+    if (payablePlansForDay.length === 0) {
+      await appAlert(tt("payableEmpty", "No items to pay."))
+      return
+    }
+    const defaultBankId = bankAccounts[0]?.id
+    if (!defaultBankId) {
+      await appAlert(tt("bankAccount", "Account"))
+      return
+    }
+    const ok = await appConfirm(
+      `${startStr} ${tt("expensePayAllDay", "Pay all approved for day")} (${payablePlansForDay.length}${tt("receivPayCount", "items")})`
+    )
+    if (!ok) return
+    setPayingAll(true)
+    try {
+      for (const row of payablePlansForDay) {
+        const res = await executeExpensePayment({
+          expenseAccrualId: row.id,
+          paymentMethod: "bank",
+          amount: row.remainingAmount || 0,
+          transDate: startStr,
+          memo: row.memo || "",
+          accountId: defaultBankId,
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          await appAlert(
+            translateApiMessage((res as { message?: string }).message, t) ||
+              (res as { message?: string }).message ||
+              t("processFail")
+          )
+          break
+        }
+      }
+      await loadPlans()
+    } finally {
+      setPayingAll(false)
+    }
+  }, [auth?.role, auth?.user, bankAccounts, loadPlans, payablePlansForDay, startStr, t, tt])
+
+  const renderAttachmentCell = React.useCallback(
+    (r: ExpenseAccrualPlanItem) => {
+      const urls = r.attachmentUrls || []
+      const firstImage = urls.find((u) => /^data:image\//i.test(u) || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(u))
+      return (
+        <td className="py-2 px-1 text-center align-top">
+          {urls.length > 0 ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0 text-primary p-0 overflow-hidden"
+              title={tt("expenseViewAttachment", "View Attachment")}
+              onClick={() =>
+                setAttachmentPreview({
+                  urls,
+                  title: `${r.payeeName || ""} #${r.id}`,
+                })
+              }
+            >
+              {firstImage ? (
+                <img src={firstImage} alt="" className="h-8 w-8 object-cover rounded" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
+            </Button>
+          ) : (
+            <span className="text-muted-foreground text-xs">—</span>
+          )}
+        </td>
+      )
+    },
+    [tt]
+  )
 
   const handleRejectAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
@@ -812,6 +901,16 @@ export function ExpenseManagementTab() {
             <Button
               size="sm"
               variant="outline"
+              className="h-9 border-emerald-600/30 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/15"
+              onClick={() => void handlePayAllForDay()}
+              disabled={payingAll || payablePlansForDay.length === 0}
+              title={tt("expensePayAllDayHint", "Pay all approved items for the start date via default bank account")}
+            >
+              {payingAll ? tt("loading", "...") : tt("expensePayAllDay", "Pay all for day")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               className="h-9 border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15"
               onClick={handleCleanNoStore}
               disabled={cleaningNoStore}
@@ -834,6 +933,7 @@ export function ExpenseManagementTab() {
                         <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
                         <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{tt("date", "Date")}</th>
+                        <th className="w-[72px] text-center py-2 px-1">{tt("expensePlanStatusCol", "Status")}</th>
                         <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}>
                           {tt("expensePlanPayAmount", "Pay Amount")}
                         </th>
@@ -852,7 +952,7 @@ export function ExpenseManagementTab() {
                       {expensePlansByStore.map(([storeLabel, rows]) => (
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
-                            <td colSpan={10} className="py-2 px-3 text-sm font-medium">
+                            <td colSpan={11} className="py-2 px-3 text-sm font-medium">
                               {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
@@ -870,29 +970,16 @@ export function ExpenseManagementTab() {
                                   )
                                 })()}
                             <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                            <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
-                            <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px]" title={r.memo || ""}>{getMemo(r.memo)}</td>
                             <td className="py-2 px-1 text-center align-top">
-                              {(r.attachmentUrls?.length ?? 0) > 0 ? (
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 shrink-0 text-primary"
-                                  title={tt("expenseViewAttachment", "View Attachment")}
-                                  onClick={() =>
-                                    setAttachmentPreview({
-                                      urls: r.attachmentUrls!,
-                                      title: `${r.payeeName || ""} #${r.id}`,
-                                    })
-                                  }
-                                >
-                                  <Paperclip className="h-4 w-4" />
-                                </Button>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              )}
+                              <ExpensePlanStatusBadge status={r.status} />
                             </td>
+                            <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
+                            <td
+                              className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
+                              title={r.memo || ""}
+                              onClick={() => setPlanDetailRow(r)}
+                            >{getMemo(r.memo)}</td>
+                            {renderAttachmentCell(r)}
                             {renderAccrualInvoiceCell(r)}
                             <td className="py-2 px-1 text-center align-top">
                               <div className="flex flex-wrap items-center justify-center gap-1">
@@ -1027,7 +1114,7 @@ export function ExpenseManagementTab() {
                           </tr>
                           {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
                             <tr className="border-b bg-muted/20">
-                              <td className="py-2 px-2" colSpan={10}>
+                              <td className="py-2 px-2" colSpan={11}>
                                 <div className="flex flex-wrap items-end gap-2">
                                   <Select
                                     value={payMethodById[r.id] || "bank"}
@@ -1135,6 +1222,7 @@ export function ExpenseManagementTab() {
                         <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
                         <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{tt("date", "Date")}</th>
+                        <th className="w-[72px] text-center py-2 px-1">{tt("expensePlanStatusCol", "Status")}</th>
                         <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}>
                           {tt("expensePlanPayAmount", "Pay Amount")}
                         </th>
@@ -1153,7 +1241,7 @@ export function ExpenseManagementTab() {
                       {purchasePlansByStore.map(([storeLabel, rows]) => (
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
-                            <td colSpan={10} className="py-2 px-3 text-sm font-medium">
+                            <td colSpan={11} className="py-2 px-3 text-sm font-medium">
                               {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
@@ -1175,29 +1263,16 @@ export function ExpenseManagementTab() {
                                     : getPayeeLine(r.payeeName, "")}
                                 </td>
                                 <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                                <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
-                                <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px]" title={r.memo || ""}>{getMemo(r.memo)}</td>
                                 <td className="py-2 px-1 text-center align-top">
-                                  {(r.attachmentUrls?.length ?? 0) > 0 ? (
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-8 w-8 shrink-0 text-primary"
-                                      title={tt("expenseViewAttachment", "View Attachment")}
-                                      onClick={() =>
-                                        setAttachmentPreview({
-                                          urls: r.attachmentUrls!,
-                                          title: `${r.payeeName || ""} #${r.id}`,
-                                        })
-                                      }
-                                    >
-                                      <Paperclip className="h-4 w-4" />
-                                    </Button>
-                                  ) : (
-                                    <span className="text-muted-foreground text-xs">—</span>
-                                  )}
+                                  <ExpensePlanStatusBadge status={r.status} />
                                 </td>
+                                <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
+                                <td
+                                  className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
+                                  title={r.memo || ""}
+                                  onClick={() => setPlanDetailRow(r)}
+                                >{getMemo(r.memo)}</td>
+                                {renderAttachmentCell(r)}
                                 {renderAccrualInvoiceCell(r)}
                                 <td className="py-2 px-1 text-center align-top">
                                   <div className="flex flex-wrap items-center justify-center gap-1">
@@ -1265,7 +1340,7 @@ export function ExpenseManagementTab() {
                               </tr>
                               {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
                                 <tr className="border-b bg-muted/20">
-                                  <td className="py-2 px-2" colSpan={10}>
+                                  <td className="py-2 px-2" colSpan={11}>
                                     <div className="flex flex-wrap items-end gap-2">
                                       <Select value={payMethodById[r.id] || "bank"} onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}>
                                         <SelectTrigger className="w-[120px] h-9">
@@ -1351,6 +1426,65 @@ export function ExpenseManagementTab() {
               </div>
             </DialogContent>
           </Dialog>
+
+          <Sheet open={!!planDetailRow} onOpenChange={(open) => !open && setPlanDetailRow(null)}>
+            <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>
+                  {tt("expensePlanDetailTitle", "Payment plan detail")}
+                  {planDetailRow ? ` #${planDetailRow.id}` : ""}
+                </SheetTitle>
+              </SheetHeader>
+              {planDetailRow ? (
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">{tt("expensePlanStatusCol", "Status")}</span>
+                    <ExpensePlanStatusBadge status={planDetailRow.status} />
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">{tt("vendor", "Vendor")}</div>
+                    <div>{planDetailRow.payeeName || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">{tt("expensePlanPayAmount", "Pay Amount")}</div>
+                    <div className="tabular-nums font-medium">
+                      ฿{(planDetailRow.grossAmount ?? planDetailRow.plannedAmount ?? 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">{tt("memo", "Memo")}</div>
+                    <div className="whitespace-pre-wrap">{planDetailRow.memo || "—"}</div>
+                  </div>
+                  {(planDetailRow.attachmentUrls?.length ?? 0) > 0 ? (
+                    <div>
+                      <div className="text-muted-foreground text-xs mb-2">{tt("expenseAttachmentTitle", "Attachment")}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {planDetailRow.attachmentUrls!.map((url, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            className="h-16 w-16 rounded border overflow-hidden"
+                            onClick={() =>
+                              setAttachmentPreview({
+                                urls: planDetailRow.attachmentUrls!,
+                                title: `${planDetailRow.payeeName || ""} #${planDetailRow.id}`,
+                              })
+                            }
+                          >
+                            {/^data:image\//i.test(url) || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(url) ? (
+                              <img src={url} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] p-1">PDF</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         <TabsContent value="expenseRegister" className={adminTabsContentCn}>

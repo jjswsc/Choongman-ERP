@@ -672,6 +672,8 @@ export async function executeWithdrawal(params: {
   invoiceNo?: string
   invoicePhotoUrl?: string
   vatAmount?: number
+  withholdingTaxAmount?: number
+  attachmentUrls?: string[]
   userName?: string
   userRole?: string
   userStore?: string
@@ -687,5 +689,30 @@ export async function executeWithdrawal(params: {
     bankTransactionId?: number
     pettyCashTransactionId?: number
     fixedAssetId?: number
+  }>
+}
+
+export type ExtractedExpenseDocumentFields = {
+  amount?: number
+  vatAmount?: number
+  withholdingTaxAmount?: number
+  expenseDate?: string
+  invoiceNo?: string
+  vendorNameHint?: string
+}
+
+export async function extractExpenseDocument(params: { dataUrl: string; fileName: string }) {
+  const res = await apiFetch('/api/extractExpenseDocument', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    fields?: ExtractedExpenseDocumentFields
+    confidence?: string
+    method?: string
+    openaiUsed?: boolean
   }>
 }

@@ -537,9 +537,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [discountReason, setDiscountReason] = useState('')
   const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
-  /** 결제 모달 금액·할인·포인트 입력 중 자동 합계 덮어쓰기 effect가 키보드 포커스를 끊지 않도록 */
+  /** 결제 모달 금액·할인·포인트 입력 중 자동 합계 덮어쓰기·스캔 포커스가 키보드를 끊지 않도록 */
   const paymentAmountInputFocusedRef = useRef(false)
   const paymentAmountInputBlurTimerRef = useRef<number | null>(null)
+  const activePaymentAmountInputRef = useRef<HTMLInputElement | null>(null)
+  const lastPaymentAmountInputAtRef = useRef(0)
+  const PAYMENT_AMOUNT_INPUT_BLUR_MS = 320
+  const PAYMENT_AMOUNT_TYPING_GRACE_MS = 800
   const isPaymentAmountInputEl = useCallback(
     (el: Element | null | undefined): el is HTMLInputElement =>
       el instanceof HTMLInputElement && el.dataset.posPaymentAmount === '1',
@@ -549,29 +553,79 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const bumpDiscountPaymentSync = useCallback(() => {
     setDiscountPaymentSyncTick((t) => t + 1)
   }, [])
-  const markPaymentAmountInputFocused = useCallback(() => {
+  const markPaymentAmountInputFocused = useCallback((el?: HTMLInputElement | null) => {
     if (paymentAmountInputBlurTimerRef.current != null) {
       window.clearTimeout(paymentAmountInputBlurTimerRef.current)
       paymentAmountInputBlurTimerRef.current = null
     }
+    if (el) activePaymentAmountInputRef.current = el
+    lastPaymentAmountInputAtRef.current = Date.now()
     paymentAmountInputFocusedRef.current = true
   }, [])
+  const isActivelyEditingPaymentAmount = useCallback(() => {
+    if (paymentAmountInputFocusedRef.current) return true
+    if (Date.now() - lastPaymentAmountInputAtRef.current < PAYMENT_AMOUNT_TYPING_GRACE_MS) return true
+    return isPaymentAmountInputEl(document.activeElement)
+  }, [isPaymentAmountInputEl])
+  const restorePaymentAmountInputFocus = useCallback((el: HTMLInputElement) => {
+    window.requestAnimationFrame(() => {
+      if (document.activeElement !== el) {
+        el.focus({ preventScroll: true })
+      }
+    })
+  }, [])
+  const handlePaymentBahtInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>, apply: (formatted: string) => void) => {
+      const el = e.currentTarget
+      markPaymentAmountInputFocused(el)
+      apply(formatBahtInputDisplay(e.target.value))
+      restorePaymentAmountInputFocus(el)
+    },
+    [markPaymentAmountInputFocused, restorePaymentAmountInputFocus]
+  )
+  const handlePaymentIntegerInputChange = useCallback(
+    (
+      e: React.ChangeEvent<HTMLInputElement>,
+      apply: (formatted: string) => void,
+      maxDigits = 6
+    ) => {
+      const el = e.currentTarget
+      markPaymentAmountInputFocused(el)
+      apply(formatIntegerInputDisplay(e.target.value, maxDigits))
+      restorePaymentAmountInputFocus(el)
+    },
+    [markPaymentAmountInputFocused, restorePaymentAmountInputFocus]
+  )
   const bindPaymentAmountInputFocus = useCallback(
     (opts?: { syncPaymentOnBlur?: boolean }) => ({
       'data-pos-payment-amount': '1' as const,
-      onPointerDown: markPaymentAmountInputFocused,
-      onFocus: markPaymentAmountInputFocused,
+      onPointerDown: (e: React.PointerEvent<HTMLInputElement>) => {
+        markPaymentAmountInputFocused(e.currentTarget)
+      },
+      onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
+        markPaymentAmountInputFocused(e.currentTarget)
+      },
       onBlur: () => {
         if (paymentAmountInputBlurTimerRef.current != null) {
           window.clearTimeout(paymentAmountInputBlurTimerRef.current)
         }
-        // 태블릿·OSK: Dialog onFocusOutside 직후 잠깐 blur 되는 경우 합계 덮어쓰기·쿠폰 포커스가 끊기지 않게
+        // 태블릿·OSK·윈도우 POS: Dialog/가상키보드 blur 직후 합계 덮어쓰기·스캔 포커스가 끊기지 않게
         paymentAmountInputBlurTimerRef.current = window.setTimeout(() => {
           paymentAmountInputBlurTimerRef.current = null
           if (isPaymentAmountInputEl(document.activeElement)) return
+          const recentlyTyping =
+            Date.now() - lastPaymentAmountInputAtRef.current < PAYMENT_AMOUNT_TYPING_GRACE_MS
+          if (recentlyTyping) {
+            const el = activePaymentAmountInputRef.current
+            if (el) {
+              el.focus({ preventScroll: true })
+              return
+            }
+          }
+          activePaymentAmountInputRef.current = null
           paymentAmountInputFocusedRef.current = false
           if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
-        }, 120)
+        }, PAYMENT_AMOUNT_INPUT_BLUR_MS)
       },
     }),
     [bumpDiscountPaymentSync, isPaymentAmountInputEl, markPaymentAmountInputFocused]
@@ -1166,6 +1220,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (scanFieldFlashTimerRef.current != null) {
         window.clearTimeout(scanFieldFlashTimerRef.current)
       }
+      if (paymentAmountInputBlurTimerRef.current != null) {
+        window.clearTimeout(paymentAmountInputBlurTimerRef.current)
+      }
     },
     []
   )
@@ -1392,14 +1449,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     })
   }, [buildPaymentSnapshot, total])
 
-  const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
-    if (!showPaymentModal) return null
-    return buildPaymentSnapshot()
-  }, [showPaymentModal, buildPaymentSnapshot])
-
+  /** 고객용 모니터·터미널 상위 리렌더가 결제 입력 포커스를 끊지 않도록 디바운스 */
   useEffect(() => {
-    onCustomerDisplayPaymentDraftChange?.(customerDisplayPaymentDraft)
-  }, [customerDisplayPaymentDraft, onCustomerDisplayPaymentDraftChange])
+    if (!showPaymentModal) {
+      onCustomerDisplayPaymentDraftChange?.(null)
+      return
+    }
+    const id = window.setTimeout(() => {
+      onCustomerDisplayPaymentDraftChange?.(buildPaymentSnapshot())
+    }, 250)
+    return () => window.clearTimeout(id)
+  }, [showPaymentModal, buildPaymentSnapshot, onCustomerDisplayPaymentDraftChange])
   /** 더치페이·일부 결제 단계가 실제로 진행 중일 때만 금액 누적(add) 입력 */
   const activeDutchSplitFlow = showSplit || splitPaidSteps > 0
   /** UI 표시용: 합계 불일치 시에도 잔액·진행 바 등 강조 (금액 입력은 activeDutchSplitFlow일 때만 add) */
@@ -2172,13 +2232,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   /** 현금 권종 버튼: 누적 합산(100+100=200). 터치 POS에서 입력 포커스 유지 */
   const addCashTenderedAmount = useCallback(
     (amount: number) => {
-      markPaymentAmountInputFocused()
+      const el = cashTenderedInputRef.current
+      markPaymentAmountInputFocused(el)
       const next = formatBahtAmountForField((parseBahtAmount(cashTenderedRef.current) || 0) + amount)
       cashTenderedRef.current = next
       setCashTendered(next)
-      window.requestAnimationFrame(() => cashTenderedInputRef.current?.focus())
+      if (el) restorePaymentAmountInputFocus(el)
     },
-    [markPaymentAmountInputFocused]
+    [markPaymentAmountInputFocused, restorePaymentAmountInputFocus]
   )
 
   const resetPaymentInputs = () => {
@@ -2933,7 +2994,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   // 협업·수동 할인 등으로 합계가 바뀌면 일반 결제(더치 아님)는 입력 금액을 새 합계로 덮어씀
   useEffect(() => {
     if (!showPaymentModal || total <= 0 || showSplit || splitPaidSteps > 0) return
-    if (paymentAmountInputFocusedRef.current) return
+    if (isActivelyEditingPaymentAmount()) return
     const newTotal = round2(total)
     resetPaymentInputs()
     if (activePaymentTab === 'cash') {
@@ -2977,6 +3038,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     activePaymentTab,
     useAdminPaymentLines,
     discountPaymentSyncTick,
+    isActivelyEditingPaymentAmount,
   ])
 
   /** 더치 패널 없이 할인만 바뀐 경우: 일부 결제 단계·누적 입력 초기화 (협업 할인 후 금액 이중 합산 방지) */
@@ -3791,8 +3853,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     if (!showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
-      if (paymentAmountInputFocusedRef.current) return
-      if (isPaymentAmountInputEl(document.activeElement)) return
+      if (isActivelyEditingPaymentAmount()) return
       if (!selectedMemberId) {
         paymentMemberScanInputRef.current?.focus()
       } else {
@@ -3800,7 +3861,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     }, 120)
     return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, isPaymentAmountInputEl, selectedMemberId, showPaymentModal])
+  }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -3902,7 +3963,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     const tick = window.setInterval(() => {
       if (couponQrScannerOpen) return
-      if (guestDirectOpen || editingNoteItemId || paymentAmountInputFocusedRef.current) return
+      if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
       if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
       const active = document.activeElement
       if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
@@ -3919,7 +3980,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       lastPosActivityRef.current = Date.now()
     }, 4000)
     return () => window.clearInterval(tick)
-  }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, showPaymentModal])
+  }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, isActivelyEditingPaymentAmount, showPaymentModal])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
@@ -4413,14 +4474,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             }
             value={discountValueInput}
             {...bindPaymentAmountInputFocus({ syncPaymentOnBlur: true })}
-            onChange={(e) => {
-              markPaymentAmountInputFocused()
-              setDiscountValueInput(
-                discountType === 'percent'
-                  ? formatIntegerInputDisplay(e.target.value, 3)
-                  : formatBahtInputDisplay(e.target.value)
-              )
-            }}
+            onChange={(e) =>
+              discountType === 'percent'
+                ? handlePaymentIntegerInputChange(e, setDiscountValueInput, 3)
+                : handlePaymentBahtInputChange(e, setDiscountValueInput)
+            }
             className="h-11 min-w-[5.5rem] text-right text-sm font-semibold tabular-nums rounded-xl px-2.5"
           />
           <Input
@@ -5672,10 +5730,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     autoComplete="off"
                     value={pointUsed}
                     {...bindPaymentAmountInputFocus()}
-                    onChange={(e) => {
-                      markPaymentAmountInputFocused()
-                      setPointUsed(formatIntegerInputDisplay(e.target.value))
-                    }}
+                    onChange={(e) => handlePaymentIntegerInputChange(e, setPointUsed)}
                     className="h-10 w-full max-w-[12rem] text-sm rounded-xl sm:w-auto"
                   />
                 </div>
@@ -5779,10 +5834,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     autoComplete="off"
                     value={value}
                     {...bindPaymentAmountInputFocus()}
-                    onChange={(e) => {
-                      markPaymentAmountInputFocused()
-                      set(formatBahtInputDisplay(e.target.value))
-                    }}
+                    onChange={(e) => handlePaymentBahtInputChange(e, set)}
                     className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                   />
                   <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
@@ -5837,10 +5889,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               autoComplete="off"
                               value={cashTendered}
                               {...bindPaymentAmountInputFocus()}
-                              onChange={(e) => {
-                                markPaymentAmountInputFocused()
-                                setCashTendered(formatBahtInputDisplay(e.target.value))
-                              }}
+                              onChange={(e) => handlePaymentBahtInputChange(e, setCashTendered)}
                               className="h-10 rounded-lg border-sky-300/70 bg-sky-50/60 text-right tabular-nums text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100"
                               placeholder="0"
                             />
@@ -5954,10 +6003,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           autoComplete="off"
                           value={payDeliveryApp}
                           {...bindPaymentAmountInputFocus()}
-                          onChange={(e) => {
-                            markPaymentAmountInputFocused()
-                            setPayDeliveryApp(formatBahtInputDisplay(e.target.value))
-                          }}
+                          onChange={(e) => handlePaymentBahtInputChange(e, setPayDeliveryApp)}
                           className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                         />
                         <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
@@ -6055,13 +6101,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                   autoComplete="off"
                                   value={payAdminLineAmounts[item.id] ?? '0'}
                                   {...bindPaymentAmountInputFocus()}
-                                  onChange={(e) => {
-                                    markPaymentAmountInputFocused()
-                                    setPayAdminLineAmounts((prev) => ({
-                                      ...prev,
-                                      [item.id]: formatBahtInputDisplay(e.target.value),
-                                    }))
-                                  }}
+                                  onChange={(e) =>
+                                    handlePaymentBahtInputChange(e, (formatted) =>
+                                      setPayAdminLineAmounts((prev) => ({
+                                        ...prev,
+                                        [item.id]: formatted,
+                                      }))
+                                    )
+                                  }
                                   className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
                                 />
                                 <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
@@ -6117,10 +6164,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               autoComplete="off"
                               value={value}
                               {...bindPaymentAmountInputFocus()}
-                              onChange={(e) => {
-                                markPaymentAmountInputFocused()
-                                set(formatBahtInputDisplay(e.target.value))
-                              }}
+                              onChange={(e) => handlePaymentBahtInputChange(e, set)}
                               className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
                             />
                             <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>

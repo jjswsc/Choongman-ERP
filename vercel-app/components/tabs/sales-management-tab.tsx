@@ -473,9 +473,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setStorePickerOpen(false)
     }
-    document.addEventListener("mousedown", onDown)
-    document.addEventListener("keydown", onKeyDown)
+    const tid = window.setTimeout(() => {
+      document.addEventListener("mousedown", onDown)
+      document.addEventListener("keydown", onKeyDown)
+    }, 0)
     return () => {
+      clearTimeout(tid)
       document.removeEventListener("mousedown", onDown)
       document.removeEventListener("keydown", onKeyDown)
     }
@@ -916,7 +919,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [router, startStr, endStr]
   )
 
-  const analyticsParamKey = React.useMemo(
+  const dataFilterKey = React.useMemo(
     () =>
       [
         startStr,
@@ -925,8 +928,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         periodGroup,
         orderTypesKey,
         compareStores ? "1" : "0",
-        activeSubMenuId,
-        selectedTopicId,
         menuSearch.trim(),
         menuSearchAnd ? "1" : "0",
       ].join("|"),
@@ -937,11 +938,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       periodGroup,
       orderTypesKey,
       compareStores,
-      activeSubMenuId,
-      selectedTopicId,
       menuSearch,
       menuSearchAnd,
     ]
+  )
+
+  const analyticsParamKey = React.useMemo(
+    () => [dataFilterKey, activeSubMenuId, selectedTopicId].join("|"),
+    [dataFilterKey, activeSubMenuId, selectedTopicId]
   )
 
   const showSalesResults = fetchedAnalyticsKey !== "" && fetchedAnalyticsKey === analyticsParamKey
@@ -1105,7 +1109,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastActualRows([])
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
-  }, [analyticsParamKey])
+  }, [dataFilterKey])
 
   const validTopicByMenu = React.useMemo(
     () =>
@@ -1796,6 +1800,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   React.useEffect(() => {
     if (searchParams.get("hours") === "1") return
+    if (storePickerOpen) return
     const currentTopic = selectedTopic?.id
     if (!currentTopic) return
 
@@ -1868,6 +1873,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     router,
     searchParams,
     selectedTopic?.id,
+    storePickerOpen,
   ])
 
   const posOptionsLoadIdRef = React.useRef(0)

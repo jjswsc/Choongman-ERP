@@ -65,6 +65,8 @@ import {
 } from "@/lib/api-client"
 import { formatBankAccountLabel } from "@/lib/bank-account-display"
 import { compressImageForUpload } from "@/lib/utils"
+import { ExpenseDocumentAttachPanel } from "@/components/erp/expense-document-attach-panel"
+import { suggestAccountSubjectId } from "@/lib/expense-ocr-suggestions"
 import {
   accountingResultTableCn,
   accountingResultTbodyRowCn,
@@ -165,7 +167,7 @@ export function PettyCashTab({
   const [addInvoiceReceived, setAddInvoiceReceived] = useState(false)
   const [addInvoiceNo, setAddInvoiceNo] = useState("")
   const [addVatAmount, setAddVatAmount] = useState("")
-  const [addInvoicePhotoFile, setAddInvoicePhotoFile] = useState<File | null>(null)
+  const [addInvoiceAttachFiles, setAddInvoiceAttachFiles] = useState<File[]>([])
   const [addSaving, setAddSaving] = useState(false)
   const [updatingInvoiceId, setUpdatingInvoiceId] = useState<number | null>(null)
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
@@ -200,7 +202,7 @@ export function PettyCashTab({
   const [editInvoiceReceived, setEditInvoiceReceived] = useState(false)
   const [editInvoiceNo, setEditInvoiceNo] = useState("")
   const [editVatAmount, setEditVatAmount] = useState("")
-  const [editInvoicePhotoFile, setEditInvoicePhotoFile] = useState<File | null>(null)
+  const [editInvoiceAttachFiles, setEditInvoiceAttachFiles] = useState<File[]>([])
   const [editSaving, setEditSaving] = useState(false)
   const [deletingMonthlyId, setDeletingMonthlyId] = useState<number | null>(null)
   const editReceiptFileInputRef = useRef<HTMLInputElement>(null)
@@ -764,9 +766,9 @@ export function PettyCashTab({
         return
       }
     }
-    if (addType === "expense" && addInvoicePhotoFile) {
+    if (addType === "expense" && addInvoiceAttachFiles[0]) {
       try {
-        invoicePhotoUrl = await compressImageForUpload(addInvoicePhotoFile, 1024, 0.7)
+        invoicePhotoUrl = await compressImageForUpload(addInvoiceAttachFiles[0], 1024, 0.7)
       } catch (err) {
         console.error("compressInvoice:", err)
       }
@@ -800,7 +802,7 @@ export function PettyCashTab({
       setAddInvoiceReceived(false)
       setAddInvoiceNo("")
       setAddVatAmount("")
-      setAddInvoicePhotoFile(null)
+      setAddInvoiceAttachFiles([])
       setAddReceiptFile(null)
       setAddReceiptPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev)
@@ -823,7 +825,7 @@ export function PettyCashTab({
     setEditInvoiceReceived(Boolean(r.invoiceReceived))
     setEditInvoiceNo(r.invoiceNo || "")
     setEditVatAmount(r.vatAmount && r.vatAmount > 0 ? String(r.vatAmount) : "")
-    setEditInvoicePhotoFile(null)
+    setEditInvoiceAttachFiles([])
     setEditReceiptFile(null)
     setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
   }
@@ -900,9 +902,9 @@ export function PettyCashTab({
         return
       }
     }
-    if (editType === "expense" && editInvoicePhotoFile) {
+    if (editType === "expense" && editInvoiceAttachFiles[0]) {
       try {
-        invoicePhotoUrl = await compressImageForUpload(editInvoicePhotoFile, 1024, 0.7)
+        invoicePhotoUrl = await compressImageForUpload(editInvoiceAttachFiles[0], 1024, 0.7)
       } catch (err) {
         console.error("compressInvoice:", err)
       }
@@ -1752,16 +1754,43 @@ ${rows.map((row, ri) => {
                           <Label className="text-xs text-muted-foreground">{t("wm_invoiceNoLabel") || "Invoice No."}</Label>
                           <Input value={addInvoiceNo} onChange={(e) => setAddInvoiceNo(e.target.value)} className="h-9 mt-1 text-xs" />
                         </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">{t("bankInvoicePhotoUpload") || "Invoice Image"}</Label>
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            className="h-9 mt-1 text-xs max-w-[180px]"
-                            onChange={(e) => setAddInvoicePhotoFile(e.target.files?.[0] || null)}
-                          />
-                        </div>
                       </div>
+                      <ExpenseDocumentAttachPanel
+                        files={addInvoiceAttachFiles}
+                        onFilesChange={setAddInvoiceAttachFiles}
+                        maxFiles={3}
+                        variant="receiptOnly"
+                        invoiceReceived={addInvoiceReceived}
+                        onInvoiceReceivedChange={setAddInvoiceReceived}
+                        invoiceNo={addInvoiceNo}
+                        onInvoiceNoChange={setAddInvoiceNo}
+                        onOcrFields={(f) => {
+                          if (f.amount && f.amount > 0 && !addAmount) setAddAmount(String(f.amount))
+                          if (f.vatAmount && f.vatAmount > 0) setAddVatAmount(String(f.vatAmount))
+                          if (f.invoiceNo) {
+                            setAddInvoiceNo(f.invoiceNo)
+                            setAddInvoiceReceived(true)
+                          }
+                          if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate)) setAddDate(f.expenseDate)
+                          if (f.vendorNameHint && !addMemo.trim()) setAddMemo(f.vendorNameHint)
+                          if (!addAccountSubjectId) {
+                            const sid = suggestAccountSubjectId(
+                              accountSubjectOptions
+                                .filter((a) => a.id != null)
+                                .map((a) => ({
+                                  id: a.id!,
+                                  code: a.code,
+                                  name: a.name,
+                                  nameEn: a.nameEn,
+                                })),
+                              { memo: f.vendorNameHint || addMemo }
+                            )
+                            if (sid) setAddAccountSubjectId(String(sid))
+                          }
+                        }}
+                        disabled={addSaving}
+                        className="mt-2"
+                      />
                     </div>
                   ) : null}
                   <Button className="h-10 w-full font-medium" onClick={handleAdd} disabled={addSaving}>
@@ -2126,13 +2155,32 @@ ${rows.map((row, ri) => {
                         <Label className="text-xs text-muted-foreground">{t("wm_invoiceNoLabel") || "Invoice No."}</Label>
                         <Input value={editInvoiceNo} onChange={(e) => setEditInvoiceNo(e.target.value)} className="h-9 mt-1 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">{t("bankInvoicePhotoUpload") || "Invoice Image"}</Label>
-                        <Input type="file" accept="image/*" className="h-9 mt-1 text-xs" onChange={(e) => setEditInvoicePhotoFile(e.target.files?.[0] || null)} />
-                        {editModalItem.invoicePhotoUrl && !editInvoicePhotoFile ? (
-                          <span className="text-xs text-muted-foreground mt-1 block">{t("poInvoice") || "Invoice"} ✓</span>
-                        ) : null}
-                      </div>
+                      {editModalItem.invoicePhotoUrl && editInvoiceAttachFiles.length === 0 ? (
+                        <img
+                          src={editModalItem.invoicePhotoUrl}
+                          alt=""
+                          className="h-12 w-12 object-cover rounded border"
+                        />
+                      ) : null}
+                      <ExpenseDocumentAttachPanel
+                        files={editInvoiceAttachFiles}
+                        onFilesChange={setEditInvoiceAttachFiles}
+                        maxFiles={3}
+                        variant="receiptOnly"
+                        invoiceReceived={editInvoiceReceived}
+                        onInvoiceReceivedChange={setEditInvoiceReceived}
+                        invoiceNo={editInvoiceNo}
+                        onInvoiceNoChange={setEditInvoiceNo}
+                        onOcrFields={(f) => {
+                          if (f.vatAmount && f.vatAmount > 0) setEditVatAmount(String(f.vatAmount))
+                          if (f.invoiceNo) {
+                            setEditInvoiceNo(f.invoiceNo)
+                            setEditInvoiceReceived(true)
+                          }
+                          if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate)) setEditDate(f.expenseDate)
+                        }}
+                        disabled={editSaving}
+                      />
                     </div>
                   ) : null}
                 </div>

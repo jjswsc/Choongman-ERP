@@ -84,6 +84,10 @@ export function SalesStorePicker({
         aria-expanded={storePickerOpen}
         aria-controls={storePickerListId}
         aria-haspopup="dialog"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
         onClick={() => setStorePickerOpen((prev) => !prev)}
       >
         <span className="truncate text-left">
@@ -106,7 +110,8 @@ export function SalesStorePicker({
           role="dialog"
           aria-modal="false"
           aria-labelledby={storePickerBtnId}
-          className="absolute z-20 mt-2 w-[320px] rounded-md border bg-background p-2 shadow-lg"
+          className="absolute z-50 mt-2 w-[320px] rounded-md border bg-background p-2 shadow-lg"
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <Input
             value={storeSearch}

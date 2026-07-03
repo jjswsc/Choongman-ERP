@@ -8,7 +8,10 @@ import {
   normalizeErpHref,
   useErpNavigationOptional,
 } from "@/lib/erp-navigation"
-import { isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
+import {
+  isErpKeepAliveExcluded,
+  resolveErpKeepAliveCacheHref,
+} from "@/lib/erp-keep-alive-config"
 import { ErpPageVisibilityProvider } from "@/lib/erp-page-visibility"
 
 const MAX_CACHED_PAGES = 16
@@ -46,10 +49,12 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
     return normalizeErpHref(pathname || "", qs ? `?${qs}` : "")
   }, [pathname, searchParams])
 
+  const cacheHref = React.useMemo(() => resolveErpKeepAliveCacheHref(href), [href])
+
   const keepAliveCurrent = !isErpKeepAliveExcluded(href)
 
   if (keepAliveCurrent) {
-    cacheRef.current.set(href, { node: children, lastSeen: Date.now() })
+    cacheRef.current.set(cacheHref, { node: children, lastSeen: Date.now() })
   }
 
   const clearAll = React.useCallback(() => {
@@ -66,16 +71,16 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   React.useEffect(() => {
     const evictHref = consumeErpBackEvictHref()
     if (evictHref && cacheRef.current.delete(evictHref)) bump()
-    syncCacheWithNavigationStack(cacheRef.current, href)
+    syncCacheWithNavigationStack(cacheRef.current, cacheHref)
     if (erpNav) erpNav.notifyKeepAliveCount(cacheRef.current.size)
-  }, [href, erpNav])
+  }, [cacheHref, erpNav])
 
   React.useEffect(() => {
     const entries = cacheRef.current
     if (entries.size <= MAX_CACHED_PAGES) return
 
     const sorted = Array.from(entries.entries())
-      .filter(([key]) => key !== href)
+      .filter(([key]) => key !== cacheHref)
       .sort((a, b) => a[1].lastSeen - b[1].lastSeen)
 
     const excess = entries.size - MAX_CACHED_PAGES
@@ -83,7 +88,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
       entries.delete(sorted[i][0])
     }
     bump()
-  }, [href])
+  }, [cacheHref])
 
   if (!keepAliveCurrent) {
     return (
@@ -106,7 +111,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   return (
     <div className="relative min-h-0 flex-1">
       {entries.map(([key, { node }]) => {
-        const active = key === href
+        const active = key === cacheHref
         return (
           <ErpPageVisibilityProvider key={key} active={active}>
             <div

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select"
 import { Search, Camera, Pencil, Trash2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ExpenseSearchTimelineCell } from "@/components/erp/expense-search-timeline-cell"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -226,6 +227,9 @@ export function ExpenseRegisterSearchTab() {
       if (relationFilter === "paid") {
         return r.relation === "paid_bank" || r.relation === "paid_petty"
       }
+      if (relationFilter === "unlinked") {
+        return r.relation === "plan_only" || r.relation === "approved_unpaid"
+      }
       return r.relation === relationFilter
     })
   }, [list, relationFilter])
@@ -341,6 +345,7 @@ export function ExpenseRegisterSearchTab() {
     { key: "paid", label: tt("expenseSearchSummaryPaid", "Paid"), count: summary.paid },
     { key: "bank_only", label: tt("expenseSearchSummaryBankOnly", "Bank Only"), count: summary.bankOnly },
     { key: "rejected", label: tt("expenseSearchSummaryRejected", "Rejected"), count: summary.rejected },
+    { key: "unlinked", label: tt("expenseSearchSummaryUnlinked", "Unlinked"), count: summary.planOnly + summary.approvedUnpaid },
   ]
 
   /** 조회(기간·매장·통장 등) 결과 + 연결 상태 필터 기준 금액 합계 */
@@ -365,14 +370,14 @@ export function ExpenseRegisterSearchTab() {
     return sub ? `${sub.code} ${asDisplayName(sub)}` : "—"
   }
 
+  const planDateLabel = (r: ExpenseSearchOverviewRow) => r.dueDate || r.expenseDate || null
+
   const renderPlanCell = (r: ExpenseSearchOverviewRow) => {
     if (!r.accrualId) return <span className="text-muted-foreground">—</span>
-    const date = r.dueDate || r.expenseDate || "-"
     const amount = r.plannedAmount != null ? fmt(r.plannedAmount) : "-"
     return (
       <div className="text-xs leading-snug">
         <div className="font-medium tabular-nums">{amount}</div>
-        <div className="text-muted-foreground">{date}</div>
         <div className="text-[11px] text-muted-foreground">
           {tt("expenseSearchPlanRef", "Plan")} #{r.accrualId}
         </div>
@@ -545,6 +550,7 @@ export function ExpenseRegisterSearchTab() {
                 <thead className="bg-muted/50 sticky top-0 z-[1]">
                   <tr>
                     <th className="p-2 text-center">{tt("expenseSearchColRelation", "Link")}</th>
+                    <th className="p-2 text-center min-w-[168px]">{tt("expenseSearchColTimeline", "Timeline")}</th>
                     <th className="p-2 text-left">{tt("store", "Store")}</th>
                     <th className="p-2 text-center">{tt("bankCategoryLabel", "Category")}</th>
                     <th className="p-2 text-left">{tt("vendor", "Vendor")}</th>
@@ -565,9 +571,20 @@ export function ExpenseRegisterSearchTab() {
                     return (
                       <tr key={r.rowKey} className="border-t align-top">
                         <td className="p-2 text-center">
-                          <Badge variant="outline" className={cn("text-[11px] font-normal whitespace-nowrap", relationBadgeClass(r.relation))}>
-                            {relationLabel(r.relation)}
-                          </Badge>
+                          <div className="flex flex-col items-center gap-0.5 min-w-[88px]">
+                            <Badge variant="outline" className={cn("text-[11px] font-normal whitespace-nowrap", relationBadgeClass(r.relation))}>
+                              {relationLabel(r.relation)}
+                            </Badge>
+                            {planDateLabel(r) ? (
+                              <div className="text-[10px] leading-tight text-muted-foreground">
+                                <div className="opacity-80">{tt("expenseSearchColPlan", "Plan")}</div>
+                                <div className="tabular-nums">{planDateLabel(r)}</div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <ExpenseSearchTimelineCell row={r} />
                         </td>
                         <td className="p-2 text-xs">{r.storeName || "—"}</td>
                         <td className="p-2 text-center text-xs">{getCategoryLabel(r.category, t)}</td>
