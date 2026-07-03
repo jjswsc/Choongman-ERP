@@ -2,6 +2,7 @@ import type { OrderItem } from '@/lib/pos-types'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import type { KitchenSlipRoutingItem } from '@/lib/pos-kitchen-slip-routing'
 import { kitchenRoutingItemFromOrderItem } from '@/lib/pos-kitchen-slip-routing'
+import { resolvePosOrderLineIndex } from '@/lib/pos-order-line-keys'
 
 export function orderItemLineQty(it: OrderItem): number {
   return Math.max(1, Math.trunc(resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })))
@@ -50,21 +51,22 @@ export function buildOrderItemsAfterLineCancel(
   itemId: string,
   cancelQty: number
 ): BuildOrderItemsAfterLineCancelResult | null {
-  const target = items.find((it) => it.id === itemId)
-  if (!target) return null
+  const idx = resolvePosOrderLineIndex(items, itemId)
+  if (idx < 0) return null
+  const target = items[idx]!
   const lineQty = orderItemLineQty(target)
   const cq = Math.max(1, Math.min(lineQty, Math.trunc(cancelQty) || 1))
   if (cq >= lineQty) {
     return {
-      items: items.filter((it) => it.id !== itemId),
+      items: items.filter((_, i) => i !== idx),
       mode: 'remove_line',
       remainingQty: 0,
     }
   }
   const newQty = lineQty - cq
   return {
-    items: items.map((it) =>
-      it.id === itemId ? scalePosLineFieldsForQtyReduce(it, lineQty, newQty) : it
+    items: items.map((it, i) =>
+      i === idx ? scalePosLineFieldsForQtyReduce(it, lineQty, newQty) : it
     ),
     mode: 'reduce_qty',
     remainingQty: newQty,

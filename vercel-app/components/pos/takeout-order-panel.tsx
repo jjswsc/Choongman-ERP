@@ -32,6 +32,7 @@ import {
 } from '@/lib/pos-member-portal-takeout-label'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
+import { buildPosOrderLineKeys, getPosOrderLineByKey } from '@/lib/pos-order-line-keys'
 import { canStartPosLinePartialCancel, orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
@@ -113,37 +114,41 @@ export function TakeoutOrderPanel({
   const [checklistSubmitting, setChecklistSubmitting] = useState(false)
   const [checklistGroups, setChecklistGroups] = useState<PosOrderPackagingChecklistGroup[]>([])
 
+  const lineKeys = useMemo(() => buildPosOrderLineKeys(order?.items ?? []), [order?.items])
+
   useEffect(() => {
     if (!order?.items?.length) {
       setItemPackaged({})
       setItemChildPackaged({})
       setItemCancelled({})
     } else {
+      const keys = buildPosOrderLineKeys(order.items)
       setItemPackaged((prev) => {
         const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.servedAt)
+        order.items.forEach((it, i) => {
+          next[keys[i] ?? `line-${i}`] = Boolean(it.servedAt)
         })
         return next
       })
       setItemChildPackaged((prev) => {
         const next = { ...prev }
-        order.items.forEach((it) => {
+        order.items.forEach((it, i) => {
+          const lineKey = keys[i] ?? `line-${i}`
           const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
           if (!childKeys.length) return
           const childState = readPosSetChildrenState(it.setChildrenState)
           childKeys.forEach((key) => {
             const raw = childState[key]
             const done = Boolean(String(raw?.packedAt ?? raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
-            next[`${it.id}::${key}`] = done
+            next[`${lineKey}::${key}`] = done
           })
         })
         return next
       })
       setItemCancelled((prev) => {
         const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.cancelledAt)
+        order.items.forEach((it, i) => {
+          next[keys[i] ?? `line-${i}`] = Boolean(it.cancelledAt)
         })
         return next
       })
@@ -220,9 +225,12 @@ export function TakeoutOrderPanel({
     }
   }
 
-  const activeItems = order?.items?.filter((it) => !itemCancelled[it.id]) ?? []
-  const packagedCount = activeItems.filter((it) => itemPackaged[it.id]).length
-  const allPackaged = activeItems.length > 0 ? packagedCount >= activeItems.length : false
+  const activeLineEntries =
+    order?.items
+      ?.map((it, i) => ({ it, lineKey: lineKeys[i] ?? `line-${i}` }))
+      .filter(({ lineKey }) => !itemCancelled[lineKey]) ?? []
+  const packagedCount = activeLineEntries.filter(({ lineKey }) => itemPackaged[lineKey]).length
+  const allPackaged = activeLineEntries.length > 0 ? packagedCount >= activeLineEntries.length : false
 
   /** `paid`는 결제 완료·회계 반영 전 단계 — `completed`와 동일하게 취소 UI 비표시 */
   const canCancel =
@@ -249,17 +257,24 @@ export function TakeoutOrderPanel({
       setSelectedLineItemId(null)
       return
     }
-    setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev && !i.cancelledAt) ? prev : null))
+    const keys = buildPosOrderLineKeys(order.items)
+    setSelectedLineItemId((prev) => {
+      if (!prev) return null
+      const idx = keys.indexOf(prev)
+      if (idx < 0) return null
+      const it = order.items[idx]
+      return it && !it.cancelledAt ? prev : null
+    })
   }, [order?.id, order?.items])
 
   const cancelQtyTargetItem = useMemo(
-    () => (selectedLineItemId && order ? order.items.find((it) => it.id === selectedLineItemId) ?? null : null),
+    () => (selectedLineItemId && order ? getPosOrderLineByKey(order.items, selectedLineItemId) : null),
     [order, selectedLineItemId]
   )
 
   const applyLineCancel = async (itemId: string, cancelQty: number, confirmBeforeApply: boolean) => {
     if (!order) return
-    const target = order.items.find((it) => it.id === itemId)
+    const target = getPosOrderLineByKey(order.items, itemId)
     if (!target) return
     const label = translatePosMenuLineForReceipt(target.name, ti)
     setRemovingItemId(itemId)
@@ -599,9 +614,10 @@ export function TakeoutOrderPanel({
             <>
               <ScrollArea className="flex-1 min-h-0 rounded-md border">
                 <ul className="p-2 space-y-2">
-                  {order.items.map((item) => {
-                    const packaged = itemPackaged[item.id]
-                    const cancelled = itemCancelled[item.id]
+                  {order.items.map((item, itemIndex) => {
+                    const lineKey = lineKeys[itemIndex] ?? `line-${itemIndex}`
+                    const packaged = itemPackaged[lineKey]
+                    const cancelled = itemCancelled[lineKey]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : item.name
                     const optionPart = optMatch ? optMatch[2].trim() : null
@@ -610,12 +626,12 @@ export function TakeoutOrderPanel({
                     const fullDisp = translatePosMenuLineForReceipt(item.name, ti)
                     return (
                       <li
-                        key={item.id}
+                        key={lineKey}
                         className={cn(
                           'grid cursor-default grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
                           packaged && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
-                          selectedLineItemId === item.id &&
+                          selectedLineItemId === lineKey &&
                             'ring-2 ring-primary/45 border-primary/50 bg-primary/5 dark:bg-primary/10'
                         )}
                         onClick={() => {
@@ -630,7 +646,7 @@ export function TakeoutOrderPanel({
                             onClick={(e) => {
                               e.stopPropagation()
                               if (cancelled) return
-                              setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
+                              setSelectedLineItemId((prev) => (prev === lineKey ? null : lineKey))
                             }}
                             title={fullDisp}
                           >
@@ -652,11 +668,11 @@ export function TakeoutOrderPanel({
                                 const childLabel = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
                                 return Array.from({ length: qty }).map((_, n) => {
                                   const childKey = buildPosSetChildKey(line, idx, n)
-                                  const mapKey = `${item.id}::${childKey}`
+                                  const mapKey = `${lineKey}::${childKey}`
                                   const childDone = Boolean(itemChildPackaged[mapKey])
                                   return (
                                     <button
-                                      key={`${item.id}-${childKey}`}
+                                      key={`${lineKey}-${childKey}`}
                                       type="button"
                                       className={cn(
                                         'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-base font-medium transition-colors',
@@ -666,9 +682,9 @@ export function TakeoutOrderPanel({
                                       )}
                                       onClick={(e) => {
                                         e.stopPropagation()
-                                        void toggleSetChildPackaged(item.id, childKey)
+                                        void toggleSetChildPackaged(lineKey, childKey)
                                       }}
-                                      disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                                      disabled={savingItemId === lineKey || removingItemId !== null || cancelled}
                                     >
                                       <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, ti)}</span>
                                       {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
@@ -690,9 +706,9 @@ export function TakeoutOrderPanel({
                           className="shrink-0 self-start mt-0.5 h-9 w-9 p-0"
                           onClick={(e) => {
                             e.stopPropagation()
-                            void toggleItemPackaged(item.id)
+                            void toggleItemPackaged(lineKey)
                           }}
-                          disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                          disabled={savingItemId === lineKey || removingItemId !== null || cancelled}
                           aria-label={
                             packaged
                               ? (t('cancel') || '취소')
@@ -739,7 +755,7 @@ export function TakeoutOrderPanel({
               >
                 {allPackaged
                   ? (t('posDeliveryPackagingComplete') || '포장 완료')
-                  : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeItems.length || order.items.length})`}
+                  : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeLineEntries.length || order.items.length})`}
               </Button>
               {canCancel && (
                 <div className="space-y-1.5">

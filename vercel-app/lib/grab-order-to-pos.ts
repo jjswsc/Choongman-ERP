@@ -1022,8 +1022,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
 
     const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {
       if (rowQty <= 0) return
+      // 동일 Grab menu id가 여러 줄(반반 2종 등)일 때 id 충돌 → 포장 체크가 묶이지 않도록 줄 순번 포함
       out.push({
-        id: `grab:${itemBaseId}${rowSuffix}`,
+        id: `grab:${itemBaseId}:L${idx}${rowSuffix}`,
         name: itemName,
         price: minorToMajor(unitMinor, exponent),
         qty: rowQty,

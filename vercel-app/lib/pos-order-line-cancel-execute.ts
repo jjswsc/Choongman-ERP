@@ -12,6 +12,7 @@ import {
   orderItemLineQty,
   wouldLeaveNoItemsAfterLineCancel,
 } from '@/lib/pos-order-line-cancel'
+import { getPosOrderLineByKey } from '@/lib/pos-order-line-keys'
 import {
   buildUpdatePosOrderParamsFromOrder,
   canRemovePosOrderLine,
@@ -69,7 +70,7 @@ export async function executePosOrderLineCancel(
     storeCode = '',
   } = opts
 
-  const target = order.items.find((it) => it.id === itemId)
+  const target = getPosOrderLineByKey(order.items, itemId)
   if (!target) return 'abort'
 
   const lineQty = orderItemLineQty(target)
