@@ -150,9 +150,10 @@ export function TableOrderPanel({
         menus: menusFromProps,
         promos: promosFromProps,
         menuOptions: menuOptionsFromProps,
-        translateLine: (name) => translatePosMenuLineForReceipt(name, t),
+        // translatePosMenuLineForReceipt는 t 미사용 — useMemo에 t 넣으면 매 렌더 재계산 → #185
+        translateLine: translatePosMenuLineForReceipt,
       }),
-    [order?.items, menusFromProps, promosFromProps, menuOptionsFromProps, t]
+    [order?.items, menusFromProps, promosFromProps, menuOptionsFromProps]
   )
   const isPaidPrepaid = order?.status === 'paid'
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
@@ -166,52 +167,85 @@ export function TableOrderPanel({
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [guestSaving, setGuestSaving] = useState(false)
 
-  const displayItemById = useMemo(() => new Map(displayItems.map((it) => [it.id, it])), [displayItems])
-
   useEffect(() => {
     if (!order?.items?.length) {
-      setItemServed({})
-      setItemChildServed({})
-      setItemCancelled({})
+      setItemServed((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemChildServed((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemCancelled((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      return
     }
-    else {
-      setItemServed((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.servedAt)
-        })
-        return next
-      })
-      setItemChildServed((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          const enriched = displayItemById.get(it.id)
-          const childKeys = listPosSetChildKeys(
-            Array.isArray(enriched?.promoItems) && enriched.promoItems.length > 0
-              ? enriched.promoItems
-              : Array.isArray(it.promoItems)
-                ? it.promoItems
-                : []
-          )
-          if (!childKeys.length) return
-          const childState = readPosSetChildrenState(it.setChildrenState)
-          childKeys.forEach((key) => {
-            const raw = childState[key]
-            const done = Boolean(String(raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
-            next[`${it.id}::${key}`] = done
-          })
-        })
-        return next
-      })
-      setItemCancelled((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.cancelledAt)
-        })
-        return next
-      })
-    }
-  }, [order?.id, order?.items, displayItemById])
+    const enrichedById = new Map(displayItems.map((it) => [it.id, it]))
+    setItemServed((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const it of order.items) {
+        const v = Boolean(it.servedAt)
+        if (next[it.id] !== v) {
+          next[it.id] = v
+          changed = true
+        }
+      }
+      for (const key of Object.keys(prev)) {
+        if (!order.items.some((it) => it.id === key)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    setItemChildServed((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const it of order.items) {
+        const enriched = enrichedById.get(it.id)
+        const childKeys = listPosSetChildKeys(
+          Array.isArray(enriched?.promoItems) && enriched.promoItems.length > 0
+            ? enriched.promoItems
+            : Array.isArray(it.promoItems)
+              ? it.promoItems
+              : []
+        )
+        if (!childKeys.length) continue
+        const childState = readPosSetChildrenState(it.setChildrenState)
+        for (const key of childKeys) {
+          const raw = childState[key]
+          const done = Boolean(String(raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
+          const mapKey = `${it.id}::${key}`
+          if (next[mapKey] !== done) {
+            next[mapKey] = done
+            changed = true
+          }
+        }
+      }
+      for (const key of Object.keys(prev)) {
+        if (!key.includes('::')) continue
+        const itemId = key.split('::')[0]
+        if (!order.items.some((it) => it.id === itemId)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    setItemCancelled((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const it of order.items) {
+        const v = Boolean(it.cancelledAt)
+        if (next[it.id] !== v) {
+          next[it.id] = v
+          changed = true
+        }
+      }
+      for (const key of Object.keys(prev)) {
+        if (!order.items.some((it) => it.id === key)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [order?.id, order?.items, displayItems])
 
   const toggleItemServed = async (itemId: string) => {
     if (!order) return
