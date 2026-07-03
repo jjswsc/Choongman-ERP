@@ -28,7 +28,7 @@ import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import {
   parseAppliedCouponsFromBody,
-  persistPosOrderCouponRedemptions,
+  redeemMemberCouponIssuesForPaidOrder,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
@@ -563,14 +563,9 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (Number(created?.id) > 0 && appliedCoupons.length > 0) {
+    if (paymentComplete && Number(created?.id) > 0) {
       try {
-        await persistPosOrderCouponRedemptions({
-          orderId: Number(created.id),
-          storeCode,
-          appliedCoupons,
-          memberId: memberId || undefined,
-        })
+        await redeemMemberCouponIssuesForPaidOrder(Number(created.id))
       } catch (redeemErr) {
         console.error('savePosOrder coupon redemptions:', redeemErr)
       }

@@ -3,11 +3,14 @@ import { expandTruncatedCouponCodeCandidates } from '@/lib/member-coupon-qr'
 import { cancelOtherIssuedMemberCouponIssues } from '@/lib/member-portal-coupon-repair'
 import { resolveMemberIdsSharingPhone } from '@/lib/members-server'
 import { resolveMemberRef } from '@/lib/member-merge-server'
+import { isPosCompletionStatus } from '@/lib/pos-order-policy'
+import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
 import {
   summarizeLegacyCouponFields,
   validatePosCouponCandidate,
   parseAppliedCouponsFromBody,
+  parseAppliedCouponsFromOrderRow,
   type PosAppliedCouponLine,
   type PosCouponCartLine,
   type PosCouponCandidateInput,
@@ -61,6 +64,7 @@ type MemberIssueRow = {
   coupon_code?: string
   status?: string
   used_at?: string | null
+  order_id?: number | null
 }
 
 type MemberCouponIssueRejectReason = 'already_used' | 'issue_not_available'
@@ -235,7 +239,13 @@ async function findMemberCouponIssue(params: {
   if (issueId > 0) {
     const byIssueId = await loadMemberCouponIssueById(issueId)
     if (!byIssueId) return null
-    if (memberId > 0 && Number(byIssueId.member_id || 0) !== memberId) return null
+    if (memberId > 0) {
+      const issueMemberId = Number(byIssueId.member_id || 0)
+      if (issueMemberId > 0 && issueMemberId !== memberId) {
+        const sharing = await resolveMemberIdsSharingPhone(memberId)
+        if (!sharing.includes(issueMemberId)) return null
+      }
+    }
     if (code) {
       const issueCode = normalizeCode(byIssueId.coupon_code || '')
       const codeMatches = expandTruncatedCouponCodeCandidates(code).some(
@@ -524,9 +534,17 @@ async function finalizeMemberCouponIssueRedemption(
   const id = Math.max(0, Math.trunc(Number(issueId) || 0))
   if (!id) return
   const raw = await loadMemberCouponIssueRawById(id)
-  if (!raw || String(raw.status ?? '').toLowerCase() !== 'issued') return
+  if (!raw) return
 
-  await markMemberCouponIssueUsed(id, orderId)
+  const status = String(raw.status ?? '').toLowerCase()
+  const linkedOrderId = Number(raw.order_id || 0)
+  const alreadyUsedOnThisOrder = status === 'used' && linkedOrderId === orderId
+
+  if (status !== 'issued' && !alreadyUsedOnThisOrder) return
+
+  if (status === 'issued') {
+    await markMemberCouponIssueUsed(id, orderId)
+  }
 
   const code = normalizeCode(raw.coupon_code || '')
   const issueMemberId = Math.max(0, Math.trunc(Number(raw.member_id ?? 0) || 0))
@@ -543,6 +561,75 @@ async function finalizeMemberCouponIssueRedemption(
       reason: 'redeemed_other_issued',
     })
   }
+}
+
+/** 결제 완료 주문의 applied_coupons·레거시 coupon_code 기준으로 회원 쿠폰 발급 건을 used 처리 */
+export async function redeemMemberCouponIssuesForPaidOrder(orderId: number): Promise<number> {
+  const id = Number(orderId || 0)
+  if (!id) return 0
+
+  const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
+    limit: 1,
+    select:
+      'id,store_code,member_id,member_no,status,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,applied_coupons,coupon_code,coupon_discount_amt,paid_at',
+  })) as Array<{
+    id?: number
+    store_code?: string | null
+    member_id?: number | null
+    member_no?: string | null
+    status?: string | null
+    total?: number | null
+    payment_cash?: number | null
+    payment_card?: number | null
+    payment_qr?: number | null
+    payment_other?: number | null
+    payment_delivery_app?: number | null
+    applied_coupons?: unknown
+    coupon_code?: string | null
+    coupon_discount_amt?: number | null
+    paid_at?: string | null
+  }>
+  const order = rows?.[0]
+  if (!order?.id) return 0
+
+  const storeCode = String(order.store_code ?? '').trim()
+  if (!storeCode) return 0
+
+  const total = Math.max(0, Number(order.total || 0))
+  const paymentSum = posOrderPaymentSumFromAmounts({
+    paymentCash: Number(order.payment_cash || 0),
+    paymentCard: Number(order.payment_card || 0),
+    paymentQr: Number(order.payment_qr || 0),
+    paymentOther: Number(order.payment_other || 0),
+    paymentDeliveryApp: Number(order.payment_delivery_app || 0),
+  })
+  const status = String(order.status || '').trim().toLowerCase()
+  const paymentComplete = total > 0.02 ? paymentSum >= total - 0.02 : paymentSum > 0
+  const paidLike =
+    Boolean(String(order.paid_at || '').trim()) ||
+    status === 'paid' ||
+    status === 'completed' ||
+    isPosCompletionStatus(status)
+  if (!paymentComplete && !paidLike) return 0
+
+  let applied = parseAppliedCouponsFromOrderRow(order.applied_coupons)
+  if (!applied.length) {
+    const legacyCode = String(order.coupon_code ?? '').trim().toUpperCase()
+    const legacyAmt = Math.max(0, Number(order.coupon_discount_amt ?? 0))
+    if (legacyCode) {
+      applied = [{ code: legacyCode, name: legacyCode, discountAmt: legacyAmt, quantity: 1 }]
+    }
+  }
+  if (!applied.length) return 0
+
+  const memberId = Math.max(0, Math.trunc(Number(order.member_id ?? 0) || 0)) || undefined
+  await persistPosOrderCouponRedemptions({
+    orderId: id,
+    storeCode,
+    appliedCoupons: applied,
+    memberId,
+  })
+  return applied.length
 }
 
 export async function persistPosOrderCouponRedemptions(params: {

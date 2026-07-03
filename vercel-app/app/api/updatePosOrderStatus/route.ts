@@ -26,7 +26,7 @@ import {
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
-import { rollbackPosOrderCouponRedemptions } from '@/lib/pos-coupon-server'
+import { rollbackPosOrderCouponRedemptions, redeemMemberCouponIssuesForPaidOrder } from '@/lib/pos-coupon-server'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -503,6 +503,11 @@ export async function POST(req: NextRequest) {
       !isPosPaidLikeStatus(prevStatus) &&
       Number(prev?.member_id || 0) > 0
     ) {
+      try {
+        await redeemMemberCouponIssuesForPaidOrder(id)
+      } catch (couponRedeemErr) {
+        console.error('updatePosOrderStatus coupon redeem:', couponRedeemErr)
+      }
       try {
         await ensurePosOrderLoyaltyApplied(id)
       } catch (loyaltyErr) {

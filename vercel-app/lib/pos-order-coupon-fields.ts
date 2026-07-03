@@ -1,8 +1,29 @@
 import {
+  parseAppliedCouponsFromBody,
   parseAppliedCouponsFromOrderRow,
   summarizeLegacyCouponFields,
   type PosAppliedCouponLine,
 } from '@/lib/pos-coupon-domain'
+
+/** 결제 요청 body + DB 기존 주문에서 쿠폰 목록 병합 (결제-only update 대비) */
+export function mergePosOrderAppliedCouponsFromRequest(
+  body: Record<string, unknown> | null | undefined,
+  existingApplied?: unknown
+): PosAppliedCouponLine[] {
+  const fromBody = parseAppliedCouponsFromBody(body?.appliedCoupons ?? body?.applied_coupons)
+  if (fromBody.length > 0) return fromBody
+
+  const fromDb = parseAppliedCouponsFromOrderRow(existingApplied)
+  if (fromDb.length > 0) return fromDb
+
+  const legacyCode = String(body?.couponCode ?? body?.coupon_code ?? '').trim().toUpperCase()
+  const legacyAmt = Math.max(0, Number(body?.couponDiscountAmt ?? body?.coupon_discount_amt ?? 0))
+  if (legacyCode) {
+    return [{ code: legacyCode, name: legacyCode, discountAmt: legacyAmt, quantity: 1 }]
+  }
+
+  return []
+}
 
 /** CartPanel·터미널 payload → savePosOrder/updatePosOrder 쿠폰 필드 (memberCouponIssueId 포함) */
 export function posOrderCouponFieldsFromPayload(payload: {

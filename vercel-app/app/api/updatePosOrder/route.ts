@@ -26,8 +26,10 @@ import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   parseAppliedCouponsFromBody,
   persistPosOrderCouponRedemptions,
+  redeemMemberCouponIssuesForPaidOrder,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
+import { mergePosOrderAppliedCouponsFromRequest } from '@/lib/pos-order-coupon-fields'
 import { assertPosBusinessOpenForExistingOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
@@ -251,7 +253,9 @@ export async function POST(req: NextRequest) {
       subtotal += price * qty
     }
 
-    let appliedPre = parseAppliedCouponsFromBody(body?.appliedCoupons ?? body?.applied_coupons)
+    const mergedAppliedCoupons = mergePosOrderAppliedCouponsFromRequest(body ?? {}, current?.applied_coupons)
+
+    let appliedPre = mergedAppliedCoupons
     const legacyCouponCode = String(body?.couponCode ?? body?.coupon_code ?? '').trim().toUpperCase()
     const legacyCouponAmt = Math.max(0, Number(body?.couponDiscountAmt ?? body?.coupon_discount_amt ?? 0))
     if (!appliedPre.length && legacyCouponCode) {
@@ -265,7 +269,10 @@ export async function POST(req: NextRequest) {
     const memberTierCode =
       String(body?.memberTierCode ?? body?.member_tier_code ?? '').trim().toUpperCase() || null
     const couponResolved = await resolvePosOrderCouponsForSave({
-      body: body ?? {},
+      body: {
+        ...(body ?? {}),
+        ...(appliedPre.length ? { appliedCoupons: appliedPre } : {}),
+      },
       subtotal,
       manualDiscountAmt: Math.max(0, manualDiscountForCoupons - collabDiscountAmt - tierDiscountAmt),
       collabDiscountAmt,
@@ -472,7 +479,7 @@ export async function POST(req: NextRequest) {
       if (ensured > 0) pointEarned = ensured
     }
 
-    let couponsForRedeem = appliedCoupons
+    let couponsForRedeem = appliedCoupons.length > 0 ? appliedCoupons : mergedAppliedCoupons
     if (!couponsForRedeem.length && paymentSum > 0) {
       couponsForRedeem = parseAppliedCouponsFromBody(current?.applied_coupons)
       if (!couponsForRedeem.length) {
@@ -486,14 +493,18 @@ export async function POST(req: NextRequest) {
     const redeemMemberId =
       memberId || Math.max(0, Math.trunc(Number(current?.member_id ?? 0) || 0)) || undefined
 
-    if (couponsForRedeem.length > 0 && paymentSum > 0) {
+    if (paymentComplete) {
       try {
-        await persistPosOrderCouponRedemptions({
-          orderId: id,
-          storeCode: String(current?.store_code ?? '').trim(),
-          appliedCoupons: couponsForRedeem,
-          memberId: redeemMemberId,
-        })
+        if (couponsForRedeem.length > 0 && paymentSum > 0) {
+          await persistPosOrderCouponRedemptions({
+            orderId: id,
+            storeCode: String(current?.store_code ?? '').trim(),
+            appliedCoupons: couponsForRedeem,
+            memberId: redeemMemberId,
+          })
+        } else {
+          await redeemMemberCouponIssuesForPaidOrder(id)
+        }
       } catch (redeemErr) {
         console.error('updatePosOrder coupon redemptions:', redeemErr)
       }

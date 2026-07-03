@@ -26,6 +26,19 @@ describe('posOrderCouponFieldsFromPayload', () => {
   })
 })
 
+describe('mergePosOrderAppliedCouponsFromRequest', () => {
+  it('falls back to existing order applied_coupons when payment body omits them', async () => {
+    const { mergePosOrderAppliedCouponsFromRequest } = await import('@/lib/pos-order-coupon-fields')
+    const merged = mergePosOrderAppliedCouponsFromRequest(
+      { paymentCash: 100 },
+      [{ code: 'GDF100P', name: 'GDF', discount_amt: 50, quantity: 1, member_coupon_issue_id: 42 }]
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.code).toBe('GDF100P')
+    expect(merged[0]?.memberCouponIssueId).toBe(42)
+  })
+})
+
 describe('posOrderCouponFieldsFromOrderRow', () => {
   it('parses applied_coupons json from order row', () => {
     const fields = posOrderCouponFieldsFromOrderRow({
