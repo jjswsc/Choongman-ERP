@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+  erpNavFavoritesLegacyStorageKey,
+  erpNavFavoritesStorageKey,
   getDefaultErpNavFavoriteHrefs,
   moveErpNavFavoriteHref,
   sanitizeErpNavFavoriteHrefs,
@@ -8,6 +10,22 @@ import {
 } from "@/lib/erp-nav-favorites"
 
 describe("erp nav favorites", () => {
+  it("uses user-scoped storage key without store", () => {
+    expect(
+      erpNavFavoritesStorageKey({ user: "Alice", employeeId: 42, tenantId: "t1" })
+    ).toBe("erp_nav_favorites_v1:t:t1:u:42")
+    expect(erpNavFavoritesStorageKey({ user: "Alice", employeeId: 42 })).toBe(
+      "erp_nav_favorites_v1:u:42"
+    )
+    expect(erpNavFavoritesStorageKey({ user: "Alice" })).toBe("erp_nav_favorites_v1:u:Alice")
+  })
+
+  it("keeps legacy store-scoped key for migration", () => {
+    expect(
+      erpNavFavoritesLegacyStorageKey({ store: "CM Office", user: "Alice", employeeId: 42 })
+    ).toBe("erp_nav_favorites_v1:CM Office:42")
+  })
+
   it("returns role-based defaults", () => {
     expect(getDefaultErpNavFavoriteHrefs("logistic")).toContain("/admin/orders")
     expect(getDefaultErpNavFavoriteHrefs("pos_staff")).toEqual([

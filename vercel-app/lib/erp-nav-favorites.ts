@@ -15,18 +15,38 @@ export type ErpNavFavoritesPayload = {
   hrefs: string[]
 }
 
-export function erpNavFavoritesStorageKey(auth: Pick<AuthState, "store" | "user" | "employeeId"> | null): string | null {
-  if (!auth?.store || !auth?.user) return null
+export function erpNavFavoritesUserId(
+  auth: Pick<AuthState, "user" | "employeeId"> | null
+): string | null {
+  if (!auth?.user) return null
   const id = auth.employeeId != null ? String(auth.employeeId) : auth.user.trim()
+  return id || null
+}
+
+/** 사용자(직원) 단위 — POS·관리자에서 매장 전환해도 동일 목록 유지 */
+export function erpNavFavoritesStorageKey(
+  auth: Pick<AuthState, "user" | "employeeId" | "tenantId"> | null
+): string | null {
+  const id = erpNavFavoritesUserId(auth)
+  if (!id) return null
+  const tenant = auth?.tenantId?.trim()
+  if (tenant) return `${ERP_NAV_FAVORITES_STORAGE_PREFIX}:t:${tenant}:u:${id}`
+  return `${ERP_NAV_FAVORITES_STORAGE_PREFIX}:u:${id}`
+}
+
+/** v1 초기: 매장별 키 — 기존 데이터 마이그레이션용 */
+export function erpNavFavoritesLegacyStorageKey(
+  auth: Pick<AuthState, "store" | "user" | "employeeId"> | null
+): string | null {
+  if (!auth?.store) return null
+  const id = erpNavFavoritesUserId(auth)
   if (!id) return null
   return `${ERP_NAV_FAVORITES_STORAGE_PREFIX}:${auth.store.trim()}:${id}`
 }
 
-export function readErpNavFavoritesFromStorage(key: string | null): ErpNavFavoritesPayload | null {
-  if (!key || typeof window === "undefined") return null
+function parseErpNavFavoritesRaw(raw: string | null): ErpNavFavoritesPayload | null {
+  if (!raw) return null
   try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return null
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== "object") return null
     const hrefsRaw = (parsed as { hrefs?: unknown }).hrefs
@@ -36,6 +56,55 @@ export function readErpNavFavoritesFromStorage(key: string | null): ErpNavFavori
   } catch {
     return null
   }
+}
+
+export function readErpNavFavoritesFromStorage(key: string | null): ErpNavFavoritesPayload | null {
+  if (!key || typeof window === "undefined") return null
+  return parseErpNavFavoritesRaw(localStorage.getItem(key))
+}
+
+function listErpNavFavoritesLegacyStorageKeys(userId: string): string[] {
+  if (typeof window === "undefined") return []
+  const keys: string[] = []
+  const prefix = `${ERP_NAV_FAVORITES_STORAGE_PREFIX}:`
+  const suffix = `:${userId}`
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (!k || !k.startsWith(prefix)) continue
+    if (k.includes(":u:") || k.includes(":t:")) continue
+    if (!k.endsWith(suffix)) continue
+    keys.push(k)
+  }
+  return keys
+}
+
+/** 신규 키 우선, 없으면 매장별 레거시 키에서 가장 긴 목록을 마이그레이션 */
+export function readErpNavFavoritesForAuth(
+  auth: Pick<AuthState, "store" | "user" | "employeeId" | "tenantId"> | null,
+  storageKey: string | null
+): ErpNavFavoritesPayload | null {
+  const direct = readErpNavFavoritesFromStorage(storageKey)
+  if (direct) return direct
+  if (!auth || !storageKey || typeof window === "undefined") return null
+
+  const candidates: ErpNavFavoritesPayload[] = []
+  const legacyCurrent = erpNavFavoritesLegacyStorageKey(auth)
+  const fromCurrent = readErpNavFavoritesFromStorage(legacyCurrent)
+  if (fromCurrent?.hrefs.length) candidates.push(fromCurrent)
+
+  const userId = erpNavFavoritesUserId(auth)
+  if (userId) {
+    for (const legacyKey of listErpNavFavoritesLegacyStorageKeys(userId)) {
+      if (legacyKey === legacyCurrent) continue
+      const payload = readErpNavFavoritesFromStorage(legacyKey)
+      if (payload?.hrefs.length) candidates.push(payload)
+    }
+  }
+
+  if (candidates.length === 0) return null
+  const best = candidates.reduce((a, b) => (b.hrefs.length > a.hrefs.length ? b : a))
+  writeErpNavFavoritesToStorage(storageKey, best)
+  return best
 }
 
 export function writeErpNavFavoritesToStorage(key: string | null, payload: ErpNavFavoritesPayload): void {

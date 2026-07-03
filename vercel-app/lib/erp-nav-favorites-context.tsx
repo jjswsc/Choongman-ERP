@@ -9,7 +9,7 @@ import {
   erpNavFavoritesStorageKey,
   getErpNavDashboardQuickHrefs,
   moveErpNavFavoriteHref,
-  readErpNavFavoritesFromStorage,
+  readErpNavFavoritesForAuth,
   resolveErpNavFavoriteHrefs,
   sanitizeErpNavFavoriteHrefs,
   toggleErpNavFavoriteHref,
@@ -34,20 +34,23 @@ const ErpNavFavoritesContext = React.createContext<ErpNavFavoritesContextValue |
 export function ErpNavFavoritesProvider({ children }: { children: React.ReactNode }) {
   const { auth } = useAuth()
   const { accessibleHrefSet } = useErpNavAccess()
-  const storageKey = React.useMemo(() => erpNavFavoritesStorageKey(auth), [auth])
+  const storageKey = React.useMemo(
+    () => erpNavFavoritesStorageKey(auth),
+    [auth?.user, auth?.employeeId, auth?.tenantId]
+  )
   const role = auth?.role || ""
 
   const [favoriteHrefs, setFavoriteHrefsState] = React.useState<string[]>([])
   const [isCustom, setIsCustom] = React.useState(false)
 
   const reload = React.useCallback(() => {
-    const stored = readErpNavFavoritesFromStorage(storageKey)
+    const stored = readErpNavFavoritesForAuth(auth, storageKey)
     const resolved = resolveErpNavFavoriteHrefs(stored, role, accessibleHrefSet, {
       includeMobileStoreSales: canViewMobileStoreSales(role),
     })
     setFavoriteHrefsState(resolved.hrefs)
     setIsCustom(resolved.isCustom)
-  }, [accessibleHrefSet, role, storageKey])
+  }, [accessibleHrefSet, auth, role, storageKey])
 
   React.useEffect(() => {
     reload()
