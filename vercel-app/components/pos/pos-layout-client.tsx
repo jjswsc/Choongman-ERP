@@ -11,6 +11,7 @@ import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
+import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-host"
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 import { PosStoreProvider } from "@/lib/pos-store-provider"
 import { appAlert } from "@/lib/app-message"
@@ -419,6 +420,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
       <PosStoreProvider>
+      <PosMainDeviceSyncHost />
       <PosDrawerPinProvider>
       <PosBusinessDayHydrate />
       {topBarRevealStrip}

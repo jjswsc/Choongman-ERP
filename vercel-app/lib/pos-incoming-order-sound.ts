@@ -63,3 +63,52 @@ export function getPosIncomingWavDataUri(): string {
   POS_INCOMING_WAV_DATA_URI_CACHE = `data:audio/wav;base64,${btoa(binary)}`
   return POS_INCOMING_WAV_DATA_URI_CACHE
 }
+
+/** 신규 주문·취소 알림음 (브라우저 autoplay 정책에 따라 무음 처리될 수 있음) */
+export function playPosIncomingOrderBeep(): void {
+  if (typeof window === 'undefined') return
+  const playFallbackWithWebAudio = () => {
+    try {
+      const AC = (window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) as
+        | typeof AudioContext
+        | undefined
+      if (!AC) return
+      const ctx = new AC()
+      const now = ctx.currentTime
+      const makeTone = (at: number, freq: number, dur: number, gainMax: number) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(freq, at)
+        gain.gain.setValueAtTime(0.0001, at)
+        gain.gain.exponentialRampToValueAtTime(gainMax, at + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.start(at)
+        osc.stop(at + dur + 0.02)
+      }
+      makeTone(now, 784, 0.12, 0.04)
+      makeTone(now + 0.14, 1046, 0.14, 0.045)
+      window.setTimeout(() => {
+        void ctx.close().catch(() => {})
+      }, 460)
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const audio = new Audio(getPosIncomingWavDataUri())
+    audio.preload = 'auto'
+    audio.volume = 0.9
+    const p = audio.play()
+    if (p && typeof p.catch === 'function') {
+      void p.catch(() => playFallbackWithWebAudio())
+    }
+    return
+  } catch {
+    /* fall through */
+  }
+  playFallbackWithWebAudio()
+}

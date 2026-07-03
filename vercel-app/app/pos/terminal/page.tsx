@@ -96,6 +96,7 @@ import {
 } from '@/lib/pos-order-item-map'
 import {
   fetchPosOrderItemsForPaymentMerge,
+  mapOrderItemForCheckoutPayment,
   mapPosOrderItemsToTerminalOrderSnapshot,
   reconcilePayloadItemsWithTerminalCart,
 } from '@/lib/pos-terminal-order-items'
@@ -330,24 +331,30 @@ import {
 } from '@/lib/pos-terminal-auto-print'
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
+import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
+import { setIncomingDeliveryUiHandler } from '@/lib/pos-main-device-incoming-delivery-ui'
+import { setGrabCancelUiHandler } from '@/lib/pos-main-device-grab-cancel-ui'
+import type { IncomingDeliveryFocusParams } from '@/lib/pos-main-device-sync-types'
+import {
+  backgroundAcceptedDeliveryOrderIdsRef,
+  bumpLastSeenOrderId,
+  dineInRemoteItemQtySnapshotRef,
+  grabCancelWatchSeededRef,
+  grabCancelWatchSnapshotRef,
+  mainPosSelfDineInUpdateSuppressUntilRef,
+  promptedGrabCustomerCancelIdsRef,
+  printedPaymentReceiptIdsRef,
+  seenOrderIdsRef,
+  shouldTreatAsMainPosIncomingOrder,
+} from '@/lib/pos-main-device-sync-state'
 
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
 type TakeoutMode = 'slot' | 'member'
-/** 신규 배달 유입 시 탭 포커스·수락 안내에 쓰는 파라미터 */
-type IncomingDeliveryFocusParams = {
-  orderId: number
-  orderType?: string
-  deliveryAppCode?: string
-  status?: string
-  createdAt?: string
-  storeCode?: string
-  memo?: string
-}
 type PendingPayRequest = {
   tableName: string
-  items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
+  items: ReturnType<typeof mapOrderItemForCheckoutPayment>[]
   /** 기존 주문 결제 시 영수증용 */
   orderNo?: string
   /** 기존 pos_orders 행 id (결제 updatePosOrder용) */
@@ -2013,12 +2020,6 @@ export default function PosTerminalPage() {
     Boolean(servingTable?.order)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
-  const posSessionStartedAtRef = useRef<number>(Date.now())
-  const seenOrderIdsRef = useRef<Set<number>>(new Set())
-  /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
-  const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
-  /** 배달 주문 할인·합계 변경 후 홀 주문서 재인쇄 중복 방지 */
-  const printedHallDiscountReprintKeysRef = useRef<Set<string>>(new Set())
   /** 주방 주문서 자동 인쇄 중복 방지(수락/Realtime/폴링 동시 발화) */
   const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
@@ -2026,30 +2027,15 @@ export default function PosTerminalPage() {
   /** 결제 등 화면 잠금 중 유입된 배달 — 잠금 해제 후 순서대로 포커스 */
   const deferredIncomingDeliveryQueueRef = useRef<IncomingDeliveryFocusParams[]>([])
   const [deferredIncomingDeliveryCount, setDeferredIncomingDeliveryCount] = useState(0)
-  /** 결제·주문 입력 중(화면 잠금) 백그라운드로 자동 수락+인쇄 처리한 배달 주문 — 잠금 해제 후 재수락·재인쇄·수락 팝업 방지 */
-  const backgroundAcceptedDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
-  const promptedGrabCustomerCancelIdsRef = useRef<Set<number>>(new Set())
-  const grabCancelWatchSnapshotRef = useRef<Map<number, GrabCancelWatchSnap>>(new Map())
-  const grabCancelWatchSeededRef = useRef(false)
-  /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
-  const paymentReceiptScanSeededRef = useRef(false)
-  /**
-   * 메인 포스: dine_in 품목 수량 스냅샷(다른 단말 UPDATE 시 id 추가 + 수량 증가를 모두 감지)
-   * - key: orderId
-   * - value: (itemId -> qty)
-   */
-  const dineInRemoteItemQtySnapshotRef = useRef<Map<number, Map<string, number>>>(new Map())
-  /** 메인 포스가 updatePosOrder(추가주문) 직후 수신하는 Realtime UPDATE로 이중 인쇄 방지 */
-  const mainPosSelfDineInUpdateSuppressUntilRef = useRef<Map<number, number>>(new Map())
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     deferredIncomingDeliveryQueueRef.current = []
     setDeferredIncomingDeliveryCount(0)
-    paymentReceiptScanSeededRef.current = false
-    dineInRemoteItemQtySnapshotRef.current = new Map()
-    mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
+    seenOrderIdsRef.current.clear()
+    mainPosSelfDineInUpdateSuppressUntilRef.current.clear()
+    dineInRemoteItemQtySnapshotRef.current.clear()
   }, [currentStoreId])
 
   const normalizeKitchenAutoPrintDedupeKeys = useCallback((rawKeyOrKeys: string | string[]) => {
@@ -2387,28 +2373,6 @@ export default function PosTerminalPage() {
       t,
       tPrint,
     ]
-  )
-
-  const recomputeRealtimeChannelHealthyRef = useRef<() => void>(() => {})
-  const scheduleRealtimeResubscribeRef = useRef<() => void>(() => {})
-
-  const makeRealtimeStatusHandler = useCallback(
-    (channelKey: string) => (status: PosRealtimeSubscribeStatus, err?: Error) => {
-      realtimeChannelStateRef.current.set(channelKey, status)
-      recomputeRealtimeChannelHealthyRef.current()
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        logPosPrintDebug('realtime_channel_degraded', {
-          channelKey,
-          status,
-          message: err?.message,
-        })
-        const primaryInsertKey = mainPosPrimaryInsertChannelKey(currentStoreId)
-        if (channelKey !== primaryInsertKey) return
-        triggerMainPosPollNowRef.current?.()
-        scheduleRealtimeResubscribeRef.current()
-      }
-    },
-    [currentStoreId, logPosPrintDebug]
   )
 
   const runAutoPrintForAcceptedDeliveryOrder = useCallback(
@@ -2913,7 +2877,7 @@ export default function PosTerminalPage() {
     (params: IncomingDeliveryFocusParams) => {
       const orderId = Number(params.orderId)
       if (!Number.isFinite(orderId) || orderId <= 0) return
-      if (!isSessionNewOrder(params.createdAt, posSessionStartedAtRef.current)) return
+      if (!shouldTreatAsMainPosIncomingOrder(orderId, params.createdAt)) return
       const orderType = String(params.orderType ?? '').trim().toLowerCase()
       if (orderType !== 'delivery') return
       if (
@@ -3015,6 +2979,20 @@ export default function PosTerminalPage() {
     },
     [isIncomingDeliveryFocusLocked, playIncomingOrderBeep, refetchCurrentStore, t]
   )
+
+  useEffect(() => {
+    if (!isPosMainDeviceSyncOwnedByLayout()) return
+    setIncomingDeliveryUiHandler((params) => {
+      autoFocusIncomingDeliveryOrder(params)
+    })
+    setGrabCancelUiHandler((params) => {
+      notifyGrabCustomerCancelledOrder(params)
+    })
+    return () => {
+      setIncomingDeliveryUiHandler(null)
+      setGrabCancelUiHandler(null)
+    }
+  }, [autoFocusIncomingDeliveryOrder, notifyGrabCustomerCancelledOrder])
 
   const runGrabCancelWatchOnOrders = useCallback(
     (
@@ -3352,82 +3330,6 @@ export default function PosTerminalPage() {
       clearCartFromTerminal()
     }
   }, [activeTab, selectedTableId, clearCartFromTerminal])
-
-  const hasInitializedMainPosPollRef = useRef(false)
-  const lastSeenOrderIdRef = useRef<number>(0)
-  const lastSeenOrderIdPersistedRef = useRef<number>(0)
-  const startupCatchupUntilRef = useRef<number>(Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS)
-  const prevStoreForPollRef = useRef<string | null>(null)
-  const triggerMainPosPollNowRef = useRef<(() => void) | null>(null)
-  const mainPosPollInFlightRef = useRef(false)
-  const lastMetaScanAtRef = useRef(0)
-  const lastRealtimeOrderEventAtRef = useRef(0)
-  const realtimeChannelStateRef = useRef<Map<string, PosRealtimeSubscribeStatus>>(new Map())
-  const realtimeChannelHealthyRef = useRef(false)
-  const pendingEmptyItemsOrderIdsRef = useRef<Set<number>>(new Set())
-  const mainPosPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const realtimeResubscribeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastRealtimeResubscribeAtRef = useRef(0)
-  const lastTriggerMainPosPollAtRef = useRef(0)
-  const [realtimeResubscribeTick, setRealtimeResubscribeTick] = useState(0)
-
-  const recomputeRealtimeChannelHealthy = useCallback(() => {
-    realtimeChannelHealthyRef.current = isMainPosRealtimeInsertChannelHealthy(
-      realtimeChannelStateRef.current
-    )
-  }, [])
-
-  const scheduleRealtimeResubscribe = useCallback(() => {
-    const now = Date.now()
-    if (now - lastRealtimeResubscribeAtRef.current < MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS) return
-    if (realtimeResubscribeTimerRef.current) clearTimeout(realtimeResubscribeTimerRef.current)
-    realtimeResubscribeTimerRef.current = setTimeout(() => {
-      lastRealtimeResubscribeAtRef.current = Date.now()
-      realtimeChannelStateRef.current.clear()
-      realtimeChannelHealthyRef.current = false
-      setRealtimeResubscribeTick((n) => n + 1)
-    }, MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS)
-  }, [])
-
-  useEffect(() => {
-    recomputeRealtimeChannelHealthyRef.current = recomputeRealtimeChannelHealthy
-  }, [recomputeRealtimeChannelHealthy])
-
-  useEffect(() => {
-    scheduleRealtimeResubscribeRef.current = scheduleRealtimeResubscribe
-  }, [scheduleRealtimeResubscribe])
-
-  const bumpLastSeenOrderId = useCallback(
-    (orderIdRaw: unknown) => {
-      const orderId = Number(orderIdRaw)
-      if (!Number.isFinite(orderId) || orderId <= 0) return
-      const next = Math.trunc(orderId)
-      if (next > lastSeenOrderIdRef.current) {
-        lastSeenOrderIdRef.current = next
-      }
-      if (next > lastSeenOrderIdPersistedRef.current) {
-        lastSeenOrderIdPersistedRef.current = next
-      }
-      if (currentStoreId) {
-        writeMainPosLastSeenOrderId(currentStoreId, next)
-      }
-    },
-    [currentStoreId]
-  )
-
-  const shouldTreatAsIncomingOrder = useCallback(
-    (orderIdRaw: unknown, createdAtRaw: unknown) => {
-      const orderId = Number(orderIdRaw)
-      if (!Number.isFinite(orderId) || orderId <= 0) return false
-      if (isSessionNewOrder(createdAtRaw, posSessionStartedAtRef.current)) return true
-      if (Date.now() > startupCatchupUntilRef.current) return false
-      if (orderId <= lastSeenOrderIdPersistedRef.current) return false
-      const createdAtMs = new Date(String(createdAtRaw ?? '').trim()).getTime()
-      if (!Number.isFinite(createdAtMs)) return true
-      return createdAtMs >= posSessionStartedAtRef.current - MAIN_POS_STARTUP_CATCHUP_WINDOW_MS
-    },
-    []
-  )
 
   const resolveOrderItemDisplayName = useCallback(
     (item: { id?: string; name?: string; menuId?: string; promoId?: string; promoCode?: string }) => {
@@ -3983,13 +3885,21 @@ export default function PosTerminalPage() {
       const batch = (splitBatch.length > 0 ? splitBatch : [receiptPayload]).map(withOrderId)
 
       if (!isMainPosDevice) {
+        const showTaxReceiptPreview = Boolean(parsePosOrderMemo(receiptPayload.memo).taxInvoice)
         if (splitBatch.length > 0) {
-          startReceiptBatch(splitBatch)
+          startReceiptBatch(
+            splitBatch.map((row) => ({
+              ...row,
+              suppressReceiptModalAutoPrint: showTaxReceiptPreview ? false : row.suppressReceiptModalAutoPrint,
+              ...(showTaxReceiptPreview ? { skipReceiptAutoPrint: true } : {}),
+            }))
+          )
         } else {
           setReceiptData({
             ...receiptPayload,
             receiptAutoPrintContext: 'payment',
-            suppressReceiptModalAutoPrint: true,
+            suppressReceiptModalAutoPrint: !showTaxReceiptPreview,
+            ...(showTaxReceiptPreview ? { skipReceiptAutoPrint: true } : {}),
           })
         }
         return
@@ -4395,308 +4305,6 @@ export default function PosTerminalPage() {
     }
   }
 
-  useEffect(() => {
-    if (!isMainPosDevice || !currentStoreId) return
-    const onInsert = (payload: { new?: Record<string, unknown> }) => {
-      const row = payload?.new as Record<string, unknown> | undefined
-      if (!row) return
-      const orderId = coercePosOrderIdFromRealtime(row.id)
-      if (orderId == null) return
-      lastRealtimeOrderEventAtRef.current = Date.now()
-      if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) {
-        logPosPrintDebug('realtime_insert_skip_not_incoming', {
-          orderId,
-          createdAt: String(row.created_at ?? ''),
-        })
-        return
-      }
-      if (!isCurrentStoreOrder(row.store_code)) {
-        logPosPrintDebug('realtime_insert_skip_store_mismatch', {
-          orderId,
-          rowStore: String(row.store_code ?? ''),
-          variants: currentStoreCodeVariants,
-        })
-        return
-      }
-      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
-        seenOrderIdsRef.current.add(orderId)
-        bumpLastSeenOrderId(orderId)
-        logPosPrintDebug('realtime_insert_suppress_queued_sync', { orderId })
-        return
-      }
-      if (seenOrderIdsRef.current.has(orderId)) {
-        logPosPrintDebug('realtime_insert_skip_seen', { orderId })
-        return
-      }
-      const parsedItems = parseRealtimePosOrderRowItemsJson(row)
-      if (!parsedItems.ok) {
-        logPosPrintDebug('realtime_insert_skip_items_parse_error', { orderId })
-        return
-      }
-      const items = parsedItems.items
-      /* items_json이 Realtime에 비어 있으면 폴링이 다시 잡도록 seen에 넣지 않음 */
-      if (items.length === 0) {
-        pendingEmptyItemsOrderIdsRef.current.add(orderId)
-        logPosPrintDebug('realtime_insert_skip_empty_items', { orderId })
-        triggerMainPosPollNowRef.current?.()
-        return
-      }
-      pendingEmptyItemsOrderIdsRef.current.delete(orderId)
-      seenOrderIdsRef.current.add(orderId)
-      bumpLastSeenOrderId(orderId)
-      const inferredOrderType = inferPosOrderTypeFromRow({
-        order_type: String(row.order_type ?? ''),
-        memo: String(row.memo ?? ''),
-        table_name: String(row.table_name ?? ''),
-        delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
-        items_json: row.items_json,
-      })
-      autoFocusIncomingDeliveryOrder({
-        orderId,
-        orderType: inferredOrderType,
-        deliveryAppCode: String(row.delivery_app_code ?? ''),
-        status: String(row.status ?? ''),
-        createdAt: String(row.created_at ?? ''),
-        storeCode: String(row.store_code ?? ''),
-        memo: String(row.memo ?? ''),
-      })
-      // 주문 바/배달 목록은 usePosStore 스냅샷을 사용하므로, 신규 주문 수신 시 즉시 갱신합니다.
-      refetchCurrentStore()
-      const storeCode = String(row.store_code ?? currentStoreId)
-      const orderNo = String(row.order_no ?? '')
-      const orderType = inferredOrderType
-      if (orderType === 'dine_in') {
-        const snap = buildDineInQtySnapshot(items)
-        if (snap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, snap)
-      }
-      const tableName = String(row.table_name ?? '')
-      const memo = String(row.memo ?? '')
-      const subtotal = Number(row.subtotal ?? 0)
-      const discountAmt = Number(row.discount_amt ?? 0)
-      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
-      const total = Number(row.total ?? 0)
-      const receiptPayloadRealtime = {
-        ...hallOrderReceiptPayloadFromOrderFields(
-          {
-            orderNo,
-            storeCode,
-            orderType: resolvePosOrderTypeReceiptLabel(orderType, t),
-            tableName,
-            memo,
-            items,
-            subtotal,
-            discountAmt,
-            couponDiscountAmt,
-            discountReason: String(row.discount_reason ?? '').trim() || undefined,
-            total,
-            ...posGuestCountSpread(row.guest_count),
-          },
-          pricingAdjustments
-        ),
-        _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
-      }
-      const runKitchenFromRealtimeOrderInsert = () => {
-        const kitchenDedupeKey = `order:${orderId}:kitchen`
-        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
-        const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
-        getPrinterSettingsForStore(printSettingsStoreCode)
-          .then(async (settings) => {
-            const ki = kitchenSlipPrintI18n(settings, lang)
-            const menusForPrint = await resolveMenusForKitchenPrint(
-              items as Array<Record<string, unknown>>,
-              printSettingsStoreCode
-            )
-            const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
-              items as Array<Record<string, unknown>>,
-              menusForPrint
-            )
-            const slips = buildKitchenSlipGroups(
-              kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
-            )
-            if (!slips.length) {
-              releaseKitchenAutoPrintKey(kitchenDedupeKey)
-              logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId, flow: 'realtime' })
-              return
-            }
-            const slipDesign = resolveKitchenSlipDesign(settings)
-            const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
-            const printOne = (idx: number) => {
-              if (idx >= slips.length) return
-              const slip = slips[idx]
-              const tablePartR = tableName
-                ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
-                : ''
-              const html = buildKitchenSlipDocumentHtml({
-                label: slip.label,
-                orderNo,
-                storeCode,
-                orderTypeLabel: kitchenSlipOrderTypeLabel({ orderType, tableName, memo, orderNo }, ki),
-                tablePart: tablePartR,
-                dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                items: kitchenSlipItemsForPrint(
-                  slip.items,
-                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                  ki,
-                  menusForPrint,
-                  optionNameByCodeForPrint
-                ),
-                memoLine: memoLine || null,
-                escapeHtml,
-                design: slipDesign,
-                optionNameByCode: optionNameByCodeForPrint,
-                printColorAdjust: 'exact',
-                ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
-              })
-              printPosHtmlDocument(html, {
-                title: slip.label,
-                printDelayMs: 0,
-                focusIframeBeforePrint: false,
-                printRole: 'kitchen',
-                kitchenStation: slip.station,
-                escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
-                onPrintUnavailable: () => {
-                  void appAlert(t('posPrintUnavailable'))
-                },
-                onAfterCleanup: () => {
-                  if (idx + 1 < slips.length)
-                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
-                },
-              })
-            }
-            setTimeout(() => printOne(0), 0)
-          })
-          .catch((e) => {
-            releaseKitchenAutoPrintKey(kitchenDedupeKey)
-            console.error('Kitchen slip print:', e)
-          })
-      }
-      const isPendingDelivery =
-        inferredOrderType === 'delivery' &&
-        String(row.status ?? '').trim().toLowerCase() === 'pending'
-      const shouldWaitForDeliveryAccept =
-        isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
-      const shouldWaitForMemberPortalPrepay = isMemberPortalPaymentPendingOrder({
-        memo: String(memo ?? ''),
-        status: String(row.status ?? ''),
-        payment_qr: Number(row.payment_qr ?? 0),
-        created_by: String(row.created_by ?? ''),
-      })
-      const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-      if (!shouldDeferAutoprint) {
-        logPosPrintDebug('realtime_insert_autoprint_start', {
-          orderId,
-          autoPrintReceiptOnOrder,
-          autoPrintKitchenSlipOnOrder,
-          itemCount: items.length,
-          isPendingDelivery,
-          shouldWaitForDeliveryAccept,
-          shouldWaitForMemberPortalPrepay,
-        })
-        if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
-          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
-        } else if (autoPrintReceiptOnOrder) {
-          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
-        } else if (autoPrintKitchenSlipOnOrder) {
-          setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-        }
-      } else {
-        logPosPrintDebug('realtime_insert_deferred_autoprint', {
-          orderId,
-          status: String(row.status ?? ''),
-          isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(memo ?? '')),
-          shouldWaitForMemberPortalPrepay,
-        })
-      }
-      if (autoPrintReceiptOnPayment) {
-        const st = String(row.status ?? '').toLowerCase()
-        const paySum = posOrderRowPaymentSum(row)
-        if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
-          void getPosOrders({ orderId, storeCode: currentStoreId })
-            .then((list) => {
-              const order = list[0] as PosOrder | undefined
-              if (!order?.items?.length) {
-                printedPaymentReceiptIdsRef.current.delete(orderId)
-                return
-              }
-              if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-                printedPaymentReceiptIdsRef.current.delete(orderId)
-                return
-              }
-              return dispatchPaymentReceiptFromOrder(order)
-            })
-            .catch(() => {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
-            })
-        }
-      }
-    }
-    const onUpdatePendingItems = (payload: { new?: Record<string, unknown> }) => {
-      const row = payload?.new as Record<string, unknown> | undefined
-      if (!row) return
-      const orderId = coercePosOrderIdFromRealtime(row.id)
-      if (orderId == null) return
-      if (!pendingEmptyItemsOrderIdsRef.current.has(orderId)) return
-      lastRealtimeOrderEventAtRef.current = Date.now()
-      if (!isCurrentStoreOrder(row.store_code)) return
-      const parsed = parseRealtimePosOrderRowItemsJson(row)
-      if (!parsed.ok || parsed.items.length === 0) return
-      pendingEmptyItemsOrderIdsRef.current.delete(orderId)
-      logPosPrintDebug('realtime_update_items_filled', { orderId })
-      triggerMainPosPollNowRef.current?.()
-    }
-
-    realtimeChannelStateRef.current.clear()
-    realtimeChannelHealthyRef.current = false
-    /** legacy·Grab ID(1042↔CM Silom) 별칭마다 INSERT 구독 — seenOrderIds로 중복 처리 방지 */
-    const channels = currentStoreCodeVariants.flatMap((storeCode) => {
-      const code = String(storeCode || '').trim()
-      if (!code) return []
-      const insertKey = `insert:${code}`
-      const updateKey = `insert-items:${code}`
-      const list = []
-      const chInsert = subscribePosOrdersInsert(onInsert, {
-        store: code,
-        onStatus: makeRealtimeStatusHandler(insertKey),
-      })
-      if (chInsert) list.push(chInsert)
-      const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
-        store: code,
-        onStatus: makeRealtimeStatusHandler(updateKey),
-      })
-      if (chUpdate) list.push(chUpdate)
-      return list
-    })
-    return () => {
-      channels.forEach((channel) => channel?.unsubscribe())
-      if (realtimeResubscribeTimerRef.current) {
-        clearTimeout(realtimeResubscribeTimerRef.current)
-        realtimeResubscribeTimerRef.current = null
-      }
-    }
-  }, [
-    isMainPosDevice,
-    currentStoreId,
-    currentStoreCodeVariants,
-    realtimeResubscribeTick,
-    autoPrintReceiptOnAddOrder,
-    autoPrintReceiptOnOrder,
-    autoPrintKitchenSlipOnOrder,
-    autoPrintReceiptOnPayment,
-    pricingAdjustments,
-    posReceiptLineOpts,
-    menus,
-    t,
-    lang,
-    refetchCurrentStore,
-    logPosPrintDebug,
-    bumpLastSeenOrderId,
-    shouldTreatAsIncomingOrder,
-    parseRealtimePosOrderRowItemsJson,
-    buildDineInQtySnapshot,
-    isCurrentStoreOrder,
-    makeRealtimeStatusHandler,
-  ])
 
   useEffect(() => {
     if (isMainPosDevice || !currentStoreId) return
@@ -4705,11 +4313,11 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
-      if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) return
+      if (!shouldTreatAsMainPosIncomingOrder(orderId, row.created_at)) return
       if (!isCurrentStoreOrder(row.store_code)) return
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
-      bumpLastSeenOrderId(orderId)
+      bumpLastSeenOrderId(currentStoreId, orderId)
       autoFocusIncomingDeliveryOrder({
         orderId,
         orderType: String(row.order_type ?? ''),
@@ -4733,14 +4341,11 @@ export default function PosTerminalPage() {
     currentStoreCodeVariants,
     autoFocusIncomingDeliveryOrder,
     refetchCurrentStore,
-    bumpLastSeenOrderId,
-    shouldTreatAsIncomingOrder,
-    runGrabCancelWatchOnOrders,
-    notifyGrabCustomerCancelledOrder,
+    isCurrentStoreOrder,
   ])
 
   useEffect(() => {
-    if (!currentStoreId) return
+    if (isMainPosDevice || !currentStoreId) return
     const deliveryList = [...deliveryOrders, ...packagedDeliveryOrders, ...completedDeliveryOrders]
     if (!deliveryList.length) return
     const rows = deliveryList.map((o) => ({
@@ -4765,14 +4370,13 @@ export default function PosTerminalPage() {
   ])
 
   useEffect(() => {
-    if (!currentStoreId) return
+    if (isMainPosDevice || !currentStoreId) return
 
     const handleUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
-      lastRealtimeOrderEventAtRef.current = Date.now()
       if (!isCurrentStoreOrder(row.store_code)) return
 
       const ot = String(row.order_type ?? '').trim().toLowerCase()
@@ -4826,1005 +4430,9 @@ export default function PosTerminalPage() {
     refetchCurrentStore,
   ])
 
-  useEffect(() => {
-    if (!isMainPosDevice || !currentStoreId) return
-    const wantPayment = autoPrintReceiptOnPayment
-    const wantRemoteDineInAdd =
-      (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder) || autoPrintKitchenSlipOnOrder
-    if (!wantPayment && !wantRemoteDineInAdd) return
 
-    const onUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
-      const row = payload?.new as Record<string, unknown> | undefined
-      if (!row) return
-      const orderId = coercePosOrderIdFromRealtime(row.id)
-      if (orderId == null) return
-      lastRealtimeOrderEventAtRef.current = Date.now()
-      if (!isCurrentStoreOrder(row.store_code)) return
-      const rowStore = String(row.store_code ?? currentStoreId ?? '').trim()
-      const oldRowForAutoprint = payload.old as Record<string, unknown> | undefined
-      const inferredOrderType = inferPosOrderTypeFromRow({
-        order_type: String(row.order_type ?? ''),
-        memo: String(row.memo ?? ''),
-        table_name: String(row.table_name ?? ''),
-        delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
-        items_json: row.items_json,
-      })
-      const packagingOnlyUpdate =
-        oldRowForAutoprint != null &&
-        isPosOrderItemsJsonPackagingOnlyUpdate(oldRowForAutoprint, row)
-
-      if (packagingOnlyUpdate) {
-        if (inferredOrderType === 'dine_in') {
-          const parsedPackaging = parseRealtimePosOrderRowItemsJson(row)
-          if (parsedPackaging.ok && parsedPackaging.items.length > 0) {
-            const newQtyById = buildDineInQtySnapshot(parsedPackaging.items)
-            if (newQtyById.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-          }
-        }
-        logPosPrintDebug('realtime_update_skip_packaging_only', { orderId })
-      }
-
-      if (
-        !packagingOnlyUpdate &&
-        autoPrintReceiptOnOrder &&
-        seenOrderIdsRef.current.has(orderId) &&
-        inferredOrderType === 'delivery' &&
-        posOrderRowPaymentSum(row) <= 0 &&
-        !isPosOrderPaidLikeStatus(String(row.status ?? ''))
-      ) {
-        if (oldRowForAutoprint) {
-          const newDisc = Math.max(0, Number(row.discount_amt ?? 0) || 0)
-          const newCoupon = Math.max(0, Number(row.coupon_discount_amt ?? 0) || 0)
-          const newTotal = Math.max(0, Number(row.total ?? 0) || 0)
-          const oldTotal = Math.max(0, Number(oldRowForAutoprint.total ?? 0) || 0)
-          if (
-            posOrderRealtimePricingFieldsChanged(oldRowForAutoprint, row) &&
-            (newDisc > 0.01 || newCoupon > 0.01 || (oldTotal > newTotal + 0.01 && newTotal > 0.005))
-          ) {
-            const reprintKey = `order:${orderId}:hall-disc:${Math.round(newDisc * 100)}:${Math.round(newCoupon * 100)}:${Math.round(newTotal * 100)}`
-            if (!printedHallDiscountReprintKeysRef.current.has(reprintKey)) {
-              printedHallDiscountReprintKeysRef.current.add(reprintKey)
-              const parsedDisc = parseRealtimePosOrderRowItemsJson(row)
-              if (parsedDisc.ok && parsedDisc.items.length > 0) {
-                const hallPayload = {
-                  ...hallOrderReceiptPayloadFromOrderFields(
-                    {
-                      orderNo: String(row.order_no ?? ''),
-                      storeCode: rowStore,
-                      orderType: resolvePosOrderTypeReceiptLabel(inferredOrderType, t),
-                      tableName: String(row.table_name ?? ''),
-                      memo: String(row.memo ?? ''),
-                      items: parsedDisc.items,
-                      subtotal: Math.max(0, Number(row.subtotal ?? 0) || 0),
-                      discountAmt: newDisc,
-                      couponDiscountAmt: newCoupon,
-                      discountReason: String(row.discount_reason ?? '').trim() || undefined,
-                      total: newTotal,
-                      ...posGuestCountSpread(row.guest_count),
-                    },
-                    pricingAdjustments
-                  ),
-                  _autoPrintDedupeKey: reprintKey,
-                }
-                logPosPrintDebug('realtime_update_delivery_discount_hall_reprint', {
-                  orderId,
-                  newDisc,
-                  newCoupon,
-                  newTotal,
-                })
-                void printReceiptNow(hallPayload, undefined, false, undefined, true)
-              }
-            }
-          }
-        }
-      }
-
-      const oldRowForPrepay = payload.old as Record<string, unknown> | undefined
-      if (
-        oldRowForPrepay &&
-        isMemberPortalPaymentPendingOrder({
-          memo: String(oldRowForPrepay.memo ?? ''),
-          status: String(oldRowForPrepay.status ?? ''),
-          payment_qr: Number(oldRowForPrepay.payment_qr ?? 0),
-          created_by: String(oldRowForPrepay.created_by ?? ''),
-        }) &&
-        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
-        posOrderRowPaymentSum(row) > 0 &&
-        reserveKitchenAutoPrintKey(`mp-prepay-paid:${orderId}`)
-      ) {
-        logPosPrintDebug('realtime_update_member_portal_prepay_paid', { orderId })
-        playIncomingOrderBeep()
-        refetchCurrentStore()
-        void getPosOrders({ orderId, storeCode: currentStoreId })
-          .then(async (list) => {
-            const order = list[0] as PosOrder | undefined
-            if (!order?.items?.length) return
-            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
-            if (autoPrintKitchenSlipOnOrder) {
-              await printKitchenFromPosOrder(order)
-            }
-            if (autoPrintReceiptOnOrder) {
-              const hallPayload = hallOrderReceiptPayloadFromOrderFields(
-                {
-                  orderNo: order.orderNo ?? '',
-                  storeCode: order.storeCode ?? rowStore,
-                  orderType: resolvePosOrderTypeReceiptLabel(String(order.orderType ?? ''), t),
-                  tableName: order.tableName ?? '',
-                  memo: order.memo ?? '',
-                  items: order.items ?? [],
-                  subtotal: Math.max(0, Number(order.subtotal ?? 0) || 0),
-                  discountAmt: Math.max(0, Number(order.discountAmt ?? 0) || 0),
-                  couponDiscountAmt: Math.max(0, Number(order.couponDiscountAmt ?? 0) || 0),
-                  discountReason: String(order.discountReason ?? '').trim() || undefined,
-                  total: Math.max(0, Number(order.total ?? 0) || 0),
-                  ...posGuestCountSpread(order.guestCount),
-                },
-                pricingAdjustments
-              )
-              await printReceiptNow(hallPayload, undefined, false, undefined, true)
-            }
-          })
-          .catch((e) => console.error('member portal prepay paid autoprint:', e))
-      }
-
-      if (
-        wantPayment &&
-        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
-        posOrderRowPaymentSum(row) > 0 &&
-        !printedPaymentReceiptIdsRef.current.has(orderId)
-      ) {
-        void getPosOrders({ orderId, storeCode: currentStoreId })
-          .then((list) => {
-            const order = list[0] as PosOrder | undefined
-            if (!order?.items?.length) {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
-              return
-            }
-            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
-              return
-            }
-            return dispatchPaymentReceiptFromOrder(order)
-          })
-          .catch(() => {
-            printedPaymentReceiptIdsRef.current.delete(orderId)
-          })
-      }
-
-      if (!wantRemoteDineInAdd || packagingOnlyUpdate) return
-      if (inferredOrderType !== 'dine_in') return
-      /**
-       * 결제(updatePosOrder + status 반영) UPDATE는 주방 추가주문 출력 대상이 아님.
-       * - 결제 직전 pending/cooking 상태에서도 payment_* 값이 먼저 반영될 수 있어
-       *   "추가 주문"으로 오인해 주방지가 한 번 더 나갈 수 있다.
-       */
-      if (posOrderRowPaymentSum(row) > 0) return
-      if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
-      const st = String(row.status ?? '').trim().toLowerCase()
-      if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
-
-      const oldRow = payload.old as Record<string, unknown> | undefined
-      if (oldRow && isPosDineInTableNameOnlyUpdate(oldRow, row)) {
-        const parsedTableMove = parseRealtimePosOrderRowItemsJson(row)
-        if (parsedTableMove.ok && parsedTableMove.items.length > 0) {
-          const sid = buildDineInQtySnapshot(parsedTableMove.items)
-          if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
-        }
-        const oldTableName = String(oldRow.table_name ?? '').trim()
-        if (oldTableName) clearTableOrder(currentStoreId, oldTableName)
-        refetchCurrentStore()
-        logPosPrintDebug('realtime_update_skip_table_name_only', { orderId })
-        return
-      }
-
-      const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId)
-      if (suppressUntil != null) {
-        if (Date.now() < suppressUntil) {
-          const parsedSelf = parseRealtimePosOrderRowItemsJson(row)
-          if (parsedSelf.ok && parsedSelf.items.length > 0) {
-            const sid = buildDineInQtySnapshot(parsedSelf.items)
-            if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
-          }
-          logPosPrintDebug('realtime_update_skip_self_dine_in_suppress', { orderId })
-          return
-        }
-        mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
-      }
-
-      const parsed = parseRealtimePosOrderRowItemsJson(row)
-      if (!parsed.ok || parsed.items.length === 0) return
-
-      const items = parsed.items
-      let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
-      const newQtyById = buildDineInQtySnapshot(items)
-      if (newQtyById.size === 0) return
-
-      if (!prevQtyById) {
-        const oldRow = payload.old as Record<string, unknown> | undefined
-        if (oldRow) {
-          const parsedOld = parseRealtimePosOrderRowItemsJson(oldRow)
-          if (parsedOld.ok && parsedOld.items.length > 0) {
-            prevQtyById = buildDineInQtySnapshot(parsedOld.items)
-            logPosPrintDebug('realtime_update_dine_in_prev_from_old_row', { orderId })
-          }
-        }
-      }
-      if (!prevQtyById) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        logPosPrintDebug('realtime_update_dine_in_snapshot_seeded', { orderId })
-        return
-      }
-
-      const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
-      const changedIds = [...changedSet]
-      if (changedIds.length === 0) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        return
-      }
-
-      const storeCodeForSkip = String(row.store_code ?? currentStoreId)
-      if (
-        shouldSkipDineInRemoteAddAutoprint(orderId, storeCodeForSkip, prevQtyById, newQtyById, changedSet)
-      ) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        logPosPrintDebug('remote_dine_in_add_skip_recent_local_print', { orderId })
-        return
-      }
-
-      refetchCurrentStore()
-
-      const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
-      if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        return
-      }
-
-      const cartLikeNew = items.map((it) => ({
-        id: resolveDineInSnapshotItemKey(it),
-        name: it.name,
-        price: it.price,
-        quantity: it.qty,
-        qty: it.qty,
-        ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
-        ...(it.menuId ? { menuId: it.menuId } : {}),
-        ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
-      }))
-      const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-        cartLikeNew,
-        prevQtyById,
-        newQtyById,
-        (line) => resolveDineInSnapshotItemKey(line)
-      )
-
-      const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
-      const discountAmt = Number(row.discount_amt ?? 0)
-      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
-      const pricing = computePosPricing({
-        subtotal: mergeSubtotal,
-        discountAmt,
-        cardPaymentAmount: 0,
-        adjustments: pricingAdjustments,
-      })
-
-      const receiptPrintItemsRemote = items.map((it) => ({
-        ...it,
-        ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
-      }))
-
-      const storeCode = String(row.store_code ?? currentStoreId)
-      const orderNoStr = String(row.order_no ?? '')
-      const tableName = String(row.table_name ?? '')
-      const memo = String(row.memo ?? '')
-
-      const receiptPayloadRemote = {
-        orderNo: orderNoStr,
-        storeCode,
-        orderType: t('posOrderTypeDineIn') || '매장',
-        tableName,
-        memo,
-        items: receiptPrintItemsRemote,
-        subtotal: mergeSubtotal,
-        discountAmt,
-        couponDiscountAmt,
-        discountReason: String(row.discount_reason ?? '').trim() || undefined,
-        total: pricing.finalTotal,
-        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
-        vatFeeAmt: pricing.vatFeeAmt,
-        vatFeeMode: pricing.vatFeeMode,
-        ...receiptTaxDisplayFieldsFromPricing(pricing),
-        serviceFeeAmt: pricing.serviceFeeAmt,
-        serviceFeeMode: pricing.serviceFeeMode,
-        cardFeeAmt: pricing.cardFeeAmt,
-        cardFeeMode: pricing.cardFeeMode,
-        otherFeeAmt: pricing.otherFeeAmt,
-        otherFeeMode: pricing.otherFeeMode,
-        ...posGuestCountSpread(row.guest_count),
-      }
-
-      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenCartLines)
-
-      dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-      logPosPrintDebug('remote_dine_in_add_autoprint', { orderId, changedCount: changedIds.length })
-
-      const dispatchRemoteKitchen = () => {
-        dispatchDineInAddonKitchenPrint({
-          kitchenCartLines,
-          dedupeKey: kitchenDedupeKey,
-          orderNo: orderNoStr,
-          storeCode,
-          tableName,
-          memo,
-          guestCount: Number(row.guest_count ?? 0) || undefined,
-          logEvent: 'remote_dine_in_add_kitchen_autoprint',
-        })
-      }
-
-      if (shouldAutoPrintReceipt) {
-        void printReceiptNow(receiptPayloadRemote, null, false, undefined, true)
-      }
-      if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
-        const kitchenDelayMs = shouldAutoPrintReceipt
-          ? typeof window !== 'undefined' && window.cmPosShell
-            ? resolveAfterReceiptToKitchenDelayMs()
-            : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-          : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-        setTimeout(dispatchRemoteKitchen, kitchenDelayMs)
-      }
-    }
-    const channels = currentStoreCodeVariants
-      .map((storeCode) => subscribePosOrdersUpdate(onUpdate, { store: storeCode }))
-      .filter(Boolean)
-    return () => {
-      channels.forEach((channel) => channel?.unsubscribe())
-    }
-  }, [
-    isMainPosDevice,
-    currentStoreId,
-    currentStoreCodeVariants,
-    autoPrintReceiptOnPayment,
-    autoPrintReceiptOnAddOrder,
-    autoPrintReceiptOnOrder,
-    autoPrintKitchenSlipOnOrder,
-    pricingAdjustments,
-    posReceiptLineOpts,
-    parseRealtimePosOrderRowItemsJson,
-    enrichPromoItemsWithOptionName,
-    dispatchDineInAddonKitchenPrint,
-    buildDineInQtySnapshot,
-    shouldSkipDineInRemoteAddAutoprint,
-    resolveDineInSnapshotItemKey,
-    formatLineNoteForPrint,
-    logPosPrintDebug,
-    t,
-    refetchCurrentStore,
-    printReceiptNow,
-    printKitchenFromPosOrder,
-    reserveKitchenAutoPrintKey,
-    playIncomingOrderBeep,
-  ])
-
-  useEffect(() => {
-    if (!isMainPosDevice || !currentStoreId) {
-      if (!isMainPosDevice) {
-        hasInitializedMainPosPollRef.current = false
-        lastSeenOrderIdRef.current = 0
-        lastSeenOrderIdPersistedRef.current = 0
-        startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
-        prevStoreForPollRef.current = null
-        lastMetaScanAtRef.current = 0
-      }
-      triggerMainPosPollNowRef.current = null
-      return
-    }
-    if (prevStoreForPollRef.current !== currentStoreId) {
-      const persistedLastSeen = readMainPosLastSeenOrderId(currentStoreId)
-      hasInitializedMainPosPollRef.current = false
-      lastSeenOrderIdRef.current = persistedLastSeen
-      lastSeenOrderIdPersistedRef.current = persistedLastSeen
-      startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
-      prevStoreForPollRef.current = currentStoreId
-      grabCancelWatchSnapshotRef.current.clear()
-      grabCancelWatchSeededRef.current = false
-      lastMetaScanAtRef.current = 0
-      printedHallDiscountReprintKeysRef.current.clear()
-    }
-    const today = getPosBusinessDateStr()
-    const poll = async () => {
-      if (mainPosPollInFlightRef.current) return
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-      mainPosPollInFlightRef.current = true
-      try {
-        const runPaymentReceiptScan = async () => {
-          if (!autoPrintReceiptOnPayment) return
-          if (
-            paymentReceiptScanSeededRef.current &&
-            !shouldUseMainPosHeavyOrderScanFallback({
-              realtimeChannelHealthy: realtimeChannelHealthyRef.current,
-              lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
-            })
-          ) {
-            return
-          }
-          try {
-            const paidLikeRows = await getPosOrders({
-              startStr: today,
-              endStr: today,
-              posBizDayScope: true,
-              storeCode: currentStoreId,
-              statusPaidLike: true,
-              limit: 800,
-              orderBy: 'id.desc',
-              pollMinimal: true,
-            })
-            if (!paymentReceiptScanSeededRef.current) {
-              for (const order of paidLikeRows) {
-                const oid = Number(order.id)
-                if (!Number.isFinite(oid) || oid <= 0) continue
-                if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) continue
-                if (posOrderPaymentSum(order) <= 0) continue
-                if (!(order.items || []).length) continue
-                printedPaymentReceiptIdsRef.current.add(oid)
-              }
-              paymentReceiptScanSeededRef.current = true
-              return
-            }
-            const candidates = paidLikeRows.filter((order) => {
-              const oid = Number(order.id)
-              if (!Number.isFinite(oid) || oid <= 0) return false
-              if (printedPaymentReceiptIdsRef.current.has(oid)) return false
-              if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return false
-              if (posOrderPaymentSum(order) <= 0) return false
-              if (!(order.items || []).length) return false
-              return true
-            })
-            candidates.sort((a, b) => Number(a.id) - Number(b.id))
-            let staggerMs = 0
-            for (const order of candidates) {
-              const oid = Number(order.id)
-              setTimeout(() => {
-                void (async () => {
-                  try {
-                    const fullRows = await getPosOrders({
-                      orderId: oid,
-                      storeCode: currentStoreId,
-                    })
-                    const full = fullRows[0]
-                    if (!full) return
-                    if (!isPosOrderPaidLikeStatus(String(full.status ?? ''))) return
-                    if (posOrderPaymentSum(full) <= 0) return
-                    if (!(full.items || []).length) return
-                    await dispatchPaymentReceiptFromOrder(full)
-                  } catch {
-                    /* ignore */
-                  }
-                })()
-              }, staggerMs)
-              staggerMs += 900
-            }
-          } catch {
-            /* ignore payment scan errors */
-          }
-        }
-
-        const sinceId = hasInitializedMainPosPollRef.current && lastSeenOrderIdRef.current > 0 ? lastSeenOrderIdRef.current : undefined
-        const orders = await getPosOrders({
-          startStr: today,
-          endStr: today,
-          posBizDayScope: true,
-          storeCode: currentStoreId,
-          pollMinimal: true,
-          ...(sinceId != null ? { sinceId } : {}),
-        })
-        if (!hasInitializedMainPosPollRef.current) {
-          const maxId = orders.length ? Math.max(...orders.map((o) => o.id ?? 0)) : 0
-          for (const o of orders) {
-            const oid = Number(o.id)
-            if (Number.isFinite(oid) && oid > 0) {
-              seenOrderIdsRef.current.add(oid)
-              if (
-                String(o.orderType ?? '').trim().toLowerCase() === 'dine_in' &&
-                (o.items || []).length > 0
-              ) {
-                const qtySnap = buildDineInQtySnapshot(o.items || [])
-                if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(oid, qtySnap)
-              }
-            }
-          }
-          const seededMax = Math.max(lastSeenOrderIdRef.current, maxId)
-          bumpLastSeenOrderId(seededMax)
-          hasInitializedMainPosPollRef.current = true
-          runGrabCancelWatchOnOrders(orders, { seedOnly: true })
-          await runPaymentReceiptScan()
-          return
-        }
-        const newOrders = orders
-        let shouldRefreshCurrentStore = false
-        for (const order of newOrders) {
-          const oid = Number(order.id)
-          if (!Number.isFinite(oid) || oid <= 0) continue
-          if (!isCurrentStoreOrder(order.storeCode ?? '')) {
-            logPosPrintDebug('poll_skip_store_mismatch', {
-              orderId: oid,
-              rowStore: String(order.storeCode ?? ''),
-            })
-            continue
-          }
-          if (!shouldTreatAsIncomingOrder(oid, order.createdAt)) {
-            bumpLastSeenOrderId(oid)
-            logPosPrintDebug('poll_skip_not_incoming', {
-              orderId: oid,
-              createdAt: String(order.createdAt ?? ''),
-            })
-            continue
-          }
-          if (seenOrderIdsRef.current.has(oid)) {
-            bumpLastSeenOrderId(oid)
-            logPosPrintDebug('poll_skip_seen', { orderId: oid })
-            continue
-          }
-          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
-            seenOrderIdsRef.current.add(oid)
-            bumpLastSeenOrderId(oid)
-            logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
-            continue
-          }
-          const items = prepareOrderItemsForKitchenPrint(
-            order.items || [],
-            (order as { deliveryAppCode?: string }).deliveryAppCode ??
-              (order.items || []).find((row) => String(row.deliveryAppCode ?? '').trim())?.deliveryAppCode
-          )
-          /* 품목이 아직 비어 있으면 seen/워터마크에 넣지 않음 → 다음 폴링에서 다시 조회 */
-          if (items.length === 0) {
-            logPosPrintDebug('poll_skip_empty_items', { orderId: oid })
-            continue
-          }
-          seenOrderIdsRef.current.add(oid)
-          bumpLastSeenOrderId(oid)
-          const inferredDeliveryCode =
-            String((order as unknown as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim() ||
-            String(
-              (order.items || []).find((it) => String(it.deliveryAppCode ?? '').trim())?.deliveryAppCode ?? ''
-            ).trim()
-          autoFocusIncomingDeliveryOrder({
-            orderId: oid,
-            orderType: String(order.orderType ?? ''),
-            deliveryAppCode: inferredDeliveryCode,
-            status: String(order.status ?? ''),
-            createdAt: String(order.createdAt ?? ''),
-            storeCode: String(order.storeCode ?? ''),
-            memo: String(order.memo ?? ''),
-          })
-          shouldRefreshCurrentStore = true
-          const receiptPayloadPoll = {
-            ...hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
-              ...posReceiptLineOpts,
-              orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
-              storeCodeFallback: currentStoreId,
-            }),
-            _autoPrintDedupeKey: `order:${oid}:hall:auto`,
-          }
-          const runKitchenForPolledOrder = () => {
-            const kitchenDedupeKey = `order:${oid}:kitchen`
-            if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
-            void (async () => {
-              try {
-                const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
-                const settings = await getPrinterSettingsForStore(
-                  effectiveStoreCode
-                )
-                const menusForPrint = await resolveMenusForKitchenPrint(
-                  items as Array<Record<string, unknown>>,
-                  effectiveStoreCode
-                )
-                const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
-                  items as Array<Record<string, unknown>>,
-                  menusForPrint
-                )
-                const ki = kitchenSlipPrintI18n(settings, lang)
-                const slips = buildKitchenSlipGroups(
-                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                  buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
-                )
-                if (!slips.length) {
-                  releaseKitchenAutoPrintKey(kitchenDedupeKey)
-                  logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId: oid, flow: 'poll' })
-                  return
-                }
-                const slipDesign = resolveKitchenSlipDesign(settings)
-                const memoLine = buildPosCustomerMemoLineForPrint(order.memo, ki.t, ki.lang)
-                const printOne = (idx: number) => {
-                  if (idx >= slips.length) return
-                  const slip = slips[idx]
-                  const tablePart = order.tableName
-                    ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
-                    : ''
-                  const orderTypeLabel = kitchenSlipOrderTypeLabel(order, ki)
-                  const html = buildKitchenSlipDocumentHtml({
-                    label: slip.label,
-                    orderNo: order.orderNo ?? '',
-                    storeCode: order.storeCode ?? '',
-                    orderTypeLabel,
-                    tablePart,
-                    dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-                    items: kitchenSlipItemsForPrint(
-                      slip.items,
-                      kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                      ki,
-                      menusForPrint,
-                      optionNameByCodeForPrint
-                    ),
-                    memoLine: memoLine || null,
-                    escapeHtml,
-                    design: slipDesign,
-                    optionNameByCode: optionNameByCodeForPrint,
-                    printColorAdjust: 'exact',
-                    ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
-                  })
-                  printPosHtmlDocument(html, {
-                    title: slip.label,
-                    printDelayMs: 0,
-                    focusIframeBeforePrint: false,
-                    printRole: 'kitchen',
-                    kitchenStation: slip.station,
-                    escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
-                    onPrintUnavailable: () => {
-                      void appAlert(t('posPrintUnavailable'))
-                    },
-                    onAfterCleanup: () => {
-                      if (idx + 1 < slips.length)
-                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
-                    },
-                  })
-                }
-                setTimeout(() => printOne(0), 0)
-              } catch (e) {
-                releaseKitchenAutoPrintKey(kitchenDedupeKey)
-                console.error('Kitchen slip print:', e)
-              }
-            })()
-          }
-          const isPendingDelivery =
-            String(order.orderType ?? '').trim().toLowerCase() === 'delivery' &&
-            String(order.status ?? '').trim().toLowerCase() === 'pending'
-          const shouldWaitForDeliveryAccept =
-            isPendingDelivery && isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))
-          const shouldWaitForMemberPortalPrepay = isMemberPortalPaymentPendingOrder({
-            memo: String(order.memo ?? ''),
-            status: String(order.status ?? ''),
-            payment_qr: order.paymentQr,
-            created_by: undefined,
-          })
-          const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-          if (!shouldDeferAutoprint) {
-            logPosPrintDebug('poll_autoprint_start', {
-              orderId: oid,
-              autoPrintReceiptOnOrder,
-              autoPrintKitchenSlipOnOrder,
-              itemCount: items.length,
-              isPendingDelivery,
-              shouldWaitForDeliveryAccept,
-              shouldWaitForMemberPortalPrepay,
-            })
-            if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
-              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
-            } else if (autoPrintReceiptOnOrder) {
-              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
-            } else if (autoPrintKitchenSlipOnOrder) {
-              setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-            }
-          } else {
-            logPosPrintDebug('poll_deferred_autoprint', {
-              orderId: oid,
-              status: String(order.status ?? ''),
-              isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(order.memo ?? '')),
-              shouldWaitForMemberPortalPrepay,
-            })
-          }
-          if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
-            const qtySnap = buildDineInQtySnapshot(items)
-            if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(oid, qtySnap)
-          }
-        }
-        if (shouldRefreshCurrentStore) {
-          refetchCurrentStore()
-        }
-
-        const nowMs = Date.now()
-        const shouldRunMetaScan =
-          !lastMetaScanAtRef.current ||
-          nowMs - lastMetaScanAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS ||
-          nowMs - lastRealtimeOrderEventAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS
-        if (shouldRunMetaScan) {
-          lastMetaScanAtRef.current = nowMs
-          const needHeavyMetaScan = shouldUseMainPosHeavyOrderScanFallback({
-            realtimeChannelHealthy: realtimeChannelHealthyRef.current,
-            lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
-          })
-          const wantMetaDineInAddonReceipt =
-            autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
-          const wantMetaDineInAddonKitchen = autoPrintKitchenSlipOnOrder
-          const wantDineInAddonMetaScan = wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen
-          if (needHeavyMetaScan || wantDineInAddonMetaScan) {
-            try {
-              const watchOrders = await getPosOrders({
-                startStr: today,
-                endStr: today,
-                posBizDayScope: true,
-                storeCode: currentStoreId,
-                limit: 800,
-                orderBy: 'id.desc',
-                pollMinimal: true,
-              })
-              if (wantDineInAddonMetaScan) {
-                for (const o of watchOrders) {
-                const oid = Number(o.id)
-                if (!Number.isFinite(oid) || oid <= 0) continue
-                if (String(o.orderType ?? '').trim().toLowerCase() !== 'dine_in') continue
-                const statusLower = String(o.status ?? '').trim().toLowerCase()
-                if (statusLower === 'completed' || statusLower === 'cancelled' || statusLower === 'canceled') continue
-                if (isPosOrderPaidLikeStatus(statusLower)) continue
-                if (posOrderPaymentSum(o) > 0) continue
-                const items = (o.items || []).map(
-                  (it: {
-                    id?: string
-                    name?: string
-                    price?: number
-                    qty?: number
-                    quantity?: number
-                    note?: string
-                    menuId1?: string
-                    menu_id1?: string
-                    menuId?: string
-                    optionCode1?: string
-                    option_code1?: string
-                    optionCode?: string
-                    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-                  }) => {
-                    const note = String(it.note ?? '').trim()
-                    const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
-                    const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
-                    const displayName = resolveOrderItemDisplayName({
-                      id: String(it.id ?? ''),
-                      name: String(it.name ?? ''),
-                      menuId,
-                    })
-                    const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
-                    return {
-                      id: String(it.id ?? ''),
-                      name: displayName,
-                      price: Number(it.price ?? 0),
-                      qty: Number(it.qty ?? it.quantity ?? 1),
-                      ...(menuId ? { menuId } : {}),
-                      ...(optionCode ? { optionCode } : {}),
-                      ...(note ? { note: formatLineNoteForPrint(note) } : {}),
-                      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
-                      ...(Array.isArray(it.promoItems)
-                        ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
-                        : {}),
-                    }
-                  }
-                )
-                if (!items.length) continue
-                const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
-                const newQtyById = buildDineInQtySnapshot(items)
-                if (newQtyById.size === 0) continue
-                const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(oid)
-                if (suppressUntil != null) {
-                  if (Date.now() < suppressUntil) {
-                    dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
-                    logPosPrintDebug('poll_meta_skip_self_dine_in_suppress', { orderId: oid })
-                    continue
-                  }
-                  mainPosSelfDineInUpdateSuppressUntilRef.current.delete(oid)
-                }
-                if (!prevQtyById) {
-                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
-                  continue
-                }
-                const changedIds = [...newQtyById.keys()].filter((id) => {
-                  const prevQty = Number(prevQtyById.get(id) ?? 0)
-                  const nextQty = Number(newQtyById.get(id) ?? 0)
-                  if (prevQty <= 0) return nextQty > 0
-                  return nextQty > prevQty
-                })
-                if (changedIds.length === 0) {
-                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
-                  continue
-                }
-                const storeCodePoll = String(o.storeCode ?? currentStoreId)
-                const changedSet = new Set(changedIds)
-                if (
-                  shouldSkipDineInRemoteAddAutoprint(oid, storeCodePoll, prevQtyById, newQtyById, changedSet)
-                ) {
-                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
-                  logPosPrintDebug('poll_meta_remote_dine_in_add_skip_recent_local_print', { orderId: oid })
-                  continue
-                }
-                const cartLikeNew = items.map((it) => ({
-                  id: resolveDineInSnapshotItemKey(it),
-                  name: it.name,
-                  price: it.price,
-                  quantity: it.qty,
-                  qty: it.qty,
-                  ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
-                  ...(it.menuId ? { menuId: it.menuId } : {}),
-                  ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
-                }))
-                const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-                  cartLikeNew,
-                  prevQtyById,
-                  newQtyById,
-                  (line) => resolveDineInSnapshotItemKey(line)
-                )
-                dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
-                refetchCurrentStore()
-                const receiptPrintItemsRemote = items.map((it) => ({
-                  ...it,
-                  ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
-                }))
-                const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
-                const discountAmt = Number(o.discountAmt ?? 0)
-                const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
-                const pricing = computePosPricing({
-                  subtotal: mergeSubtotal,
-                  discountAmt,
-                  cardPaymentAmount: 0,
-                  adjustments: pricingAdjustments,
-                })
-                const orderNoStr = String(o.orderNo ?? '')
-                const tableNamePoll = String(o.tableName ?? '')
-                const memoPoll = String(o.memo ?? '')
-                const receiptPayloadRemote = {
-                  orderNo: orderNoStr,
-                  storeCode: storeCodePoll,
-                  orderType: t('posOrderTypeDineIn') || '매장',
-                  tableName: tableNamePoll,
-                  memo: memoPoll,
-                  items: receiptPrintItemsRemote,
-                  subtotal: mergeSubtotal,
-                  discountAmt,
-                  couponDiscountAmt,
-                  discountReason: String(o.discountReason ?? '').trim() || undefined,
-                  total: pricing.finalTotal,
-                  _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
-                  vatFeeAmt: pricing.vatFeeAmt,
-                  vatFeeMode: pricing.vatFeeMode,
-                  ...receiptTaxDisplayFieldsFromPricing(pricing),
-                  serviceFeeAmt: pricing.serviceFeeAmt,
-                  serviceFeeMode: pricing.serviceFeeMode,
-                  cardFeeAmt: pricing.cardFeeAmt,
-                  cardFeeMode: pricing.cardFeeMode,
-                  otherFeeAmt: pricing.otherFeeAmt,
-                  otherFeeMode: pricing.otherFeeMode,
-                  ...posGuestCountSpread(o.guestCount),
-                }
-                logPosPrintDebug('poll_meta_remote_dine_in_add_receipt', {
-                  orderId: oid,
-                  changedCount: changedIds.length,
-                })
-                if (wantMetaDineInAddonReceipt) {
-                  void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)
-                }
-                if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
-                  const kitchenDelayMs = wantMetaDineInAddonReceipt
-                    ? typeof window !== 'undefined' && window.cmPosShell
-                      ? resolveAfterReceiptToKitchenDelayMs()
-                      : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-                    : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-                  setTimeout(() => {
-                    dispatchDineInAddonKitchenPrint({
-                      kitchenCartLines,
-                      dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines),
-                      orderNo: orderNoStr,
-                      storeCode: storeCodePoll,
-                      tableName: tableNamePoll,
-                      memo: memoPoll,
-                      guestCount: Number(o.guestCount ?? 0) || undefined,
-                      logEvent: 'poll_meta_remote_dine_in_add_kitchen',
-                    })
-                  }, kitchenDelayMs)
-                }
-                }
-              }
-              if (needHeavyMetaScan) {
-                if (!grabCancelWatchSeededRef.current) {
-                  runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
-                } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
-                  refetchCurrentStore()
-                }
-              }
-            } catch {
-              /* meta scan: dine-in add / grab cancel */
-            }
-          }
-        }
-
-        await runPaymentReceiptScan()
-      } catch {
-        // ignore poll errors
-      } finally {
-        mainPosPollInFlightRef.current = false
-      }
-    }
-    triggerMainPosPollNowRef.current = () => {
-      const now = Date.now()
-      if (now - lastTriggerMainPosPollAtRef.current < MAIN_POS_TRIGGER_POLL_MIN_MS) return
-      if (mainPosPollInFlightRef.current) return
-      lastTriggerMainPosPollAtRef.current = now
-      void poll()
-    }
-
-    let pollLoopCancelled = false
-
-    const scheduleNextPoll = () => {
-      if (pollLoopCancelled) return
-      const delayMs = resolveMainPosPollIntervalMs({
-        realtimeChannelHealthy: realtimeChannelHealthyRef.current,
-        realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(lastRealtimeOrderEventAtRef.current),
-      })
-      mainPosPollTimerRef.current = setTimeout(() => {
-        void poll().finally(() => {
-          if (!pollLoopCancelled) scheduleNextPoll()
-        })
-      }, delayMs)
-    }
-
-    void poll().finally(() => scheduleNextPoll())
-
-    return () => {
-      pollLoopCancelled = true
-      triggerMainPosPollNowRef.current = null
-      if (mainPosPollTimerRef.current) {
-        clearTimeout(mainPosPollTimerRef.current)
-        mainPosPollTimerRef.current = null
-      }
-    }
-  }, [
-    isMainPosDevice,
-    currentStoreId,
-    autoPrintReceiptOnOrder,
-    autoPrintReceiptOnAddOrder,
-    autoPrintKitchenSlipOnOrder,
-    autoPrintReceiptOnPayment,
-    pricingAdjustments,
-    posReceiptLineOpts,
-    menus,
-    autoFocusIncomingDeliveryOrder,
-    t,
-    lang,
-    refetchCurrentStore,
-    isCurrentStoreOrder,
-    logPosPrintDebug,
-    bumpLastSeenOrderId,
-    shouldTreatAsIncomingOrder,
-    buildDineInQtySnapshot,
-    shouldSkipDineInRemoteAddAutoprint,
-    resolveDineInSnapshotItemKey,
-    resolveOrderItemDisplayName,
-    enrichPromoItemsWithOptionName,
-    printReceiptNow,
-    dispatchDineInAddonKitchenPrint,
-    formatLineNoteForPrint,
-  ])
 
   /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */
-  useEffect(() => {
-    if (!isMainPosDevice || !currentStoreId) return
-    const onResume = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-      logPosPrintDebug('realtime_resume_reconnect', {})
-      realtimeChannelStateRef.current.clear()
-      realtimeChannelHealthyRef.current = false
-      setRealtimeResubscribeTick((n) => n + 1)
-      triggerMainPosPollNowRef.current?.()
-    }
-    document.addEventListener('visibilitychange', onResume)
-    window.addEventListener('online', onResume)
-    return () => {
-      document.removeEventListener('visibilitychange', onResume)
-      window.removeEventListener('online', onResume)
-    }
-  }, [isMainPosDevice, currentStoreId, logPosPrintDebug])
 
   useEffect(() => {
     if (selectedTableId) {
@@ -7238,23 +5846,26 @@ export default function PosTerminalPage() {
         return
       }
       /** 결제 후 세금 정보 저장 시: 결제(세금계산서) 영수증 재인쇄 — 홀 주문표는 매장·VAT·결제 수단이 빠짐 */
+      const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
+        taxInvoiceTargetOrder,
+        currentStoreId,
+        nextMemo,
+        pricingAdjustments,
+        posReceiptLineOpts
+      )
+      const receiptData = {
+        ...receiptBase,
+        items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, {
+          ...posReceiptLineOpts,
+          memo: receiptBase.memo,
+          deliveryAppCode: receiptBase.deliveryAppCode,
+        }),
+        receiptAutoPrintContext: 'payment' as const,
+        suppressReceiptModalAutoPrint: false,
+        skipReceiptAutoPrint: !isMainPosDevice,
+      }
       if (isMainPosDevice) {
         const settings = await getPrinterSettingsForStore(currentStoreId)
-        const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
-          taxInvoiceTargetOrder,
-          currentStoreId,
-          nextMemo,
-          pricingAdjustments,
-          posReceiptLineOpts
-        )
-        const receiptData = {
-          ...receiptBase,
-          items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, {
-            ...posReceiptLineOpts,
-            memo: receiptBase.memo,
-            deliveryAppCode: receiptBase.deliveryAppCode,
-          }),
-        }
         const receiptHtml = buildPosPaymentReceiptDocumentHtml({
           receiptData,
           menus,
@@ -7286,6 +5897,8 @@ export default function PosTerminalPage() {
             void appAlert(t('posPrintUnavailable'))
           },
         })
+      } else {
+        setReceiptData(receiptData)
       }
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
@@ -8869,7 +7482,7 @@ export default function PosTerminalPage() {
                     skipLocalAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
                   }
                   seenOrderIdsRef.current.add(savedOrderId)
-                  bumpLastSeenOrderId(savedOrderId)
+                  bumpLastSeenOrderId(currentStoreId, savedOrderId)
                 }
 
                 type ReceiptPrintLine = {
@@ -9851,7 +8464,7 @@ export default function PosTerminalPage() {
                 if (newOrderId != null && newOrderId > 0) {
                   if (seenOrderIdsRef.current.has(newOrderId)) suppressReceiptModalAutoPrint = true
                   seenOrderIdsRef.current.add(newOrderId)
-                  bumpLastSeenOrderId(newOrderId)
+                  bumpLastSeenOrderId(currentStoreId, newOrderId)
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -10917,6 +9530,8 @@ export default function PosTerminalPage() {
               order={servingTable.order}
               storeCode={currentStoreId}
               menus={menus}
+              menuOptions={menuOptionsForCodeMap.length > 0 ? menuOptionsForCodeMap : menuOptions}
+              promos={promosWithItems}
               allTables={currentStore?.tables ?? []}
               takeoutMergePeers={takeoutMergePeerTables}
               isDemo={isPosDemo}
@@ -10995,17 +9610,7 @@ export default function PosTerminalPage() {
                 setPendingPayRequest({
                   tableName: servingTable.name,
                   existingOrderId: Number(servingTable.order.id),
-                  items: servingTable.order.items.map((item) => {
-                    const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
-                    return {
-                      id: item.id,
-                      name: item.name,
-                      price: item.price,
-                      quantity: item.quantity,
-                      ...(menuId ? { menuId } : {}),
-                      ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                    }
-                  }),
+                  items: servingTable.order.items.map((item) => mapOrderItemForCheckoutPayment(item)),
                   orderNo: servingTable.order.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...servingTable.order,
@@ -11066,18 +9671,16 @@ export default function PosTerminalPage() {
                 setPendingReceiptOrderNo(selectedDeliveryOrder.orderNo ?? null)
                 setPendingDeliveryPayRequest({
                   tableName: selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id),
-                  items: selectedDeliveryOrder.items.map((item) => ({
-                    id: item.id,
-                    name: resolveOrderItemDisplayName({
-                      id: item.id,
-                      name: item.name,
-                      menuId: item.menuId,
-                    }),
-                    price: item.price,
-                    quantity: item.quantity,
-                    ...(item.menuId ? { menuId: item.menuId } : {}),
-                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                  })),
+                  items: selectedDeliveryOrder.items.map((item) =>
+                    mapOrderItemForCheckoutPayment({
+                      ...item,
+                      name: resolveOrderItemDisplayName({
+                        id: item.id,
+                        name: item.name,
+                        menuId: item.menuId,
+                      }),
+                    })
+                  ),
                   orderNo: selectedDeliveryOrder.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...selectedDeliveryOrder,
@@ -11152,14 +9755,7 @@ export default function PosTerminalPage() {
                 setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
                 setPendingTakeoutPayRequest({
                   tableName: resolveTakeoutOrderBarLabel(selectedTakeoutOrder),
-                  items: selectedTakeoutOrder.items.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    ...(item.menuId ? { menuId: item.menuId } : {}),
-                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                  })),
+                  items: selectedTakeoutOrder.items.map((item) => mapOrderItemForCheckoutPayment(item)),
                   orderNo: selectedTakeoutOrder.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...selectedTakeoutOrder,
