@@ -332,6 +332,10 @@ import {
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
+import {
+  markPosTerminalOrderSubmitInFlight,
+  setPosTerminalLocalAutoprintActive,
+} from '@/lib/pos-terminal-local-autoprint-ui'
 import { setIncomingDeliveryUiHandler } from '@/lib/pos-main-device-incoming-delivery-ui'
 import { setGrabCancelUiHandler } from '@/lib/pos-main-device-grab-cancel-ui'
 import type { IncomingDeliveryFocusParams } from '@/lib/pos-main-device-sync-types'
@@ -2982,6 +2986,14 @@ export default function PosTerminalPage() {
     },
     [isIncomingDeliveryFocusLocked, playIncomingOrderBeep, refetchCurrentStore, t]
   )
+
+  useEffect(() => {
+    if (!isPosMainDeviceSyncOwnedByLayout()) return
+    setPosTerminalLocalAutoprintActive(true)
+    return () => {
+      setPosTerminalLocalAutoprintActive(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isPosMainDeviceSyncOwnedByLayout()) return
@@ -6751,6 +6763,7 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
+              markPosTerminalOrderSubmitInFlight()
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -6923,6 +6936,7 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
+              markPosTerminalOrderSubmitInFlight()
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -7085,6 +7099,7 @@ export default function PosTerminalPage() {
               if (posCartBackendBusyRef.current) return
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
+              markPosTerminalOrderSubmitInFlight()
               const posSaveClientKey = newPosOrderClientRequestId()
               /** `await getPosOrders` 등으로 한참 뒤에 맞추면 카트가 비거나 바뀐 뒤라 수량이 엇갈릴 수 있음 → 제출 직후 스냅샷 */
               const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
@@ -7875,6 +7890,7 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
+              markPosTerminalOrderSubmitInFlight()
               const posSaveClientKey = newPosOrderClientRequestId()
               try {
                 if (isPosDemo) {
@@ -8121,6 +8137,7 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
+              markPosTerminalOrderSubmitInFlight()
               const posSaveClientKey = newPosOrderClientRequestId()
               try {
                 if (isPosDemo) {

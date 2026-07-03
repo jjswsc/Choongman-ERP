@@ -50,6 +50,10 @@ import {
 } from '@/lib/pos-terminal-auto-print'
 import { activatePosMainDeviceLayoutSync } from '@/lib/pos-main-device-sync-owner'
 import {
+  shouldSyncHostSkipDineInAddonMetaScan,
+  shouldSyncHostSkipLocalKitchenAutoprint,
+} from '@/lib/pos-terminal-local-autoprint-ui'
+import {
   bumpLastSeenOrderId,
   claimMainPosPaymentReceiptAutoprint,
   clearPosMainDeviceSyncStateOnNonMain,
@@ -224,6 +228,7 @@ function buildDineInQtySnapshot(
 export function usePosMainDeviceSyncHost(): void {
   const { auth } = useAuth()
   const storeCode = String(auth?.store ?? '').trim()
+  const posTerminalUser = String(auth?.user ?? '').trim()
   const [isMainPosDevice] = usePosMainDevice(storeCode || null)
   const { lang } = useLang()
   const t = useT(lang)
@@ -257,6 +262,25 @@ export function usePosMainDeviceSyncHost(): void {
   const mainPosPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const realtimeResubscribeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRealtimeResubscribeAtRef = useRef(0)
+  const prevMainPosStoreCodeRef = useRef<string | null>(null)
+
+  const skipLocalKitchenAutoprintForOrder = useCallback(
+    (orderId: number, row?: Record<string, unknown>) => {
+      const memo = String(row?.memo ?? '')
+      const isApiInbound =
+        String(row?.order_type ?? '').trim().toLowerCase() === 'delivery' &&
+        isApiInboundDeliveryOrderMemo(memo)
+      return shouldSyncHostSkipLocalKitchenAutoprint({
+        orderId,
+        createdBy: String(row?.created_by ?? ''),
+        currentUser: posTerminalUser,
+        isApiInboundDelivery: isApiInbound,
+        seenOrderIds: seenOrderIdsRef.current,
+        suppressUntilMs: mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId) ?? null,
+      })
+    },
+    [posTerminalUser]
+  )
 
   const currentStoreCodeVariants = useMemo(() => {
     if (!storeCode) return [] as string[]
@@ -651,14 +675,18 @@ export function usePosMainDeviceSyncHost(): void {
 
   useEffect(() => {
     if (!isMainPosDevice || !storeCode) return
-    resetPosMainDeviceSessionStartedAt()
-    seenOrderIdsRef.current.clear()
-    printedPaymentReceiptIdsRef.current.clear()
-    paymentReceiptScanSeededRef.current = false
-    dineInRemoteItemQtySnapshotRef.current.clear()
-    mainPosSelfDineInUpdateSuppressUntilRef.current.clear()
-    resetPosMainDeviceSyncStateForStore(storeCode)
-    void seedPaymentReceiptIdsForStore(storeCode)
+    const storeChanged = prevMainPosStoreCodeRef.current !== storeCode
+    prevMainPosStoreCodeRef.current = storeCode
+    if (storeChanged) {
+      resetPosMainDeviceSessionStartedAt()
+      seenOrderIdsRef.current.clear()
+      printedPaymentReceiptIdsRef.current.clear()
+      paymentReceiptScanSeededRef.current = false
+      dineInRemoteItemQtySnapshotRef.current.clear()
+      mainPosSelfDineInUpdateSuppressUntilRef.current.clear()
+      resetPosMainDeviceSyncStateForStore(storeCode)
+      void seedPaymentReceiptIdsForStore(storeCode)
+    }
 
     let cancelled = false
     void Promise.all([
@@ -786,7 +814,9 @@ export function usePosMainDeviceSyncHost(): void {
         memo: String(row.memo ?? ''),
       })
 
-      refetchStores({ scope: 'all' })
+      refetchStores({
+        scope: skipLocalKitchenAutoprintForOrder(orderId, row) ? 'current' : 'all',
+      })
 
       if (inferredOrderType === 'dine_in') {
         const snap = buildDineInQtySnapshotForStore(items)
@@ -837,7 +867,9 @@ export function usePosMainDeviceSyncHost(): void {
         guestCount: Number(row.guest_count ?? 0) || undefined,
       } as PosOrder
 
-      runAutoprintForNewOrder(orderId, receiptPayload, orderForKitchen, 'realtime_insert', shouldDeferAutoprint)
+      if (!skipLocalKitchenAutoprintForOrder(orderId, row)) {
+        runAutoprintForNewOrder(orderId, receiptPayload, orderForKitchen, 'realtime_insert', shouldDeferAutoprint)
+      }
 
       if (autoPrint.receiptOnPayment) {
         const st = String(row.status ?? '').toLowerCase()
@@ -922,6 +954,7 @@ export function usePosMainDeviceSyncHost(): void {
     runAutoprintForNewOrder,
     dispatchPaymentReceiptFromOrder,
     printPaymentReceiptIfEnabled,
+    skipLocalKitchenAutoprintForOrder,
   ])
 
   // Realtime UPDATE — payment receipt + dine-in remote add (simplified mirror)
@@ -1103,6 +1136,15 @@ export function usePosMainDeviceSyncHost(): void {
       }
       if (suppressUntil != null) mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
 
+      if (skipLocalKitchenAutoprintForOrder(orderId, row)) {
+        const parsedLocal = parseRealtimePosOrderRowItemsJson(row, resolveOrderItemDisplayName, enrichPromoItemsWithOptionName)
+        if (parsedLocal.ok && parsedLocal.items.length > 0) {
+          const sid = buildDineInQtySnapshotForStore(parsedLocal.items)
+          if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
+        }
+        return
+      }
+
       const parsed = parseRealtimePosOrderRowItemsJson(row, resolveOrderItemDisplayName, enrichPromoItemsWithOptionName)
       if (!parsed.ok || parsed.items.length === 0) return
       const items = parsed.items
@@ -1129,7 +1171,9 @@ export function usePosMainDeviceSyncHost(): void {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         return
       }
-      refetchStores({ scope: 'all' })
+      refetchStores({
+        scope: skipLocalKitchenAutoprintForOrder(orderId, row) ? 'current' : 'all',
+      })
       const shouldAutoPrintReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
       if (!shouldAutoPrintReceipt && !autoPrint.kitchenOnOrder) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
@@ -1240,6 +1284,7 @@ export function usePosMainDeviceSyncHost(): void {
     enrichPromoItemsWithOptionName,
     dispatchPaymentReceiptFromOrder,
     printPaymentReceiptIfEnabled,
+    skipLocalKitchenAutoprintForOrder,
     shouldSkipDineInRemoteAddAutoprint,
     reserveKitchenAutoPrintKey,
     releaseKitchenAutoPrintKey,
@@ -1414,7 +1459,13 @@ export function usePosMainDeviceSyncHost(): void {
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
 
-          runAutoprintForNewOrder(oid, receiptPayload, order, 'poll', shouldDeferAutoprint)
+          if (!skipLocalKitchenAutoprintForOrder(oid, {
+            memo: String(order.memo ?? ''),
+            order_type: String(order.orderType ?? ''),
+            created_by: String((order as { createdBy?: string }).createdBy ?? ''),
+          })) {
+            runAutoprintForNewOrder(oid, receiptPayload, order, 'poll', shouldDeferAutoprint)
+          }
 
           if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
             const qtySnap = buildDineInQtySnapshotForStore(items)
@@ -1422,7 +1473,7 @@ export function usePosMainDeviceSyncHost(): void {
           }
         }
 
-        if (shouldRefresh) refetchStores({ scope: 'all' })
+        if (shouldRefresh) refetchStores({ scope: 'current' })
 
         const nowMs = Date.now()
         const shouldRunMetaScan =
@@ -1438,7 +1489,9 @@ export function usePosMainDeviceSyncHost(): void {
           })
           const wantMetaDineInAddonReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
           const wantMetaDineInAddonKitchen = autoPrint.kitchenOnOrder
-          const wantDineInAddonMetaScan = wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen
+          const wantDineInAddonMetaScan =
+            !shouldSyncHostSkipDineInAddonMetaScan() &&
+            (wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen)
           if (needHeavyMetaScan || wantDineInAddonMetaScan) {
             try {
               const watchOrders = await getPosOrders({
@@ -1680,6 +1733,7 @@ export function usePosMainDeviceSyncHost(): void {
     runAutoprintForNewOrder,
     dispatchPaymentReceiptFromOrder,
     seedPaymentReceiptIdsForStore,
+    skipLocalKitchenAutoprintForOrder,
     resolveOrderItemDisplayName,
     enrichPromoItemsWithOptionName,
     shouldSkipDineInRemoteAddAutoprint,
