@@ -7493,11 +7493,11 @@ export default function PosTerminalPage() {
                   registerLocallyPrintedQueuedOrderNo(queuedLocalOrderNo)
                   queuedLocalOrderNo = null
                 }
-                let skipLocalAutoPrint = false
+                let skipLocalHallReceiptAutoPrint = false
                 if (savedOrderId != null) {
-                  // 추가 주문은 기존 orderId로 merge 저장이라 이미 seen에 있음. 여기서 skip하면 홀/주방 인쇄가 막힘(폴링·로컬 중복 방지는 신규 주문에만 적용).
+                  // Realtime이 seen에 먼저 넣어도 홀 영수증만 skip — 주방은 터미널 submit이 담당
                   if (!isAddOrder) {
-                    skipLocalAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
+                    skipLocalHallReceiptAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
                   }
                   seenOrderIdsRef.current.add(savedOrderId)
                   bumpLastSeenOrderId(currentStoreId, savedOrderId)
@@ -7780,34 +7780,36 @@ export default function PosTerminalPage() {
                   typeof window !== 'undefined' && window.cmPosShell
                     ? resolveAfterReceiptToKitchenDelayMs()
                     : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-                if (isMainPosDevice && !skipLocalAutoPrint) {
-                  if (shouldAutoPrintReceipt) {
+                if (isMainPosDevice) {
+                  if (shouldAutoPrintReceipt && !skipLocalHallReceiptAutoPrint) {
                     markQueuedLocalPrintedIfNeeded()
                     logPosPrintDebug('submit_receipt_autoprint_dispatch', {
                       orderId: savedOrderId,
                       orderNo: orderNoStr,
                       autoPrintKitchenSlipOnOrder: autoPrintKitchenForSubmit,
-                      skipLocalAutoPrint,
+                      skipLocalHallReceiptAutoPrint,
                       receiptItems: receiptPrintItems.length,
                     })
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                   }
                   if (autoPrintKitchenForSubmit && kitchenCartLines.length > 0) {
-                    if (!shouldAutoPrintReceipt) {
+                    if (!shouldAutoPrintReceipt || skipLocalHallReceiptAutoPrint) {
                       markQueuedLocalPrintedIfNeeded()
                       logPosPrintDebug('submit_kitchen_only_autoprint_dispatch', {
                         orderId: savedOrderId,
                         orderNo: orderNoStr,
-                        skipLocalAutoPrint,
+                        skipLocalHallReceiptAutoPrint,
                         kitchenLines: kitchenCartLines.length,
                       })
                     }
                     setTimeout(
                       scheduleKitchenAfterDineInSubmit,
-                      shouldAutoPrintReceipt ? kitchenDelayAfterReceiptMs : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+                      shouldAutoPrintReceipt && !skipLocalHallReceiptAutoPrint
+                        ? kitchenDelayAfterReceiptMs
+                        : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
                     )
                   }
-                  if (!shouldAutoPrintReceipt && !autoPrintKitchenForSubmit) {
+                  if (!shouldAutoPrintReceipt && !autoPrintKitchenForSubmit && !skipLocalHallReceiptAutoPrint) {
                   /** 자동 인쇄(영수증·주방) 모두 꺼진 경우: 수동 인쇄 안내 모달(Windows 인쇄 대화상자로 이어짐) */
                   setReceiptData({
                     orderNo: orderNoStr,
@@ -8699,17 +8701,23 @@ export default function PosTerminalPage() {
                     ? resolveAfterReceiptToKitchenDelayMs()
                     : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
 
-                if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
-                  if (autoPrintReceiptNonDine && autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
+                if (!hasPayment && isMainPosDevice) {
+                  const skipHallAutoPrint = suppressReceiptModalAutoPrint
+                  if (
+                    !skipHallAutoPrint &&
+                    autoPrintReceiptNonDine &&
+                    autoPrintKitchenNonDine &&
+                    payloadItemsNormalized.length > 0
+                  ) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)
-                  } else if (autoPrintReceiptNonDine) {
+                  } else if (!skipHallAutoPrint && autoPrintReceiptNonDine) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                   } else if (autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     setTimeout(runKitchenAfterNonDineSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-                  } else {
+                  } else if (!skipHallAutoPrint) {
                     setReceiptData({
                       ...receiptPayloadSubmit,
                       receiptAutoPrintContext: 'order',

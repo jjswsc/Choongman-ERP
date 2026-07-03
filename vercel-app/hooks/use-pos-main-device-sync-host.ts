@@ -52,6 +52,9 @@ import { activatePosMainDeviceLayoutSync } from '@/lib/pos-main-device-sync-owne
 import {
   shouldSyncHostSkipDineInAddonMetaScan,
   shouldSyncHostSkipLocalKitchenAutoprint,
+  shouldSyncHostKitchenFallbackForTerminalOrder,
+  isPosTerminalLocalAutoprintActive,
+  isPosTerminalOrderSubmitInFlight,
 } from '@/lib/pos-terminal-local-autoprint-ui'
 import {
   bumpLastSeenOrderId,
@@ -793,6 +796,11 @@ export function usePosMainDeviceSyncHost(): void {
         return
       }
       pendingEmptyItemsOrderIdsRef.current.delete(orderId)
+      /** 터미널 savePosOrder 진행 중 — seenOrderIds 선등록 시 터미널 주방 인쇄가 skipLocalAutoPrint에 막힘 */
+      if (isPosTerminalLocalAutoprintActive() && isPosTerminalOrderSubmitInFlight()) {
+        logPosPrintDebug('realtime_insert_defer_terminal_submit', { orderId })
+        return
+      }
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(storeCode, orderId)
 
@@ -869,6 +877,10 @@ export function usePosMainDeviceSyncHost(): void {
 
       if (!skipLocalKitchenAutoprintForOrder(orderId, row)) {
         runAutoprintForNewOrder(orderId, receiptPayload, orderForKitchen, 'realtime_insert', shouldDeferAutoprint)
+      } else if (
+        shouldSyncHostKitchenFallbackForTerminalOrder(orderId, storeCode, autoPrint.kitchenOnOrder)
+      ) {
+        runKitchenAutoprintForOrder(orderForKitchen, autoprintCtx, 'realtime_insert_terminal_kitchen_fallback')
       }
 
       if (autoPrint.receiptOnPayment) {
@@ -1465,6 +1477,8 @@ export function usePosMainDeviceSyncHost(): void {
             created_by: String((order as { createdBy?: string }).createdBy ?? ''),
           })) {
             runAutoprintForNewOrder(oid, receiptPayload, order, 'poll', shouldDeferAutoprint)
+          } else if (shouldSyncHostKitchenFallbackForTerminalOrder(oid, storeCode, autoPrint.kitchenOnOrder)) {
+            runKitchenAutoprintForOrder(order, autoprintCtx, 'poll_terminal_kitchen_fallback')
           }
 
           if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {

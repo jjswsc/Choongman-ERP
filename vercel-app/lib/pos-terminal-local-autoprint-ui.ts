@@ -1,5 +1,7 @@
 /** POS 터미널 페이지 마운트 시 로컬 주문·주방 인쇄 — layout sync host와 중복 방지 */
 
+import { hasRecentPosAutoPrintKey } from '@/lib/pos-auto-print-dedupe'
+
 let terminalLocalAutoprintActive = false
 let orderSubmitInFlightUntilMs = 0
 
@@ -44,4 +46,20 @@ export function shouldSyncHostSkipLocalKitchenAutoprint(opts: {
 /** 홀 추가주문 meta scan — 터미널이 열려 있으면 터미널 submit 경로만 사용 */
 export function shouldSyncHostSkipDineInAddonMetaScan(): boolean {
   return terminalLocalAutoprintActive
+}
+
+/** 터미널 submit 후 주방 미출력 시 sync host 폴백(2분 이내·dedupe 없을 때만) */
+export function shouldSyncHostKitchenFallbackForTerminalOrder(
+  orderId: number,
+  storeCode: string,
+  kitchenOnOrder: boolean
+): boolean {
+  if (!kitchenOnOrder) return false
+  if (!terminalLocalAutoprintActive) return false
+  if (isPosTerminalOrderSubmitInFlight()) return false
+  const id = Math.floor(Number(orderId))
+  if (!Number.isFinite(id) || id <= 0) return false
+  const store = String(storeCode ?? '').trim()
+  if (!store) return false
+  return !hasRecentPosAutoPrintKey(store, `k2:order:${id}:kitchen`, 120_000)
 }
