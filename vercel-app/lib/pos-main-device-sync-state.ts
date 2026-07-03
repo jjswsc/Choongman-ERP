@@ -1,5 +1,6 @@
 import type { PosRealtimeSubscribeStatus } from '@/lib/supabase-client'
 import type { GrabCancelWatchSnap } from '@/lib/pos-grab-cancel-watch'
+import { hasRecentPosAutoPrintKey, posPaymentAutoPrintDedupeKey } from '@/lib/pos-auto-print-dedupe'
 import {
   MAIN_POS_STARTUP_CATCHUP_DURATION_MS,
   MAIN_POS_STARTUP_CATCHUP_WINDOW_MS,
@@ -79,6 +80,24 @@ export function bumpLastSeenOrderId(storeCode: string | null | undefined, orderI
 
 export function resetPosMainDeviceSessionStartedAt(): void {
   sessionStartedAt = Date.now()
+}
+
+/**
+ * 결제 영수증 자동 인쇄 큐 — Realtime·폴링 경합 시 1회만 허용.
+ * localStorage dedupe에 이미 있으면 ref만 채우고 false.
+ */
+export function claimMainPosPaymentReceiptAutoprint(orderIdRaw: unknown, storeCode: string): boolean {
+  const orderId = Math.floor(Number(orderIdRaw))
+  if (!Number.isFinite(orderId) || orderId <= 0) return false
+  if (printedPaymentReceiptIdsRef.current.has(orderId)) return false
+  const store = String(storeCode ?? '').trim()
+  const dedupeKey = posPaymentAutoPrintDedupeKey(orderId)
+  if (store && hasRecentPosAutoPrintKey(store, dedupeKey)) {
+    printedPaymentReceiptIdsRef.current.add(orderId)
+    return false
+  }
+  printedPaymentReceiptIdsRef.current.add(orderId)
+  return true
 }
 
 /** Realtime·폴링·배달 UI — hook·터미널 공통 “신규 유입” 판정 (catchup 포함) */

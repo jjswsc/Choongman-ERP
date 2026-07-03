@@ -51,6 +51,7 @@ import {
 import { activatePosMainDeviceLayoutSync } from '@/lib/pos-main-device-sync-owner'
 import {
   bumpLastSeenOrderId,
+  claimMainPosPaymentReceiptAutoprint,
   clearPosMainDeviceSyncStateOnNonMain,
   dineInRemoteItemQtySnapshotRef,
   grabCancelWatchSeededRef,
@@ -501,6 +502,9 @@ export function usePosMainDeviceSyncHost(): void {
     refetchStores,
   ])
 
+  const autoprintCtxRef = useRef(autoprintCtx)
+  autoprintCtxRef.current = autoprintCtx
+
   const shouldTreatAsIncomingOrder = shouldTreatAsMainPosIncomingOrder
 
   const shouldSkipDineInRemoteAddAutoprint = useCallback(
@@ -555,25 +559,28 @@ export function usePosMainDeviceSyncHost(): void {
     [autoprintCtx]
   )
 
+  const printPaymentReceiptIfEnabled = useCallback(async (order: PosOrder) => {
+    const ctx = autoprintCtxRef.current
+    if (!ctx || !autoPrint.receiptOnPayment) return
+    try {
+      await printPaymentReceiptForOrder(order, ctx)
+    } catch {
+      /* ref 유지 */
+    }
+  }, [autoPrint.receiptOnPayment])
+
   const dispatchPaymentReceiptFromOrder = useCallback(
     async (order: PosOrder) => {
-      if (!autoprintCtx) return
+      const ctx = autoprintCtxRef.current
+      if (!ctx) return
       const orderId = Number(order.id)
       if (!Number.isFinite(orderId) || orderId <= 0) return
-      if (printedPaymentReceiptIdsRef.current.has(orderId)) return
-      printedPaymentReceiptIdsRef.current.add(orderId)
-      try {
-        if (!autoPrint.receiptOnPayment) {
-          printedPaymentReceiptIdsRef.current.delete(orderId)
-          return
-        }
-        const ok = await printPaymentReceiptForOrder(order, autoprintCtx)
-        if (!ok) printedPaymentReceiptIdsRef.current.delete(orderId)
-      } catch {
-        printedPaymentReceiptIdsRef.current.delete(orderId)
-      }
+      if (!autoPrint.receiptOnPayment) return
+      const storeForClaim = String(ctx.storeCode || order.storeCode || storeCode || '').trim()
+      if (!claimMainPosPaymentReceiptAutoprint(orderId, storeForClaim)) return
+      await printPaymentReceiptIfEnabled(order)
     },
-    [autoprintCtx, autoPrint.receiptOnPayment]
+    [autoPrint.receiptOnPayment, storeCode, printPaymentReceiptIfEnabled]
   )
 
   const runAutoprintForNewOrder = useCallback(
@@ -614,6 +621,34 @@ export function usePosMainDeviceSyncHost(): void {
     return activatePosMainDeviceLayoutSync()
   }, [])
 
+  const seedPaymentReceiptIdsForStore = useCallback(async (code: string) => {
+    if (paymentReceiptScanSeededRef.current || !code) return
+    try {
+      const today = getPosBusinessDateStr()
+      const paidLikeRows = await getPosOrders({
+        startStr: today,
+        endStr: today,
+        posBizDayScope: true,
+        storeCode: code,
+        statusPaidLike: true,
+        limit: 800,
+        orderBy: 'id.desc',
+        pollMinimal: true,
+      })
+      for (const order of paidLikeRows) {
+        const oid = Number(order.id)
+        if (!Number.isFinite(oid) || oid <= 0) continue
+        if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) continue
+        if (posOrderPaymentSum(order) <= 0) continue
+        if (!(order.items || []).length) continue
+        printedPaymentReceiptIdsRef.current.add(oid)
+      }
+      paymentReceiptScanSeededRef.current = true
+    } catch {
+      /* seed retry on next poll */
+    }
+  }, [])
+
   useEffect(() => {
     if (!isMainPosDevice || !storeCode) return
     resetPosMainDeviceSessionStartedAt()
@@ -623,6 +658,7 @@ export function usePosMainDeviceSyncHost(): void {
     dineInRemoteItemQtySnapshotRef.current.clear()
     mainPosSelfDineInUpdateSuppressUntilRef.current.clear()
     resetPosMainDeviceSyncStateForStore(storeCode)
+    void seedPaymentReceiptIdsForStore(storeCode)
 
     let cancelled = false
     void Promise.all([
@@ -666,7 +702,7 @@ export function usePosMainDeviceSyncHost(): void {
     return () => {
       cancelled = true
     }
-  }, [isMainPosDevice, storeCode])
+  }, [isMainPosDevice, storeCode, seedPaymentReceiptIdsForStore])
 
   const recomputeRealtimeChannelHealthy = useCallback(() => {
     realtimeChannelHealthyRef.current = isMainPosRealtimeInsertChannelHealthy(realtimeChannelStateRef.current)
@@ -806,22 +842,21 @@ export function usePosMainDeviceSyncHost(): void {
       if (autoPrint.receiptOnPayment) {
         const st = String(row.status ?? '').toLowerCase()
         const paySum = posOrderRowPaymentSum(row)
-        if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
+        const rowStore = String(row.store_code ?? storeCode).trim()
+        if (
+          isPosOrderPaidLikeStatus(st) &&
+          paySum > 0 &&
+          claimMainPosPaymentReceiptAutoprint(orderId, rowStore)
+        ) {
           void getPosOrders({ orderId, storeCode })
             .then((list) => {
               const order = list[0]
-              if (!order?.items?.length) {
-                printedPaymentReceiptIdsRef.current.delete(orderId)
-                return
-              }
-              if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-                printedPaymentReceiptIdsRef.current.delete(orderId)
-                return
-              }
-              return dispatchPaymentReceiptFromOrder(order)
+              if (!order?.items?.length) return
+              if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
+              return printPaymentReceiptIfEnabled(order)
             })
             .catch(() => {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
+              /* ignore */
             })
         }
       }
@@ -886,6 +921,7 @@ export function usePosMainDeviceSyncHost(): void {
     handleIncomingDelivery,
     runAutoprintForNewOrder,
     dispatchPaymentReceiptFromOrder,
+    printPaymentReceiptIfEnabled,
   ])
 
   // Realtime UPDATE — payment receipt + dine-in remote add (simplified mirror)
@@ -1004,23 +1040,17 @@ export function usePosMainDeviceSyncHost(): void {
         wantPayment &&
         isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
         posOrderRowPaymentSum(row) > 0 &&
-        !printedPaymentReceiptIdsRef.current.has(orderId)
+        claimMainPosPaymentReceiptAutoprint(orderId, String(row.store_code ?? storeCode).trim())
       ) {
         void getPosOrders({ orderId, storeCode })
           .then((list) => {
             const order = list[0]
-            if (!order?.items?.length) {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
-              return
-            }
-            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-              printedPaymentReceiptIdsRef.current.delete(orderId)
-              return
-            }
-            return dispatchPaymentReceiptFromOrder(order)
+            if (!order?.items?.length) return
+            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
+            return printPaymentReceiptIfEnabled(order)
           })
           .catch(() => {
-            printedPaymentReceiptIdsRef.current.delete(orderId)
+            /* ignore */
           })
       }
 
@@ -1209,6 +1239,7 @@ export function usePosMainDeviceSyncHost(): void {
     resolveOrderItemDisplayName,
     enrichPromoItemsWithOptionName,
     dispatchPaymentReceiptFromOrder,
+    printPaymentReceiptIfEnabled,
     shouldSkipDineInRemoteAddAutoprint,
     reserveKitchenAutoPrintKey,
     releaseKitchenAutoPrintKey,
@@ -1234,9 +1265,9 @@ export function usePosMainDeviceSyncHost(): void {
       mainPosPollInFlightRef.current = true
       try {
         const runPaymentReceiptScan = async () => {
+          await seedPaymentReceiptIdsForStore(storeCode)
           if (!autoPrint.receiptOnPayment) return
           if (
-            paymentReceiptScanSeededRef.current &&
             !shouldUseMainPosHeavyOrderScanFallback({
               realtimeChannelHealthy: realtimeChannelHealthyRef.current,
               lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
@@ -1255,18 +1286,6 @@ export function usePosMainDeviceSyncHost(): void {
               orderBy: 'id.desc',
               pollMinimal: true,
             })
-            if (!paymentReceiptScanSeededRef.current) {
-              for (const order of paidLikeRows) {
-                const oid = Number(order.id)
-                if (!Number.isFinite(oid) || oid <= 0) continue
-                if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) continue
-                if (posOrderPaymentSum(order) <= 0) continue
-                if (!(order.items || []).length) continue
-                printedPaymentReceiptIdsRef.current.add(oid)
-              }
-              paymentReceiptScanSeededRef.current = true
-              return
-            }
             const candidates = paidLikeRows.filter((order) => {
               const oid = Number(order.id)
               if (!Number.isFinite(oid) || oid <= 0) return false
@@ -1660,6 +1679,7 @@ export function usePosMainDeviceSyncHost(): void {
     handleIncomingDelivery,
     runAutoprintForNewOrder,
     dispatchPaymentReceiptFromOrder,
+    seedPaymentReceiptIdsForStore,
     resolveOrderItemDisplayName,
     enrichPromoItemsWithOptionName,
     shouldSkipDineInRemoteAddAutoprint,

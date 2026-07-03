@@ -344,6 +344,7 @@ import {
   mainPosSelfDineInUpdateSuppressUntilRef,
   promptedGrabCustomerCancelIdsRef,
   printedPaymentReceiptIdsRef,
+  paymentReceiptScanSeededRef,
   seenOrderIdsRef,
   shouldTreatAsMainPosIncomingOrder,
 } from '@/lib/pos-main-device-sync-state'
@@ -2028,7 +2029,9 @@ export default function PosTerminalPage() {
   const deferredIncomingDeliveryQueueRef = useRef<IncomingDeliveryFocusParams[]>([])
   const [deferredIncomingDeliveryCount, setDeferredIncomingDeliveryCount] = useState(0)
   useEffect(() => {
+    if (isPosMainDeviceSyncOwnedByLayout()) return
     printedPaymentReceiptIdsRef.current = new Set()
+    paymentReceiptScanSeededRef.current = false
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     deferredIncomingDeliveryQueueRef.current = []
