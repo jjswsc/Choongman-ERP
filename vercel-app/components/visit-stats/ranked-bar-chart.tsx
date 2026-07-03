@@ -19,13 +19,22 @@ type RankedBarChartProps = {
   title: string
   color: string
   data: { name: string; totalMin: number; visits: number }[]
+  /** Y축·라벨 표시용 (집계 키는 data.name 그대로) */
+  formatName?: (name: string) => string
   /** 긴 매장명 등 Y축 라벨 폭 (px) */
   yAxisWidth?: number
   /** 기본 220. 매장 수가 많을 때만 지정 */
   heightPx?: number
 }
 
-export function RankedBarChart({ title, color, data, yAxisWidth = 100, heightPx = 220 }: RankedBarChartProps) {
+export function RankedBarChart({
+  title,
+  color,
+  data,
+  formatName,
+  yAxisWidth = 100,
+  heightPx = 220,
+}: RankedBarChartProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const inputTimeLabel = t("visit_chart_input_time")
@@ -53,6 +62,7 @@ export function RankedBarChart({ title, color, data, yAxisWidth = 100, heightPx 
               dataKey="name"
               width={yAxisWidth}
               tick={{ fontSize: 12, fill: "hsl(220, 13%, 40%)" }}
+              tickFormatter={(name) => (formatName ? formatName(String(name)) : String(name))}
               axisLine={false}
               tickLine={false}
             />

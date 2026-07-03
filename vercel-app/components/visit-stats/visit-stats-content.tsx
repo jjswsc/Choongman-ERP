@@ -19,6 +19,7 @@ import { HeatmapTable } from "./heatmap-table"
 import { PurposeDonut } from "./purpose-donut"
 import { cn } from "@/lib/utils"
 import { attendanceBusinessDateStrBangkok } from "@/lib/attendance-utils"
+import { translateVisitPurpose } from "@/lib/visit-i18n"
 
 const ALL = "__ALL__"
 
@@ -87,6 +88,10 @@ export function VisitStatsContent() {
   const byPurpose = useMemo(() => aggregateBy(filtered, "purpose"), [filtered])
   const weeklyTrend = useMemo(() => getWeeklyTrend(filtered), [filtered])
   const crossMatrix = useMemo(() => getStorePurposeMatrix(filtered), [filtered])
+  const formatPurposeLabel = useCallback(
+    (name: string) => translateVisitPurpose(name, t) || name,
+    [t]
+  )
 
   const totalMin = filtered.reduce((s, r) => s + r.durationMin, 0)
   const uniqueStores = new Set(filtered.map((r) => r.store)).size
@@ -176,7 +181,7 @@ export function VisitStatsContent() {
           >
             <option value={ALL}>{t("all")}</option>
             {filterOptions.purposes.map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p}>{formatPurposeLabel(p)}</option>
             ))}
           </select>
         </div>
@@ -216,7 +221,12 @@ export function VisitStatsContent() {
         <RankedBarChart title={t("visit_chart_store_hours")} color="#2563eb" data={byStore} />
         <RankedBarChart title={t("visit_chart_employee_hours")} color="#059669" data={byEmployee} />
         <RankedBarChart title={t("visit_chart_dept_hours")} color="#d97706" data={byDept} />
-        <RankedBarChart title={t("visit_chart_purpose_hours")} color="#dc2626" data={byPurpose} />
+        <RankedBarChart
+          title={t("visit_chart_purpose_hours")}
+          color="#dc2626"
+          data={byPurpose}
+          formatName={formatPurposeLabel}
+        />
       </div>
 
       {/* Cross Analysis Heatmap */}
