@@ -8,8 +8,10 @@ import {
   MapPin,
   Package,
   Truck,
+  CheckCircle,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 export interface PoPrintItem {
   name: string
@@ -22,6 +24,8 @@ export interface PoPrintItem {
 }
 
 export interface PoPrintData {
+  /** 발주 DB id — 인쇄 화면에서 승인 API 호출용 */
+  poId?: number
   poNo: string
   createdAt: string
   vendorName: string
@@ -96,10 +100,16 @@ export function PurchaseOrderPrint({
   company,
   labels,
   stampImageUrl,
+  onApprove,
+  approveBusy,
+  approveLabel,
 }: {
   data: PoPrintData
   company: PoPrintCompany
   stampImageUrl?: string
+  onApprove?: () => void
+  approveBusy?: boolean
+  approveLabel?: string
   labels?: {
     poTitle?: string
     poNo?: string
@@ -475,23 +485,39 @@ export function PurchaseOrderPrint({
           </span>
           <span className="ml-2 font-medium">{data.userName}</span>
         </div>
-        {approved && (
-          <div className="invoice-signature-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 items-stretch min-h-[160px]">
+        {(approved || onApprove) && (
+          <div
+            className={`invoice-signature-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 items-stretch min-h-[160px]${approved ? "" : " no-print"}`}
+          >
             <div className="flex flex-col justify-between min-h-[160px] py-1">
               <h4 className="font-semibold">{data.vendorName}</h4>
-              <div className="space-y-1.5">
-                <div className="flex items-end gap-2">
-                  <span className="text-sm text-muted-foreground shrink-0">
-                    {t("receivedBy") || "Received by"}:
-                  </span>
-                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]" />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-end gap-2">
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {t("receivedBy") || "Received by"}:
+                    </span>
+                    <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]" />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {t("signatureDate") || "Date"}:
+                    </span>
+                    <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]" />
+                  </div>
                 </div>
-                <div className="flex items-end gap-2">
-                  <span className="text-sm text-muted-foreground shrink-0">
-                    {t("signatureDate") || "Date"}:
-                  </span>
-                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]" />
-                </div>
+                {!approved && onApprove ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-2 bg-success hover:bg-success/90 text-success-foreground"
+                    onClick={onApprove}
+                    disabled={approveBusy}
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    {approveLabel || "PO Approve"}
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center justify-end gap-4 min-h-[160px]">
@@ -503,7 +529,7 @@ export function PurchaseOrderPrint({
                 </span>
               </div>
               <div className="invoice-stamp shrink-0 flex-shrink-0">
-                {stampImageUrl ? (
+                {approved && stampImageUrl ? (
                   <img
                     src={stampImageUrl}
                     alt=""

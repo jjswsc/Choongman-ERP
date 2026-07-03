@@ -516,14 +516,20 @@ async function markIssuedMemberCouponIssueById(issueId: number, orderId: number)
   return true
 }
 
-async function markMemberCouponIssueUsed(issueId: number, orderId: number): Promise<void> {
+async function markMemberCouponIssueUsed(issueId: number, orderId: number): Promise<boolean> {
   const id = Math.max(0, Math.trunc(Number(issueId) || 0))
-  if (!id) return
-  await supabaseUpdate('member_coupon_issues', id, {
-    status: 'used',
-    used_at: getBangkokDateTimeString(),
-    order_id: orderId,
-  })
+  if (!id) return false
+  try {
+    await supabaseUpdateByFilter('member_coupon_issues', `id=eq.${id}&status=eq.issued`, {
+      status: 'used',
+      used_at: getBangkokDateTimeString(),
+      order_id: orderId,
+    })
+    return true
+  } catch (e) {
+    console.error('markMemberCouponIssueUsed:', { issueId: id, orderId, error: e })
+    return false
+  }
 }
 
 async function finalizeMemberCouponIssueRedemption(
@@ -717,6 +723,35 @@ export async function persistPosOrderCouponRedemptions(params: {
       await finalizeMemberCouponIssueRedemption(memberCouponIssueId, orderId, memberIdsForRedeem)
     } else if (memberIssue?.id) {
       await finalizeMemberCouponIssueRedemption(memberIssue.id, orderId, memberIdsForRedeem)
+    } else {
+      let scopeMemberIds = memberIdsForRedeem
+      if (!scopeMemberIds.length && orderMemberNo) {
+        const ref = await resolveMemberRef(orderMemberNo)
+        if (ref?.id) {
+          scopeMemberIds = await resolveMemberIdsSharingPhone(ref.id)
+        }
+      }
+      if (scopeMemberIds.length) {
+        const fallbackIssue = await findMemberCouponIssueAcrossMembers({
+          memberIds: scopeMemberIds,
+          code,
+        })
+        if (fallbackIssue?.id) {
+          await finalizeMemberCouponIssueRedemption(fallbackIssue.id, orderId, scopeMemberIds)
+        } else {
+          console.error('persistPosOrderCouponRedemptions: no issued issue', {
+            orderId,
+            code,
+            memberIds: scopeMemberIds,
+          })
+        }
+      } else {
+        console.error('persistPosOrderCouponRedemptions: no member scope', {
+          orderId,
+          code,
+          orderMemberNo,
+        })
+      }
     }
 
     if (couponId) {

@@ -89,6 +89,17 @@ export function posPaymentAutoPrintDedupeKey(
   return inst ? `order:${id}:payment:${inst}` : `order:${id}:payment:auto`
 }
 
+/** 결제 후 세금계산서 memo 추가·수정 시 결제 영수증 재인쇄 dedupe */
+export function posTaxInvoicePaymentReprintDedupeKey(
+  orderId: number,
+  taxFingerprint: string
+): string {
+  const id = Math.floor(Number(orderId))
+  const fp = String(taxFingerprint ?? '').trim()
+  if (!Number.isFinite(id) || id <= 0 || !fp) return ''
+  return `order:${id}:payment:tax:${fp}`
+}
+
 export function reservePosAutoPrintKey(
   storeCode: string,
   key: string,

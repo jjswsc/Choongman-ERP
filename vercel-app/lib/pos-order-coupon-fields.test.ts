@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   posOrderCouponFieldsFromOrderRow,
   posOrderCouponFieldsFromPayload,
+  resolveAppliedCouponsForOrderDbSave,
+  isPosOrderCouponPaymentSettled,
 } from '@/lib/pos-order-coupon-fields'
 
 describe('posOrderCouponFieldsFromPayload', () => {
@@ -48,5 +50,52 @@ describe('posOrderCouponFieldsFromOrderRow', () => {
     })
     expect(fields.appliedCoupons?.[0]?.code).toBe('ROWCPN')
     expect(fields.couponDiscountAmt).toBe(20)
+  })
+})
+
+describe('resolveAppliedCouponsForOrderDbSave', () => {
+  it('keeps appliedPre when server revalidation strips coupons', () => {
+    const appliedPre = [
+      { code: 'CMV100P', name: 'CMV100P', discountAmt: 100, quantity: 1, memberCouponIssueId: 10 },
+      { code: 'GDF100P', name: 'GDF100P', discountAmt: 129, quantity: 1, memberCouponIssueId: 11 },
+    ]
+    const saved = resolveAppliedCouponsForOrderDbSave({
+      appliedPre,
+      validated: [],
+      validatedCouponCode: '',
+      validatedCouponDiscountAmt: 0,
+    })
+    expect(saved.appliedCoupons).toHaveLength(2)
+    expect(saved.appliedCouponsJson).toHaveLength(2)
+    expect(saved.couponCode).toContain('CMV100P')
+    expect(saved.couponDiscountAmt).toBe(229)
+  })
+})
+
+describe('isPosOrderCouponPaymentSettled', () => {
+  it('treats coupon-only zero-total checkout as settled', () => {
+    expect(
+      isPosOrderCouponPaymentSettled({
+        total: 0,
+        paymentSum: 0,
+        preCouponSum: 129,
+        appliedPreCount: 1,
+      })
+    ).toBe(true)
+  })
+
+  it('requires payment sum for positive totals', () => {
+    expect(
+      isPosOrderCouponPaymentSettled({
+        total: 500,
+        paymentSum: 400,
+      })
+    ).toBe(false)
+    expect(
+      isPosOrderCouponPaymentSettled({
+        total: 500,
+        paymentSum: 500,
+      })
+    ).toBe(true)
   })
 })

@@ -10,9 +10,12 @@ import {
   isPoAccountingTaxInvoiceMode,
 } from "@/components/invoice/purchase-order-print"
 import { Button } from "@/components/ui/button"
-import { getInvoiceData } from "@/lib/api-client"
+import { getInvoiceData, processPurchaseOrderApproval } from "@/lib/api-client"
+import { appAlert } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { CheckCircle } from "lucide-react"
 
 const STORAGE_KEY = "po-print-data"
 
@@ -24,6 +27,41 @@ export default function PoPrintPage() {
   const [loaded, setLoaded] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [stampImageUrl, setStampImageUrl] = React.useState<string | undefined>(undefined)
+  const [approving, setApproving] = React.useState(false)
+
+  const canApprove = Boolean(
+    data?.poId &&
+      !isPoApprovedStatus(data.status) &&
+      String(data.status ?? "").trim().toLowerCase() !== "cancelled"
+  )
+
+  const persistData = React.useCallback((next: PoPrintData) => {
+    setData(next)
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      // ignore session storage failures
+    }
+  }, [])
+
+  const handleApprove = React.useCallback(async () => {
+    if (!data?.poId || approving) return
+    setApproving(true)
+    try {
+      const res = await processPurchaseOrderApproval({ poId: data.poId })
+      if (res.success) {
+        persistData({ ...data, status: "Approved" })
+      } else {
+        await appAlert(
+          translateApiMessage(res.message || "", t) || res.message || t("processFail")
+        )
+      }
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setApproving(false)
+    }
+  }, [approving, data, persistData, t])
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
@@ -173,13 +211,27 @@ export default function PoPrintPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 print:bg-white">
-      <div className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 z-[9999]">
+      <div className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 flex flex-wrap items-center justify-center gap-3 z-[9999] max-w-[min(100vw-2rem,42rem)]">
+        {canApprove ? (
+          <Button
+            className="gap-2 bg-success hover:bg-success/90 text-success-foreground"
+            onClick={() => void handleApprove()}
+            disabled={approving}
+          >
+            <CheckCircle className="h-4 w-4" />
+            {approving ? t("loading") : t("poPrintApprove") || t("adminApproved") || "PO Approve"}
+          </Button>
+        ) : null}
         <Button onClick={handlePrint}>{t("purchaseOrderPrint") || "Print"}</Button>
         <Button variant="outline" onClick={() => window.close()}>
           Close
         </Button>
         <span className="text-xs text-muted-foreground max-w-[220px]">
-          {t("outPrintHint") || "인쇄 시 브라우저 설정에서 '머리글 및 바닥글'을 끄면 URL·날짜가 나오지 않습니다."}
+          {canApprove
+            ? t("poPrintApproveHint") ||
+              "승인 후 회사 인·서명란이 인쇄에 포함됩니다."
+            : t("outPrintHint") ||
+              "인쇄 시 브라우저 설정에서 '머리글 및 바닥글'을 끄면 URL·날짜가 나오지 않습니다."}
         </span>
       </div>
       <div className="invoice-print-wrapper pb-24 print:pb-0 max-w-4xl mx-auto print:max-w-full print:mx-0 print:px-0 pt-4">
@@ -188,6 +240,9 @@ export default function PoPrintPage() {
           company={company!}
           labels={labels}
           stampImageUrl={stampImageUrl}
+          onApprove={canApprove ? () => void handleApprove() : undefined}
+          approveBusy={approving}
+          approveLabel={t("poPrintApprove") || t("adminApproved") || "PO Approve"}
         />
       </div>
     </div>

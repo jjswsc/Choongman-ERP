@@ -4,6 +4,7 @@
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { getAdminItemsWithCache, getWarehouseLocationsWithCache, invalidateAdminItemsCache } from '../offline/erp-offline'
 import { jsonAsArray } from '../safe-api-json'
+import { sortVendorsByDisplayName } from '../vendor-sort'
 
 export interface AdminItem {
   code: string
@@ -131,7 +132,7 @@ export async function getItemCategories() {
 
 export async function getAdminVendors() {
   const res = await apiFetchWithOffline('/api/getVendors')
-  return jsonAsArray<AdminVendor>(await res.json())
+  return sortVendorsByDisplayName(jsonAsArray<AdminVendor>(await res.json()))
 }
 
 export async function saveVendor(params: {

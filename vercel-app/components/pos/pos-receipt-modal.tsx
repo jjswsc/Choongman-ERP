@@ -106,6 +106,8 @@ export type ReceiptModalData = {
   receiptAutoPrintContext?: 'order' | 'add_order' | 'payment'
   /** 실시간/폴링 등에서 이미 자동 인쇄된 주문이면 모달 자동 인쇄 생략 */
   suppressReceiptModalAutoPrint?: boolean
+  /** 보조 POS 등 화면 미리보기만 필요할 때 자동 인쇄 생략(메인 POS가 인쇄) */
+  skipReceiptAutoPrint?: boolean
   /** 동일 주문의 다중 인쇄(더치 분할 등) 구분용 키 */
   printInstanceKey?: string
   /** 주문 취소·void 시 음수 금액·Voided 배너 영수증 */
@@ -538,6 +540,7 @@ export function PosReceiptModal({
   useEffect(() => {
     if (!receiptData) return
     if (receiptData.suppressReceiptModalAutoPrint) return
+    if (receiptData.skipReceiptAutoPrint) return
     const ctx = receiptData.receiptAutoPrintContext
     const autoReceipt =
       ctx === 'payment'

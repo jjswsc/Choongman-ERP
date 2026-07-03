@@ -56,6 +56,57 @@ export function posOrderCouponFieldsFromPayload(payload: {
   }
 }
 
+/**
+ * 결제 저장 시 재검증이 쿠폰을 제거해도, 클라이언트·병합 결과(appliedPre)는 DB에 보존한다.
+ * 이후 redemption·상태 동기화가 applied_coupons를 읽을 수 있게 한다.
+ */
+export function resolveAppliedCouponsForOrderDbSave(params: {
+  appliedPre: PosAppliedCouponLine[]
+  validated: PosAppliedCouponLine[]
+  validatedCouponCode: string
+  validatedCouponDiscountAmt: number
+}): {
+  appliedCoupons: PosAppliedCouponLine[]
+  appliedCouponsJson: PosAppliedCouponLine[] | null
+  couponCode: string
+  couponDiscountAmt: number
+} {
+  const appliedForSave =
+    params.validated.length > 0 ? params.validated : params.appliedPre
+  const preLegacy = summarizeLegacyCouponFields(params.appliedPre)
+  const saveLegacy = summarizeLegacyCouponFields(appliedForSave)
+  return {
+    appliedCoupons: appliedForSave,
+    appliedCouponsJson: appliedForSave.length > 0 ? appliedForSave : null,
+    couponCode:
+      params.validatedCouponCode || saveLegacy.couponCode || preLegacy.couponCode,
+    couponDiscountAmt:
+      params.validatedCouponDiscountAmt > 0.0001
+        ? params.validatedCouponDiscountAmt
+        : saveLegacy.couponDiscountAmt > 0.0001
+          ? saveLegacy.couponDiscountAmt
+          : preLegacy.couponDiscountAmt,
+  }
+}
+
+/** 결제 완료 판정 — 쿠폰만으로 0원 결제·paid_at 스탬프도 포함 */
+export function isPosOrderCouponPaymentSettled(params: {
+  total: number
+  paymentSum: number
+  preCouponSum?: number
+  appliedPreCount?: number
+  paidAtStamp?: string | null
+}): boolean {
+  const total = Math.max(0, Number(params.total) || 0)
+  const paymentSum = Math.max(0, Number(params.paymentSum) || 0)
+  const preCouponSum = Math.max(0, Number(params.preCouponSum ?? 0) || 0)
+  const appliedPreCount = Math.max(0, Math.trunc(Number(params.appliedPreCount ?? 0) || 0))
+  if (total > 0.02) return paymentSum >= total - 0.02
+  if (paymentSum > 0) return true
+  if (String(params.paidAtStamp ?? '').trim()) return true
+  return preCouponSum > 0.02 || appliedPreCount > 0
+}
+
 /** pos_orders 행 스냅샷 → updatePosOrder 쿠폰 필드 */
 export function posOrderCouponFieldsFromOrderRow(order: {
   couponCode?: string

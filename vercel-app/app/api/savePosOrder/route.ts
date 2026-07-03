@@ -28,9 +28,14 @@ import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import {
   parseAppliedCouponsFromBody,
+  persistPosOrderCouponRedemptions,
   redeemMemberCouponIssuesForPaidOrder,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
+import {
+  resolveAppliedCouponsForOrderDbSave,
+  isPosOrderCouponPaymentSettled,
+} from '@/lib/pos-order-coupon-fields'
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
@@ -301,6 +306,12 @@ export async function POST(req: NextRequest) {
     const couponCode = couponResolved.couponCode
     const couponDiscountAmt = couponResolved.couponDiscountAmt
     const appliedCoupons = couponResolved.appliedCoupons
+    const couponDbSave = resolveAppliedCouponsForOrderDbSave({
+      appliedPre,
+      validated: appliedCoupons,
+      validatedCouponCode: couponCode,
+      validatedCouponDiscountAmt: couponDiscountAmt,
+    })
     const discountAmtForPricing = Math.min(
       subtotal,
       Math.max(0, manualDiscountForCoupons + couponDiscountAmt)
@@ -432,9 +443,9 @@ export async function POST(req: NextRequest) {
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
-      coupon_code: couponCode || null,
-      coupon_discount_amt: couponDiscountAmt,
-      applied_coupons: couponResolved.appliedCouponsJson,
+      coupon_code: couponDbSave.couponCode || null,
+      coupon_discount_amt: couponDbSave.couponDiscountAmt,
+      applied_coupons: couponDbSave.appliedCouponsJson,
       point_used: pointUsed,
       point_earned: pointEarnedReq,
       guest_count,
@@ -540,7 +551,13 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentSum = paymentSumForStatus
-    const paymentComplete = total > 0 && paymentSum >= total - 0.02
+    const paymentComplete = isPosOrderCouponPaymentSettled({
+      total,
+      paymentSum: paymentSumForStatus,
+      preCouponSum,
+      appliedPreCount: appliedPre.length,
+      paidAtStamp,
+    })
     let pointEarned = pointEarnedReq
     let stampResult: import('@/lib/member-stamp-card').MemberStampRecordResult | null = null
     if (memberId > 0 && paymentComplete && created?.id) {
@@ -564,7 +581,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (paymentComplete && Number(created?.id) > 0) {
+      const couponsForRedeem = appliedPre.length > 0 ? appliedPre : appliedCoupons
       try {
+        if (couponsForRedeem.length > 0) {
+          await persistPosOrderCouponRedemptions({
+            orderId: Number(created.id),
+            storeCode,
+            appliedCoupons: couponsForRedeem,
+            memberId: memberId || undefined,
+          })
+        }
         await redeemMemberCouponIssuesForPaidOrder(Number(created.id))
       } catch (redeemErr) {
         console.error('savePosOrder coupon redemptions:', redeemErr)

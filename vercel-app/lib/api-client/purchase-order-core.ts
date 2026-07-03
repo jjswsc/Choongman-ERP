@@ -5,6 +5,7 @@ import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { getPurchaseOrdersWithCache, getVendorsForPurchaseWithCache, getVendorsForSalesWithCache } from '../offline/erp-offline'
 import { jsonAsArray } from '../safe-api-json'
+import { sortVendorsByDisplayName } from '../vendor-sort'
 
 export interface PurchaseLocation {
   name: string
@@ -42,11 +43,11 @@ export async function getPurchaseLocations() {
 }
 
 export async function getVendorsForPurchase() {
-  return getVendorsForPurchaseWithCache()
+  return sortVendorsByDisplayName(await getVendorsForPurchaseWithCache())
 }
 
 export async function getVendorsForSales() {
-  return getVendorsForSalesWithCache()
+  return sortVendorsByDisplayName(await getVendorsForSalesWithCache())
 }
 
 /** 회계 PO·로열티 청구: 매출처(가맹 법인) 전체 필드 — getVendorsForPurchase에는 매출처가 없음 */
@@ -54,7 +55,7 @@ export async function getVendorsForSalesFranchiseMaster(): Promise<VendorForPurc
   const res = await apiFetch('/api/getVendorsForSales?detail=1')
   if (!res.ok) return []
   const data = (await res.json()) as unknown
-  return Array.isArray(data) ? (data as VendorForPurchase[]) : []
+  return sortVendorsByDisplayName(Array.isArray(data) ? (data as VendorForPurchase[]) : [])
 }
 
 export async function getItemsByVendor(

@@ -34,6 +34,7 @@ import {
   type PurchaseOrderRow,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -131,15 +132,17 @@ export function AdminPurchaseOrderHistory() {
           merged = [...fr, ...(pur || []).filter((v) => !frCodes.has(v.code))]
         }
         setVendors(
-          merged.map((v) => ({
-            code: v.code,
-            name: v.name,
-            address: v.address,
-            taxId: v.taxId,
-            phone: v.phone,
-            salesOutlet: v.salesOutlet,
-            gpsName: v.gpsName,
-          }))
+          sortVendorsByDisplayName(
+            merged.map((v) => ({
+              code: v.code,
+              name: v.name,
+              address: v.address,
+              taxId: v.taxId,
+              phone: v.phone,
+              salesOutlet: v.salesOutlet,
+              gpsName: v.gpsName,
+            }))
+          )
         )
       } catch {
         setVendors([])
@@ -500,6 +503,7 @@ ${allRows.map((row, ri) => {
 
     const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const poPrintData = {
+      poId: po.id,
       poNo,
       createdAt: dateStr,
       vendorName: po.vendor_name || vendorResolved?.name || "-",

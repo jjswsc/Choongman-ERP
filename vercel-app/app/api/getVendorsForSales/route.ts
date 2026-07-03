@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { sortVendorsByDisplayName } from '@/lib/vendor-sort'
 
 function mapVendorType(v: string): 'purchase' | 'sales' | 'both' {
   const lower = String(v || '').toLowerCase().trim()
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
           gpsName,
         }
       })
-      return NextResponse.json(list, { headers })
+      return NextResponse.json(sortVendorsByDisplayName(list), { headers })
     }
 
     const list = salesRows.map((row) => {
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(list, { headers })
+    return NextResponse.json(sortVendorsByDisplayName(list), { headers })
   } catch (e) {
     console.error('getVendorsForSales:', e)
     return NextResponse.json([], { headers })

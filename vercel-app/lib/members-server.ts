@@ -1275,6 +1275,12 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   if (earned > 0) {
     await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: earned })
   }
+  try {
+    const { redeemMemberCouponIssuesForPaidOrder } = await import('@/lib/pos-coupon-server')
+    await redeemMemberCouponIssuesForPaidOrder(id)
+  } catch (redeemErr) {
+    console.error('ensurePosOrderLoyaltyApplied coupon redeem:', redeemErr)
+  }
   return earned
 }
 

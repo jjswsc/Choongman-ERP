@@ -81,6 +81,26 @@ describe('mergeDineInAddonCartPosItemsWithExisting', () => {
       { id: 'line-pepsi', name: 'Pepsi', price: 30, qty: 1, quantity: 1 },
     ])
   })
+
+  it('preserves server promoItems when cart line omits set snapshot', () => {
+    const existing = [
+      {
+        id: 'set-line',
+        name: '[Super Deal] Set 3',
+        price: 333,
+        qty: 1,
+        quantity: 1,
+        promoId: '99',
+        promoItems: [
+          { menuId: '1', optionId: null, quantity: 1, menuName: 'Rice' },
+          { menuId: '2', optionId: '3', quantity: 1, menuName: 'CURRY Bar.B.Q FRIED CHICKEN' },
+          { menuId: '4', optionId: null, quantity: 1, menuName: 'KIMCHI SOUP With Rice' },
+        ],
+      },
+    ]
+    const fromCart = [{ id: 'set-line', name: '[Super Deal] Set 3', price: 333, qty: 1, quantity: 1 }]
+    expect(mergeDineInAddonCartPosItemsWithExisting(existing, fromCart)[0]?.promoItems).toHaveLength(3)
+  })
 })
 
 describe('mergeOrderUiItemsPreserveLineState', () => {

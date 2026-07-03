@@ -501,6 +501,42 @@ function resolvePromoItemsForReceiptLine(
 }
 
 /**
+ * 스냅샷이 일부만 저장된 경우(예: Rice만 남음) 카탈로그 구성으로 빠진 슬롯을 채운다.
+ * 동일 menuId 가 있으면 스냅샷 선택·옵션을 우선한다.
+ */
+export function mergePartialPromoSnapshotWithCatalog(
+  snapshot: ReceiptPromoLine[],
+  catalogLines: ReceiptPromoLine[] | null | undefined
+): ReceiptPromoLine[] {
+  if (!catalogLines?.length) return snapshot
+  if (!snapshot.length) return catalogLines
+  if (snapshot.length >= catalogLines.length) return snapshot
+
+  const usedSnapshotIdx = new Set<number>()
+  const merged: ReceiptPromoLine[] = []
+  for (const cat of catalogLines) {
+    const catMenuId = String(cat.menuId ?? '').trim()
+    let bestIdx = -1
+    snapshot.forEach((s, idx) => {
+      if (usedSnapshotIdx.has(idx)) return
+      if (catMenuId && String(s.menuId ?? '').trim() === catMenuId) {
+        bestIdx = idx
+      }
+    })
+    if (bestIdx >= 0) {
+      usedSnapshotIdx.add(bestIdx)
+      merged.push({ ...cat, ...snapshot[bestIdx] })
+    } else {
+      merged.push(cat)
+    }
+  }
+  snapshot.forEach((s, idx) => {
+    if (!usedSnapshotIdx.has(idx)) merged.push(s)
+  })
+  return merged
+}
+
+/**
  * 주방 슬립 등: 줄에 `promoItems`/`promo_items` 스냅샷이 없으면 카탈로그·메뉴로 세트 구성을 채운다.
  * 이미 스냅샷이 있으면 유지한다(저장된 선택·수량).
  */
@@ -521,7 +557,15 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
     }
     const direct = pickPromoItemsFromOrderLine(it)
     if (direct && direct.length > 0) {
-      const enriched = applyPromoEnrich(normalizeReceiptPromoLines(direct))
+      const normalized = normalizeReceiptPromoLines(direct)
+      const promoId = pickPromoIdFromOrderLine(it)
+      const fromCatalog =
+        promoId && catalog?.size ? promoLinesFromCatalog(promoId, catalog) : null
+      const merged =
+        fromCatalog && fromCatalog.length > normalized.length
+          ? mergePartialPromoSnapshotWithCatalog(normalized, fromCatalog)
+          : normalized
+      const enriched = applyPromoEnrich(merged)
       return enriched ? ({ ...it, promoItems: enriched } as T) : (it as T)
     }
     const promo = resolvePromoItemsForReceiptLine(it, catalog, menus, opts)

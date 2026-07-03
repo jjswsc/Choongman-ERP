@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   appendPosInternalMemoStamp,
   parsePosOrderMemo,
+  shouldReprintPaymentReceiptForTaxInvoiceMemoChange,
   TAX_INVOICE_MARKER,
   upsertPosOrderTaxInvoiceMemo,
 } from '@/lib/pos-tax-invoice'
@@ -75,5 +76,26 @@ describe('parsePosOrderMemo', () => {
     expect(taxInvoice?.name).toBe('Phuwadet Munphanklang')
     expect(taxInvoice?.phone).toBe('0987654321')
     expect(memo).toContain(TAX_INVOICE_MARKER)
+  })
+
+  it('detects tax invoice memo changes for payment receipt reprint', () => {
+    const tax = {
+      memberNo: '',
+      customerType: 'person' as const,
+      name: 'ABC',
+      taxId: '1234567890123',
+      branchNo: '00000',
+      phone: '0987654321',
+      email: 'a@b.com',
+      address: 'Bangkok',
+      member: false,
+    }
+    expect(shouldReprintPaymentReceiptForTaxInvoiceMemoChange('', upsertPosOrderTaxInvoiceMemo('', tax))).toBe(
+      true
+    )
+    const memoWithTax = upsertPosOrderTaxInvoiceMemo('', tax)
+    expect(shouldReprintPaymentReceiptForTaxInvoiceMemoChange(memoWithTax, memoWithTax)).toBe(false)
+    const updated = upsertPosOrderTaxInvoiceMemo('', { ...tax, name: 'DEF' })
+    expect(shouldReprintPaymentReceiptForTaxInvoiceMemoChange(memoWithTax, updated)).toBe(true)
   })
 })

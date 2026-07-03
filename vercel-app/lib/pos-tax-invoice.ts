@@ -217,6 +217,31 @@ function stripTaxInvoiceSectionFromMemoRaw(memo: string | undefined | null): str
 }
 
 /** 기존 memo의 `[TAX_INVOICE]` 블록을 교체(또는 신규 추가)한다. */
+/** 결제 영수증 세금계산서 재인쇄 dedupe·변경 감지용 */
+export function posTaxInvoiceReceiptFingerprint(
+  tax: PosTaxInvoiceData | null | undefined
+): string {
+  if (!tax) return ''
+  return [
+    tax.taxId,
+    tax.branchNo || '00000',
+    tax.name,
+    tax.phone,
+    tax.address,
+  ].join('|')
+}
+
+/** 결제 완료 후 memo에 세금계산서가 추가·변경되면 결제 영수증 재인쇄가 필요한지 */
+export function shouldReprintPaymentReceiptForTaxInvoiceMemoChange(
+  oldMemo: string | null | undefined,
+  newMemo: string | null | undefined
+): boolean {
+  const oldFp = posTaxInvoiceReceiptFingerprint(parsePosOrderMemo(oldMemo).taxInvoice)
+  const newFp = posTaxInvoiceReceiptFingerprint(parsePosOrderMemo(newMemo).taxInvoice)
+  if (!newFp) return false
+  return oldFp !== newFp
+}
+
 export function upsertPosOrderTaxInvoiceMemo(
   memo: string | undefined | null,
   taxInvoice: PosTaxInvoiceData

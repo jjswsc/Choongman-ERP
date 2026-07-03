@@ -235,10 +235,20 @@ export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[
     const k = normPosOrderItemId(c.id)
     const b = k ? baseById.get(k) : undefined
     if (!b) return { ...c }
+    const promoItems =
+      Array.isArray(c.promoItems) && c.promoItems.length > 0
+        ? c.promoItems
+        : Array.isArray(b.promoItems) && b.promoItems.length > 0
+          ? b.promoItems
+          : undefined
+    const promoId = String(c.promoId ?? b.promoId ?? '').trim() || undefined
+    const promoCode = String(c.promoCode ?? b.promoCode ?? '').trim() || undefined
     return {
       ...b,
       ...c,
       id: k || String(b.id ?? c.id ?? ''),
+      ...(promoId ? { promoId, ...(promoCode ? { promoCode } : {}) } : {}),
+      ...(promoItems ? { promoItems } : {}),
       servedAt: c.servedAt ?? b.servedAt ?? null,
       servedBy: c.servedBy ?? b.servedBy ?? null,
       cancelledAt: c.cancelledAt ?? b.cancelledAt ?? null,

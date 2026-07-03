@@ -29,7 +29,7 @@ import {
   redeemMemberCouponIssuesForPaidOrder,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
-import { mergePosOrderAppliedCouponsFromRequest } from '@/lib/pos-order-coupon-fields'
+import { mergePosOrderAppliedCouponsFromRequest, resolveAppliedCouponsForOrderDbSave, isPosOrderCouponPaymentSettled } from '@/lib/pos-order-coupon-fields'
 import { assertPosBusinessOpenForExistingOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
@@ -282,6 +282,12 @@ export async function POST(req: NextRequest) {
     const couponCode = couponResolved.couponCode
     const couponDiscountAmt = couponResolved.couponDiscountAmt
     const appliedCoupons = couponResolved.appliedCoupons
+    const couponDbSave = resolveAppliedCouponsForOrderDbSave({
+      appliedPre,
+      validated: appliedCoupons,
+      validatedCouponCode: couponCode,
+      validatedCouponDiscountAmt: couponDiscountAmt,
+    })
     const discountAmtForPricing = Math.min(
       subtotal,
       Math.max(0, manualDiscountForCoupons + couponDiscountAmt)
@@ -360,9 +366,9 @@ export async function POST(req: NextRequest) {
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
-      coupon_code: couponCode || null,
-      coupon_discount_amt: couponDiscountAmt,
-      applied_coupons: couponResolved.appliedCouponsJson,
+      coupon_code: couponDbSave.couponCode || null,
+      coupon_discount_amt: couponDbSave.couponDiscountAmt,
+      applied_coupons: couponDbSave.appliedCouponsJson,
       point_used: pointUsed,
       point_earned: pointEarnedReq,
       items_json: JSON.stringify(items),
@@ -454,7 +460,13 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
-    const paymentComplete = total > 0 && paymentSum >= total - 0.02
+    const paymentComplete = isPosOrderCouponPaymentSettled({
+      total,
+      paymentSum,
+      preCouponSum,
+      appliedPreCount: appliedPre.length,
+      paidAtStamp,
+    })
     let pointEarned = pointEarnedReq
     const previousEarned = Number(current?.point_earned || 0)
     if (memberId > 0 && paymentComplete && previousEarned <= 0) {
@@ -479,7 +491,10 @@ export async function POST(req: NextRequest) {
       if (ensured > 0) pointEarned = ensured
     }
 
-    let couponsForRedeem = appliedCoupons.length > 0 ? appliedCoupons : mergedAppliedCoupons
+    let couponsForRedeem = appliedPre.length > 0 ? appliedPre : appliedCoupons
+    if (!couponsForRedeem.length) {
+      couponsForRedeem = mergedAppliedCoupons
+    }
     if (!couponsForRedeem.length && paymentSum > 0) {
       couponsForRedeem = parseAppliedCouponsFromBody(current?.applied_coupons)
       if (!couponsForRedeem.length) {
@@ -495,16 +510,15 @@ export async function POST(req: NextRequest) {
 
     if (paymentComplete) {
       try {
-        if (couponsForRedeem.length > 0 && paymentSum > 0) {
+        if (couponsForRedeem.length > 0) {
           await persistPosOrderCouponRedemptions({
             orderId: id,
             storeCode: String(current?.store_code ?? '').trim(),
             appliedCoupons: couponsForRedeem,
             memberId: redeemMemberId,
           })
-        } else {
-          await redeemMemberCouponIssuesForPaidOrder(id)
         }
+        await redeemMemberCouponIssuesForPaidOrder(id)
       } catch (redeemErr) {
         console.error('updatePosOrder coupon redemptions:', redeemErr)
       }

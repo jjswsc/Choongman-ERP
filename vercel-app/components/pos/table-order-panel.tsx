@@ -20,7 +20,9 @@ import {
   posDineInTableMove,
   updatePosOrder,
   type PosMenu,
+  type PosMenuOption,
   type PosOrderStatusUpdateResult,
+  type PosPromoWithItems,
   updatePosOrderStatus,
 } from '@/lib/api-client'
 import { formatIntegerInputDisplay, parseIntegerInput } from '@/lib/baht-input-format'
@@ -60,12 +62,15 @@ import {
   executePosOrderLineCancel,
 } from '@/lib/pos-order-line-cancel-execute'
 import type { PosKitchenReprintPayload } from '@/lib/pos-kitchen-slip-routing'
+import { buildOrderItemsWithPromoDisplayEnrichment } from '@/lib/pos-order-set-display-items'
 import { PosLineCancelQtyDialog } from '@/components/pos/pos-line-cancel-qty-dialog'
 
 export interface TableOrderPanelProps {
   tableName: string
   order: Order | null
   menus?: PosMenu[]
+  menuOptions?: PosMenuOption[]
+  promos?: PosPromoWithItems[]
   /** 테이블 이동·합석용 (매장 전체 테이블 목록) */
   allTables?: Table[]
   /** 합석 대상에 넣을 포장 주문(가상 테이블 행). absorb는 항상 “현재 테이블 청구서”로만 허용. */
@@ -106,6 +111,8 @@ export function TableOrderPanel({
   tableName,
   order,
   menus: menusFromProps = [],
+  menuOptions: menuOptionsFromProps = [],
+  promos: promosFromProps = [],
   allTables = [],
   onServed,
   onAddOrder,
@@ -136,6 +143,17 @@ export function TableOrderPanel({
     return !v || v === key ? fallback : v
   }
   const serveActionLabel = t('posServeAction') || '서빙'
+  const displayItems = useMemo(
+    () =>
+      buildOrderItemsWithPromoDisplayEnrichment({
+        items: order?.items ?? [],
+        menus: menusFromProps,
+        promos: promosFromProps,
+        menuOptions: menuOptionsFromProps,
+        translateLine: (name) => translatePosMenuLineForReceipt(name, t),
+      }),
+    [order?.items, menusFromProps, promosFromProps, menuOptionsFromProps, t]
+  )
   const isPaidPrepaid = order?.status === 'paid'
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const mergeDisabledByPayment = isPaidPrepaid
@@ -147,6 +165,8 @@ export function TableOrderPanel({
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [guestSaving, setGuestSaving] = useState(false)
+
+  const displayItemById = useMemo(() => new Map(displayItems.map((it) => [it.id, it])), [displayItems])
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -165,7 +185,14 @@ export function TableOrderPanel({
       setItemChildServed((prev) => {
         const next = { ...prev }
         order.items.forEach((it) => {
-          const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
+          const enriched = displayItemById.get(it.id)
+          const childKeys = listPosSetChildKeys(
+            Array.isArray(enriched?.promoItems) && enriched.promoItems.length > 0
+              ? enriched.promoItems
+              : Array.isArray(it.promoItems)
+                ? it.promoItems
+                : []
+          )
           if (!childKeys.length) return
           const childState = readPosSetChildrenState(it.setChildrenState)
           childKeys.forEach((key) => {
@@ -184,7 +211,7 @@ export function TableOrderPanel({
         return next
       })
     }
-  }, [order?.id, order?.items])
+  }, [order?.id, order?.items, displayItemById])
 
   const toggleItemServed = async (itemId: string) => {
     if (!order) return
@@ -939,7 +966,7 @@ export function TableOrderPanel({
             <>
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
                 <ul className="p-1.5 space-y-1">
-                  {order.items.map((item) => {
+                  {displayItems.map((item) => {
                     const served = itemServed[item.id]
                     const cancelled = itemCancelled[item.id]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
@@ -1032,11 +1059,19 @@ export function TableOrderPanel({
                             {item.promoItems!.flatMap((line, idx) => {
                               const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
                               const menuId = String(line.menuId ?? '').trim()
-                              const optId = String(line.optionId ?? '').trim()
                               const menuLabel = menuId
-                                ? resolvePosOrderItemMenuDisplayName({ id: menuId, name: menuId, menuId }, menusFromProps)
+                                ? resolvePosOrderItemMenuDisplayName(
+                                    {
+                                      id: menuId,
+                                      name: String(line.menuName ?? menuId).trim() || menuId,
+                                      menuId,
+                                    },
+                                    menusFromProps
+                                  )
                                 : `Set ${idx + 1}`
-                              const childLabel = optId ? `${menuLabel} (${optId})` : menuLabel
+                              const optName = String(line.optionName ?? '').trim()
+                              const optId = String(line.optionId ?? '').trim()
+                              const childLabel = optName || (optId ? `${menuLabel} (${optId})` : menuLabel)
                               return Array.from({ length: qty }).map((_, n) => {
                                 const childKey = buildPosSetChildKey(line, idx, n)
                                 const mapKey = `${item.id}::${childKey}`

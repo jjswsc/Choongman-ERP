@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { sortVendorsByDisplayName } from '@/lib/vendor-sort'
 
 /** 본사 발주용 거래처 목록: 매입/둘다/본사 (매장→본사 전환 시 본사 거래처 포함) */
 export async function GET() {
@@ -35,7 +36,7 @@ export async function GET() {
         salesOutlet: String(row.sales_outlet || '').trim() || null,
       }))
 
-    return NextResponse.json(list, { headers })
+    return NextResponse.json(sortVendorsByDisplayName(list), { headers })
   } catch (e) {
     console.error('getVendorsForPurchase:', e)
     return NextResponse.json([], { headers })

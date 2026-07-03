@@ -85,6 +85,7 @@ import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest
 import { useRouter, useSearchParams } from "next/navigation"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import {
   extractExpenseAccrualPrefix,
@@ -1116,7 +1117,7 @@ export function BankTransactionsTab() {
   const normalizePurchaseVendorOptions = React.useCallback((rows: unknown): { code: string; name: string }[] => {
     if (!Array.isArray(rows)) return []
     const seen = new Set<string>()
-    return rows
+    const deduped = rows
       .map((row) => {
         const item = row as { code?: string; name?: string }
         return {
@@ -1130,7 +1131,7 @@ export function BankTransactionsTab() {
         seen.add(row.code)
         return true
       })
-      .sort((a, b) => (a.name || a.code).localeCompare(b.name || b.code))
+    return sortVendorsByDisplayName(deduped)
   }, [])
   const loadPurchaseVendorOptions = React.useCallback(async (forceFresh = false) => {
     if (!forceFresh) {

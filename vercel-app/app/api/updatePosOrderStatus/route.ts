@@ -500,8 +500,7 @@ export async function POST(req: NextRequest) {
 
     if (
       (nextStatus === 'paid' || isPosCompletionStatus(nextStatus)) &&
-      !isPosPaidLikeStatus(prevStatus) &&
-      Number(prev?.member_id || 0) > 0
+      !isPosPaidLikeStatus(prevStatus)
     ) {
       try {
         await redeemMemberCouponIssuesForPaidOrder(id)

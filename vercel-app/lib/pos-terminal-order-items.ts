@@ -4,7 +4,35 @@
  */
 import { getPosOrders, type PosOrder, type PosOrderItem } from '@/lib/api-client'
 import type { OrderItem } from '@/lib/pos-types'
-import { orderUiItemsToPosOrderItems, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { normalizeCartLineIdForSave, orderUiItemsToPosOrderItems, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+
+/** 홀·포장 결제 모달/저장용 — 세트 promoItems 스냅샷 유지 */
+export function mapOrderItemForCheckoutPayment(item: OrderItem) {
+  const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
+  const optionId = String(item.optionId ?? item.optionId1 ?? '').trim()
+  const optionCode = String(item.optionCode ?? item.optionCode1 ?? '').trim()
+  const promoId = String(item.promoId ?? '').trim()
+  const promoCode = String(item.promoCode ?? '').trim()
+  const promoItems =
+    Array.isArray(item.promoItems) && item.promoItems.length > 0 ? item.promoItems : undefined
+  return {
+    id: item.id,
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    ...(menuId ? { menuId } : {}),
+    ...(optionId ? { optionId } : {}),
+    ...(optionCode ? { optionCode } : {}),
+    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+    ...(promoId
+      ? {
+          promoId,
+          ...(promoCode ? { promoCode } : {}),
+          ...(promoItems ? { promoItems } : {}),
+        }
+      : {}),
+  }
+}
 
 /** 결제 payload 라인을 터미널 카트(서버 수량·옵션 기준)와 정합화 */
 export function reconcilePayloadItemsWithTerminalCart<
@@ -19,10 +47,17 @@ export function reconcilePayloadItemsWithTerminalCart<
     optionCode?: unknown
     optionCode2?: unknown
     optionCodes?: unknown
+    promoId?: unknown
+    promoCode?: unknown
+    promoItems?: unknown
   },
 >(payloadItems: T[] | undefined | null, terminalLines: OrderItem[]): T[] {
   return (payloadItems || []).map((it) => {
-    const hit = (terminalLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
+    const hit = (terminalLines || []).find(
+      (line) =>
+        String(line.id ?? '') === String(it.id ?? '') ||
+        normalizeCartLineIdForSave(line.id) === normalizeCartLineIdForSave(it.id)
+    )
     if (hit) {
       const q = resolveCartLineQuantityForSave(hit as { quantity?: unknown; qty?: unknown })
       const mid = String(
@@ -54,6 +89,15 @@ export function reconcilePayloadItemsWithTerminalCart<
           ].filter(Boolean)
         ),
       ]
+      const promoId = String((it as { promoId?: unknown }).promoId ?? hit.promoId ?? '').trim()
+      const promoCode = String((it as { promoCode?: unknown }).promoCode ?? hit.promoCode ?? '').trim()
+      const promoItems =
+        Array.isArray((it as { promoItems?: unknown }).promoItems) &&
+        (it as { promoItems?: unknown[] }).promoItems!.length > 0
+          ? (it as { promoItems: unknown[] }).promoItems
+          : Array.isArray(hit.promoItems) && hit.promoItems.length > 0
+            ? hit.promoItems
+            : undefined
       return {
         ...it,
         quantity: q,
@@ -64,6 +108,13 @@ export function reconcilePayloadItemsWithTerminalCart<
         ...(oc ? { optionCode: oc } : {}),
         ...(oc2 ? { optionCode2: oc2 } : {}),
         ...(optionCodes.length > 0 ? { optionCodes } : {}),
+        ...(promoId
+          ? {
+              promoId,
+              ...(promoCode ? { promoCode } : {}),
+              ...(promoItems ? { promoItems } : {}),
+            }
+          : {}),
       }
     }
     const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)

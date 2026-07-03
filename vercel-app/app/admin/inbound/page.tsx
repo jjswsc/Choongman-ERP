@@ -78,6 +78,7 @@ import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/utils"
+import { sortVendorNameStrings, sortVendorsByDisplayName } from "@/lib/vendor-sort"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -179,24 +180,26 @@ export default function InboundPage() {
   }, [auth?.store])
 
   const purchaseVendors = React.useMemo(() => {
-    return vendors.filter((v) => v.type === "purchase" || v.type === "both")
+    return sortVendorsByDisplayName(vendors.filter((v) => v.type === "purchase" || v.type === "both"))
   }, [vendors])
 
   const histVendorSelectOptions = React.useMemo(() => {
     const masters = purchaseVendors.map((v) => v.name).filter(Boolean)
     const fromHist = [...new Set(historyList.map((h) => h.vendor).filter(Boolean))]
-    return [...new Set([...masters, ...fromHist])].sort((a, b) => a.localeCompare(b))
+    return sortVendorNameStrings([...new Set([...masters, ...fromHist])])
   }, [purchaseVendors, historyList])
 
   /** 판매처 (입고 목적지로 선택 가능) - 매장 아닌 외부 판매처. sales_outlet 우선 */
   const salesVendors = React.useMemo(() => {
-    return vendors
-      .filter((v) => v.type === "sales" || v.type === "both")
-      .map((v) => ({
-        code: v.code,
-        name: (v.sales_outlet?.trim() || v.gps_name?.trim() || v.name || "").trim(),
-      }))
-      .filter((v) => v.name)
+    return sortVendorsByDisplayName(
+      vendors
+        .filter((v) => v.type === "sales" || v.type === "both")
+        .map((v) => ({
+          code: v.code,
+          name: (v.sales_outlet?.trim() || v.gps_name?.trim() || v.name || "").trim(),
+        }))
+        .filter((v) => v.name)
+    )
   }, [vendors])
 
   const storeOptions = React.useMemo(() => {
@@ -235,7 +238,7 @@ export default function InboundPage() {
   const summaryVendorOptions = React.useMemo(() => {
     const fromMaster = purchaseVendors.map((v) => v.name).filter(Boolean)
     const fromRows = [...new Set(summaryList.map((r) => r.vendor).filter(Boolean))]
-    return [...new Set([...fromMaster, ...fromRows])].sort((a, b) => a.localeCompare(b))
+    return sortVendorNameStrings([...new Set([...fromMaster, ...fromRows])])
   }, [purchaseVendors, summaryList])
 
   const summaryCategoryOptions = React.useMemo(() => {

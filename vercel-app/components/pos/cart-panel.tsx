@@ -4021,7 +4021,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     tableName: string
     orderNo?: string
     existingOrderId?: number | null
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
+    items: {
+      id: string
+      name: string
+      price: number
+      quantity: number
+      note?: string
+      menuId?: string
+      menuId1?: string
+      promoId?: string
+      promoCode?: string
+      promoItems?: CartItem['promoItems']
+    }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
   }) => {
@@ -4030,6 +4041,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => {
       const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      const promoId = String(i.promoId ?? '').trim()
+      const promoCode = String(i.promoCode ?? '').trim()
       return {
         id: `cart-existing-${idx}-${i.id}`,
         name: i.name,
@@ -4037,6 +4050,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         quantity: i.quantity,
         ...(menuId ? { menuId } : {}),
         ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+        ...(promoId
+          ? {
+              promoId,
+              ...(promoCode ? { promoCode } : {}),
+              ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+            }
+          : {}),
       }
     })
     resetCheckoutDiscountUiState({
@@ -4076,7 +4096,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openTakeoutPaymentFromOrder = (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
+    items: {
+      id: string
+      name: string
+      price: number
+      quantity: number
+      note?: string
+      menuId?: string
+      menuId1?: string
+      promoId?: string
+      promoCode?: string
+      promoItems?: CartItem['promoItems']
+    }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
@@ -4086,6 +4117,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => {
       const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      const promoId = String(i.promoId ?? '').trim()
+      const promoCode = String(i.promoCode ?? '').trim()
       return {
         id: `cart-existing-${idx}-${i.id}`,
         name: i.name,
@@ -4093,6 +4126,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         quantity: i.quantity,
         ...(menuId ? { menuId } : {}),
         ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+        ...(promoId
+          ? {
+              promoId,
+              ...(promoCode ? { promoCode } : {}),
+              ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+            }
+          : {}),
       }
     })
     resetCheckoutDiscountUiState({
@@ -4130,7 +4170,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openDeliveryPaymentFromOrder = async (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
+    items: {
+      id: string
+      name: string
+      price: number
+      quantity: number
+      note?: string
+      menuId?: string
+      menuId1?: string
+      promoId?: string
+      promoCode?: string
+      promoItems?: CartItem['promoItems']
+    }[]
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
@@ -4140,6 +4191,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => {
       const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      const promoId = String(i.promoId ?? '').trim()
+      const promoCode = String(i.promoCode ?? '').trim()
       return {
         id: `cart-existing-${idx}-${i.id}`,
         name: i.name,
@@ -4147,6 +4200,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         quantity: i.quantity,
         ...(menuId ? { menuId } : {}),
         ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+        ...(promoId
+          ? {
+              promoId,
+              ...(promoCode ? { promoCode } : {}),
+              ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+            }
+          : {}),
       }
     })
     resetCheckoutDiscountUiState({
@@ -6180,7 +6240,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               showTaxInvoiceDetails={showTaxInvoiceDetails}
               onShowTaxInvoiceDetailsChange={setShowTaxInvoiceDetails}
               needTaxInvoice={needTaxInvoice}
-              onNeedTaxInvoiceChange={setNeedTaxInvoice}
+              onNeedTaxInvoiceChange={(next) => {
+                setNeedTaxInvoice(next)
+                if (next) setShowTaxInvoiceDetails(true)
+              }}
               invoiceCustomerType={invoiceCustomerType}
               onInvoiceCustomerTypeChange={setInvoiceCustomerType}
               taxSearchField={taxSearchField}
