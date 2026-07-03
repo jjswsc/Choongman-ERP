@@ -278,7 +278,6 @@ export function usePosMainDeviceSyncHost(): void {
         createdBy: String(row?.created_by ?? ''),
         currentUser: posTerminalUser,
         isApiInboundDelivery: isApiInbound,
-        seenOrderIds: seenOrderIdsRef.current,
         suppressUntilMs: mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId) ?? null,
       })
     },

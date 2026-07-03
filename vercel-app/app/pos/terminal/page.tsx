@@ -7632,6 +7632,7 @@ export default function PosTerminalPage() {
                   }
                   const kitchenPrintKey =
                     savedOrderId != null ? `order:${savedOrderId}:kitchen` : `submit:${orderNoStr}:${payload.tableName || ''}:new`
+                  releaseKitchenAutoPrintKey(kitchenPrintKey)
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
                   const runKitchenFromSnapshot = () => {
                     logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
@@ -7781,35 +7782,35 @@ export default function PosTerminalPage() {
                     ? resolveAfterReceiptToKitchenDelayMs()
                     : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
                 if (isMainPosDevice) {
-                  if (shouldAutoPrintReceipt && !skipLocalHallReceiptAutoPrint) {
+                  const doHall = shouldAutoPrintReceipt && !skipLocalHallReceiptAutoPrint
+                  const doKitchen = autoPrintKitchenForSubmit && kitchenCartLines.length > 0
+                  if (doHall && doKitchen) {
+                    markQueuedLocalPrintedIfNeeded()
+                    logPosPrintDebug('submit_receipt_kitchen_chained_dispatch', {
+                      orderId: savedOrderId,
+                      orderNo: orderNoStr,
+                      receiptItems: receiptPrintItems.length,
+                      kitchenLines: kitchenCartLines.length,
+                    })
+                    void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, scheduleKitchenAfterDineInSubmit)
+                  } else if (doHall) {
                     markQueuedLocalPrintedIfNeeded()
                     logPosPrintDebug('submit_receipt_autoprint_dispatch', {
                       orderId: savedOrderId,
                       orderNo: orderNoStr,
-                      autoPrintKitchenSlipOnOrder: autoPrintKitchenForSubmit,
-                      skipLocalHallReceiptAutoPrint,
                       receiptItems: receiptPrintItems.length,
                     })
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
+                  } else if (doKitchen) {
+                    markQueuedLocalPrintedIfNeeded()
+                    logPosPrintDebug('submit_kitchen_only_autoprint_dispatch', {
+                      orderId: savedOrderId,
+                      orderNo: orderNoStr,
+                      kitchenLines: kitchenCartLines.length,
+                    })
+                    setTimeout(scheduleKitchenAfterDineInSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
                   }
-                  if (autoPrintKitchenForSubmit && kitchenCartLines.length > 0) {
-                    if (!shouldAutoPrintReceipt || skipLocalHallReceiptAutoPrint) {
-                      markQueuedLocalPrintedIfNeeded()
-                      logPosPrintDebug('submit_kitchen_only_autoprint_dispatch', {
-                        orderId: savedOrderId,
-                        orderNo: orderNoStr,
-                        skipLocalHallReceiptAutoPrint,
-                        kitchenLines: kitchenCartLines.length,
-                      })
-                    }
-                    setTimeout(
-                      scheduleKitchenAfterDineInSubmit,
-                      shouldAutoPrintReceipt && !skipLocalHallReceiptAutoPrint
-                        ? kitchenDelayAfterReceiptMs
-                        : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-                    )
-                  }
-                  if (!shouldAutoPrintReceipt && !autoPrintKitchenForSubmit && !skipLocalHallReceiptAutoPrint) {
+                  if (!doHall && !doKitchen && !skipLocalHallReceiptAutoPrint) {
                   /** 자동 인쇄(영수증·주방) 모두 꺼진 경우: 수동 인쇄 안내 모달(Windows 인쇄 대화상자로 이어짐) */
                   setReceiptData({
                     orderNo: orderNoStr,
@@ -8584,6 +8585,7 @@ export default function PosTerminalPage() {
                     newOrderId != null && newOrderId > 0
                       ? `order:${newOrderId}:kitchen`
                       : `submit:${orderNo}:${payload.orderLabel || ''}:${payload.orderType}`
+                  releaseKitchenAutoPrintKey(kitchenPrintKey)
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
                   const itemsForKitchen = payloadItemsNormalized.map((i) => {
                     const line = i as {

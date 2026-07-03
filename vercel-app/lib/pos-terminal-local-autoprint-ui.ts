@@ -23,19 +23,21 @@ export function isPosTerminalOrderSubmitInFlight(): boolean {
   return Date.now() < orderSubmitInFlightUntilMs
 }
 
-/** layout sync host — 터미널이 열려 있으면 로컬(같은 기기) 제출 주문 autoprint는 터미널에 위임 */
+/**
+ * layout sync host — 터미널이 열려 있으면 **이 기기가 방금 저장한** 주문 autoprint는 터미널에 위임.
+ * seenOrderIds 는 INSERT/Poll 핸들러가 이미 add한 뒤 호출되므로 항상 true → 원격 주문까지 차단됨.
+ * 따라서 submitInFlight / suppressUntilMs / createdBy 세 가지로만 판정한다.
+ */
 export function shouldSyncHostSkipLocalKitchenAutoprint(opts: {
   orderId: number
   createdBy?: string | null
   currentUser?: string | null
   isApiInboundDelivery?: boolean
-  seenOrderIds: ReadonlySet<number>
   suppressUntilMs?: number | null
 }): boolean {
   if (!terminalLocalAutoprintActive) return false
   if (opts.isApiInboundDelivery) return false
   if (isPosTerminalOrderSubmitInFlight()) return true
-  if (opts.seenOrderIds.has(opts.orderId)) return true
   if (opts.suppressUntilMs != null && Date.now() < opts.suppressUntilMs) return true
   const createdBy = String(opts.createdBy ?? '').trim()
   const currentUser = String(opts.currentUser ?? '').trim()
