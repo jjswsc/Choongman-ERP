@@ -107,7 +107,7 @@ function pickIssuedRowForCodeInScope(
       if (!(rowMemberId > 0 && scope.memberIds.includes(rowMemberId))) return false
       return couponIssueEligibleForOrderTime(row.issuedAt, orderPaidAt)
     })
-    .sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
+    .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
   return candidates[0] ?? null
 }
 

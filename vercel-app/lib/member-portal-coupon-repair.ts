@@ -105,6 +105,40 @@ async function collapseDuplicateIssuedCouponIssues<T extends CouponIssueRepairRo
   return { rows, cancelledIds }
 }
 
+/** POS 사용·지갑 표시와 맞추기 위해 같은 회원·코드의 다른 issued 행을 취소한다. */
+export async function cancelOtherIssuedMemberCouponIssues(params: {
+  keepIssueId: number
+  memberIds: number[]
+  couponCode: string
+  reason?: string
+}): Promise<number> {
+  const keepId = Number(params.keepIssueId || 0)
+  const code = normalizeCouponCode(params.couponCode)
+  const memberIds = params.memberIds.map((id) => Number(id || 0)).filter((id) => id > 0)
+  const reason = String(params.reason || DUPLICATE_ISSUED_REASON).slice(0, 120)
+  if (!keepId || !code || !memberIds.length) return 0
+
+  let cancelledCount = 0
+  for (const memberId of memberIds) {
+    try {
+      const rows = (await supabaseSelectFilter(
+        'member_coupon_issues',
+        `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(code)}&status=eq.issued`,
+        { limit: 100, select: 'id' }
+      )) as Array<{ id?: number }>
+      for (const row of rows || []) {
+        const id = Number(row.id || 0)
+        if (!id || id === keepId) continue
+        await cancelIssueRow(id, reason)
+        cancelledCount += 1
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return cancelledCount
+}
+
 /**
  * 동일 주문에 잘못 묶인 used 중복은 취소하고,
  * 단일 false-positive(발급이 주문보다 늦음)만 issued 로 복원한다.

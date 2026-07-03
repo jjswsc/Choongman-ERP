@@ -27,7 +27,7 @@ import {
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { resolveMemberPortalCouponStatus } from '@/lib/member-portal-coupon-status'
 import { buildUsedMemberCouponIssueMap, type MemberPortalCouponScope } from '@/lib/member-portal-coupon-reconcile'
-import { repairFalsePositiveAndDuplicateUsedCouponIssues } from '@/lib/member-portal-coupon-repair'
+import { repairFalsePositiveAndDuplicateUsedCouponIssues, cancelOtherIssuedMemberCouponIssues } from '@/lib/member-portal-coupon-repair'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -1474,6 +1474,15 @@ async function reconcileMemberCouponIssueStatusesForPortal<
           used_at: toText(row.usedAt) || nowBangkok,
           ...(redemption?.orderId ? { order_id: redemption.orderId } : {}),
         })
+        const couponCode = toText(row.couponCode).toUpperCase()
+        if (couponCode && scope.memberIds.length) {
+          await cancelOtherIssuedMemberCouponIssues({
+            keepIssueId: Number(row.id || 0),
+            memberIds: scope.memberIds,
+            couponCode,
+            reason: 'redeemed_other_issued',
+          })
+        }
       } catch {
         /* ignore */
       }
