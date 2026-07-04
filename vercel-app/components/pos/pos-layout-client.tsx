@@ -293,7 +293,18 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T16:50+07")
+    console.log("[cm-pos] layout build: 2026-07-04T17:10+07")
+    const logDomState = () => {
+      const portals = document.querySelectorAll("[data-radix-portal]").length
+      const dialogs = document.querySelectorAll("[role=dialog]").length
+      const inertEls = document.querySelectorAll("[inert]")
+      if (portals > 0 || dialogs > 0 || inertEls.length > 0) {
+        const inertInfo = Array.from(inertEls).map((el) => describeEl(el))
+        console.warn("[cm-pos-diag] DOM:", { portals, dialogs, inert: inertEls.length, inertElements: inertInfo })
+      }
+    }
+    window.setTimeout(logDomState, 2000)
+    const domTid = window.setInterval(logDomState, 5000)
     const describeEl = (el: Element | null): string => {
       if (!el) return "(null)"
       const tag = el.tagName.toLowerCase()
@@ -325,13 +336,16 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     }
     const stripAllStaleInert = () => {
       if (typeof document === "undefined") return
-      const hasOpenDialog = document.querySelector(
+      const openDialog = document.querySelector(
         "[data-radix-portal] [role=dialog]"
       )
-      if (hasOpenDialog) return
       const inertEls = document.querySelectorAll("[inert]")
+      if (openDialog && inertEls.length > 0) {
+        console.warn("[cm-pos-diag] dialog open → NOT stripping", inertEls.length, "inert. dialog:", describeEl(openDialog))
+        return
+      }
       if (inertEls.length > 0) {
-        console.warn("[cm-pos-diag] stripAllStaleInert removing", inertEls.length, "inert elements")
+        console.warn("[cm-pos-diag] no dialog open → stripping", inertEls.length, "inert elements")
       }
       inertEls.forEach((el) => {
         el.removeAttribute("inert")
@@ -384,6 +398,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       inertObserver.disconnect()
       document.removeEventListener("pointerdown", onPointerDown, true)
       window.clearInterval(tid)
+      window.clearInterval(domTid)
     }
   }, [])
 
