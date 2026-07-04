@@ -925,11 +925,57 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
       const ki = kitchenSlipPrintI18n(settings, lang)
+      let menusForPrint: PosMenu[] = menus
+      const neededMenuIds = new Set<string>()
+      for (const it of (o.items || []) as unknown as Array<Record<string, unknown>>) {
+        const mid = String(
+          (it as { menuId?: unknown; menuId1?: unknown; menuId2?: unknown }).menuId ??
+            (it as { menuId?: unknown; menuId1?: unknown; menuId2?: unknown }).menuId1 ??
+            (it as { menuId?: unknown; menuId1?: unknown; menuId2?: unknown }).menuId2 ??
+            ''
+        ).trim()
+        if (mid) neededMenuIds.add(mid)
+        const pis = (it as { promoItems?: Array<{ menuId?: unknown }> }).promoItems
+        if (Array.isArray(pis)) {
+          for (const p of pis) {
+            const pm = String((p as { menuId?: unknown }).menuId ?? '').trim()
+            if (pm) neededMenuIds.add(pm)
+          }
+        }
+      }
+      if (neededMenuIds.size > 0) {
+        const haveAll = [...neededMenuIds].every((id) =>
+          menus.some((m) => String(m.id ?? '').trim() === id)
+        )
+        if (!haveAll) {
+          try {
+            const storeScoped = await getPosMenus({ fresh: true, storeCode: store || undefined })
+            let merged =
+              Array.isArray(storeScoped) && storeScoped.length > 0 ? (storeScoped as PosMenu[]) : menus
+            const missing = [...neededMenuIds].filter(
+              (id) => !merged.some((m) => String(m.id ?? '').trim() === id)
+            )
+            if (missing.length > 0) {
+              const globalMenus = await getPosMenus({ fresh: true })
+              const supplement = (Array.isArray(globalMenus) ? (globalMenus as PosMenu[]) : []).filter(
+                (m) => missing.includes(String(m.id ?? '').trim())
+              )
+              if (supplement.length > 0) merged = [...merged, ...supplement]
+            }
+            menusForPrint = merged
+          } catch {
+            /* 메뉴 보강 실패 시 현재 menus로 진행 */
+          }
+        }
+      }
       const items = preparePosOrderItemsForKitchenSlip(
         (o.items || []) as Parameters<typeof preparePosOrderItemsForKitchenSlip>[0],
-        { ...posReceiptLineOptsKitchen, menus }
+        { ...posReceiptLineOptsKitchen, menus: menusForPrint }
       )
-      const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, ki.kLabels))
+      const slips = buildKitchenSlipGroups(
+        items,
+        buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
+      )
       if (!slips.length) {
         await appAlert(t('posKitchenNoItemsToPrint'))
         return

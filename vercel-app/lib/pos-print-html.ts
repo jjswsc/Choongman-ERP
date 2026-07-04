@@ -220,7 +220,12 @@ async function printPosHtmlDocumentInner(
     return
   }
 
-  await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+  try {
+    await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+  } catch {
+    /* iframe print rejected (e.g. onPrintUnavailable) — fall through to onAfterCleanup
+       so multi-slip chains (Kitchen 1 → Kitchen 2) are not broken by a single slip failure */
+  }
   opts?.onAfterCleanup?.()
 }
 

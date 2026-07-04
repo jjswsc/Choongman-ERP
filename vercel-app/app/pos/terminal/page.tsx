@@ -7890,12 +7890,11 @@ export default function PosTerminalPage() {
                     onClick={() => {
                       if (!deliveryApp) return
                       const orderNo = deliveryOrderNo.trim()
-                      if (!orderNo) return
                       setSelectedDeliveryTargetId('delivery-draft')
                       const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
-                      setSelectedDeliveryTargetLabel(`${appLabelEn} #${orderNo}`)
+                      setSelectedDeliveryTargetLabel(orderNo ? `${appLabelEn} #${orderNo}` : appLabelEn)
                     }}
-                    disabled={!deliveryApp || !deliveryOrderNo.trim()}
+                    disabled={!deliveryApp}
                   >
                     + {t('posNewOrder') || '새 주문'}
                   </Button>

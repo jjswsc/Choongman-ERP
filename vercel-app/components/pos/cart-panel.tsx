@@ -450,7 +450,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (orderType === 'dine-in'
       ? !!selectedTable
       : orderType === 'delivery'
-        ? !!deliveryAppProp && !!String(deliveryOrderNoProp || '').trim()
+        ? !!deliveryAppProp
         : true)
   const tableIdForCartSessionKey =
     orderType === 'dine-in'
