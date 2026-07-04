@@ -84,7 +84,18 @@ function linesMatchByKitchenContent(
   const priceB = Number(b.price ?? 0) || 0
   const noteA = formatNote(String(a.note ?? '').trim())
   const noteB = formatNote(String(b.note ?? '').trim())
-  return nameA === nameB && priceA === priceB && noteA === noteB
+  if (nameA === nameB && priceA === priceB && noteA === noteB) return true
+  if (menuIdA && menuIdA === menuIdB && nameA === nameB && priceA === priceB) {
+    const rawA = String(a.note ?? '').trim()
+    const rawB = String(b.note ?? '').trim()
+    if (looksLikeOptionTokenNote(rawA) || looksLikeOptionTokenNote(rawB)) return true
+  }
+  return false
+}
+
+function looksLikeOptionTokenNote(note: string): boolean {
+  if (!note) return false
+  return /(?:^|\s|·)(?:optc:|mods?:)/i.test(note)
 }
 
 /** 추가 주문 주방·홀 자동인쇄 dedupe — 줄 수만 쓰면 연속 1품목 추가가 막힘 */

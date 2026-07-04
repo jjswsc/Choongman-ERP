@@ -92,13 +92,9 @@ export function POSHeader({
     }
     try {
       const maybePromise = onRefresh()
-      Promise.resolve(maybePromise)
-        .then(() => {
-          router.refresh()
-        })
-        .catch(() => {
-          window.location.reload()
-        })
+      Promise.resolve(maybePromise).catch(() => {
+        window.location.reload()
+      })
     } catch {
       window.location.reload()
     }

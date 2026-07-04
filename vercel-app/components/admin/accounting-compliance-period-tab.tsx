@@ -132,7 +132,6 @@ export interface AccountingCompliancePeriodTabProps {
   closingYearMonth: string
   setClosingYearMonth: (v: string) => void
   isOffice: boolean
-  storeTb_forSelect: string
   setStoreTb: ((v: string) => void) | undefined
   storeOptions: string[]
   storeOptionLabel: (code: string) => string

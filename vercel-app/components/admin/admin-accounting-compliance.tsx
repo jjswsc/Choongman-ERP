@@ -4333,7 +4333,6 @@ export function AdminAccountingCompliance({
             closingYearMonth={closingYearMonth}
             setClosingYearMonth={setClosingYearMonth}
             isOffice={isOffice}
-            storeTb_forSelect={storeTb}
             setStoreTb={setStoreTb}
             storeOptions={storeOptions}
             storeOptionLabel={storeOptionLabel}

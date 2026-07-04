@@ -165,6 +165,10 @@ export function mapPosOrderItemsToTerminalOrderSnapshot(
   price: number
   menuId?: string
   note?: string
+  optionCode?: string
+  promoId?: string
+  promoCode?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
   servedAt?: string
   servedBy?: string
   cancelledAt?: string
@@ -176,13 +180,25 @@ export function mapPosOrderItemsToTerminalOrderSnapshot(
     const quantity = resolveCartLineQuantityForSave(it)
     const id = String(it.id ?? '').trim() || `line-${idx + 1}`
     const menuId = String(it.menuId1 ?? (it as { menuId?: string }).menuId ?? '').trim()
+    const optionCode = String(
+      it.optionCode1 ?? (it as { optionCode?: string; option_code1?: string }).option_code1 ?? (it as { optionCode?: string }).optionCode ?? ''
+    ).trim()
+    const promoId = String((it as { promoId?: string }).promoId ?? '').trim()
+    const promoCode = String((it as { promoCode?: string }).promoCode ?? '').trim()
+    const promoItems = Array.isArray((it as { promoItems?: unknown }).promoItems)
+      ? (it as { promoItems: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
+      : undefined
     return {
       id,
       name: String(it.name ?? '').trim() || id,
       quantity,
       price: Number(it.price ?? 0) || 0,
       ...(menuId ? { menuId } : {}),
+      ...(optionCode ? { optionCode } : {}),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...(promoId ? { promoId } : {}),
+      ...(promoCode ? { promoCode } : {}),
+      ...(promoItems ? { promoItems } : {}),
       ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
       ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
       ...(String(it.cancelledAt ?? '').trim() ? { cancelledAt: String(it.cancelledAt) } : {}),

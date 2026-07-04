@@ -18,6 +18,10 @@ import {
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
   isLogisticsStaffRole,
+  isManagerOrFranchiseeRole,
+  isOfficeRole,
+  isAccountingRole,
+  isSupervisorRole,
 } from "@/lib/permissions"
 import { useAdminDashboardStats } from "@/lib/use-admin-dashboard-stats"
 import {
@@ -122,6 +126,7 @@ export function ErpSidebar() {
   const tr = (key: string, fallback: string) => tOr(t, key, fallback)
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
+  const hasManagerScope = isManagerOrFranchiseeRole(auth?.role || "") || isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "") || isSupervisorRole(auth?.role || "")
   const brand = useAppBrandConfig()
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
   const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
@@ -155,6 +160,7 @@ export function ErpSidebar() {
   }, [])
 
   React.useEffect(() => {
+    if (!hasManagerScope) return
     let cancelled = false
     getStoreOpsAlertSummary()
       .then((s) => {
@@ -166,7 +172,7 @@ export function ErpSidebar() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [hasManagerScope])
 
   React.useEffect(() => {
     try {

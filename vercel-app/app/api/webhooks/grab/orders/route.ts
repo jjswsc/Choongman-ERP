@@ -30,6 +30,25 @@ export async function POST(req: NextRequest) {
     logGrabWebhook('submit_order', req, { error: 'missing_orderID' })
     return new NextResponse(null, { status: 400 })
   }
+
+  try {
+    const duplicate = await reserveGrabWebhookEvent({
+      eventKind: 'submit_order',
+      uniqueKey: orderID,
+      requestId: String(body.requestID ?? ''),
+      orderId: orderID,
+      merchantId: merchantID,
+      partnerMerchantId: String(body.partnerMerchantID ?? ''),
+      payload: body,
+    })
+    if (duplicate) {
+      logGrabWebhook('submit_order', req, { orderID, duplicate: true })
+      return new NextResponse(null, { status: 204 })
+    }
+  } catch (e) {
+    console.warn('[grab-webhook] submit_order idempotency_check_failed, proceeding:', String(e ?? 'unknown'))
+  }
+
   /** 매장별 `pos_delivery_app_policies`: manual → pending(수락 필요), auto → cooking(자동 수락) */
   const policyBundle = resolvedStoreCode
     ? await getPosDeliveryPolicyBundle({ storeCode: resolvedStoreCode, appCode: 'grab' }).catch(() => null)
@@ -99,21 +118,6 @@ export async function POST(req: NextRequest) {
     acceptanceMode,
     initialStatus,
   })
-
-  // Audit trail only (idempotency는 POS 저장 로직에서도 memo 기반으로 보강)
-  try {
-    await reserveGrabWebhookEvent({
-      eventKind: 'submit_order',
-      uniqueKey: orderID,
-      requestId: String(body.requestID ?? ''),
-      orderId: orderID,
-      merchantId: merchantID,
-      partnerMerchantId: String(body.partnerMerchantID ?? ''),
-      payload: body,
-    })
-  } catch (e) {
-    console.warn('[grab-webhook] submit_order audit_write_failed', String(e ?? 'unknown'))
-  }
 
   return new NextResponse(null, { status: 204 })
 }

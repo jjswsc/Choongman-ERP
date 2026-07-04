@@ -524,6 +524,11 @@ export default function PosTerminalPage() {
     return refetchStores({ scope: 'current', immediate: true })
   }, [refetchStores])
 
+  /** 헤더 Refresh 버튼 전용 — forceFullRefresh로 캐시 무시 + 레이아웃 API 재조회 */
+  const refetchCurrentStoreForManualRefresh = useCallback(() => {
+    return refetchStores({ scope: 'current', immediate: true, forceFullRefresh: true })
+  }, [refetchStores])
+
   const dismissTerminalOrder = useCallback(
     (order: Order) => {
       if (!currentStoreId) return
@@ -7631,7 +7636,7 @@ export default function PosTerminalPage() {
         stores={stores}
         currentStoreId={currentStoreId}
         onStoreChange={() => {}}
-        onRefresh={refetchCurrentStore}
+        onRefresh={refetchCurrentStoreForManualRefresh}
         todayCompleted={todayCompleted}
         totalSales={totalSales}
         showBackButton

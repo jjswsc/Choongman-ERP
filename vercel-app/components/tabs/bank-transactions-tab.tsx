@@ -140,7 +140,6 @@ import {
   RECEIVABLE_BANK_LINK_MISMATCH_REASONS,
   canApproveReceivableBankMismatch,
   classifyReceivableBankLinkMismatch,
-  computeReceivableLinkGap,
 } from "@/lib/bank-receivable-link-policy"
 import { BankAdvanceTargetCell } from "@/components/erp/bank-advance-target-cell"
 import {

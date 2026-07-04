@@ -77,14 +77,12 @@ import {
   purchaseVendorRowLabel,
   purchaseVendorLabelForKey,
   purchaseAmountForVendor,
-  salesCustomerRowLabel,
   incomeStatementSalesBreakdown,
   salesBreakdownIsDaily,
   salesBreakdownIsHqOutbound,
   salesBreakdownRowLabel,
   salesAmountForBreakdownKey,
   mergeSalesBreakdownKeysForCompare,
-  dailyBreakdownKeySort,
   mergePurchaseVendorKeysForCompare,
   expenseAmountForSubject,
   mergeExpenseSubjectsForCompare,
@@ -93,7 +91,7 @@ import {
   yearlyExpenseSubjectAmount,
   yearlyExpenseBreakdownField,
 } from "./income-statement-tab-utils"
-import { IncomePlDetailTableContent, type IncomeStatementViewModel } from "./income-statement-pl-detail"
+import { IncomePlDetailTableContent } from "./income-statement-pl-detail"
 import { IncomePurchaseDrillDialog } from "./income-statement-purchase-drill-dialog"
 
 function mapIncomeStatementOverrideSaveError(err: string | undefined, t: (k: string) => string): string {

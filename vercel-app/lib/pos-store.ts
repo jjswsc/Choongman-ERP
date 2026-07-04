@@ -347,6 +347,8 @@ type RefetchStoresOptions = {
   storeCode?: string
   /** true: 헤더 새로고침 등 사용자가 즉시 반영을 기대할 때(디바운스 생략) */
   immediate?: boolean
+  /** true: 사용자 수동 새로고침 — 레이아웃 API 재조회 + IndexedDB 캐시 갱신 (backgroundRefresh 무시) */
+  forceFullRefresh?: boolean
 }
 
 type OptimisticOrderInput = {
@@ -972,6 +974,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     if (!targetStoreCodes.length) return Promise.resolve()
     /** Realtime·폴링 등 백그라운드 갱신: 테이블 플로어를 「로딩」으로 덮지 않음(인쇄·주문 UX) */
     const backgroundRefresh =
+      !options?.forceFullRefresh &&
       options?.scope === 'current' && stores.length > 0 && targetStoreCodes.length > 0
     if (!backgroundRefresh) {
       setLoading(true)
@@ -1050,6 +1053,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     const pass: RefetchStoresOptions = {
       scope: options?.scope,
       storeCode: options?.storeCode,
+      forceFullRefresh: options?.forceFullRefresh,
     }
     if (immediate) {
       return refetchStoresImmediate(pass)

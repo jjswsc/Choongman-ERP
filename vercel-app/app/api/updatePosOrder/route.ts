@@ -20,6 +20,7 @@ import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-server'
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
+import { formatGrabLineNoteForKitchenPrint } from '@/lib/grab-pos-order-enrich'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobUpdateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
@@ -612,7 +613,8 @@ export async function POST(req: NextRequest) {
     })()
     const kitchenDeltaLines = filterKitchenCartLinesForDineInAdd(
       items as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
-      prevOrderItems as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
+      prevOrderItems as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1],
+      { formatNote: (note: string) => formatGrabLineNoteForKitchenPrint(note) }
     )
     await enqueueKitchenPrintJob({
       storeCode: String(current?.store_code || '').trim(),

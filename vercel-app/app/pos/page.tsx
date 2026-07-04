@@ -62,6 +62,7 @@ import {
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { PosDrawerPinSettingsDialog } from '@/components/pos/pos-drawer-pin-settings-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { usePosStore } from '@/hooks/use-pos-store'
 
 /** POS 첫 화면: 주문(매장/포장/배달), 영수증, 결산, 근태 등 타일 */
 function POSMainPageInner() {
@@ -74,6 +75,7 @@ function POSMainPageInner() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { posStores, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const { refetchStores } = usePosStore()
   const preferredStoreFromQuery = useMemo(
     () => String(searchParams.get('store') || '').trim(),
     [searchParams]
@@ -213,12 +215,15 @@ function POSMainPageInner() {
   )
   const handlePosHomeHeaderRefresh = useCallback(() => {
     if (storeCode) {
-      return getPosTodaySales({ storeCode, forceNetwork: true })
-        .then(setTodaySales)
-        .catch(() => setTodaySales(null))
+      return Promise.all([
+        getPosTodaySales({ storeCode, forceNetwork: true })
+          .then(setTodaySales)
+          .catch(() => setTodaySales(null)),
+        refetchStores({ scope: 'current', immediate: true, forceFullRefresh: true }),
+      ]).then(() => {})
     }
     window.location.reload()
-  }, [storeCode])
+  }, [storeCode, refetchStores])
 
   useEffect(() => {
     setCurrentTime(new Date())

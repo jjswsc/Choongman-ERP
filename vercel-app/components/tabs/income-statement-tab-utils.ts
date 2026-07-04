@@ -33,7 +33,7 @@ export function purchaseAmountForVendor(data: IncomeStatementData | undefined, v
   return r ? Number(r.amount) || 0 : 0
 }
 
-export function salesCustomerRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
+function salesCustomerRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
   if (row.key === "__pl_sales_customer_unknown__") return t("pL_salesCustomerUnknown") || "Unspecified customer"
   const n = String(row.label || "").trim()
   return n || row.key
@@ -114,7 +114,7 @@ export function mergeSalesBreakdownKeysForCompare(
 }
 
 /** YYYY-MM-DD 키는 날짜순, 그 외는 금액 정렬 유지 */
-export function dailyBreakdownKeySort(a: string, b: string): number {
+function dailyBreakdownKeySort(a: string, b: string): number {
   const daily = /^\d{4}-\d{2}-\d{2}$/
   if (daily.test(a) && daily.test(b)) return a.localeCompare(b)
   return 0

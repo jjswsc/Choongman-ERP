@@ -106,7 +106,7 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
     expect(resolveDineInKitchenLinesForAddSubmit(cart, existing)).toEqual([])
   })
 
-  it('without a note normalizer the drift would re-emit existing chicken (documents root cause)', () => {
+  it('without a note normalizer the optc token fallback still matches existing chicken', () => {
     const cart = [
       { id: 'cart-c1-new', name: 'Golden Fried Chicken', price: 219, quantity: 1, note: 'optc:SIZE_M', menuId: '26' },
       { id: 'cart-soup-new', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
@@ -115,7 +115,7 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
       { id: 'db-c1', name: 'Golden Fried Chicken', price: 219, quantity: 1, qty: 1, note: 'M - Boneless', menuId: '26' },
     ]
     const delta = filterKitchenCartLinesForDineInAdd(cart, existing)
-    expect(delta.some((l) => l.name === 'Golden Fried Chicken')).toBe(true)
+    expect(delta.some((l) => l.name === 'Golden Fried Chicken')).toBe(false)
   })
 
   it('matches existing menu_id1 rows when cart line only has menuId', () => {
