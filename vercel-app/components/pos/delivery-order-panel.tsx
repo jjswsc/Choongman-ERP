@@ -228,7 +228,8 @@ export function DeliveryOrderPanel({
         menusFromProps,
         promosFromProps
       )
-      return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw, ti))
+      // translatePosMenuLineForReceipt는 _t 미사용 — useMemo에 ti 넣으면 매 렌더 재계산
+      return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw))
     })
     const prepared = preparePosOrderItemsForKitchenSlip(routingRows, {
       ...posReceiptLineOpts,
@@ -250,7 +251,6 @@ export function DeliveryOrderPanel({
     promosFromProps,
     posReceiptLineOpts,
     enrichPromoItemsWithOptionName,
-    ti,
   ])
 
   const childStateMapKey = (itemId: string, childKey: string) => `${itemId}::${childKey}`
@@ -278,40 +278,51 @@ export function DeliveryOrderPanel({
 
   const lineKeys = useMemo(() => buildPosOrderLineKeys(order?.items ?? []), [order?.items])
 
-  /** 부모 줄·취소 — order 스냅샷만 (takeout/table과 동일). displayItems 변경 시 덮어쓰지 않음 */
   useEffect(() => {
     if (!order?.items?.length) {
-      setItemPackaged({})
-      setItemCancelled({})
+      setItemPackaged((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemCancelled((prev) => (Object.keys(prev).length === 0 ? prev : {}))
       return
     }
     const keys = buildPosOrderLineKeys(order.items)
     setItemPackaged((prev) => {
+      let changed = false
       const next = { ...prev }
-      order.items.forEach((it, i) => {
-        next[keys[i] ?? `line-${i}`] = Boolean(it.servedAt)
-      })
-      return next
+      for (let i = 0; i < order.items.length; i++) {
+        const k = keys[i] ?? `line-${i}`
+        const v = Boolean(order.items[i].servedAt)
+        if (next[k] !== v) { next[k] = v; changed = true }
+      }
+      for (const k of Object.keys(prev)) {
+        if (!keys.includes(k) && !k.startsWith('line-')) { delete next[k]; changed = true }
+      }
+      return changed ? next : prev
     })
     setItemCancelled((prev) => {
+      let changed = false
       const next = { ...prev }
-      order.items.forEach((it, i) => {
-        next[keys[i] ?? `line-${i}`] = Boolean(it.cancelledAt)
-      })
-      return next
+      for (let i = 0; i < order.items.length; i++) {
+        const k = keys[i] ?? `line-${i}`
+        const v = Boolean(order.items[i].cancelledAt)
+        if (next[k] !== v) { next[k] = v; changed = true }
+      }
+      for (const k of Object.keys(prev)) {
+        if (!keys.includes(k) && !k.startsWith('line-')) { delete next[k]; changed = true }
+      }
+      return changed ? next : prev
     })
   }, [order?.id, order?.items])
 
-  /** 세트 하위 포장 — 카탈로그 보강(displayItems) 반영 */
   useEffect(() => {
     if (!order?.items?.length) {
-      setItemChildPackaged({})
+      setItemChildPackaged((prev) => (Object.keys(prev).length === 0 ? prev : {}))
       return
     }
     const keys = buildPosOrderLineKeys(order.items)
+    const enriched = displayItems.length ? displayItems : order.items
     setItemChildPackaged((prev) => {
+      let changed = false
       const next = { ...prev }
-      const enriched = displayItems.length ? displayItems : order.items
       enriched.forEach((it, i) => {
         const lineKey = keys[i] ?? `line-${i}`
         const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
@@ -320,10 +331,16 @@ export function DeliveryOrderPanel({
         childKeys.forEach((key) => {
           const raw = childState[key]
           const done = Boolean(String(raw?.packedAt ?? raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
-          next[childStateMapKey(lineKey, key)] = done
+          const mapKey = childStateMapKey(lineKey, key)
+          if (next[mapKey] !== done) { next[mapKey] = done; changed = true }
         })
       })
-      return next
+      for (const k of Object.keys(prev)) {
+        if (!k.includes('::')) continue
+        const itemId = k.split('::')[0]
+        if (!keys.includes(itemId) && !itemId.startsWith('line-')) { delete next[k]; changed = true }
+      }
+      return changed ? next : prev
     })
   }, [order?.id, order?.items, displayItems])
 

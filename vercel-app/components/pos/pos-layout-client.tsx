@@ -289,6 +289,55 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(t)
   }, [])
 
+  /**
+   * 방어적 input 포커스 보장:
+   * Radix Dialog inert 잔존, 캡처 단계 이벤트 간섭 등 어떤 원인이든
+   * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
+   */
+  useEffect(() => {
+    const stripInertFromAncestors = (el: Element) => {
+      let node: Element | null = el
+      while (node) {
+        if (node.hasAttribute("inert")) {
+          node.removeAttribute("inert")
+        }
+        node = node.parentElement
+      }
+    }
+    const stripAllStaleInert = () => {
+      if (typeof document === "undefined") return
+      const hasOpenDialog = document.querySelector(
+        "[data-radix-portal] [role=dialog]"
+      )
+      if (hasOpenDialog) return
+      document.querySelectorAll("[inert]").forEach((el) => {
+        el.removeAttribute("inert")
+      })
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      const isInput =
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLSelectElement ||
+        t.isContentEditable
+      if (!isInput) return
+      stripInertFromAncestors(t)
+      requestAnimationFrame(() => {
+        if (document.activeElement !== t) {
+          t.focus({ preventScroll: true })
+        }
+      })
+    }
+    document.addEventListener("pointerdown", onPointerDown, true)
+    const tid = window.setInterval(stripAllStaleInert, 3000)
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true)
+      window.clearInterval(tid)
+    }
+  }, [])
+
   useEffect(() => {
     try {
       setTopBarHidden(sessionStorage.getItem(POS_TOPBAR_HIDDEN_KEY) === "1")

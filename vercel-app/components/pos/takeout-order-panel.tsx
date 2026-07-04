@@ -118,41 +118,49 @@ export function TakeoutOrderPanel({
 
   useEffect(() => {
     if (!order?.items?.length) {
-      setItemPackaged({})
-      setItemChildPackaged({})
-      setItemCancelled({})
-    } else {
-      const keys = buildPosOrderLineKeys(order.items)
-      setItemPackaged((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it, i) => {
-          next[keys[i] ?? `line-${i}`] = Boolean(it.servedAt)
-        })
-        return next
-      })
-      setItemChildPackaged((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it, i) => {
-          const lineKey = keys[i] ?? `line-${i}`
-          const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
-          if (!childKeys.length) return
-          const childState = readPosSetChildrenState(it.setChildrenState)
-          childKeys.forEach((key) => {
-            const raw = childState[key]
-            const done = Boolean(String(raw?.packedAt ?? raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
-            next[`${lineKey}::${key}`] = done
-          })
-        })
-        return next
-      })
-      setItemCancelled((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it, i) => {
-          next[keys[i] ?? `line-${i}`] = Boolean(it.cancelledAt)
-        })
-        return next
-      })
+      setItemPackaged((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemChildPackaged((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemCancelled((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      return
     }
+    const keys = buildPosOrderLineKeys(order.items)
+    setItemPackaged((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (let i = 0; i < order.items.length; i++) {
+        const k = keys[i] ?? `line-${i}`
+        const v = Boolean(order.items[i].servedAt)
+        if (next[k] !== v) { next[k] = v; changed = true }
+      }
+      return changed ? next : prev
+    })
+    setItemChildPackaged((prev) => {
+      let changed = false
+      const next = { ...prev }
+      order.items.forEach((it, i) => {
+        const lineKey = keys[i] ?? `line-${i}`
+        const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
+        if (!childKeys.length) return
+        const childState = readPosSetChildrenState(it.setChildrenState)
+        childKeys.forEach((key) => {
+          const raw = childState[key]
+          const done = Boolean(String(raw?.packedAt ?? raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
+          const mapKey = `${lineKey}::${key}`
+          if (next[mapKey] !== done) { next[mapKey] = done; changed = true }
+        })
+      })
+      return changed ? next : prev
+    })
+    setItemCancelled((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (let i = 0; i < order.items.length; i++) {
+        const k = keys[i] ?? `line-${i}`
+        const v = Boolean(order.items[i].cancelledAt)
+        if (next[k] !== v) { next[k] = v; changed = true }
+      }
+      return changed ? next : prev
+    })
   }, [order?.id, order?.items])
 
   const toggleItemPackaged = async (itemId: string) => {
