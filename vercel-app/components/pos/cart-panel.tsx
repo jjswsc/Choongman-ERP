@@ -616,13 +616,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           paymentAmountInputBlurTimerRef.current = null
           const nowFocused = document.activeElement
           if (isPaymentAmountInputEl(nowFocused)) return
-          // 사용자가 의도적으로 다른 input으로 이동한 경우 포커스를 뺏지 않음
+          // 사용자가 의도적으로 다른 input·버튼·Radix 드롭다운으로 이동한 경우 포커스를 뺏지 않음
           if (
             nowFocused instanceof HTMLInputElement ||
             nowFocused instanceof HTMLTextAreaElement ||
             nowFocused instanceof HTMLSelectElement ||
-            (nowFocused instanceof HTMLElement && nowFocused.isContentEditable)
+            nowFocused instanceof HTMLButtonElement ||
+            (nowFocused instanceof HTMLElement && nowFocused.isContentEditable) ||
+            (nowFocused instanceof HTMLElement && nowFocused.closest('[data-radix-popper-content-wrapper]'))
           ) {
+            activePaymentAmountInputRef.current = null
+            paymentAmountInputFocusedRef.current = false
+            if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
+            return
+          }
+          if (isRadixOverlayOpen()) {
             activePaymentAmountInputRef.current = null
             paymentAmountInputFocusedRef.current = false
             if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
@@ -5142,6 +5150,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       onOpenChange={(open) => {
         if (!open && lockPaymentModalForTour) return
         if (!open && (couponQrScannerOpen || isCouponQrScannerOverlayActive())) return
+        if (!open && isRadixOverlayOpen()) return
         if (!open && orderType === 'delivery' && checkoutExistingPosOrderIdRef.current != null) {
           handleClearCart()
         }
@@ -5155,13 +5164,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
-          // 터치 POS·가상 키보드 탭이 outside로 잡혀 금액 입력이 한 글자마다 끊기는 문제 방지
+          if (isRadixOverlayOpen()) return
           e.preventDefault()
         }}
         onInteractOutside={(e) => {
+          if (isRadixOverlayOpen()) return
           e.preventDefault()
         }}
         onFocusOutside={(e) => {
+          if (isRadixOverlayOpen()) return
           e.preventDefault()
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
