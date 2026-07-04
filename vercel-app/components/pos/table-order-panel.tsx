@@ -63,6 +63,7 @@ import {
 } from '@/lib/pos-order-line-cancel-execute'
 import type { PosKitchenReprintPayload } from '@/lib/pos-kitchen-slip-routing'
 import { buildOrderItemsWithPromoDisplayEnrichment } from '@/lib/pos-order-set-display-items'
+import { buildPosOrderLineKeys, getPosOrderLineByKey } from '@/lib/pos-order-line-keys'
 import { PosLineCancelQtyDialog } from '@/components/pos/pos-line-cancel-qty-dialog'
 
 export interface TableOrderPanelProps {
@@ -150,9 +151,10 @@ export function TableOrderPanel({
         menus: menusFromProps,
         promos: promosFromProps,
         menuOptions: menuOptionsFromProps,
-        translateLine: (name) => translatePosMenuLineForReceipt(name, t),
+        // translatePosMenuLineForReceipt는 t 미사용 — useMemo에 t 넣으면 매 렌더 재계산 → #185
+        translateLine: translatePosMenuLineForReceipt,
       }),
-    [order?.items, menusFromProps, promosFromProps, menuOptionsFromProps, t]
+    [order?.items, menusFromProps, promosFromProps, menuOptionsFromProps]
   )
   const isPaidPrepaid = order?.status === 'paid'
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
@@ -166,60 +168,101 @@ export function TableOrderPanel({
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [guestSaving, setGuestSaving] = useState(false)
 
-  const displayItemById = useMemo(() => new Map(displayItems.map((it) => [it.id, it])), [displayItems])
+  const lineKeys = useMemo(() => buildPosOrderLineKeys(order?.items ?? []), [order?.items])
 
   useEffect(() => {
     if (!order?.items?.length) {
-      setItemServed({})
-      setItemChildServed({})
-      setItemCancelled({})
+      setItemServed((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemChildServed((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      setItemCancelled((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      return
     }
-    else {
-      setItemServed((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.servedAt)
-        })
-        return next
+    const keys = buildPosOrderLineKeys(order.items)
+    const keySet = new Set(keys)
+    setItemServed((prev) => {
+      let changed = false
+      const next = { ...prev }
+      order.items.forEach((it, i) => {
+        const lineKey = keys[i] ?? `line-${i}`
+        const v = Boolean(it.servedAt)
+        if (next[lineKey] !== v) {
+          next[lineKey] = v
+          changed = true
+        }
       })
-      setItemChildServed((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          const enriched = displayItemById.get(it.id)
-          const childKeys = listPosSetChildKeys(
-            Array.isArray(enriched?.promoItems) && enriched.promoItems.length > 0
-              ? enriched.promoItems
-              : Array.isArray(it.promoItems)
-                ? it.promoItems
-                : []
-          )
-          if (!childKeys.length) return
-          const childState = readPosSetChildrenState(it.setChildrenState)
-          childKeys.forEach((key) => {
-            const raw = childState[key]
-            const done = Boolean(String(raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
-            next[`${it.id}::${key}`] = done
-          })
-        })
-        return next
+      for (const key of Object.keys(prev)) {
+        if (!keySet.has(key)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    setItemChildServed((prev) => {
+      let changed = false
+      const next = { ...prev }
+      const liveChildKeys = new Set<string>()
+      order.items.forEach((it, i) => {
+        const lineKey = keys[i] ?? `line-${i}`
+        const enriched = displayItems[i]
+        const childKeys = listPosSetChildKeys(
+          Array.isArray(enriched?.promoItems) && enriched.promoItems.length > 0
+            ? enriched.promoItems
+            : Array.isArray(it.promoItems)
+              ? it.promoItems
+              : []
+        )
+        if (!childKeys.length) return
+        const childState = readPosSetChildrenState(it.setChildrenState)
+        for (const key of childKeys) {
+          const raw = childState[key]
+          const done = Boolean(String(raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
+          const mapKey = `${lineKey}::${key}`
+          liveChildKeys.add(mapKey)
+          if (next[mapKey] !== done) {
+            next[mapKey] = done
+            changed = true
+          }
+        }
       })
-      setItemCancelled((prev) => {
-        const next = { ...prev }
-        order.items.forEach((it) => {
-          next[it.id] = Boolean(it.cancelledAt)
-        })
-        return next
+      for (const key of Object.keys(prev)) {
+        if (!key.includes('::')) continue
+        if (!liveChildKeys.has(key)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    setItemCancelled((prev) => {
+      let changed = false
+      const next = { ...prev }
+      order.items.forEach((it, i) => {
+        const lineKey = keys[i] ?? `line-${i}`
+        const v = Boolean(it.cancelledAt)
+        if (next[lineKey] !== v) {
+          next[lineKey] = v
+          changed = true
+        }
       })
-    }
-  }, [order?.id, order?.items, displayItemById])
+      for (const key of Object.keys(prev)) {
+        if (!keySet.has(key)) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [order?.id, order?.items, displayItems])
 
   const toggleItemServed = async (itemId: string) => {
     if (!order) return
     if (itemCancelled[itemId]) return
     if (isDemo && onDemoOrderReplace) {
       const nextServed = !itemServed[itemId]
-      const nextItems = order.items.map((it) =>
-        it.id === itemId
+      const keys = buildPosOrderLineKeys(order.items)
+      const nextItems = order.items.map((it, i) =>
+        (keys[i] ?? `line-${i}`) === itemId
           ? {
               ...it,
               servedAt: nextServed ? new Date().toISOString() : null,
@@ -396,17 +439,24 @@ export function TableOrderPanel({
       setSelectedLineItemId(null)
       return
     }
-    setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev && !i.cancelledAt) ? prev : null))
+    const keys = buildPosOrderLineKeys(order.items)
+    setSelectedLineItemId((prev) => {
+      if (!prev) return null
+      const idx = keys.indexOf(prev)
+      if (idx < 0) return null
+      const it = order.items[idx]
+      return it && !it.cancelledAt ? prev : null
+    })
   }, [order?.id, order?.items])
 
   const cancelQtyTargetItem = useMemo(
-    () => (selectedLineItemId && order ? order.items.find((it) => it.id === selectedLineItemId) ?? null : null),
+    () => (selectedLineItemId && order ? getPosOrderLineByKey(order.items, selectedLineItemId) : null),
     [order, selectedLineItemId]
   )
 
   const applyLineCancel = async (itemId: string, cancelQty: number, confirmBeforeApply: boolean) => {
     if (!order) return
-    const target = order.items.find((it) => it.id === itemId)
+    const target = getPosOrderLineByKey(order.items, itemId)
     if (!target) return
     const label = translatePosMenuLineForReceipt(target.name, t)
     setRemovingItemId(itemId)
@@ -966,9 +1016,10 @@ export function TableOrderPanel({
             <>
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
                 <ul className="p-1.5 space-y-1">
-                  {displayItems.map((item) => {
-                    const served = itemServed[item.id]
-                    const cancelled = itemCancelled[item.id]
+                  {displayItems.map((item, itemIndex) => {
+                    const lineKey = lineKeys[itemIndex] ?? `line-${itemIndex}`
+                    const served = itemServed[lineKey]
+                    const cancelled = itemCancelled[lineKey]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : item.name
                     const optionPart = optMatch ? optMatch[2].trim() : null
@@ -979,12 +1030,12 @@ export function TableOrderPanel({
                     const fullNameT = translatePosMenuLineForReceipt(item.name, t)
                     return (
                       <li
-                        key={item.id}
+                        key={lineKey}
                         className={cn(
                           'grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-1.5 gap-y-1 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
                           served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
-                          selectedLineItemId === item.id &&
+                          selectedLineItemId === lineKey &&
                             'ring-2 ring-primary/45 border-primary/50 bg-primary/5 dark:bg-primary/10'
                         )}
                         onClick={() => {
@@ -999,7 +1050,7 @@ export function TableOrderPanel({
                             onClick={(e) => {
                               e.stopPropagation()
                               if (cancelled) return
-                              setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
+                              setSelectedLineItemId((prev) => (prev === lineKey ? null : lineKey))
                             }}
                             title={fullNameT}
                           >
@@ -1043,9 +1094,9 @@ export function TableOrderPanel({
                           className="shrink-0 self-start mt-0.5 h-9 w-9 p-0"
                           onClick={(e) => {
                             e.stopPropagation()
-                            void toggleItemServed(item.id)
+                            void toggleItemServed(lineKey)
                           }}
-                          disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                          disabled={savingItemId === lineKey || removingItemId !== null || cancelled}
                           aria-label={
                             served
                               ? (t('cancel') || '취소')
@@ -1074,11 +1125,11 @@ export function TableOrderPanel({
                               const childLabel = optName || (optId ? `${menuLabel} (${optId})` : menuLabel)
                               return Array.from({ length: qty }).map((_, n) => {
                                 const childKey = buildPosSetChildKey(line, idx, n)
-                                const mapKey = `${item.id}::${childKey}`
+                                const mapKey = `${lineKey}::${childKey}`
                                 const childDone = Boolean(itemChildServed[mapKey])
                                 return (
                                   <button
-                                    key={`${item.id}-${childKey}`}
+                                    key={`${lineKey}-${childKey}`}
                                     type="button"
                                     className={cn(
                                       'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-base font-medium transition-colors',
@@ -1088,9 +1139,9 @@ export function TableOrderPanel({
                                     )}
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      void toggleSetChildServed(item.id, childKey)
+                                      void toggleSetChildServed(lineKey, childKey)
                                     }}
-                                    disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                                    disabled={savingItemId === lineKey || removingItemId !== null || cancelled}
                                   >
                                     <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, t)}</span>
                                     {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
