@@ -293,13 +293,40 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T18:20+07")
+    console.log("[cm-pos] layout build: 2026-07-04T18:50+07")
     const peStyle = document.createElement("style")
     peStyle.textContent = [
       "body { pointer-events: auto !important; }",
       '[role="dialog"] { pointer-events: auto !important; }',
     ].join("\n")
     document.head.appendChild(peStyle)
+
+    // Radix DismissableLayer가 body.style.pointerEvents = "none"을 설정하는 것을
+    // 원천 차단. CSS !important만으로는 Electron에서 불충분할 수 있음.
+    let _blockedPE = ""
+    try {
+      const orig = document.body.style.pointerEvents || ""
+      _blockedPE = orig
+      Object.defineProperty(document.body.style, "pointerEvents", {
+        get() { return _blockedPE },
+        set(v: string) {
+          if (v === "none") return
+          _blockedPE = v || ""
+        },
+        configurable: true,
+        enumerable: true,
+      })
+      console.log("[cm-pos] body.style.pointerEvents setter patched")
+    } catch (e) {
+      console.warn("[cm-pos] defineProperty fallback — using MutationObserver", e)
+    }
+
+    const bodyObserver = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === "none") {
+        document.body.style.pointerEvents = ""
+      }
+    })
+    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ["style"] })
     const logDomState = () => {
       const dialogs = document.querySelectorAll("[role=dialog]").length
       const inertEls = document.querySelectorAll("[inert]")
@@ -454,6 +481,8 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     const tid = window.setInterval(stripAllStaleInert, 3000)
     return () => {
       document.head.removeChild(peStyle)
+      bodyObserver.disconnect()
+      try { delete (document.body.style as any).pointerEvents } catch (_e) { /* noop */ }
       document.removeEventListener("focusin", onFocusIn, true)
       inertObserver.disconnect()
       document.removeEventListener("pointerdown", wrappedOnPointerDown, true)
