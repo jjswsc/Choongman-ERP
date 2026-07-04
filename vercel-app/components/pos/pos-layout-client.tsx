@@ -293,14 +293,18 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T17:10+07")
+    console.log("[cm-pos] layout build: 2026-07-04T17:30+07")
     const logDomState = () => {
-      const portals = document.querySelectorAll("[data-radix-portal]").length
       const dialogs = document.querySelectorAll("[role=dialog]").length
       const inertEls = document.querySelectorAll("[inert]")
-      if (portals > 0 || dialogs > 0 || inertEls.length > 0) {
-        const inertInfo = Array.from(inertEls).map((el) => describeEl(el))
-        console.warn("[cm-pos-diag] DOM:", { portals, dialogs, inert: inertEls.length, inertElements: inertInfo })
+      const bodyPE = document.body.style.pointerEvents
+      const inertInfo = Array.from(inertEls).map((el) => describeEl(el))
+      if (bodyPE || dialogs > 0 || inertEls.length > 0) {
+        console.warn("[cm-pos-diag] DOM:", { bodyPointerEvents: bodyPE || "(empty)", dialogs, inert: inertEls.length, inertElements: inertInfo })
+      }
+      if (bodyPE === "none" && dialogs === 0) {
+        console.warn("[cm-pos-diag] *** body.pointerEvents stuck at 'none' with no dialog! Restoring ***")
+        document.body.style.pointerEvents = ""
       }
     }
     window.setTimeout(logDomState, 2000)
@@ -363,12 +367,23 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
-      if (!isInteractive(t)) return
+      const bodyPE = document.body.style.pointerEvents
+      const computedPE = window.getComputedStyle(t).pointerEvents
+      if (isInteractive(t) || computedPE === "none" || bodyPE === "none") {
+        console.warn("[cm-pos-diag] tap:", describeEl(t),
+          "| body.pointerEvents:", bodyPE || "(empty)",
+          "| el.computedPE:", computedPE,
+          "| interactive:", isInteractive(t))
+      }
       const inertAnc = findInertAncestors(t)
       if (inertAnc.length > 0) {
-        console.warn("[cm-pos-diag] pointerdown on INERT element:", describeEl(t), "inert ancestors:", inertAnc)
+        console.warn("[cm-pos-diag] INERT ancestors:", inertAnc)
       }
       stripInertFromAncestors(t)
+      if (bodyPE === "none") {
+        console.warn("[cm-pos-diag] *** body.pointerEvents is NONE! Force-restoring ***")
+        document.body.style.pointerEvents = ""
+      }
       if (
         t instanceof HTMLInputElement ||
         t instanceof HTMLTextAreaElement ||
@@ -391,10 +406,20 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         }
       }
     })
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      const ds = t.dataset || {}
+      if (ds.posMemberScan === "1" || ds.posCouponScan === "1") {
+        console.trace("[cm-pos-diag] scan input FOCUSED:", describeEl(t))
+      }
+    }
+    document.addEventListener("focusin", onFocusIn, true)
     inertObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["inert"], subtree: true })
     document.addEventListener("pointerdown", onPointerDown, true)
     const tid = window.setInterval(stripAllStaleInert, 3000)
     return () => {
+      document.removeEventListener("focusin", onFocusIn, true)
       inertObserver.disconnect()
       document.removeEventListener("pointerdown", onPointerDown, true)
       window.clearInterval(tid)

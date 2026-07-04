@@ -270,7 +270,7 @@ export function DeliveryOrderPanel({
         String(line.optionName ?? '').trim() ||
         optFromCode ||
         String(line.optionId ?? '').trim()
-      const childLabel = rawOpt || rawMenu
+      const childLabel = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
       for (let n = 0; n < qty; n += 1) rows.push({ key: buildPosSetChildKey(line, idx, n), label: childLabel })
     })
     return rows

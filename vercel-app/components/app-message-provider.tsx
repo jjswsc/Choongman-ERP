@@ -80,6 +80,14 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
     showingRef.current = false
     setOpen(false)
     setCurrent(null)
+    window.setTimeout(() => {
+      if (
+        document.body.style.pointerEvents === "none" &&
+        document.querySelectorAll("[role=dialog]").length === 0
+      ) {
+        document.body.style.pointerEvents = ""
+      }
+    }, 50)
     queueMicrotask(() => showNext())
   }, [showNext])
 

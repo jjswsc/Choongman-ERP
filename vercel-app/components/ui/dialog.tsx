@@ -44,18 +44,29 @@ function DialogContent({
   children,
   hideCloseButton,
   overlayClassName,
+  forceOverlay,
   "aria-describedby": ariaDescribedBy,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   hideCloseButton?: boolean
   /** 글로벌 알림 등 z-[9999] 포털보다 위에 올릴 때 */
   overlayClassName?: string
+  /** modal={false} Dialog에서도 시각적 배경 오버레이를 렌더할 때 */
+  forceOverlay?: boolean
 }) {
   const { lang } = useLang()
   const t = useT(lang)
   return (
     <DialogPortal>
       <DialogOverlay className={overlayClassName} />
+      {forceOverlay && (
+        <div
+          className={cn(
+            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-[100] bg-black/50",
+            overlayClassName
+          )}
+        />
+      )}
       <DialogPrimitive.Content
         aria-describedby={ariaDescribedBy ?? undefined}
         className={cn(

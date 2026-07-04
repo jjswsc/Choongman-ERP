@@ -672,7 +672,7 @@ export function TakeoutOrderPanel({
                                 const rawMenu = menuId
                                   ? resolvePosOrderItemMenuDisplayName({ id: menuId, name: menuId, menuId }, menusFromProps)
                                   : `Set ${idx + 1}`
-                                const rawOpt = String(line.optionId ?? '').trim()
+                                const rawOpt = String(line.optionName ?? '').trim() || String(line.optionId ?? '').trim()
                                 const childLabel = rawOpt ? `${rawMenu} (${rawOpt})` : rawMenu
                                 return Array.from({ length: qty }).map((_, n) => {
                                   const childKey = buildPosSetChildKey(line, idx, n)

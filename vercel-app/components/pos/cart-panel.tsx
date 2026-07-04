@@ -5147,6 +5147,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
     <Dialog
       open={showPaymentModal}
+      modal={false}
       onOpenChange={(open) => {
         if (!open && lockPaymentModalForTour) return
         if (!open && (couponQrScannerOpen || isCouponQrScannerOverlayActive())) return
@@ -5160,19 +5161,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       <DialogContent
         data-tour="pos-tour-payment-dialog"
         hideCloseButton
+        forceOverlay
         onEscapeKeyDown={(e) => {
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
-          if (isRadixOverlayOpen()) return
           e.preventDefault()
         }}
         onInteractOutside={(e) => {
-          if (isRadixOverlayOpen()) return
-          e.preventDefault()
-        }}
-        onFocusOutside={(e) => {
-          if (isRadixOverlayOpen()) return
           e.preventDefault()
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
