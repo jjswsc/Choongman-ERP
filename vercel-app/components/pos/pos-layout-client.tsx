@@ -293,10 +293,31 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
+    console.log("[cm-pos] layout build: 2026-07-04T16:50+07")
+    const describeEl = (el: Element | null): string => {
+      if (!el) return "(null)"
+      const tag = el.tagName.toLowerCase()
+      const id = el.id ? `#${el.id}` : ""
+      const cls = String((el as HTMLElement).className ?? "").slice(0, 40)
+      const type = (el as HTMLInputElement).type ? `[${(el as HTMLInputElement).type}]` : ""
+      const ds = (el as HTMLElement).dataset
+      const dsKeys = ds ? Object.keys(ds).filter(k => k.startsWith("pos") || k.startsWith("radix") || k === "tour").join(",") : ""
+      return `${tag}${type}${id}${cls ? `.${cls}` : ""}${dsKeys ? ` data:{${dsKeys}}` : ""}`
+    }
+    const findInertAncestors = (el: Element): string[] => {
+      const result: string[] = []
+      let node: Element | null = el.parentElement
+      while (node) {
+        if (node.hasAttribute("inert")) result.push(describeEl(node))
+        node = node.parentElement
+      }
+      return result
+    }
     const stripInertFromAncestors = (el: Element) => {
       let node: Element | null = el
       while (node) {
         if (node.hasAttribute("inert")) {
+          console.warn("[cm-pos-diag] stripping inert from:", describeEl(node))
           node.removeAttribute("inert")
         }
         node = node.parentElement
@@ -308,29 +329,59 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         "[data-radix-portal] [role=dialog]"
       )
       if (hasOpenDialog) return
-      document.querySelectorAll("[inert]").forEach((el) => {
+      const inertEls = document.querySelectorAll("[inert]")
+      if (inertEls.length > 0) {
+        console.warn("[cm-pos-diag] stripAllStaleInert removing", inertEls.length, "inert elements")
+      }
+      inertEls.forEach((el) => {
         el.removeAttribute("inert")
       })
     }
+    const isInteractive = (el: HTMLElement): boolean =>
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement ||
+      el instanceof HTMLButtonElement ||
+      el.isContentEditable ||
+      el.getAttribute("role") === "combobox" ||
+      el.getAttribute("role") === "option" ||
+      el.getAttribute("role") === "listbox"
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
-      const isInput =
+      if (!isInteractive(t)) return
+      const inertAnc = findInertAncestors(t)
+      if (inertAnc.length > 0) {
+        console.warn("[cm-pos-diag] pointerdown on INERT element:", describeEl(t), "inert ancestors:", inertAnc)
+      }
+      stripInertFromAncestors(t)
+      if (
         t instanceof HTMLInputElement ||
         t instanceof HTMLTextAreaElement ||
         t instanceof HTMLSelectElement ||
         t.isContentEditable
-      if (!isInput) return
-      stripInertFromAncestors(t)
-      requestAnimationFrame(() => {
-        if (document.activeElement !== t) {
-          t.focus({ preventScroll: true })
-        }
-      })
+      ) {
+        requestAnimationFrame(() => {
+          if (document.activeElement !== t) {
+            console.warn("[cm-pos-diag] force-focusing:", describeEl(t), "activeElement was:", describeEl(document.activeElement))
+            t.focus({ preventScroll: true })
+          }
+        })
+      }
     }
+    const inertObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "attributes" && m.attributeName === "inert") {
+          const el = m.target as HTMLElement
+          console.warn("[cm-pos-diag] inert attr changed:", describeEl(el), "inert=", el.hasAttribute("inert"))
+        }
+      }
+    })
+    inertObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["inert"], subtree: true })
     document.addEventListener("pointerdown", onPointerDown, true)
     const tid = window.setInterval(stripAllStaleInert, 3000)
     return () => {
+      inertObserver.disconnect()
       document.removeEventListener("pointerdown", onPointerDown, true)
       window.clearInterval(tid)
     }
