@@ -2418,6 +2418,7 @@ export default function PosTerminalPage() {
       const runKitchenForAcceptedOrder = () => {
         if (!autoPrintKitchenSlipOnOrder) return
         const kitchenDedupeKey = `order:${orderId}:kitchen`
+        releaseKitchenAutoPrintKey(kitchenDedupeKey)
         if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
         void (async () => {
           try {
@@ -2606,6 +2607,7 @@ export default function PosTerminalPage() {
               const items = prepareOrderItemsForKitchenPrint(order.items || [], order.deliveryAppCode)
               const runKitchenForAcceptedOrder = () => {
                 if (!autoPrintKitchenSlipOnOrder) return
+                releaseKitchenAutoPrintKey(`order:${orderId}:kitchen`)
                 if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
                 void (async () => {
                   try {
