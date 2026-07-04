@@ -392,6 +392,20 @@ interface CartPanelProps {
 
 type CartItem = OrderItem
 
+/**
+ * 열린 Radix Select/Popover/Dropdown이 있는지 검사.
+ * 스캔 input 자동 포커스가 열린 드롭다운의 포커스를 뺏어 즉시 닫는 것을 막기 위함.
+ * (메인 POS 기기는 폴링·refetch로 리렌더가 잦아 그때마다 포커스를 뺏겼음)
+ */
+function isRadixOverlayOpen(): boolean {
+  if (typeof document === 'undefined') return false
+  return Boolean(
+    document.querySelector(
+      '[data-radix-popper-content-wrapper], [role="listbox"][data-state="open"], [data-radix-select-viewport], [role="menu"][data-state="open"]'
+    )
+  )
+}
+
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
   stores: _stores,
   currentStoreId,
@@ -660,6 +674,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const refocusActiveScanInput = useCallback(() => {
     window.setTimeout(() => {
       if (couponQrScannerOpenRef.current) return
+      if (isRadixOverlayOpen()) return
       if (showPaymentModal) couponScanInputRef.current?.focus()
       else memberScanInputRef.current?.focus()
     }, 60)
@@ -3625,6 +3640,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
+      if (isRadixOverlayOpen()) return
       memberScanInputRef.current?.focus()
     }, 80)
     return () => window.clearTimeout(id)
@@ -3634,6 +3650,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
       if (isActivelyEditingPaymentAmount()) return
+      if (isRadixOverlayOpen()) return
       if (!selectedMemberId) {
         paymentMemberScanInputRef.current?.focus()
       } else {
@@ -3745,6 +3762,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (couponQrScannerOpen) return
       if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
       if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
+      // 열린 Select/Popover(협업 할인·인원 선택 등)의 포커스를 뺏어 닫지 않도록
+      if (isRadixOverlayOpen()) return
       const active = document.activeElement
       if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
       if (
