@@ -22,8 +22,7 @@ import {
   writePosCartItemsCache,
 } from '@/components/pos/cart-panel'
 import { replacePosCartItemsCache } from '@/lib/pos-cart-items-cache'
-import { PosTerminalDialogs } from '@/components/pos/terminal/pos-terminal-dialogs'
-import { usePosKbankPayment } from '@/hooks/use-pos-kbank-payment'
+import { PosTerminalDialogs, type KbankOutcomeState } from '@/components/pos/terminal/pos-terminal-dialogs'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -48,6 +47,13 @@ import {
   getPosTodaySales,
   getPosDeliveryApps,
   getPosTaxInvoiceRecipients,
+  getPosPaymentAttempts,
+  executeKbankCancelQr,
+  executeKbankCheckStatus,
+  executeKbankGenerateQr,
+  executeKbankSettlement,
+  executeKbankVoidPayment,
+  executeLinkposDisplayQr,
   executeLinkposClearQr,
   executeLinkposPayment,
   grabCancelOrderByStoreApi,
@@ -63,6 +69,7 @@ import {
   type PosTableItem,
   type PosPrinterSettings,
   type PosPromoWithItems,
+  type PosPaymentAttempt,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
@@ -89,7 +96,6 @@ import {
 } from '@/lib/pos-order-item-map'
 import {
   fetchPosOrderItemsForPaymentMerge,
-  mapOrderItemForCheckoutPayment,
   mapPosOrderItemsToTerminalOrderSnapshot,
   reconcilePayloadItemsWithTerminalCart,
 } from '@/lib/pos-terminal-order-items'
@@ -124,6 +130,7 @@ import {
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
 import { escapeHtml, cn } from '@/lib/utils'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
@@ -230,6 +237,22 @@ import {
 } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import {
+  extractKbankQrResponseMeta,
+  extractKbankPaymentTxnNo,
+  isKbankCreditCardQrUnavailableError,
+  isKbankPaymentTxnNo,
+  isKbankPaymentAttemptApproved,
+  isKbankInquiryResponseApproved,
+  isKbankQrSessionTxnNo,
+  isKbankRateLimitError,
+  KBANK_RATE_LIMIT_BACKOFF_MS,
+  resolveKbankInquiryTxnNoForRequest,
+  resolveKbankVoidTxnNoForRequest,
+  resolveKbankCreditCardBrandLabels,
+  resolveKbankDisplayQrTypeDetails,
+  type KbankDisplayQrTypeSource,
+} from '@/lib/payments/kbank-api-reference'
+import {
   subscribePosOrdersInsert,
   subscribePosOrdersUpdate,
   type PosRealtimeSubscribeStatus,
@@ -283,6 +306,12 @@ import {
   resolveCardPaymentAmountForPricing,
 } from '@/lib/pos-terminal-customer-display'
 import {
+  buildKbankGenerateAuditPaste,
+  extractAmountFromEmvQrPayload,
+  extractKbankGenerateResponseInfo,
+  kbankOrigPartnerTxnUidForFollowup,
+} from '@/lib/pos-terminal-kbank-helpers'
+import {
   MAIN_POS_META_SCAN_INTERVAL_MS,
   MAIN_POS_STARTUP_CATCHUP_DURATION_MS,
   MAIN_POS_STARTUP_CATCHUP_WINDOW_MS,
@@ -301,36 +330,24 @@ import {
 } from '@/lib/pos-terminal-auto-print'
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
-import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
-import { usePosMainDeviceSyncHost } from '@/hooks/use-pos-main-device-sync-host'
-import {
-  markPosTerminalOrderSubmitInFlight,
-  setPosTerminalLocalAutoprintActive,
-} from '@/lib/pos-terminal-local-autoprint-ui'
-import { setIncomingDeliveryUiHandler } from '@/lib/pos-main-device-incoming-delivery-ui'
-import { setGrabCancelUiHandler } from '@/lib/pos-main-device-grab-cancel-ui'
-import type { IncomingDeliveryFocusParams } from '@/lib/pos-main-device-sync-types'
-import {
-  backgroundAcceptedDeliveryOrderIdsRef,
-  bumpLastSeenOrderId,
-  dineInRemoteItemQtySnapshotRef,
-  grabCancelWatchSeededRef,
-  grabCancelWatchSnapshotRef,
-  mainPosSelfDineInUpdateSuppressUntilRef,
-  promptedGrabCustomerCancelIdsRef,
-  printedPaymentReceiptIdsRef,
-  paymentReceiptScanSeededRef,
-  seenOrderIdsRef,
-  shouldTreatAsMainPosIncomingOrder,
-} from '@/lib/pos-main-device-sync-state'
 
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
 type TakeoutMode = 'slot' | 'member'
+/** 신규 배달 유입 시 탭 포커스·수락 안내에 쓰는 파라미터 */
+type IncomingDeliveryFocusParams = {
+  orderId: number
+  orderType?: string
+  deliveryAppCode?: string
+  status?: string
+  createdAt?: string
+  storeCode?: string
+  memo?: string
+}
 type PendingPayRequest = {
   tableName: string
-  items: ReturnType<typeof mapOrderItemForCheckoutPayment>[]
+  items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   /** 기존 주문 결제 시 영수증용 */
   orderNo?: string
   /** 기존 pos_orders 행 id (결제 updatePosOrder용) */
@@ -525,11 +542,6 @@ export default function PosTerminalPage() {
     return refetchStores({ scope: 'current', immediate: true })
   }, [refetchStores])
 
-  /** 헤더 Refresh 버튼 전용 — forceFullRefresh로 캐시 무시 + 레이아웃 API 재조회 */
-  const refetchCurrentStoreForManualRefresh = useCallback(() => {
-    return refetchStores({ scope: 'current', immediate: true, forceFullRefresh: true })
-  }, [refetchStores])
-
   const dismissTerminalOrder = useCallback(
     (order: Order) => {
       if (!currentStoreId) return
@@ -703,6 +715,44 @@ export default function PosTerminalPage() {
   const [customerDisplayIdleMessage, setCustomerDisplayIdleMessage] = useState('')
   const [customerDisplayPaymentMessage, setCustomerDisplayPaymentMessage] = useState('')
   const [customerDisplayQrPayload, setCustomerDisplayQrPayload] = useState('')
+  const [linkposQrBridgeStatus, setLinkposQrBridgeStatus] = useState<'idle' | 'ok' | 'failed'>('idle')
+  const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
+  const [liveKbankQrAmount, setLiveKbankQrAmount] = useState(0)
+  const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
+  const [liveKbankQrTypeSource, setLiveKbankQrTypeSource] =
+    useState<KbankDisplayQrTypeSource>('requested')
+  const [kbankSentQrTypeCode, setKbankSentQrTypeCode] = useState('')
+  const [kbankGenerateAuditText, setKbankGenerateAuditText] = useState('')
+  const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
+  const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
+  const kbankOpsTxnUidRef = useRef('')
+  const [kbankOpsOrigTxnUid, setKbankOpsOrigTxnUid] = useState('')
+  const [kbankOpsTxnNo, setKbankOpsTxnNo] = useState('')
+  const [kbankOpsTerminalId, setKbankOpsTerminalId] = useState('')
+  const [kbankOpsLastResult, setKbankOpsLastResult] = useState('')
+  const [kbankOpsCardBrands, setKbankOpsCardBrands] = useState<string[]>([])
+  const [kbankCallbackState, setKbankCallbackState] = useState<'idle' | 'waiting' | 'received' | 'failed'>('idle')
+  const [kbankOutcomeState, setKbankOutcomeState] = useState<KbankOutcomeState | null>(null)
+  const kbankCallbackNotifiedTxRef = useRef('')
+  const kbankOutcomeLastKeyRef = useRef('')
+  const kbankManualCancelPendingRef = useRef(false)
+  const kbankGenerateLastAtRef = useRef(0)
+  const kbankInquiryLastAtRef = useRef(0)
+  const kbankFollowupLastAtRef = useRef(0)
+  const kbankCcInquiryTriggeredRef = useRef('')
+  const kbankApiPausedUntilRef = useRef(0)
+  const [kbankApiPausedUntilMs, setKbankApiPausedUntilMs] = useState(0)
+  /** QR 대기 결제: 승인되면 주문을 paid로 마감·영수증 출력하는 후처리(파트너TxnUid별). */
+  const pendingKbankFinalizeRef = useRef<
+    Record<string, (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>>
+  >({})
+  /** 콜백이 결제 후처리 등록보다 빠를 때 승인 정보 보관 (partnerTxnUid별). */
+  const deferredKbankApprovalRef = useRef<
+    Record<string, { txnNo?: string; cardBrands?: string[] }>
+  >({})
+  useEffect(() => {
+    kbankOpsTxnUidRef.current = String(kbankOpsTxnUid || '').trim()
+  }, [kbankOpsTxnUid])
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
@@ -710,21 +760,6 @@ export default function PosTerminalPage() {
   const [customerDisplayPaymentDraft, setCustomerDisplayPaymentDraft] = useState<CartPanelPaymentPayload | null>(null)
   const tourPaymentCardAmount = Number(customerDisplayPaymentDraft?.paymentCard ?? 0)
   const tourPaymentQrAmount = Number(customerDisplayPaymentDraft?.paymentQr ?? 0)
-
-  const kbank = usePosKbankPayment({
-    currentStoreId,
-    currentStoreName: String(currentStore?.name || '').trim(),
-    formatStoreLabel,
-    isPosDemo,
-    tourPaymentModalOpen,
-    tourPaymentQrAmount,
-    customerDisplayQrPayload,
-    customerDisplayPaymentDraft,
-    t,
-    lang,
-    setCustomerDisplayPaymentMessage,
-  })
-
   const tourPaymentDeliveryAppAmount = Number(customerDisplayPaymentDraft?.paymentDeliveryApp ?? 0)
   const tourPaymentOtherAmount = Number(customerDisplayPaymentDraft?.paymentOther ?? 0)
   /** 결제 완료 직후 고객 모니터에 설정된 QR을 잠시 표시(ms 기준 타임스탬프) */
@@ -1897,7 +1932,7 @@ export default function PosTerminalPage() {
     tourPaymentModalOpen ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null ||
-    kbank.kbankCallbackState === 'waiting' ||
+    kbankCallbackState === 'waiting' ||
     hasActiveWalkInCart
   const customerDisplayOrderItems = useMemo(
     () =>
@@ -1978,7 +2013,12 @@ export default function PosTerminalPage() {
     Boolean(servingTable?.order)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
-  usePosMainDeviceSyncHost()
+  const posSessionStartedAtRef = useRef<number>(Date.now())
+  const seenOrderIdsRef = useRef<Set<number>>(new Set())
+  /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
+  const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  /** 배달 주문 할인·합계 변경 후 홀 주문서 재인쇄 중복 방지 */
+  const printedHallDiscountReprintKeysRef = useRef<Set<string>>(new Set())
   /** 주방 주문서 자동 인쇄 중복 방지(수락/Realtime/폴링 동시 발화) */
   const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
@@ -1986,17 +2026,30 @@ export default function PosTerminalPage() {
   /** 결제 등 화면 잠금 중 유입된 배달 — 잠금 해제 후 순서대로 포커스 */
   const deferredIncomingDeliveryQueueRef = useRef<IncomingDeliveryFocusParams[]>([])
   const [deferredIncomingDeliveryCount, setDeferredIncomingDeliveryCount] = useState(0)
+  /** 결제·주문 입력 중(화면 잠금) 백그라운드로 자동 수락+인쇄 처리한 배달 주문 — 잠금 해제 후 재수락·재인쇄·수락 팝업 방지 */
+  const backgroundAcceptedDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
+  const promptedGrabCustomerCancelIdsRef = useRef<Set<number>>(new Set())
+  const grabCancelWatchSnapshotRef = useRef<Map<number, GrabCancelWatchSnap>>(new Map())
+  const grabCancelWatchSeededRef = useRef(false)
+  /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
+  const paymentReceiptScanSeededRef = useRef(false)
+  /**
+   * 메인 포스: dine_in 품목 수량 스냅샷(다른 단말 UPDATE 시 id 추가 + 수량 증가를 모두 감지)
+   * - key: orderId
+   * - value: (itemId -> qty)
+   */
+  const dineInRemoteItemQtySnapshotRef = useRef<Map<number, Map<string, number>>>(new Map())
+  /** 메인 포스가 updatePosOrder(추가주문) 직후 수신하는 Realtime UPDATE로 이중 인쇄 방지 */
+  const mainPosSelfDineInUpdateSuppressUntilRef = useRef<Map<number, number>>(new Map())
   useEffect(() => {
-    if (isPosMainDeviceSyncOwnedByLayout()) return
     printedPaymentReceiptIdsRef.current = new Set()
-    paymentReceiptScanSeededRef.current = false
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     deferredIncomingDeliveryQueueRef.current = []
     setDeferredIncomingDeliveryCount(0)
-    seenOrderIdsRef.current.clear()
-    mainPosSelfDineInUpdateSuppressUntilRef.current.clear()
-    dineInRemoteItemQtySnapshotRef.current.clear()
+    paymentReceiptScanSeededRef.current = false
+    dineInRemoteItemQtySnapshotRef.current = new Map()
+    mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
 
   const normalizeKitchenAutoPrintDedupeKeys = useCallback((rawKeyOrKeys: string | string[]) => {
@@ -2336,6 +2389,28 @@ export default function PosTerminalPage() {
     ]
   )
 
+  const recomputeRealtimeChannelHealthyRef = useRef<() => void>(() => {})
+  const scheduleRealtimeResubscribeRef = useRef<() => void>(() => {})
+
+  const makeRealtimeStatusHandler = useCallback(
+    (channelKey: string) => (status: PosRealtimeSubscribeStatus, err?: Error) => {
+      realtimeChannelStateRef.current.set(channelKey, status)
+      recomputeRealtimeChannelHealthyRef.current()
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        logPosPrintDebug('realtime_channel_degraded', {
+          channelKey,
+          status,
+          message: err?.message,
+        })
+        const primaryInsertKey = mainPosPrimaryInsertChannelKey(currentStoreId)
+        if (channelKey !== primaryInsertKey) return
+        triggerMainPosPollNowRef.current?.()
+        scheduleRealtimeResubscribeRef.current()
+      }
+    },
+    [currentStoreId, logPosPrintDebug]
+  )
+
   const runAutoPrintForAcceptedDeliveryOrder = useCallback(
     async (params: {
       orderId: number
@@ -2372,7 +2447,6 @@ export default function PosTerminalPage() {
       const runKitchenForAcceptedOrder = () => {
         if (!autoPrintKitchenSlipOnOrder) return
         const kitchenDedupeKey = `order:${orderId}:kitchen`
-        releaseKitchenAutoPrintKey(kitchenDedupeKey)
         if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
         void (async () => {
           try {
@@ -2561,7 +2635,6 @@ export default function PosTerminalPage() {
               const items = prepareOrderItemsForKitchenPrint(order.items || [], order.deliveryAppCode)
               const runKitchenForAcceptedOrder = () => {
                 if (!autoPrintKitchenSlipOnOrder) return
-                releaseKitchenAutoPrintKey(`order:${orderId}:kitchen`)
                 if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
                 void (async () => {
                   try {
@@ -2840,7 +2913,7 @@ export default function PosTerminalPage() {
     (params: IncomingDeliveryFocusParams) => {
       const orderId = Number(params.orderId)
       if (!Number.isFinite(orderId) || orderId <= 0) return
-      if (!shouldTreatAsMainPosIncomingOrder(orderId, params.createdAt)) return
+      if (!isSessionNewOrder(params.createdAt, posSessionStartedAtRef.current)) return
       const orderType = String(params.orderType ?? '').trim().toLowerCase()
       if (orderType !== 'delivery') return
       if (
@@ -2943,28 +3016,6 @@ export default function PosTerminalPage() {
     [isIncomingDeliveryFocusLocked, playIncomingOrderBeep, refetchCurrentStore, t]
   )
 
-  useEffect(() => {
-    if (!isPosMainDeviceSyncOwnedByLayout()) return
-    setPosTerminalLocalAutoprintActive(true)
-    return () => {
-      setPosTerminalLocalAutoprintActive(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isPosMainDeviceSyncOwnedByLayout()) return
-    setIncomingDeliveryUiHandler((params) => {
-      autoFocusIncomingDeliveryOrder(params)
-    })
-    setGrabCancelUiHandler((params) => {
-      notifyGrabCustomerCancelledOrder(params)
-    })
-    return () => {
-      setIncomingDeliveryUiHandler(null)
-      setGrabCancelUiHandler(null)
-    }
-  }, [autoFocusIncomingDeliveryOrder, notifyGrabCustomerCancelledOrder])
-
   const runGrabCancelWatchOnOrders = useCallback(
     (
       orders: Array<{ id?: number; status?: string; memo?: string; orderType?: string; tableName?: string; orderNo?: string }>,
@@ -3007,21 +3058,146 @@ export default function PosTerminalPage() {
     [currentStoreCodeVariants]
   )
 
+  const isKbankPilotStore = useMemo(() => {
+    const values = [
+      String(currentStoreId || '').trim(),
+      String(currentStore?.name || '').trim(),
+      String(formatStoreLabel(currentStoreId || '') || '').trim(),
+    ]
+      .filter(Boolean)
+      .map((value) => value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim())
+    return values.includes('cm office')
+  }, [currentStoreId, currentStore?.name, formatStoreLabel])
+
+  useEffect(() => {
+    if (isKbankPilotStore) return
+    setLiveKbankQrPayload('')
+    setLiveKbankQrAmount(0)
+    setLiveKbankQrType('THAI_QR')
+    setKbankOpsTxnUid('')
+    setKbankOpsOrigTxnUid('')
+    setKbankOpsTxnNo('')
+    setKbankOpsLastResult('')
+    setKbankCallbackState('idle')
+    kbankCallbackNotifiedTxRef.current = ''
+    kbankCcInquiryTriggeredRef.current = ''
+    pendingKbankFinalizeRef.current = {}
+    deferredKbankApprovalRef.current = {}
+    setCustomerDisplayPaymentMessage('')
+  }, [isKbankPilotStore, currentStoreId])
+
+  const kbankTerminalIdStorageKey = useMemo(() => {
+    const store = String(currentStoreId || '').trim().toUpperCase()
+    return store ? `pos.kbank.terminalId.${store}` : 'pos.kbank.terminalId'
+  }, [currentStoreId])
+
+  useEffect(() => {
+    if (!isKbankPilotStore) return
+    try {
+      const saved = String(localStorage.getItem(kbankTerminalIdStorageKey) || '').trim()
+      if (saved) setKbankOpsTerminalId(saved)
+    } catch {
+      /* ignore */
+    }
+  }, [isKbankPilotStore, kbankTerminalIdStorageKey])
+
+  useEffect(() => {
+    if (!isKbankPilotStore) return
+    const value = String(kbankOpsTerminalId || '').trim()
+    try {
+      if (value) localStorage.setItem(kbankTerminalIdStorageKey, value)
+    } catch {
+      /* ignore */
+    }
+  }, [isKbankPilotStore, kbankTerminalIdStorageKey, kbankOpsTerminalId])
+
+  useEffect(() => {
+    const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+    if (!partnerTxnUid) return
+    if (String(kbankOpsOrigTxnUid || '').trim() !== partnerTxnUid) {
+      setKbankOpsOrigTxnUid(partnerTxnUid)
+    }
+  }, [kbankOpsTxnUid, kbankOpsOrigTxnUid])
+
+  const demoKbankQrPayload = useMemo(() => {
+    if (!isPosDemo || !tourPaymentModalOpen) return ''
+    const amount = Math.max(0, Number(tourPaymentQrAmount || 0))
+    if (amount <= 0) return ''
+    const store = String(currentStoreId || 'POS DEMO').trim() || 'POS DEMO'
+    return `CMERP-DEMO-KBANK|${store}|${amount.toFixed(2)}`
+  }, [isPosDemo, tourPaymentModalOpen, tourPaymentQrAmount, currentStoreId])
+
+  const effectiveStaffKbankQrPayload = useMemo(() => {
+    const live = String(liveKbankQrPayload || '').trim()
+    if (live) return live
+    return String(demoKbankQrPayload || '').trim()
+  }, [liveKbankQrPayload, demoKbankQrPayload])
+  /** QR 이미지 없이 txnUid만 남은 경우(취소 후 Inquiry 등)에도 직원 모니터 표시 */
+  const showKbankStaffMonitor = useMemo(
+    () =>
+      Boolean(
+        String(effectiveStaffKbankQrPayload || '').trim() ||
+          (!isPosDemo && isKbankPilotStore && String(kbankOpsTxnUid || '').trim())
+      ),
+    [effectiveStaffKbankQrPayload, isPosDemo, isKbankPilotStore, kbankOpsTxnUid]
+  )
+  const effectiveStaffKbankQrAmount = useMemo(() => {
+    const live = String(liveKbankQrPayload || '').trim()
+    if (live && liveKbankQrAmount > 0) return liveKbankQrAmount
+    if (live) {
+      const fromPayload = extractAmountFromEmvQrPayload(live)
+      if (fromPayload > 0) return fromPayload
+    }
+    return Math.max(0, Number(tourPaymentQrAmount || 0))
+  }, [liveKbankQrPayload, liveKbankQrAmount, tourPaymentQrAmount])
+
+  const effectiveCustomerDisplayQrPayload = useMemo(() => {
+    const live = String(liveKbankQrPayload || '').trim()
+    if (live) return live
+    return String(customerDisplayQrPayload || '').trim()
+  }, [liveKbankQrPayload, customerDisplayQrPayload])
+  const effectiveCustomerDisplayQrType = useMemo<'THAI_QR' | 'CREDIT_CARD'>(() => {
+    if (String(liveKbankQrPayload || '').trim()) return liveKbankQrType
+    const draftType = String(customerDisplayPaymentDraft?.paymentQrType || '').trim().toUpperCase()
+    return draftType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
+  }, [liveKbankQrPayload, liveKbankQrType, customerDisplayPaymentDraft?.paymentQrType])
+
+  const staffKbankQrTypeLabel = useMemo(() => {
+    const fromBank =
+      liveKbankQrTypeSource === 'bank_qr_type' ||
+      liveKbankQrTypeSource === 'bank_sof' ||
+      liveKbankQrTypeSource === 'emv_payload'
+    if (effectiveCustomerDisplayQrType === 'CREDIT_CARD') {
+      return fromBank
+        ? t('posKbankQrTypeCreditFromBank') || 'Credit Card QR (from bank)'
+        : t('posKbankQrTypeCreditRequested') || 'Credit Card QR (requested · bank type not returned)'
+    }
+    return fromBank
+      ? t('posKbankQrTypeThaiFromBank') || 'Thai QR · PromptPay (from bank)'
+      : t('posKbankQrTypeThaiRequested') || 'Thai QR · PromptPay (requested)'
+  }, [effectiveCustomerDisplayQrType, liveKbankQrTypeSource, t])
+
+  useEffect(() => {
+    if (String(liveKbankQrPayload || '').trim()) return
+    setLiveKbankQrAmount(0)
+  }, [liveKbankQrPayload])
+
   const schedulePostPaymentCustomerQr = useCallback(() => {
-    const q = String(kbank.effectiveCustomerDisplayQrPayload || '').trim()
+    const q = String(effectiveCustomerDisplayQrPayload || '').trim()
     if (!q) return
     const until = Date.now() + 16000
     setPostPaymentQrUntil(until)
     window.setTimeout(() => {
       setPostPaymentQrUntil((prev) => {
         if (prev === until) {
-          kbank.clearLiveKbankQr()
+          setLiveKbankQrPayload('')
+          setLiveKbankQrType('THAI_QR')
           void executeLinkposClearQr({ storeCode: currentStoreId })
         }
         return prev === until ? 0 : prev
       })
     }, 16000)
-  }, [currentStoreId, kbank])
+  }, [currentStoreId, effectiveCustomerDisplayQrPayload])
 
   const customerDisplayUiLang = useMemo<LangCode>(() => {
     if (customerDisplayLangMode === 'custom' && isLangCode(customerDisplayLangOverride)) {
@@ -3061,10 +3237,10 @@ export default function PosTerminalPage() {
       brandLogoUrl: brand,
     }
     const now = Date.now()
-    const showPostPayQr = postPaymentQrUntil > now && String(kbank.effectiveCustomerDisplayQrPayload || '').trim().length > 0
+    const showPostPayQr = postPaymentQrUntil > now && String(effectiveCustomerDisplayQrPayload || '').trim().length > 0
     const showLiveKbankQr =
-      Boolean(String(kbank.liveKbankQrPayload || '').trim()) &&
-      String(kbank.effectiveCustomerDisplayQrPayload || '').trim().length > 0
+      Boolean(String(liveKbankQrPayload || '').trim()) &&
+      String(effectiveCustomerDisplayQrPayload || '').trim().length > 0
     const showPostPayChange =
       postPaymentCashChangeBaht != null && Number.isFinite(postPaymentCashChangeBaht)
 
@@ -3084,8 +3260,8 @@ export default function PosTerminalPage() {
           kind: 'qr',
           title: customerDisplayT('posCustomerThankYou') || '감사합니다',
           message: customerDisplayT('posCustomerPostPaymentQrHint') || '아래 QR을 이용해 주세요.',
-          qrPayload: kbank.effectiveCustomerDisplayQrPayload,
-          qrType: kbank.effectiveCustomerDisplayQrType,
+          qrPayload: effectiveCustomerDisplayQrPayload,
+          qrType: effectiveCustomerDisplayQrType,
         }
       : showLiveKbankQr
         ? {
@@ -3096,11 +3272,11 @@ export default function PosTerminalPage() {
               customerDisplayPaymentMessage ||
               customerDisplayT('posScanToPayHint') ||
               '스캔 후 결제해 주세요.',
-            qrPayload: kbank.effectiveCustomerDisplayQrPayload,
-            qrType: kbank.effectiveCustomerDisplayQrType,
+            qrPayload: effectiveCustomerDisplayQrPayload,
+            qrType: effectiveCustomerDisplayQrType,
             totalAmount:
-              kbank.effectiveStaffKbankQrAmount > 0
-                ? kbank.effectiveStaffKbankQrAmount
+              effectiveStaffKbankQrAmount > 0
+                ? effectiveStaffKbankQrAmount
                 : customerDisplayBreakdown.total,
           }
         : hasPendingPaymentFlow
@@ -3127,8 +3303,8 @@ export default function PosTerminalPage() {
                   ...base,
                   kind: 'qr',
                   title: customerDisplayT('posCustomerQrTitle') || 'QR 코드',
-                  qrPayload: kbank.effectiveCustomerDisplayQrPayload,
-                  qrType: kbank.effectiveCustomerDisplayQrType,
+                  qrPayload: effectiveCustomerDisplayQrPayload,
+                  qrType: effectiveCustomerDisplayQrType,
                 }
               : {
                   ...base,
@@ -3156,7 +3332,10 @@ export default function PosTerminalPage() {
     customerDisplayOrderItems,
     customerDisplayDefaultState,
     customerDisplayQrPayload,
-    kbank,
+    liveKbankQrPayload,
+    effectiveCustomerDisplayQrPayload,
+    effectiveCustomerDisplayQrType,
+    effectiveStaffKbankQrAmount,
     customerDisplayIdleMessage,
     customerDisplayIdleMediaType,
     customerDisplayIdleMediaUrl,
@@ -3173,6 +3352,82 @@ export default function PosTerminalPage() {
       clearCartFromTerminal()
     }
   }, [activeTab, selectedTableId, clearCartFromTerminal])
+
+  const hasInitializedMainPosPollRef = useRef(false)
+  const lastSeenOrderIdRef = useRef<number>(0)
+  const lastSeenOrderIdPersistedRef = useRef<number>(0)
+  const startupCatchupUntilRef = useRef<number>(Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS)
+  const prevStoreForPollRef = useRef<string | null>(null)
+  const triggerMainPosPollNowRef = useRef<(() => void) | null>(null)
+  const mainPosPollInFlightRef = useRef(false)
+  const lastMetaScanAtRef = useRef(0)
+  const lastRealtimeOrderEventAtRef = useRef(0)
+  const realtimeChannelStateRef = useRef<Map<string, PosRealtimeSubscribeStatus>>(new Map())
+  const realtimeChannelHealthyRef = useRef(false)
+  const pendingEmptyItemsOrderIdsRef = useRef<Set<number>>(new Set())
+  const mainPosPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const realtimeResubscribeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastRealtimeResubscribeAtRef = useRef(0)
+  const lastTriggerMainPosPollAtRef = useRef(0)
+  const [realtimeResubscribeTick, setRealtimeResubscribeTick] = useState(0)
+
+  const recomputeRealtimeChannelHealthy = useCallback(() => {
+    realtimeChannelHealthyRef.current = isMainPosRealtimeInsertChannelHealthy(
+      realtimeChannelStateRef.current
+    )
+  }, [])
+
+  const scheduleRealtimeResubscribe = useCallback(() => {
+    const now = Date.now()
+    if (now - lastRealtimeResubscribeAtRef.current < MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS) return
+    if (realtimeResubscribeTimerRef.current) clearTimeout(realtimeResubscribeTimerRef.current)
+    realtimeResubscribeTimerRef.current = setTimeout(() => {
+      lastRealtimeResubscribeAtRef.current = Date.now()
+      realtimeChannelStateRef.current.clear()
+      realtimeChannelHealthyRef.current = false
+      setRealtimeResubscribeTick((n) => n + 1)
+    }, MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS)
+  }, [])
+
+  useEffect(() => {
+    recomputeRealtimeChannelHealthyRef.current = recomputeRealtimeChannelHealthy
+  }, [recomputeRealtimeChannelHealthy])
+
+  useEffect(() => {
+    scheduleRealtimeResubscribeRef.current = scheduleRealtimeResubscribe
+  }, [scheduleRealtimeResubscribe])
+
+  const bumpLastSeenOrderId = useCallback(
+    (orderIdRaw: unknown) => {
+      const orderId = Number(orderIdRaw)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      const next = Math.trunc(orderId)
+      if (next > lastSeenOrderIdRef.current) {
+        lastSeenOrderIdRef.current = next
+      }
+      if (next > lastSeenOrderIdPersistedRef.current) {
+        lastSeenOrderIdPersistedRef.current = next
+      }
+      if (currentStoreId) {
+        writeMainPosLastSeenOrderId(currentStoreId, next)
+      }
+    },
+    [currentStoreId]
+  )
+
+  const shouldTreatAsIncomingOrder = useCallback(
+    (orderIdRaw: unknown, createdAtRaw: unknown) => {
+      const orderId = Number(orderIdRaw)
+      if (!Number.isFinite(orderId) || orderId <= 0) return false
+      if (isSessionNewOrder(createdAtRaw, posSessionStartedAtRef.current)) return true
+      if (Date.now() > startupCatchupUntilRef.current) return false
+      if (orderId <= lastSeenOrderIdPersistedRef.current) return false
+      const createdAtMs = new Date(String(createdAtRaw ?? '').trim()).getTime()
+      if (!Number.isFinite(createdAtMs)) return true
+      return createdAtMs >= posSessionStartedAtRef.current - MAIN_POS_STARTUP_CATCHUP_WINDOW_MS
+    },
+    []
+  )
 
   const resolveOrderItemDisplayName = useCallback(
     (item: { id?: string; name?: string; menuId?: string; promoId?: string; promoCode?: string }) => {
@@ -3728,21 +3983,13 @@ export default function PosTerminalPage() {
       const batch = (splitBatch.length > 0 ? splitBatch : [receiptPayload]).map(withOrderId)
 
       if (!isMainPosDevice) {
-        const showTaxReceiptPreview = Boolean(parsePosOrderMemo(receiptPayload.memo).taxInvoice)
         if (splitBatch.length > 0) {
-          startReceiptBatch(
-            splitBatch.map((row) => ({
-              ...row,
-              suppressReceiptModalAutoPrint: showTaxReceiptPreview ? false : row.suppressReceiptModalAutoPrint,
-              ...(showTaxReceiptPreview ? { skipReceiptAutoPrint: true } : {}),
-            }))
-          )
+          startReceiptBatch(splitBatch)
         } else {
           setReceiptData({
             ...receiptPayload,
             receiptAutoPrintContext: 'payment',
-            suppressReceiptModalAutoPrint: !showTaxReceiptPreview,
-            ...(showTaxReceiptPreview ? { skipReceiptAutoPrint: true } : {}),
+            suppressReceiptModalAutoPrint: true,
           })
         }
         return
@@ -4148,6 +4395,308 @@ export default function PosTerminalPage() {
     }
   }
 
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId) return
+    const onInsert = (payload: { new?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
+      if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) {
+        logPosPrintDebug('realtime_insert_skip_not_incoming', {
+          orderId,
+          createdAt: String(row.created_at ?? ''),
+        })
+        return
+      }
+      if (!isCurrentStoreOrder(row.store_code)) {
+        logPosPrintDebug('realtime_insert_skip_store_mismatch', {
+          orderId,
+          rowStore: String(row.store_code ?? ''),
+          variants: currentStoreCodeVariants,
+        })
+        return
+      }
+      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
+        seenOrderIdsRef.current.add(orderId)
+        bumpLastSeenOrderId(orderId)
+        logPosPrintDebug('realtime_insert_suppress_queued_sync', { orderId })
+        return
+      }
+      if (seenOrderIdsRef.current.has(orderId)) {
+        logPosPrintDebug('realtime_insert_skip_seen', { orderId })
+        return
+      }
+      const parsedItems = parseRealtimePosOrderRowItemsJson(row)
+      if (!parsedItems.ok) {
+        logPosPrintDebug('realtime_insert_skip_items_parse_error', { orderId })
+        return
+      }
+      const items = parsedItems.items
+      /* items_json이 Realtime에 비어 있으면 폴링이 다시 잡도록 seen에 넣지 않음 */
+      if (items.length === 0) {
+        pendingEmptyItemsOrderIdsRef.current.add(orderId)
+        logPosPrintDebug('realtime_insert_skip_empty_items', { orderId })
+        triggerMainPosPollNowRef.current?.()
+        return
+      }
+      pendingEmptyItemsOrderIdsRef.current.delete(orderId)
+      seenOrderIdsRef.current.add(orderId)
+      bumpLastSeenOrderId(orderId)
+      const inferredOrderType = inferPosOrderTypeFromRow({
+        order_type: String(row.order_type ?? ''),
+        memo: String(row.memo ?? ''),
+        table_name: String(row.table_name ?? ''),
+        delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
+        items_json: row.items_json,
+      })
+      autoFocusIncomingDeliveryOrder({
+        orderId,
+        orderType: inferredOrderType,
+        deliveryAppCode: String(row.delivery_app_code ?? ''),
+        status: String(row.status ?? ''),
+        createdAt: String(row.created_at ?? ''),
+        storeCode: String(row.store_code ?? ''),
+        memo: String(row.memo ?? ''),
+      })
+      // 주문 바/배달 목록은 usePosStore 스냅샷을 사용하므로, 신규 주문 수신 시 즉시 갱신합니다.
+      refetchCurrentStore()
+      const storeCode = String(row.store_code ?? currentStoreId)
+      const orderNo = String(row.order_no ?? '')
+      const orderType = inferredOrderType
+      if (orderType === 'dine_in') {
+        const snap = buildDineInQtySnapshot(items)
+        if (snap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, snap)
+      }
+      const tableName = String(row.table_name ?? '')
+      const memo = String(row.memo ?? '')
+      const subtotal = Number(row.subtotal ?? 0)
+      const discountAmt = Number(row.discount_amt ?? 0)
+      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
+      const total = Number(row.total ?? 0)
+      const receiptPayloadRealtime = {
+        ...hallOrderReceiptPayloadFromOrderFields(
+          {
+            orderNo,
+            storeCode,
+            orderType: resolvePosOrderTypeReceiptLabel(orderType, t),
+            tableName,
+            memo,
+            items,
+            subtotal,
+            discountAmt,
+            couponDiscountAmt,
+            discountReason: String(row.discount_reason ?? '').trim() || undefined,
+            total,
+            ...posGuestCountSpread(row.guest_count),
+          },
+          pricingAdjustments
+        ),
+        _autoPrintDedupeKey: `order:${orderId}:hall:auto`,
+      }
+      const runKitchenFromRealtimeOrderInsert = () => {
+        const kitchenDedupeKey = `order:${orderId}:kitchen`
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+        const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
+        getPrinterSettingsForStore(printSettingsStoreCode)
+          .then(async (settings) => {
+            const ki = kitchenSlipPrintI18n(settings, lang)
+            const menusForPrint = await resolveMenusForKitchenPrint(
+              items as Array<Record<string, unknown>>,
+              printSettingsStoreCode
+            )
+            const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+              items as Array<Record<string, unknown>>,
+              menusForPrint
+            )
+            const slips = buildKitchenSlipGroups(
+              kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
+              buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
+            )
+            if (!slips.length) {
+              releaseKitchenAutoPrintKey(kitchenDedupeKey)
+              logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId, flow: 'realtime' })
+              return
+            }
+            const slipDesign = resolveKitchenSlipDesign(settings)
+            const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
+            const printOne = (idx: number) => {
+              if (idx >= slips.length) return
+              const slip = slips[idx]
+              const tablePartR = tableName
+                ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
+                : ''
+              const html = buildKitchenSlipDocumentHtml({
+                label: slip.label,
+                orderNo,
+                storeCode,
+                orderTypeLabel: kitchenSlipOrderTypeLabel({ orderType, tableName, memo, orderNo }, ki),
+                tablePart: tablePartR,
+                dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
+                items: kitchenSlipItemsForPrint(
+                  slip.items,
+                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                  ki,
+                  menusForPrint,
+                  optionNameByCodeForPrint
+                ),
+                memoLine: memoLine || null,
+                escapeHtml,
+                design: slipDesign,
+                optionNameByCode: optionNameByCodeForPrint,
+                printColorAdjust: 'exact',
+                ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
+              })
+              printPosHtmlDocument(html, {
+                title: slip.label,
+                printDelayMs: 0,
+                focusIframeBeforePrint: false,
+                printRole: 'kitchen',
+                kitchenStation: slip.station,
+                escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                onPrintUnavailable: () => {
+                  void appAlert(t('posPrintUnavailable'))
+                },
+                onAfterCleanup: () => {
+                  if (idx + 1 < slips.length)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
+                },
+              })
+            }
+            setTimeout(() => printOne(0), 0)
+          })
+          .catch((e) => {
+            releaseKitchenAutoPrintKey(kitchenDedupeKey)
+            console.error('Kitchen slip print:', e)
+          })
+      }
+      const isPendingDelivery =
+        inferredOrderType === 'delivery' &&
+        String(row.status ?? '').trim().toLowerCase() === 'pending'
+      const shouldWaitForDeliveryAccept =
+        isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
+      const shouldWaitForMemberPortalPrepay = isMemberPortalPaymentPendingOrder({
+        memo: String(memo ?? ''),
+        status: String(row.status ?? ''),
+        payment_qr: Number(row.payment_qr ?? 0),
+        created_by: String(row.created_by ?? ''),
+      })
+      const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+      if (!shouldDeferAutoprint) {
+        logPosPrintDebug('realtime_insert_autoprint_start', {
+          orderId,
+          autoPrintReceiptOnOrder,
+          autoPrintKitchenSlipOnOrder,
+          itemCount: items.length,
+          isPendingDelivery,
+          shouldWaitForDeliveryAccept,
+          shouldWaitForMemberPortalPrepay,
+        })
+        if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
+        } else if (autoPrintReceiptOnOrder) {
+          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
+        } else if (autoPrintKitchenSlipOnOrder) {
+          setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
+        }
+      } else {
+        logPosPrintDebug('realtime_insert_deferred_autoprint', {
+          orderId,
+          status: String(row.status ?? ''),
+          isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(memo ?? '')),
+          shouldWaitForMemberPortalPrepay,
+        })
+      }
+      if (autoPrintReceiptOnPayment) {
+        const st = String(row.status ?? '').toLowerCase()
+        const paySum = posOrderRowPaymentSum(row)
+        if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
+          void getPosOrders({ orderId, storeCode: currentStoreId })
+            .then((list) => {
+              const order = list[0] as PosOrder | undefined
+              if (!order?.items?.length) {
+                printedPaymentReceiptIdsRef.current.delete(orderId)
+                return
+              }
+              if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+                printedPaymentReceiptIdsRef.current.delete(orderId)
+                return
+              }
+              return dispatchPaymentReceiptFromOrder(order)
+            })
+            .catch(() => {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+            })
+        }
+      }
+    }
+    const onUpdatePendingItems = (payload: { new?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      if (!pendingEmptyItemsOrderIdsRef.current.has(orderId)) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
+      if (!isCurrentStoreOrder(row.store_code)) return
+      const parsed = parseRealtimePosOrderRowItemsJson(row)
+      if (!parsed.ok || parsed.items.length === 0) return
+      pendingEmptyItemsOrderIdsRef.current.delete(orderId)
+      logPosPrintDebug('realtime_update_items_filled', { orderId })
+      triggerMainPosPollNowRef.current?.()
+    }
+
+    realtimeChannelStateRef.current.clear()
+    realtimeChannelHealthyRef.current = false
+    /** legacy·Grab ID(1042↔CM Silom) 별칭마다 INSERT 구독 — seenOrderIds로 중복 처리 방지 */
+    const channels = currentStoreCodeVariants.flatMap((storeCode) => {
+      const code = String(storeCode || '').trim()
+      if (!code) return []
+      const insertKey = `insert:${code}`
+      const updateKey = `insert-items:${code}`
+      const list = []
+      const chInsert = subscribePosOrdersInsert(onInsert, {
+        store: code,
+        onStatus: makeRealtimeStatusHandler(insertKey),
+      })
+      if (chInsert) list.push(chInsert)
+      const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
+        store: code,
+        onStatus: makeRealtimeStatusHandler(updateKey),
+      })
+      if (chUpdate) list.push(chUpdate)
+      return list
+    })
+    return () => {
+      channels.forEach((channel) => channel?.unsubscribe())
+      if (realtimeResubscribeTimerRef.current) {
+        clearTimeout(realtimeResubscribeTimerRef.current)
+        realtimeResubscribeTimerRef.current = null
+      }
+    }
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    currentStoreCodeVariants,
+    realtimeResubscribeTick,
+    autoPrintReceiptOnAddOrder,
+    autoPrintReceiptOnOrder,
+    autoPrintKitchenSlipOnOrder,
+    autoPrintReceiptOnPayment,
+    pricingAdjustments,
+    posReceiptLineOpts,
+    menus,
+    t,
+    lang,
+    refetchCurrentStore,
+    logPosPrintDebug,
+    bumpLastSeenOrderId,
+    shouldTreatAsIncomingOrder,
+    parseRealtimePosOrderRowItemsJson,
+    buildDineInQtySnapshot,
+    isCurrentStoreOrder,
+    makeRealtimeStatusHandler,
+  ])
 
   useEffect(() => {
     if (isMainPosDevice || !currentStoreId) return
@@ -4156,11 +4705,11 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
-      if (!shouldTreatAsMainPosIncomingOrder(orderId, row.created_at)) return
+      if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) return
       if (!isCurrentStoreOrder(row.store_code)) return
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
-      bumpLastSeenOrderId(currentStoreId, orderId)
+      bumpLastSeenOrderId(orderId)
       autoFocusIncomingDeliveryOrder({
         orderId,
         orderType: String(row.order_type ?? ''),
@@ -4184,11 +4733,14 @@ export default function PosTerminalPage() {
     currentStoreCodeVariants,
     autoFocusIncomingDeliveryOrder,
     refetchCurrentStore,
-    isCurrentStoreOrder,
+    bumpLastSeenOrderId,
+    shouldTreatAsIncomingOrder,
+    runGrabCancelWatchOnOrders,
+    notifyGrabCustomerCancelledOrder,
   ])
 
   useEffect(() => {
-    if (isMainPosDevice || !currentStoreId) return
+    if (!currentStoreId) return
     const deliveryList = [...deliveryOrders, ...packagedDeliveryOrders, ...completedDeliveryOrders]
     if (!deliveryList.length) return
     const rows = deliveryList.map((o) => ({
@@ -4213,13 +4765,14 @@ export default function PosTerminalPage() {
   ])
 
   useEffect(() => {
-    if (isMainPosDevice || !currentStoreId) return
+    if (!currentStoreId) return
 
     const handleUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
       if (!isCurrentStoreOrder(row.store_code)) return
 
       const ot = String(row.order_type ?? '').trim().toLowerCase()
@@ -4273,9 +4826,1005 @@ export default function PosTerminalPage() {
     refetchCurrentStore,
   ])
 
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId) return
+    const wantPayment = autoPrintReceiptOnPayment
+    const wantRemoteDineInAdd =
+      (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder) || autoPrintKitchenSlipOnOrder
+    if (!wantPayment && !wantRemoteDineInAdd) return
 
+    const onUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      lastRealtimeOrderEventAtRef.current = Date.now()
+      if (!isCurrentStoreOrder(row.store_code)) return
+      const rowStore = String(row.store_code ?? currentStoreId ?? '').trim()
+      const oldRowForAutoprint = payload.old as Record<string, unknown> | undefined
+      const inferredOrderType = inferPosOrderTypeFromRow({
+        order_type: String(row.order_type ?? ''),
+        memo: String(row.memo ?? ''),
+        table_name: String(row.table_name ?? ''),
+        delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
+        items_json: row.items_json,
+      })
+      const packagingOnlyUpdate =
+        oldRowForAutoprint != null &&
+        isPosOrderItemsJsonPackagingOnlyUpdate(oldRowForAutoprint, row)
+
+      if (packagingOnlyUpdate) {
+        if (inferredOrderType === 'dine_in') {
+          const parsedPackaging = parseRealtimePosOrderRowItemsJson(row)
+          if (parsedPackaging.ok && parsedPackaging.items.length > 0) {
+            const newQtyById = buildDineInQtySnapshot(parsedPackaging.items)
+            if (newQtyById.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+          }
+        }
+        logPosPrintDebug('realtime_update_skip_packaging_only', { orderId })
+      }
+
+      if (
+        !packagingOnlyUpdate &&
+        autoPrintReceiptOnOrder &&
+        seenOrderIdsRef.current.has(orderId) &&
+        inferredOrderType === 'delivery' &&
+        posOrderRowPaymentSum(row) <= 0 &&
+        !isPosOrderPaidLikeStatus(String(row.status ?? ''))
+      ) {
+        if (oldRowForAutoprint) {
+          const newDisc = Math.max(0, Number(row.discount_amt ?? 0) || 0)
+          const newCoupon = Math.max(0, Number(row.coupon_discount_amt ?? 0) || 0)
+          const newTotal = Math.max(0, Number(row.total ?? 0) || 0)
+          const oldTotal = Math.max(0, Number(oldRowForAutoprint.total ?? 0) || 0)
+          if (
+            posOrderRealtimePricingFieldsChanged(oldRowForAutoprint, row) &&
+            (newDisc > 0.01 || newCoupon > 0.01 || (oldTotal > newTotal + 0.01 && newTotal > 0.005))
+          ) {
+            const reprintKey = `order:${orderId}:hall-disc:${Math.round(newDisc * 100)}:${Math.round(newCoupon * 100)}:${Math.round(newTotal * 100)}`
+            if (!printedHallDiscountReprintKeysRef.current.has(reprintKey)) {
+              printedHallDiscountReprintKeysRef.current.add(reprintKey)
+              const parsedDisc = parseRealtimePosOrderRowItemsJson(row)
+              if (parsedDisc.ok && parsedDisc.items.length > 0) {
+                const hallPayload = {
+                  ...hallOrderReceiptPayloadFromOrderFields(
+                    {
+                      orderNo: String(row.order_no ?? ''),
+                      storeCode: rowStore,
+                      orderType: resolvePosOrderTypeReceiptLabel(inferredOrderType, t),
+                      tableName: String(row.table_name ?? ''),
+                      memo: String(row.memo ?? ''),
+                      items: parsedDisc.items,
+                      subtotal: Math.max(0, Number(row.subtotal ?? 0) || 0),
+                      discountAmt: newDisc,
+                      couponDiscountAmt: newCoupon,
+                      discountReason: String(row.discount_reason ?? '').trim() || undefined,
+                      total: newTotal,
+                      ...posGuestCountSpread(row.guest_count),
+                    },
+                    pricingAdjustments
+                  ),
+                  _autoPrintDedupeKey: reprintKey,
+                }
+                logPosPrintDebug('realtime_update_delivery_discount_hall_reprint', {
+                  orderId,
+                  newDisc,
+                  newCoupon,
+                  newTotal,
+                })
+                void printReceiptNow(hallPayload, undefined, false, undefined, true)
+              }
+            }
+          }
+        }
+      }
+
+      const oldRowForPrepay = payload.old as Record<string, unknown> | undefined
+      if (
+        oldRowForPrepay &&
+        isMemberPortalPaymentPendingOrder({
+          memo: String(oldRowForPrepay.memo ?? ''),
+          status: String(oldRowForPrepay.status ?? ''),
+          payment_qr: Number(oldRowForPrepay.payment_qr ?? 0),
+          created_by: String(oldRowForPrepay.created_by ?? ''),
+        }) &&
+        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
+        posOrderRowPaymentSum(row) > 0 &&
+        reserveKitchenAutoPrintKey(`mp-prepay-paid:${orderId}`)
+      ) {
+        logPosPrintDebug('realtime_update_member_portal_prepay_paid', { orderId })
+        playIncomingOrderBeep()
+        refetchCurrentStore()
+        void getPosOrders({ orderId, storeCode: currentStoreId })
+          .then(async (list) => {
+            const order = list[0] as PosOrder | undefined
+            if (!order?.items?.length) return
+            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
+            if (autoPrintKitchenSlipOnOrder) {
+              await printKitchenFromPosOrder(order)
+            }
+            if (autoPrintReceiptOnOrder) {
+              const hallPayload = hallOrderReceiptPayloadFromOrderFields(
+                {
+                  orderNo: order.orderNo ?? '',
+                  storeCode: order.storeCode ?? rowStore,
+                  orderType: resolvePosOrderTypeReceiptLabel(String(order.orderType ?? ''), t),
+                  tableName: order.tableName ?? '',
+                  memo: order.memo ?? '',
+                  items: order.items ?? [],
+                  subtotal: Math.max(0, Number(order.subtotal ?? 0) || 0),
+                  discountAmt: Math.max(0, Number(order.discountAmt ?? 0) || 0),
+                  couponDiscountAmt: Math.max(0, Number(order.couponDiscountAmt ?? 0) || 0),
+                  discountReason: String(order.discountReason ?? '').trim() || undefined,
+                  total: Math.max(0, Number(order.total ?? 0) || 0),
+                  ...posGuestCountSpread(order.guestCount),
+                },
+                pricingAdjustments
+              )
+              await printReceiptNow(hallPayload, undefined, false, undefined, true)
+            }
+          })
+          .catch((e) => console.error('member portal prepay paid autoprint:', e))
+      }
+
+      if (
+        wantPayment &&
+        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
+        posOrderRowPaymentSum(row) > 0 &&
+        !printedPaymentReceiptIdsRef.current.has(orderId)
+      ) {
+        void getPosOrders({ orderId, storeCode: currentStoreId })
+          .then((list) => {
+            const order = list[0] as PosOrder | undefined
+            if (!order?.items?.length) {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+              return
+            }
+            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+              return
+            }
+            return dispatchPaymentReceiptFromOrder(order)
+          })
+          .catch(() => {
+            printedPaymentReceiptIdsRef.current.delete(orderId)
+          })
+      }
+
+      if (!wantRemoteDineInAdd || packagingOnlyUpdate) return
+      if (inferredOrderType !== 'dine_in') return
+      /**
+       * 결제(updatePosOrder + status 반영) UPDATE는 주방 추가주문 출력 대상이 아님.
+       * - 결제 직전 pending/cooking 상태에서도 payment_* 값이 먼저 반영될 수 있어
+       *   "추가 주문"으로 오인해 주방지가 한 번 더 나갈 수 있다.
+       */
+      if (posOrderRowPaymentSum(row) > 0) return
+      if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
+      const st = String(row.status ?? '').trim().toLowerCase()
+      if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
+
+      const oldRow = payload.old as Record<string, unknown> | undefined
+      if (oldRow && isPosDineInTableNameOnlyUpdate(oldRow, row)) {
+        const parsedTableMove = parseRealtimePosOrderRowItemsJson(row)
+        if (parsedTableMove.ok && parsedTableMove.items.length > 0) {
+          const sid = buildDineInQtySnapshot(parsedTableMove.items)
+          if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
+        }
+        const oldTableName = String(oldRow.table_name ?? '').trim()
+        if (oldTableName) clearTableOrder(currentStoreId, oldTableName)
+        refetchCurrentStore()
+        logPosPrintDebug('realtime_update_skip_table_name_only', { orderId })
+        return
+      }
+
+      const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId)
+      if (suppressUntil != null) {
+        if (Date.now() < suppressUntil) {
+          const parsedSelf = parseRealtimePosOrderRowItemsJson(row)
+          if (parsedSelf.ok && parsedSelf.items.length > 0) {
+            const sid = buildDineInQtySnapshot(parsedSelf.items)
+            if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
+          }
+          logPosPrintDebug('realtime_update_skip_self_dine_in_suppress', { orderId })
+          return
+        }
+        mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
+      }
+
+      const parsed = parseRealtimePosOrderRowItemsJson(row)
+      if (!parsed.ok || parsed.items.length === 0) return
+
+      const items = parsed.items
+      let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
+      const newQtyById = buildDineInQtySnapshot(items)
+      if (newQtyById.size === 0) return
+
+      if (!prevQtyById) {
+        const oldRow = payload.old as Record<string, unknown> | undefined
+        if (oldRow) {
+          const parsedOld = parseRealtimePosOrderRowItemsJson(oldRow)
+          if (parsedOld.ok && parsedOld.items.length > 0) {
+            prevQtyById = buildDineInQtySnapshot(parsedOld.items)
+            logPosPrintDebug('realtime_update_dine_in_prev_from_old_row', { orderId })
+          }
+        }
+      }
+      if (!prevQtyById) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        logPosPrintDebug('realtime_update_dine_in_snapshot_seeded', { orderId })
+        return
+      }
+
+      const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
+      const changedIds = [...changedSet]
+      if (changedIds.length === 0) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        return
+      }
+
+      const storeCodeForSkip = String(row.store_code ?? currentStoreId)
+      if (
+        shouldSkipDineInRemoteAddAutoprint(orderId, storeCodeForSkip, prevQtyById, newQtyById, changedSet)
+      ) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        logPosPrintDebug('remote_dine_in_add_skip_recent_local_print', { orderId })
+        return
+      }
+
+      refetchCurrentStore()
+
+      const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
+      if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        return
+      }
+
+      const cartLikeNew = items.map((it) => ({
+        id: resolveDineInSnapshotItemKey(it),
+        name: it.name,
+        price: it.price,
+        quantity: it.qty,
+        qty: it.qty,
+        ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
+        ...(it.menuId ? { menuId: it.menuId } : {}),
+        ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+      }))
+      const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
+        cartLikeNew,
+        prevQtyById,
+        newQtyById,
+        (line) => resolveDineInSnapshotItemKey(line)
+      )
+
+      const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
+      const discountAmt = Number(row.discount_amt ?? 0)
+      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
+      const pricing = computePosPricing({
+        subtotal: mergeSubtotal,
+        discountAmt,
+        cardPaymentAmount: 0,
+        adjustments: pricingAdjustments,
+      })
+
+      const receiptPrintItemsRemote = items.map((it) => ({
+        ...it,
+        ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+      }))
+
+      const storeCode = String(row.store_code ?? currentStoreId)
+      const orderNoStr = String(row.order_no ?? '')
+      const tableName = String(row.table_name ?? '')
+      const memo = String(row.memo ?? '')
+
+      const receiptPayloadRemote = {
+        orderNo: orderNoStr,
+        storeCode,
+        orderType: t('posOrderTypeDineIn') || '매장',
+        tableName,
+        memo,
+        items: receiptPrintItemsRemote,
+        subtotal: mergeSubtotal,
+        discountAmt,
+        couponDiscountAmt,
+        discountReason: String(row.discount_reason ?? '').trim() || undefined,
+        total: pricing.finalTotal,
+        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+        vatFeeAmt: pricing.vatFeeAmt,
+        vatFeeMode: pricing.vatFeeMode,
+        ...receiptTaxDisplayFieldsFromPricing(pricing),
+        serviceFeeAmt: pricing.serviceFeeAmt,
+        serviceFeeMode: pricing.serviceFeeMode,
+        cardFeeAmt: pricing.cardFeeAmt,
+        cardFeeMode: pricing.cardFeeMode,
+        otherFeeAmt: pricing.otherFeeAmt,
+        otherFeeMode: pricing.otherFeeMode,
+        ...posGuestCountSpread(row.guest_count),
+      }
+
+      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenCartLines)
+
+      dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+      logPosPrintDebug('remote_dine_in_add_autoprint', { orderId, changedCount: changedIds.length })
+
+      const dispatchRemoteKitchen = () => {
+        dispatchDineInAddonKitchenPrint({
+          kitchenCartLines,
+          dedupeKey: kitchenDedupeKey,
+          orderNo: orderNoStr,
+          storeCode,
+          tableName,
+          memo,
+          guestCount: Number(row.guest_count ?? 0) || undefined,
+          logEvent: 'remote_dine_in_add_kitchen_autoprint',
+        })
+      }
+
+      if (shouldAutoPrintReceipt) {
+        void printReceiptNow(receiptPayloadRemote, null, false, undefined, true)
+      }
+      if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
+        const kitchenDelayMs = shouldAutoPrintReceipt
+          ? typeof window !== 'undefined' && window.cmPosShell
+            ? resolveAfterReceiptToKitchenDelayMs()
+            : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+          : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+        setTimeout(dispatchRemoteKitchen, kitchenDelayMs)
+      }
+    }
+    const channels = currentStoreCodeVariants
+      .map((storeCode) => subscribePosOrdersUpdate(onUpdate, { store: storeCode }))
+      .filter(Boolean)
+    return () => {
+      channels.forEach((channel) => channel?.unsubscribe())
+    }
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    currentStoreCodeVariants,
+    autoPrintReceiptOnPayment,
+    autoPrintReceiptOnAddOrder,
+    autoPrintReceiptOnOrder,
+    autoPrintKitchenSlipOnOrder,
+    pricingAdjustments,
+    posReceiptLineOpts,
+    parseRealtimePosOrderRowItemsJson,
+    enrichPromoItemsWithOptionName,
+    dispatchDineInAddonKitchenPrint,
+    buildDineInQtySnapshot,
+    shouldSkipDineInRemoteAddAutoprint,
+    resolveDineInSnapshotItemKey,
+    formatLineNoteForPrint,
+    logPosPrintDebug,
+    t,
+    refetchCurrentStore,
+    printReceiptNow,
+    printKitchenFromPosOrder,
+    reserveKitchenAutoPrintKey,
+    playIncomingOrderBeep,
+  ])
+
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId) {
+      if (!isMainPosDevice) {
+        hasInitializedMainPosPollRef.current = false
+        lastSeenOrderIdRef.current = 0
+        lastSeenOrderIdPersistedRef.current = 0
+        startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
+        prevStoreForPollRef.current = null
+        lastMetaScanAtRef.current = 0
+      }
+      triggerMainPosPollNowRef.current = null
+      return
+    }
+    if (prevStoreForPollRef.current !== currentStoreId) {
+      const persistedLastSeen = readMainPosLastSeenOrderId(currentStoreId)
+      hasInitializedMainPosPollRef.current = false
+      lastSeenOrderIdRef.current = persistedLastSeen
+      lastSeenOrderIdPersistedRef.current = persistedLastSeen
+      startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
+      prevStoreForPollRef.current = currentStoreId
+      grabCancelWatchSnapshotRef.current.clear()
+      grabCancelWatchSeededRef.current = false
+      lastMetaScanAtRef.current = 0
+      printedHallDiscountReprintKeysRef.current.clear()
+    }
+    const today = getPosBusinessDateStr()
+    const poll = async () => {
+      if (mainPosPollInFlightRef.current) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      mainPosPollInFlightRef.current = true
+      try {
+        const runPaymentReceiptScan = async () => {
+          if (!autoPrintReceiptOnPayment) return
+          if (
+            paymentReceiptScanSeededRef.current &&
+            !shouldUseMainPosHeavyOrderScanFallback({
+              realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+              lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
+            })
+          ) {
+            return
+          }
+          try {
+            const paidLikeRows = await getPosOrders({
+              startStr: today,
+              endStr: today,
+              posBizDayScope: true,
+              storeCode: currentStoreId,
+              statusPaidLike: true,
+              limit: 800,
+              orderBy: 'id.desc',
+              pollMinimal: true,
+            })
+            if (!paymentReceiptScanSeededRef.current) {
+              for (const order of paidLikeRows) {
+                const oid = Number(order.id)
+                if (!Number.isFinite(oid) || oid <= 0) continue
+                if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) continue
+                if (posOrderPaymentSum(order) <= 0) continue
+                if (!(order.items || []).length) continue
+                printedPaymentReceiptIdsRef.current.add(oid)
+              }
+              paymentReceiptScanSeededRef.current = true
+              return
+            }
+            const candidates = paidLikeRows.filter((order) => {
+              const oid = Number(order.id)
+              if (!Number.isFinite(oid) || oid <= 0) return false
+              if (printedPaymentReceiptIdsRef.current.has(oid)) return false
+              if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return false
+              if (posOrderPaymentSum(order) <= 0) return false
+              if (!(order.items || []).length) return false
+              return true
+            })
+            candidates.sort((a, b) => Number(a.id) - Number(b.id))
+            let staggerMs = 0
+            for (const order of candidates) {
+              const oid = Number(order.id)
+              setTimeout(() => {
+                void (async () => {
+                  try {
+                    const fullRows = await getPosOrders({
+                      orderId: oid,
+                      storeCode: currentStoreId,
+                    })
+                    const full = fullRows[0]
+                    if (!full) return
+                    if (!isPosOrderPaidLikeStatus(String(full.status ?? ''))) return
+                    if (posOrderPaymentSum(full) <= 0) return
+                    if (!(full.items || []).length) return
+                    await dispatchPaymentReceiptFromOrder(full)
+                  } catch {
+                    /* ignore */
+                  }
+                })()
+              }, staggerMs)
+              staggerMs += 900
+            }
+          } catch {
+            /* ignore payment scan errors */
+          }
+        }
+
+        const sinceId = hasInitializedMainPosPollRef.current && lastSeenOrderIdRef.current > 0 ? lastSeenOrderIdRef.current : undefined
+        const orders = await getPosOrders({
+          startStr: today,
+          endStr: today,
+          posBizDayScope: true,
+          storeCode: currentStoreId,
+          pollMinimal: true,
+          ...(sinceId != null ? { sinceId } : {}),
+        })
+        if (!hasInitializedMainPosPollRef.current) {
+          const maxId = orders.length ? Math.max(...orders.map((o) => o.id ?? 0)) : 0
+          for (const o of orders) {
+            const oid = Number(o.id)
+            if (Number.isFinite(oid) && oid > 0) {
+              seenOrderIdsRef.current.add(oid)
+              if (
+                String(o.orderType ?? '').trim().toLowerCase() === 'dine_in' &&
+                (o.items || []).length > 0
+              ) {
+                const qtySnap = buildDineInQtySnapshot(o.items || [])
+                if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(oid, qtySnap)
+              }
+            }
+          }
+          const seededMax = Math.max(lastSeenOrderIdRef.current, maxId)
+          bumpLastSeenOrderId(seededMax)
+          hasInitializedMainPosPollRef.current = true
+          runGrabCancelWatchOnOrders(orders, { seedOnly: true })
+          await runPaymentReceiptScan()
+          return
+        }
+        const newOrders = orders
+        let shouldRefreshCurrentStore = false
+        for (const order of newOrders) {
+          const oid = Number(order.id)
+          if (!Number.isFinite(oid) || oid <= 0) continue
+          if (!isCurrentStoreOrder(order.storeCode ?? '')) {
+            logPosPrintDebug('poll_skip_store_mismatch', {
+              orderId: oid,
+              rowStore: String(order.storeCode ?? ''),
+            })
+            continue
+          }
+          if (!shouldTreatAsIncomingOrder(oid, order.createdAt)) {
+            bumpLastSeenOrderId(oid)
+            logPosPrintDebug('poll_skip_not_incoming', {
+              orderId: oid,
+              createdAt: String(order.createdAt ?? ''),
+            })
+            continue
+          }
+          if (seenOrderIdsRef.current.has(oid)) {
+            bumpLastSeenOrderId(oid)
+            logPosPrintDebug('poll_skip_seen', { orderId: oid })
+            continue
+          }
+          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
+            seenOrderIdsRef.current.add(oid)
+            bumpLastSeenOrderId(oid)
+            logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
+            continue
+          }
+          const items = prepareOrderItemsForKitchenPrint(
+            order.items || [],
+            (order as { deliveryAppCode?: string }).deliveryAppCode ??
+              (order.items || []).find((row) => String(row.deliveryAppCode ?? '').trim())?.deliveryAppCode
+          )
+          /* 품목이 아직 비어 있으면 seen/워터마크에 넣지 않음 → 다음 폴링에서 다시 조회 */
+          if (items.length === 0) {
+            logPosPrintDebug('poll_skip_empty_items', { orderId: oid })
+            continue
+          }
+          seenOrderIdsRef.current.add(oid)
+          bumpLastSeenOrderId(oid)
+          const inferredDeliveryCode =
+            String((order as unknown as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim() ||
+            String(
+              (order.items || []).find((it) => String(it.deliveryAppCode ?? '').trim())?.deliveryAppCode ?? ''
+            ).trim()
+          autoFocusIncomingDeliveryOrder({
+            orderId: oid,
+            orderType: String(order.orderType ?? ''),
+            deliveryAppCode: inferredDeliveryCode,
+            status: String(order.status ?? ''),
+            createdAt: String(order.createdAt ?? ''),
+            storeCode: String(order.storeCode ?? ''),
+            memo: String(order.memo ?? ''),
+          })
+          shouldRefreshCurrentStore = true
+          const receiptPayloadPoll = {
+            ...hallOrderReceiptPayloadFromPosOrder(order, pricingAdjustments, {
+              ...posReceiptLineOpts,
+              orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, t),
+              storeCodeFallback: currentStoreId,
+            }),
+            _autoPrintDedupeKey: `order:${oid}:hall:auto`,
+          }
+          const runKitchenForPolledOrder = () => {
+            const kitchenDedupeKey = `order:${oid}:kitchen`
+            if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+            void (async () => {
+              try {
+                const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
+                const settings = await getPrinterSettingsForStore(
+                  effectiveStoreCode
+                )
+                const menusForPrint = await resolveMenusForKitchenPrint(
+                  items as Array<Record<string, unknown>>,
+                  effectiveStoreCode
+                )
+                const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+                  items as Array<Record<string, unknown>>,
+                  menusForPrint
+                )
+                const ki = kitchenSlipPrintI18n(settings, lang)
+                const slips = buildKitchenSlipGroups(
+                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
+                  buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
+                )
+                if (!slips.length) {
+                  releaseKitchenAutoPrintKey(kitchenDedupeKey)
+                  logPosPrintDebug('kitchen_autoprint_skip_empty_slips', { orderId: oid, flow: 'poll' })
+                  return
+                }
+                const slipDesign = resolveKitchenSlipDesign(settings)
+                const memoLine = buildPosCustomerMemoLineForPrint(order.memo, ki.t, ki.lang)
+                const printOne = (idx: number) => {
+                  if (idx >= slips.length) return
+                  const slip = slips[idx]
+                  const tablePart = order.tableName
+                    ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
+                    : ''
+                  const orderTypeLabel = kitchenSlipOrderTypeLabel(order, ki)
+                  const html = buildKitchenSlipDocumentHtml({
+                    label: slip.label,
+                    orderNo: order.orderNo ?? '',
+                    storeCode: order.storeCode ?? '',
+                    orderTypeLabel,
+                    tablePart,
+                    dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
+                    items: kitchenSlipItemsForPrint(
+                      slip.items,
+                      kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                      ki,
+                      menusForPrint,
+                      optionNameByCodeForPrint
+                    ),
+                    memoLine: memoLine || null,
+                    escapeHtml,
+                    design: slipDesign,
+                    optionNameByCode: optionNameByCodeForPrint,
+                    printColorAdjust: 'exact',
+                    ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
+                  })
+                  printPosHtmlDocument(html, {
+                    title: slip.label,
+                    printDelayMs: 0,
+                    focusIframeBeforePrint: false,
+                    printRole: 'kitchen',
+                    kitchenStation: slip.station,
+                    escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                    onPrintUnavailable: () => {
+                      void appAlert(t('posPrintUnavailable'))
+                    },
+                    onAfterCleanup: () => {
+                      if (idx + 1 < slips.length)
+                    setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
+                    },
+                  })
+                }
+                setTimeout(() => printOne(0), 0)
+              } catch (e) {
+                releaseKitchenAutoPrintKey(kitchenDedupeKey)
+                console.error('Kitchen slip print:', e)
+              }
+            })()
+          }
+          const isPendingDelivery =
+            String(order.orderType ?? '').trim().toLowerCase() === 'delivery' &&
+            String(order.status ?? '').trim().toLowerCase() === 'pending'
+          const shouldWaitForDeliveryAccept =
+            isPendingDelivery && isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))
+          const shouldWaitForMemberPortalPrepay = isMemberPortalPaymentPendingOrder({
+            memo: String(order.memo ?? ''),
+            status: String(order.status ?? ''),
+            payment_qr: order.paymentQr,
+            created_by: undefined,
+          })
+          const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+          if (!shouldDeferAutoprint) {
+            logPosPrintDebug('poll_autoprint_start', {
+              orderId: oid,
+              autoPrintReceiptOnOrder,
+              autoPrintKitchenSlipOnOrder,
+              itemCount: items.length,
+              isPendingDelivery,
+              shouldWaitForDeliveryAccept,
+              shouldWaitForMemberPortalPrepay,
+            })
+            if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
+            } else if (autoPrintReceiptOnOrder) {
+              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
+            } else if (autoPrintKitchenSlipOnOrder) {
+              setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
+            }
+          } else {
+            logPosPrintDebug('poll_deferred_autoprint', {
+              orderId: oid,
+              status: String(order.status ?? ''),
+              isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(order.memo ?? '')),
+              shouldWaitForMemberPortalPrepay,
+            })
+          }
+          if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
+            const qtySnap = buildDineInQtySnapshot(items)
+            if (qtySnap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(oid, qtySnap)
+          }
+        }
+        if (shouldRefreshCurrentStore) {
+          refetchCurrentStore()
+        }
+
+        const nowMs = Date.now()
+        const shouldRunMetaScan =
+          !lastMetaScanAtRef.current ||
+          nowMs - lastMetaScanAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS ||
+          nowMs - lastRealtimeOrderEventAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS
+        if (shouldRunMetaScan) {
+          lastMetaScanAtRef.current = nowMs
+          const needHeavyMetaScan = shouldUseMainPosHeavyOrderScanFallback({
+            realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+            lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
+          })
+          const wantMetaDineInAddonReceipt =
+            autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
+          const wantMetaDineInAddonKitchen = autoPrintKitchenSlipOnOrder
+          const wantDineInAddonMetaScan = wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen
+          if (needHeavyMetaScan || wantDineInAddonMetaScan) {
+            try {
+              const watchOrders = await getPosOrders({
+                startStr: today,
+                endStr: today,
+                posBizDayScope: true,
+                storeCode: currentStoreId,
+                limit: 800,
+                orderBy: 'id.desc',
+                pollMinimal: true,
+              })
+              if (wantDineInAddonMetaScan) {
+                for (const o of watchOrders) {
+                const oid = Number(o.id)
+                if (!Number.isFinite(oid) || oid <= 0) continue
+                if (String(o.orderType ?? '').trim().toLowerCase() !== 'dine_in') continue
+                const statusLower = String(o.status ?? '').trim().toLowerCase()
+                if (statusLower === 'completed' || statusLower === 'cancelled' || statusLower === 'canceled') continue
+                if (isPosOrderPaidLikeStatus(statusLower)) continue
+                if (posOrderPaymentSum(o) > 0) continue
+                const items = (o.items || []).map(
+                  (it: {
+                    id?: string
+                    name?: string
+                    price?: number
+                    qty?: number
+                    quantity?: number
+                    note?: string
+                    menuId1?: string
+                    menu_id1?: string
+                    menuId?: string
+                    optionCode1?: string
+                    option_code1?: string
+                    optionCode?: string
+                    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+                  }) => {
+                    const note = String(it.note ?? '').trim()
+                    const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+                    const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
+                    const displayName = resolveOrderItemDisplayName({
+                      id: String(it.id ?? ''),
+                      name: String(it.name ?? ''),
+                      menuId,
+                    })
+                    const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
+                    return {
+                      id: String(it.id ?? ''),
+                      name: displayName,
+                      price: Number(it.price ?? 0),
+                      qty: Number(it.qty ?? it.quantity ?? 1),
+                      ...(menuId ? { menuId } : {}),
+                      ...(optionCode ? { optionCode } : {}),
+                      ...(note ? { note: formatLineNoteForPrint(note) } : {}),
+                      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
+                      ...(Array.isArray(it.promoItems)
+                        ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
+                        : {}),
+                    }
+                  }
+                )
+                if (!items.length) continue
+                const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
+                const newQtyById = buildDineInQtySnapshot(items)
+                if (newQtyById.size === 0) continue
+                const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(oid)
+                if (suppressUntil != null) {
+                  if (Date.now() < suppressUntil) {
+                    dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                    logPosPrintDebug('poll_meta_skip_self_dine_in_suppress', { orderId: oid })
+                    continue
+                  }
+                  mainPosSelfDineInUpdateSuppressUntilRef.current.delete(oid)
+                }
+                if (!prevQtyById) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  continue
+                }
+                const changedIds = [...newQtyById.keys()].filter((id) => {
+                  const prevQty = Number(prevQtyById.get(id) ?? 0)
+                  const nextQty = Number(newQtyById.get(id) ?? 0)
+                  if (prevQty <= 0) return nextQty > 0
+                  return nextQty > prevQty
+                })
+                if (changedIds.length === 0) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  continue
+                }
+                const storeCodePoll = String(o.storeCode ?? currentStoreId)
+                const changedSet = new Set(changedIds)
+                if (
+                  shouldSkipDineInRemoteAddAutoprint(oid, storeCodePoll, prevQtyById, newQtyById, changedSet)
+                ) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  logPosPrintDebug('poll_meta_remote_dine_in_add_skip_recent_local_print', { orderId: oid })
+                  continue
+                }
+                const cartLikeNew = items.map((it) => ({
+                  id: resolveDineInSnapshotItemKey(it),
+                  name: it.name,
+                  price: it.price,
+                  quantity: it.qty,
+                  qty: it.qty,
+                  ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
+                  ...(it.menuId ? { menuId: it.menuId } : {}),
+                  ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+                }))
+                const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
+                  cartLikeNew,
+                  prevQtyById,
+                  newQtyById,
+                  (line) => resolveDineInSnapshotItemKey(line)
+                )
+                dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                refetchCurrentStore()
+                const receiptPrintItemsRemote = items.map((it) => ({
+                  ...it,
+                  ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+                }))
+                const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
+                const discountAmt = Number(o.discountAmt ?? 0)
+                const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
+                const pricing = computePosPricing({
+                  subtotal: mergeSubtotal,
+                  discountAmt,
+                  cardPaymentAmount: 0,
+                  adjustments: pricingAdjustments,
+                })
+                const orderNoStr = String(o.orderNo ?? '')
+                const tableNamePoll = String(o.tableName ?? '')
+                const memoPoll = String(o.memo ?? '')
+                const receiptPayloadRemote = {
+                  orderNo: orderNoStr,
+                  storeCode: storeCodePoll,
+                  orderType: t('posOrderTypeDineIn') || '매장',
+                  tableName: tableNamePoll,
+                  memo: memoPoll,
+                  items: receiptPrintItemsRemote,
+                  subtotal: mergeSubtotal,
+                  discountAmt,
+                  couponDiscountAmt,
+                  discountReason: String(o.discountReason ?? '').trim() || undefined,
+                  total: pricing.finalTotal,
+                  _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
+                  ...posGuestCountSpread(o.guestCount),
+                }
+                logPosPrintDebug('poll_meta_remote_dine_in_add_receipt', {
+                  orderId: oid,
+                  changedCount: changedIds.length,
+                })
+                if (wantMetaDineInAddonReceipt) {
+                  void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)
+                }
+                if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
+                  const kitchenDelayMs = wantMetaDineInAddonReceipt
+                    ? typeof window !== 'undefined' && window.cmPosShell
+                      ? resolveAfterReceiptToKitchenDelayMs()
+                      : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+                    : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+                  setTimeout(() => {
+                    dispatchDineInAddonKitchenPrint({
+                      kitchenCartLines,
+                      dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines),
+                      orderNo: orderNoStr,
+                      storeCode: storeCodePoll,
+                      tableName: tableNamePoll,
+                      memo: memoPoll,
+                      guestCount: Number(o.guestCount ?? 0) || undefined,
+                      logEvent: 'poll_meta_remote_dine_in_add_kitchen',
+                    })
+                  }, kitchenDelayMs)
+                }
+                }
+              }
+              if (needHeavyMetaScan) {
+                if (!grabCancelWatchSeededRef.current) {
+                  runGrabCancelWatchOnOrders(watchOrders, { seedOnly: true })
+                } else if (runGrabCancelWatchOnOrders(watchOrders, { seedOnly: false })) {
+                  refetchCurrentStore()
+                }
+              }
+            } catch {
+              /* meta scan: dine-in add / grab cancel */
+            }
+          }
+        }
+
+        await runPaymentReceiptScan()
+      } catch {
+        // ignore poll errors
+      } finally {
+        mainPosPollInFlightRef.current = false
+      }
+    }
+    triggerMainPosPollNowRef.current = () => {
+      const now = Date.now()
+      if (now - lastTriggerMainPosPollAtRef.current < MAIN_POS_TRIGGER_POLL_MIN_MS) return
+      if (mainPosPollInFlightRef.current) return
+      lastTriggerMainPosPollAtRef.current = now
+      void poll()
+    }
+
+    let pollLoopCancelled = false
+
+    const scheduleNextPoll = () => {
+      if (pollLoopCancelled) return
+      const delayMs = resolveMainPosPollIntervalMs({
+        realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+        realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(lastRealtimeOrderEventAtRef.current),
+      })
+      mainPosPollTimerRef.current = setTimeout(() => {
+        void poll().finally(() => {
+          if (!pollLoopCancelled) scheduleNextPoll()
+        })
+      }, delayMs)
+    }
+
+    void poll().finally(() => scheduleNextPoll())
+
+    return () => {
+      pollLoopCancelled = true
+      triggerMainPosPollNowRef.current = null
+      if (mainPosPollTimerRef.current) {
+        clearTimeout(mainPosPollTimerRef.current)
+        mainPosPollTimerRef.current = null
+      }
+    }
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    autoPrintReceiptOnOrder,
+    autoPrintReceiptOnAddOrder,
+    autoPrintKitchenSlipOnOrder,
+    autoPrintReceiptOnPayment,
+    pricingAdjustments,
+    posReceiptLineOpts,
+    menus,
+    autoFocusIncomingDeliveryOrder,
+    t,
+    lang,
+    refetchCurrentStore,
+    isCurrentStoreOrder,
+    logPosPrintDebug,
+    bumpLastSeenOrderId,
+    shouldTreatAsIncomingOrder,
+    buildDineInQtySnapshot,
+    shouldSkipDineInRemoteAddAutoprint,
+    resolveDineInSnapshotItemKey,
+    resolveOrderItemDisplayName,
+    enrichPromoItemsWithOptionName,
+    printReceiptNow,
+    dispatchDineInAddonKitchenPrint,
+    formatLineNoteForPrint,
+  ])
 
   /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId) return
+    const onResume = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      logPosPrintDebug('realtime_resume_reconnect', {})
+      realtimeChannelStateRef.current.clear()
+      realtimeChannelHealthyRef.current = false
+      setRealtimeResubscribeTick((n) => n + 1)
+      triggerMainPosPollNowRef.current?.()
+    }
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('online', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('online', onResume)
+    }
+  }, [isMainPosDevice, currentStoreId, logPosPrintDebug])
 
   useEffect(() => {
     if (selectedTableId) {
@@ -4388,6 +5937,885 @@ export default function PosTerminalPage() {
     [isPosDemo, currentStoreId, auth?.user, t]
   )
 
+  const sleepMs = useCallback((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), [])
+
+  const noteKbankRateLimitResponse = useCallback((message: unknown): boolean => {
+    if (!isKbankRateLimitError(message)) return false
+    // 이미 pause 중이면 만료 시각을 뒤로 미루지 않음 (Void/Inquiry 연타로 3분 타이머 리셋 방지).
+    if (Date.now() < kbankApiPausedUntilRef.current) return true
+    const until = Date.now() + KBANK_RATE_LIMIT_BACKOFF_MS
+    kbankApiPausedUntilRef.current = until
+    setKbankApiPausedUntilMs(until)
+    return true
+  }, [])
+
+  const clearKbankApiPause = useCallback(() => {
+    kbankApiPausedUntilRef.current = 0
+    setKbankApiPausedUntilMs(0)
+  }, [])
+
+  const isKbankApiPaused = useCallback(
+    () => Date.now() < kbankApiPausedUntilRef.current,
+    []
+  )
+
+  const alertIfKbankApiPaused = useCallback(
+    async (label: string): Promise<boolean> => {
+      if (!isKbankApiPaused()) return true
+      const waitSec = Math.max(1, Math.ceil((kbankApiPausedUntilRef.current - Date.now()) / 1000))
+      const waitMin = Math.max(1, Math.ceil(waitSec / 60))
+      await appAlert(
+        String(t('posKbankRateLimitAlert') || '')
+          .replace('{minutes}', String(waitMin))
+          .replace('{label}', label) ||
+          `KBank API rate limit exceeded. Wait about ${waitMin} minute(s), then try ${label} once (do not tap repeatedly).`
+      )
+      return false
+    },
+    [isKbankApiPaused, t]
+  )
+
+  const enforceKbankCooldown = useCallback(
+    async (
+      bucket: 'generate' | 'inquiry' | 'followup',
+      minIntervalMs: number,
+      label: string
+    ): Promise<boolean> => {
+      const targetRef =
+        bucket === 'generate'
+          ? kbankGenerateLastAtRef
+          : bucket === 'inquiry'
+            ? kbankInquiryLastAtRef
+            : kbankFollowupLastAtRef
+      const now = Date.now()
+      const elapsed = now - targetRef.current
+      const remainingMs = minIntervalMs - elapsed
+      if (remainingMs > 0) {
+        const waitSec = Math.ceil(remainingMs / 1000)
+        await appAlert(
+          `KBank rate-limit protection: wait about ${waitSec}s before ${label}.`
+        )
+        return false
+      }
+      targetRef.current = now
+      return true
+    },
+    []
+  )
+
+  const openKbankOutcomeModal = useCallback(
+    (next: KbankOutcomeState, dedupeKey?: string) => {
+      const key = String(dedupeKey || `${next.kind}:${next.refId}:${next.amount}`).trim()
+      if (key && kbankOutcomeLastKeyRef.current === key) return
+      if (key) kbankOutcomeLastKeyRef.current = key
+      setKbankOutcomeState(next)
+    },
+    []
+  )
+
+  const tryRunKbankPendingFinalize = useCallback(
+    (refId: string, approval: { txnNo?: string; cardBrands?: string[] }) => {
+      const key = String(refId || '').trim()
+      if (!key) return false
+      const finalize = pendingKbankFinalizeRef.current[key]
+      if (!finalize) return false
+      delete pendingKbankFinalizeRef.current[key]
+      delete deferredKbankApprovalRef.current[key]
+      void Promise.resolve(finalize(approval)).catch((e) =>
+        console.error('kbank pending finalize:', e)
+      )
+      return true
+    },
+    []
+  )
+
+  const registerPendingKbankFinalize = useCallback(
+    (
+      partnerTxnId: string,
+      fn: (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>
+    ) => {
+      const key = String(partnerTxnId || '').trim()
+      if (!key) return
+      pendingKbankFinalizeRef.current[key] = fn
+      const deferred = deferredKbankApprovalRef.current[key]
+      if (deferred) {
+        tryRunKbankPendingFinalize(key, deferred)
+      }
+    },
+    [tryRunKbankPendingFinalize]
+  )
+
+  const purgeKbankPendingFinalize = useCallback((partnerTxnId: string) => {
+    const key = String(partnerTxnId || '').trim()
+    if (!key) return
+    delete pendingKbankFinalizeRef.current[key]
+    delete deferredKbankApprovalRef.current[key]
+  }, [])
+
+  const clearKbankQrFromLinkpos = useCallback(() => {
+    setLinkposQrBridgeStatus('idle')
+    void executeLinkposClearQr({ storeCode: currentStoreId })
+  }, [currentStoreId])
+
+  const pushKbankQrToLinkposDisplay = useCallback(
+    async (params: {
+      qrPayload: string
+      amount: number
+      reference1?: string
+      reference2?: string
+    }) => {
+      setLinkposQrBridgeStatus('idle')
+      const out = await executeLinkposDisplayQr({
+        qrPayload: params.qrPayload,
+        amount: params.amount,
+        reference1: params.reference1,
+        reference2: params.reference2,
+        storeCode: currentStoreId,
+      })
+      if (out.success) {
+        setLinkposQrBridgeStatus('ok')
+      } else if (out.message !== 'linkpos_card_api_disabled') {
+        setLinkposQrBridgeStatus('failed')
+      }
+      return out
+    },
+    [currentStoreId]
+  )
+
+  const presentKbankPaymentApproved = useCallback(
+    (input: {
+      refId: string
+      amount?: number
+      approvalCode?: string
+      timeLabel?: string
+      dedupeKey?: string
+      paymentMethod?: string
+      cardBrands?: string[]
+    }) => {
+      const refId = String(input.refId || '').trim()
+      if (!refId) return
+      const brands = input.cardBrands ?? kbankOpsCardBrands
+      const approval = { txnNo: input.approvalCode, cardBrands: brands }
+      const alreadyNotified = kbankCallbackNotifiedTxRef.current === refId
+      // QR 대기 결제: 승인되면 등록된 후처리(주문 paid 마감·영수증). 콜백이 먼저 오면 deferred 후 등록 시 실행.
+      if (!alreadyNotified) {
+        clearKbankQrFromLinkpos()
+        if (!tryRunKbankPendingFinalize(refId, approval)) {
+          deferredKbankApprovalRef.current[refId] = approval
+        }
+      }
+      kbankCallbackNotifiedTxRef.current = refId
+      setKbankCallbackState('received')
+      clearKbankApiPause()
+      setCustomerDisplayPaymentMessage('')
+      if (alreadyNotified) return
+      openKbankOutcomeModal(
+        {
+          kind: 'success',
+          amount:
+            input.amount != null && Number.isFinite(input.amount)
+              ? input.amount
+              : Math.max(0, Number(liveKbankQrAmount || 0)),
+          refId,
+          paymentMethod:
+            input.paymentMethod ||
+            (liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR'),
+          cardLabel: brands.length > 0 ? brands.join(' / ') : undefined,
+          approvalCode: input.approvalCode,
+          timeLabel: input.timeLabel || formatPosDateTimeMedium(new Date(), lang),
+        },
+        input.dedupeKey || `success:${refId}`
+      )
+    },
+    [
+      kbankOpsCardBrands,
+      liveKbankQrAmount,
+      liveKbankQrType,
+      openKbankOutcomeModal,
+      lang,
+      tryRunKbankPendingFinalize,
+      clearKbankQrFromLinkpos,
+      clearKbankApiPause,
+    ]
+  )
+
+  const presentKbankApprovedFromInquiry = useCallback(
+    (
+      partnerTxnUid: string,
+      st: {
+        success?: boolean
+        status?: string | null
+        statusCode?: string | null
+        data?: Record<string, unknown>
+      },
+      dedupePrefix: string,
+      options?: { amount?: number; paymentMethod?: string }
+    ): boolean => {
+      if (!st.success) return false
+      const stData = (st.data || {}) as Record<string, unknown>
+      if (!isKbankInquiryResponseApproved(st.status, stData, st.statusCode)) return false
+      const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
+      if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
+      const inquiryMeta = extractKbankQrResponseMeta(stData)
+      const brands = resolveKbankCreditCardBrandLabels({
+        sof: inquiryMeta.sof,
+        cardScheme: inquiryMeta.cardScheme,
+      })
+      if (brands.length > 0) setKbankOpsCardBrands(brands)
+      presentKbankPaymentApproved({
+        refId: partnerTxnUid,
+        amount: options?.amount,
+        paymentMethod: options?.paymentMethod,
+        approvalCode: stTxnNo || undefined,
+        cardBrands: brands,
+        dedupeKey: `${dedupePrefix}:${partnerTxnUid}:${stTxnNo || st.status || ''}`,
+      })
+      return true
+    },
+    [presentKbankPaymentApproved]
+  )
+
+  /** KBank QR 직원 모니터 세션 정리 (QR 이미지·후속 처리 ID·상태 초기화) */
+  const clearKbankQrSession = useCallback(() => {
+    purgeKbankPendingFinalize(kbankOpsTxnUidRef.current)
+    clearKbankQrFromLinkpos()
+    setLiveKbankQrPayload('')
+    setLiveKbankQrType('THAI_QR')
+    setKbankOpsTxnUid('')
+    setKbankOpsOrigTxnUid('')
+    setKbankOpsTxnNo('')
+    setCustomerDisplayPaymentMessage('')
+    setKbankCallbackState('idle')
+    kbankManualCancelPendingRef.current = false
+    kbankCcInquiryTriggeredRef.current = ''
+  }, [purgeKbankPendingFinalize, clearKbankQrFromLinkpos])
+
+  const runKbankQrPaymentIfNeeded = useCallback(
+    async (
+      payment: CartPanelPaymentPayload | null | undefined,
+      context?: { orderType?: string; orderLabel?: string; orderId?: number }
+    ) => {
+      if (isPosDemo) return { ok: true as const }
+      kbankManualCancelPendingRef.current = false
+      const qrAmount = Math.max(0, Number(payment?.paymentQr || 0))
+      if (qrAmount <= 0) return { ok: true as const }
+      if (!isKbankPilotStore) return { ok: true as const }
+      if (!currentStoreId) {
+        const msg = t('posStoreRequired') || '매장 정보가 필요합니다.'
+        await appAlert(msg)
+        return { ok: false as const, message: msg }
+      }
+      const canGenerate = await enforceKbankCooldown('generate', 5000, 'Generate QR')
+      if (!canGenerate) {
+        return { ok: false as const, message: 'kbank_generate_cooldown' }
+      }
+      const requestedQrType =
+        String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase() === 'CREDIT_CARD'
+          ? 'CREDIT_CARD'
+          : 'THAI_QR'
+
+      const existingQrPayload = String(liveKbankQrPayload || '').trim()
+      const existingPartnerTxnId = String(kbankOpsTxnUid || '').trim()
+      const canReuseLiveQr =
+        Boolean(existingQrPayload && existingPartnerTxnId) &&
+        kbankCallbackState === 'waiting' &&
+        !kbankManualCancelPendingRef.current &&
+        Math.abs(liveKbankQrAmount - qrAmount) < 0.001 &&
+        liveKbankQrType === requestedQrType
+
+      if (canReuseLiveQr) {
+        setCustomerDisplayPaymentMessage(
+          (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+        )
+        return {
+          ok: false as const,
+          qrPending: true as const,
+          message: 'kbank_qr_pending',
+          partnerTransactionId: existingPartnerTxnId,
+          qrAmount,
+          qrType: requestedQrType,
+        }
+      }
+
+      if (!(await alertIfKbankApiPaused('Generate QR'))) {
+        return { ok: false as const, message: 'kbank_rate_limit_paused' }
+      }
+
+      setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
+
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      const partnerTransactionIdSeed = `POSQR${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
+      const generate = await executeKbankGenerateQr({
+        amount: qrAmount,
+        qrType: requestedQrType,
+        storeCode: currentStoreId,
+        orderId: context?.orderId,
+        partnerTransactionId: partnerTransactionIdSeed,
+        reference1: String(context?.orderType || '').slice(0, 20),
+        reference2: String(context?.orderLabel || '').slice(0, 20),
+        ...(terminalId ? { terminalId } : {}),
+      })
+      if (!generate.success) {
+        setLiveKbankQrPayload('')
+        setLiveKbankQrType('THAI_QR')
+        setLiveKbankQrTypeSource('requested')
+        setKbankSentQrTypeCode(String(generate.sentQrTypeCode || '').trim())
+        setKbankGenerateAuditText(
+          generate.requestMessage
+            ? buildKbankGenerateAuditPaste({
+                partnerTxnUid: String(
+                  generate.partnerTransactionId || partnerTransactionIdSeed
+                ),
+                amount: qrAmount,
+                requestedQrType,
+                sentQrTypeCode: generate.sentQrTypeCode || undefined,
+                bankQrTypeCode: generate.bankQrTypeCode,
+                bankSof: generate.bankSof,
+                requestMessage: generate.requestMessage,
+                responseMessage: generate.responseMessage,
+                storeCode: currentStoreId,
+              })
+            : ''
+        )
+        setKbankCallbackState('idle')
+        setKbankOpsTxnUid('')
+        setKbankOpsOrigTxnUid('')
+        setKbankOpsTxnNo('')
+        setCustomerDisplayPaymentMessage('')
+        const rateLimited = isKbankRateLimitError(generate.message || generate.statusMessage)
+        if (rateLimited) {
+          noteKbankRateLimitResponse(generate.message || generate.statusMessage)
+        }
+        const msg =
+          rateLimited
+            ? 'KBank rate limit exceeded. Wait 2–5 minutes, then try Generate QR again (do not tap repeatedly).'
+            : requestedQrType === 'CREDIT_CARD' &&
+                isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
+              ? t('posKbankCreditCardQrNotRegisteredAlert') ||
+                'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'
+              : (t('posPaymentQr') || 'QR') + ' ' + (generate.message || 'generate_failed')
+        await appAlert(msg)
+        return { ok: false as const, message: msg }
+      }
+
+      const partnerTransactionId = String(generate.partnerTransactionId || partnerTransactionIdSeed)
+        .trim()
+        .slice(0, 32)
+
+      const data = (generate.data || {}) as Record<string, unknown>
+      const generatedInfo = extractKbankGenerateResponseInfo(data)
+      const generateTxnNoRaw = String(generatedInfo.txnNo || '').trim().slice(0, 20)
+      setKbankOpsTxnUid(partnerTransactionId)
+      setKbankOpsOrigTxnUid(partnerTransactionId)
+      // Generate APIC* is QR session id — not for CC Inquiry; payment txnNo comes from callback/inquiry (e.g. 26440008).
+      if (generateTxnNoRaw && isKbankPaymentTxnNo(generateTxnNoRaw)) {
+        setKbankOpsTxnNo(generateTxnNoRaw)
+      } else if (generateTxnNoRaw && isKbankQrSessionTxnNo(generateTxnNoRaw)) {
+        setKbankOpsTxnNo('')
+      } else if (generateTxnNoRaw) {
+        setKbankOpsTxnNo(generateTxnNoRaw)
+      } else {
+        setKbankOpsTxnNo('')
+      }
+      setKbankCallbackState('waiting')
+      const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
+      const generatedCardBrands = resolveKbankCreditCardBrandLabels({
+        sof: generatedInfo.sof,
+        cardScheme: generatedInfo.cardScheme,
+      })
+      setKbankOpsCardBrands(generatedCardBrands)
+      if (!generatedQrPayload) {
+        setCustomerDisplayPaymentMessage('')
+        const msg =
+          (t('posPaymentQr') || 'QR') +
+          ` response parse failed (${requestedQrType}): qrPayload/qrCode not found.`
+        await appAlert(msg)
+        return { ok: false as const, message: msg }
+      }
+      setLiveKbankQrPayload(generatedQrPayload)
+      setLiveKbankQrAmount(qrAmount)
+      const bankQrMeta = extractKbankQrResponseMeta(data)
+      const qrTypeDetails = resolveKbankDisplayQrTypeDetails({
+        qrType: String(generate.bankQrTypeCode || bankQrMeta.qrTypeCode || '').trim(),
+        sof: generatedInfo.sof ?? generate.bankSof,
+        requested: requestedQrType,
+        emvPayload: generatedQrPayload,
+      })
+      setLiveKbankQrType(qrTypeDetails.displayType)
+      setLiveKbankQrTypeSource(qrTypeDetails.source)
+      setKbankSentQrTypeCode(String(generate.sentQrTypeCode || '').trim())
+      setKbankGenerateAuditText(
+        buildKbankGenerateAuditPaste({
+          partnerTxnUid: partnerTransactionId,
+          amount: qrAmount,
+          requestedQrType: requestedQrType,
+          sentQrTypeCode: generate.sentQrTypeCode || undefined,
+          bankQrTypeCode: qrTypeDetails.bankQrTypeCode || generate.bankQrTypeCode,
+          bankSof: qrTypeDetails.bankSof || generate.bankSof,
+          requestMessage: generate.requestMessage,
+          responseMessage: generate.responseMessage,
+          storeCode: currentStoreId,
+        })
+      )
+      if (requestedQrType === 'CREDIT_CARD') {
+        if (qrTypeDetails.displayType === 'THAI_QR') {
+          await appAlert(
+            t('posKbankQrReturnedThaiAlert') ||
+              'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.'
+          )
+        } else if (qrTypeDetails.source === 'requested') {
+          await appAlert(
+            t('posKbankQrBankTypeUnknownAlert') ||
+              'Credit Card QR was requested (qrType 4). KBank did not return qrType in the response. Please send the audit message below to KBank.'
+          )
+        }
+      }
+      void pushKbankQrToLinkposDisplay({
+        qrPayload: generatedQrPayload,
+        amount: qrAmount,
+        reference1: String(context?.orderType || '').slice(0, 20),
+        reference2: String(context?.orderLabel || '').slice(0, 20),
+      })
+      setCustomerDisplayPaymentMessage(
+        (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+      )
+      let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
+      let refId = String(generatedInfo.referenceId || '').trim()
+
+      const finalizeKbankQrFailureWithManualOption = async (
+        failureHint: string
+      ): Promise<
+        | { ok: true; partnerTransactionId: string; pending: true }
+        | { ok: false; message: string }
+      > => {
+        const manualMsg =
+          (t('posPaymentQr') || 'QR') +
+          ' ' +
+          failureHint +
+          '. ' +
+          (t('posProceedQuestion') || '수동 처리로 주문 저장을 계속할까요?')
+        const proceed = await appConfirm(manualMsg)
+        if (!proceed) {
+          setLiveKbankQrPayload('')
+          setLiveKbankQrType('THAI_QR')
+          setKbankCallbackState('idle')
+          setKbankOpsTxnUid('')
+          setKbankOpsOrigTxnUid('')
+          setKbankOpsTxnNo('')
+          setCustomerDisplayPaymentMessage('')
+          return { ok: false as const, message: failureHint }
+        }
+        setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posManual') || '수동 처리'))
+        return { ok: true as const, partnerTransactionId, pending: true as const }
+      }
+
+      // Thai QR only: one optional inquiry after 10s (auto-poll handles later sync).
+      // Credit Card QR skips this — CC needs numeric payment txnNo; silent auto-inquiry burns UAT quota
+      // and can trigger rate-limit pause before staff tap Inquiry.
+      if (requestedQrType !== 'CREDIT_CARD') {
+        await sleepMs(10_000)
+        if (kbankManualCancelPendingRef.current) {
+          return { ok: false as const, message: 'kbank_qr_cancelled' }
+        }
+        if (!isKbankApiPaused()) {
+          kbankInquiryLastAtRef.current = Date.now()
+          const st = await executeKbankCheckStatus({
+            storeCode: currentStoreId,
+            orderId: context?.orderId,
+            partnerTransactionId,
+            originalTransactionId: partnerTransactionId,
+            refId: refId || undefined,
+            payload: {
+              origPartnerTxnUid: partnerTransactionId,
+              qrType: requestedQrType,
+            },
+          })
+          const stData = (st.data || {}) as Record<string, unknown>
+          const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
+          if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
+          if (!st.success && noteKbankRateLimitResponse(st.statusMessage || st.message)) {
+            /* stay pending; staff can Inquiry after backoff */
+          } else if (st.success) {
+            if (
+              presentKbankApprovedFromInquiry(partnerTransactionId, st, 'success', {
+                amount: qrAmount,
+                paymentMethod: 'PromptPay QR',
+              })
+            ) {
+              return { ok: true as const, partnerTransactionId }
+            }
+            const s = String(st.status || '').trim().toLowerCase()
+            if (s === 'declined' || s === 'failed') {
+              const txnStatusRaw = String(
+                stData.txnStatus || stData.transactionStatus || stData.status || stData.paymentStatus || ''
+              )
+                .trim()
+                .toUpperCase()
+              const declineBlob = `${String(st.statusMessage || '')} ${String(st.message || '')} ${txnStatusRaw}`
+                .trim()
+                .toLowerCase()
+              const treatedAsCancelled =
+                kbankManualCancelPendingRef.current ||
+                txnStatusRaw.includes('CANCEL') ||
+                declineBlob.includes('cancel')
+              if (treatedAsCancelled) {
+                kbankManualCancelPendingRef.current = false
+                setKbankCallbackState('failed')
+                setCustomerDisplayPaymentMessage('')
+                openKbankOutcomeModal(
+                  {
+                    kind: 'cancelled',
+                    amount: qrAmount,
+                    refId: partnerTransactionId,
+                    paymentMethod: 'PromptPay QR',
+                    timeLabel: formatPosDateTimeMedium(new Date(), lang),
+                  },
+                  `cancelled-by-inquiry:${partnerTransactionId}`
+                )
+                return { ok: false as const, message: 'kbank_qr_cancelled' }
+              }
+              setKbankCallbackState('failed')
+              const failureHint =
+                s === 'failed'
+                  ? String(st.statusMessage || st.message || t('processFail') || '결제 실패').trim()
+                  : t('posPaymentDeclined') || '결제가 거절되었습니다.'
+              return finalizeKbankQrFailureWithManualOption(failureHint)
+            }
+          } else if (!st.success) {
+            const failureHint = String(
+              st.statusMessage || st.message || t('processFail') || 'kbank_check_status_failed'
+            ).trim()
+            if (!noteKbankRateLimitResponse(failureHint)) {
+              return finalizeKbankQrFailureWithManualOption(failureHint)
+            }
+          }
+          const inquiryMeta = extractKbankQrResponseMeta(stData)
+          if (inquiryMeta.qrTypeCode || inquiryMeta.sof) {
+            const inquiryDetails = resolveKbankDisplayQrTypeDetails({
+              qrType: inquiryMeta.qrTypeCode,
+              sof: inquiryMeta.sof,
+              requested: requestedQrType,
+              emvPayload: String(liveKbankQrPayload || '').trim(),
+            })
+            setLiveKbankQrType(inquiryDetails.displayType)
+            setLiveKbankQrTypeSource(inquiryDetails.source)
+          }
+          if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
+          if (!refId) refId = String(st.refId || '').trim()
+        }
+      }
+
+      if (kbankManualCancelPendingRef.current) {
+        return { ok: false as const, message: 'kbank_qr_cancelled' }
+      }
+
+      // Still pending after inquiry: keep QR visible and wait for callback / manual Inquiry.
+      setCustomerDisplayPaymentMessage(
+        (t('posPaymentQr') || 'QR') +
+          ' ' +
+          (t('posPending') || '대기') +
+          ' — ' +
+          (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+      )
+      return {
+        ok: false as const,
+        qrPending: true as const,
+        message: 'kbank_qr_pending',
+        partnerTransactionId,
+        qrAmount,
+        qrType: requestedQrType,
+      }
+    },
+    [
+      isPosDemo,
+      isKbankPilotStore,
+      currentStoreId,
+      kbankOpsTerminalId,
+      t,
+      sleepMs,
+      enforceKbankCooldown,
+      openKbankOutcomeModal,
+      presentKbankPaymentApproved,
+      presentKbankApprovedFromInquiry,
+      pushKbankQrToLinkposDisplay,
+      isKbankApiPaused,
+      noteKbankRateLimitResponse,
+      alertIfKbankApiPaused,
+      liveKbankQrPayload,
+      liveKbankQrAmount,
+      liveKbankQrType,
+      kbankCallbackState,
+      kbankOpsTxnUid,
+      lang,
+    ]
+  )
+
+  const runKbankFollowupAction = useCallback(
+    async (action: 'inquiry' | 'cancel' | 'void' | 'settlement') => {
+      if (!currentStoreId) {
+        await appAlert(t('posStoreRequired') || '매장 정보가 필요합니다.')
+        return
+      }
+      const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+      if (!partnerTxnUid) {
+        await appAlert(t('posKbankGenerateFirstAlert') || 'Please run QR Generate first.')
+        return
+      }
+      const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      const txnNoRaw = String(kbankOpsTxnNo || '').trim()
+      const txnAlreadyPaid =
+        kbankCallbackState === 'received' ||
+        kbankCallbackNotifiedTxRef.current === partnerTxnUid ||
+        kbankCallbackNotifiedTxRef.current === origPartnerTxnUid
+      if (txnAlreadyPaid && (action === 'void' || action === 'cancel' || action === 'inquiry')) {
+        await appAlert(
+          t('posKbankAlreadyPaidNoVoid') ||
+            'This transaction is already paid. Void/Cancel/Inquiry is not needed — check order close and receipt.'
+        )
+        return
+      }
+      const inquiryTxnNo = resolveKbankInquiryTxnNoForRequest(txnNoRaw, {
+        qrType: liveKbankQrType,
+      })
+      if (!(await alertIfKbankApiPaused(action))) return
+      if (action === 'inquiry') {
+        const canInquiry = await enforceKbankCooldown('inquiry', 30_000, 'Inquiry')
+        if (!canInquiry) return
+      } else {
+        const canFollowup = await enforceKbankCooldown('followup', 5000, action)
+        if (!canFollowup) return
+      }
+      setKbankOpsBusy(true)
+      try {
+        if (action === 'inquiry') {
+          kbankInquiryLastAtRef.current = Date.now()
+          const out = await executeKbankCheckStatus({
+            storeCode: currentStoreId,
+            partnerTransactionId: partnerTxnUid,
+            originalTransactionId: origPartnerTxnUid || undefined,
+            terminalId: terminalId || undefined,
+            txnNo: inquiryTxnNo,
+            payload: {
+              ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+              ...(terminalId ? { terminalId } : {}),
+              qrType: liveKbankQrType,
+              ...(inquiryTxnNo ? { txnNo: inquiryTxnNo } : {}),
+            },
+          })
+          if (out.success) {
+            presentKbankApprovedFromInquiry(partnerTxnUid, out, 'inquiry', {
+              paymentMethod:
+                liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+            })
+          } else {
+            const errMsg = String(out.statusMessage || out.message || t('processFail') || 'Inquiry failed').trim()
+            const rateLimited = noteKbankRateLimitResponse(errMsg)
+            await appAlert(
+              rateLimited
+                ? String(t('posKbankRateLimitAlert') || errMsg)
+                    .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                    .replace('{label}', 'Inquiry') || errMsg
+                : errMsg
+            )
+          }
+          setKbankOpsLastResult(`[INQUIRY] ${JSON.stringify(out)}`)
+          return
+        }
+        if (action === 'cancel') {
+          const cancelPartnerTxnUid = `CCH${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
+          const out = await executeKbankCancelQr({
+            storeCode: currentStoreId,
+            origPartnerTxnUid,
+            originalTransactionId: origPartnerTxnUid,
+            partnerTxnUid: cancelPartnerTxnUid,
+            terminalId: terminalId || undefined,
+            payload: {
+              partnerTxnUid: cancelPartnerTxnUid,
+              origPartnerTxnUid,
+              ...(terminalId ? { terminalId } : {}),
+            },
+          })
+          if (out.success) {
+            kbankManualCancelPendingRef.current = true
+            purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
+            clearKbankQrFromLinkpos()
+            setKbankCallbackState('failed')
+            openKbankOutcomeModal(
+              {
+                kind: 'cancelled',
+                amount: Math.max(0, Number(liveKbankQrAmount || 0)),
+                refId: origPartnerTxnUid || partnerTxnUid,
+                paymentMethod: liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+                timeLabel: formatPosDateTimeMedium(new Date(), lang),
+              },
+              `cancel:${origPartnerTxnUid || partnerTxnUid}:${cancelPartnerTxnUid}`
+            )
+          }
+          setKbankOpsLastResult(`[CANCEL] ${JSON.stringify(out)}`)
+          return
+        }
+        if (action === 'void') {
+          let voidTxnNo = resolveKbankVoidTxnNoForRequest(txnNoRaw) || ''
+          if (!voidTxnNo) {
+            kbankInquiryLastAtRef.current = Date.now()
+            const inq = await executeKbankCheckStatus({
+              storeCode: currentStoreId,
+              partnerTransactionId: partnerTxnUid,
+              originalTransactionId: origPartnerTxnUid,
+              terminalId: terminalId || undefined,
+              payload: {
+                origPartnerTxnUid,
+                qrType: liveKbankQrType,
+                ...(terminalId ? { terminalId } : {}),
+              },
+            })
+            if (inq.success) {
+              const inqData = (inq.data || {}) as Record<string, unknown>
+              voidTxnNo = extractKbankPaymentTxnNo(inqData).slice(0, 20)
+              if (voidTxnNo) setKbankOpsTxnNo(voidTxnNo)
+            }
+            if (!voidTxnNo) {
+              const inqErr = String(
+                inq.statusMessage ||
+                  inq.message ||
+                  t('posKbankVoidInquiryFailed') ||
+                  'Could not obtain txnNo from Inquiry. Check KBank response below.'
+              ).trim()
+              const rateLimited = noteKbankRateLimitResponse(inqErr)
+              await appAlert(
+                rateLimited
+                  ? String(t('posKbankRateLimitAlert') || inqErr)
+                      .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                      .replace('{label}', 'Inquiry') || inqErr
+                  : inqErr
+              )
+              setKbankOpsLastResult(`[VOID-INQUIRY] ${JSON.stringify(inq)}`)
+              return
+            }
+          }
+          const voidPartnerTxnUid = `VOD${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
+          const out = await executeKbankVoidPayment({
+            storeCode: currentStoreId,
+            origPartnerTxnUid,
+            originalTransactionId: origPartnerTxnUid,
+            partnerTxnUid: voidPartnerTxnUid,
+            terminalId: terminalId || undefined,
+            txnNo: voidTxnNo || undefined,
+            payload: {
+              partnerTxnUid: voidPartnerTxnUid,
+              origPartnerTxnUid,
+              ...(terminalId ? { terminalId } : {}),
+              ...(voidTxnNo ? { txnNo: voidTxnNo } : {}),
+            },
+          })
+          if (out.success) {
+            const d = (out.data || {}) as Record<string, unknown>
+            const nextTxnNo = extractKbankPaymentTxnNo(d).slice(0, 20) || voidTxnNo
+            if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
+            purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
+            clearKbankQrFromLinkpos()
+            setKbankCallbackState('failed')
+            openKbankOutcomeModal(
+              {
+                kind: 'voided',
+                amount: Math.max(0, Number(liveKbankQrAmount || 0)),
+                refId: origPartnerTxnUid || partnerTxnUid,
+                paymentMethod: liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+                approvalCode: nextTxnNo || voidTxnNo || undefined,
+                timeLabel: formatPosDateTimeMedium(new Date(), lang),
+              },
+              `void:${origPartnerTxnUid || partnerTxnUid}:${voidPartnerTxnUid}`
+            )
+          } else {
+            const voidErr = String(
+              out.statusMessage ||
+                out.message ||
+                t('posKbankVoidFailedAlert') ||
+                'Void payment failed. Check KBank response in the panel below.'
+            ).trim()
+            const rateLimited = noteKbankRateLimitResponse(voidErr)
+            await appAlert(
+              rateLimited
+                ? String(t('posKbankRateLimitAlert') || voidErr)
+                    .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
+                    .replace('{label}', 'Void') || voidErr
+                : voidErr
+            )
+          }
+          setKbankOpsLastResult(`[VOID] ${JSON.stringify(out)}`)
+          return
+        }
+        if (liveKbankQrType === 'CREDIT_CARD') {
+          await appAlert(
+            t('posKbankSettlementThaiQrOnlyAlert') ||
+              'Manual Settlement is not supported for Credit Card QR. Only Thai QR supports immediate settlement.'
+          )
+          return
+        }
+        if (!terminalId) {
+          await appAlert(
+            t('posKbankTerminalIdRequiredAlert') ||
+              'terminalId is required for Settlement. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID.'
+          )
+          return
+        }
+        const settlementPartnerTxnUid = `STM${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
+        const out = await executeKbankSettlement({
+          storeCode: currentStoreId,
+          partnerTxnUid: settlementPartnerTxnUid,
+          terminalId,
+          qrType: 'THAI_QR',
+          payload: {
+            partnerTxnUid: settlementPartnerTxnUid,
+            terminalId,
+            qrType: 'THAI_QR',
+          },
+        })
+        setKbankOpsLastResult(`[SETTLEMENT] ${JSON.stringify(out)}`)
+      } finally {
+        setKbankOpsBusy(false)
+      }
+    },
+    [
+      currentStoreId,
+      kbankOpsTxnUid,
+      kbankOpsOrigTxnUid,
+      kbankOpsTerminalId,
+      kbankOpsTxnNo,
+      liveKbankQrType,
+      kbankCallbackState,
+      t,
+      enforceKbankCooldown,
+      liveKbankQrAmount,
+      openKbankOutcomeModal,
+      presentKbankPaymentApproved,
+      presentKbankApprovedFromInquiry,
+      purgeKbankPendingFinalize,
+      clearKbankQrFromLinkpos,
+      alertIfKbankApiPaused,
+      noteKbankRateLimitResponse,
+      lang,
+    ]
+  )
+
+  const applyKbankManualMemoTag = useCallback(
+    (
+      memo: string | null | undefined,
+      result: { pending?: boolean; partnerTransactionId?: string } | { ok?: boolean }
+    ) => {
+      const base = String(memo ?? '').trim()
+      const isManual = Boolean((result as { pending?: boolean }).pending)
+      if (!isManual) return base
+      const txnId = String((result as { partnerTransactionId?: string }).partnerTransactionId ?? '').trim()
+      const tag = txnId ? `[KBANK_MANUAL:${txnId}]` : '[KBANK_MANUAL]'
+      if (base.includes(tag)) return base
+      if (base.includes('[KBANK_MANUAL')) return base
+      return base ? `${base}\n${tag}` : tag
+    },
+    []
+  )
+
   const posOrderMemoForPaymentSave = useCallback(
     (
       memo: string | null | undefined,
@@ -4395,11 +6823,246 @@ export default function PosTerminalPage() {
       kbankResult: { pending?: boolean; partnerTransactionId?: string } | { ok?: boolean }
     ) =>
       upsertPosSplitReceiptsInMemo(
-        kbank.applyKbankManualMemoTag(memo, kbankResult),
+        applyKbankManualMemoTag(memo, kbankResult),
         normalizePosSplitReceiptSnapshots(splitReceipts)
       ),
-    [kbank]
+    [applyKbankManualMemoTag]
   )
+
+  useEffect(() => {
+    if (!isKbankPilotStore || !currentStoreId) return
+    const localTxId = String(kbankOpsTxnUid || '').trim()
+    if (!localTxId) {
+      setKbankCallbackState('idle')
+      return
+    }
+    if (kbankCallbackState === 'idle') {
+      setKbankCallbackState('waiting')
+    }
+    let cancelled = false
+    const applyCallbackAttempt = async () => {
+      const businessDate = getPosBusinessDateStr()
+      const rows = await getPosPaymentAttempts({
+        startStr: businessDate,
+        endStr: businessDate,
+        storeCode: currentStoreId,
+        status: 'all',
+        localTxId,
+        limit: 1,
+      })
+      if (cancelled || !Array.isArray(rows) || rows.length === 0) return
+      const hit = rows[0] as PosPaymentAttempt | undefined
+      if (!hit) return
+      const status = String(hit.status || '').trim().toLowerCase()
+      const lowerText = String(hit.responseText || '').trim().toLowerCase()
+      const txnNoFromTextMatch =
+        lowerText.match(/(?:txnno|transactionno)\s*[:=]\s*(\d{6,16})/i) ||
+        lowerText.match(/\btxnno\b.*?(\d{6,16})\b/i)
+      const txnNoFromText = String(txnNoFromTextMatch?.[1] || '').trim()
+      const tracePaymentTxnNo = String(hit.traceNo || '').trim()
+      let paymentTxnNo = ''
+      if (isKbankPaymentTxnNo(tracePaymentTxnNo)) {
+        paymentTxnNo = tracePaymentTxnNo
+      } else if (isKbankPaymentTxnNo(txnNoFromText)) {
+        paymentTxnNo = txnNoFromText
+      }
+      if (paymentTxnNo && !resolveKbankInquiryTxnNoForRequest(kbankOpsTxnNo, { qrType: liveKbankQrType })) {
+        setKbankOpsTxnNo(paymentTxnNo.slice(0, 20))
+      }
+      if (isKbankPaymentAttemptApproved(hit)) {
+        setKbankOpsLastResult(
+          `[CALLBACK] ${JSON.stringify({
+            localTxId,
+            status: hit.status,
+            responseCode: hit.responseCode,
+            responseText: hit.responseText,
+            traceNo: hit.traceNo,
+            createdAt: hit.createdAt,
+          })}`
+        )
+        const methodFromText = lowerText.includes('credit') || lowerText.includes('card')
+        presentKbankPaymentApproved({
+          refId: localTxId,
+          amount: Math.max(0, Number(hit.approvedAmount || hit.requestAmount || liveKbankQrAmount || 0)),
+          paymentMethod:
+            liveKbankQrType === 'CREDIT_CARD' || methodFromText
+              ? 'Credit Card QR'
+              : 'PromptPay QR',
+          approvalCode:
+            String(hit.approvalCode || paymentTxnNo || kbankOpsTxnNo || '').trim() || undefined,
+          timeLabel: formatPosDateTimeMedium(hit.createdAt ? new Date(hit.createdAt) : new Date(), lang),
+          dedupeKey: `callback:${localTxId}:${hit.createdAt || ''}:${hit.responseCode || ''}`,
+        })
+        return
+      }
+      if (status === 'declined' || status === 'failed' || status === 'timeout' || status === 'error') {
+        setKbankCallbackState('failed')
+      }
+    }
+    void applyCallbackAttempt().catch(() => {})
+    const callbackPollMs = liveKbankQrType === 'CREDIT_CARD' ? 5_000 : 8_000
+    const timerId = window.setInterval(() => {
+      void applyCallbackAttempt().catch(() => {})
+    }, callbackPollMs)
+    return () => {
+      cancelled = true
+      window.clearInterval(timerId)
+    }
+  }, [
+    isKbankPilotStore,
+    currentStoreId,
+    kbankOpsTxnUid,
+    kbankOpsTxnNo,
+    kbankCallbackState,
+    liveKbankQrAmount,
+    liveKbankQrType,
+    kbankOpsCardBrands,
+    presentKbankPaymentApproved,
+    lang,
+  ])
+
+  /** Callback 미수신 시 KBank Inquiry로 승인 상태 동기화 (은행 결제 완료·POS 대기 불일치 완화). */
+  useEffect(() => {
+    if (!isKbankPilotStore || !currentStoreId) return
+    const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+    const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
+    if (!partnerTxnUid || kbankCallbackState !== 'waiting') return
+
+    let cancelled = false
+    const pollApprovedViaInquiry = async () => {
+      if (cancelled || kbankCallbackNotifiedTxRef.current === partnerTxnUid) return
+      if (isKbankApiPaused()) return
+      const inquiryCooldownMs = liveKbankQrType === 'CREDIT_CARD' ? 20_000 : 60_000
+      if (Date.now() - kbankInquiryLastAtRef.current < inquiryCooldownMs) return
+
+      kbankInquiryLastAtRef.current = Date.now()
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      const pollInquiryTxnNo = resolveKbankInquiryTxnNoForRequest(String(kbankOpsTxnNo || '').trim(), {
+        qrType: liveKbankQrType,
+      })
+      try {
+        const st = await executeKbankCheckStatus({
+          storeCode: currentStoreId,
+          partnerTransactionId: partnerTxnUid,
+          originalTransactionId: origPartnerTxnUid || undefined,
+          terminalId: terminalId || undefined,
+          txnNo: pollInquiryTxnNo,
+          payload: {
+            ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+            ...(terminalId ? { terminalId } : {}),
+            qrType: liveKbankQrType,
+            ...(pollInquiryTxnNo ? { txnNo: pollInquiryTxnNo } : {}),
+          },
+        })
+        if (cancelled) return
+        if (!st.success) {
+          noteKbankRateLimitResponse(st.statusMessage || st.message)
+          return
+        }
+        presentKbankApprovedFromInquiry(partnerTxnUid, st, 'auto-inquiry', {
+          paymentMethod:
+            liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+        })
+      } catch {
+        /* noop */
+      }
+    }
+
+    // CC: 콜백·txnNo 즉시 Inquiry가 먼저이고, 여기는 보조 폴백(쿼터 고려해 Thai보다 짧게만).
+    const pollFirstDelayMs = liveKbankQrType === 'CREDIT_CARD' ? 12_000 : 60_000
+    const pollIntervalMs = liveKbankQrType === 'CREDIT_CARD' ? 45_000 : 120_000
+    const firstDelayMs = window.setTimeout(() => {
+      void pollApprovedViaInquiry()
+    }, pollFirstDelayMs)
+    const intervalId = window.setInterval(() => {
+      void pollApprovedViaInquiry()
+    }, pollIntervalMs)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(firstDelayMs)
+      window.clearInterval(intervalId)
+    }
+  }, [
+    isKbankPilotStore,
+    currentStoreId,
+    kbankOpsTxnUid,
+    kbankOpsOrigTxnUid,
+    kbankOpsTerminalId,
+    kbankOpsTxnNo,
+    kbankCallbackState,
+    presentKbankPaymentApproved,
+    presentKbankApprovedFromInquiry,
+    isKbankApiPaused,
+    noteKbankRateLimitResponse,
+    liveKbankQrType,
+  ])
+
+  /** Credit Card QR: txnNo(숫자) 수신 즉시 Inquiry → 승인 팝업 (콜백 지연 대비). */
+  useEffect(() => {
+    if (!isKbankPilotStore || !currentStoreId) return
+    if (liveKbankQrType !== 'CREDIT_CARD') return
+    if (kbankCallbackState !== 'waiting') return
+    const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+    if (!partnerTxnUid || kbankCallbackNotifiedTxRef.current === partnerTxnUid) return
+    const inquiryTxnNo = resolveKbankInquiryTxnNoForRequest(kbankOpsTxnNo, {
+      qrType: 'CREDIT_CARD',
+    })
+    if (!inquiryTxnNo) return
+    const triggerKey = `${partnerTxnUid}:${inquiryTxnNo}`
+    if (kbankCcInquiryTriggeredRef.current === triggerKey) return
+    if (isKbankApiPaused()) return
+    kbankCcInquiryTriggeredRef.current = triggerKey
+
+    let cancelled = false
+    void (async () => {
+      if (Date.now() - kbankInquiryLastAtRef.current < 3_000) return
+      kbankInquiryLastAtRef.current = Date.now()
+      const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
+      const terminalId = String(kbankOpsTerminalId || '').trim()
+      try {
+        const st = await executeKbankCheckStatus({
+          storeCode: currentStoreId,
+          partnerTransactionId: partnerTxnUid,
+          originalTransactionId: origPartnerTxnUid || undefined,
+          terminalId: terminalId || undefined,
+          txnNo: inquiryTxnNo,
+          payload: {
+            ...(origPartnerTxnUid ? { origPartnerTxnUid } : {}),
+            ...(terminalId ? { terminalId } : {}),
+            qrType: 'CREDIT_CARD',
+            txnNo: inquiryTxnNo,
+          },
+        })
+        if (cancelled) return
+        if (!st.success) {
+          noteKbankRateLimitResponse(st.statusMessage || st.message)
+          return
+        }
+        const shown = presentKbankApprovedFromInquiry(partnerTxnUid, st, 'cc-txn-inquiry', {
+          paymentMethod: 'Credit Card QR',
+        })
+        if (!shown) kbankCcInquiryTriggeredRef.current = ''
+      } catch {
+        kbankCcInquiryTriggeredRef.current = ''
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    isKbankPilotStore,
+    currentStoreId,
+    liveKbankQrType,
+    kbankCallbackState,
+    kbankOpsTxnUid,
+    kbankOpsTxnNo,
+    kbankOpsTerminalId,
+    presentKbankApprovedFromInquiry,
+    isKbankApiPaused,
+    noteKbankRateLimitResponse,
+  ])
 
   const applyTaxInvoiceProfile = useCallback((profile: PosTaxInvoiceData) => {
     setTiCustomerType(profile.customerType === 'company' ? 'company' : 'person')
@@ -4575,26 +7238,23 @@ export default function PosTerminalPage() {
         return
       }
       /** 결제 후 세금 정보 저장 시: 결제(세금계산서) 영수증 재인쇄 — 홀 주문표는 매장·VAT·결제 수단이 빠짐 */
-      const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
-        taxInvoiceTargetOrder,
-        currentStoreId,
-        nextMemo,
-        pricingAdjustments,
-        posReceiptLineOpts
-      )
-      const receiptData = {
-        ...receiptBase,
-        items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, {
-          ...posReceiptLineOpts,
-          memo: receiptBase.memo,
-          deliveryAppCode: receiptBase.deliveryAppCode,
-        }),
-        receiptAutoPrintContext: 'payment' as const,
-        suppressReceiptModalAutoPrint: false,
-        skipReceiptAutoPrint: !isMainPosDevice,
-      }
       if (isMainPosDevice) {
         const settings = await getPrinterSettingsForStore(currentStoreId)
+        const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
+          taxInvoiceTargetOrder,
+          currentStoreId,
+          nextMemo,
+          pricingAdjustments,
+          posReceiptLineOpts
+        )
+        const receiptData = {
+          ...receiptBase,
+          items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, {
+            ...posReceiptLineOpts,
+            memo: receiptBase.memo,
+            deliveryAppCode: receiptBase.deliveryAppCode,
+          }),
+        }
         const receiptHtml = buildPosPaymentReceiptDocumentHtml({
           receiptData,
           menus,
@@ -4626,8 +7286,6 @@ export default function PosTerminalPage() {
             void appAlert(t('posPrintUnavailable'))
           },
         })
-      } else {
-        setReceiptData(receiptData)
       }
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
@@ -5477,7 +8135,6 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
-              markPosTerminalOrderSubmitInFlight()
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -5511,7 +8168,7 @@ export default function PosTerminalPage() {
                   }
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
-                  const kbankQr = await kbank.runKbankQrPaymentIfNeeded(payload.payment, {
+                  const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: 'delivery',
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
@@ -5627,7 +8284,7 @@ export default function PosTerminalPage() {
                   return true
                 }
                 if (kbankQrPending && kbankPartnerTxnId) {
-                  kbank.registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void finalizeDeliveryPaid()
                   })
                   await refetchCurrentStore()
@@ -5650,7 +8307,6 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
-              markPosTerminalOrderSubmitInFlight()
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -5682,7 +8338,7 @@ export default function PosTerminalPage() {
                   }
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
-                  const kbankQr = await kbank.runKbankQrPaymentIfNeeded(payload.payment, {
+                  const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: 'takeout',
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
@@ -5793,7 +8449,7 @@ export default function PosTerminalPage() {
                   return true
                 }
                 if (kbankQrPending && kbankPartnerTxnId) {
-                  kbank.registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void finalizeTakeoutPaid()
                   })
                   await refetchCurrentStore()
@@ -5813,7 +8469,6 @@ export default function PosTerminalPage() {
               if (posCartBackendBusyRef.current) return
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
-              markPosTerminalOrderSubmitInFlight()
               const posSaveClientKey = newPosOrderClientRequestId()
               /** `await getPosOrders` 등으로 한참 뒤에 맞추면 카트가 비거나 바뀐 뒤라 수량이 엇갈릴 수 있음 → 제출 직후 스냅샷 */
               const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
@@ -6207,14 +8862,14 @@ export default function PosTerminalPage() {
                   registerLocallyPrintedQueuedOrderNo(queuedLocalOrderNo)
                   queuedLocalOrderNo = null
                 }
-                let skipLocalHallReceiptAutoPrint = false
+                let skipLocalAutoPrint = false
                 if (savedOrderId != null) {
-                  // Realtime이 seen에 먼저 넣어도 홀 영수증만 skip — 주방은 터미널 submit이 담당
+                  // 추가 주문은 기존 orderId로 merge 저장이라 이미 seen에 있음. 여기서 skip하면 홀/주방 인쇄가 막힘(폴링·로컬 중복 방지는 신규 주문에만 적용).
                   if (!isAddOrder) {
-                    skipLocalHallReceiptAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
+                    skipLocalAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
                   }
                   seenOrderIdsRef.current.add(savedOrderId)
-                  bumpLastSeenOrderId(currentStoreId, savedOrderId)
+                  bumpLastSeenOrderId(savedOrderId)
                 }
 
                 type ReceiptPrintLine = {
@@ -6346,7 +9001,6 @@ export default function PosTerminalPage() {
                   }
                   const kitchenPrintKey =
                     savedOrderId != null ? `order:${savedOrderId}:kitchen` : `submit:${orderNoStr}:${payload.tableName || ''}:new`
-                  releaseKitchenAutoPrintKey(kitchenPrintKey)
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
                   const runKitchenFromSnapshot = () => {
                     logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
@@ -6495,36 +9149,34 @@ export default function PosTerminalPage() {
                   typeof window !== 'undefined' && window.cmPosShell
                     ? resolveAfterReceiptToKitchenDelayMs()
                     : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-                if (isMainPosDevice) {
-                  const doHall = shouldAutoPrintReceipt && !skipLocalHallReceiptAutoPrint
-                  const doKitchen = autoPrintKitchenForSubmit && kitchenCartLines.length > 0
-                  if (doHall && doKitchen) {
-                    markQueuedLocalPrintedIfNeeded()
-                    logPosPrintDebug('submit_receipt_kitchen_chained_dispatch', {
-                      orderId: savedOrderId,
-                      orderNo: orderNoStr,
-                      receiptItems: receiptPrintItems.length,
-                      kitchenLines: kitchenCartLines.length,
-                    })
-                    void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, scheduleKitchenAfterDineInSubmit)
-                  } else if (doHall) {
+                if (isMainPosDevice && !skipLocalAutoPrint) {
+                  if (shouldAutoPrintReceipt) {
                     markQueuedLocalPrintedIfNeeded()
                     logPosPrintDebug('submit_receipt_autoprint_dispatch', {
                       orderId: savedOrderId,
                       orderNo: orderNoStr,
+                      autoPrintKitchenSlipOnOrder: autoPrintKitchenForSubmit,
+                      skipLocalAutoPrint,
                       receiptItems: receiptPrintItems.length,
                     })
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
-                  } else if (doKitchen) {
-                    markQueuedLocalPrintedIfNeeded()
-                    logPosPrintDebug('submit_kitchen_only_autoprint_dispatch', {
-                      orderId: savedOrderId,
-                      orderNo: orderNoStr,
-                      kitchenLines: kitchenCartLines.length,
-                    })
-                    setTimeout(scheduleKitchenAfterDineInSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
                   }
-                  if (!doHall && !doKitchen && !skipLocalHallReceiptAutoPrint) {
+                  if (autoPrintKitchenForSubmit && kitchenCartLines.length > 0) {
+                    if (!shouldAutoPrintReceipt) {
+                      markQueuedLocalPrintedIfNeeded()
+                      logPosPrintDebug('submit_kitchen_only_autoprint_dispatch', {
+                        orderId: savedOrderId,
+                        orderNo: orderNoStr,
+                        skipLocalAutoPrint,
+                        kitchenLines: kitchenCartLines.length,
+                      })
+                    }
+                    setTimeout(
+                      scheduleKitchenAfterDineInSubmit,
+                      shouldAutoPrintReceipt ? kitchenDelayAfterReceiptMs : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+                    )
+                  }
+                  if (!shouldAutoPrintReceipt && !autoPrintKitchenForSubmit) {
                   /** 자동 인쇄(영수증·주방) 모두 꺼진 경우: 수동 인쇄 안내 모달(Windows 인쇄 대화상자로 이어짐) */
                   setReceiptData({
                     orderNo: orderNoStr,
@@ -6607,7 +9259,6 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
-              markPosTerminalOrderSubmitInFlight()
               const posSaveClientKey = newPosOrderClientRequestId()
               try {
                 if (isPosDemo) {
@@ -6629,7 +9280,7 @@ export default function PosTerminalPage() {
                 const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
                 if (!linkpos.ok) return false
                 const kbankQr = pay
-                  ? await kbank.runKbankQrPaymentIfNeeded(pay, {
+                  ? await runKbankQrPaymentIfNeeded(pay, {
                       orderType: 'dine_in',
                       orderLabel: payload.tableName,
                       orderId: existingOrderId ?? undefined,
@@ -6831,7 +9482,7 @@ export default function PosTerminalPage() {
                 }
                 /** QR 대기 결제: 모달을 닫고 주문은 open 유지, 승인되면 후처리 실행 */
                 if (kbankQrPending && kbankPartnerTxnId) {
-                  kbank.registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void finalizeDineInPaid()
                   })
                   await refetchCurrentStore()
@@ -6854,7 +9505,6 @@ export default function PosTerminalPage() {
               }
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
-              markPosTerminalOrderSubmitInFlight()
               const posSaveClientKey = newPosOrderClientRequestId()
               try {
                 if (isPosDemo) {
@@ -7120,7 +9770,7 @@ export default function PosTerminalPage() {
                 }
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                 if (!linkpos.ok) return false
-                const kbankQr = await kbank.runKbankQrPaymentIfNeeded(payload.payment, {
+                const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                   orderType: payload.orderType,
                   orderLabel: payload.orderLabel,
                 })
@@ -7201,7 +9851,7 @@ export default function PosTerminalPage() {
                 if (newOrderId != null && newOrderId > 0) {
                   if (seenOrderIdsRef.current.has(newOrderId)) suppressReceiptModalAutoPrint = true
                   seenOrderIdsRef.current.add(newOrderId)
-                  bumpLastSeenOrderId(currentStoreId, newOrderId)
+                  bumpLastSeenOrderId(newOrderId)
                 }
                 const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -7299,7 +9949,6 @@ export default function PosTerminalPage() {
                     newOrderId != null && newOrderId > 0
                       ? `order:${newOrderId}:kitchen`
                       : `submit:${orderNo}:${payload.orderLabel || ''}:${payload.orderType}`
-                  releaseKitchenAutoPrintKey(kitchenPrintKey)
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
                   const itemsForKitchen = payloadItemsNormalized.map((i) => {
                     const line = i as {
@@ -7417,23 +10066,17 @@ export default function PosTerminalPage() {
                     ? resolveAfterReceiptToKitchenDelayMs()
                     : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
 
-                if (!hasPayment && isMainPosDevice) {
-                  const skipHallAutoPrint = suppressReceiptModalAutoPrint
-                  if (
-                    !skipHallAutoPrint &&
-                    autoPrintReceiptNonDine &&
-                    autoPrintKitchenNonDine &&
-                    payloadItemsNormalized.length > 0
-                  ) {
+                if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
+                  if (autoPrintReceiptNonDine && autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)
-                  } else if (!skipHallAutoPrint && autoPrintReceiptNonDine) {
+                  } else if (autoPrintReceiptNonDine) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                   } else if (autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     setTimeout(runKitchenAfterNonDineSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-                  } else if (!skipHallAutoPrint) {
+                  } else {
                     setReceiptData({
                       ...receiptPayloadSubmit,
                       receiptAutoPrintContext: 'order',
@@ -7547,7 +10190,7 @@ export default function PosTerminalPage() {
                 if (hasPayment) schedulePostPaymentCustomerQr()
                 /** QR 대기 결제: 승인되면 주문을 paid로 마감하고 결제 영수증 발행 */
                 if (kbankQrPending && kbankPartnerTxnId) {
-                  kbank.registerPendingKbankFinalize(kbankPartnerTxnId, () => {
+                  registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void (async () => {
                       if (newOrderId != null && newOrderId > 0) {
                         await applyOrderStatusWithRetry({ id: newOrderId, status: 'paid' })
@@ -7638,7 +10281,7 @@ export default function PosTerminalPage() {
         stores={stores}
         currentStoreId={currentStoreId}
         onStoreChange={() => {}}
-        onRefresh={refetchCurrentStoreForManualRefresh}
+        onRefresh={refetchCurrentStore}
         todayCompleted={todayCompleted}
         totalSales={totalSales}
         showBackButton
@@ -7897,11 +10540,12 @@ export default function PosTerminalPage() {
                     onClick={() => {
                       if (!deliveryApp) return
                       const orderNo = deliveryOrderNo.trim()
+                      if (!orderNo) return
                       setSelectedDeliveryTargetId('delivery-draft')
                       const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
-                      setSelectedDeliveryTargetLabel(orderNo ? `${appLabelEn} #${orderNo}` : appLabelEn)
+                      setSelectedDeliveryTargetLabel(`${appLabelEn} #${orderNo}`)
                     }}
-                    disabled={!deliveryApp}
+                    disabled={!deliveryApp || !deliveryOrderNo.trim()}
                   >
                     + {t('posNewOrder') || '새 주문'}
                   </Button>
@@ -8273,8 +10917,6 @@ export default function PosTerminalPage() {
               order={servingTable.order}
               storeCode={currentStoreId}
               menus={menus}
-              menuOptions={menuOptionsForCodeMap.length > 0 ? menuOptionsForCodeMap : menuOptions}
-              promos={promosWithItems}
               allTables={currentStore?.tables ?? []}
               takeoutMergePeers={takeoutMergePeerTables}
               isDemo={isPosDemo}
@@ -8353,7 +10995,17 @@ export default function PosTerminalPage() {
                 setPendingPayRequest({
                   tableName: servingTable.name,
                   existingOrderId: Number(servingTable.order.id),
-                  items: servingTable.order.items.map((item) => mapOrderItemForCheckoutPayment(item)),
+                  items: servingTable.order.items.map((item) => {
+                    const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
+                    return {
+                      id: item.id,
+                      name: item.name,
+                      price: item.price,
+                      quantity: item.quantity,
+                      ...(menuId ? { menuId } : {}),
+                      ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                    }
+                  }),
                   orderNo: servingTable.order.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...servingTable.order,
@@ -8414,16 +11066,18 @@ export default function PosTerminalPage() {
                 setPendingReceiptOrderNo(selectedDeliveryOrder.orderNo ?? null)
                 setPendingDeliveryPayRequest({
                   tableName: selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id),
-                  items: selectedDeliveryOrder.items.map((item) =>
-                    mapOrderItemForCheckoutPayment({
-                      ...item,
-                      name: resolveOrderItemDisplayName({
-                        id: item.id,
-                        name: item.name,
-                        menuId: item.menuId,
-                      }),
-                    })
-                  ),
+                  items: selectedDeliveryOrder.items.map((item) => ({
+                    id: item.id,
+                    name: resolveOrderItemDisplayName({
+                      id: item.id,
+                      name: item.name,
+                      menuId: item.menuId,
+                    }),
+                    price: item.price,
+                    quantity: item.quantity,
+                    ...(item.menuId ? { menuId: item.menuId } : {}),
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                  })),
                   orderNo: selectedDeliveryOrder.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...selectedDeliveryOrder,
@@ -8498,7 +11152,14 @@ export default function PosTerminalPage() {
                 setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
                 setPendingTakeoutPayRequest({
                   tableName: resolveTakeoutOrderBarLabel(selectedTakeoutOrder),
-                  items: selectedTakeoutOrder.items.map((item) => mapOrderItemForCheckoutPayment(item)),
+                  items: selectedTakeoutOrder.items.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    ...(item.menuId ? { menuId: item.menuId } : {}),
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                  })),
                   orderNo: selectedTakeoutOrder.orderNo,
                   orderDiscount: posOrderToCheckoutDiscountSnapshot({
                     ...selectedTakeoutOrder,
@@ -8579,9 +11240,9 @@ export default function PosTerminalPage() {
           onSave: handleSaveTaxInvoiceForOrder,
         }}
         kbankOutcome={{
-          state: kbank.kbankOutcomeState,
+          state: kbankOutcomeState,
           onOpenChange: (open) => {
-            if (!open) kbank.setKbankOutcomeState(null)
+            if (!open) setKbankOutcomeState(null)
           },
           onViewAllOrders: () => {
             setActiveTab('tables')
@@ -8591,33 +11252,33 @@ export default function PosTerminalPage() {
             setSelectedTakeoutTargetLabel('')
           },
           onCreateNewQr: () => {
-            kbank.clearKbankQrSession()
+            clearKbankQrSession()
           },
         }}
         kbankStaffMonitor={{
-          visible: kbank.showKbankStaffMonitor,
+          visible: showKbankStaffMonitor,
           tourAttr: isPosDemo ? 'pos-tour-kbank-qr-preview' : undefined,
-          liveQrPayload: kbank.liveKbankQrPayload,
-          callbackState: kbank.kbankCallbackState,
-          effectiveQrAmount: kbank.effectiveStaffKbankQrAmount,
-          effectiveQrType: kbank.effectiveCustomerDisplayQrType,
-          qrTypeLabel: kbank.staffKbankQrTypeLabel,
-          sentQrTypeCode: kbank.kbankSentQrTypeCode,
-          linkposQrBridgeStatus: kbank.linkposQrBridgeStatus,
-          generateAuditText: kbank.kbankGenerateAuditText,
-          effectiveStaffQrPayload: kbank.effectiveStaffKbankQrPayload,
-          opsTxnUid: kbank.kbankOpsTxnUid,
-          opsOrigTxnUid: kbank.kbankOpsOrigTxnUid,
-          opsTxnNo: kbank.kbankOpsTxnNo,
-          onOpsTxnNoChange: kbank.setKbankOpsTxnNo,
-          opsTerminalId: kbank.kbankOpsTerminalId,
-          onOpsTerminalIdChange: kbank.setKbankOpsTerminalId,
-          opsBusy: kbank.kbankOpsBusy,
-          opsLastResult: kbank.kbankOpsLastResult,
-          apiPausedUntilMs: kbank.kbankApiPausedUntilMs,
-          isPilotStore: kbank.isKbankPilotStore,
-          onFollowupAction: kbank.runKbankFollowupAction,
-          onClearSession: kbank.clearKbankQrSession,
+          liveQrPayload: liveKbankQrPayload,
+          callbackState: kbankCallbackState,
+          effectiveQrAmount: effectiveStaffKbankQrAmount,
+          effectiveQrType: effectiveCustomerDisplayQrType,
+          qrTypeLabel: staffKbankQrTypeLabel,
+          sentQrTypeCode: kbankSentQrTypeCode,
+          linkposQrBridgeStatus: linkposQrBridgeStatus,
+          generateAuditText: kbankGenerateAuditText,
+          effectiveStaffQrPayload: effectiveStaffKbankQrPayload,
+          opsTxnUid: kbankOpsTxnUid,
+          opsOrigTxnUid: kbankOpsOrigTxnUid,
+          opsTxnNo: kbankOpsTxnNo,
+          onOpsTxnNoChange: setKbankOpsTxnNo,
+          opsTerminalId: kbankOpsTerminalId,
+          onOpsTerminalIdChange: setKbankOpsTerminalId,
+          opsBusy: kbankOpsBusy,
+          opsLastResult: kbankOpsLastResult,
+          apiPausedUntilMs: kbankApiPausedUntilMs,
+          isPilotStore: isKbankPilotStore,
+          onFollowupAction: runKbankFollowupAction,
+          onClearSession: clearKbankQrSession,
         }}
         liveMenuSearch={{
           open: liveSearchOpen,
@@ -8678,13 +11339,13 @@ export default function PosTerminalPage() {
           itemBarcode,
           printerSettingsRef: posPrinterSettingsRef,
           kitchenPromoLineEnrich: posReceiptLineOpts,
-          onPaymentVoidClick: () => void kbank.runKbankFollowupAction('void'),
+          onPaymentVoidClick: () => void runKbankFollowupAction('void'),
           paymentVoidEnabled: Boolean(
-            kbank.isKbankPilotStore &&
+            isKbankPilotStore &&
               receiptData?.receiptAutoPrintContext === 'payment' &&
-              String(kbank.kbankOpsTxnUid || '').trim()
+              String(kbankOpsTxnUid || '').trim()
           ),
-          paymentVoidBusy: kbank.kbankOpsBusy,
+          paymentVoidBusy: kbankOpsBusy,
         }}
         deliveryEditOrderNo={{
           open: deliveryEditOrderNoOpen,

@@ -74,7 +74,9 @@ import { appAlert } from '@/lib/app-message'
 import { useAuth } from '@/lib/auth-context'
 import {
   getPosMenuOptions,
+  getMembers,
   getPosCollabCampaigns,
+  getPosMemberTierRates,
   getPosPaymentMethodItems,
   upsertPosTaxInvoiceRecipient,
   validatePosCoupons,
@@ -89,7 +91,10 @@ import {
   collabDiscountAmountForCart,
   collabSupportsQuantityEntry,
 } from '@/lib/pos-collab-discount'
-import { normalizeMemberTierCodeForDiscount } from '@/lib/member-tier-discount'
+import {
+  computeMemberTierDiscountAmount,
+  normalizeMemberTierCodeForDiscount,
+} from '@/lib/member-tier-discount'
 import { buildCouponDiscountLineAllocations, summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
@@ -127,7 +132,6 @@ import {
   translateTakeoutOrderDisplayLabel,
 } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
-import { usePosCartMember } from '@/hooks/use-pos-cart-member'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
@@ -450,7 +454,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (orderType === 'dine-in'
       ? !!selectedTable
       : orderType === 'delivery'
-        ? !!deliveryAppProp
+        ? !!deliveryAppProp && !!String(deliveryOrderNoProp || '').trim()
         : true)
   const tableIdForCartSessionKey =
     orderType === 'dine-in'
@@ -477,6 +481,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const setCartItems = isCartControlled ? setCartItemsProp! : setInternalCartItems
   const [takeoutSlot, setTakeoutSlot] = useState<string>('1')
   const [takeoutMemberName, setTakeoutMemberName] = useState('')
+  const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [memberKeyword, setMemberKeyword] = useState('')
+  const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
+  const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }>>({})
+  const [tierDiscountRates, setTierDiscountRates] = useState<Record<string, number>>({})
+  const [, setRecentMemberIds] = useState<string[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
   const [guestCount, setGuestCount] = useState(0)
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
   const [guestDirectValue, setGuestDirectValue] = useState('10')
@@ -492,6 +503,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [couponScanFlash, setCouponScanFlash] = useState<PosScanFieldFlash>(null)
   const scanFieldFlashTimerRef = useRef<number | null>(null)
   const lastPosActivityRef = useRef(Date.now())
+  const memberScanAutoSubmitRef = useRef<string | null>(null)
   const couponScanAutoSubmitRef = useRef<string | null>(null)
   const memberFieldCouponAutoRef = useRef<string | null>(null)
   const [couponQuantityInput, setCouponQuantityInput] = useState('1')
@@ -651,6 +663,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       else memberScanInputRef.current?.focus()
     }, 60)
   }, [showPaymentModal])
+  const finishMemberScanInput = useCallback(
+    (outcome: 'success' | 'error') => {
+      triggerScanFieldFeedback('member', outcome)
+      setMemberKeyword('')
+      memberScanAutoSubmitRef.current = null
+      pendingMemberCouponQrRawRef.current = null
+      couponUsbScanBufferRef.current = { chars: '', lastAt: 0 }
+      refocusActiveScanInput()
+    },
+    [refocusActiveScanInput, triggerScanFieldFeedback]
+  )
   const finishCouponScanInput = useCallback(
     (outcome: 'success' | 'error') => {
       triggerScanFieldFeedback('coupon', outcome)
@@ -929,36 +952,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const discountScopeSubtotal = hasSelectedDiscountScope
     ? selectedDiscountSubtotal
     : Math.max(0, subtotalAfterCancel - serviceDiscountAmt)
-  const {
-    selectedMemberId,
-    setSelectedMemberId,
-    memberKeyword,
-    setMemberKeyword,
-    memberOptions,
-    setMemberOptions,
-    memberMap,
-    setMemberMap,
-    membersLoading,
-    tierDiscountRates,
-    memberScanAutoSubmitRef,
-    isMemberOrder,
-    selectedMemberDetail,
-    memberSearchEmpty,
-    selectedMemberTierDiscountRate,
-    tierDiscountAmt,
-    tierOrderFields,
-    linkMemberByMemberNo,
-    linkMemberById,
-    handleMemberSearch,
-    handleMemberKeywordInput,
-    finishMemberScanInput,
-  } = usePosCartMember({
-    discountScopeSubtotal,
-    triggerScanFieldFeedback,
-    refocusActiveScanInput,
-    pendingMemberCouponQrRawRef,
-    couponUsbScanBufferRef,
-  })
   const menuByIdForCollab = useMemo(() => {
     if (!posMenus?.length) return new Map<string, PosMenu>()
     return new Map(posMenus.map((m) => [String(m.id), m]))
@@ -1006,6 +999,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       collabQuantity
     )
   }, [appliedCollab, cartItems, collabQuantity, hasSelectedDiscountScope, lineDiscountModeByItemId, menuByIdForCollab])
+  const selectedMemberTierDiscountRate = useMemo(() => {
+    if (!selectedMemberId) return 0
+    const tierCode = normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')
+    return Math.max(0, Number(tierDiscountRates[tierCode] ?? 0))
+  }, [memberMap, selectedMemberId, tierDiscountRates])
+  const tierDiscountAmt = useMemo(() => {
+    if (!selectedMemberId || selectedMemberTierDiscountRate <= 0) return 0
+    return computeMemberTierDiscountAmount(discountScopeSubtotal, selectedMemberTierDiscountRate)
+  }, [discountScopeSubtotal, selectedMemberId, selectedMemberTierDiscountRate])
   const manualDiscountInputAmt =
     discountType === 'percent' ? Math.floor((discountScopeSubtotal * discountValue) / 100) : discountValue
   const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
@@ -1047,6 +1049,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       couponDiscountAmt: legacy.couponDiscountAmt || undefined,
     }
   }, [appliedCoupons])
+  const tierOrderFields = useMemo(
+    () => ({
+      ...(tierDiscountAmt > 0.0001 ? { tierDiscountAmt } : {}),
+      ...(selectedMemberId
+        ? {
+            memberTierCode: normalizeMemberTierCodeForDiscount(
+              memberMap[selectedMemberId]?.tierCode || 'BRONZE'
+            ),
+          }
+        : {}),
+    }),
+    [memberMap, selectedMemberId, tierDiscountAmt]
+  )
   const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + tierDiscountAmt
   const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
   const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + tierDiscountAmt + collabDiscountAmt)
@@ -1821,6 +1836,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     { id: 'delivery_app', label: t('posPaymentDeliveryApp') || '배달앱', icon: Bike },
     { id: 'other', label: t('posPaymentOther') || '기타', icon: Wallet },
   ]
+  const isMemberOrder = selectedMemberId !== ''
+  const selectedMemberDetail = memberMap[selectedMemberId]
+  const memberSearchEmpty = !membersLoading && memberKeyword.trim().length >= 2 && memberOptions.length === 0
   const normalizedTaxFields = normalizeTaxInvoiceFields({
     taxName,
     taxId,
@@ -1847,6 +1865,195 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             ? t('posDeliveryAppShopee')
             : deliveryAppProp || ''
   const deliveryBrand = deliveryAppBrandClasses(deliveryAppProp)
+
+  const loadMembers = async (
+    keyword?: string,
+    opts?: { autoSelectExactMemberNo?: string }
+  ) => {
+    setMembersLoading(true)
+    try {
+      const rawKeyword = String(keyword || '').trim()
+      const normalizedPhoneKeyword = rawKeyword.replace(/[^\d+]/g, '')
+      const q = normalizedPhoneKeyword.length >= 4 ? normalizedPhoneKeyword : rawKeyword
+      const rows = await getMembers({ q, limit: 20 })
+      const options = rows
+        .filter((row) => row.status !== 'inactive')
+        .map((row) => ({
+          value: String(row.id),
+          label: `${row.name}${row.memberNo ? ` (${row.memberNo})` : ''}${row.phone ? ` · ${row.phone}` : ''}`,
+        }))
+      const map: Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }> = {}
+      for (const row of rows) {
+        map[String(row.id)] = {
+          id: row.id,
+          memberNo: row.memberNo || '',
+          name: row.name || '',
+          phone: row.phone || '',
+          email: row.email || '',
+          tierCode: row.tierCode || 'BRONZE',
+        }
+      }
+      setMemberOptions(options)
+      setMemberMap(map)
+
+      const exactMemberNo = String(opts?.autoSelectExactMemberNo || '').trim().toUpperCase()
+      if (exactMemberNo) {
+        const exact = rows.find(
+          (row) => String(row.memberNo || '').trim().toUpperCase() === exactMemberNo
+        )
+        if (exact?.id) {
+          setSelectedMemberId(String(exact.id))
+          finishMemberScanInput('success')
+        } else {
+          finishMemberScanInput('error')
+        }
+      }
+    } catch (e) {
+      console.error('getMembers:', e)
+      setMemberOptions([])
+      setMemberMap({})
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  const linkMemberByMemberNo = useCallback(
+    async (
+      memberNo: string,
+      _opts?: { beep?: boolean }
+    ): Promise<{ id: number; name: string } | null> => {
+      const keyword = String(memberNo || '').trim()
+      if (!keyword) return null
+      const rows = await getMembers({ q: keyword, limit: 20 })
+      const match = (rows || []).find(
+        (row) => String(row.memberNo || '').trim().toUpperCase() === keyword.toUpperCase()
+      )
+      if (!match?.id) return null
+      const value = String(match.id)
+      const name = match.name || match.memberNo || keyword
+      setSelectedMemberId(value)
+      setMemberKeyword(match.memberNo || keyword)
+      setMemberOptions((prev) => {
+        const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+        if (prev.some((row) => row.value === value)) return prev
+        return [{ value, label }, ...prev]
+      })
+      setMemberMap((prev) => ({
+        ...prev,
+        [value]: {
+          id: match.id,
+          memberNo: match.memberNo || '',
+          name: match.name || '',
+          phone: match.phone || '',
+          email: match.email || '',
+          tierCode: match.tierCode || 'BRONZE',
+        },
+      }))
+      return { id: match.id, name }
+    },
+    []
+  )
+
+  const linkMemberById = useCallback(
+    async (memberId: number): Promise<{ id: number; name: string } | null> => {
+      const id = Math.max(0, Math.trunc(Number(memberId) || 0))
+      if (!id) return null
+      const rows = await getMembers({ q: String(id), limit: 20 })
+      const match = (rows || []).find((row) => Number(row.id) === id)
+      if (!match?.id) return null
+      const value = String(match.id)
+      const name = match.name || match.memberNo || String(id)
+      setSelectedMemberId(value)
+      setMemberKeyword(match.memberNo || String(id))
+      setMemberOptions((prev) => {
+        const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+        if (prev.some((row) => row.value === value)) return prev
+        return [{ value, label }, ...prev]
+      })
+      setMemberMap((prev) => ({
+        ...prev,
+        [value]: {
+          id: match.id,
+          memberNo: match.memberNo || '',
+          name: match.name || '',
+          phone: match.phone || '',
+          email: match.email || '',
+          tierCode: match.tierCode || 'BRONZE',
+        },
+      }))
+      return { id: match.id, name }
+    },
+    []
+  )
+
+  const handleMemberSearch = useCallback(
+    async (rawOverride?: string, opts?: { fromScan?: boolean }): Promise<boolean> => {
+      const raw = normalizeCouponScanDelimiters(String(rawOverride ?? memberKeyword).trim())
+      if (!raw) return false
+      const fromScan = opts?.fromScan === true
+
+      if (isMemberCouponScanPayload(raw)) {
+        const couponParsed = parseLooseMemberCouponScanInput(raw)
+        if (couponParsed?.memberNo) {
+          const linked = await linkMemberByMemberNo(couponParsed.memberNo, { beep: false })
+          if (linked) {
+            if (fromScan) finishMemberScanInput('success')
+            return true
+          }
+          if (fromScan) finishMemberScanInput('error')
+          return false
+        }
+      }
+
+      const memberParsed = parseMemberPosScanInput(raw)
+      if (memberParsed) {
+        const linked = await linkMemberByMemberNo(memberParsed.memberNo, { beep: false })
+        if (linked) {
+          if (fromScan) finishMemberScanInput('success')
+          return true
+        }
+        if (fromScan) finishMemberScanInput('error')
+        return false
+      }
+
+      const searchKey = raw
+      setMemberKeyword(searchKey)
+      await loadMembers(searchKey, { autoSelectExactMemberNo: undefined })
+      return false
+    },
+    [finishMemberScanInput, linkMemberByMemberNo, memberKeyword]
+  )
+
+  const handleMemberKeywordInput = (next: string) => {
+    const sanitized = normalizeCouponScanDelimiters(String(next ?? '').replace(/[^\x20-\x7E\uFF5E\u223C\u02DC\u2053]/g, ''))
+    const memberParsed = parseMemberPosScanInput(sanitized)
+    if (memberParsed) {
+      setMemberKeyword(memberParsed.memberNo)
+      return
+    }
+    if (isMemberCouponScanPayload(sanitized)) {
+      // 정식 쿠폰 QR(CM|CPN 헤더)은 회원번호로 줄이지 않고 전체 페이로드를 유지한다.
+      // → 회원란에 잘못 스캔돼도 Enter에서 쿠폰 적용으로 라우팅할 수 있다.
+      if (isMemberCouponQrPayload(sanitized)) {
+        setMemberKeyword(sanitized)
+        return
+      }
+      const couponParsed = parseLooseMemberCouponScanInput(sanitized)
+      if (couponParsed?.memberNo) {
+        setMemberKeyword(couponParsed.memberNo)
+        return
+      }
+    }
+    setMemberKeyword(sanitized)
+  }
+
+  useEffect(() => {
+    getPosMemberTierRates()
+      .then((res) => {
+        if (res.success && res.rates) setTierDiscountRates(res.rates)
+      })
+      .catch(() => {})
+  }, [])
 
   const buildSplitReceiptPayloads = (): CartPanelSplitReceiptPayload[] | undefined => {
     if (!showSplit) return undefined
@@ -1919,6 +2126,32 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       .filter((entry) => entry.total > 0)
     return entries.length > 0 ? entries : undefined
   }
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('pos-recent-member-ids')
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setRecentMemberIds(parsed.map((x) => String(x || '')).filter(Boolean).slice(0, 6))
+      }
+    } catch {
+      setRecentMemberIds([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedMemberId) return
+    setRecentMemberIds((prev) => {
+      const next = [selectedMemberId, ...prev.filter((x) => x !== selectedMemberId)].slice(0, 6)
+      try {
+        localStorage.setItem('pos-recent-member-ids', JSON.stringify(next))
+      } catch {
+        // ignore storage failures
+      }
+      return next
+    })
+  }, [selectedMemberId])
 
   useEffect(() => {
     if (!selectedMemberId) return
