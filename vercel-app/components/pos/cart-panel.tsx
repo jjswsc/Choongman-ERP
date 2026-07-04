@@ -392,20 +392,6 @@ interface CartPanelProps {
 
 type CartItem = OrderItem
 
-/**
- * 열린 Radix Select/Popover/Dropdown이 있는지 검사.
- * 스캔 input 자동 포커스가 열린 드롭다운의 포커스를 뺏어 즉시 닫는 것을 막기 위함.
- * (메인 POS 기기는 폴링·refetch로 리렌더가 잦아 그때마다 포커스를 뺏겼음)
- */
-function isRadixOverlayOpen(): boolean {
-  if (typeof document === 'undefined') return false
-  return Boolean(
-    document.querySelector(
-      '[data-radix-popper-content-wrapper], [role="listbox"][data-state="open"], [data-radix-select-viewport], [role="menu"][data-state="open"]'
-    )
-  )
-}
-
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
   stores: _stores,
   currentStoreId,
@@ -614,28 +600,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         // 태블릿·OSK·윈도우 POS: Dialog/가상키보드 blur 직후 합계 덮어쓰기·스캔 포커스가 끊기지 않게
         paymentAmountInputBlurTimerRef.current = window.setTimeout(() => {
           paymentAmountInputBlurTimerRef.current = null
-          const nowFocused = document.activeElement
-          if (isPaymentAmountInputEl(nowFocused)) return
-          // 사용자가 의도적으로 다른 input·버튼·Radix 드롭다운으로 이동한 경우 포커스를 뺏지 않음
-          if (
-            nowFocused instanceof HTMLInputElement ||
-            nowFocused instanceof HTMLTextAreaElement ||
-            nowFocused instanceof HTMLSelectElement ||
-            nowFocused instanceof HTMLButtonElement ||
-            (nowFocused instanceof HTMLElement && nowFocused.isContentEditable) ||
-            (nowFocused instanceof HTMLElement && nowFocused.closest('[data-radix-popper-content-wrapper]'))
-          ) {
-            activePaymentAmountInputRef.current = null
-            paymentAmountInputFocusedRef.current = false
-            if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
-            return
-          }
-          if (isRadixOverlayOpen()) {
-            activePaymentAmountInputRef.current = null
-            paymentAmountInputFocusedRef.current = false
-            if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
-            return
-          }
+          if (isPaymentAmountInputEl(document.activeElement)) return
           const recentlyTyping =
             Date.now() - lastPaymentAmountInputAtRef.current < PAYMENT_AMOUNT_TYPING_GRACE_MS
           if (recentlyTyping) {
@@ -679,9 +644,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [collabQuantity, setCollabQuantity] = useState(1)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  // [DEBUG] refocus 비활성화
   const refocusActiveScanInput = useCallback(() => {
-    // noop — 자동포커스가 원인인지 확인
+    window.setTimeout(() => {
+      if (couponQrScannerOpenRef.current) return
+      if (showPaymentModal) couponScanInputRef.current?.focus()
+      else memberScanInputRef.current?.focus()
+    }, 60)
   }, [showPaymentModal])
   const finishCouponScanInput = useCallback(
     (outcome: 'success' | 'error') => {
@@ -3641,42 +3609,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [couponQrScannerOpen, runCouponScanPayload, showPaymentModal])
 
   /** USB 스캐너(키보드 웨지): 회원·쿠폰 입력칸이 화면별로 분리되어 있으므로 해당 화면 진입 시 포커스 */
-  const isUserInteracting = useCallback(() => {
-    const a = document.activeElement
-    if (!a || a === document.body) return false
-    if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement) return true
-    if (a instanceof HTMLButtonElement) return true
-    if (a instanceof HTMLElement && a.isContentEditable) return true
-    if (a instanceof HTMLElement && a.closest('[data-radix-popper-content-wrapper]')) return true
-    if (a instanceof HTMLElement && a.closest('[data-radix-select-viewport]')) return true
-    if (a instanceof HTMLElement && (a.getAttribute('role') === 'option' || a.getAttribute('role') === 'listbox' || a.getAttribute('role') === 'combobox')) return true
-    return false
-  }, [])
-  // [DEBUG] 80ms/120ms 자동포커스 비활성화 — 포커스 강탈이 원인인지 확인
-  // useEffect(() => {
-  //   if (showPaymentModal || couponQrScannerOpen) return
-  //   const id = window.setTimeout(() => {
-  //     if (isRadixOverlayOpen()) return
-  //     if (isUserInteracting()) return
-  //     memberScanInputRef.current?.focus()
-  //   }, 80)
-  //   return () => window.clearTimeout(id)
-  // }, [couponQrScannerOpen, isUserInteracting, showPaymentModal])
+  useEffect(() => {
+    if (showPaymentModal || couponQrScannerOpen) return
+    const id = window.setTimeout(() => {
+      memberScanInputRef.current?.focus()
+    }, 80)
+    return () => window.clearTimeout(id)
+  }, [couponQrScannerOpen, showPaymentModal])
 
-  // useEffect(() => {
-  //   if (!showPaymentModal || couponQrScannerOpen) return
-  //   const id = window.setTimeout(() => {
-  //     if (isActivelyEditingPaymentAmount()) return
-  //     if (isRadixOverlayOpen()) return
-  //     if (isUserInteracting()) return
-  //     if (!selectedMemberId) {
-  //       paymentMemberScanInputRef.current?.focus()
-  //     } else {
-  //       couponScanInputRef.current?.focus()
-  //     }
-  //   }, 120)
-  //   return () => window.clearTimeout(id)
-  // }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, isUserInteracting, selectedMemberId, showPaymentModal])
+  useEffect(() => {
+    if (!showPaymentModal || couponQrScannerOpen) return
+    const id = window.setTimeout(() => {
+      if (isActivelyEditingPaymentAmount()) return
+      if (!selectedMemberId) {
+        paymentMemberScanInputRef.current?.focus()
+      } else {
+        couponScanInputRef.current?.focus()
+      }
+    }, 120)
+    return () => window.clearTimeout(id)
+  }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -3775,22 +3727,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }, [])
 
-  // [DEBUG] 4초 자동포커스 비활성화 — 포커스 강탈이 원인인지 확인
-  // useEffect(() => {
-  //   const tick = window.setInterval(() => {
-  //     if (couponQrScannerOpen) return
-  //     if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
-  //     if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
-  //     if (isRadixOverlayOpen()) return
-  //     if (isUserInteracting()) return
-  //     const active = document.activeElement
-  //     if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
-  //     if (showPaymentModal) couponScanInputRef.current?.focus()
-  //     else memberScanInputRef.current?.focus()
-  //     lastPosActivityRef.current = Date.now()
-  //   }, 4000)
-  //   return () => window.clearInterval(tick)
-  // }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, isActivelyEditingPaymentAmount, showPaymentModal])
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      if (couponQrScannerOpen) return
+      if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
+      if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
+      const active = document.activeElement
+      if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement ||
+        (active instanceof HTMLElement && active.isContentEditable)
+      ) {
+        return
+      }
+      if (showPaymentModal) couponScanInputRef.current?.focus()
+      else memberScanInputRef.current?.focus()
+      lastPosActivityRef.current = Date.now()
+    }, 4000)
+    return () => window.clearInterval(tick)
+  }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, isActivelyEditingPaymentAmount, showPaymentModal])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
@@ -5150,11 +5107,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
     <Dialog
       open={showPaymentModal}
-      modal={false}
       onOpenChange={(open) => {
         if (!open && lockPaymentModalForTour) return
         if (!open && (couponQrScannerOpen || isCouponQrScannerOverlayActive())) return
-        if (!open && isRadixOverlayOpen()) return
         if (!open && orderType === 'delivery' && checkoutExistingPosOrderIdRef.current != null) {
           handleClearCart()
         }
@@ -5164,14 +5119,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       <DialogContent
         data-tour="pos-tour-payment-dialog"
         hideCloseButton
-        forceOverlay
         onEscapeKeyDown={(e) => {
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
+          // 터치 POS·가상 키보드 탭이 outside로 잡혀 금액 입력이 한 글자마다 끊기는 문제 방지
           e.preventDefault()
         }}
         onInteractOutside={(e) => {
+          e.preventDefault()
+        }}
+        onFocusOutside={(e) => {
           e.preventDefault()
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"

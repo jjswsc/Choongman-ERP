@@ -1122,8 +1122,7 @@ export function TableOrderPanel({
                                 : `Set ${idx + 1}`
                               const optName = String(line.optionName ?? '').trim()
                               const optId = String(line.optionId ?? '').trim()
-                              const optDisplay = optName || optId
-                              const childLabel = optDisplay ? `${menuLabel} (${optDisplay})` : menuLabel
+                              const childLabel = optName || (optId ? `${menuLabel} (${optId})` : menuLabel)
                               return Array.from({ length: qty }).map((_, n) => {
                                 const childKey = buildPosSetChildKey(line, idx, n)
                                 const mapKey = `${lineKey}::${childKey}`
@@ -1228,8 +1227,8 @@ export function TableOrderPanel({
         </div>
       )}
 
-      <Dialog open={moveOpen} modal={false} onOpenChange={setMoveOpen}>
-        <DialogContent className="max-w-sm" forceOverlay>
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{t('posTableMoveTitle') || '테이블 이동'}</DialogTitle>
           </DialogHeader>
@@ -1263,8 +1262,8 @@ export function TableOrderPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={mergeOpen} modal={false} onOpenChange={setMergeOpen}>
-        <DialogContent className="max-w-sm" forceOverlay>
+      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{t('posTableMergeTitle') || '테이블 합석'}</DialogTitle>
           </DialogHeader>
@@ -1329,14 +1328,13 @@ export function TableOrderPanel({
 
       <Dialog
         open={guestEditOpen}
-        modal={false}
         onOpenChange={(open) => {
           if (guestSaving) return
           setGuestEditOpen(open)
           if (!open) setGuestDirectOpen(false)
         }}
       >
-        <DialogContent className="sm:max-w-xs" forceOverlay>
+        <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>{t('posOrderGuestCount') || '손님 수'}</DialogTitle>
           </DialogHeader>

@@ -14,8 +14,7 @@ import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate
 import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-host"
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 import { PosStoreProvider } from "@/lib/pos-store-provider"
-// appAlert는 모달 Dialog → inert 잠금 유발하므로 POS 레이아웃에서 사용 금지
-// import { appAlert } from "@/lib/app-message"
+import { appAlert } from "@/lib/app-message"
 import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
 import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
@@ -212,15 +211,18 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
           summary.mismatchFields.length > 0 || summary.usesOnlyWindowsDefault || !summary.hasExplicitPrintDevices
         if (!hasIssue) return
 
-        // 모달 Dialog(appAlert)가 inert를 걸어 전체 POS를 잠그므로 console.warn만 사용
-        console.warn(
-          "[cm-pos] printer health:",
-          summary.mismatchFields.length > 0
-            ? `mismatch: ${summary.mismatchFields.join(", ")}`
-            : !summary.hasExplicitPrintDevices
-              ? "no explicit print devices"
-              : "uses only Windows default"
-        )
+        const lines: string[] = []
+        lines.push(t("posShellStartupHealthWarnTitle"))
+        lines.push(t("posShellStartupHealthWarnBody"))
+        if (summary.mismatchFields.length > 0) {
+          lines.push(t("posShellStartupHealthWarnMismatch"))
+        } else if (!summary.hasExplicitPrintDevices) {
+          lines.push(t("posShellStartupHealthWarnNoExplicit"))
+        } else if (summary.usesOnlyWindowsDefault) {
+          lines.push(t("posShellStartupHealthWarnDefaultOnly"))
+        }
+        lines.push(t("posShellStartupHealthWarnAction"))
+        await appAlert(lines.join("\n"))
         void sendPosHealthAlert({
           eventType: "hybrid_print_mapping_mismatch",
           payload: {
@@ -285,222 +287,6 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         .catch(() => {})
     }, 0)
     return () => window.clearTimeout(t)
-  }, [])
-
-  /**
-   * 방어적 input 포커스 보장:
-   * Radix Dialog inert 잔존, 캡처 단계 이벤트 간섭 등 어떤 원인이든
-   * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
-   */
-  useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T19:10+07")
-    const peStyle = document.createElement("style")
-    peStyle.textContent = [
-      "body { pointer-events: auto !important; }",
-      '[role="dialog"] { pointer-events: auto !important; }',
-    ].join("\n")
-    document.head.appendChild(peStyle)
-
-    // Radix DismissableLayer가 body.style.pointerEvents = "none"을 설정하는 것을
-    // 원천 차단. CSS !important만으로는 Electron에서 불충분할 수 있음.
-    let _blockedPE = ""
-    try {
-      const orig = document.body.style.pointerEvents || ""
-      _blockedPE = orig
-      Object.defineProperty(document.body.style, "pointerEvents", {
-        get() { return _blockedPE },
-        set(v: string) {
-          if (v === "none") return
-          _blockedPE = v || ""
-        },
-        configurable: true,
-        enumerable: true,
-      })
-      console.log("[cm-pos] body.style.pointerEvents setter patched")
-    } catch (e) {
-      console.warn("[cm-pos] defineProperty fallback — using MutationObserver", e)
-    }
-
-    const bodyObserver = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === "none") {
-        document.body.style.pointerEvents = ""
-      }
-    })
-    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ["style"] })
-    const logDomState = () => {
-      const dialogs = document.querySelectorAll("[role=dialog]").length
-      const inertEls = document.querySelectorAll("[inert]")
-      const bodyPE = document.body.style.pointerEvents
-      const inertInfo = Array.from(inertEls).map((el) => describeEl(el))
-      if (bodyPE || dialogs > 0 || inertEls.length > 0) {
-        console.warn("[cm-pos-diag] DOM:", { bodyPointerEvents: bodyPE || "(empty)", dialogs, inert: inertEls.length, inertElements: inertInfo })
-      }
-      if (bodyPE === "none" && dialogs === 0) {
-        console.warn("[cm-pos-diag] *** body.pointerEvents stuck at 'none' with no dialog! Restoring ***")
-        document.body.style.pointerEvents = ""
-      }
-    }
-    window.setTimeout(logDomState, 2000)
-    const domTid = window.setInterval(logDomState, 5000)
-    const describeEl = (el: Element | null): string => {
-      if (!el) return "(null)"
-      const tag = el.tagName.toLowerCase()
-      const id = el.id ? `#${el.id}` : ""
-      const cls = String((el as HTMLElement).className ?? "").slice(0, 40)
-      const type = (el as HTMLInputElement).type ? `[${(el as HTMLInputElement).type}]` : ""
-      const ds = (el as HTMLElement).dataset
-      const dsKeys = ds ? Object.keys(ds).filter(k => k.startsWith("pos") || k.startsWith("radix") || k === "tour").join(",") : ""
-      return `${tag}${type}${id}${cls ? `.${cls}` : ""}${dsKeys ? ` data:{${dsKeys}}` : ""}`
-    }
-    const findInertAncestors = (el: Element): string[] => {
-      const result: string[] = []
-      let node: Element | null = el.parentElement
-      while (node) {
-        if (node.hasAttribute("inert")) result.push(describeEl(node))
-        node = node.parentElement
-      }
-      return result
-    }
-    const stripInertFromAncestors = (el: Element) => {
-      let node: Element | null = el
-      while (node) {
-        if (node.hasAttribute("inert")) {
-          console.warn("[cm-pos-diag] stripping inert from:", describeEl(node))
-          node.removeAttribute("inert")
-        }
-        node = node.parentElement
-      }
-    }
-    const stripAllStaleInert = () => {
-      if (typeof document === "undefined") return
-      const openDialog = document.querySelector(
-        "[data-radix-portal] [role=dialog]"
-      )
-      const inertEls = document.querySelectorAll("[inert]")
-      if (openDialog && inertEls.length > 0) {
-        console.warn("[cm-pos-diag] dialog open → NOT stripping", inertEls.length, "inert. dialog:", describeEl(openDialog))
-        return
-      }
-      if (inertEls.length > 0) {
-        console.warn("[cm-pos-diag] no dialog open → stripping", inertEls.length, "inert elements")
-      }
-      inertEls.forEach((el) => {
-        el.removeAttribute("inert")
-      })
-    }
-    const isInteractive = (el: HTMLElement): boolean =>
-      el instanceof HTMLInputElement ||
-      el instanceof HTMLTextAreaElement ||
-      el instanceof HTMLSelectElement ||
-      el instanceof HTMLButtonElement ||
-      el.isContentEditable ||
-      el.getAttribute("role") === "combobox" ||
-      el.getAttribute("role") === "option" ||
-      el.getAttribute("role") === "listbox"
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target
-      if (!(t instanceof HTMLElement)) return
-      const bodyPE = document.body.style.pointerEvents
-      const computedPE = window.getComputedStyle(t).pointerEvents
-      if (isInteractive(t) || computedPE === "none" || bodyPE === "none") {
-        console.warn("[cm-pos-diag] tap:", describeEl(t),
-          "| body.pointerEvents:", bodyPE || "(empty)",
-          "| el.computedPE:", computedPE,
-          "| interactive:", isInteractive(t))
-      }
-      const inertAnc = findInertAncestors(t)
-      if (inertAnc.length > 0) {
-        console.warn("[cm-pos-diag] INERT ancestors:", inertAnc)
-      }
-      stripInertFromAncestors(t)
-      if (bodyPE === "none") {
-        console.warn("[cm-pos-diag] *** body.pointerEvents is NONE! Force-restoring ***")
-        document.body.style.pointerEvents = ""
-      }
-      if (
-        t instanceof HTMLInputElement ||
-        t instanceof HTMLTextAreaElement ||
-        t instanceof HTMLSelectElement ||
-        t.isContentEditable
-      ) {
-        requestAnimationFrame(() => {
-          if (document.activeElement !== t) {
-            console.warn("[cm-pos-diag] force-focusing:", describeEl(t), "activeElement was:", describeEl(document.activeElement))
-            t.focus({ preventScroll: true })
-          }
-        })
-      }
-    }
-    const inertObserver = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.type === "attributes" && m.attributeName === "inert") {
-          const el = m.target as HTMLElement
-          console.warn("[cm-pos-diag] inert attr changed:", describeEl(el), "inert=", el.hasAttribute("inert"))
-        }
-      }
-    })
-    let lastPointerDownTarget: EventTarget | null = null
-    let lastPointerDownAt = 0
-    let prevFocusedEl: HTMLElement | null = null
-    let restoringFocus = false
-    const origOnPointerDown = onPointerDown
-    const wrappedOnPointerDown = (e: PointerEvent) => {
-      lastPointerDownTarget = e.target
-      lastPointerDownAt = Date.now()
-      origOnPointerDown(e)
-    }
-    const radixOverlaySelector =
-      '[data-radix-popper-content-wrapper], [role="listbox"][data-state="open"], [data-radix-select-viewport], [role="menu"][data-state="open"]'
-    const onFocusIn = (e: FocusEvent) => {
-      const t = e.target
-      if (!(t instanceof HTMLElement)) return
-      if (restoringFocus) {
-        restoringFocus = false
-        prevFocusedEl = t
-        return
-      }
-      const ds = t.dataset || {}
-      const isScanInput = ds.posMemberScan === "1" || ds.posCouponScan === "1"
-      if (isScanInput) {
-        const isUserClick = lastPointerDownTarget === t && (Date.now() - lastPointerDownAt < 300)
-        const overlayOpen = Boolean(document.querySelector(radixOverlaySelector))
-        if (!isUserClick && overlayOpen && prevFocusedEl && prevFocusedEl !== t) {
-          console.warn("[cm-pos-diag] scan autofocus blocked — overlay open, restoring:", describeEl(prevFocusedEl))
-          restoringFocus = true
-          prevFocusedEl.focus()
-          return
-        }
-        console.warn("[cm-pos-diag] scan input FOCUSED:", describeEl(t),
-          isUserClick ? "(user click)" : "(programmatic)")
-      }
-      prevFocusedEl = t
-    }
-    const onClickCapture = (e: MouseEvent) => {
-      const t = e.target
-      if (!(t instanceof HTMLElement)) return
-      if (isInteractive(t) || t.closest("button, a, [role=option], [role=menuitem]")) {
-        console.warn("[cm-pos-diag] CLICK:", describeEl(t),
-          "| defaultPrevented:", e.defaultPrevented,
-          "| button:", e.button,
-          "| isTrusted:", e.isTrusted)
-      }
-    }
-    document.addEventListener("click", onClickCapture, true)
-    document.addEventListener("focusin", onFocusIn, true)
-    inertObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["inert"], subtree: true })
-    document.addEventListener("pointerdown", wrappedOnPointerDown, true)
-    const tid = window.setInterval(stripAllStaleInert, 3000)
-    return () => {
-      document.head.removeChild(peStyle)
-      bodyObserver.disconnect()
-      try { delete (document.body.style as any).pointerEvents } catch (_e) { /* noop */ }
-      document.removeEventListener("click", onClickCapture, true)
-      document.removeEventListener("focusin", onFocusIn, true)
-      inertObserver.disconnect()
-      document.removeEventListener("pointerdown", wrappedOnPointerDown, true)
-      window.clearInterval(tid)
-      window.clearInterval(domTid)
-    }
   }, [])
 
   useEffect(() => {

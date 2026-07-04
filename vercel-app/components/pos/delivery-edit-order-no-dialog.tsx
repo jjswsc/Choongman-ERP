@@ -55,8 +55,8 @@ export function DeliveryEditOrderNoDialog({
   const appLabelEn = app ? app.name : (t('posOrderTypeDelivery') || '배달')
 
   return (
-    <Dialog open={open} modal={false} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm" forceOverlay>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{t('posEditOrderNoDialogTitle') || '주문번호 수정'}</DialogTitle>
         </DialogHeader>
