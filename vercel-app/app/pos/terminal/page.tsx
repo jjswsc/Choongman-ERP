@@ -302,6 +302,7 @@ import {
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
+import { PosMainDeviceSyncHost } from '@/components/pos/pos-main-device-sync-host'
 import {
   markPosTerminalOrderSubmitInFlight,
   setPosTerminalLocalAutoprintActive,
@@ -7594,6 +7595,7 @@ export default function PosTerminalPage() {
 
   return (
     <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
+      <PosMainDeviceSyncHost />
       <PosTourTerminalManualNextGates
         dineInGuestCount={tourCartGuestCount}
         activeTab={activeTab}
