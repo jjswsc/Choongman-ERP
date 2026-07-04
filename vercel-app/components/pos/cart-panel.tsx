@@ -600,7 +600,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         // 태블릿·OSK·윈도우 POS: Dialog/가상키보드 blur 직후 합계 덮어쓰기·스캔 포커스가 끊기지 않게
         paymentAmountInputBlurTimerRef.current = window.setTimeout(() => {
           paymentAmountInputBlurTimerRef.current = null
-          if (isPaymentAmountInputEl(document.activeElement)) return
+          const nowFocused = document.activeElement
+          if (isPaymentAmountInputEl(nowFocused)) return
+          // 사용자가 의도적으로 다른 input으로 이동한 경우 포커스를 뺏지 않음
+          if (
+            nowFocused instanceof HTMLInputElement ||
+            nowFocused instanceof HTMLTextAreaElement ||
+            nowFocused instanceof HTMLSelectElement ||
+            (nowFocused instanceof HTMLElement && nowFocused.isContentEditable)
+          ) {
+            activePaymentAmountInputRef.current = null
+            paymentAmountInputFocusedRef.current = false
+            if (opts?.syncPaymentOnBlur) bumpDiscountPaymentSync()
+            return
+          }
           const recentlyTyping =
             Date.now() - lastPaymentAmountInputAtRef.current < PAYMENT_AMOUNT_TYPING_GRACE_MS
           if (recentlyTyping) {
