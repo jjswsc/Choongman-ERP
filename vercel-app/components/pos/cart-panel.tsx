@@ -679,13 +679,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [collabQuantity, setCollabQuantity] = useState(1)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  // [DEBUG] refocus 비활성화
   const refocusActiveScanInput = useCallback(() => {
-    window.setTimeout(() => {
-      if (couponQrScannerOpenRef.current) return
-      if (isRadixOverlayOpen()) return
-      if (showPaymentModal) couponScanInputRef.current?.focus()
-      else memberScanInputRef.current?.focus()
-    }, 60)
+    // noop — 자동포커스가 원인인지 확인
   }, [showPaymentModal])
   const finishCouponScanInput = useCallback(
     (outcome: 'success' | 'error') => {
@@ -3656,30 +3652,31 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (a instanceof HTMLElement && (a.getAttribute('role') === 'option' || a.getAttribute('role') === 'listbox' || a.getAttribute('role') === 'combobox')) return true
     return false
   }, [])
-  useEffect(() => {
-    if (showPaymentModal || couponQrScannerOpen) return
-    const id = window.setTimeout(() => {
-      if (isRadixOverlayOpen()) return
-      if (isUserInteracting()) return
-      memberScanInputRef.current?.focus()
-    }, 80)
-    return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, isUserInteracting, showPaymentModal])
+  // [DEBUG] 80ms/120ms 자동포커스 비활성화 — 포커스 강탈이 원인인지 확인
+  // useEffect(() => {
+  //   if (showPaymentModal || couponQrScannerOpen) return
+  //   const id = window.setTimeout(() => {
+  //     if (isRadixOverlayOpen()) return
+  //     if (isUserInteracting()) return
+  //     memberScanInputRef.current?.focus()
+  //   }, 80)
+  //   return () => window.clearTimeout(id)
+  // }, [couponQrScannerOpen, isUserInteracting, showPaymentModal])
 
-  useEffect(() => {
-    if (!showPaymentModal || couponQrScannerOpen) return
-    const id = window.setTimeout(() => {
-      if (isActivelyEditingPaymentAmount()) return
-      if (isRadixOverlayOpen()) return
-      if (isUserInteracting()) return
-      if (!selectedMemberId) {
-        paymentMemberScanInputRef.current?.focus()
-      } else {
-        couponScanInputRef.current?.focus()
-      }
-    }, 120)
-    return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, isUserInteracting, selectedMemberId, showPaymentModal])
+  // useEffect(() => {
+  //   if (!showPaymentModal || couponQrScannerOpen) return
+  //   const id = window.setTimeout(() => {
+  //     if (isActivelyEditingPaymentAmount()) return
+  //     if (isRadixOverlayOpen()) return
+  //     if (isUserInteracting()) return
+  //     if (!selectedMemberId) {
+  //       paymentMemberScanInputRef.current?.focus()
+  //     } else {
+  //       couponScanInputRef.current?.focus()
+  //     }
+  //   }, 120)
+  //   return () => window.clearTimeout(id)
+  // }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, isUserInteracting, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -3778,21 +3775,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }, [])
 
-  useEffect(() => {
-    const tick = window.setInterval(() => {
-      if (couponQrScannerOpen) return
-      if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
-      if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
-      if (isRadixOverlayOpen()) return
-      if (isUserInteracting()) return
-      const active = document.activeElement
-      if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
-      if (showPaymentModal) couponScanInputRef.current?.focus()
-      else memberScanInputRef.current?.focus()
-      lastPosActivityRef.current = Date.now()
-    }, 4000)
-    return () => window.clearInterval(tick)
-  }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, isActivelyEditingPaymentAmount, showPaymentModal])
+  // [DEBUG] 4초 자동포커스 비활성화 — 포커스 강탈이 원인인지 확인
+  // useEffect(() => {
+  //   const tick = window.setInterval(() => {
+  //     if (couponQrScannerOpen) return
+  //     if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
+  //     if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
+  //     if (isRadixOverlayOpen()) return
+  //     if (isUserInteracting()) return
+  //     const active = document.activeElement
+  //     if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
+  //     if (showPaymentModal) couponScanInputRef.current?.focus()
+  //     else memberScanInputRef.current?.focus()
+  //     lastPosActivityRef.current = Date.now()
+  //   }, 4000)
+  //   return () => window.clearInterval(tick)
+  // }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, isActivelyEditingPaymentAmount, showPaymentModal])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))

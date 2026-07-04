@@ -293,7 +293,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T18:50+07")
+    console.log("[cm-pos] layout build: 2026-07-04T19:10+07")
     const peStyle = document.createElement("style")
     peStyle.textContent = [
       "body { pointer-events: auto !important; }",
@@ -475,6 +475,17 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       }
       prevFocusedEl = t
     }
+    const onClickCapture = (e: MouseEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (isInteractive(t) || t.closest("button, a, [role=option], [role=menuitem]")) {
+        console.warn("[cm-pos-diag] CLICK:", describeEl(t),
+          "| defaultPrevented:", e.defaultPrevented,
+          "| button:", e.button,
+          "| isTrusted:", e.isTrusted)
+      }
+    }
+    document.addEventListener("click", onClickCapture, true)
     document.addEventListener("focusin", onFocusIn, true)
     inertObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["inert"], subtree: true })
     document.addEventListener("pointerdown", wrappedOnPointerDown, true)
@@ -483,6 +494,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       document.head.removeChild(peStyle)
       bodyObserver.disconnect()
       try { delete (document.body.style as any).pointerEvents } catch (_e) { /* noop */ }
+      document.removeEventListener("click", onClickCapture, true)
       document.removeEventListener("focusin", onFocusIn, true)
       inertObserver.disconnect()
       document.removeEventListener("pointerdown", wrappedOnPointerDown, true)
