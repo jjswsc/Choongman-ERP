@@ -302,7 +302,7 @@ import {
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
-import { PosMainDeviceSyncHost } from '@/components/pos/pos-main-device-sync-host'
+import { usePosMainDeviceSyncHost } from '@/hooks/use-pos-main-device-sync-host'
 import {
   markPosTerminalOrderSubmitInFlight,
   setPosTerminalLocalAutoprintActive,
@@ -1978,6 +1978,7 @@ export default function PosTerminalPage() {
     Boolean(servingTable?.order)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
+  usePosMainDeviceSyncHost()
   /** 주방 주문서 자동 인쇄 중복 방지(수락/Realtime/폴링 동시 발화) */
   const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
@@ -7595,7 +7596,6 @@ export default function PosTerminalPage() {
 
   return (
     <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
-      <PosMainDeviceSyncHost />
       <PosTourTerminalManualNextGates
         dineInGuestCount={tourCartGuestCount}
         activeTab={activeTab}
