@@ -3645,20 +3645,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [couponQrScannerOpen, runCouponScanPayload, showPaymentModal])
 
   /** USB 스캐너(키보드 웨지): 회원·쿠폰 입력칸이 화면별로 분리되어 있으므로 해당 화면 진입 시 포커스 */
+  const isUserInteracting = useCallback(() => {
+    const a = document.activeElement
+    if (!a || a === document.body) return false
+    if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement) return true
+    if (a instanceof HTMLButtonElement) return true
+    if (a instanceof HTMLElement && a.isContentEditable) return true
+    if (a instanceof HTMLElement && a.closest('[data-radix-popper-content-wrapper]')) return true
+    if (a instanceof HTMLElement && a.closest('[data-radix-select-viewport]')) return true
+    if (a instanceof HTMLElement && (a.getAttribute('role') === 'option' || a.getAttribute('role') === 'listbox' || a.getAttribute('role') === 'combobox')) return true
+    return false
+  }, [])
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
       if (isRadixOverlayOpen()) return
+      if (isUserInteracting()) return
       memberScanInputRef.current?.focus()
     }, 80)
     return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, showPaymentModal])
+  }, [couponQrScannerOpen, isUserInteracting, showPaymentModal])
 
   useEffect(() => {
     if (!showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
       if (isActivelyEditingPaymentAmount()) return
       if (isRadixOverlayOpen()) return
+      if (isUserInteracting()) return
       if (!selectedMemberId) {
         paymentMemberScanInputRef.current?.focus()
       } else {
@@ -3666,7 +3679,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     }, 120)
     return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, selectedMemberId, showPaymentModal])
+  }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, isUserInteracting, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -3770,18 +3783,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (couponQrScannerOpen) return
       if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
       if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
-      // 열린 Select/Popover(협업 할인·인원 선택 등)의 포커스를 뺏어 닫지 않도록
       if (isRadixOverlayOpen()) return
+      if (isUserInteracting()) return
       const active = document.activeElement
       if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
-      if (
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        active instanceof HTMLSelectElement ||
-        (active instanceof HTMLElement && active.isContentEditable)
-      ) {
-        return
-      }
       if (showPaymentModal) couponScanInputRef.current?.focus()
       else memberScanInputRef.current?.focus()
       lastPosActivityRef.current = Date.now()

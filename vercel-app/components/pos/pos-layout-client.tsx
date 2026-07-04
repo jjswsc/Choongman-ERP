@@ -293,9 +293,12 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T17:50+07")
+    console.log("[cm-pos] layout build: 2026-07-04T18:20+07")
     const peStyle = document.createElement("style")
-    peStyle.textContent = "body { pointer-events: auto !important; }"
+    peStyle.textContent = [
+      "body { pointer-events: auto !important; }",
+      '[role="dialog"] { pointer-events: auto !important; }',
+    ].join("\n")
     document.head.appendChild(peStyle)
     const logDomState = () => {
       const dialogs = document.querySelectorAll("[role=dialog]").length
