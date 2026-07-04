@@ -37,11 +37,9 @@ import { MemberPortalHomeHeroBanner, MemberPortalHomeNewMenuHeroes } from "@/com
 import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
 import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
 import {
-  DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
   resolveMemberPortalHomePrivilegesForLang,
   type MemberPortalHomePrivilegeItem,
 } from "@/lib/member-portal-home-privileges-config"
-import { DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL } from "@/lib/member-portal-stamp-food-image"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
@@ -101,80 +99,17 @@ import {
   mpInputClass,
   mpPrimaryBtn,
 } from "@/lib/member-portal-design"
-import { memberPortalStoreMatchesQuery, type MemberPortalStoreDto } from "@/lib/member-portal-stores"
-
-type MemberPortalStoreRow = MemberPortalStoreDto
-
-async function postJson<T>(url: string, body: Record<string, unknown> = {}): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    credentials: "same-origin",
-  })
-  return res.json() as Promise<T>
-}
-
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store", credentials: "same-origin" })
-  return res.json() as Promise<T>
-}
-
-function publicConfigUrl(): string {
-  return `/api/member-portal/public-config?_=${Date.now()}`
-}
-
-type PublicConfigResponse = {
-  success: boolean
-  facebookUrl?: string
-  instagramUrl?: string
-  lineOfficialUrl?: string
-  loginBackgroundUrl?: string
-  appBackgroundUrl?: string
-  heroFoodImageUrl?: string
-  signupWelcomeCouponEnabled?: boolean
-  textPrimaryColor?: string
-  textSecondaryColor?: string
-  fontScalePct?: number
-  homePrivileges?: MemberPortalHomePrivilegeItem[]
-  stampFoodImageUrl?: string
-}
-
-function applyPublicConfigToState(
-  r: PublicConfigResponse,
-  brand: {
-    memberContactFacebookUrl: string
-    memberContactInstagramUrl: string
-    memberContactLineOfficialUrl: string
-  },
-  opts?: {
-    previewLoginBackgroundUrl?: string
-    previewAppBackgroundUrl?: string
-  }
-) {
-  const previewLogin = String(opts?.previewLoginBackgroundUrl || "").trim()
-  const previewApp = String(opts?.previewAppBackgroundUrl || "").trim()
-  return {
-    contactUrls: {
-      facebookUrl: String(r.facebookUrl || brand.memberContactFacebookUrl).trim(),
-      instagramUrl: String(r.instagramUrl || brand.memberContactInstagramUrl).trim(),
-      lineOfficialUrl: String(r.lineOfficialUrl || brand.memberContactLineOfficialUrl).trim(),
-    },
-    designBackgrounds: {
-      loginBackgroundUrl: previewLogin || String(r.loginBackgroundUrl || "").trim(),
-      appBackgroundUrl: previewApp || String(r.appBackgroundUrl || "").trim(),
-      heroFoodImageUrl: String(r.heroFoodImageUrl || "").trim(),
-    },
-    uiTheme: {
-      textPrimaryColor: String(r.textPrimaryColor || DEFAULT_MEMBER_PORTAL_UI_THEME.textPrimaryColor),
-      textSecondaryColor: String(r.textSecondaryColor || DEFAULT_MEMBER_PORTAL_UI_THEME.textSecondaryColor),
-      fontScalePct: Number(r.fontScalePct) || DEFAULT_MEMBER_PORTAL_UI_THEME.fontScalePct,
-    },
-    signupWelcomeCouponEnabled: Boolean(r.signupWelcomeCouponEnabled),
-    homePrivileges: Array.isArray(r.homePrivileges) ? r.homePrivileges : DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
-    stampFoodImageUrl: String(r.stampFoodImageUrl || DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL).trim(),
-  }
-}
+import { memberPortalStoreMatchesQuery } from "@/lib/member-portal-stores"
+import {
+  DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES,
+  DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL,
+  type MemberPortalStoreRow,
+  type PublicConfigResponse,
+  postJson,
+  getJson,
+  publicConfigUrl,
+  applyPublicConfigToState,
+} from "@/components/member-portal/member-portal-app-utils"
 
 function LineLogo({ className }: { className?: string }) {
   return (

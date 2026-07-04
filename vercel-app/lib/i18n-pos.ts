@@ -11900,6 +11900,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
     posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
     posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
+    posPaymentSectionMember: 'Member search',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -14667,6 +14668,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
     posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
     posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
+    posPaymentSectionMember: 'Member search',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -17462,6 +17464,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
     posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
     posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
+    posPaymentSectionMember: 'Member search',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -20231,6 +20234,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
     posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
     posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
+    posPaymentSectionMember: 'Member search',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -23004,4 +23008,5 @@ export const I18N_POS_MS: Record<string, string> = {
     posCouponMinOrderRequired: 'Minimum order amount is {amount} baht.',
     posTakeoutAddOrderModeBadge: 'Adding to {{label}}',
     posTakeoutOpenBillExistsBody: 'Unpaid order on {{label}}.\\n[OK] Open new bill · [Cancel] Add to this bill',
+    posPaymentSectionMember: 'Member search',
 }

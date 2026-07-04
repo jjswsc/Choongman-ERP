@@ -3,7 +3,7 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText, Wrench } from "lucide-react"
+import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText, Wrench, Camera, X as XIcon, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -47,6 +47,7 @@ import {
   updateChecklistItems,
   addChecklistItem,
   deleteChecklistItem,
+  uploadStoreCheckPhoto,
   translateTexts,
   type ChecklistItem,
   type CheckHistoryItem,
@@ -61,7 +62,7 @@ function todayStr() {
   return getBangkokTodayDateString()
 }
 
-type CheckRow = { id: number; main: string; sub: string; name: string; val: "O" | "X"; remark: string }
+type CheckRow = { id: number; main: string; sub: string; name: string; val: "O" | "X"; remark: string; beforePhotos: string[]; afterPhotos: string[] }
 
 export function AdminStoreCheck() {
   const { auth } = useAuth()
@@ -95,6 +96,12 @@ export function AdminStoreCheck() {
   const [newName, setNewName] = useState("")
   const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [remarkModalIdx, setRemarkModalIdx] = useState<number | null>(null)
+  const [photoModalIdx, setPhotoModalIdx] = useState<number | null>(null)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoViewerUrl, setPhotoViewerUrl] = useState<string | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const [photoPhase, setPhotoPhase] = useState<"before" | "after">("before")
+  const [failedPhotoViewing, setFailedPhotoViewing] = useState<{ beforePhotos: string[]; afterPhotos: string[]; name: string } | null>(null)
   const [existsHint, setExistsHint] = useState(false)
 
   const resultBadge = (result: string) => {
@@ -215,6 +222,8 @@ export function AdminStoreCheck() {
         name: it.name,
         val: "O",
         remark: "",
+        beforePhotos: [],
+        afterPhotos: [],
       }))
       setCheckRows(rows)
     } catch {
@@ -236,7 +245,7 @@ export function AdminStoreCheck() {
     setCheckItems(items)
     let rows: CheckRow[] = []
     try {
-      const data = JSON.parse(h.json || "[]") as { id: number; main: string; sub: string; name: string; val: "O" | "X"; remark: string }[]
+      const data = JSON.parse(h.json || "[]") as { id: number; main: string; sub: string; name: string; val: "O" | "X"; remark: string; beforePhotos?: string[]; afterPhotos?: string[] }[]
       rows = data.map((d) => ({
         id: d.id,
         main: d.main || "",
@@ -244,13 +253,15 @@ export function AdminStoreCheck() {
         name: d.name || "",
         val: d.val === "X" ? "X" : "O",
         remark: d.remark || "",
+        beforePhotos: Array.isArray(d.beforePhotos) ? d.beforePhotos : [],
+        afterPhotos: Array.isArray(d.afterPhotos) ? d.afterPhotos : [],
       }))
     } catch {
-      rows = items.map((it) => ({ id: it.id, main: it.main, sub: it.sub, name: it.name, val: "O" as const, remark: "" }))
+      rows = items.map((it) => ({ id: it.id, main: it.main, sub: it.sub, name: it.name, val: "O" as const, remark: "", beforePhotos: [], afterPhotos: [] }))
     }
     for (const it of items) {
       if (!rows.find((r) => r.id === it.id)) {
-        rows.push({ id: it.id, main: it.main, sub: it.sub, name: it.name, val: "O", remark: "" })
+        rows.push({ id: it.id, main: it.main, sub: it.sub, name: it.name, val: "O", remark: "", beforePhotos: [], afterPhotos: [] })
       }
     }
     rows.sort((a, b) => a.id - b.id)
@@ -275,6 +286,8 @@ export function AdminStoreCheck() {
         name: r.name,
         val: r.val,
         remark: r.remark,
+        ...(r.beforePhotos.length > 0 ? { beforePhotos: r.beforePhotos } : {}),
+        ...(r.afterPhotos.length > 0 ? { afterPhotos: r.afterPhotos } : {}),
       }))
       await saveCheckResult({
         id: editId || undefined,
@@ -409,6 +422,60 @@ export function AdminStoreCheck() {
     )
   }
 
+  const MAX_PHOTOS = 5
+
+  const handlePhotoUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0 || photoModalIdx == null) return
+    const row = checkRows[photoModalIdx]
+    if (!row) return
+    const target = photoPhase === "before" ? row.beforePhotos : row.afterPhotos
+    if (target.length >= MAX_PHOTOS) {
+      await appAlert(t("store_check_photo_limit"))
+      return
+    }
+    setPhotoUploading(true)
+    try {
+      const remaining = MAX_PHOTOS - target.length
+      const filesToUpload = Array.from(files).slice(0, remaining)
+      const newUrls: string[] = []
+      for (const file of filesToUpload) {
+        const res = await uploadStoreCheckPhoto(storeSelect, dateSelect, row.id, photoPhase, file)
+        if (res.success && res.url) {
+          newUrls.push(res.url)
+        } else {
+          await appAlert(res.message || "업로드 실패")
+        }
+      }
+      if (newUrls.length > 0) {
+        setCheckRows((prev) =>
+          prev.map((r, i) => {
+            if (i !== photoModalIdx) return r
+            return photoPhase === "before"
+              ? { ...r, beforePhotos: [...r.beforePhotos, ...newUrls] }
+              : { ...r, afterPhotos: [...r.afterPhotos, ...newUrls] }
+          })
+        )
+      }
+    } finally {
+      setPhotoUploading(false)
+      if (photoInputRef.current) photoInputRef.current.value = ""
+    }
+  }, [photoModalIdx, photoPhase, checkRows, storeSelect, dateSelect, t])
+
+  const removePhoto = useCallback((idx: number, phase: "before" | "after", photoIdx: number) => {
+    setCheckRows((prev) =>
+      prev.map((r, i) => {
+        if (i !== idx) return r
+        if (phase === "before") {
+          return { ...r, beforePhotos: r.beforePhotos.filter((_, pi) => pi !== photoIdx) }
+        }
+        return { ...r, afterPhotos: r.afterPhotos.filter((_, pi) => pi !== photoIdx) }
+      })
+    )
+  }, [])
+
+  const getPhotoCount = (r: CheckRow) => r.beforePhotos.length + r.afterPhotos.length
+
   const tr = (s: string) => (s && transMap[s]) || s || ""
 
   const updateSettingItem = (idx: number, field: "main" | "sub" | "name" | "use", value: string | boolean) => {
@@ -517,12 +584,13 @@ export function AdminStoreCheck() {
                         <th className="p-2 text-center font-medium">{t("store_check_item")}</th>
                         <th className="p-2 text-center w-24 font-medium">{t("store_check")}</th>
                         <th className="p-2 text-center w-40 font-medium">{t("store_remark")}</th>
+                        <th className="p-2 text-center w-20 font-medium">{t("store_check_photo_btn")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {checkRows.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                          <td colSpan={7} className="p-8 text-center text-muted-foreground">
                             {t("store_load_hint")}
                           </td>
                         </tr>
@@ -599,6 +667,23 @@ export function AdminStoreCheck() {
                                 <p className="text-[11px] text-muted-foreground mt-1 font-medium truncate max-w-[140px]" title={r.remark}>{tr(r.remark)}</p>
                               )}
                             </td>
+                            <td className="p-2 text-center">
+                              {r.val === "X" ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={cn(ADMIN_BTN_XS_CN, "gap-1", getPhotoCount(r) > 0 && "border-blue-500 text-blue-600 dark:text-blue-400")}
+                                  onClick={() => setPhotoModalIdx(idx)}
+                                >
+                                  <Camera className="h-3 w-3" />
+                                  {getPhotoCount(r) > 0 && (
+                                    <span className="text-[10px] font-bold">{t("store_check_photo_count").replace("{n}", String(getPhotoCount(r)))}</span>
+                                  )}
+                                </Button>
+                              ) : (
+                                <span className="text-muted-foreground text-[11px]">-</span>
+                              )}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -655,6 +740,140 @@ export function AdminStoreCheck() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Before/After Photo Modal */}
+            <Dialog open={photoModalIdx !== null} onOpenChange={(open) => { if (!open) { setPhotoModalIdx(null); setPhotoViewerUrl(null) } }}>
+              <DialogContent className={cn("max-w-lg", ADMIN_DIALOG_SCROLL_CN)}>
+                <DialogHeader>
+                  <DialogTitle>
+                    {t("store_check_photo_title")}
+                    {photoModalIdx != null && checkRows[photoModalIdx] && (
+                      <span className="text-muted-foreground font-normal text-sm"> — {tr(checkRows[photoModalIdx].name)}</span>
+                    )}
+                  </DialogTitle>
+                </DialogHeader>
+                {photoModalIdx != null && checkRows[photoModalIdx] && (
+                  <div className="space-y-4">
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => handlePhotoUpload(e.target.files)}
+                    />
+
+                    {/* Before Section */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold">{t("store_check_photo_before")}</h4>
+                        {!viewOnlyMode && checkRows[photoModalIdx].beforePhotos.length < MAX_PHOTOS && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={ADMIN_BTN_XS_CN}
+                            disabled={photoUploading}
+                            onClick={() => {
+                              setPhotoPhase("before")
+                              photoInputRef.current?.click()
+                            }}
+                          >
+                            {photoUploading && photoPhase === "before" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                            {photoUploading && photoPhase === "before" ? t("store_check_photo_uploading") : t("store_check_photo_add")}
+                          </Button>
+                        )}
+                      </div>
+                      {checkRows[photoModalIdx].beforePhotos.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center border rounded-md border-dashed">-</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {checkRows[photoModalIdx].beforePhotos.map((url, pi) => (
+                            <div key={pi} className="relative group">
+                              <img
+                                src={url}
+                                alt={`before-${pi + 1}`}
+                                className="h-20 w-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => setPhotoViewerUrl(url)}
+                              />
+                              {!viewOnlyMode && (
+                                <button
+                                  type="button"
+                                  className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => removePhoto(photoModalIdx, "before", pi)}
+                                >
+                                  <XIcon className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* After Section */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold">{t("store_check_photo_after")}</h4>
+                        {!viewOnlyMode && checkRows[photoModalIdx].afterPhotos.length < MAX_PHOTOS && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className={ADMIN_BTN_XS_CN}
+                            disabled={photoUploading}
+                            onClick={() => {
+                              setPhotoPhase("after")
+                              photoInputRef.current?.click()
+                            }}
+                          >
+                            {photoUploading && photoPhase === "after" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                            {photoUploading && photoPhase === "after" ? t("store_check_photo_uploading") : t("store_check_photo_add")}
+                          </Button>
+                        )}
+                      </div>
+                      {checkRows[photoModalIdx].afterPhotos.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center border rounded-md border-dashed">-</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {checkRows[photoModalIdx].afterPhotos.map((url, pi) => (
+                            <div key={pi} className="relative group">
+                              <img
+                                src={url}
+                                alt={`after-${pi + 1}`}
+                                className="h-20 w-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => setPhotoViewerUrl(url)}
+                              />
+                              {!viewOnlyMode && (
+                                <button
+                                  type="button"
+                                  className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => removePhoto(photoModalIdx, "after", pi)}
+                                >
+                                  <XIcon className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground text-center">{t("store_check_photo_limit")}</p>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button onClick={() => { setPhotoModalIdx(null); setPhotoViewerUrl(null) }}>{t("btn_close")}</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Photo Viewer (full-size) */}
+            <Dialog open={photoViewerUrl !== null} onOpenChange={(open) => !open && setPhotoViewerUrl(null)}>
+              <DialogContent className="max-w-3xl p-2">
+                {photoViewerUrl && (
+                  <img src={photoViewerUrl} alt="photo" className="w-full h-auto max-h-[80vh] object-contain rounded-md" />
+                )}
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="failedSummary" className={adminTabsContentCn}>
@@ -694,12 +913,12 @@ export function AdminStoreCheck() {
                   </Button>
                 </AdminFilterBar>
                 {(() => {
-                  type XRow = { date: string; store: string; inspector: string; main: string; sub: string; name: string; remark: string }
+                  type XRow = { date: string; store: string; inspector: string; main: string; sub: string; name: string; remark: string; beforePhotos: string[]; afterPhotos: string[] }
                   const xRows: XRow[] = []
                   for (const h of histList) {
                     if (h.result === "PASS") continue
                     try {
-                      const arr = JSON.parse(h.json || "[]") as { main?: string; sub?: string; name?: string; val?: string; remark?: string }[]
+                      const arr = JSON.parse(h.json || "[]") as { main?: string; sub?: string; name?: string; val?: string; remark?: string; beforePhotos?: string[]; afterPhotos?: string[] }[]
                       for (const it of arr) {
                         if (it.val === "X") {
                           xRows.push({
@@ -710,6 +929,8 @@ export function AdminStoreCheck() {
                             sub: it.sub || "",
                             name: it.name || "",
                             remark: it.remark || "",
+                            beforePhotos: Array.isArray(it.beforePhotos) ? it.beforePhotos : [],
+                            afterPhotos: Array.isArray(it.afterPhotos) ? it.afterPhotos : [],
                           })
                         }
                       }
@@ -725,17 +946,19 @@ export function AdminStoreCheck() {
                             <th className="p-2 text-center font-medium">{t("store_col_inspector")}</th>
                             <th className="p-2 text-center font-medium">{t("store_col_item_path")}</th>
                             <th className="p-2 text-left font-medium min-w-[200px]">{t("store_remark")}</th>
+                            <th className="p-2 text-center font-medium w-16">{t("store_check_photo_btn")}</th>
                             <th className="p-2 text-center font-medium w-24">{t("store_col_manage")}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {histLoading ? (
-                            <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">{t("loading")}</td></tr>
+                            <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">{t("loading")}</td></tr>
                           ) : xRows.length === 0 ? (
-                            <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">-</td></tr>
+                            <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">-</td></tr>
                           ) : (
                             xRows.map((x, i) => {
                               const itemPath = [tr(x.main), tr(x.sub), tr(x.name)].filter(Boolean).join(" > ") || "-"
+                              const pCount = x.beforePhotos.length + x.afterPhotos.length
                               return (
                               <tr key={`${x.date}-${x.store}-${i}`} className="border-b border-border/60 hover:bg-muted/30">
                                 <td className="p-2 text-center">{x.date}</td>
@@ -743,6 +966,23 @@ export function AdminStoreCheck() {
                                 <td className="p-2 text-center">{x.inspector}</td>
                                 <td className="p-2 text-center whitespace-nowrap">{itemPath}</td>
                                 <td className="p-2 whitespace-pre-wrap break-words">{tr(x.remark) || "-"}</td>
+                                <td className="p-2 text-center">
+                                  {pCount > 0 ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className={cn(ADMIN_BTN_XS_CN, "gap-1 border-blue-500 text-blue-600 dark:text-blue-400")}
+                                      onClick={() => {
+                                        setFailedPhotoViewing({ beforePhotos: x.beforePhotos, afterPhotos: x.afterPhotos, name: x.name })
+                                      }}
+                                    >
+                                      <Camera className="h-3 w-3" />
+                                      <span className="text-[10px] font-bold">{t("store_check_photo_count").replace("{n}", String(pCount))}</span>
+                                    </Button>
+                                  ) : (
+                                    <span className="text-muted-foreground text-[11px]">-</span>
+                                  )}
+                                </td>
                                 <td className="p-2 text-center">
                                   <Button asChild variant="outline" size="sm" className={ADMIN_BTN_XS_CN}>
                                     <Link href={repairPrefillHref(x.store, itemPath)}>
@@ -761,6 +1001,62 @@ export function AdminStoreCheck() {
                 })()}
               </CardContent>
             </Card>
+            {/* Read-only photo viewer for failedSummary */}
+            <Dialog open={failedPhotoViewing !== null} onOpenChange={(open) => { if (!open) { setFailedPhotoViewing(null); setPhotoViewerUrl(null) } }}>
+              <DialogContent className={cn("max-w-lg", ADMIN_DIALOG_SCROLL_CN)}>
+                <DialogHeader>
+                  <DialogTitle>
+                    {t("store_check_photo_title")}
+                    {failedPhotoViewing && (
+                      <span className="text-muted-foreground font-normal text-sm"> — {tr(failedPhotoViewing.name)}</span>
+                    )}
+                  </DialogTitle>
+                </DialogHeader>
+                {failedPhotoViewing && (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">{t("store_check_photo_before")}</h4>
+                      {failedPhotoViewing.beforePhotos.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center border rounded-md border-dashed">-</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {failedPhotoViewing.beforePhotos.map((url, pi) => (
+                            <img
+                              key={pi}
+                              src={url}
+                              alt={`before-${pi + 1}`}
+                              className="h-20 w-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => setPhotoViewerUrl(url)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">{t("store_check_photo_after")}</h4>
+                      {failedPhotoViewing.afterPhotos.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center border rounded-md border-dashed">-</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {failedPhotoViewing.afterPhotos.map((url, pi) => (
+                            <img
+                              key={pi}
+                              src={url}
+                              alt={`after-${pi + 1}`}
+                              className="h-20 w-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => setPhotoViewerUrl(url)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button onClick={() => { setFailedPhotoViewing(null); setPhotoViewerUrl(null) }}>{t("btn_close")}</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="history" className={adminTabsContentCn}>

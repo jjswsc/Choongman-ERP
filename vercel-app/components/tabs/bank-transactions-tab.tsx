@@ -23,7 +23,6 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -83,7 +82,6 @@ import {
 } from "@/lib/bank-import-deposit-category"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
@@ -105,8 +103,20 @@ import {
 } from "@/lib/bank-quick-memos"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
-import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
+import {
+  todayStr,
+  bankRowSettleDate,
+  formatBankLedgerDepositCell,
+  formatBankLedgerWithdrawCell,
+  type BankImportRowEdit,
+  type BankImportDraft,
+  type BankQueryDraft,
+  type BankTransactionRow,
+} from "./bank-transactions-tab-utils"
+import { BankAccountManageDialog } from "./bank-account-manage-dialog"
+import { BankRegisterActionDialog } from "./bank-register-action-dialog"
+import { BankQuickMemoChipBar, BankMiscDialogs } from "./bank-misc-dialogs"
 import { formatMoneyAmountParam, formatMoneyBaht, moneyEqual, parseMoneyAmount } from "@/lib/money-amount"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import {
@@ -144,143 +154,6 @@ import {
 } from "@/lib/bank-query-filter-options"
 
 const BANK_EDIT_BTN_CN = `${ADMIN_BTN_XS_CN} shrink-0 h-7 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15`
-
-function todayStr() {
-  return getBangkokTodayDateString()
-}
-
-function bankRowSettleDate(r: { transDate: string; salesDate?: string }): string {
-  if (r.salesDate?.trim()) return r.salesDate.slice(0, 10)
-  const d = new Date(r.transDate)
-  if (!Number.isNaN(d.getTime())) {
-    d.setDate(d.getDate() - 1)
-    return d.toISOString().slice(0, 10)
-  }
-  return r.transDate.slice(0, 10)
-}
-
-function formatBankLedgerDepositCell(transType: string, amount?: number): string {
-  if (transType !== "deposit") return "—"
-  const n = Math.abs(Number(amount) || 0)
-  return n > 0 ? n.toLocaleString() : "—"
-}
-
-function formatBankLedgerWithdrawCell(transType: string, amount?: number): string {
-  if (transType !== "withdraw") return "—"
-  const n = Math.abs(Number(amount) || 0)
-  return n > 0 ? n.toLocaleString() : "—"
-}
-
-type BankImportRowEdit = {
-  category?: string
-  accountSubjectId?: string
-  autoAssigned?: boolean
-  note?: string
-  salesDate?: string
-  expenseDate?: string
-  vendorCode?: string
-  storeName?: string
-}
-
-type BankImportDraft = {
-  importPreview?: KDepositParsedResult | null
-  importRowEdits?: Record<number, BankImportRowEdit>
-  accountId?: string
-  startStr?: string
-  endStr?: string
-  newAccountName?: string
-  newAccountBankName?: string
-  newAccountStore?: string
-}
-
-type BankQueryDraft = {
-  accountId?: string
-  startStr?: string
-  endStr?: string
-  actualBalance?: string
-  activeBankTab?: string
-  filterTransType?: string
-  filterCategory?: string
-  filterVendorCode?: string
-  filterAccountSubjectId?: string
-  filterAccountSubjectEmpty?: boolean
-  filterPlExpenseOnly?: boolean
-  filterInvoiceNotReceived?: boolean
-  queryRowEdits?: Record<
-    number,
-    Partial<{
-      category: string
-      accountSubjectId: string
-      note: string
-      salesDate: string
-      expenseDate: string
-      vendorCode: string
-      storeName: string
-      withholdingTaxAmount: string
-      withholdingTaxRate: string
-    }>
-  >
-}
-
-function BankQuickMemoChipBar({
-  title,
-  hint,
-  phrases,
-  onPhrase,
-  onManageClick,
-  manageLabel,
-  className,
-}: {
-  title: string
-  hint: string
-  phrases: string[]
-  onPhrase: (phrase: string) => void
-  onManageClick?: () => void
-  manageLabel?: string
-  className?: string
-}) {
-  return (
-    <div
-      className={`rounded-md border border-amber-200/80 dark:border-amber-800/60 bg-background/80 px-3 py-2 space-y-2 ${className ?? ""}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0 space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">{title}</p>
-          <p className="text-[11px] text-muted-foreground leading-snug">{hint}</p>
-        </div>
-        {onManageClick ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={`${ADMIN_BTN_XS_CN} shrink-0`}
-            onClick={onManageClick}
-            title={manageLabel}
-          >
-            <Pencil className="h-3.5 w-3.5" aria-hidden />
-            <span className="hidden sm:inline">{manageLabel}</span>
-          </Button>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {phrases.map((phrase, i) => (
-          <Button
-            key={`${i}-${phrase.slice(0, 48)}`}
-            type="button"
-            size="sm"
-            variant="secondary"
-            className={`${ADMIN_BTN_XS_CN} font-normal`}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onPhrase(phrase)}
-            title={phrase}
-          >
-            {phrase}
-          </Button>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 export function BankTransactionsTab() {
   const router = useRouter()
@@ -3792,1095 +3665,120 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         </TabsContent>
       </Tabs>
 
-      <Dialog open={accountManageOpen} onOpenChange={(open) => { setAccountManageOpen(open); if (!open) { setEditingAccountId(null); } }}>
-        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{t("bankAccountManage")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-auto">
-            {accounts.length > 0 && (
-              <p className="text-xs text-muted-foreground">{t("bankAddSecondAccountHint")}</p>
-            )}
-            {accounts.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">{t("bankNoAccountHintShort")}</p>
-            ) : (
-              accounts.map((a) => (
-                <div key={a.id} className="rounded-lg border p-3 space-y-2">
-                  {editingAccountId === a.id ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-0.5">{t("bankName") || "은행명"}</label>
-                          <Input
-                            value={editAccountForm.bankName}
-                            onChange={(e) => setEditAccountForm((p) => ({ ...p, bankName: e.target.value }))}
-                            className="h-8 text-sm"
-                            placeholder={t("bankName")}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-0.5">{t("bankAccount")}</label>
-                          <Input
-                            value={editAccountForm.name}
-                            onChange={(e) => setEditAccountForm((p) => ({ ...p, name: e.target.value }))}
-                            className="h-8 text-sm"
-                            placeholder={t("bankAccount")}
-                          />
-                        </div>
-                      </div>
-                      {isOffice && (
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-0.5">{t("store")}</label>
-                          <Select value={editAccountForm.store || BANK_ACCOUNT_HQ_STORE_LABEL} onValueChange={(v) => setEditAccountForm((p) => ({ ...p, store: v }))}>
-                            <SelectTrigger className="h-8 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {storeOptionsDeduped.map((s) => (
-                                <SelectItem key={s} value={s}>
-                                  {displayBankAccountStore(s)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-0.5">{t("bankCarryOverAmount") || "이월금액"}</label>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={editAccountForm.openingBalance}
-                            onChange={(e) => setEditAccountForm((p) => ({ ...p, openingBalance: formatBahtInputDisplay(e.target.value) }))}
-                            className="h-8 text-sm text-right"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-0.5">{t("bankCarryOverDate") || "기준일"}</label>
-                          <Input
-                            type="date"
-                            value={editAccountForm.openingBalanceDate}
-                            onChange={(e) => setEditAccountForm((p) => ({ ...p, openingBalanceDate: e.target.value }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2 pt-1">
-                        <Button size="sm" variant="outline" onClick={() => { setEditingAccountId(null); }} disabled={accountManageSaving}>
-                          {t("cancel")}
-                        </Button>
-                        <Button size="sm" onClick={handleSaveAccountEdit} disabled={accountManageSaving || !editAccountForm.name.trim()}>
-                          {accountManageSaving ? "..." : t("btn_save")}
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {formatBankAccountLabel(a)}
-                          </p>
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className={ADMIN_BTN_XS_CN}
-                            onClick={() => {
-                              setEditingAccountId(a.id)
-                              setEditAccountForm({
-                                name: a.name,
-                                bankName: a.bankName || "",
-                                store: displayBankAccountStore(a.store) || BANK_ACCOUNT_HQ_STORE_LABEL,
-                                openingBalance: formatBahtAmountForField(a.openingBalance),
-                                openingBalanceDate: a.openingBalanceDate || "",
-                              })
-                            }}
-                          >
-                            <PenLine className="h-3.5 w-3.5" />
-                          </Button>
-                          {canDeleteBankAccountUi ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
-                              onClick={() => handleDeleteAccount(a.id)}
-                              disabled={accountDeletingId !== null}
-                            >
-                              {accountDeletingId === a.id ? "..." : <Trash2 className="h-3.5 w-3.5" />}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
-            )}
-            {!canDeleteBankAccountUi && accounts.length > 0 && (
-              <p className="text-xs text-amber-800 dark:text-amber-200">{t("bankAccountDeleteOfficeOnly")}</p>
-            )}
-            {canViewBankAccountAuditUi && (
-              <div className="border-t pt-3 space-y-2">
-                <p className="text-xs font-medium">{t("bankAccountAuditTitle")}</p>
-                {accountAuditLoading ? (
-                  <p className="text-xs text-muted-foreground">...</p>
-                ) : accountAuditLogs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("bankAccountAuditEmpty")}</p>
-                ) : (
-                  <ul className="space-y-2 max-h-[220px] overflow-auto pr-1">
-                    {accountAuditLogs.map((log) => {
-                      const actionKey =
-                        log.actionType === "create"
-                          ? "bankAccountAuditActionCreate"
-                          : log.actionType === "update"
-                            ? "bankAccountAuditActionUpdate"
-                            : log.actionType === "delete_denied"
-                              ? "bankAccountAuditActionDeleteDenied"
-                              : "bankAccountAuditActionDelete"
-                      const payload = log.payload || {}
-                      const txCount = payload.transactionCount != null ? Number(payload.transactionCount) : null
-                      const actor = [log.actorName, log.actorRole ? `(${log.actorRole})` : null, log.actorStore ? `@ ${log.actorStore}` : null]
-                        .filter(Boolean)
-                        .join(" ")
-                      const at = log.createdAt
-                        ? new Date(log.createdAt).toLocaleString("sv-SE", { timeZone: "Asia/Bangkok", hour12: false }).replace("T", " ")
-                        : "—"
-                      const accountLabel = [log.bankName ? `[${log.bankName}]` : null, log.accountName || (log.accountId ? `#${log.accountId}` : null)]
-                        .filter(Boolean)
-                        .join(" ")
-                      return (
-                        <li key={log.id} className="text-xs rounded-md border px-2 py-1.5 space-y-0.5">
-                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 justify-between">
-                            <span className="font-medium">{t(actionKey)}</span>
-                            <span className="text-muted-foreground tabular-nums">{at}</span>
-                          </div>
-                          <div className="text-muted-foreground">
-                            {accountLabel}
-                            {log.accountStore ? ` · ${log.accountStore}` : ""}
-                            {txCount != null && log.actionType === "delete" ? ` · ${txCount}${tt("receivPayCount", "건")}` : ""}
-                          </div>
-                          <div>{actor || "—"}</div>
-                          {log.decision === "deny" && log.reasonCode ? (
-                            <div className="text-amber-700 dark:text-amber-300">{log.reasonCode}</div>
-                          ) : null}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BankAccountManageDialog
+        open={accountManageOpen}
+        onOpenChange={setAccountManageOpen}
+        accounts={accounts}
+        editingAccountId={editingAccountId}
+        setEditingAccountId={setEditingAccountId}
+        editAccountForm={editAccountForm}
+        setEditAccountForm={setEditAccountForm}
+        isOffice={isOffice}
+        storeOptionsDeduped={storeOptionsDeduped}
+        accountManageSaving={accountManageSaving}
+        canDeleteBankAccountUi={canDeleteBankAccountUi}
+        accountDeletingId={accountDeletingId}
+        canViewBankAccountAuditUi={canViewBankAccountAuditUi}
+        accountAuditLoading={accountAuditLoading}
+        accountAuditLogs={accountAuditLogs}
+        handleSaveAccountEdit={handleSaveAccountEdit}
+        handleDeleteAccount={handleDeleteAccount}
+        t={t}
+        tt={tt}
+      />
 
-      <Dialog open={bankQuickMemosEditOpen} onOpenChange={setBankQuickMemosEditOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{t("bankQuickMemosEditTitle") || "자주 쓰는 메모 편집"}</DialogTitle>
-            <DialogDescription className="text-left">
-              {t("bankQuickMemosEditHint") ||
-                "이 브라우저에만 저장됩니다. 다른 PC나 브라우저와는 공유되지 않습니다."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 overflow-y-auto flex-1 min-h-0 max-h-[min(420px,50vh)] py-1 pr-1">
-            {bankQuickMemosDraft.map((line, i) => (
-              <div key={`draft-${i}`} className="flex gap-2 items-center">
-                <Input
-                  value={line}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setBankQuickMemosDraft((prev) => prev.map((x, j) => (j === i ? v : x)))
-                  }}
-                  placeholder={t("bankQuickMemosLinePlaceholder") || "문구"}
-                  className="h-9 text-sm flex-1 min-w-0"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 text-muted-foreground"
-                  onClick={() => setBankQuickMemosDraft((prev) => prev.filter((_, j) => j !== i))}
-                  title={t("delete") || "삭제"}
-                  aria-label={t("delete") || "삭제"}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="self-start shrink-0"
-            onClick={() => setBankQuickMemosDraft((p) => [...p, ""])}
-          >
-            <Plus className="h-4 w-4 mr-1" aria-hidden />
-            {t("bankQuickMemosAddLine") || "항목 추가"}
-          </Button>
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
-            <Button type="button" variant="ghost" size="sm" className="self-start" onClick={() => void resetBankQuickMemosToDefault()}>
-              {t("bankQuickMemosResetDefault") || "기본값으로 되돌리기"}
-            </Button>
-            <div className="flex gap-2 justify-end w-full sm:w-auto">
-              <Button type="button" variant="outline" onClick={() => setBankQuickMemosEditOpen(false)}>
-                {t("cancel")}
-              </Button>
-              <Button type="button" onClick={() => void saveBankQuickMemosFromDialog()}>
-                {t("btn_save")}
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BankMiscDialogs
+        bankQuickMemosEditOpen={bankQuickMemosEditOpen}
+        setBankQuickMemosEditOpen={setBankQuickMemosEditOpen}
+        bankQuickMemosDraft={bankQuickMemosDraft}
+        setBankQuickMemosDraft={setBankQuickMemosDraft}
+        saveBankQuickMemosFromDialog={saveBankQuickMemosFromDialog}
+        resetBankQuickMemosToDefault={resetBankQuickMemosToDefault}
+        memoPreviewText={memoPreviewText}
+        setMemoPreviewText={setMemoPreviewText}
+        getMemo={getMemo}
+        invoicePhotoPreviewUrl={invoicePhotoPreviewUrl}
+        setInvoicePhotoPreviewUrl={setInvoicePhotoPreviewUrl}
+        invoiceLinkRow={invoiceLinkRow}
+        setInvoiceLinkRow={setInvoiceLinkRow}
+        invoiceLinkPOList={invoiceLinkPOList}
+        invoiceLinkSelectedPO={invoiceLinkSelectedPO}
+        setInvoiceLinkSelectedPO={setInvoiceLinkSelectedPO}
+        updatingInvoiceId={updatingInvoiceId}
+        handleInvoiceLinkConfirm={handleInvoiceLinkConfirm}
+        registerExpenseRow={registerExpenseRow}
+        setRegisterExpenseRow={setRegisterExpenseRow}
+        registerEditMode={registerEditMode}
+        setRegisterEditMode={setRegisterEditMode}
+        registerPayeeManual={registerPayeeManual}
+        setRegisterPayeeManual={setRegisterPayeeManual}
+        registerPayeeCode={registerPayeeCode}
+        setRegisterPayeeCode={setRegisterPayeeCode}
+        registerPayeeName={registerPayeeName}
+        setRegisterPayeeName={setRegisterPayeeName}
+        registerAccountSubjectId={registerAccountSubjectId}
+        setRegisterAccountSubjectId={setRegisterAccountSubjectId}
+        registerSaving={registerSaving}
+        setRegisterSaving={setRegisterSaving}
+        vendorOptions={vendorOptions}
+        accountSubjectOptions={accountSubjectOptions}
+        getAccountSubjectLabel={getAccountSubjectLabel}
+        auth={auth}
+        loadData={loadData}
+        t={t}
+        tt={tt}
+      />
 
-      <Dialog open={!!memoPreviewText} onOpenChange={(open) => !open && setMemoPreviewText(null)}>
-        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
-          </DialogHeader>
-          <p className="whitespace-pre-wrap break-words text-sm py-2">{getMemo(memoPreviewText ?? undefined) || memoPreviewText || ""}</p>
-        </DialogContent>
-      </Dialog>
+      <BankRegisterActionDialog
+        registerActionRow={registerActionRow}
+        setRegisterActionRow={setRegisterActionRow}
+        openApprovedPick={openApprovedPick}
+        approvedPickRow={approvedPickRow}
+        setApprovedPickRow={setApprovedPickRow}
+        approvedPickList={approvedPickList}
+        setApprovedPickList={setApprovedPickList}
+        approvedPickId={approvedPickId}
+        setApprovedPickId={setApprovedPickId}
+        approvedPickLoading={approvedPickLoading}
+        approvedPickSaving={approvedPickSaving}
+        setApprovedPickSaving={setApprovedPickSaving}
+        receivableLinkedRow={receivableLinkedRow}
+        setReceivableLinkedRow={setReceivableLinkedRow}
+        receivableLinkedList={receivableLinkedList}
+        setReceivableLinkedList={setReceivableLinkedList}
+        receivableLinkedSummary={receivableLinkedSummary}
+        setReceivableLinkedSummary={setReceivableLinkedSummary}
+        receivableLinkedLoading={receivableLinkedLoading}
+        receivableLinkedUnlinking={receivableLinkedUnlinking}
+        beginReceivableLinkEdit={beginReceivableLinkEdit}
+        receivablePickRow={receivablePickRow}
+        setReceivablePickRow={setReceivablePickRow}
+        receivablePickList={receivablePickList}
+        setReceivablePickList={setReceivablePickList}
+        receivablePickSelectedIds={receivablePickSelectedIds}
+        setReceivablePickSelectedIds={setReceivablePickSelectedIds}
+        receivablePickLoading={receivablePickLoading}
+        receivablePickSaving={receivablePickSaving}
+        setReceivablePickSaving={setReceivablePickSaving}
+        receivablePickStoreCreditAvailable={receivablePickStoreCreditAvailable}
+        setReceivablePickStoreCreditAvailable={setReceivablePickStoreCreditAvailable}
+        receivablePickCreditApply={receivablePickCreditApply}
+        setReceivablePickCreditApply={setReceivablePickCreditApply}
+        receivablePickMismatchReason={receivablePickMismatchReason}
+        setReceivablePickMismatchReason={setReceivablePickMismatchReason}
+        receivablePickMismatchNote={receivablePickMismatchNote}
+        setReceivablePickMismatchNote={setReceivablePickMismatchNote}
+        accountId={accountId}
+        selectedAccountStore={selectedAccountStore}
+        startStr={startStr}
+        endStr={endStr}
+        auth={auth}
+        canApproveReceivableMismatch={canApproveReceivableMismatch}
+        loadData={loadData}
+        t={t}
+        tt={tt}
+      />
 
-      <Dialog open={!!invoicePhotoPreviewUrl} onOpenChange={(open) => !open && setInvoicePhotoPreviewUrl(null)}>
-        <DialogContent className={`max-w-2xl ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{t("poInvoice") || "인보이스"}</DialogTitle>
-          </DialogHeader>
-          <ImageViewerWithRotate
-            src={invoicePhotoPreviewUrl || ""}
-            alt=""
-            imgClassName="max-h-[70vh] w-full object-contain rounded"
-            rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-            rotateRightLabel={t("imageRotateRight") || "시계"}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!invoiceLinkRow} onOpenChange={(open) => !open && setInvoiceLinkRow(null)}>
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{t("bankInvoiceCheckTitle") || "인보이스 수령 체크"}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {invoiceLinkRow?.vendorCode
-              ? (t("bankInvoiceLinkPrompt") || "이 건을 발주서와 연동하시겠습니까? 연동 시 발주서 인보이스 상태와 동기화됩니다.")
-              : (t("bankInvoiceCheckOnly") || "인보이스 수령 체크만 합니다. (발주서 연동 없음)")}
-          </p>
-          {invoiceLinkRow?.vendorCode && invoiceLinkPOList.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground block">{t("bankLinkPO") || "발주서 연동"}</label>
-              <Select value={invoiceLinkSelectedPO} onValueChange={setInvoiceLinkSelectedPO}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t("bankLinkPOSelect") || "선택 (연동 없으면 체크만)"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— {t("bankInvoiceCheckOnly") || "연동 없이 체크만"}</SelectItem>
-                  {invoiceLinkPOList.map((po) => (
-                    <SelectItem key={po.id} value={String(po.id)}>
-                      {po.po_no || `#${po.id}`} {po.vendor_name || ""} ฿{(po.total ?? 0).toLocaleString()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          {invoiceLinkRow?.vendorCode && invoiceLinkPOList.length === 0 && (
-            <p className="text-xs text-muted-foreground">{t("bankNoPOForVendor") || "해당 거래처 발주서가 없습니다. 연동 없이 체크만 합니다."}</p>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setInvoiceLinkRow(null)}>{t("cancel")}</Button>
-            <Button size="sm" onClick={handleInvoiceLinkConfirm} disabled={updatingInvoiceId !== null}>
-              {updatingInvoiceId !== null ? "..." : t("msg_done")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!registerActionRow} onOpenChange={(open) => !open && setRegisterActionRow(null)}>
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{tt("bankRegisterLinkExpenseMgmt", "지출관리 연결")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {registerActionRow ? `${registerActionRow.transDate} · ฿${Math.abs(registerActionRow.amount || 0).toLocaleString()}` : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {tt("bankExpenseViaExpenseMgmt", BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE)}
-          </p>
-          <div className="grid grid-cols-1 gap-2 pt-2">
-            <Button
-              type="button"
-              onClick={() => {
-                if (!registerActionRow) return
-                setRegisterActionRow(null)
-                openApprovedPick(registerActionRow)
-              }}
-            >
-              {tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                if (!registerActionRow) return
-                const r = registerActionRow
-                const amt = Math.abs(r.amount ?? 0)
-                const bankMemo = (r.memo || "").trim().slice(0, 500)
-                const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
-                const q = new URLSearchParams({ tab: "expenseRegister" })
-                if (r.id) q.set("bankTransactionId", String(r.id))
-                if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
-                if (bankMemo) q.set("bankMemo", bankMemo)
-                if (bankNote) q.set("bankNote", bankNote)
-                if (r.transDate) q.set("transDate", r.transDate)
-                if (accountId) q.set("accountId", accountId)
-                if (selectedAccountStore) q.set("storeName", selectedAccountStore)
-                if (r.category) q.set("category", r.category)
-                q.set("startStr", startStr)
-                q.set("endStr", endStr)
-                q.set("returnTab", "query")
-                if (r.id) q.set("openRegisterTxId", String(r.id))
-                setRegisterActionRow(null)
-                router.push(`/admin/expense-management?${q.toString()}`)
-              }}
-            >
-              {t("bankRegisterLink") || "신규 지출 등록"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!approvedPickRow}
-        onOpenChange={(open) => {
-          if (!open) {
-            setApprovedPickRow(null)
-            setApprovedPickList([])
-            setApprovedPickId("")
-          }
-        }}
-      >
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-2">
-            {approvedPickRow ? `${approvedPickRow.transDate} · ฿${formatMoneyBaht(Math.abs(approvedPickRow.amount || 0))}` : ""}
-          </p>
-          {approvedPickLoading ? (
-            <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
-          ) : approvedPickList.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
-              {tt("expensePlanPickEmptyForBankLink", "No linkable payment plan for this date/store.")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                {(t("date") || "날짜")}: {approvedPickRow?.transDate || "-"} / {(t("amount") || "금액")}: ฿{formatMoneyBaht(Math.abs(parseMoneyAmount(approvedPickRow?.amount || 0)))}
-              </p>
-              <Select value={approvedPickId || "__none__"} onValueChange={(v) => setApprovedPickId(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={`${tt("expensePlanTab", "지급예정")} ${tt("btnSelect", "선택")}`} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {approvedPickList.map((p) => {
-                    const tag =
-                      p.payeeMemoMatchQuality === "mismatch"
-                        ? "⚠"
-                        : p.payeeMemoMatchQuality === "uncertain"
-                          ? "?"
-                          : p.payeeMemoMatchQuality === "ok"
-                            ? "✓"
-                            : "·"
-                    const statusTag =
-                      p.status === "planned"
-                        ? tt("expensePlanStatusPlanned", "대기")
-                        : p.status === "partial"
-                          ? tt("expensePlanStatusPartial", "부분")
-                          : ""
-                    const amountHint = p.amountMatch === false ? " ≠" : ""
-                    return (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {tag}{statusTag ? ` [${statusTag}]` : ""} {(p.dueDate || p.expenseDate || "-")} · {p.payeeName} ({p.payeeCode || "-"}) / ฿{formatMoneyBaht(p.remainingAmount || 0)}{amountHint}
-                    </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-              {(() => {
-                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                if (selected && selected.payeeMemoMatchQuality) {
-                  const q = selected.payeeMemoMatchQuality
-                  if (q === "mismatch") {
-                    return (
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        {tt("bankPayeeMemoMismatchOverride", "적요와 지급처가 불일치로 추정됩니다. 금액이 일치하면 저장할 수 있습니다.")}
-                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
-                      </p>
-                    )
-                  }
-                  if (q === "uncertain") {
-                    return (
-                      <p className="text-xs text-muted-foreground">
-                        {tt("bankPayeeMemoUncertain", "적요와 지급처 일치를 확정할 수 없습니다. 내용을 확인하세요.")}
-                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
-                      </p>
-                    )
-                  }
-                }
-                return null
-              })()}
-              {(() => {
-                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                if (!selected || !approvedPickRow) return null
-                const bankAmt = parseMoneyAmount(approvedPickRow.amount || 0)
-                const remain = parseMoneyAmount(selected?.remainingAmount || 0)
-                if (moneyEqual(bankAmt, remain)) return null
-                return (
-                  <p className="text-xs text-destructive">
-                    {tt("bankPlanAmountMismatchDetail", "Bank amount differs from plan balance.")
-                      .replace("{bankAmount}", formatMoneyBaht(bankAmt))
-                      .replace("{remain}", formatMoneyBaht(remain))}
-                  </p>
-                )
-              })()}
-              {(() => {
-                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                if (!selected || selected.status !== "planned") return null
-                return (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {tt(
-                      "expensePlanPickPlannedNeedsApproval",
-                      "Selected item is pending approval. Saving will auto-approve; HQ items need Director/Secretary rights."
-                    )}
-                  </p>
-                )
-              })()}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setApprovedPickRow(null)}>
-                  {t("cancel") || "취소"}
-                </Button>
-                <Button
-                  onClick={async () => {
-                    if (!approvedPickRow?.id || !approvedPickId) return
-                    const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                    const bankAmt = parseMoneyAmount(approvedPickRow.amount || 0)
-                    const remain = parseMoneyAmount(selected?.remainingAmount || 0)
-                    if (!selected || !moneyEqual(bankAmt, remain)) {
-                      await appAlert(tt("bankPlanAmountMismatch", "통장 금액과 선택한 지급예정 잔액이 일치해야 합니다."))
-                      return
-                    }
-                    setApprovedPickSaving(true)
-                    try {
-                      if (selected.status === "planned") {
-                        const approveRes = await approveExpenseAccrual({
-                          expenseAccrualId: Number(approvedPickId),
-                          action: "approve",
-                          userName: auth?.user,
-                          userRole: auth?.role,
-                        })
-                        if (!approveRes.success) {
-                          await appAlert(translateApiMessage(approveRes.message, t) || approveRes.message || t("processFail"))
-                          return
-                        }
-                      }
-                      const basePayload = {
-                        expenseAccrualId: Number(approvedPickId),
-                        paymentMethod: "bank" as const,
-                        amount: bankAmt,
-                        transDate: String(approvedPickRow.transDate || "").slice(0, 10),
-                        memo: stripWithdrawalCategoryMetaFromNote(
-                          (approvedPickRow.note || approvedPickRow.memo || "").trim()
-                        ),
-                        bankTransactionId: Number(approvedPickRow.id),
-                        userName: auth?.user,
-                        userRole: auth?.role,
-                      }
-                      const res = await executeExpensePayment(basePayload)
-                      if (!res.success) {
-                        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-                        return
-                      }
-                      setApprovedPickRow(null)
-                      setApprovedPickList([])
-                      setApprovedPickId("")
-                      loadData()
-                    } finally {
-                      setApprovedPickSaving(false)
-                    }
-                  }}
-                  disabled={!approvedPickId || approvedPickSaving || (() => {
-                    const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                    const bankAmt = parseMoneyAmount(approvedPickRow?.amount || 0)
-                    const remain = parseMoneyAmount(selected?.remainingAmount || 0)
-                    if (!selected || !moneyEqual(bankAmt, remain)) return true
-                    return false
-                  })()}
-                >
-                  {approvedPickSaving ? "..." : (t("btnSave") || "저장")}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!receivableLinkedRow}
-        onOpenChange={(open) => {
-          if (!open) {
-            setReceivableLinkedRow(null)
-            setReceivableLinkedList([])
-            setReceivableLinkedSummary(null)
-          }
-        }}
-      >
-        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{tt("bankReceivableLinkedTitle", "미수 연결 내역")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-2">
-            {receivableLinkedRow
-              ? `${receivableLinkedRow.transDate} · ฿${Math.abs(receivableLinkedRow.amount || 0).toLocaleString()}`
-              : ""}
-          </p>
-          <p className="text-xs text-muted-foreground mb-3 leading-snug">
-            {tt(
-              "bankReceivableLinkedHint",
-              "이 통장 입금에 연결된 인보이스입니다. 잘못 연결했으면 「연결 수정」으로 해제 후 다시 연결하세요."
-            )}
-          </p>
-          {receivableLinkedLoading ? (
-            <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
-          ) : receivableLinkedList.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
-              {tt("bankReceivableLinkedEmpty", "연결된 미수금이 없습니다.")}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
-                {receivableLinkedList.map((p) => {
-                  const label =
-                    p.invoiceNo ||
-                    (p.refId ? `#${p.refId}` : "") ||
-                    (p.memo ? p.memo.slice(0, 40) : "")
-                  return (
-                    <div key={p.accrualId} className="px-3 py-2 text-sm leading-snug">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="flex-1 min-w-0">
-                          <span className="font-medium tabular-nums">{p.transDate}</span>
-                          <span className="text-muted-foreground"> · {p.refType}</span>
-                          {label ? (
-                            <span className="block text-xs text-muted-foreground truncate">{label}</span>
-                          ) : null}
-                        </span>
-                        <span className="font-medium tabular-nums whitespace-nowrap shrink-0">
-                          ฿{p.paidTotal.toLocaleString()}
-                        </span>
-                      </div>
-                      {(p.paidFromCredit > 0.009 || p.paidFromRounding > 0.009) && (
-                        <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
-                          {p.paidFromBank > 0.009
-                            ? `${tt("bankReceivableLinkedPaidFromBank", "통장")} ฿${p.paidFromBank.toLocaleString()}`
-                            : ""}
-                          {p.paidFromCredit > 0.009
-                            ? `${p.paidFromBank > 0.009 ? " · " : ""}${tt("bankReceivableLinkedPaidFromCredit", "선수금")} ฿${p.paidFromCredit.toLocaleString()}`
-                            : ""}
-                          {p.paidFromRounding > 0.009
-                            ? `${p.paidFromBank > 0.009 || p.paidFromCredit > 0.009 ? " · " : ""}${tt("bankReceivableLinkedPaidFromRounding", "차액")} ฿${p.paidFromRounding.toLocaleString()}`
-                            : ""}
-                        </p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-              {receivableLinkedSummary ? (
-                <div className="rounded-md border border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30 px-3 py-2 text-sm space-y-1">
-                  <div className="flex justify-between gap-2 tabular-nums">
-                    <span className="text-muted-foreground">
-                      {tt("bankReceivablePickBankAmount", "통장 입금")}
-                    </span>
-                    <span className="font-medium">
-                      ฿{receivableLinkedSummary.bankAmount.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 tabular-nums">
-                    <span className="text-muted-foreground">
-                      {tt("bankReceivablePickSelectedTotal", "연결 합계")} ({receivableLinkedList.length})
-                    </span>
-                    <span className="font-medium">
-                      ฿{receivableLinkedSummary.linkedTotal.toLocaleString()}
-                    </span>
-                  </div>
-                  {receivableLinkedSummary.storeCreditApplied > 0.009 ? (
-                    <div className="flex justify-between gap-2 tabular-nums text-xs">
-                      <span className="text-muted-foreground">
-                        {tt("bankReceivableLinkedStoreCreditApplied", "선수금 사용")}
-                      </span>
-                      <span>
-                        ฿{receivableLinkedSummary.storeCreditApplied.toLocaleString()}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setReceivableLinkedRow(null)}>
-                  {t("cancel") || "취소"}
-                </Button>
-                <Button
-                  onClick={() => void beginReceivableLinkEdit()}
-                  disabled={receivableLinkedUnlinking}
-                >
-                  {receivableLinkedUnlinking
-                    ? "..."
-                    : tt("bankReceivableLinkedEdit", "연결 수정")}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!receivablePickRow}
-        onOpenChange={(open) => {
-          if (!open) {
-            setReceivablePickRow(null)
-            setReceivablePickList([])
-            setReceivablePickSelectedIds([])
-            setReceivablePickCreditApply(0)
-            setReceivablePickMismatchReason("")
-            setReceivablePickMismatchNote("")
-            setReceivablePickStoreCreditAvailable(0)
-          }
-        }}
-      >
-        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{tt("bankRegisterLinkReceivable", "미수금 연결")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-2">
-            {receivablePickRow
-              ? `${receivablePickRow.transDate} · ฿${Math.abs(receivablePickRow.amount || 0).toLocaleString()}`
-              : ""}
-          </p>
-          <p className="text-xs text-muted-foreground mb-3 leading-snug">
-            {tt(
-              "bankReceivablePickWorkflowHint",
-              "매출 수령으로 매장 잔액은 이미 반영되었습니다. 아래에서 이 입금에 해당하는 인보이스를 선택하면 미수금 화면 수금확인에 자동 반영됩니다."
-            )}
-          </p>
-          {receivablePickLoading ? (
-            <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
-          ) : receivablePickList.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
-              {tt("bankReceivablePickEmpty", "연결 가능한 미수금(출고·주문)이 없습니다.")}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {tt(
-                  "bankReceivablePickMultiHint",
-                  "여러 인보이스를 선택할 수 있습니다. 선택 합계가 통장 입금액과 일치해야 저장됩니다."
-                )}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {tt("bankReceivablePickListHint", "인보이스별 미수 잔액이 남은 건만 표시됩니다(장부 기준).")}
-              </p>
-              <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
-                {receivablePickList.map((p) => {
-                  const checked = receivablePickSelectedIds.includes(p.id)
-                  const label =
-                    p.invoiceNo ||
-                    (p.refId ? `#${p.refId}` : "") ||
-                    (p.memo ? p.memo.slice(0, 40) : "")
-                  return (
-                    <label
-                      key={p.id}
-                      className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-muted/40"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        className="mt-0.5"
-                        onCheckedChange={(v) => {
-                          setReceivablePickSelectedIds((prev) => {
-                            if (v) return prev.includes(p.id) ? prev : [...prev, p.id]
-                            return prev.filter((id) => id !== p.id)
-                          })
-                        }}
-                      />
-                      <span className="flex-1 min-w-0 text-sm leading-snug">
-                        <span className="font-medium tabular-nums">{p.transDate}</span>
-                        <span className="text-muted-foreground"> · {p.refType}</span>
-                        {label ? (
-                          <span className="block text-xs text-muted-foreground truncate">{label}</span>
-                        ) : null}
-                      </span>
-                      <span className="text-sm font-medium tabular-nums whitespace-nowrap shrink-0">
-                        ฿{p.remainingAmount.toLocaleString()}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-              {(() => {
-                const bankAmt = Math.abs(Number(receivablePickRow?.amount || 0))
-                const selectedTotal = sumOpenReceivablePickAmount(
-                  receivablePickList,
-                  receivablePickSelectedIds
-                )
-                const creditApply = roundReceivableMoney(Math.max(0, receivablePickCreditApply))
-                const gap = computeReceivableLinkGap(bankAmt, selectedTotal, creditApply)
-                const matches = Math.abs(gap) <= 0.01
-                const { kind } = classifyReceivableBankLinkMismatch(bankAmt, selectedTotal, creditApply)
-                const canSave =
-                  receivablePickSelectedIds.length > 0 &&
-                  canSaveReceivablePickWithMismatch({
-                    bankAmt,
-                    selectedTotal,
-                    storeCreditApply: creditApply,
-                    mismatchNote: receivablePickMismatchNote,
-                    mismatchReason: receivablePickMismatchReason,
-                    canApproveMismatch: canApproveReceivableMismatch,
-                  })
-                const showMismatchFields = receivablePickSelectedIds.length > 0 && !matches
-                const shortfall = Math.max(0, gap)
-                return (
-                  <>
-                    <div
-                      className={cn(
-                        "rounded-md border px-3 py-2 text-sm space-y-1",
-                        receivablePickSelectedIds.length === 0
-                          ? "border-border bg-muted/30"
-                          : matches
-                            ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
-                            : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
-                      )}
-                    >
-                      <div className="flex justify-between gap-2 tabular-nums">
-                        <span className="text-muted-foreground">
-                          {tt("bankReceivablePickBankAmount", "통장 입금")}
-                        </span>
-                        <span className="font-medium">฿{bankAmt.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between gap-2 tabular-nums">
-                        <span className="text-muted-foreground">
-                          {tt("bankReceivablePickSelectedTotal", "선택 합계")} ({receivablePickSelectedIds.length})
-                        </span>
-                        <span className="font-medium">฿{selectedTotal.toLocaleString()}</span>
-                      </div>
-                      {creditApply > 0.009 ? (
-                        <div className="flex justify-between gap-2 tabular-nums">
-                          <span className="text-muted-foreground">
-                            {tt("bankReceivablePickStoreCreditApply", "선수금 적용")}
-                          </span>
-                          <span className="font-medium">฿{creditApply.toLocaleString()}</span>
-                        </div>
-                      ) : null}
-                      {showMismatchFields ? (
-                        <p className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
-                          {tt("bankReceivablePickDiff", "차이")}: ฿{gap.toLocaleString()}
-                        </p>
-                      ) : null}
-                      {receivablePickSelectedIds.length > 0 && matches ? (
-                        <p className="text-xs text-green-800 dark:text-green-300">
-                          {tt("bankReceivablePickAmountOk", "금액이 일치합니다.")}
-                        </p>
-                      ) : null}
-                      {showMismatchFields && kind === "large" && !canApproveReceivableMismatch ? (
-                        <p className="text-xs text-destructive">
-                          {tt(
-                            "bankReceivablePickMismatchApprovalRequired",
-                            "큰 차액 — Director 또는 오피스 급여 담당 승인 필요"
-                          )}
-                        </p>
-                      ) : null}
-                    </div>
-                    {receivablePickStoreCreditAvailable > 0.009 ? (
-                      <div className="rounded-md border border-border px-3 py-2 space-y-2 text-sm">
-                        <div className="flex justify-between gap-2 tabular-nums">
-                          <span className="text-muted-foreground">
-                            {tt("bankReceivablePickStoreCreditAvailable", "매장 선수금 잔액")}
-                          </span>
-                          <span className="font-medium">
-                            ฿{receivablePickStoreCreditAvailable.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            className="h-8 w-32 tabular-nums"
-                            value={creditApply || ""}
-                            onChange={(e) =>
-                              setReceivablePickCreditApply(
-                                roundReceivableMoney(Math.max(0, parseMoneyAmount(e.target.value)))
-                              )
-                            }
-                          />
-                          {shortfall > 0.009 ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8"
-                              onClick={() =>
-                                setReceivablePickCreditApply(
-                                  roundReceivableMoney(
-                                    Math.min(shortfall, receivablePickStoreCreditAvailable)
-                                  )
-                                )
-                              }
-                            >
-                              {tt("bankReceivablePickStoreCreditApplyAll", "부족분 전액 적용")}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : null}
-                    {showMismatchFields ? (
-                      <div className="space-y-2 rounded-md border border-border px-3 py-2 text-sm">
-                        <p className="text-xs text-muted-foreground leading-snug">
-                          {tt(
-                            "bankReceivablePickMismatchHint",
-                            "금액이 다를 때는 사유를 선택하거나 หมายเหตุ를 입력하세요."
-                          )}
-                        </p>
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-1">
-                            {tt("bankReceivablePickMismatchReason", "차액 사유")}
-                          </label>
-                          <Select
-                            value={receivablePickMismatchReason || "__none__"}
-                            onValueChange={(v) =>
-                              setReceivablePickMismatchReason(v === "__none__" ? "" : v)
-                            }
-                          >
-                            <SelectTrigger className="h-8">
-                              <SelectValue placeholder="—" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">—</SelectItem>
-                              {RECEIVABLE_BANK_LINK_MISMATCH_REASONS.map((reason) => (
-                                <SelectItem key={reason} value={reason}>
-                                  {tt(`bankReceivableMismatchReason_${reason}`, reason)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground block mb-1">
-                            {tt("bankReceivablePickMismatchNote", "หมายเหตุ")}
-                          </label>
-                          <Input
-                            value={receivablePickMismatchNote}
-                            onChange={(e) => setReceivablePickMismatchNote(e.target.value)}
-                            placeholder={tt(
-                              "bankReceivablePickMismatchNotePlaceholder",
-                              "예: 3월 인보이스 오류 과납 273บ. 상계"
-                            )}
-                          />
-                        </div>
-                      </div>
-                    ) : null}
-                    {canApproveReceivableMismatch && receivablePickRow?.storeName ? (
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            const memo = await appPrompt(
-                              tt("bankReceivablePickMismatchNote", "หมายเหตุ"),
-                              ""
-                            )
-                            if (memo === null) return
-                            const amountStr = await appPrompt(
-                              tt("bankReceivablePickStoreCreditAvailable", "매장 선수금 잔액"),
-                              shortfall > 0.009 ? String(shortfall) : ""
-                            )
-                            if (amountStr === null) return
-                            const amount = parseMoneyAmount(amountStr)
-                            if (amount <= 0) return
-                            const res = await addReceivableStoreCredit({
-                              storeName: String(receivablePickRow.storeName || ""),
-                              amount,
-                              transDate: String(receivablePickRow.transDate || "").slice(0, 10),
-                              memo: memo.trim(),
-                            })
-                            if (!res.success) {
-                              await appAlert(
-                                translateApiMessage(res.message, t) || res.message || t("processFail")
-                              )
-                              return
-                            }
-                            setReceivablePickStoreCreditAvailable((prev) =>
-                              roundReceivableMoney(prev + amount)
-                            )
-                            if (shortfall > 0.009) {
-                              setReceivablePickCreditApply(
-                                roundReceivableMoney(Math.min(shortfall, amount))
-                              )
-                            }
-                          }}
-                        >
-                          {tt("bankReceivablePickRegisterStoreCredit", "선수금 등록")}
-                        </Button>
-                      </div>
-                    ) : null}
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setReceivablePickRow(null)}>
-                        {t("cancel") || "취소"}
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          if (!receivablePickRow?.id || receivablePickSelectedIds.length === 0) return
-                          if (!canSave) {
-                            await appAlert(
-                              tt(
-                                "bankReceivableAmountMismatch",
-                                "통장 금액과 선택한 미수 잔액 합계가 일치해야 합니다."
-                              )
-                            )
-                            return
-                          }
-                          setReceivablePickSaving(true)
-                          try {
-                            const res = await linkReceivableFromBankTransaction({
-                              bankTransactionId: Number(receivablePickRow.id),
-                              receivableAccrualIds: receivablePickSelectedIds,
-                              storeCreditApplyAmount: creditApply > 0.009 ? creditApply : undefined,
-                              mismatchNote: receivablePickMismatchNote.trim() || undefined,
-                              mismatchReason: receivablePickMismatchReason || undefined,
-                            })
-                            if (!res.success) {
-                              await appAlert(
-                                translateApiMessage(res.message, t) || res.message || t("processFail")
-                              )
-                              return
-                            }
-                            setReceivablePickRow(null)
-                            setReceivablePickList([])
-                            setReceivablePickSelectedIds([])
-                            setReceivablePickCreditApply(0)
-                            setReceivablePickMismatchReason("")
-                            setReceivablePickMismatchNote("")
-                            await invalidateReceivablePayableListCache()
-                            loadData()
-                          } finally {
-                            setReceivablePickSaving(false)
-                          }
-                        }}
-                        disabled={
-                          receivablePickSelectedIds.length === 0 || receivablePickSaving || !canSave
-                        }
-                      >
-                        {receivablePickSaving ? "..." : (t("btnSave") || "저장")}
-                      </Button>
-                    </div>
-                  </>
-                )
-              })()}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!registerExpenseRow} onOpenChange={(open) => !open && (setRegisterExpenseRow(null), setRegisterEditMode(false))}>
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
-            <DialogTitle>{t("bankRegisterExpense") || "지출 발생으로 등록"}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">
-            {registerExpenseRow ? `${registerExpenseRow.transDate} · ฿${Math.abs(registerExpenseRow.amount || 0).toLocaleString()}` : ""}
-          </p>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("vendor") || "지급처"}</label>
-              <Select value={registerPayeeManual ? "__manual__" : (registerPayeeCode || "__none__")} onValueChange={(v) => { setRegisterPayeeManual(v === "__manual__"); if (v !== "__manual__" && v !== "__none__") { setRegisterPayeeCode(v); setRegisterPayeeName(vendorOptions.find((x) => x.code === v)?.name || v) } else if (v === "__manual__") { setRegisterPayeeCode(""); setRegisterPayeeName("") } }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("vendor") || "거래처 선택 또는 직접 입력"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__manual__">{t("bankRegisterPayeeManual") || "직접 입력"}</SelectItem>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {vendorOptions.map((v) => (
-                    <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {registerPayeeManual ? (
-                <div className="flex gap-2 mt-2">
-                  <Input placeholder={t("expensePayeeCode") || "지급처 코드"} value={registerPayeeCode} onChange={(e) => setRegisterPayeeCode(e.target.value)} className="flex-1" />
-                  <Input placeholder={t("expensePayeeName") || "지급처명"} value={registerPayeeName} onChange={(e) => setRegisterPayeeName(e.target.value)} className="flex-1" />
-                </div>
-              ) : null}
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("accountSubject") || "계정과목"}</label>
-              <Select value={registerAccountSubjectId || "__none__"} onValueChange={(v) => setRegisterAccountSubjectId(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("accountSubject") || "계정과목"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {accountSubjectOptions.filter((a) => a.type === "expense").map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>{a.code} {getAccountSubjectLabel(a)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setRegisterExpenseRow(null)}>{t("cancel")}</Button>
-            <Button
-              disabled={registerSaving || !(registerPayeeManual ? (registerPayeeCode.trim() || registerPayeeName.trim()) : registerPayeeCode)}
-              onClick={async () => {
-                if (!registerExpenseRow?.id) return
-                const code = (registerPayeeCode || "").trim()
-                const name = (registerPayeeName || code).trim()
-                if (!code && !name) return
-                setRegisterSaving(true)
-                try {
-                  const res = await registerExpenseFromBankTransaction({
-                    bankTransactionId: registerExpenseRow.id,
-                    payeeCode: code || name,
-                    payeeName: name || code,
-                    accountSubjectId: registerAccountSubjectId ? Number(registerAccountSubjectId) : null,
-                    userName: auth?.user,
-                    userRole: auth?.role,
-                    updateExisting: registerEditMode,
-                  })
-                  if (res.success) {
-                    setRegisterExpenseRow(null)
-                    setRegisterEditMode(false)
-                    loadData()
-                    await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
-                  } else {
-                    await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-                  }
-                } finally {
-                  setRegisterSaving(false)
-                }
-              }}
-            >
-              {registerSaving ? "..." : (t("btnSave") || "저장")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
       {(() => {
         if (!channelSettleRow?.id) return null
         const csEdits = queryRowEdits[channelSettleRow.id]

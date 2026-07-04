@@ -59,6 +59,14 @@ const STORE_ADMIN_KEYS = {
   tab_visit_today: '',
   tab_complaint_input: '',
   tab_complaint_list: '',
+  store_check_photo_btn: '',
+  store_check_photo_title: '',
+  store_check_photo_before: '',
+  store_check_photo_after: '',
+  store_check_photo_add: '',
+  store_check_photo_limit: '',
+  store_check_photo_uploading: '',
+  store_check_photo_count: '',
 } as const
 
 type StoreAdminKey = keyof typeof STORE_ADMIN_KEYS
@@ -140,6 +148,14 @@ export const I18N_STORE_ADMIN_KO = pack({
   tab_visit_today: '당일 방문 현황',
   tab_complaint_input: '입력',
   tab_complaint_list: '검색',
+  store_check_photo_btn: '사진',
+  store_check_photo_title: 'Before / After 사진',
+  store_check_photo_before: 'Before (점검 전)',
+  store_check_photo_after: 'After (점검 후)',
+  store_check_photo_add: '사진 추가',
+  store_check_photo_limit: '최대 5장까지 첨부할 수 있습니다.',
+  store_check_photo_uploading: '업로드 중...',
+  store_check_photo_count: '{n}장',
 })
 
 export const I18N_STORE_ADMIN_EN = pack({
@@ -211,6 +227,14 @@ export const I18N_STORE_ADMIN_EN = pack({
   tab_visit_today: 'Today',
   tab_complaint_input: 'Input',
   tab_complaint_list: 'List',
+  store_check_photo_btn: 'Photo',
+  store_check_photo_title: 'Before / After Photos',
+  store_check_photo_before: 'Before',
+  store_check_photo_after: 'After',
+  store_check_photo_add: 'Add photo',
+  store_check_photo_limit: 'Up to 5 photos allowed.',
+  store_check_photo_uploading: 'Uploading...',
+  store_check_photo_count: '{n} photos',
 })
 
 export const I18N_STORE_ADMIN_TH = pack({
@@ -282,6 +306,14 @@ export const I18N_STORE_ADMIN_TH = pack({
   tab_visit_today: 'สถานะวันนี้',
   tab_complaint_input: 'กรอก',
   tab_complaint_list: 'ค้นหา',
+  store_check_photo_btn: 'รูปภาพ',
+  store_check_photo_title: 'รูปภาพ Before / After',
+  store_check_photo_before: 'Before (ก่อนตรวจ)',
+  store_check_photo_after: 'After (หลังตรวจ)',
+  store_check_photo_add: 'เพิ่มรูป',
+  store_check_photo_limit: 'แนบได้สูงสุด 5 รูป',
+  store_check_photo_uploading: 'กำลังอัปโหลด...',
+  store_check_photo_count: '{n} รูป',
 })
 
 export const I18N_STORE_ADMIN_MM = mergeStoreAdmin(I18N_STORE_ADMIN_EN, {

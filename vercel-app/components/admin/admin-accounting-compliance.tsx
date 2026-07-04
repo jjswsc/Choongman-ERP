@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
@@ -153,6 +153,53 @@ import {
 } from "@/lib/accounting-result-ui"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import type {
+  VatDraft,
+  WhtDraft,
+  Pp36Draft,
+  Pnd54Draft,
+  Pnd1IssueCode,
+  Kt20kSummaryResponse,
+  Kt20kReasonTag,
+  SsoPayrollPreview,
+  SsoSubmissionMeta,
+  EtaxTimestampMeta,
+  EtaxStepKey,
+  AdminAccountingComplianceProps,
+} from "./admin-accounting-compliance-types"
+import {
+  PND1_ISSUE_CODES,
+  KT20K_REASON_TAGS,
+  KT20K_TAGS_QUERY_KEY,
+  KT20K_TOL_QUERY_KEY,
+  KT20K_YEAR_QUERY_KEY,
+  KT20K_STORE_QUERY_KEY,
+  KT20K_TAB_QUERY_KEY,
+  PP30_FETCH_TIMEOUT_MS,
+  SSO_WORKFLOW_NOTE_PREFIX,
+  ETAX_TIMESTAMP_NOTE_PREFIX,
+} from "./admin-accounting-compliance-types"
+import {
+  ymNow,
+  emptyVat,
+  emptyWht,
+  emptyPp36,
+  emptyPnd54,
+  normalizeLedgerFilingStatus,
+  formatBangkokDateTime,
+  daysFromNow,
+  withClientTimeout,
+  asNum,
+  buildSsoPayrollPreview,
+  parseAttachmentUrlsFromInput,
+  displayNameFromUrl,
+  parseSsoWorkflowNote,
+  buildSsoWorkflowNote,
+  parseEtaxTimestampWorkflowNote,
+  buildEtaxTimestampWorkflowNote,
+  pickPayrollApiMsg,
+  csvCell,
+} from "./admin-accounting-compliance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import { whtCertificateFromLedgerRow, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
 import {
@@ -180,556 +227,9 @@ import {
   exportCorporateTaxPdf,
   validateCorporateTaxForPdf,
 } from "@/lib/corporate-tax-pdf"
-
-type VatDraft = {
-  id?: number
-  doc_date: string
-  tax_month: string
-  direction: "output" | "input"
-  counterparty_name: string
-  counterparty_tax_id: string
-  invoice_number: string
-  net_amount: string
-  vat_amount: string
-  total_amount: string
-  vat_status: string
-  invoice_evidence_status: "required_pending" | "received" | "not_required" | "unobtainable"
-  invoice_evidence_reason_code: string
-  filing_status: "draft" | "submitted"
-  submitted_at: string
-  submitted_by: string
-  memo: string
-  store_name: string
-}
-
-type WhtDraft = {
-  id?: number
-  payment_date: string
-  tax_month: string
-  payee_name: string
-  payee_tax_id: string
-  income_type: string
-  gross_amount: string
-  wht_rate: string
-  wht_amount: string
-  form_hint: string
-  certificate_no: string
-  filing_status: "draft" | "submitted"
-  submitted_at: string
-  submitted_by: string
-  memo: string
-  store_name: string
-  direction: "inbound" | "outbound"
-  source_type: string
-}
-
-type Pp36Draft = {
-  id?: number
-  doc_date: string
-  tax_month: string
-  supplier_name: string
-  supplier_country: string
-  supplier_tax_id: string
-  service_desc: string
-  taxable_amount: string
-  vat_rate: string
-  vat_amount: string
-  filing_status: "draft" | "submitted"
-  submitted_at: string
-  submitted_by: string
-  memo: string
-  store_name: string
-}
-
-type Pnd54Draft = {
-  id?: number
-  payment_date: string
-  tax_month: string
-  payee_name: string
-  payee_country: string
-  payee_tax_id: string
-  income_type: string
-  gross_amount: string
-  wht_rate: string
-  wht_amount: string
-  filing_status: "draft" | "submitted"
-  submitted_at: string
-  submitted_by: string
-  memo: string
-  store_name: string
-}
-
-type Pnd1IssueCode =
-  | "missing_payee_name"
-  | "missing_payee_tax_id"
-  | "invalid_payee_tax_id_length"
-  | "missing_payment_date"
-  | "invalid_payment_date"
-  | "missing_income_type"
-  | "non_positive_withheld_amount"
-
-const PND1_ISSUE_CODES: Pnd1IssueCode[] = [
-  "missing_payee_name",
-  "missing_payee_tax_id",
-  "invalid_payee_tax_id_length",
-  "missing_payment_date",
-  "invalid_payment_date",
-  "missing_income_type",
-  "non_positive_withheld_amount",
-]
-
-type Kt20kSummaryResponse = {
-  year: number
-  storeFilter: string
-  rows: {
-    month: string
-    employeeCount: number
-    salaryAmount: number
-    dailyWageAmount: number
-    otherCompAmount: number
-    totalWage: number
-    excessOver20000: number
-    netWageToReport: number
-  }[]
-  annual: {
-    employeeCountPeak: number
-    salaryAmount: number
-    dailyWageAmount: number
-    otherCompAmount: number
-    totalWage: number
-    excessOver20000: number
-    netWageToReport: number
-  }
-  reconciliation: {
-    monthly: {
-      month: string
-      kt20kTotalWage: number
-      kt20kNetWage: number
-      pnd1aLedgerGross: number
-      diffTotalVsPnd1a: number
-      diffNetVsPnd1a: number
-    }[]
-    employeeTopDiff: {
-      employeeKey: string
-      name: string
-      store: string
-      kt20kTotalWage: number
-      pnd1aLedgerGross: number
-      diff: number
-      reasonTags: string[]
-    }[]
-    annual: {
-      kt20kTotalWage: number
-      kt20kNetWage: number
-      pnd1aLedgerGross: number
-      diffTotalVsPnd1a: number
-      diffNetVsPnd1a: number
-    }
-  }
-  warnings: string[]
-}
-
-type Kt20kReasonTag =
-  | "missing_in_pnd1a"
-  | "missing_in_kt20k"
-  | "amount_mismatch"
-  | "possible_store_mismatch"
-  | "possible_name_mismatch"
-
-const KT20K_REASON_TAGS: Kt20kReasonTag[] = [
-  "missing_in_pnd1a",
-  "missing_in_kt20k",
-  "amount_mismatch",
-  "possible_store_mismatch",
-  "possible_name_mismatch",
-]
-
-const KT20K_TAGS_QUERY_KEY = "kt20k_tags"
-const KT20K_TOL_QUERY_KEY = "kt20k_tol"
-const KT20K_YEAR_QUERY_KEY = "kt20k_year"
-const KT20K_STORE_QUERY_KEY = "kt20k_store"
-const KT20K_TAB_QUERY_KEY = "kt20k_tab"
-const PP30_FETCH_TIMEOUT_MS = 120000
-
-function ymNow(): string {
-  const n = new Date()
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`
-}
-
-function emptyVat(taxMonth: string, defaultStoreName = ""): VatDraft {
-  return {
-    doc_date: `${taxMonth}-01`,
-    tax_month: taxMonth,
-    direction: "output",
-    counterparty_name: "",
-    counterparty_tax_id: "",
-    invoice_number: "",
-    net_amount: "",
-    vat_amount: "",
-    total_amount: "",
-    vat_status: "",
-    invoice_evidence_status: "required_pending",
-    invoice_evidence_reason_code: "",
-    filing_status: "draft",
-    submitted_at: "",
-    submitted_by: "",
-    memo: "",
-    store_name: defaultStoreName,
-  }
-}
-
-function emptyWht(taxMonth: string, defaultStoreName: string): WhtDraft {
-  return {
-    payment_date: `${taxMonth}-01`,
-    tax_month: taxMonth,
-    payee_name: "",
-    payee_tax_id: "",
-    income_type: "",
-    gross_amount: "",
-    wht_rate: "",
-    wht_amount: "",
-    form_hint: "",
-    certificate_no: "",
-    filing_status: "draft",
-    submitted_at: "",
-    submitted_by: "",
-    memo: "",
-    store_name: defaultStoreName,
-    direction: "outbound",
-    source_type: "manual",
-  }
-}
-
-function emptyPp36(taxMonth: string, defaultStoreName: string): Pp36Draft {
-  return {
-    doc_date: `${taxMonth}-01`,
-    tax_month: taxMonth,
-    supplier_name: "",
-    supplier_country: "",
-    supplier_tax_id: "",
-    service_desc: "",
-    taxable_amount: "",
-    vat_rate: "7",
-    vat_amount: "",
-    filing_status: "draft",
-    submitted_at: "",
-    submitted_by: "",
-    memo: "",
-    store_name: defaultStoreName,
-  }
-}
-
-function emptyPnd54(taxMonth: string, defaultStoreName: string): Pnd54Draft {
-  return {
-    payment_date: `${taxMonth}-01`,
-    tax_month: taxMonth,
-    payee_name: "",
-    payee_country: "",
-    payee_tax_id: "",
-    income_type: "",
-    gross_amount: "",
-    wht_rate: "",
-    wht_amount: "",
-    filing_status: "draft",
-    submitted_at: "",
-    submitted_by: "",
-    memo: "",
-    store_name: defaultStoreName,
-  }
-}
-
-function normalizeLedgerFilingStatus(v: unknown): "draft" | "submitted" {
-  return String(v || "").trim().toLowerCase() === "submitted" ? "submitted" : "draft"
-}
-
-function formatBangkokDateTime(v: string): string {
-  const s = String(v || "").trim()
-  if (!s) return "-"
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleString("en-GB", {
-    timeZone: "Asia/Bangkok",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  })
-}
-
-function daysFromNow(v: string | null | undefined): number | null {
-  const s = String(v || "").trim()
-  if (!s) return null
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return null
-  const ms = Date.now() - d.getTime()
-  return Math.floor(ms / (24 * 60 * 60 * 1000))
-}
-
-async function withClientTimeout<T>(promise: Promise<T>, timeoutMs = 15000): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("CLIENT_TIMEOUT")), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
-type SsoPayrollPreview = {
-  rowCount: number
-  storeCount: number
-  totalEmployeeSso: number
-  totalEmployerSso: number
-  totalContribution: number
-  missingCitizenIdCount: number
-  missingSsoMemberNoCount: number
-}
-
-type SsoSubmissionMeta = {
-  summaryLine?: string
-  memo: string
-  attachmentUrls: string[]
-  submittedAt?: string
-  submittedBy?: string
-}
-
-type EtaxTimestampMeta = {
-  taxId: string
-  branchCode: string
-  rdContactEmail: string
-  senderGmail: string
-  activateCodeRef: string
-  memo: string
-  attachmentUrls: string[]
-  applySubmitted: boolean
-  ko01Printed: boolean
-  docsUploaded: boolean
-  emailConfirmed: boolean
-  activateCodeReceived: boolean
-  passwordSet: boolean
-  senderEmailRegistered: boolean
-  pilotIssued: boolean
-  stepAudit?: Partial<Record<EtaxStepKey, { doneAt: string; doneBy: string }>>
-  updatedAt?: string
-  updatedBy?: string
-}
-
-type EtaxStepKey =
-  | "applySubmitted"
-  | "ko01Printed"
-  | "docsUploaded"
-  | "emailConfirmed"
-  | "activateCodeReceived"
-  | "passwordSet"
-  | "senderEmailRegistered"
-  | "pilotIssued"
-
-const SSO_WORKFLOW_NOTE_PREFIX = "SSO_SUBMISSION::"
-const ETAX_TIMESTAMP_NOTE_PREFIX = "ETAX_TIMESTAMP::"
-
-function asNum(v: unknown): number {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
-}
-
-function buildSsoPayrollPreview(rows: Record<string, unknown>[]): SsoPayrollPreview {
-  const stores = new Set<string>()
-  let totalEmployeeSso = 0
-  let totalEmployerSso = 0
-  let missingCitizenIdCount = 0
-  let missingSsoMemberNoCount = 0
-  for (const row of rows) {
-    const store = String(row.store || "").trim()
-    if (store) stores.add(store)
-    totalEmployeeSso += asNum(row.sso)
-    totalEmployerSso += asNum(row.employerSso)
-    if (!String(row.idNumber || "").trim()) missingCitizenIdCount += 1
-    if (!String(row.ssoMemberNo || "").trim()) missingSsoMemberNoCount += 1
-  }
-  return {
-    rowCount: rows.length,
-    storeCount: stores.size,
-    totalEmployeeSso,
-    totalEmployerSso,
-    totalContribution: totalEmployeeSso + totalEmployerSso,
-    missingCitizenIdCount,
-    missingSsoMemberNoCount,
-  }
-}
-
-function parseAttachmentUrlsFromInput(raw: string): string[] {
-  const uniq = new Set<string>()
-  for (const token of String(raw || "").split(/[\n,]/g)) {
-    const v = token.trim()
-    if (!v) continue
-    uniq.add(v)
-  }
-  return Array.from(uniq)
-}
-
-function displayNameFromUrl(url: string): string {
-  const raw = String(url || "").trim()
-  if (!raw) return "-"
-  try {
-    const u = new URL(raw)
-    const seg = u.pathname.split("/").filter(Boolean)
-    const last = seg[seg.length - 1] || raw
-    return decodeURIComponent(last)
-  } catch {
-    const seg = raw.split("/").filter(Boolean)
-    return seg[seg.length - 1] || raw
-  }
-}
-
-function parseSsoWorkflowNote(note: string | null | undefined): SsoSubmissionMeta | null {
-  const s = String(note || "").trim()
-  if (!s.startsWith(SSO_WORKFLOW_NOTE_PREFIX)) return null
-  const payload = s.slice(SSO_WORKFLOW_NOTE_PREFIX.length).trim()
-  if (!payload) return null
-  try {
-    const parsed = JSON.parse(payload) as {
-      summaryLine?: unknown
-      memo?: unknown
-      attachmentUrls?: unknown
-      submittedAt?: unknown
-      submittedBy?: unknown
-    }
-    const summaryLine = String(parsed.summaryLine || "").trim() || undefined
-    const memo = String(parsed.memo || "").trim()
-    const attachmentUrls = Array.isArray(parsed.attachmentUrls)
-      ? parsed.attachmentUrls.map((x) => String(x || "").trim()).filter(Boolean)
-      : []
-    const submittedAt = String(parsed.submittedAt || "").trim() || undefined
-    const submittedBy = String(parsed.submittedBy || "").trim() || undefined
-    return { summaryLine, memo, attachmentUrls, submittedAt, submittedBy }
-  } catch {
-    return null
-  }
-}
-
-function buildSsoWorkflowNote(meta: SsoSubmissionMeta & { summaryLine: string }): string {
-  return `${SSO_WORKFLOW_NOTE_PREFIX}${JSON.stringify({
-    summaryLine: meta.summaryLine,
-    memo: meta.memo,
-    attachmentUrls: meta.attachmentUrls,
-    submittedAt: meta.submittedAt || "",
-    submittedBy: meta.submittedBy || "",
-  })}`
-}
-
-function parseEtaxTimestampWorkflowNote(note: string | null | undefined): EtaxTimestampMeta | null {
-  const s = String(note || "").trim()
-  if (!s.startsWith(ETAX_TIMESTAMP_NOTE_PREFIX)) return null
-  const payload = s.slice(ETAX_TIMESTAMP_NOTE_PREFIX.length).trim()
-  if (!payload) return null
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>
-    const bool = (k: string) => Boolean(parsed[k])
-    const parsedStepAudit =
-      parsed.stepAudit && typeof parsed.stepAudit === "object"
-        ? (parsed.stepAudit as Record<string, unknown>)
-        : {}
-    const readStep = (k: EtaxStepKey): { doneAt: string; doneBy: string } | undefined => {
-      const v = parsedStepAudit[k]
-      if (!v || typeof v !== "object") return undefined
-      const o = v as Record<string, unknown>
-      const doneAt = String(o.doneAt || "").trim()
-      const doneBy = String(o.doneBy || "").trim()
-      if (!doneAt || !doneBy) return undefined
-      return { doneAt, doneBy }
-    }
-    const stepAudit: Partial<Record<EtaxStepKey, { doneAt: string; doneBy: string }>> = {}
-    ;(
-      [
-        "applySubmitted",
-        "ko01Printed",
-        "docsUploaded",
-        "emailConfirmed",
-        "activateCodeReceived",
-        "passwordSet",
-        "senderEmailRegistered",
-        "pilotIssued",
-      ] as EtaxStepKey[]
-    ).forEach((k) => {
-      const one = readStep(k)
-      if (one) stepAudit[k] = one
-    })
-    return {
-      taxId: String(parsed.taxId || "").trim(),
-      branchCode: String(parsed.branchCode || "").trim(),
-      rdContactEmail: String(parsed.rdContactEmail || "").trim(),
-      senderGmail: String(parsed.senderGmail || "").trim(),
-      activateCodeRef: String(parsed.activateCodeRef || "").trim(),
-      memo: String(parsed.memo || "").trim(),
-      attachmentUrls: Array.isArray(parsed.attachmentUrls)
-        ? parsed.attachmentUrls.map((x) => String(x || "").trim()).filter(Boolean)
-        : [],
-      applySubmitted: bool("applySubmitted"),
-      ko01Printed: bool("ko01Printed"),
-      docsUploaded: bool("docsUploaded"),
-      emailConfirmed: bool("emailConfirmed"),
-      activateCodeReceived: bool("activateCodeReceived"),
-      passwordSet: bool("passwordSet"),
-      senderEmailRegistered: bool("senderEmailRegistered"),
-      pilotIssued: bool("pilotIssued"),
-      stepAudit,
-      updatedAt: String(parsed.updatedAt || "").trim() || undefined,
-      updatedBy: String(parsed.updatedBy || "").trim() || undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-function buildEtaxTimestampWorkflowNote(meta: EtaxTimestampMeta): string {
-  return `${ETAX_TIMESTAMP_NOTE_PREFIX}${JSON.stringify(meta)}`
-}
-
-function pickPayrollApiMsg(data: { msg?: unknown; message?: unknown }): string {
-  const raw = data.msg ?? data.message
-  if (raw == null || raw === "") return ""
-  return String(raw).trim()
-}
-
-function csvCell(v: unknown): string {
-  const s = String(v ?? "")
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
-  return s
-}
-
-type AdminAccountingComplianceProps = {
-  initialTab?: string
-  hideTabBar?: boolean
-  initialPp30SubView?: "output" | "input" | "settlement" | "wht"
-  /** PP30 영역 표시 모드: all(통합) / vat_only(매출·매입만) / wht_only(원천만) */
-  pp30Mode?: "all" | "vat_only" | "wht_only"
-  /** 원천징수 영역 포커스 모드: all(전체) / pnd1391 / pnd5354 / pp36 */
-  whtFocusMode?: "all" | "pnd1391" | "pnd5354" | "pp36"
-  /** 원천징수 제출형 기본값 */
-  initialWhtSubmissionFormHint?: "PND3" | "PND53" | "ALL"
-  /** 세무 신고 셸과 동기화 시 본문의 중복 년·매장 입력 숨김 */
-  filingYearMonth?: string
-  onFilingYearMonthChange?: (v: string) => void
-  filingStoreFilter?: string
-  onFilingStoreFilterChange?: (v: string) => void
-  /** PP30 화면에서 매장 납세자 정보 탭으로 이동 */
-  onOpenStoreProfiles?: () => void
-  /** 세무 신고 셸 SSO·PP30 필터 카드 검색 버튼 틱 */
-  filingSearchTick?: number
-  /** 세무 신고 셸 PP30 검색 시 PP36 등 하위 섹션 동기 조회 */
-  onFilingSearch?: () => void
-  /** P.P30/P.P36 탭 하단 PP36 임베드 전용 — P.N.D 탭 등 다른 wht_only 화면과 구분 */
-  embeddedPp36Section?: boolean
-  /** 세무 신고 P.N.D.50/51 탭 — 반기·연간 신고 주기 전용 필터 */
-  citFilingShell?: boolean
-}
+import { AccountingCompliancePeriodTab } from "./accounting-compliance-period-tab"
+import { AccountingComplianceSummaryTab } from "./accounting-compliance-summary-tab"
+import { AccountingComplianceSsoTab } from "./accounting-compliance-sso-tab"
 
 export function AdminAccountingCompliance({
   initialTab = "scope",
@@ -759,7 +259,7 @@ export function AdminAccountingCompliance({
   const { stores: franchiseStoreList, posStores, resolveStoreKey, storeLabels, legacyToCanonical, formatStoreLabel } = useStoreList()
   const managerStore = (auth?.store || "").trim()
   const hqUserByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
-  /** 본사·회계만 전 매장; 매장 매니저·가맹은 소속 매장만(본사 store 문자열이어도 역할이 매장이면 전체 조회 불가) */
+  /** ë³¸ì‚¬Â·íšŒê³„ë§Œ ì „ ë§¤ìž¥; ë§¤ìž¥ ë§¤ë‹ˆì €Â·ê°€ë§¹ì€ ì†Œì† ë§¤ìž¥ë§Œ(ë³¸ì‚¬ store ë¬¸ìžì—´ì´ì–´ë„ ì—­í• ì´ ë§¤ìž¥ì´ë©´ ì „ì²´ ì¡°íšŒ ë¶ˆê°€) */
   const isOffice =
     isOfficeRole(role) ||
     isAccountingRole(role) ||
@@ -782,7 +282,7 @@ export function AdminAccountingCompliance({
     onFilingYearMonthChange !== undefined &&
     filingStoreFilter !== undefined &&
     onFilingStoreFilterChange !== undefined
-  /** P.P30/P.P36 탭 하단 PP36 블록만: 중복 필터·PP36 제목·PP30 검색 연동 */
+  /** P.P30/P.P36 íƒ­ í•˜ë‹¨ PP36 ë¸”ë¡ë§Œ: ì¤‘ë³µ í•„í„°Â·PP36 ì œëª©Â·PP30 ê²€ìƒ‰ ì—°ë™ */
   const isEmbeddedPp36Section = embeddedPp36Section === true
 
   const [internalTaxMonth, setInternalTaxMonth] = React.useState(ymNow)
@@ -797,13 +297,13 @@ export function AdminAccountingCompliance({
   const storeTb = externalFiling ? filingStoreFilter : internalStoreTb
   const setStoreTb = externalFiling ? onFilingStoreFilterChange : setInternalStoreTb
 
-  /** POS·원장 API storeFilter — 사용자 선택값 그대로(서버에서 erp_stores로 해석) */
+  /** POSÂ·ì›ìž¥ API storeFilter â€” ì‚¬ìš©ìž ì„ íƒê°’ ê·¸ëŒ€ë¡œ(ì„œë²„ì—ì„œ erp_storesë¡œ í•´ì„) */
   const storeFilterForApi = React.useMemo(() => {
     const s = String(storeTb ?? "").trim()
     if (!s || s === "All" || s === "*") return "All"
     return s
   }, [storeTb])
-  /** 프로필·UI용 canonical store_code */
+  /** í”„ë¡œí•„Â·UIìš© canonical store_code */
   const storeFilterForLedger = React.useMemo(() => {
     if (storeFilterForApi === "All") return "All"
     const r = String(resolveStoreKey(storeFilterForApi) ?? "").trim()
@@ -983,11 +483,11 @@ export function AdminAccountingCompliance({
     citFilingShell ? "half_year" : "monthly"
   )
   const [ledgerStatusFilter, setLedgerStatusFilter] = React.useState<"all" | "draft" | "submitted">("all")
-  /** 법인세 연간: API는 yearMonth의 연도만 사용 — UI는 연도만 고름 */
+  /** ë²•ì¸ì„¸ ì—°ê°„: APIëŠ” yearMonthì˜ ì—°ë„ë§Œ ì‚¬ìš© â€” UIëŠ” ì—°ë„ë§Œ ê³ ë¦„ */
   const [citFiscalYear, setCitFiscalYear] = React.useState(() => Number(ymNow().slice(0, 4)))
-  /** 부가세(ภ.พ.30) 탭: 매출/매입/정산/원천 조회 */
+  /** ë¶€ê°€ì„¸(à¸ .à¸ž.30) íƒ­: ë§¤ì¶œ/ë§¤ìž…/ì •ì‚°/ì›ì²œ ì¡°íšŒ */
   const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "settlement" | "wht">(initialPp30SubView)
-  /** P.N.D.53/54 탭: 법인 원천(53) / 해외 지급(54) 신고 분리 */
+  /** P.N.D.53/54 íƒ­: ë²•ì¸ ì›ì²œ(53) / í•´ì™¸ ì§€ê¸‰(54) ì‹ ê³  ë¶„ë¦¬ */
   const [pnd5354SubView, setPnd5354SubView] = React.useState<"pnd53" | "pnd54">("pnd53")
   const [vatOutputViewMode, setVatOutputViewMode] = React.useState<"vendor" | "detail">("vendor")
   const [vatInputViewMode, setVatInputViewMode] = React.useState<"vendor" | "detail">("vendor")
@@ -1002,7 +502,7 @@ export function AdminAccountingCompliance({
   )
   const [taxSummary, setTaxSummary] = React.useState<ThaiTaxFilingSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = React.useState(false)
-  /** 부가세(PP30) 요약 탭: 조건 변경 시 초기화, 검색 후에만 API 조회 */
+  /** ë¶€ê°€ì„¸(PP30) ìš”ì•½ íƒ­: ì¡°ê±´ ë³€ê²½ ì‹œ ì´ˆê¸°í™”, ê²€ìƒ‰ í›„ì—ë§Œ API ì¡°íšŒ */
   const [pp30Queried, setPp30Queried] = React.useState(false)
   const [pp30SearchSeq, setPp30SearchSeq] = React.useState(0)
   const [pp30XlsxExporting, setPp30XlsxExporting] = React.useState(false)
@@ -1039,7 +539,7 @@ export function AdminAccountingCompliance({
   const [ssoStoreFilter, setSsoStoreFilter] = React.useState(() =>
     isManager && managerStore ? managerStore : "All"
   )
-  /** SSO 탭: 조건 변경 시 초기화, 검색 후에만 급여·요약 표시 */
+  /** SSO íƒ­: ì¡°ê±´ ë³€ê²½ ì‹œ ì´ˆê¸°í™”, ê²€ìƒ‰ í›„ì—ë§Œ ê¸‰ì—¬Â·ìš”ì•½ í‘œì‹œ */
   const [ssoQueried, setSsoQueried] = React.useState(false)
   const [ssoPayrollLoading, setSsoPayrollLoading] = React.useState(false)
   const [ssoPayrollExporting, setSsoPayrollExporting] = React.useState(false)
@@ -2464,7 +1964,7 @@ export function AdminAccountingCompliance({
           postedBy: auth.user || undefined,
         })
       } catch {
-        /* submission still recorded; user can retry 지급예정 반영 */
+        /* submission still recorded; user can retry ì§€ê¸‰ì˜ˆì • ë°˜ì˜ */
       }
       const effectiveStore = isManager && managerStore ? managerStore : pickStore
       const summaryLine = `SSO rows=${preview.rowCount}, employee_sso=${Math.round(
@@ -2583,7 +2083,7 @@ export function AdminAccountingCompliance({
       return
     }
     if (!pp30Queried) return
-    // summary 탭 재조회는 summaryEffect가 담당한다(중복 호출 방지).
+    // summary íƒ­ ìž¬ì¡°íšŒëŠ” summaryEffectê°€ ë‹´ë‹¹í•œë‹¤(ì¤‘ë³µ í˜¸ì¶œ ë°©ì§€).
     if (tab === "summary") return
     setPp30Queried(false)
     setVatRows([])
@@ -2941,7 +2441,7 @@ export function AdminAccountingCompliance({
             .join("\n")
           const more =
             Number(res.pendingEvidenceCount || rows.length) > rows.length
-              ? `\n... +${Number(res.pendingEvidenceCount || 0) - rows.length}건`
+              ? `\n... +${Number(res.pendingEvidenceCount || 0) - rows.length}ê±´`
               : ""
           await appAlert(
             `${t("accCompEvidencePendingInMonth")}\n\n${preview || t("accCompEvidenceRequiredForSubmit")}${more}`
@@ -3667,7 +3167,7 @@ export function AdminAccountingCompliance({
       const branchOfficeLabel = (() => {
         const st = String(storeTb || "").trim()
         if (st && st !== "All") return `${st} ${branchNo}`.trim()
-        return branchNo ? `สำนักงานใหญ่ ${branchNo}` : ""
+        return branchNo ? `à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¹ƒà¸«à¸à¹ˆ ${branchNo}` : ""
       })()
       const companyBlock = {
         companyName,
@@ -3691,13 +3191,13 @@ export function AdminAccountingCompliance({
       }
       const periodDescriptionLine =
         taxSummary?.period && taxSummary.period.startMonth !== taxSummary.period.endMonth
-          ? `สำหรับงวดภาษี ${summaryPeriodLabel}`
+          ? `à¸ªà¸³à¸«à¸£à¸±à¸šà¸‡à¸§à¸”à¸ à¸²à¸©à¸µ ${summaryPeriodLabel}`
           : mod.formatThaiVatPeriodLine(taxMonth)
       let filingRound = mod.filingRoundLabelFromTaxMonth(taxMonth)
       if (taxSummary?.period?.startMonth && taxSummary?.period?.endMonth) {
         const a = taxSummary.period.startMonth
         const b = taxSummary.period.endMonth
-        if (a !== b) filingRound = `${a.slice(5, 7)}-${a.slice(0, 4)} ~ ${b.slice(5, 7)}-${b.slice(0, 4)} (ยื่นปกติ)`
+        if (a !== b) filingRound = `${a.slice(5, 7)}-${a.slice(0, 4)} ~ ${b.slice(5, 7)}-${b.slice(0, 4)} (à¸¢à¸·à¹ˆà¸™à¸›à¸à¸•à¸´)`
       }
       const toLedger = (r: VatDraft): VatLedgerRow => ({
         id: r.id,
@@ -3731,7 +3231,7 @@ export function AdminAccountingCompliance({
           inputVat: vatSettlement.inputVat,
         },
         filingStatusLabel: (fs) =>
-          String(fs || "").toLowerCase() === "submitted" ? "ยื่นแล้ว" : "รอยื่นแบบภาษี",
+          String(fs || "").toLowerCase() === "submitted" ? "à¸¢à¸·à¹ˆà¸™à¹à¸¥à¹‰à¸§" : "à¸£à¸­à¸¢à¸·à¹ˆà¸™à¹à¸šà¸šà¸ à¸²à¸©à¸µ",
         filingRoundLabel: filingRound,
       })
       const blob = new Blob([buf], {
@@ -4023,31 +3523,31 @@ export function AdminAccountingCompliance({
     [auth?.user]
   )
   const pnd1RdPrepBtnLabel =
-    lang === "th" ? "ส่งออก RD Prep ภ.ง.ด.1 TXT" : t("accCompPnd1ExportTxt")
+    lang === "th" ? "à¸ªà¹ˆà¸‡à¸­à¸­à¸ RD Prep à¸ .à¸‡.à¸”.1 TXT" : t("accCompPnd1ExportTxt")
   const pnd1RdPrepGuideTitle =
-    lang === "th" ? "แนวทางยื่น RD Prep (ภ.ง.ด.1 / ภ.ง.ด.1ก)" : t("accCompPnd1GuideTitle")
+    lang === "th" ? "à¹à¸™à¸§à¸—à¸²à¸‡à¸¢à¸·à¹ˆà¸™ RD Prep (à¸ .à¸‡.à¸”.1 / à¸ .à¸‡.à¸”.1à¸)" : t("accCompPnd1GuideTitle")
   const pnd1RdPrepGuideNote =
     lang === "th"
-      ? "ไฟล์นี้เป็นแบบคั่นด้วย | เพื่อนำเข้าใน RD Prep โดยแมปคอลัมน์ในขั้นตอนโอนย้ายข้อมูล"
+      ? "à¹„à¸Ÿà¸¥à¹Œà¸™à¸µà¹‰à¹€à¸›à¹‡à¸™à¹à¸šà¸šà¸„à¸±à¹ˆà¸™à¸”à¹‰à¸§à¸¢ | à¹€à¸žà¸·à¹ˆà¸­à¸™à¸³à¹€à¸‚à¹‰à¸²à¹ƒà¸™ RD Prep à¹‚à¸”à¸¢à¹à¸¡à¸›à¸„à¸­à¸¥à¸±à¸¡à¸™à¹Œà¹ƒà¸™à¸‚à¸±à¹‰à¸™à¸•à¸­à¸™à¹‚à¸­à¸™à¸¢à¹‰à¸²à¸¢à¸‚à¹‰à¸­à¸¡à¸¹à¸¥"
       : t("accCompPnd1GuideNotePipe")
   const pnd1ValidateBtnLabel =
-    lang === "th" ? "ตรวจสอบก่อนส่งออก" : t("accCompPnd1ValidateBeforeExport")
+    lang === "th" ? "à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸à¹ˆà¸­à¸™à¸ªà¹ˆà¸‡à¸­à¸­à¸" : t("accCompPnd1ValidateBeforeExport")
   const pnd1FormLabel =
-    lang === "th" ? "แบบยื่น" : t("accCompPnd1FilingForm")
+    lang === "th" ? "à¹à¸šà¸šà¸¢à¸·à¹ˆà¸™" : t("accCompPnd1FilingForm")
   const pnd1PayerBoxTitle =
-    lang === "th" ? "ข้อมูลผู้จ่าย (ผู้หัก ณ ที่จ่าย)" : t("accCompPnd1PayerInfoBox")
+    lang === "th" ? "à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸œà¸¹à¹‰à¸ˆà¹ˆà¸²à¸¢ (à¸œà¸¹à¹‰à¸«à¸±à¸ à¸“ à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢)" : t("accCompPnd1PayerInfoBox")
   const pnd1ValidationTableTitle =
-    lang === "th" ? "ผลตรวจสอบ RD Prep" : t("accCompPnd1ValidationResults")
+    lang === "th" ? "à¸œà¸¥à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š RD Prep" : t("accCompPnd1ValidationResults")
   const pnd1GoLedgerBtnLabel =
-    lang === "th" ? "ไปที่รายการ" : t("accCompPnd1GoToLedgerRow")
+    lang === "th" ? "à¹„à¸›à¸—à¸µà¹ˆà¸£à¸²à¸¢à¸à¸²à¸£" : t("accCompPnd1GoToLedgerRow")
   const pnd1ClearValidationLabel =
-    lang === "th" ? "ล้างผลตรวจสอบ" : t("accCompPnd1ClearValidation")
+    lang === "th" ? "à¸¥à¹‰à¸²à¸‡à¸œà¸¥à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š" : t("accCompPnd1ClearValidation")
   const pnd1IssueFilterLabel =
-    lang === "th" ? "ตัวกรองปัญหา" : t("accCompPnd1IssueFilter")
+    lang === "th" ? "à¸•à¸±à¸§à¸à¸£à¸­à¸‡à¸›à¸±à¸à¸«à¸²" : t("accCompPnd1IssueFilter")
   const pnd1IssueExportCsvLabel =
-    lang === "th" ? "ส่งออกผลตรวจสอบ CSV" : t("accCompPnd1ExportValidationCsv")
+    lang === "th" ? "à¸ªà¹ˆà¸‡à¸­à¸­à¸à¸œà¸¥à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š CSV" : t("accCompPnd1ExportValidationCsv")
   const pnd1NoIssueTooltip =
-    lang === "th" ? "ไม่มีปัญหาประเภทนี้ในช่วงที่เลือก" : t("accCompPnd1NoIssuesInFilter")
+    lang === "th" ? "à¹„à¸¡à¹ˆà¸¡à¸µà¸›à¸±à¸à¸«à¸²à¸›à¸£à¸°à¹€à¸ à¸—à¸™à¸µà¹‰à¹ƒà¸™à¸Šà¹ˆà¸§à¸‡à¸—à¸µà¹ˆà¹€à¸¥à¸·à¸­à¸" : t("accCompPnd1NoIssuesInFilter")
   const kt20kExportUrl = React.useMemo(() => {
     const y = Number(kt20kYear)
     if (!Number.isFinite(y) || y < 2000 || y > 2100) return "#"
@@ -4056,13 +3556,13 @@ export function AdminAccountingCompliance({
   const pnd1IssueCodeLabel = React.useCallback(
     (code: string) => {
       const th: Record<string, string> = {
-        missing_payee_name: "ไม่มีชื่อผู้รับเงิน",
-        missing_payee_tax_id: "ไม่มีเลขผู้เสียภาษีผู้รับเงิน",
-        invalid_payee_tax_id_length: "เลขผู้เสียภาษีผู้รับเงินไม่ครบ 13 หลัก",
-        missing_payment_date: "ไม่มีวันที่จ่าย",
-        invalid_payment_date: "รูปแบบวันที่จ่ายไม่ถูกต้อง",
-        missing_income_type: "ไม่มีประเภทเงินได้",
-        non_positive_withheld_amount: "ภาษีหัก ณ ที่จ่าย <= 0",
+        missing_payee_name: "à¹„à¸¡à¹ˆà¸¡à¸µà¸Šà¸·à¹ˆà¸­à¸œà¸¹à¹‰à¸£à¸±à¸šà¹€à¸‡à¸´à¸™",
+        missing_payee_tax_id: "à¹„à¸¡à¹ˆà¸¡à¸µà¹€à¸¥à¸‚à¸œà¸¹à¹‰à¹€à¸ªà¸µà¸¢à¸ à¸²à¸©à¸µà¸œà¸¹à¹‰à¸£à¸±à¸šà¹€à¸‡à¸´à¸™",
+        invalid_payee_tax_id_length: "à¹€à¸¥à¸‚à¸œà¸¹à¹‰à¹€à¸ªà¸µà¸¢à¸ à¸²à¸©à¸µà¸œà¸¹à¹‰à¸£à¸±à¸šà¹€à¸‡à¸´à¸™à¹„à¸¡à¹ˆà¸„à¸£à¸š 13 à¸«à¸¥à¸±à¸",
+        missing_payment_date: "à¹„à¸¡à¹ˆà¸¡à¸µà¸§à¸±à¸™à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢",
+        invalid_payment_date: "à¸£à¸¹à¸›à¹à¸šà¸šà¸§à¸±à¸™à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢à¹„à¸¡à¹ˆà¸–à¸¹à¸à¸•à¹‰à¸­à¸‡",
+        missing_income_type: "à¹„à¸¡à¹ˆà¸¡à¸µà¸›à¸£à¸°à¹€à¸ à¸—à¹€à¸‡à¸´à¸™à¹„à¸”à¹‰",
+        non_positive_withheld_amount: "à¸ à¸²à¸©à¸µà¸«à¸±à¸ à¸“ à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢ <= 0",
       }
       if (lang === "th") return th[code] || code
       const key = `accCompPnd1Issue_${code}`
@@ -4156,11 +3656,11 @@ export function AdminAccountingCompliance({
   const kt20kReasonTagLabel = React.useCallback(
     (tag: string) => {
       const th: Record<string, string> = {
-        missing_in_pnd1a: "ไม่มีใน PND1A",
-        missing_in_kt20k: "ไม่มีใน KT20K",
-        amount_mismatch: "ยอดไม่ตรงกัน",
-        possible_store_mismatch: "อาจแมปสาขาผิด",
-        possible_name_mismatch: "อาจแมปชื่อผิด",
+        missing_in_pnd1a: "à¹„à¸¡à¹ˆà¸¡à¸µà¹ƒà¸™ PND1A",
+        missing_in_kt20k: "à¹„à¸¡à¹ˆà¸¡à¸µà¹ƒà¸™ KT20K",
+        amount_mismatch: "à¸¢à¸­à¸”à¹„à¸¡à¹ˆà¸•à¸£à¸‡à¸à¸±à¸™",
+        possible_store_mismatch: "à¸­à¸²à¸ˆà¹à¸¡à¸›à¸ªà¸²à¸‚à¸²à¸œà¸´à¸”",
+        possible_name_mismatch: "à¸­à¸²à¸ˆà¹à¸¡à¸›à¸Šà¸·à¹ˆà¸­à¸œà¸´à¸”",
       }
       if (lang === "th") return th[tag] || tag
       const key = `accCompKt20kTag_${tag}`
@@ -4268,12 +3768,12 @@ export function AdminAccountingCompliance({
         wc.nonPositiveWithheldAmount
       appAlert(
         warningTotal > 0
-          ? `PND3/53 검증 경고 ${warningTotal.toLocaleString()}건`
-          : "PND3/53 검증 완료 (경고 없음)"
+          ? `PND3/53 ê²€ì¦ ê²½ê³  ${warningTotal.toLocaleString()}ê±´`
+          : "PND3/53 ê²€ì¦ ì™„ë£Œ (ê²½ê³  ì—†ìŒ)"
       )
     } catch {
       setPnd353ValidationResult(null)
-      appAlert("PND3/53 검증에 실패했습니다.")
+      appAlert("PND3/53 ê²€ì¦ì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤.")
     } finally {
       setPnd353Validating(false)
     }
@@ -4325,7 +3825,7 @@ export function AdminAccountingCompliance({
           .map((x) => (x.storeName ? `${x.storeName}/${x.payeeName || '-'}` : x.payeeName || '-'))
           .join(', ')
         appAlert(
-          `${t("accCompTinGapCheckDone")}: ${data.gapRowCount.toLocaleString()} · ${t("accCompImpactedEmployees")} ${data.uniqueEmployeeCount.toLocaleString()}\n` +
+          `${t("accCompTinGapCheckDone")}: ${data.gapRowCount.toLocaleString()} Â· ${t("accCompImpactedEmployees")} ${data.uniqueEmployeeCount.toLocaleString()}\n` +
             (sample ? `${t("example")}: ${sample}` : "")
         )
       } else {
@@ -4560,7 +4060,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "เทียบยอด KT20K vs PND1A" : t("accCompKt20kVsPnd1aTitle")}
+                {lang === "th" ? "à¹€à¸—à¸µà¸¢à¸šà¸¢à¸­à¸” KT20K vs PND1A" : t("accCompKt20kVsPnd1aTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -4568,7 +4068,7 @@ export function AdminAccountingCompliance({
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "เกณฑ์ส่วนต่าง (บาท)" : t("accCompKt20kDiffToleranceLabel")}
+                      {lang === "th" ? "à¹€à¸à¸“à¸‘à¹Œà¸ªà¹ˆà¸§à¸™à¸•à¹ˆà¸²à¸‡ (à¸šà¸²à¸—)" : t("accCompKt20kDiffToleranceLabel")}
                     </div>
                     <Input
                       type="number"
@@ -4630,7 +4130,7 @@ export function AdminAccountingCompliance({
                         {!kt20kMonthlyDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "ไม่พบส่วนต่างตามเกณฑ์" : t("accCompKt20kNoMonthlyDiff")}
+                              {lang === "th" ? "à¹„à¸¡à¹ˆà¸žà¸šà¸ªà¹ˆà¸§à¸™à¸•à¹ˆà¸²à¸‡à¸•à¸²à¸¡à¹€à¸à¸“à¸‘à¹Œ" : t("accCompKt20kNoMonthlyDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -4640,7 +4140,7 @@ export function AdminAccountingCompliance({
 
                   <div className="space-y-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "ตัวกรองแท็กสาเหตุ" : t("accCompKt20kReasonTagQuickFilter")}
+                      {lang === "th" ? "à¸•à¸±à¸§à¸à¸£à¸­à¸‡à¹à¸—à¹‡à¸à¸ªà¸²à¹€à¸«à¸•à¸¸" : t("accCompKt20kReasonTagQuickFilter")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <Button
@@ -4649,7 +4149,7 @@ export function AdminAccountingCompliance({
                         variant={kt20kReasonTagFilter.length === 0 ? "default" : "outline"}
                         onClick={() => setKt20kReasonTagFilter([])}
                       >
-                        {lang === "th" ? "ทั้งหมด" : t("all")}
+                        {lang === "th" ? "à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”" : t("all")}
                       </Button>
                       {KT20K_REASON_TAGS.map((tag) => {
                         const cnt = kt20kReasonTagCountMap[tag] || 0
@@ -4664,7 +4164,7 @@ export function AdminAccountingCompliance({
                             title={
                               cnt === 0
                                 ? lang === "th"
-                                  ? "ไม่พบรายการในเงื่อนไขปัจจุบัน"
+                                  ? "à¹„à¸¡à¹ˆà¸žà¸šà¸£à¸²à¸¢à¸à¸²à¸£à¹ƒà¸™à¹€à¸‡à¸·à¹ˆà¸­à¸™à¹„à¸‚à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™"
                                   : t("accCompKt20kNoTagInFilter")
                                 : ""
                             }
@@ -4718,7 +4218,7 @@ export function AdminAccountingCompliance({
                         {!kt20kEmployeeDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "ไม่พบส่วนต่างรายบุคคล" : t("accCompKt20kNoEmployeeDiff")}
+                              {lang === "th" ? "à¹„à¸¡à¹ˆà¸žà¸šà¸ªà¹ˆà¸§à¸™à¸•à¹ˆà¸²à¸‡à¸£à¸²à¸¢à¸šà¸¸à¸„à¸„à¸¥" : t("accCompKt20kNoEmployeeDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -4728,7 +4228,7 @@ export function AdminAccountingCompliance({
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  {lang === "th" ? "ยังไม่มีข้อมูลเทียบยอด" : t("accCompKt20kNoReconcileData")}
+                  {lang === "th" ? "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹€à¸—à¸µà¸¢à¸šà¸¢à¸­à¸”" : t("accCompKt20kNoReconcileData")}
                 </div>
               )}
             </CardContent>
@@ -4816,810 +4316,102 @@ export function AdminAccountingCompliance({
         </TabsContent>
 
         <TabsContent value="period" className={tabsContentClass}>
-          <div className="text-[11px] text-muted-foreground mb-2">
-            {t("accCompPeriodLockRoleHint")}
-            {storeTb && storeTb !== "All" ? (
-              <span className="block mt-1">
-                {t("store")}: <span className="font-mono">{storeTb}</span>
-              </span>
-            ) : (
-              <span className="block mt-1">{t("accCompVatPeriodPickStoreForLock")}</span>
-            )}
-          </div>
-          <Card>
-            <CardContent className="pt-6 overflow-x-auto">
-              <div className="mb-3 grid grid-cols-1 lg:grid-cols-2 gap-2 text-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompUnlockReasonRequired")}</div>
-                  <Input
-                    className="h-9"
-                    value={periodUnlockReason}
-                    onChange={(e) => setPeriodUnlockReason(e.target.value)}
-                    placeholder={t("accCompUnlockReasonPlaceholder")}
-                  />
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompUnlockApprover")}</div>
-                  <Input
-                    className="h-9"
-                    value={periodUnlockApprovedBy}
-                    onChange={(e) => setPeriodUnlockApprovedBy(e.target.value)}
-                    placeholder={t("accCompUnlockApproverPlaceholder")}
-                  />
-                </div>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2">{t("accCompColYearMonth")}</th>
-                    <th className="text-left p-2">{t("accCompColStatus")}</th>
-                    <th className="text-right p-2"> </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {periods.map((p) => (
-                    <tr key={p.yearMonth} className="border-b border-border/60">
-                      <td className="p-2 font-mono">{p.yearMonth}</td>
-                      <td className="p-2">
-                        {p.isClosed ? (
-                          <span className="text-amber-600">{t("accCompPeriodClosedLabel")}</span>
-                        ) : (
-                          <span className="text-muted-foreground">{t("accCompPeriodProgress")}</span>
-                        )}
-                        {!p.isClosed && p.unlockedAt ? (
-                          <div className="text-[11px] text-muted-foreground mt-1">
-                            {t("accCompUnlockedAt")}: {formatBangkokDateTime(String(p.unlockedAt || ""))}
-                            {p.unlockApprovedBy ? ` / ${t("approval")} ${p.unlockApprovedBy}` : ""}
-                            {p.unlockReason ? ` / ${p.unlockReason}` : ""}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="p-2 text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={p.isClosed ? "secondary" : "default"}
-                          onClick={() => void togglePeriod(p.yearMonth, !p.isClosed)}
-                          disabled={p.isClosed ? !canApproveUnlock : !canApproveCompliance}
-                        >
-                          {p.isClosed ? t("accCompPeriodOpen") : t("accCompPeriodClose")}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-          <Card className="mt-3">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("accCompHealthCheckTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="secondary" onClick={() => void loadAccountingHealth()} disabled={accountingHealthLoading}>
-                  {accountingHealthLoading ? t("loading") : t("accCompReloadReconcile")}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {t("accCompHealthBase")}: {closingYearMonth} / {t("store")}: {storeTb}
-                </span>
-              </div>
-              {accountingHealth ? (
-                <div className="rounded border border-border/60 p-3 space-y-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
-                    <div>{t("accCompTbRevenue4xx")}: {accountingHealth.tbRevenue.toLocaleString()}</div>
-                    <div>{t("accCompTbExpense5xx")}: {accountingHealth.tbExpense.toLocaleString()}</div>
-                    <div>{t("accCompTbNetIncome")}: {accountingHealth.tbNetIncome.toLocaleString()}</div>
-                    <div>{t("accCompIncomeStatementNetIncome")}: {accountingHealth.incomeNetProfit.toLocaleString()}</div>
-                    <div>{t("accCompBsCurrentPeriodProfit")}: {accountingHealth.bsCurrentPeriodProfit.toLocaleString()}</div>
-                    <div>{t("accCompClosingPreviewNetIncome")}: {accountingHealth.closingPreviewNetIncome.toLocaleString()}</div>
-                    <div>{t("accCompNetIncomeDiffTbIncome")}: {accountingHealth.netDiff.toLocaleString()}</div>
-                    <div>{t("accCompNetIncomeDiffTbBs")}: {accountingHealth.bsDiff.toLocaleString()}</div>
-                    <div>{t("accCompNetIncomeDiffTbClosing")}: {accountingHealth.closingDiff.toLocaleString()}</div>
-                    <div>{t("accCompTrialBalanceDiff")}: {accountingHealth.tbDiff.toLocaleString()}</div>
-                  </div>
-                  {Math.abs(accountingHealth.netDiff) > 0.0001 ||
-                  Math.abs(accountingHealth.bsDiff) > 0.0001 ||
-                  Math.abs(accountingHealth.closingDiff) > 0.0001 ||
-                  Math.abs(accountingHealth.tbDiff) > 0.0001 ? (
-                    <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-                      {t("accCompHealthDiffDetected")}
-                    </div>
-                  ) : (
-                    <div className="rounded border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">
-                      {t("accCompHealthAligned")}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">{t("accCompHealthLoadFailed")}</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card className="mt-3">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("accCompClosingFlowTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex flex-wrap gap-2 items-end">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                  <Input
-                    type="month"
-                    className="h-9 w-[160px]"
-                    value={closingYearMonth}
-                    onChange={(e) => setClosingYearMonth(e.target.value)}
-                  />
-                </div>
-                {isOffice ? (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                    <Select value={storeTb} onValueChange={setStoreTb}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {storeOptions.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {storeOptionLabel(s)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompClosingProfitLossAccount")}</div>
-                  <Input
-                    className="h-9 w-[120px] font-mono"
-                    value={closingProfitLossAccountCode}
-                    onChange={(e) => setClosingProfitLossAccountCode(e.target.value)}
-                    placeholder="3120"
-                  />
-                </div>
-                <Button type="button" variant="secondary" onClick={() => void loadIncomeExpenseClosingPreview()} disabled={closingLoading}>
-                  {closingLoading ? t("loading") : t("search")}
-                </Button>
-                <a href={closingAuditCsvUrl} target="_blank" rel="noreferrer" className="inline-flex">
-                  <Button type="button" variant="outline" className="h-9">
-                    {t("accCompAuditCsv")}
-                    <ExternalLink className="ml-1 h-3.5 w-3.5" />
-                  </Button>
-                </a>
-              </div>
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">{t("accCompClosingMemoLabel")}</div>
-                <Textarea
-                  className="min-h-[72px]"
-                  value={closingMemo}
-                  onChange={(e) => setClosingMemo(e.target.value)}
-                  placeholder={t("accCompClosingMemoPlaceholder")}
-                />
-                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={closingAutoLock}
-                    onChange={(e) => setClosingAutoLock(e.target.checked)}
-                  />
-                  {t("accCompClosingAutoLock")}
-                </label>
-              </div>
-              {closingPreview ? (
-                <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                    <div>{t("accCompClosingRevenueTotal")}: {closingPreview.revenueTotal.toLocaleString()}</div>
-                    <div>{t("accCompClosingExpenseTotal")}: {closingPreview.expenseTotal.toLocaleString()}</div>
-                    <div>{t("accCompClosingNetIncome")}: {closingPreview.netIncome.toLocaleString()}</div>
-                    <div>{t("accCompClosingGeneratedLineCount")}: {closingPreview.lineCount.toLocaleString()}</div>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {t("accCompClosingProfitLossAccountApplied")}: {closingPreview.profitLossAccountCode} (
-                    {closingPreview.profitLossAccountName})
-                  </div>
-                  <div className="overflow-x-auto rounded border border-border/60">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left p-2">{t("accCompAccountCode")}</th>
-                          <th className="text-left p-2">{t("accCompAccountName")}</th>
-                          <th className="text-left p-2">{t("accCompDebitCredit")}</th>
-                          <th className="text-right p-2">{t("amount")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {closingPreview.lines.slice(0, 200).map((ln, i) => (
-                          <tr key={`${ln.accountCode}-${ln.side}-${i}`} className="border-b border-border/40">
-                            <td className="p-2 font-mono">{ln.accountCode}</td>
-                            <td className="p-2">{ln.accountName || "-"}</td>
-                            <td className="p-2">{ln.side === "debit" ? t("accCompDebit") : t("accCompCredit")}</td>
-                            <td className="p-2 text-right">{ln.amount.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void saveIncomeExpenseClosingDraftNow()}
-                      disabled={closingDraftSaving || closingPosting}
-                    >
-                      {closingDraftSaving ? t("loading") : t("accCompClosingSaveDraft")}
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => void runIncomeExpenseClosing(false)}
-                      disabled={closingPosting || closingPreview.lineCount === 0 || !canApproveCompliance}
-                    >
-                      {closingPosting ? t("loading") : t("accCompClosingRunApproved")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void runIncomeExpenseClosing(true)}
-                      disabled={closingPosting || closingPreview.lineCount === 0 || !canApproveCompliance}
-                    >
-                      {closingPosting ? t("loading") : t("accCompClosingRerunAfterReset")}
-                    </Button>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {t("accCompClosingLatestDraft")}:{" "}
-                    {closingDraft?.created_at ? formatBangkokDateTime(String(closingDraft.created_at)) : "-"}
-                    {closingDraft?.created_by ? ` / ${closingDraft.created_by}` : ""}
-                    {closingDraft?.memo ? ` / ${closingDraft.memo}` : ""}
-                  </div>
-                  {closingDraftDiff ? (
-                    <div className="rounded border border-border/60 p-2">
-                      <div className="text-xs font-medium mb-1">{t("accCompClosingDiffVsDraft")}</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-[11px]">
-                        <div>{t("accCompClosingRevenueDiff")}: {closingDraftDiff.revenueDiff.toLocaleString()}</div>
-                        <div>{t("accCompClosingExpenseDiff")}: {closingDraftDiff.expenseDiff.toLocaleString()}</div>
-                        <div>{t("accCompClosingNetIncomeDiff")}: {closingDraftDiff.netIncomeDiff.toLocaleString()}</div>
-                        <div>{t("accCompClosingLineDiff")}: {closingDraftDiff.lineCountDiff.toLocaleString()}</div>
-                        <div>{t("accCompClosingChangedItems")}: {closingDraftDiff.changedCount.toLocaleString()}</div>
-                      </div>
-                      {closingDraftDiff.changedSample.length ? (
-                        <div className="mt-2 text-[11px] text-muted-foreground">
-                          {closingDraftDiff.changedSample.map((item) => (
-                            <div key={item.key}>
-                              {item.key} / {t("accCompCurrent")} {item.current.toLocaleString()} / {t("accCompDraft")}{" "}
-                              {item.draft.toLocaleString()} / {t("accCompDiff")}{" "}
-                              {item.diff.toLocaleString()}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className="text-[11px] text-muted-foreground">
-                    {t("accCompClosingLatestPosting")}: {closingPosted?.entry_no || "-"} /{" "}
-                    {formatBangkokDateTime(String(closingPosted?.posted_at || ""))}
-                    {closingPosted?.posted_by ? ` / ${closingPosted.posted_by}` : ""}
-                  </div>
-                  <div className="rounded border border-border/60 p-2">
-                    <div className="text-xs font-medium mb-1">{t("accCompClosingDocHistoryRecent30")}</div>
-                    {closingHistory.length ? (
-                      <div className="space-y-1 text-[11px]">
-                        {closingHistory.map((h) => (
-                          <div key={String(h.id)} className="border-b border-border/40 pb-1">
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                              <span>{h.status || "-"}</span>
-                              <span>[{h.store_scope || "-"}]</span>
-                              <span>{formatBangkokDateTime(String(h.created_at || ""))}</span>
-                              <span>{h.created_by || "-"}</span>
-                              <span>
-                                {t("accCompClosingNetIncomeShort")} {Number(h.net_income || 0).toLocaleString()}
-                              </span>
-                              {h.journal_entry_id ? <span>JE #{h.journal_entry_id}</span> : null}
-                              {h.memo ? <span className="text-muted-foreground">{h.memo}</span> : null}
-                              {Array.isArray((h.payload as { lines?: unknown[] } | null)?.lines) ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-[10px]"
-                                  onClick={() => setClosingHistoryExpandedId(closingHistoryExpandedId === Number(h.id || 0) ? null : Number(h.id || 0))}
-                                >
-                                  {closingHistoryExpandedId === Number(h.id || 0) ? t("collapse") : t("viewDetails")}
-                                </Button>
-                              ) : null}
-                            </div>
-                            {closingHistoryExpandedId === Number(h.id || 0) &&
-                            Array.isArray((h.payload as { lines?: unknown[] } | null)?.lines) ? (
-                              <div className="mt-1 overflow-x-auto rounded border border-border/50">
-                                <table className="w-full text-[10px]">
-                                  <thead>
-                                    <tr className="border-b bg-muted/30">
-                                      <th className="text-left p-1">{t("code")}</th>
-                                      <th className="text-left p-1">{t("account")}</th>
-                                      <th className="text-left p-1">{t("accCompDebitCredit")}</th>
-                                      <th className="text-right p-1">{t("amount")}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {((h.payload as IncomeExpenseClosingPreview).lines || []).slice(0, 80).map((ln, idx) => (
-                                      <tr key={`${ln.accountCode}-${ln.side}-${idx}`} className="border-b border-border/30">
-                                        <td className="p-1 font-mono">{ln.accountCode}</td>
-                                        <td className="p-1">{ln.accountName || "-"}</td>
-                                        <td className="p-1">{ln.side === "debit" ? t("accCompDebit") : t("accCompCredit")}</td>
-                                        <td className="p-1 text-right">{Number(ln.amount || 0).toLocaleString()}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[11px] text-muted-foreground">{t("accCompClosingDocHistoryEmpty")}</div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">{t("accCompClosingRunSearchForPreview")}</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card className="mt-3">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("accCompComplianceAuditLogTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex flex-wrap gap-2 items-end">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                  <Input
-                    type="month"
-                    className="h-9 w-[160px]"
-                    value={auditYearMonth}
-                    onChange={(e) => setAuditYearMonth(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompAuditFilterDecision")}</div>
-                  <Select value={auditDecision} onValueChange={(v) => setAuditDecision(v as "all" | "allow" | "deny" | "error")}>
-                    <SelectTrigger className="h-9 w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("all")}</SelectItem>
-                      <SelectItem value="allow">{t("accCompDecisionAllow")}</SelectItem>
-                      <SelectItem value="deny">{t("accCompDecisionDeny")}</SelectItem>
-                      <SelectItem value="error">{t("accCompDecisionError")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompAuditActionKeywordLabel")}</div>
-                  <Input
-                    className="h-9 w-[220px]"
-                    value={auditActionKeyword}
-                    onChange={(e) => setAuditActionKeyword(e.target.value)}
-                    placeholder={t("accCompAuditActionKeywordPh")}
-                  />
-                </div>
-                <Button type="button" variant="secondary" onClick={() => void loadComplianceAuditLogs()} disabled={auditLoading}>
-                  {auditLoading ? t("loading") : t("accCompAuditQueryButton")}
-                </Button>
-                <a href={complianceAuditCsvUrl} target="_blank" rel="noreferrer" className="inline-flex">
-                  <Button type="button" variant="outline" className="h-9">
-                    {t("accCompAuditCsv")}
-                    <ExternalLink className="ml-1 h-3.5 w-3.5" />
-                  </Button>
-                </a>
-              </div>
-              {auditFallbackUsed ? (
-                <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-                  {t("accCompAuditTableMissingFallback")}
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-                <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiTotalCount")}</div>
-                  <div className="text-sm font-semibold">{auditKpi.total.toLocaleString()}</div>
-                </div>
-                <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiAllowShort")}</div>
-                  <div className="text-sm font-semibold text-emerald-700">{auditKpi.allowCount.toLocaleString()}</div>
-                </div>
-                <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiDenyShort")}</div>
-                  <div className="text-sm font-semibold text-amber-700">{auditKpi.denyCount.toLocaleString()}</div>
-                </div>
-                <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiErrorShort")}</div>
-                  <div className="text-sm font-semibold text-rose-700">{auditKpi.errorCount.toLocaleString()}</div>
-                </div>
-                <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditDenyRateShort")}</div>
-                  <div className="text-sm font-semibold">{auditKpi.denyRate.toFixed(1)}%</div>
-                </div>
-                <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditErrorRateShort")}</div>
-                  <div className="text-sm font-semibold">{auditKpi.errorRate.toFixed(1)}%</div>
-                </div>
-              </div>
-              <div className="rounded border border-border/60 p-2 text-[11px]">
-                <span className="text-muted-foreground">
-                  {tr(t, "accCompAuditMoMCompare", {
-                    month: auditPrevMonthStats?.yearMonth || "-",
-                    sampleCount: Number(auditPrevMonthStats?.total || 0).toLocaleString(),
-                  })}
-                </span>
-                {auditDenyRateDelta == null ? (
-                  <span className="ml-2 text-muted-foreground">{t("accCompAuditNoMoMData")}</span>
-                ) : (
-                  <span
-                    className={cn(
-                      "ml-2 font-medium",
-                      auditDenyRateDelta > 0.0001
-                        ? "text-rose-700"
-                        : auditDenyRateDelta < -0.0001
-                          ? "text-emerald-700"
-                          : "text-muted-foreground"
-                    )}
-                  >
-                    {tr(t, "accCompAuditDenyRateMoMLine", {
-                      current: auditKpi.denyRate.toFixed(1),
-                      prev: Number(auditPrevMonthStats?.denyRate || 0).toFixed(1),
-                      delta: `${auditDenyRateDelta > 0.0001 ? "+" : ""}${auditDenyRateDelta.toFixed(1)}`,
-                    })}
-                  </span>
-                )}
-              </div>
-              <div className="rounded border border-border/60 p-2">
-                <div className="text-[11px] font-medium mb-1">{t("accCompAuditTopReasonCodes")}</div>
-                {auditKpi.topReasons.length ? (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    {auditKpi.topReasons.map(([reason, count]) => (
-                      <span key={reason}>
-                        {reason}: {count.toLocaleString()}
-                        {t("accCompAuditCaseSuffix")}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-muted-foreground">{t("accCompAuditNoReasonStats")}</div>
-                )}
-              </div>
-              <div className="rounded border border-border/60 p-2">
-                <div className="text-[11px] font-medium mb-1">{t("accCompAuditLast3MonthsTrend")}</div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left p-1.5">{t("accCompAuditTableMonth")}</th>
-                        <th className="text-right p-1.5">{t("accCompAuditTableCount")}</th>
-                        <th className="text-right p-1.5">{t("accCompAuditTableDenyRate")}</th>
-                        <th className="text-right p-1.5">{t("accCompAuditTableErrorRate")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditTrendStats.length ? (
-                        auditTrendStats.map((row) => (
-                          <tr key={row.yearMonth} className="border-b border-border/40">
-                            <td className="p-1.5">{row.yearMonth}</td>
-                            <td className="p-1.5 text-right">{row.total.toLocaleString()}</td>
-                            <td className="p-1.5 text-right">{row.denyRate.toFixed(1)}%</td>
-                            <td className="p-1.5 text-right">{row.errorRate.toFixed(1)}%</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="p-1.5 text-muted-foreground" colSpan={4}>
-                            {t("accCompAuditTrendEmpty")}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {tr(t, "accCompAuditRecentMeta", {
-                  n: auditRows.length.toLocaleString(),
-                  ym: auditYearMonth,
-                  store: storeTb,
-                })}
-              </div>
-              <div className="overflow-x-auto rounded border border-border/60">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-left p-2">{t("accCompAuditThTime")}</th>
-                      <th className="text-left p-2">{t("accCompAuditFilterDecision")}</th>
-                      <th className="text-left p-2">{t("accCompAuditThAction")}</th>
-                      <th className="text-left p-2">{t("accCompAuditThReasonCode")}</th>
-                      <th className="text-left p-2">{t("accCompAuditThTarget")}</th>
-                      <th className="text-left p-2">{t("accCompAuditThMonthStore")}</th>
-                      <th className="text-left p-2">{t("accCompAuditThActor")}</th>
-                      <th className="text-left p-2">{t("accCompAuditThDetail")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditRows.length ? (
-                      auditRows.map((row, idx) => (
-                        <React.Fragment key={`${row.id || "noid"}-${row.created_at || ""}-${row.action_type || ""}-${idx}`}>
-                          <tr className="border-b border-border/40 align-top">
-                            <td className="p-2 whitespace-nowrap">{formatBangkokDateTime(String(row.created_at || ""))}</td>
-                            <td
-                              className={cn(
-                                "p-2 whitespace-nowrap",
-                                row.decision === "deny"
-                                  ? "text-amber-700"
-                                  : row.decision === "error"
-                                    ? "text-rose-700"
-                                    : "text-emerald-700"
-                              )}
-                            >
-                              {row.decision === "allow"
-                                ? t("accCompDecisionAllow")
-                                : row.decision === "deny"
-                                  ? t("accCompDecisionDeny")
-                                  : row.decision === "error"
-                                    ? t("accCompDecisionError")
-                                    : "-"}
-                            </td>
-                            <td className="p-2 font-mono whitespace-nowrap">{row.action_type || "-"}</td>
-                            <td className="p-2 font-mono whitespace-nowrap">{row.reason_code || "-"}</td>
-                            <td className="p-2 whitespace-nowrap">
-                              {row.target_type || "-"}
-                              {row.target_id ? ` #${row.target_id}` : ""}
-                            </td>
-                            <td className="p-2 whitespace-nowrap">
-                              {row.year_month || "-"} / {row.store_scope || "-"}
-                            </td>
-                            <td className="p-2 whitespace-nowrap">
-                              {row.actor || "-"}
-                              <span className="ml-1 text-muted-foreground">({row.user_role || "-"})</span>
-                            </td>
-                            <td className="p-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-6 px-2 text-[10px]"
-                                onClick={() => {
-                                  const key = `${row.id || "noid"}-${idx}`
-                                  setAuditExpandedRowKey(auditExpandedRowKey === key ? null : key)
-                                }}
-                              >
-                                {auditExpandedRowKey === `${row.id || "noid"}-${idx}` ? t("collapse") : t("accCompDetailShort")}
-                              </Button>
-                            </td>
-                          </tr>
-                          {auditExpandedRowKey === `${row.id || "noid"}-${idx}` ? (
-                            <tr className="border-b border-border/30 bg-muted/10">
-                              <td className="p-2" colSpan={8}>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                                  <div className="rounded border border-border/50 p-2">
-                                    <div className="font-medium mb-1">{t("accCompAuditMetaHeading")}</div>
-                                    <div>period: {row.period_type || "-"} / {row.period_key || "-"}</div>
-                                    <div>filing: {row.filing_type || "-"}</div>
-                                    <div>target: {row.target_type || "-"} {row.target_id ? `#${row.target_id}` : ""}</div>
-                                  </div>
-                                  <div className="rounded border border-border/50 p-2">
-                                    <div className="font-medium mb-1">payload</div>
-                                    <pre className="whitespace-pre-wrap break-all text-[10px] text-muted-foreground">
-                                      {row.payload == null ? "-" : (() => {
-                                        try {
-                                          return JSON.stringify(row.payload, null, 2)
-                                        } catch {
-                                          return String(row.payload)
-                                        }
-                                      })()}
-                                    </pre>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : null}
-                        </React.Fragment>
-                      ))
-                    ) : (
-                      <tr>
-                        <td className="p-3 text-muted-foreground" colSpan={8}>
-                          {t("accCompAuditNoLogs")}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("accCompEtaxTimestampFlowTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="text-xs text-muted-foreground">
-                {t("accCompEtaxGuideRecommended")}
-                <a
-                  href="https://flowaccount.com/help-center/category/platform/register-e-tax-invoice-by-time-stamp"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-1 underline underline-offset-2"
-                >
-                  {t("accCompEtaxFlowaccountStepsLink")}
-                </a>
-                <a href={etaxAuditCsvUrl} target="_blank" rel="noreferrer" className="ml-3 underline underline-offset-2">
-                  {t("accCompEtaxAuditCsvLink")}
-                </a>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                <Input value={etaxTaxId} onChange={(e) => setEtaxTaxId(e.target.value)} placeholder={t("accCompPhCompanyTaxId13")} />
-                <Input
-                  value={etaxBranchCode}
-                  onChange={(e) => setEtaxBranchCode(e.target.value)}
-                  placeholder={t("accCompPhBranch00000")}
-                />
-                <Input
-                  value={etaxRdContactEmail}
-                  onChange={(e) => setEtaxRdContactEmail(e.target.value)}
-                  placeholder={t("accCompPhRdEmail")}
-                />
-                <Input
-                  value={etaxSenderGmail}
-                  onChange={(e) => setEtaxSenderGmail(e.target.value)}
-                  placeholder={t("accCompPhIssuingGmail")}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <Input
-                  value={etaxActivateCodeRef}
-                  onChange={(e) => setEtaxActivateCodeRef(e.target.value)}
-                  placeholder={t("accCompPhActivateOrCmRef")}
-                />
-                <Input
-                  value={etaxAttachmentInput}
-                  onChange={(e) => setEtaxAttachmentInput(e.target.value)}
-                  placeholder={t("accCompPhEvidenceUrlsMultiline")}
-                />
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <Input
-                  type="file"
-                  multiple
-                  onChange={(e) => {
-                    void uploadEtaxEvidenceFiles(e.target.files)
-                    e.currentTarget.value = ""
-                  }}
-                  disabled={etaxEvidenceUploading}
-                />
-                <span className="text-muted-foreground">
-                  {etaxEvidenceUploading ? t("accCompUploading") : t("accCompEtaxFileUploadHintIdle")}
-                </span>
-              </div>
-              {etaxReminderMessages.length ? (
-                <div className="rounded border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800 space-y-1">
-                  {etaxReminderMessages.map((msg, idx) => (
-                    <div key={`etax-reminder-${idx}`}>- {msg}</div>
-                  ))}
-                </div>
-              ) : null}
-              {etaxAttachmentUrls.length ? (
-                <div className="rounded border border-border/60 p-2 text-[11px] space-y-1">
-                  <div className="font-medium">{t("accCompEvidenceLinksHeading")}</div>
-                  {etaxAttachmentUrls.map((u, idx) => (
-                    <div key={`${u}-${idx}`} className="flex items-center gap-2">
-                      <a href={u} target="_blank" rel="noreferrer" className="underline underline-offset-2 truncate">
-                        {displayNameFromUrl(u)}
-                      </a>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-[10px]"
-                        onClick={async () => {
-                          if (!(await appConfirm(t("accCompConfirmDeleteThisLink")))) return
-                          setEtaxAttachmentInput((prev) => parseAttachmentUrlsFromInput(prev).filter((x) => x !== u).join("\n"))
-                        }}
-                      >
-                        {t("accCompDelete")}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              <div className="rounded border border-border/60 p-2">
-                <div className="text-xs font-medium mb-2">
-                  {tr(t, "accCompEtaxChecklistProgress", { done: String(etaxStepCountDone) })}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-1 text-xs">
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={etaxApplySubmitted} onChange={(e) => toggleEtaxStep("applySubmitted", e.target.checked)} />
-                      {t("accCompEtaxStep1RdApplyDone")}
-                    </label>
-                    {etaxStepAudit.applySubmitted ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("applySubmitted")}</div> : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={etaxKo01Printed} onChange={(e) => toggleEtaxStep("ko01Printed", e.target.checked)} />
-                      {t("accCompEtaxStep2Ko01")}
-                    </label>
-                    {etaxStepAudit.ko01Printed ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("ko01Printed")}</div> : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={etaxDocsUploaded} onChange={(e) => toggleEtaxStep("docsUploaded", e.target.checked)} />
-                      {t("accCompEtaxStep3PdfThree")}
-                    </label>
-                    {etaxStepAudit.docsUploaded ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("docsUploaded")}</div> : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={etaxEmailConfirmed} onChange={(e) => toggleEtaxStep("emailConfirmed", e.target.checked)} />
-                      {t("accCompEtaxStep4RdEmailVerify")}
-                    </label>
-                    {etaxStepAudit.emailConfirmed ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("emailConfirmed")}</div> : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={etaxActivateCodeReceived}
-                        onChange={(e) => toggleEtaxStep("activateCodeReceived", e.target.checked)}
-                      />
-                      {t("accCompEtaxStep5ActivateCode")}
-                    </label>
-                    {etaxStepAudit.activateCodeReceived ? (
-                      <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("activateCodeReceived")}</div>
-                    ) : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={etaxPasswordSet} onChange={(e) => toggleEtaxStep("passwordSet", e.target.checked)} />
-                      {t("accCompEtaxStep6RdPassword")}
-                    </label>
-                    {etaxStepAudit.passwordSet ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("passwordSet")}</div> : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={etaxSenderEmailRegistered}
-                        onChange={(e) => toggleEtaxStep("senderEmailRegistered", e.target.checked)}
-                      />
-                      {t("accCompEtaxStep7SenderEmail")}
-                    </label>
-                    {etaxStepAudit.senderEmailRegistered ? (
-                      <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("senderEmailRegistered")}</div>
-                    ) : null}
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={etaxPilotIssued} onChange={(e) => toggleEtaxStep("pilotIssued", e.target.checked)} />
-                      {t("accCompEtaxStep8Pilot")}
-                    </label>
-                    {etaxStepAudit.pilotIssued ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("pilotIssued")}</div> : null}
-                  </div>
-                </div>
-              </div>
-              <Textarea
-                value={etaxMemo}
-                onChange={(e) => setEtaxMemo(e.target.value)}
-                className="min-h-[72px]"
-                placeholder={t("accCompEtaxOpsMemoPlaceholder")}
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" onClick={() => void saveEtaxTimestampProgress()} disabled={etaxSaving || !canWriteCompliance}>
-                  {etaxSaving ? t("loading") : t("accCompEtaxSaveProgressButton")}
-                </Button>
-                <span className="text-[11px] text-muted-foreground">
-                  {t("accCompEtaxStatusPrefix")}{" "}
-                  {workflowStatusLabel((etaxWorkflowRow?.status as "todo" | "in_progress" | "review" | "done") || "todo")}
-                  {etaxWorkflowMeta?.updatedAt ? ` / ${formatBangkokDateTime(etaxWorkflowMeta.updatedAt)}` : ""}
-                  {etaxWorkflowMeta?.updatedBy ? ` / ${etaxWorkflowMeta.updatedBy}` : ""}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          <AccountingCompliancePeriodTab
+            t={t}
+            storeTb={storeTb}
+            periods={periods}
+            periodUnlockReason={periodUnlockReason}
+            setPeriodUnlockReason={setPeriodUnlockReason}
+            periodUnlockApprovedBy={periodUnlockApprovedBy}
+            setPeriodUnlockApprovedBy={setPeriodUnlockApprovedBy}
+            canApproveUnlock={canApproveUnlock}
+            canApproveCompliance={canApproveCompliance}
+            togglePeriod={togglePeriod}
+            accountingHealthLoading={accountingHealthLoading}
+            accountingHealth={accountingHealth}
+            loadAccountingHealth={loadAccountingHealth}
+            closingYearMonth={closingYearMonth}
+            setClosingYearMonth={setClosingYearMonth}
+            isOffice={isOffice}
+            storeTb_forSelect={storeTb}
+            setStoreTb={setStoreTb}
+            storeOptions={storeOptions}
+            storeOptionLabel={storeOptionLabel}
+            closingProfitLossAccountCode={closingProfitLossAccountCode}
+            setClosingProfitLossAccountCode={setClosingProfitLossAccountCode}
+            closingLoading={closingLoading}
+            loadIncomeExpenseClosingPreview={loadIncomeExpenseClosingPreview}
+            closingAuditCsvUrl={closingAuditCsvUrl}
+            closingMemo={closingMemo}
+            setClosingMemo={setClosingMemo}
+            closingAutoLock={closingAutoLock}
+            setClosingAutoLock={setClosingAutoLock}
+            closingPreview={closingPreview}
+            closingDraftSaving={closingDraftSaving}
+            closingPosting={closingPosting}
+            saveIncomeExpenseClosingDraftNow={saveIncomeExpenseClosingDraftNow}
+            runIncomeExpenseClosing={runIncomeExpenseClosing}
+            closingDraft={closingDraft}
+            closingDraftDiff={closingDraftDiff}
+            closingPosted={closingPosted}
+            closingHistory={closingHistory}
+            closingHistoryExpandedId={closingHistoryExpandedId}
+            setClosingHistoryExpandedId={setClosingHistoryExpandedId}
+            auditYearMonth={auditYearMonth}
+            setAuditYearMonth={setAuditYearMonth}
+            auditDecision={auditDecision}
+            setAuditDecision={setAuditDecision}
+            auditActionKeyword={auditActionKeyword}
+            setAuditActionKeyword={setAuditActionKeyword}
+            auditLoading={auditLoading}
+            loadComplianceAuditLogs={loadComplianceAuditLogs}
+            complianceAuditCsvUrl={complianceAuditCsvUrl}
+            auditFallbackUsed={auditFallbackUsed}
+            auditKpi={auditKpi}
+            auditPrevMonthStats={auditPrevMonthStats}
+            auditDenyRateDelta={auditDenyRateDelta}
+            auditTrendStats={auditTrendStats}
+            auditRows={auditRows}
+            auditExpandedRowKey={auditExpandedRowKey}
+            setAuditExpandedRowKey={setAuditExpandedRowKey}
+            etaxTaxId={etaxTaxId}
+            setEtaxTaxId={setEtaxTaxId}
+            etaxBranchCode={etaxBranchCode}
+            setEtaxBranchCode={setEtaxBranchCode}
+            etaxRdContactEmail={etaxRdContactEmail}
+            setEtaxRdContactEmail={setEtaxRdContactEmail}
+            etaxSenderGmail={etaxSenderGmail}
+            setEtaxSenderGmail={setEtaxSenderGmail}
+            etaxActivateCodeRef={etaxActivateCodeRef}
+            setEtaxActivateCodeRef={setEtaxActivateCodeRef}
+            etaxAttachmentInput={etaxAttachmentInput}
+            setEtaxAttachmentInput={setEtaxAttachmentInput}
+            etaxEvidenceUploading={etaxEvidenceUploading}
+            uploadEtaxEvidenceFiles={uploadEtaxEvidenceFiles}
+            etaxReminderMessages={etaxReminderMessages}
+            etaxAttachmentUrls={etaxAttachmentUrls}
+            etaxStepCountDone={etaxStepCountDone}
+            etaxApplySubmitted={etaxApplySubmitted}
+            etaxKo01Printed={etaxKo01Printed}
+            etaxDocsUploaded={etaxDocsUploaded}
+            etaxEmailConfirmed={etaxEmailConfirmed}
+            etaxActivateCodeReceived={etaxActivateCodeReceived}
+            etaxPasswordSet={etaxPasswordSet}
+            etaxSenderEmailRegistered={etaxSenderEmailRegistered}
+            etaxPilotIssued={etaxPilotIssued}
+            etaxStepAudit={etaxStepAudit}
+            toggleEtaxStep={toggleEtaxStep}
+            etaxStepStamp={etaxStepStamp}
+            etaxMemo={etaxMemo}
+            setEtaxMemo={setEtaxMemo}
+            etaxSaving={etaxSaving}
+            canWriteCompliance={canWriteCompliance}
+            saveEtaxTimestampProgress={saveEtaxTimestampProgress}
+            etaxWorkflowRow={etaxWorkflowRow}
+            etaxWorkflowMeta={etaxWorkflowMeta}
+            workflowStatusLabel={workflowStatusLabel}
+            etaxAuditCsvUrl={etaxAuditCsvUrl}
+          />
         </TabsContent>
 
         <TabsContent value="trial" className={cn(tabsContentClass, "space-y-3")}>
@@ -5694,2083 +4486,174 @@ export function AdminAccountingCompliance({
         </TabsContent>
 
         <TabsContent value="summary" className={cn(tabsContentClass, "space-y-3")}>
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{summaryCardTitle}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!isEmbeddedPp36Section ? (
-              <div className="flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
-                <div className="shrink-0">
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                  <Input
-                    type="month"
-                    className="h-9 w-[160px]"
-                    value={taxMonth}
-                    onChange={(e) => setTaxMonth(e.target.value)}
-                  />
-                </div>
-                {isOffice ? (
-                  <div className="shrink-0">
-                    <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                    <Select value={storeTb} onValueChange={setStoreTb}>
-                      <SelectTrigger className="h-9 w-[180px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {storeOptions.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {storeOptionLabel(s)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : isManager && managerStore ? (
-                  <div className="shrink-0">
-                    <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                    <div className="flex h-9 min-w-[140px] max-w-[220px] items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
-                      <span className="truncate">{managerStore}</span>
-                    </div>
-                  </div>
-                ) : null}
-                <div className="shrink-0">
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompPeriodType")}</div>
-                  <Select
-                    value={periodType}
-                    onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}
-                  >
-                    <SelectTrigger className="h-9 w-[150px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
-                      <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
-                      <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="shrink-0">
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompColStatus")}</div>
-                  <Select
-                    value={ledgerStatusFilter}
-                    onValueChange={(v) => setLedgerStatusFilter(v as "all" | "draft" | "submitted")}
-                  >
-                    <SelectTrigger className="h-9 w-[150px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("all")}</SelectItem>
-                      <SelectItem value="draft">{t("accCompWorkflowStatusTodo")}</SelectItem>
-                      <SelectItem value="submitted">{t("accCompWorkflowStatusDone")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="shrink-0">
-                  <Button
-                    type="button"
-                    variant="default"
-                    className={cn(
-                      "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
-                      "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
-                      "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
-                      "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
-                    )}
-                    onClick={() => {
-                      setPp30Queried(true)
-                      setPp30SearchSeq((prev) => prev + 1)
-                      onFilingSearch?.()
-                    }}
-                  >
-                    {t("search")}
-                  </Button>
-                </div>
-                <div className="shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
-                      "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
-                      "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
-                      "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
-                    )}
-                    disabled={loading || summaryLoading || pp30XlsxExporting}
-                    onClick={() => void handleDownloadPp30VatReconcileXlsx()}
-                  >
-                    <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
-                    {pp30XlsxExporting ? t("loading") : t("accCompPp30VatReconcileXlsx")}
-                  </Button>
-                </div>
-              </div>
-              ) : null}
-
-              {!isEmbeddedPp36Section ? (
-              <StoreVendorTaxLinkBanner
-                t={t}
-                tr={tr}
-                loading={taxLinkMetaLoading}
-                storeFilter={storeFilterForLedger}
-                isOffice={isOffice}
-                storeLinkEval={pp30StoreLinkEval}
-                vendorLinkCounts={pp30VendorLinkCounts}
-                onOpenStoreProfiles={onOpenStoreProfiles}
-                showProfileShortcut
-              />
-              ) : null}
-
-              {!isEmbeddedPp36Section ? (
-              <Collapsible open={pp30OpsOpen} onOpenChange={setPp30OpsOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="w-full justify-between px-2 h-9 font-normal">
-                    <span>{t("accCompPp30OpsSectionTitle")}</span>
-                    <ChevronDown className={cn("h-4 w-4 transition-transform", pp30OpsOpen && "rotate-180")} aria-hidden />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-3 pt-2">
-                  {storeFilterForLedger === "All" ? (
-                    <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2">{t("accCompPp30OpsPickStore")}</p>
-                  ) : (
-                    <>
-                      <div className="rounded-lg border border-border/70 bg-background p-3 space-y-2 text-sm">
-                        <div className="text-xs font-medium">{t("accCompVatPeriodLockTitle")}</div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompVatPeriodLockHint")}</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs">{taxMonth}</span>
-                          <span className="text-muted-foreground">·</span>
-                          <span className="font-mono text-xs">{storeFilterForLedger}</span>
-                          {pp30PeriodCloseLoading ? (
-                            <span className="text-xs text-muted-foreground">{t("loading")}</span>
-                          ) : pp30PeriodClose?.isClosed ? (
-                            <span className="text-xs text-amber-700 dark:text-amber-300">{t("accCompPeriodClosedLabel")}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{t("accCompPeriodProgress")}</span>
-                          )}
-                        </div>
-                        {pp30PeriodClose?.closedViaAll ? (
-                          <p className="text-xs text-amber-800/90 dark:text-amber-200/80">{t("accCompVatPeriodClosedViaAll")}</p>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={pp30PeriodClose?.isClosed ? "secondary" : "default"}
-                          disabled={pp30PeriodCloseLoading || (pp30PeriodClose?.isClosed ? !canApproveUnlock : !canApproveCompliance)}
-                          onClick={() => void togglePeriod(taxMonth, !pp30PeriodClose?.isClosed)}
-                        >
-                          {pp30PeriodClose?.isClosed ? t("accCompPeriodOpen") : t("accCompPeriodClose")}
-                        </Button>
-                      </div>
-                      {hqSupplyProbeLoading ? (
-                        <p className="text-xs text-muted-foreground">{t("accCompIntercompanyProbeLoading")}</p>
-                      ) : hqSupplyReconcileApplicable ? (
-                      <div className="rounded-lg border border-border/70 bg-background p-3 space-y-2 text-sm">
-                        <div className="text-xs font-medium">{t("accCompIntercompanyReconcileTitle")}</div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompIntercompanyReconcileHint")}</p>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => void loadIntercompanyVatRecon()} disabled={intercompanyVatReconLoading}>
-                          {intercompanyVatReconLoading ? t("loading") : t("accCompReloadReconcile")}
-                        </Button>
-                        {intercompanyVatRecon ? (
-                          <div className="space-y-2 text-xs">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                              <div>{t("accCompIntercompanyIssued")}: <b>{intercompanyVatRecon.issuedCount.toLocaleString()}</b></div>
-                              <div>{t("accCompIntercompanyMissing")}: <b>{intercompanyVatRecon.missingInStoreCount.toLocaleString()}</b></div>
-                              <div>{t("accCompIntercompanyDiff")}: <b>{intercompanyVatRecon.diffCount.toLocaleString()}</b></div>
-                              <div>{t("accCompIntercompanyMatched")}: <b>{intercompanyVatRecon.matchedCount.toLocaleString()}</b></div>
-                            </div>
-                            {intercompanyVatRecon.rows.length > 0 ? (
-                              <div className="rounded border border-border/60 overflow-auto max-h-48">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="border-b bg-muted/30">
-                                      <th className="text-left p-2">{t("accCompColStatus")}</th>
-                                      <th className="text-left p-2">{t("accCompPhInvoiceNo")}</th>
-                                      <th className="text-right p-2">{t("accCompIntercompanyHqNet")}</th>
-                                      <th className="text-right p-2">{t("accCompIntercompanyStoreNet")}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {intercompanyVatRecon.rows.slice(0, 15).map((r, idx) => (
-                                      <tr key={`${r.referenceNo}-${idx}`} className="border-b border-border/40">
-                                        <td className="p-2">
-                                          {r.status === "missing_in_store_input"
-                                            ? t("accCompIntercompanyStatusMissing")
-                                            : r.status === "extra_in_store_input"
-                                              ? t("accCompIntercompanyStatusExtra")
-                                              : t("accCompIntercompanyStatusDiff")}
-                                        </td>
-                                        <td className="p-2 font-mono">{r.referenceNo || "-"}</td>
-                                        <td className="p-2 text-right">{r.hqIssuedNet.toLocaleString()}</td>
-                                        <td className="p-2 text-right">{r.storeInputNet.toLocaleString()}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <p className="text-emerald-700 dark:text-emerald-300">{t("accCompIntercompanyOk")}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">{t("accCompIntercompanyAfterSearch")}</p>
-                        )}
-                      </div>
-                      ) : hqSupplyReconcileApplicable === false ? (
-                        <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border/60 px-3 py-2 leading-relaxed">
-                          {t("accCompIntercompanyNotApplicable")}
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-              ) : null}
-
-              {!pp30Queried ? (
-                <AccountingEmptyState>
-                  {isEmbeddedPp36Section
-                    ? t("accCompPp36EmbeddedSearchHint")
-                    : isPnd5354CompactList
-                      ? t("accCompPnd5354EmptySearchHint")
-                      : t("accCompPp30EmptySearchHint")}
-                </AccountingEmptyState>
-              ) : (
-                <>
-              {!isPnd5354CompactList && vatStoreNameGapsLoading ? (
-                <p className="text-xs text-muted-foreground">{t("accCompStoreNameGapsLoading")}</p>
-              ) : null}
-              {!isPnd5354CompactList && vatStoreNameGaps && vatStoreNameGaps.emptyStoreNameRowCount > 0 ? (
-                <div className="rounded-md border border-amber-300/80 bg-amber-50/90 dark:bg-amber-950/30 px-3 py-3 text-xs space-y-2">
-                  <div className="font-medium text-amber-900 dark:text-amber-100">{t("accCompStoreNameGapsTitle")}</div>
-                  <p className="text-amber-800/90 dark:text-amber-200/80 leading-relaxed whitespace-pre-line">
-                    {tr(t, "accCompStoreNameGapsBody", {
-                      count: String(vatStoreNameGaps.emptyStoreNameRowCount),
-                      outVat: Math.round(vatStoreNameGaps.emptyStoreNameOutputVat).toLocaleString(),
-                      inVat: Math.round(vatStoreNameGaps.emptyStoreNameInputVat).toLocaleString(),
-                    })}
-                  </p>
-                  {storeFilterForLedger !== "All" ? (
-                    <p className="text-amber-800/80 dark:text-amber-200/70">{t("accCompStoreNameGapsPerStoreNote")}</p>
-                  ) : null}
-                </div>
-              ) : null}
-              {!isEmbeddedPp36Section && isPnd5354CompactList ? (
-              <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pnd5354SubView === "pnd53" ? "default" : "outline"}
-                  onClick={() => setPnd5354SubView("pnd53")}
-                >
-                  {t("accCompPnd5354SubPnd53")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pnd5354SubView === "pnd54" ? "default" : "outline"}
-                  onClick={() => setPnd5354SubView("pnd54")}
-                >
-                  {t("accCompPnd5354SubPnd54")}
-                </Button>
-              </div>
-              ) : null}
-              {!isEmbeddedPp36Section && !isPnd5354CompactList ? (
-              <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
-                {allowedPp30Views.includes("output") && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={pp30SubView === "output" ? "default" : "outline"}
-                    onClick={() => setPp30SubView("output")}
-                  >
-                    {t("accCompTaxOutputDocs")}
-                  </Button>
-                )}
-                {allowedPp30Views.includes("input") && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={pp30SubView === "input" ? "default" : "outline"}
-                    onClick={() => setPp30SubView("input")}
-                  >
-                    {t("accCompTaxInputDocs")}
-                  </Button>
-                )}
-                {canShowVatSettlement && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={pp30SubView === "settlement" ? "default" : "outline"}
-                    onClick={() => setPp30SubView("settlement")}
-                  >
-                    {t("accCompVatSettlementShort")}
-                  </Button>
-                )}
-                {allowedPp30Views.includes("wht") && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={pp30SubView === "wht" ? "default" : "outline"}
-                    onClick={() => setPp30SubView("wht")}
-                  >
-                    {t("accCompTaxWhtDocs")}
-                  </Button>
-                )}
-              </div>
-              ) : null}
-              {!isEmbeddedPp36Section ? (
-              <AccountingPeriodChip>
-                {t("accCompPeriodType")}: {summaryPeriodLabel}
-              </AccountingPeriodChip>
-              ) : null}
-
-              {loading ? (
-                <div className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground" aria-live="polite">
-                  {t("loading")}
-                </div>
-              ) : null}
-              {summaryLoading ? (
-                <div className="rounded-md border border-border/40 bg-background px-3 py-2 text-[11px] text-muted-foreground" aria-live="polite">
-                  {t("accCompSummaryLoading")}
-                </div>
-              ) : null}
-
-              <>
-              {pp30SubView === "output" && (
-                <div className="space-y-3 text-sm">
-                  <AccountingStatGrid>
-                    <AccountingStatCard
-                      label={t("accCompVatOutputNet")}
-                      value={Math.round(outputSummaryNet).toLocaleString()}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompVatOutputVat")}
-                      value={Math.round(outputSummaryVat).toLocaleString()}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompVatPayable")}
-                      value={Math.round(outputSummaryPayable).toLocaleString()}
-                      tone={outputSummaryPayable > 0 ? "warn" : "default"}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompVatRowsSales")}
-                      value={`${nonPosOutputCount.toLocaleString()} / ${vatFilteredStats.rowCount.toLocaleString()}`}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompMissingTin")}
-                      value={vatFilteredStats.missingTaxIdCount.toLocaleString()}
-                      tone={vatFilteredStats.missingTaxIdCount > 0 ? "warn" : "ok"}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompMissingInvoice")}
-                      value={vatFilteredStats.missingInvoiceCount.toLocaleString()}
-                      tone={vatFilteredStats.missingInvoiceCount > 0 ? "warn" : "ok"}
-                    />
-                  </AccountingStatGrid>
-                  {taxSummary && allowedPp30Views.includes("wht") ? (
-                    <div className="rounded-lg border border-border/70 bg-muted/15 p-3 text-xs space-y-2">
-                      <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
-                      <AccountingStatGrid className="grid-cols-2 md:grid-cols-4">
-                        <AccountingStatCard
-                          label={t("accCompWhtLabelGross")}
-                          value={(taxSummary.wht.totalGross || 0).toLocaleString()}
-                        />
-                        <AccountingStatCard
-                          label={t("accCompWhtLabelWithheld")}
-                          value={(taxSummary.wht.totalWithheld || 0).toLocaleString()}
-                        />
-                        <AccountingStatCard
-                          label={t("accCompWhtLabelRows")}
-                          value={(taxSummary.wht.rowCount || 0).toLocaleString()}
-                        />
-                        <AccountingStatCard
-                          label={t("accCompMissingTinWht")}
-                          value={(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
-                          tone={(taxSummary.wht.missingTaxIdCount || 0) > 0 ? "warn" : "ok"}
-                        />
-                      </AccountingStatGrid>
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setVatRows((prev) => [
-                          ...prev,
-                          { ...emptyVat(taxMonth, storeFilterForLedger !== "All" ? storeFilterForLedger : ""), direction: "output" },
-                        ])
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {t("accCompVatAdd")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <a
-                        href={vatExportUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {t("accCompVatExport")}
-                      </a>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={vatOutputViewMode === "vendor" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setVatOutputViewMode("vendor")}
-                    >
-                      {t("accCompVatByVendor")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={vatOutputViewMode === "detail" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setVatOutputViewMode("detail")}
-                    >
-                      {t("accCompVatByLine")}
-                    </Button>
-                  </div>
-                  <Card>
-                    <CardContent className="p-2 overflow-x-auto space-y-3">
-                      {posFilingOutputSummaries.length > 0 ? (
-                        <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2 text-xs">
-                          <div className="font-medium text-foreground">{t("accCompPosSalesAutoTitle")}</div>
-                          <div className="space-y-2">
-                            {posFilingOutputSummaries.map((row, sidx) => (
-                              <div
-                                key={`pos-sum-${row.tax_month}-${sidx}`}
-                                className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 border rounded p-2 bg-background/80"
-                              >
-                                <div className="text-muted-foreground">{t("accCompLabelTaxMonth")}</div>
-                                <div>{String(row.tax_month || "")}</div>
-                                <div className="text-muted-foreground">{t("accCompLabelNetAmount")}</div>
-                                <div className="text-right tabular-nums">{Number(row.net_amount || 0).toLocaleString()}</div>
-                                <div className="text-muted-foreground">VAT</div>
-                                <div className="text-right tabular-nums">{Number(row.vat_amount || 0).toLocaleString()}</div>
-                                <div className="text-muted-foreground">{t("accCompLabelGrandTotal")}</div>
-                                <div className="text-right tabular-nums font-medium">
-                                  {Number(row.total_amount || 0).toLocaleString()}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                      {nonPosOutputCount > 0 ? (
-                        <div className="text-[11px] font-medium text-muted-foreground px-0.5">{t("accCompNonPosSalesEdit")}</div>
-                      ) : null}
-                      {vatOutputViewMode === "vendor" ? (
-                        <AccountingTableShell>
-                          <AccountingTableHead>
-                            <th className={accountingResultThCn}>{t("accCompColVendorName")}</th>
-                            <th className={accountingResultThRightCn}>{t("accCompColCount")}</th>
-                            <th className={accountingResultThRightCn}>{t("accCompLabelNetAmount")}</th>
-                            <th className={accountingResultThRightCn}>{t("accCompPhVat")}</th>
-                            <th className={accountingResultThRightCn}>{t("accCompLabelGrandTotal")}</th>
-                          </AccountingTableHead>
-                          <tbody>
-                            {vatOutputVendorSummaries.map((row) => (
-                              <AccountingTableBodyRow key={`vendor-sum-${row.name}`}>
-                                <td className={accountingResultTdCn}>{row.name}</td>
-                                <td className={accountingResultTdRightCn}>{row.count.toLocaleString()}</td>
-                                <td className={accountingResultTdRightCn}>{Math.round(row.net).toLocaleString()}</td>
-                                <td className={accountingResultTdRightCn}>{Math.round(row.vat).toLocaleString()}</td>
-                                <td className={accountingResultTdRightCn}>{Math.round(row.total).toLocaleString()}</td>
-                              </AccountingTableBodyRow>
-                            ))}
-                            {!vatOutputVendorSummaries.length ? (
-                              <AccountingTableBodyRow>
-                                <td className={`${accountingResultTdCn} text-center text-muted-foreground py-6`} colSpan={5}>
-                                  {t("emp_result_empty")}
-                                </td>
-                              </AccountingTableBodyRow>
-                            ) : null}
-                          </tbody>
-                          {vatOutputVendorSummaries.length ? (
-                            <tfoot>
-                              <AccountingTableFootRow>
-                                <td className={accountingResultTdCn}>{t("accCompTotalsFooter")}</td>
-                                <td className={accountingResultTdRightCn}>
-                                  {vatOutputVendorTotals.count.toLocaleString()}
-                                </td>
-                                <td className={accountingResultTdRightCn}>
-                                  {Math.round(vatOutputVendorTotals.net).toLocaleString()}
-                                </td>
-                                <td className={accountingResultTdRightCn}>
-                                  {Math.round(vatOutputVendorTotals.vat).toLocaleString()}
-                                </td>
-                                <td className={accountingResultTdRightCn}>
-                                  {Math.round(vatOutputVendorTotals.total).toLocaleString()}
-                                </td>
-                              </AccountingTableFootRow>
-                            </tfoot>
-                          ) : null}
-                        </AccountingTableShell>
-                      ) : null}
-                      {vatOutputViewMode === "detail" ? vatRows.map((row, idx) => {
-                        if (row.direction !== "output") return null
-                        if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
-                        if (isPosAutoVatOutputRow(row)) return null
-                        return (
-                          <div
-                            key={row.id ?? `vat-out-${idx}`}
-                            className={accountingLedgerEntryGridCn}
-                          >
-                            <Input
-                              type="date"
-                              value={row.doc_date}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, doc_date: v } : x)))
-                              }}
-                            />
-                            <Select
-                              value={row.direction}
-                              onValueChange={(v) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, direction: v as "output" | "input" } : x))
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="output">{t("accCompDirOutput")}</SelectItem>
-                                <SelectItem value="input">{t("accCompDirInput")}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              placeholder={t("accCompPhCounterparty")}
-                              value={row.counterparty_name}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_name: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhTin")}
-                              value={row.counterparty_tax_id}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_tax_id: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhInvoiceNo")}
-                              value={row.invoice_number}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, invoice_number: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhNet")}
-                              value={row.net_amount}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, net_amount: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhVat")}
-                              value={row.vat_amount}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, vat_amount: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhTotal")}
-                              value={row.total_amount}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, total_amount: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              className="md:col-span-2"
-                              placeholder={t("accCompPhVatStatus")}
-                              value={row.vat_status}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, vat_status: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Select
-                              value={row.invoice_evidence_status}
-                              onValueChange={(v) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx
-                                      ? {
-                                          ...x,
-                                          invoice_evidence_status: v as
-                                            | "required_pending"
-                                            | "received"
-                                            | "not_required"
-                                            | "unobtainable",
-                                        }
-                                      : x
-                                  )
-                                )
-                              }
-                            >
-                              <SelectTrigger className="md:col-span-2">
-                                <SelectValue placeholder="증빙 상태" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="required_pending">증빙미완료</SelectItem>
-                                <SelectItem value="received">증빙완료</SelectItem>
-                                <SelectItem value="not_required">증빙불요</SelectItem>
-                                <SelectItem value="unobtainable">수취불가/신고제외</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              className="md:col-span-2"
-                              placeholder="증빙 사유 코드 (small_amount, supplier_refused...)"
-                              value={row.invoice_evidence_reason_code}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx ? { ...x, invoice_evidence_reason_code: e.target.value } : x
-                                  )
-                                )
-                              }
-                            />
-                            <Input
-                              className="md:col-span-2"
-                              placeholder={t("accCompPhMemo")}
-                              value={row.memo}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Select
-                              value={row.filing_status}
-                              onValueChange={(v) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx ? { ...x, filing_status: v as "draft" | "submitted" } : x
-                                  )
-                                )
-                              }
-                            >
-                              <SelectTrigger className="md:col-span-2">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="draft">{filingStatusLabel("draft")}</SelectItem>
-                                <SelectItem value="submitted">{filingStatusLabel("submitted")}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            {row.filing_status === "submitted" ? (
-                              <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                                {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
-                                {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
-                              </div>
-                            ) : null}
-                            <div className="flex gap-2 md:col-span-4">
-                              <Button type="button" size="sm" onClick={() => void saveVatRow(row)}>
-                                <Save className="h-3 w-3 mr-1" />
-                                {t("accCompSave")}
-                              </Button>
-                              <Button type="button" size="sm" variant="destructive" onClick={() => void removeVat(row)}>
-                                <Trash2 className="h-3 w-3 mr-1" />
-                                {t("accCompDelete")}
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      }) : null}
-                      {!posFilingOutputSummaries.length &&
-                      ((vatOutputViewMode === "vendor" && !vatOutputVendorSummaries.length) ||
-                        (vatOutputViewMode === "detail" && !nonPosOutputCount)) ? (
-                        <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {pp30SubView === "input" && (
-                <div className="space-y-3 text-sm">
-                  <AccountingStatGrid>
-                    <AccountingStatCard
-                      label={t("accCompVatInputNet")}
-                      value={Math.round(vatSettlement.inputNet).toLocaleString()}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompVatInputVat")}
-                      value={Math.round(vatSettlement.inputVat).toLocaleString()}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompVatPayable")}
-                      value={Math.round(vatSettlement.payableVat).toLocaleString()}
-                      tone={vatSettlement.payableVat > 0 ? "warn" : "default"}
-                    />
-                    <AccountingStatCard
-                      label={t("accCompVatRowsPurchase")}
-                      value={`${vatInputRowsFiltered.length.toLocaleString()} / ${vatFilteredStats.rowCount.toLocaleString()}`}
-                    />
-                  </AccountingStatGrid>
-                  <AccountingStatGrid>
-                    <AccountingStatCard label="신고가능 매입VAT" value={Math.round(vatInputClaimable.claimableVat).toLocaleString()} tone="ok" />
-                    <AccountingStatCard label="증빙미완료 VAT" value={Math.round(vatInputClaimable.pendingVat).toLocaleString()} tone="warn" />
-                    <AccountingStatCard label="신고제외 VAT" value={Math.round(vatInputClaimable.unobtainableVat).toLocaleString()} />
-                    <AccountingStatCard
-                      label="체크 건수(완료/미완료/제외)"
-                      value={`${vatInputClaimable.claimableCount}/${vatInputClaimable.pendingCount}/${vatInputClaimable.unobtainableCount}`}
-                    />
-                  </AccountingStatGrid>
-                  {taxSummary && allowedPp30Views.includes("wht") ? (
-                    <div className="rounded-lg border border-border/70 bg-muted/15 p-3 text-xs space-y-2">
-                      <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
-                      <AccountingStatGrid className="grid-cols-2 md:grid-cols-4">
-                        <AccountingStatCard
-                          label={t("accCompWhtLabelGross")}
-                          value={(taxSummary.wht.totalGross || 0).toLocaleString()}
-                        />
-                        <AccountingStatCard
-                          label={t("accCompWhtLabelWithheld")}
-                          value={(taxSummary.wht.totalWithheld || 0).toLocaleString()}
-                        />
-                        <AccountingStatCard
-                          label={t("accCompWhtLabelRows")}
-                          value={(taxSummary.wht.rowCount || 0).toLocaleString()}
-                        />
-                        <AccountingStatCard
-                          label={t("accCompMissingTinWht")}
-                          value={(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
-                          tone={(taxSummary.wht.missingTaxIdCount || 0) > 0 ? "warn" : "ok"}
-                        />
-                      </AccountingStatGrid>
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setVatRows((prev) => [
-                          ...prev,
-                          { ...emptyVat(taxMonth, storeFilterForLedger !== "All" ? storeFilterForLedger : ""), direction: "input" },
-                        ])
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {t("accCompVatAdd")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={loading}
-                      onClick={async () => {
-                        if (!canUse) return
-                        setLoading(true)
-                        try {
-                          const res = await apiFetch("/api/syncExpenseInputVatLedgers", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              userRole: role,
-                              yearMonth: taxMonth,
-                              storeFilter: storeFilterForApi !== "All" ? storeFilterForLedger : undefined,
-                            }),
-                          })
-                          const j = (await res.json()) as {
-                            success?: boolean
-                            processed?: number
-                            failed?: number
-                            error?: string
-                          }
-                          if (!res.ok || !j.success) {
-                            appAlert(j.error || t("accCompLoadFail"))
-                            return
-                          }
-                          appAlert(
-                            tr(t, "accCompInputVatBackfillToast", {
-                              processed: String(j.processed ?? 0),
-                              failedPart:
-                                (j.failed ?? 0) > 0
-                                  ? tr(t, "accCompInputVatBackfillToastFailed", { failed: String(j.failed ?? 0) })
-                                  : "",
-                            })
-                          )
-                          setPp30Queried(true)
-                          await loadVat()
-                        } catch {
-                          appAlert(t("accCompLoadFail"))
-                        } finally {
-                          setLoading(false)
-                        }
-                      }}
-                    >
-                      {tr(t, "accCompInputVatBackfillButton", { month: taxMonth })}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <a
-                        href={vatExportUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {t("accCompVatExport")}
-                      </a>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={vatInputViewMode === "vendor" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setVatInputViewMode("vendor")}
-                    >
-                      {t("accCompVatByVendor")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={vatInputViewMode === "detail" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setVatInputViewMode("detail")}
-                    >
-                      {t("accCompVatByLine")}
-                    </Button>
-                  </div>
-                  <Card>
-                    <CardContent className="p-2 overflow-x-auto space-y-3">
-                      {vatInputViewMode === "vendor" ? (
-                        <div className="rounded-md border border-border/70 overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead className="bg-muted/30">
-                              <tr className="border-b border-border/70">
-                                <th className="p-2 text-left">{t("accCompColVendorName")}</th>
-                                <th className="p-2 text-right">{t("accCompColCount")}</th>
-                                <th className="p-2 text-right">{t("accCompLabelNetAmount")}</th>
-                                <th className="p-2 text-right">{t("accCompPhVat")}</th>
-                                <th className="p-2 text-right">{t("accCompLabelGrandTotal")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {vatInputVendorSummaries.map((row) => (
-                                <tr key={`vendor-input-sum-${row.name}`} className="border-b border-border/50">
-                                  <td className="p-2">{row.name}</td>
-                                  <td className="p-2 text-right tabular-nums">{row.count.toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums">{Math.round(row.net).toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums">{Math.round(row.vat).toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums font-medium">{Math.round(row.total).toLocaleString()}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            {vatInputVendorSummaries.length ? (
-                              <tfoot className="bg-muted/20">
-                                <tr className="border-t border-border/70 font-medium">
-                                  <td className="p-2">{t("accCompTotalsFooter")}</td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {vatInputVendorTotals.count.toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {Math.round(vatInputVendorTotals.net).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {Math.round(vatInputVendorTotals.vat).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 text-right tabular-nums">
-                                    {Math.round(vatInputVendorTotals.total).toLocaleString()}
-                                  </td>
-                                </tr>
-                              </tfoot>
-                            ) : null}
-                          </table>
-                        </div>
-                      ) : null}
-                      {vatInputViewMode === "detail" ? vatRows.map((row, idx) => {
-                        if (row.direction !== "input") return null
-                        if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
-                        return (
-                          <div
-                            key={row.id ?? `vat-in-${idx}`}
-                            className={accountingLedgerEntryGridCn}
-                          >
-                            <Input
-                              type="date"
-                              value={row.doc_date}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, doc_date: v } : x)))
-                              }}
-                            />
-                            <Select
-                              value={row.direction}
-                              onValueChange={(v) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, direction: v as "output" | "input" } : x))
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="output">{t("accCompDirOutput")}</SelectItem>
-                                <SelectItem value="input">{t("accCompDirInput")}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              placeholder={t("accCompPhCounterparty")}
-                              value={row.counterparty_name}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_name: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhTin")}
-                              value={row.counterparty_tax_id}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_tax_id: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhInvoiceNo")}
-                              value={row.invoice_number}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, invoice_number: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhNet")}
-                              value={row.net_amount}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, net_amount: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhVat")}
-                              value={row.vat_amount}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, vat_amount: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              placeholder={t("accCompPhTotal")}
-                              value={row.total_amount}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, total_amount: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Input
-                              className="md:col-span-2"
-                              placeholder={t("accCompPhVatStatus")}
-                              value={row.vat_status}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, vat_status: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Select
-                              value={row.invoice_evidence_status}
-                              onValueChange={(v) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx
-                                      ? {
-                                          ...x,
-                                          invoice_evidence_status: v as
-                                            | "required_pending"
-                                            | "received"
-                                            | "not_required"
-                                            | "unobtainable",
-                                        }
-                                      : x
-                                  )
-                                )
-                              }
-                            >
-                              <SelectTrigger className="md:col-span-2">
-                                <SelectValue placeholder="증빙 상태" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="required_pending">증빙미완료</SelectItem>
-                                <SelectItem value="received">증빙완료</SelectItem>
-                                <SelectItem value="not_required">증빙불요</SelectItem>
-                                <SelectItem value="unobtainable">수취불가/신고제외</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              className="md:col-span-2"
-                              placeholder="증빙 사유 코드 (small_amount, supplier_refused...)"
-                              value={row.invoice_evidence_reason_code}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx ? { ...x, invoice_evidence_reason_code: e.target.value } : x
-                                  )
-                                )
-                              }
-                            />
-                            <Input
-                              className="md:col-span-2"
-                              placeholder={t("accCompPhMemo")}
-                              value={row.memo}
-                              onChange={(e) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
-                                )
-                              }
-                            />
-                            <Select
-                              value={row.filing_status}
-                              onValueChange={(v) =>
-                                setVatRows((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx ? { ...x, filing_status: v as "draft" | "submitted" } : x
-                                  )
-                                )
-                              }
-                            >
-                              <SelectTrigger className="md:col-span-2">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="draft">{filingStatusLabel("draft")}</SelectItem>
-                                <SelectItem value="submitted">{filingStatusLabel("submitted")}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            {row.filing_status === "submitted" ? (
-                              <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                                {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
-                                {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
-                              </div>
-                            ) : null}
-                            <div className="flex gap-2 md:col-span-4">
-                              <Button type="button" size="sm" onClick={() => void saveVatRow(row)}>
-                                <Save className="h-3 w-3 mr-1" />
-                                {t("accCompSave")}
-                              </Button>
-                              <Button type="button" size="sm" variant="destructive" onClick={() => void removeVat(row)}>
-                                <Trash2 className="h-3 w-3 mr-1" />
-                                {t("accCompDelete")}
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      }) : null}
-                      {(vatInputViewMode === "vendor" && !vatInputVendorSummaries.length) ||
-                      (vatInputViewMode === "detail" && !vatInputRowsFiltered.length) ? (
-                        <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {pp30SubView === "settlement" && (
-                <div className="space-y-3 text-sm">
-                  <div className={cn("sticky top-0 z-10 rounded-md border p-4 backdrop-blur-sm", vatSettlementHeadline.className)}>
-                    <div className="text-xs text-muted-foreground">{t("accCompVatExpectedForMonth")}</div>
-                    <div className="mt-1 flex flex-wrap items-end gap-2">
-                      <span className="text-3xl md:text-4xl font-bold tabular-nums">
-                        {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
-                      </span>
-                      <span className="text-sm font-medium text-muted-foreground pb-1">THB</span>
-                    </div>
-                    <div className="text-xs mt-1">
-                      {tr(t, "accCompVatSettlementFormulaLine", { tone: vatSettlementHeadline.tone })}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div className="rounded-md border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3">
-                      <div className="text-xs text-muted-foreground">{t("accCompVatOutputVatSumLabel")}</div>
-                      <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.outputVat).toLocaleString()}</div>
-                      <div className="text-[11px] text-muted-foreground mt-1">
-                        {tr(t, "accCompVatNetAndRows", {
-                          net: Math.round(vatSettlement.outputNet).toLocaleString(),
-                          count: vatSettlement.outputCount.toLocaleString(),
-                        })}
-                      </div>
-                    </div>
-                    <div className="rounded-md border border-sky-300/40 bg-sky-50/40 dark:bg-sky-950/20 p-3">
-                      <div className="text-xs text-muted-foreground">{t("accCompVatInputVatSumLabel")}</div>
-                      <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.inputVat).toLocaleString()}</div>
-                      <div className="text-[11px] text-muted-foreground mt-1">
-                        {tr(t, "accCompVatNetAndRows", {
-                          net: Math.round(vatSettlement.inputNet).toLocaleString(),
-                          count: vatSettlement.inputCount.toLocaleString(),
-                        })}
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "rounded-md border p-3",
-                        vatSettlement.payableVat >= 0
-                          ? "border-rose-300/40 bg-rose-50/40 dark:bg-rose-950/20"
-                          : "border-violet-300/40 bg-violet-50/40 dark:bg-violet-950/20"
-                      )}
-                    >
-                      <div className="text-xs text-muted-foreground">{t("accCompVatExpectedPayableCreditLabel")}</div>
-                      <div className="text-lg font-semibold tabular-nums">
-                        {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground mt-1">
-                        {vatSettlement.payableVat >= 0 ? t("accCompVatPayableDueShort") : t("accCompVatCreditCarryoverShort")}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-2">
-                    <div className="font-medium text-foreground">{t("accCompVatCalcFormulaTitle")}</div>
-                    <div className="tabular-nums">
-                      {tr(t, "accCompVatCalcFormulaDetail", {
-                        out: Math.round(vatSettlement.outputVat).toLocaleString(),
-                        inp: Math.round(vatSettlement.inputVat).toLocaleString(),
-                        payable: Math.round(vatSettlement.payableVat).toLocaleString(),
-                      })}
-                    </div>
-                    <div className="text-muted-foreground">{t("accCompVatCalcDisclaimer")}</div>
-                  </div>
-
-                  {taxSummary ? (
-                    <div className="rounded-md border border-dashed border-border/70 bg-background p-3 text-xs">
-                      <span className="text-muted-foreground">{t("accCompVatSummaryApiNote")}</span>{" "}
-                      <span className="font-medium tabular-nums">{Math.round(vatSettlement.summaryPayableVat).toLocaleString()}</span>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              {pp30SubView === "wht" && (
-                <div className="space-y-3 text-sm">
-                  {isPnd5354CompactList && pnd5354SubView === "pnd54" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                      <div>
-                        {t("accCompWhtGrossShort")}: {pnd54Summary.gross.toLocaleString()}
-                      </div>
-                      <div>
-                        {t("accCompWhtWithheldShort")}: {pnd54Summary.withheld.toLocaleString()}
-                      </div>
-                      <div>
-                        {t("accCompWhtRowsShort")}: {pnd54Summary.count.toLocaleString()}
-                      </div>
-                    </div>
-                  ) : null}
-                  {showWhtLedger ? (
-                    <>
-                      {isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                          <div>
-                            {t("accCompWhtGrossShort")}: {pnd53Summary.gross.toLocaleString()}
-                          </div>
-                          <div>
-                            {t("accCompWhtWithheldShort")}: {pnd53Summary.withheld.toLocaleString()}
-                          </div>
-                          <div>
-                            {t("accCompWhtRowsShort")}: {pnd53Summary.count.toLocaleString()}
-                          </div>
-                          <div>
-                            {t("accCompMissingTin")}:{" "}
-                            {whtRowsPnd53Display.filter((r) => !String(r.payee_tax_id || "").trim()).length.toLocaleString()}
-                          </div>
-                        </div>
-                      ) : null}
-                      {!isPnd5354CompactList && pp30Mode !== "wht_only" ? (
-                        <StoreVendorTaxLinkBanner
-                          t={t}
-                          tr={tr}
-                          loading={taxLinkMetaLoading}
-                          storeFilter={storeFilterForLedger}
-                          isOffice={isOffice}
-                          storeLinkEval={pp30StoreLinkEval}
-                          vendorLinkCounts={pp30VendorLinkCounts}
-                          onOpenStoreProfiles={onOpenStoreProfiles}
-                          extra={
-                            whtPayeeTinGapCount > 0 ? (
-                              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
-                                {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
-                              </div>
-                            ) : null
-                          }
-                        />
-                      ) : !isPnd5354CompactList && whtPayeeTinGapCount > 0 ? (
-                        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive leading-relaxed">
-                          {tr(t, "accCompWhtPayeeTinGapLine", { count: String(whtPayeeTinGapCount) })}
-                        </div>
-                      ) : null}
-                      {!isPnd5354CompactList ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                        <div>
-                          {t("accCompWhtGrossShort")}: {(taxSummary?.wht.totalGross || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompWhtWithheldShort")}: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompWhtRowsShort")}: {(taxSummary?.wht.rowCount || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompMissingTin")}: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}
-                        </div>
-                        <div>
-                          {t("accCompMissingCertNo")}: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}
-                        </div>
-                      </div>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {showPnd1Area ? (
-                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                      <div className="text-xs font-medium">{pnd1PayerBoxTitle}</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                        <Input
-                          placeholder="payer tax id (13 digits)"
-                          value={pnd1PayerTaxId}
-                          onChange={(e) => setPnd1PayerTaxId(e.target.value)}
-                        />
-                        <Input
-                          placeholder="branch no (00000)"
-                          value={pnd1PayerBranchNo}
-                          onChange={(e) => setPnd1PayerBranchNo(e.target.value)}
-                        />
-                        <Input
-                          className="lg:col-span-2"
-                          placeholder={lang === "th" ? "ชื่อนิติบุคคลผู้จ่าย" : t("accCompPnd1PayerLegalNamePlaceholder")}
-                          value={pnd1PayerName}
-                          onChange={(e) => setPnd1PayerName(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-xs text-muted-foreground min-w-16">{pnd1FormLabel}</div>
-                        <Select
-                          value={pnd1FormMode}
-                          onValueChange={(v) => setPnd1FormMode(v as "auto" | "pnd1" | "pnd1a" | "all")}
-                        >
-                          <SelectTrigger className="w-[180px] h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">Auto ({periodType === "annual" ? "PND1A" : "PND1"})</SelectItem>
-                            <SelectItem value="pnd1">PND1 (ภ.ง.ด.1)</SelectItem>
-                            <SelectItem value="pnd1a">PND1A (ภ.ง.ด.1ก)</SelectItem>
-                            <SelectItem value="all">All</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={pnd1IncludeHeader}
-                            onChange={(e) => setPnd1IncludeHeader(e.target.checked)}
-                          />
-                          include header row
-                        </label>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    {showWhtLedger && !isPnd5354CompactList ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setWhtRows((prev) => [
-                            ...prev,
-                            emptyWht(taxMonth, storeTb !== "All" ? storeTb : ""),
-                          ])
-                        }
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {t("accCompVatAdd")}
-                      </Button>
-                    ) : null}
-                    {showWhtLedger && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                      <Button type="button" variant="outline" size="sm" asChild>
-                        <a
-                          href={whtExportUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {t("accCompWhtExportCsv")}
-                        </a>
-                      </Button>
-                    ) : null}
-                    {isPnd5354CompactList && pnd5354SubView === "pnd54" ? (
-                      <Button type="button" variant="outline" size="sm" asChild>
-                        <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">
-                          {t("accCompPnd54ExportCsv")}
-                        </a>
-                      </Button>
-                    ) : null}
-                    {showWhtLedger && !isPnd5354CompactList ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void printWhtCertificates(whtRowsFiltered)}
-                        disabled={!whtRowsFiltered.some((r) => Number(r.wht_amount) > 0)}
-                      >
-                        <Printer className="h-4 w-4 mr-1" />
-                        {t("whtCertPrintBulk")}
-                      </Button>
-                    ) : null}
-                    {showPnd1Area ? (
-                      <Button type="button" variant="outline" size="sm" asChild>
-                        <a
-                          href={pnd1RdPrepUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {pnd1RdPrepBtnLabel}
-                        </a>
-                      </Button>
-                    ) : null}
-                    {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                      <Select
-                        value={whtSubmissionFormHint}
-                        onValueChange={(v) => setWhtSubmissionFormHint(v as "PND3" | "PND53" | "ALL")}
-                      >
-                        <SelectTrigger className="h-9 w-[140px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">PND3/53 전체</SelectItem>
-                          <SelectItem value="PND3">PND3</SelectItem>
-                          <SelectItem value="PND53">PND53</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : null}
-                    {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                      <Button type="button" variant="outline" size="sm" asChild>
-                        <a href={whtSubmissionExportUrl} target="_blank" rel="noopener noreferrer">
-                          {t("accCompPnd53SubmissionCsv")}
-                        </a>
-                      </Button>
-                    ) : null}
-                    {showPnd1Area ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void runPnd1Validation()}
-                        disabled={pnd1Validating}
-                      >
-                        {pnd1Validating ? t("loading") : pnd1ValidateBtnLabel}
-                      </Button>
-                    ) : null}
-                    {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void runPnd353Validation()}
-                        disabled={pnd353Validating}
-                      >
-                        {pnd353Validating ? t("loading") : t("accCompPnd53ValidateBtn")}
-                      </Button>
-                    ) : null}
-                    {showPnd1Area ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void runPayrollTinGapCheck()}
-                        disabled={payrollTinGapLoading}
-                      >
-                        {payrollTinGapLoading ? t("loading") : lang === "th" ? "ตรวจสอบ TIN พนักงาน" : t("accCompPayrollTinCheckBtn")}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {showPnd353Tools && pnd353ValidationResult ? (
-                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-1">
-                      <div className="font-medium">PND3/53 검증 결과</div>
-                      <div>검증 행: {pnd353ValidationResult.totalRows.toLocaleString()}</div>
-                      <div>정상 행: {pnd353ValidationResult.validRows.toLocaleString()}</div>
-                      <div>경고 건수: {(pnd353ValidationResult.issues || []).length.toLocaleString()}</div>
-                    </div>
-                  ) : null}
-                  {(showPp36Ledger || (showPnd54Ledger && (!isPnd5354CompactList || pnd5354SubView === "pnd54"))) ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    {showPp36Ledger ? (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">PP.36 원장</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => setPp36Rows((prev) => [...prev, emptyPp36(taxMonth, storeTb !== "All" ? storeTb : "")])}>
-                            <Plus className="h-3 w-3 mr-1" /> 행 추가
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => void loadPp36()}>조회</Button>
-                          <Button type="button" size="sm" variant="outline" asChild>
-                            <a href={pp36ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
-                          </Button>
-                        </div>
-                        {(pp36Rows || []).slice(0, 20).map((row, idx) => (
-                          <div key={row.id ?? `pp36-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
-                            <Input type="date" value={row.doc_date} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, doc_date: e.target.value } : x))} />
-                            <Input placeholder="Supplier" value={row.supplier_name} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, supplier_name: e.target.value } : x))} />
-                            <Input placeholder="Taxable" value={row.taxable_amount} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, taxable_amount: e.target.value } : x))} />
-                            <Input placeholder="VAT" value={row.vat_amount} onChange={(e) => setPp36Rows((prev) => prev.map((x, i) => i === idx ? { ...x, vat_amount: e.target.value } : x))} />
-                            <div className="col-span-2 flex gap-2 justify-end">
-                              <Button type="button" size="sm" onClick={() => void savePp36Row(row)}>{t("accCompSave")}</Button>
-                              <Button type="button" size="sm" variant="destructive" onClick={() => void removePp36(row)}>{t("accCompDelete")}</Button>
-                            </div>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                    ) : null}
-                    {showPnd54Ledger ? (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">{t("accCompPnd5354SubPnd54")}</CardTitle>
-                      </CardHeader>
-                      <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "space-y-2"}>
-                        <div className={cn("flex gap-2", isPnd5354CompactList ? "px-4 py-3 border-b border-border/60" : "")}>
-                          {!isPnd5354CompactList ? (
-                            <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
-                              <Plus className="h-3 w-3 mr-1" /> 행 추가
-                            </Button>
-                          ) : null}
-                          {!isPnd5354CompactList ? (
-                            <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>조회</Button>
-                          ) : null}
-                          <Button type="button" size="sm" variant="outline" asChild>
-                            <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
-                          </Button>
-                        </div>
-                        {isPnd5354CompactList ? (
-                          <table className="w-full text-xs border-collapse min-w-[720px]">
-                            <thead>
-                              <tr className="border-b bg-muted/30">
-                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
-                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompStore")}</th>
-                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhPayee")}</th>
-                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhIncomeType")}</th>
-                                <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtGrossShort")}</th>
-                                <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtWithheldShort")}</th>
-                                <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColStatus")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {pnd54RowsFiltered.map((row, idx) => (
-                                <tr key={row.id ?? `pnd54-${idx}`} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                                  <td className="p-2 whitespace-nowrap tabular-nums">{row.tax_month || row.payment_date}</td>
-                                  <td className="p-2 whitespace-nowrap">{row.store_name || "-"}</td>
-                                  <td className="p-2 max-w-[180px] truncate" title={row.payee_name}>{row.payee_name || "-"}</td>
-                                  <td className="p-2 max-w-[140px] truncate" title={row.income_type}>{row.income_type || "-"}</td>
-                                  <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.gross_amount || 0).toLocaleString()}</td>
-                                  <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.wht_amount || 0).toLocaleString()}</td>
-                                  <td className="p-2 whitespace-nowrap">{filingStatusLabel(row.filing_status)}</td>
-                                </tr>
-                              ))}
-                              {!pnd54RowsFiltered.length ? (
-                                <tr>
-                                  <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
-                                </tr>
-                              ) : null}
-                            </tbody>
-                          </table>
-                        ) : (
-                          (pnd54Rows || []).slice(0, 20).map((row, idx) => (
-                            <div key={row.id ?? `pnd54-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
-                              <Input type="date" value={row.payment_date} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payment_date: e.target.value } : x))} />
-                              <Input placeholder="Payee" value={row.payee_name} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payee_name: e.target.value } : x))} />
-                              <Input placeholder="Gross" value={row.gross_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, gross_amount: e.target.value } : x))} />
-                              <Input placeholder="WHT" value={row.wht_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, wht_amount: e.target.value } : x))} />
-                              <div className="col-span-2 flex gap-2 justify-end">
-                                <Button type="button" size="sm" onClick={() => void savePnd54Row(row)}>{t("accCompSave")}</Button>
-                                <Button type="button" size="sm" variant="destructive" onClick={() => void removePnd54(row)}>{t("accCompDelete")}</Button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </CardContent>
-                    </Card>
-                    ) : null}
-                  </div>
-                  ) : null}
-                  {showPnd1Area ? (
-                  <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
-                    <div className="font-medium text-foreground/90">{pnd1RdPrepGuideTitle}</div>
-                    <p>{pnd1RdPrepGuideNote}</p>
-                    <a
-                      href="https://flowaccount.com/blog/rd-prep-pnd1/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary underline"
-                    >
-                      {t("accCompFlowRdPrepExample")}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                  ) : null}
-                  {showPnd1Area ? (
-                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-3">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1 min-w-0">
-                          <div className="text-sm font-medium">{t("accCompPnd91Title")}</div>
-                          <p className="text-xs text-muted-foreground">{t("taxFilingNotePnd91Annual")}</p>
-                          <p className="text-xs text-muted-foreground">{t("accCompPnd91ChecklistLocalNote")}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2 shrink-0">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={pnd91Loading || pnd91Year == null}
-                            onClick={() => void loadPnd91()}
-                          >
-                            {pnd91Loading ? t("loading") : t("accCompPnd91Load")}
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" asChild disabled={pnd91Year == null}>
-                            <a href={pnd91ExportUrl} target="_blank" rel="noopener noreferrer">
-                              <Download className="h-3 w-3 mr-1" />
-                              {t("accCompPnd91ExportCsv")}
-                            </a>
-                          </Button>
-                        </div>
-                      </div>
-                      {pnd91Year != null ? (
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          <span>
-                            {t("holiday_year")}: {pnd91Year}
-                          </span>
-                          <span>
-                            {t("accCompPnd91FilingDue")}:{" "}
-                            {pnd91Summary?.filingDueDate || `${pnd91Year + 1}-03-31`}
-                          </span>
-                          {pnd91Summary ? (
-                            <span>
-                              {t("accCompPnd91SummaryEmployees")}:{" "}
-                              {pnd91Summary.totals.employeeCount.toLocaleString()}
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {pnd91Summary && pnd91Summary.totals.whtMismatchCount > 0 ? (
-                        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-900 dark:text-amber-200">
-                          {t("accCompPnd91WhtMismatchWarn")} ({pnd91Summary.totals.whtMismatchCount.toLocaleString()})
-                        </div>
-                      ) : null}
-                      {pnd91Summary && !pnd91Summary.employees.length ? (
-                        <div className="text-xs text-muted-foreground py-2">{t("accCompPnd91Empty")}</div>
-                      ) : null}
-                      {pnd91Summary && pnd91Summary.employees.length > 0 ? (
-                        <div className="overflow-x-auto rounded border border-border/60">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="border-b bg-muted/30">
-                                <th className="text-left p-2">{t("accCompPnd91ColEmployee")}</th>
-                                <th className="text-left p-2">{t("accCompPnd91ColTaxId")}</th>
-                                <th className="text-right p-2">{t("accCompPnd91ColMonths")}</th>
-                                <th className="text-right p-2">{t("accCompPnd91ColGross")}</th>
-                                <th className="text-right p-2">{t("accCompPnd91ColWhtPayroll")}</th>
-                                <th className="text-right p-2">{t("accCompPnd91ColWhtLedger")}</th>
-                                <th className="text-right p-2">{t("accCompPnd91ColSso")}</th>
-                                <th className="text-right p-2">{t("accCompPnd91ColNet")}</th>
-                                <th className="text-left p-2 min-w-[120px]">{t("accCompPnd91ColStatus")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {pnd91Summary.employees.map((emp) => {
-                                const checklistStatus =
-                                  (pnd91Year != null
-                                    ? readPnd91ChecklistEntry(pnd91Year, storeFilterForApi, emp.employeeKey)?.status
-                                    : null) || "pending"
-                                return (
-                                  <tr
-                                    key={emp.employeeKey}
-                                    className={cn(
-                                      "border-b border-border/40",
-                                      emp.whtLedgerMismatch && "bg-amber-500/5"
-                                    )}
-                                  >
-                                    <td className="p-2">
-                                      <div>{emp.name}</div>
-                                      <div className="text-muted-foreground">{emp.store}</div>
-                                    </td>
-                                    <td className="p-2">{emp.taxId || "-"}</td>
-                                    <td className="p-2 text-right">{emp.monthCount.toLocaleString()}</td>
-                                    <td className="p-2 text-right">{emp.annualGross.toLocaleString()}</td>
-                                    <td className="p-2 text-right">{emp.annualWhtPayroll.toLocaleString()}</td>
-                                    <td className="p-2 text-right">{emp.annualWhtLedger.toLocaleString()}</td>
-                                    <td className="p-2 text-right">{emp.annualSso.toLocaleString()}</td>
-                                    <td className="p-2 text-right">{emp.annualNetPay.toLocaleString()}</td>
-                                    <td className="p-2">
-                                      <Select
-                                        value={checklistStatus}
-                                        onValueChange={(v) => {
-                                          if (pnd91Year == null) return
-                                          writePnd91ChecklistEntry(
-                                            pnd91Year,
-                                            storeFilterForApi,
-                                            emp.employeeKey,
-                                            v as Pnd91ChecklistStatus
-                                          )
-                                          setPnd91ChecklistTick((n) => n + 1)
-                                        }}
-                                      >
-                                        <SelectTrigger className="h-8 text-xs">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="pending">{t("accCompPnd91StatusPending")}</SelectItem>
-                                          <SelectItem value="notified">{t("accCompPnd91StatusNotified")}</SelectItem>
-                                          <SelectItem value="filed">{t("accCompPnd91StatusFiled")}</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {showPnd1Area && payrollTinGapResult ? (
-                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-xs font-medium">
-                          {lang === "th" ? "ผลตรวจ TIN พนักงาน (รายเดือน)" : t("accCompPayrollTinGapTitleMonthly")}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPayrollTinGapResult(null)}
-                        >
-                          {lang === "th" ? "ล้างผลลัพธ์" : t("accCompPayrollTinGapClearResult")}
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div>
-                          {lang === "th" ? "แถวเงินเดือนรวม" : t("accCompPayrollStatWhtRows")}:{" "}
-                          {payrollTinGapResult.payrollRowCount.toLocaleString()}
-                        </div>
-                        <div>
-                          {lang === "th" ? "แถวที่ TIN หาย" : t("accCompPayrollStatTinMissingRows")}:{" "}
-                          {payrollTinGapResult.gapRowCount.toLocaleString()}
-                        </div>
-                        <div>
-                          {lang === "th" ? "พนักงานที่ได้รับผลกระทบ" : t("accCompPayrollStatImpactedEmployees")}:{" "}
-                          {payrollTinGapResult.uniqueEmployeeCount.toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="overflow-x-auto rounded border border-border/60">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="text-left p-2">{t("month")}</th>
-                              <th className="text-left p-2">{t("accCompPayrollGapColPayDate")}</th>
-                              <th className="text-left p-2">{t("accCompPayrollGapColStore")}</th>
-                              <th className="text-left p-2">{t("accCompPayrollGapColEmployeeName")}</th>
-                              <th className="text-right p-2">{t("accCompPayrollGapColWht")}</th>
-                              <th className="text-left p-2">{t("accCompPayrollGapColCertNo")}</th>
-                              <th className="text-right p-2">{t("accCompColAction")}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {payrollTinGapResult.gaps.slice(0, 200).map((row, i) => (
-                              <tr key={`${row.id ?? 'gap'}-${i}`} className="border-b border-border/40">
-                                <td className="p-2">{row.taxMonth || '-'}</td>
-                                <td className="p-2">{row.paymentDate || '-'}</td>
-                                <td className="p-2">{row.storeName || '-'}</td>
-                                <td className="p-2">{row.payeeName || '-'}</td>
-                                <td className="p-2 text-right">{row.whtAmount.toLocaleString()}</td>
-                                <td className="p-2">{row.certificateNo || '-'}</td>
-                                <td className="p-2 text-right">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={!row.id}
-                                    onClick={() => jumpToWhtLedgerRow(row.id)}
-                                  >
-                                    {pnd1GoLedgerBtnLabel}
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                            {!payrollTinGapResult.gaps.length ? (
-                              <tr>
-                                <td colSpan={7} className="p-4 text-center text-muted-foreground">
-                                  {lang === "th" ? "ไม่พบพนักงานที่ TIN หาย" : t("accCompPayrollNoTinGaps")}
-                                </td>
-                              </tr>
-                            ) : null}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ) : null}
-                  {showPnd1Area && pnd1ValidationResult ? (
-                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs font-medium">{pnd1ValidationTableTitle}</div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => exportPnd1ValidationCsv()}
-                          >
-                            {pnd1IssueExportCsvLabel}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setPnd1ValidationResult(null)}
-                          >
-                            {pnd1ClearValidationLabel}
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-xs text-muted-foreground">
-                          Rows: {pnd1ValidationResult.totalRows.toLocaleString()} · Issues:{" "}
-                          {pnd1ValidationResult.issues.length.toLocaleString()} · Filtered:{" "}
-                          {pnd1IssueRowsFiltered.length.toLocaleString()}
-                        </div>
-                        <div className="ml-auto w-full lg:w-auto space-y-1">
-                          <div className="text-xs text-muted-foreground">{pnd1IssueFilterLabel}</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={pnd1IssueFilterCodes.length === 0 ? "default" : "outline"}
-                              onClick={() => setPnd1IssueFilterCodes([])}
-                              className="justify-between"
-                            >
-                              <span>{lang === "th" ? "ทั้งหมด" : t("all")}</span>
-                              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                                {(pnd1ValidationResult?.issues.length || 0).toLocaleString()}
-                              </span>
-                            </Button>
-                            {PND1_ISSUE_CODES.map((code) => (
-                              (() => {
-                                const cnt = pnd1IssueCountMap[code] || 0
-                                const disabled = cnt === 0
-                                return (
-                              <Button
-                                key={code}
-                                type="button"
-                                size="sm"
-                                variant={pnd1IssueFilterCodes.includes(code) ? "default" : "outline"}
-                                onClick={() => togglePnd1IssueCode(code)}
-                                className="justify-between"
-                                disabled={disabled}
-                                title={disabled ? pnd1NoIssueTooltip : ""}
-                              >
-                                <span className="truncate">{pnd1IssueCodeLabel(code)}</span>
-                                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                                  {cnt.toLocaleString()}
-                                </span>
-                              </Button>
-                                )
-                              })()
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="overflow-x-auto rounded border border-border/60">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="text-left p-2">Line</th>
-                              <th className="text-left p-2">Issue</th>
-                              <th className="text-left p-2">Hint</th>
-                              <th className="text-right p-2">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {pnd1IssueRowsFiltered.slice(0, 300).map((issue, i) => (
-                              <tr key={`${issue.lineNo}-${issue.code}-${i}`} className="border-b border-border/40">
-                                <td className="p-2 font-mono">{issue.lineNo}</td>
-                                <td className="p-2">{pnd1IssueCodeLabel(issue.code)}</td>
-                                <td className="p-2 text-muted-foreground">
-                                  {issue.payeeName || "-"}
-                                  {issue.certificateNo ? ` / cert:${issue.certificateNo}` : ""}
-                                </td>
-                                <td className="p-2 text-right">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={!issue.rowId}
-                                    onClick={() => jumpToWhtLedgerRow(issue.rowId)}
-                                  >
-                                    {pnd1GoLedgerBtnLabel}
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                            {!pnd1IssueRowsFiltered.length ? (
-                              <tr>
-                                <td colSpan={4} className="p-4 text-center text-muted-foreground">
-                                  {lang === "th" ? "ไม่พบข้อมูล" : t("accCompPnd1ValidationNoIssues")}
-                                </td>
-                              </tr>
-                            ) : null}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ) : null}
-                  {showWhtLedger && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                  <Card>
-                    {isPnd5354CompactList ? (
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">{t("accCompPnd5354SubPnd53")}</CardTitle>
-                      </CardHeader>
-                    ) : null}
-                    <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto space-y-3"}>
-                      {isPnd5354CompactList ? (
-                        <table className="w-full text-xs border-collapse min-w-[880px]">
-                          <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
-                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompStore")}</th>
-                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhPayee")}</th>
-                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhIncomeType")}</th>
-                              <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtGrossShort")}</th>
-                              <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtWithheldShort")}</th>
-                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhFormHint")}</th>
-                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColStatus")}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {whtRowsPnd53Display.map((row, idx) => (
-                              <tr key={row.id ?? `wht-${idx}`} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                                <td className="p-2 whitespace-nowrap tabular-nums">{row.tax_month || row.payment_date}</td>
-                                <td className="p-2 whitespace-nowrap">{row.store_name || "-"}</td>
-                                <td className="p-2 max-w-[180px] truncate" title={row.payee_name}>{row.payee_name || "-"}</td>
-                                <td className="p-2 max-w-[140px] truncate" title={row.income_type}>{row.income_type || "-"}</td>
-                                <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.gross_amount || 0).toLocaleString()}</td>
-                                <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.wht_amount || 0).toLocaleString()}</td>
-                                <td className="p-2 whitespace-nowrap">{row.form_hint || "-"}</td>
-                                <td className="p-2 whitespace-nowrap">{filingStatusLabel(row.filing_status)}</td>
-                              </tr>
-                            ))}
-                            {!whtRowsPnd53Display.length ? (
-                              <tr>
-                                <td colSpan={8} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
-                              </tr>
-                            ) : null}
-                          </tbody>
-                        </table>
-                      ) : (
-                      <>
-                      {whtRows.map((row, idx) => {
-                        if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
-                        return (
-                        <div
-                          key={row.id ?? `wht-${idx}`}
-                          ref={(el) => {
-                            if (row.id) whtRowRefs.current[row.id] = el
-                          }}
-                          className={accountingLedgerEntryGridCn}
-                        >
-                          <Input
-                            type="date"
-                            value={row.payment_date}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, payment_date: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompStore")}
-                            value={row.store_name}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, store_name: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompPhPayee")}
-                            value={row.payee_name}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, payee_name: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <div className="flex flex-col gap-0.5 text-[10px] text-muted-foreground justify-center">
-                            <span>
-                              {row.direction === "inbound"
-                                ? t("whtDirectionInbound")
-                                : t("whtDirectionOutbound")}
-                            </span>
-                            {row.source_type ? (
-                              <span className="truncate" title={row.source_type}>
-                                {row.source_type}
-                              </span>
-                            ) : null}
-                          </div>
-                          <Input
-                            placeholder={t("accCompPhPayeeTin")}
-                            value={row.payee_tax_id}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, payee_tax_id: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompPhIncomeType")}
-                            value={row.income_type}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, income_type: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompPhGross")}
-                            value={row.gross_amount}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, gross_amount: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompPhWhtRate")}
-                            value={row.wht_rate}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, wht_rate: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompPhWhtAmt")}
-                            value={row.wht_amount}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, wht_amount: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            placeholder={t("accCompPhFormHint")}
-                            value={row.form_hint}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, form_hint: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            className="md:col-span-2"
-                            placeholder={t("accCompPhCertNo")}
-                            value={row.certificate_no}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, certificate_no: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Input
-                            className="md:col-span-2"
-                            placeholder={t("accCompPhMemo")}
-                            value={row.memo}
-                            onChange={(e) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
-                              )
-                            }
-                          />
-                          <Select
-                            value={row.filing_status}
-                            onValueChange={(v) =>
-                              setWhtRows((prev) =>
-                                prev.map((x, i) =>
-                                  i === idx ? { ...x, filing_status: v as "draft" | "submitted" } : x
-                                )
-                              )
-                            }
-                          >
-                            <SelectTrigger className="md:col-span-2">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="draft">{filingStatusLabel("draft")}</SelectItem>
-                              <SelectItem value="submitted">{filingStatusLabel("submitted")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {row.filing_status === "submitted" ? (
-                            <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                              {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
-                              {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
-                            </div>
-                          ) : null}
-                          <div className="flex gap-2 md:col-span-4">
-                            <Button type="button" size="sm" onClick={() => void saveWhtRow(row)}>
-                              <Save className="h-3 w-3 mr-1" />
-                              {t("accCompSave")}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={!(Number(row.wht_amount) > 0)}
-                              onClick={() => void printWhtCertificates([row])}
-                            >
-                              <Printer className="h-3 w-3 mr-1" />
-                              {t("whtCertPrint")}
-                            </Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => void removeWht(row)}>
-                              <Trash2 className="h-3 w-3 mr-1" />
-                              {t("accCompDelete")}
-                            </Button>
-                          </div>
-                        </div>
-                        )
-                      })}
-                      {!whtRowsFiltered.length ? (
-                        <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
-                      ) : null}
-                      </>
-                      )}
-                    </CardContent>
-                  </Card>
-                  ) : null}
-                </div>
-              )}
-                </>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          <AccountingComplianceSummaryTab
+            t={t}
+            lang={lang}
+            taxMonth={taxMonth}
+            setTaxMonth={setTaxMonth}
+            storeTb={storeTb}
+            setStoreTb={setStoreTb}
+            isOffice={isOffice}
+            isManager={isManager}
+            managerStore={managerStore}
+            periodType={periodType}
+            setPeriodType={setPeriodType}
+            ledgerStatusFilter={ledgerStatusFilter}
+            setLedgerStatusFilter={setLedgerStatusFilter}
+            storeOptions={storeOptions}
+            storeOptionLabel={storeOptionLabel}
+            loading={loading}
+            setLoading={setLoading}
+            canUse={canUse}
+            role={role}
+            canApproveUnlock={canApproveUnlock}
+            canApproveCompliance={canApproveCompliance}
+            storeFilterForApi={storeFilterForApi}
+            storeFilterForLedger={storeFilterForLedger}
+            summaryCardTitle={summaryCardTitle}
+            summaryPeriodLabel={summaryPeriodLabel}
+            summaryLoading={summaryLoading}
+            isEmbeddedPp36Section={isEmbeddedPp36Section}
+            isPnd5354CompactList={isPnd5354CompactList}
+            pp30Queried={pp30Queried}
+            setPp30Queried={setPp30Queried}
+            setPp30SearchSeq={setPp30SearchSeq}
+            onFilingSearch={onFilingSearch}
+            pp30XlsxExporting={pp30XlsxExporting}
+            handleDownloadPp30VatReconcileXlsx={handleDownloadPp30VatReconcileXlsx}
+            pp30SubView={pp30SubView}
+            setPp30SubView={setPp30SubView}
+            allowedPp30Views={allowedPp30Views}
+            canShowVatSettlement={canShowVatSettlement}
+            pp30Mode={pp30Mode}
+            pnd5354SubView={pnd5354SubView}
+            setPnd5354SubView={setPnd5354SubView}
+            taxLinkMetaLoading={taxLinkMetaLoading}
+            pp30StoreLinkEval={pp30StoreLinkEval}
+            pp30VendorLinkCounts={pp30VendorLinkCounts}
+            onOpenStoreProfiles={onOpenStoreProfiles}
+            pp30OpsOpen={pp30OpsOpen}
+            setPp30OpsOpen={setPp30OpsOpen}
+            pp30PeriodCloseLoading={pp30PeriodCloseLoading}
+            pp30PeriodClose={pp30PeriodClose}
+            togglePeriod={togglePeriod}
+            hqSupplyProbeLoading={hqSupplyProbeLoading}
+            hqSupplyReconcileApplicable={hqSupplyReconcileApplicable}
+            intercompanyVatReconLoading={intercompanyVatReconLoading}
+            loadIntercompanyVatRecon={loadIntercompanyVatRecon}
+            intercompanyVatRecon={intercompanyVatRecon}
+            vatStoreNameGapsLoading={vatStoreNameGapsLoading}
+            vatStoreNameGaps={vatStoreNameGaps}
+            outputSummaryNet={outputSummaryNet}
+            outputSummaryVat={outputSummaryVat}
+            outputSummaryPayable={outputSummaryPayable}
+            nonPosOutputCount={nonPosOutputCount}
+            vatFilteredStats={vatFilteredStats}
+            taxSummary={taxSummary}
+            vatRows={vatRows}
+            setVatRows={setVatRows}
+            vatExportUrl={vatExportUrl}
+            vatOutputViewMode={vatOutputViewMode}
+            setVatOutputViewMode={setVatOutputViewMode}
+            posFilingOutputSummaries={posFilingOutputSummaries}
+            vatOutputVendorSummaries={vatOutputVendorSummaries}
+            vatOutputVendorTotals={vatOutputVendorTotals}
+            saveVatRow={saveVatRow}
+            removeVat={removeVat}
+            filingStatusLabel={filingStatusLabel}
+            vatSettlement={vatSettlement}
+            vatInputRowsFiltered={vatInputRowsFiltered}
+            vatInputClaimable={vatInputClaimable}
+            vatInputViewMode={vatInputViewMode}
+            setVatInputViewMode={setVatInputViewMode}
+            vatInputVendorSummaries={vatInputVendorSummaries}
+            vatInputVendorTotals={vatInputVendorTotals}
+            loadVat={loadVat}
+            vatSettlementHeadline={vatSettlementHeadline}
+            showWhtLedger={showWhtLedger}
+            showPp36Ledger={showPp36Ledger}
+            showPnd54Ledger={showPnd54Ledger}
+            showPnd1Area={showPnd1Area}
+            showPnd353Tools={showPnd353Tools}
+            pnd53Summary={pnd53Summary}
+            pnd54Summary={pnd54Summary}
+            whtPayeeTinGapCount={whtPayeeTinGapCount}
+            whtRowsPnd53Display={whtRowsPnd53Display}
+            whtRows={whtRows}
+            setWhtRows={setWhtRows}
+            whtRowsFiltered={whtRowsFiltered}
+            whtRowRefs={whtRowRefs}
+            whtExportUrl={whtExportUrl}
+            whtSubmissionFormHint={whtSubmissionFormHint}
+            setWhtSubmissionFormHint={setWhtSubmissionFormHint}
+            whtSubmissionExportUrl={whtSubmissionExportUrl}
+            printWhtCertificates={printWhtCertificates}
+            saveWhtRow={saveWhtRow}
+            removeWht={removeWht}
+            pnd1PayerTaxId={pnd1PayerTaxId}
+            setPnd1PayerTaxId={setPnd1PayerTaxId}
+            pnd1PayerBranchNo={pnd1PayerBranchNo}
+            setPnd1PayerBranchNo={setPnd1PayerBranchNo}
+            pnd1PayerName={pnd1PayerName}
+            setPnd1PayerName={setPnd1PayerName}
+            pnd1FormMode={pnd1FormMode}
+            setPnd1FormMode={setPnd1FormMode}
+            pnd1IncludeHeader={pnd1IncludeHeader}
+            setPnd1IncludeHeader={setPnd1IncludeHeader}
+            pnd1PayerBoxTitle={pnd1PayerBoxTitle}
+            pnd1FormLabel={pnd1FormLabel}
+            pnd1RdPrepUrl={pnd1RdPrepUrl}
+            pnd1RdPrepBtnLabel={pnd1RdPrepBtnLabel}
+            pnd1RdPrepGuideTitle={pnd1RdPrepGuideTitle}
+            pnd1RdPrepGuideNote={pnd1RdPrepGuideNote}
+            pnd1Validating={pnd1Validating}
+            runPnd1Validation={runPnd1Validation}
+            pnd1ValidateBtnLabel={pnd1ValidateBtnLabel}
+            pnd353Validating={pnd353Validating}
+            runPnd353Validation={runPnd353Validation}
+            payrollTinGapLoading={payrollTinGapLoading}
+            runPayrollTinGapCheck={runPayrollTinGapCheck}
+            pnd353ValidationResult={pnd353ValidationResult}
+            pnd1ValidationResult={pnd1ValidationResult}
+            setPnd1ValidationResult={setPnd1ValidationResult}
+            pnd1ValidationTableTitle={pnd1ValidationTableTitle}
+            pnd1IssueRowsFiltered={pnd1IssueRowsFiltered}
+            pnd1IssueFilterCodes={pnd1IssueFilterCodes}
+            setPnd1IssueFilterCodes={setPnd1IssueFilterCodes}
+            pnd1IssueFilterLabel={pnd1IssueFilterLabel}
+            pnd1IssueCountMap={pnd1IssueCountMap}
+            togglePnd1IssueCode={togglePnd1IssueCode}
+            pnd1IssueCodeLabel={pnd1IssueCodeLabel}
+            pnd1NoIssueTooltip={pnd1NoIssueTooltip}
+            pnd1IssueExportCsvLabel={pnd1IssueExportCsvLabel}
+            exportPnd1ValidationCsv={exportPnd1ValidationCsv}
+            pnd1ClearValidationLabel={pnd1ClearValidationLabel}
+            pnd1GoLedgerBtnLabel={pnd1GoLedgerBtnLabel}
+            jumpToWhtLedgerRow={jumpToWhtLedgerRow}
+            pp36Rows={pp36Rows}
+            setPp36Rows={setPp36Rows}
+            pp36ExportUrl={pp36ExportUrl}
+            loadPp36={loadPp36}
+            savePp36Row={savePp36Row}
+            removePp36={removePp36}
+            pnd54Rows={pnd54Rows}
+            setPnd54Rows={setPnd54Rows}
+            pnd54ExportUrl={pnd54ExportUrl}
+            loadPnd54={loadPnd54}
+            savePnd54Row={savePnd54Row}
+            removePnd54={removePnd54}
+            pnd54RowsFiltered={pnd54RowsFiltered}
+            pnd91Loading={pnd91Loading}
+            loadPnd91={loadPnd91}
+            pnd91Year={pnd91Year}
+            pnd91ExportUrl={pnd91ExportUrl}
+            pnd91Summary={pnd91Summary}
+            setPnd91ChecklistTick={setPnd91ChecklistTick}
+            payrollTinGapResult={payrollTinGapResult}
+            setPayrollTinGapResult={setPayrollTinGapResult}
+          />
         </TabsContent>
+
 
         <TabsContent value="cit" className={cn(tabsContentClass, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
@@ -7973,7 +4856,7 @@ export function AdminAccountingCompliance({
                 {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
               </div>
               <div>
-                신고폼: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
+                ì‹ ê³ í¼: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
               </div>
               <div>
                 {t("accCompCitProjectedAnnualTaxableIncome")}: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
@@ -7988,7 +4871,7 @@ export function AdminAccountingCompliance({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">세무조정(가산/차감) 초안</CardTitle>
+              <CardTitle className="text-sm">ì„¸ë¬´ì¡°ì •(ê°€ì‚°/ì°¨ê°) ì´ˆì•ˆ</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex gap-2">
@@ -8004,7 +4887,7 @@ export function AdminAccountingCompliance({
                   }
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  행 추가
+                  í–‰ ì¶”ê°€
                 </Button>
                 <Button type="button" size="sm" onClick={() => void saveCitAdjustmentsDraft()}>
                   {t("accCompSave")}
@@ -8029,21 +4912,21 @@ export function AdminAccountingCompliance({
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="항목명"
+                    placeholder="í•­ëª©ëª…"
                     value={row.itemName}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, itemName: e.target.value } : x)))
                     }
                   />
                   <Input
-                    placeholder="금액"
+                    placeholder="ê¸ˆì•¡"
                     value={row.amount}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))
                     }
                   />
                   <Input
-                    placeholder="메모"
+                    placeholder="ë©”ëª¨"
                     value={row.memo}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
@@ -8064,476 +4947,60 @@ export function AdminAccountingCompliance({
         </TabsContent>
 
         <TabsContent value="sso" className={cn(tabsContentClass, "space-y-3")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Landmark className="h-4 w-4" />
-                {t("accCompTabSso")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <Tabs value={ssoSubView} onValueChange={(v) => setSsoSubView(v as "filing" | "history")}>
-                <TabsList className="grid w-full max-w-md grid-cols-2">
-                  <TabsTrigger value="filing">{t("accCompSsoSubTabFiling")}</TabsTrigger>
-                  <TabsTrigger value="history">{t("accCompSsoSubTabHistory")}</TabsTrigger>
-                </TabsList>
-                <TabsContent value="filing" className="space-y-4 mt-4">
-              {!ssoQueried ? (
-                <AccountingEmptyState>{t("accCompSsoEmptySearchHint")}</AccountingEmptyState>
-              ) : null}
-              <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-2">
-                <div className="text-xs font-medium">{t("accCompSsoStep1Title")}</div>
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={ssoOnlineEnabled}
-                    onChange={(e) => setSsoOnlineEnabled(e.target.checked)}
-                  />
-                  {t("accCompSsoStep1ChecklistOnline")}
-                </label>
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={ssoEmployeeRegReady}
-                    onChange={(e) => setSsoEmployeeRegReady(e.target.checked)}
-                  />
-                  {t("accCompSsoStep1ChecklistEmployment")}
-                </label>
-                <div className="text-[11px] text-muted-foreground">
-                  {t("accCompColStatus")}: {ssoStep1Ready ? t("accCompWorkflowStatusDone") : t("accCompNotCompleted")}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 items-end">
-                {!externalFiling ? (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                    <Input
-                      type="month"
-                      className="h-9 w-[160px]"
-                      value={taxMonth}
-                      onChange={(e) => setTaxMonth(e.target.value)}
-                    />
-                  </div>
-                ) : null}
-                {isOffice && !externalFiling ? (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">{t("accCompSsoPayrollStore")}</div>
-                    <Select value={ssoStoreFilter} onValueChange={setSsoStoreFilter}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {storeOptions.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {storeOptionLabel(s)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-                <div className="shrink-0">
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompSsoFilingWageMode")}</div>
-                  <Select
-                    value={ssoFilingWageMode}
-                    onValueChange={(v) => setSsoFilingWageMode(v as SsoFilingWageMode)}
-                  >
-                    <SelectTrigger className="h-9 w-[220px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="contributable">{t("accCompSsoFilingWageContributable")}</SelectItem>
-                      <SelectItem value="gross">{t("accCompSsoFilingWageGross")}</SelectItem>
-                      <SelectItem value="basic">{t("accCompSsoFilingWageBasic")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {!externalFiling ? (
-                  <Button
-                    type="button"
-                    variant="default"
-                    className={ssoSearchBtnClass}
-                    onClick={() => void runSsoSearch()}
-                    disabled={ssoPayrollLoading}
-                  >
-                    {ssoPayrollLoading ? t("loading") : t("search")}
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={() => void exportOfficialUploadFromPayroll()}
-                  disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
-                  title={t("accCompSsoOfficialUploadHint")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {ssoPayrollExporting ? t("loading") : t("accCompSsoOfficialUploadFromPayroll")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void exportSps110FromPayroll()}
-                  disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
-                  title={t("accCompSsoSps110Hint")}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {ssoPayrollExporting ? t("loading") : t("accCompSsoSps110FromPayroll")}
-                </Button>
-                <Button type="button" variant="outline" asChild>
-                  <a href="https://www.sso.go.th/eservices" target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    {t("accCompSsoOpenSsoSite")}
-                  </a>
-                </Button>
-              </div>
-              {ssoQueried ? (
-                <>
-              <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                <div className="text-xs font-medium">{t("accCompSsoStep2Title")}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {t("accCompMonth")}: {taxMonth} / {t("store")}: {ssoSelectedStore || t("accCompAll")} /{" "}
-                  {t("accCompLoadTime")}:{" "}
-                  {ssoPayrollLoadedAt ? formatBangkokDateTime(ssoPayrollLoadedAt) : "-"}
-                </div>
-                {ssoPayrollLoading ? (
-                  <div className="text-xs text-muted-foreground">{t("loading")}</div>
-                ) : ssoPayrollPreview ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                    <div>{t("accCompSsoTargetEmployees")}: {ssoPayrollPreview.rowCount.toLocaleString()}</div>
-                    <div>{t("accCompSsoStoreCount")}: {ssoPayrollPreview.storeCount.toLocaleString()}</div>
-                    <div>{t("accCompSsoEmployeeContribution")}: {Math.round(ssoPayrollPreview.totalEmployeeSso).toLocaleString()}</div>
-                    <div>{t("accCompSsoEmployerContribution")}: {Math.round(ssoPayrollPreview.totalEmployerSso).toLocaleString()}</div>
-                    <div>{t("accCompSsoTotalContribution")}: {Math.round(ssoPayrollPreview.totalContribution).toLocaleString()}</div>
-                    <div>{t("accCompSsoMissingCitizenId")}: {ssoPayrollPreview.missingCitizenIdCount.toLocaleString()}</div>
-                    <div>{t("accCompSsoMissingMemberNo")}: {ssoPayrollPreview.missingSsoMemberNoCount.toLocaleString()}</div>
-                    <div>{t("accCompColStatus")}: {ssoStep2Ready ? t("accCompWorkflowStatusDone") : t("accCompNoTarget")}</div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">{t("accCompSsoSnapshotNotLoaded")}</div>
-                )}
-                {ssoEmployeePreviewRows.length > 0 ? (
-                  <div className="space-y-2 pt-2">
-                    <div className="text-xs font-medium">{t("accCompSsoEmployeeListTitle")}</div>
-                    {ssoPayrollRows.length > ssoEmployeePreviewRows.length ? (
-                      <p className="text-[11px] text-muted-foreground">
-                        {tr(t, "accCompSsoEmployeeListTruncated", {
-                          shown: String(ssoEmployeePreviewRows.length),
-                          total: String(ssoPayrollRows.length),
-                        })}
-                      </p>
-                    ) : null}
-                    <div className="rounded border border-border/60 overflow-auto max-h-72">
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b bg-muted/30">
-                            <th className="text-left p-2 font-medium">{t("store")}</th>
-                            {SSO_OFFICIAL_UPLOAD_COLUMN_HELP.map((c) => (
-                              <th key={c.labelTh} className="text-left p-2 font-medium whitespace-nowrap">
-                                {resolveSsoOfficialUploadColumnLabel(c, lang)}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ssoEmployeePreviewRows.map((row, idx) => {
-                            const store = String(row.store || "").trim() || "-"
-                            const cols = mapPayrollRowToOfficialUploadRow(row, ssoFilingWageMode)
-                            const rowKey = `${store}-${String(cols[0])}-${idx}`
-                            return (
-                              <tr key={rowKey} className="border-b border-border/40">
-                                <td className="p-2 font-mono text-[11px]">{store}</td>
-                                {cols.map((cell, colIdx) => (
-                                  <td
-                                    key={`${rowKey}-${colIdx}`}
-                                    className={cn(
-                                      "p-2",
-                                      colIdx >= 4 ? "text-right tabular-nums" : "",
-                                      colIdx === 0 ? "font-mono text-[11px]" : ""
-                                    )}
-                                  >
-                                    {typeof cell === "number" ? cell.toLocaleString() : cell || "-"}
-                                  </td>
-                                ))}
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : ssoPayrollPreview && ssoPayrollPreview.rowCount === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("accCompSsoPayrollEmpty")}</p>
-                ) : null}
-              </div>
-              <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                <div className="text-xs font-medium">{t("accCompSsoStep3Title")}</div>
-                <div className="text-[11px] text-muted-foreground whitespace-pre-line">
-                  {t("accCompSsoStep3Guide")}
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void runSsoAccountingSync()}
-                    disabled={
-                      ssoAccountingSyncing ||
-                      ssoSubmissionSaving ||
-                      !ssoQueried ||
-                      !ssoStep2Ready
-                    }
-                  >
-                    {ssoAccountingSyncing ? t("loading") : t("accCompSsoAccountingSyncBtn")}
-                  </Button>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("accCompColStatus")}: {ssoStep3Ready ? t("accCompReady") : t("accCompNeedsPreparation")}
-                </div>
-              </div>
-              <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                <div className="text-xs font-medium">{t("accCompSsoStep4Title")}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {t("accCompSsoStep4Guide")}
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">{t("accCompEvidenceMemo")}</div>
-                  <Textarea
-                    rows={2}
-                    value={ssoSubmissionMemo}
-                    onChange={(e) => setSsoSubmissionMemo(e.target.value)}
-                    placeholder={t("accCompSsoSubmissionMemoPlaceholder")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">{t("accCompEvidenceAttachmentUrls")}</div>
-                  <Textarea
-                    rows={3}
-                    value={ssoAttachmentInput}
-                    onChange={(e) => setSsoAttachmentInput(e.target.value)}
-                    placeholder={t("accCompEvidenceAttachmentUrlsPh")}
-                  />
-                </div>
-                {ssoAttachmentUrls.length ? (
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
-                      {tr(t, "accCompSsoAttachmentListTitle", {
-                        count: ssoAttachmentUrls.length.toLocaleString(),
-                      })}
-                    </div>
-                    <div className="space-y-1">
-                      {ssoAttachmentUrls.map((u) => (
-                        <div
-                          key={u}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded border border-border/60 px-2 py-1"
-                        >
-                          <a
-                            href={u}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="min-w-0 flex-1 truncate text-[11px] text-primary underline"
-                            title={u}
-                          >
-                            {displayNameFromUrl(u)}
-                          </a>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={async () => {
-                              const ok = await appConfirm(
-                                t("msg_delete_confirm_check_item") || t("accCompDeleteEvidenceLinkConfirm")
-                              )
-                              if (!ok) return
-                              const next = ssoAttachmentUrls.filter((x) => x !== u)
-                              setSsoAttachmentInput(next.join("\n"))
-                            }}
-                          >
-                            {t("accCompDelete")}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">{t("accCompDirectUploadGuide")}</div>
-                  <Input
-                    type="file"
-                    multiple
-                    accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.xlsx,.xls,.csv,application/pdf,image/*,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(e) => {
-                      void uploadSsoEvidenceFiles(e.target.files)
-                      e.currentTarget.value = ""
-                    }}
-                    disabled={ssoEvidenceUploading}
-                  />
-                  {ssoEvidenceUploading ? (
-                    <div className="text-[11px] text-muted-foreground">{t("accCompUploading")}</div>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => void markSsoSubmissionDone()}
-                    disabled={!ssoStep1Ready || !ssoStep2Ready || ssoSubmissionSaving || !canApproveCompliance}
-                  >
-                    {ssoSubmissionSaving ? t("loading") : t("accCompMarkSsoSubmissionDone")}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {t("accCompCurrentStatus")}: {ssoStep4Ready ? t("accCompWorkflowStatusDone") : t("accCompNotCompleted")}
-                  </span>
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  {t("accCompSubmittedAt")}: {formatBangkokDateTime(String(ssoWorkflowRow?.updated_at || ""))}
-                  {ssoWorkflowRow?.updated_by ? ` · ${t("accCompSubmittedBy")}: ${ssoWorkflowRow.updated_by}` : ""}
-                </div>
-                {ssoWorkflowMeta?.memo ? (
-                  <div className="text-[11px] text-muted-foreground">{t("memo")}: {ssoWorkflowMeta.memo}</div>
-                ) : null}
-                {ssoWorkflowMeta?.attachmentUrls?.length ? (
-                  <div className="flex flex-col gap-1">
-                    {ssoWorkflowMeta.attachmentUrls.map((u) => (
-                      <a
-                        key={u}
-                        href={u}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] underline text-primary truncate"
-                        title={u}
-                      >
-                        {displayNameFromUrl(u)}
-                      </a>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-                </>
-              ) : null}
-                </TabsContent>
-                <TabsContent value="history" className="mt-4 space-y-3">
-                  <div className="flex flex-wrap items-end gap-2">
-                    {isOffice && !externalFiling ? (
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">{t("accCompSsoPayrollStore")}</div>
-                        <Select value={ssoStoreFilter} onValueChange={setSsoStoreFilter}>
-                          <SelectTrigger className="w-[180px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {storeOptions.map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {storeOptionLabel(s)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void loadSsoSubmissionHistory()}
-                      disabled={ssoHistoryLoading}
-                    >
-                      {ssoHistoryLoading ? t("loading") : t("search")}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">{t("accCompSsoHistoryGuide")}</p>
-                  {ssoHistoryLoading ? (
-                    <div className="text-xs text-muted-foreground">{t("loading")}</div>
-                  ) : ssoHistoryRows.length === 0 ? (
-                    <AccountingEmptyState>{t("accCompSsoHistoryEmpty")}</AccountingEmptyState>
-                  ) : (
-                    <div className="rounded border border-border/60 overflow-auto max-h-[480px]">
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b bg-muted/30">
-                            <th className="text-left p-2 font-medium">{t("accCompColYearMonth")}</th>
-                            <th className="text-left p-2 font-medium">{t("store")}</th>
-                            <th className="text-left p-2 font-medium">{t("accCompSubmittedAt")}</th>
-                            <th className="text-left p-2 font-medium">{t("accCompSubmittedBy")}</th>
-                            <th className="text-left p-2 font-medium">{t("accCompSsoHistorySummary")}</th>
-                            <th className="text-left p-2 font-medium">{t("memo")}</th>
-                            <th className="text-right p-2 font-medium">{t("accCompSsoHistoryAttachments")}</th>
-                            <th className="text-right p-2 font-medium" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ssoHistoryRows.map((row) => {
-                            const meta = parseSsoWorkflowNote(String(row.note || ""))
-                            const storeLabel =
-                              String(row.store_scope || "").trim() === "*" || !String(row.store_scope || "").trim()
-                                ? t("accCompAll")
-                                : String(row.store_scope || "")
-                            const submittedAt = meta?.submittedAt || String(row.updated_at || "")
-                            const submittedBy = meta?.submittedBy || String(row.updated_by || "")
-                            const attachmentCount = meta?.attachmentUrls?.length || 0
-                            return (
-                              <tr key={String(row.id || `${row.year_month}-${row.store_scope}`)} className="border-b border-border/40">
-                                <td className="p-2 tabular-nums whitespace-nowrap">{String(row.year_month || "").slice(0, 7)}</td>
-                                <td className="p-2">{storeLabel}</td>
-                                <td className="p-2 whitespace-nowrap">{formatBangkokDateTime(submittedAt)}</td>
-                                <td className="p-2">{submittedBy || "-"}</td>
-                                <td className="p-2 text-muted-foreground">{meta?.summaryLine || "-"}</td>
-                                <td className="p-2 max-w-[200px] truncate" title={meta?.memo || ""}>
-                                  {meta?.memo || "-"}
-                                </td>
-                                <td className="p-2 text-right tabular-nums">{attachmentCount.toLocaleString()}</td>
-                                <td className="p-2 text-right">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => void openSsoHistoryRow(row)}
-                                  >
-                                    {t("accCompSsoHistoryOpenMonth")}
-                                  </Button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {ssoHistoryRows.some((row) => {
-                    const meta = parseSsoWorkflowNote(String(row.note || ""))
-                    return (meta?.attachmentUrls?.length || 0) > 0
-                  }) ? (
-                    <div className="space-y-2 pt-1">
-                      <div className="text-xs font-medium">{t("accCompSsoHistoryAttachmentLinks")}</div>
-                      {ssoHistoryRows.map((row) => {
-                        const meta = parseSsoWorkflowNote(String(row.note || ""))
-                        if (!meta?.attachmentUrls?.length) return null
-                        const ym = String(row.year_month || "").slice(0, 7)
-                        return (
-                          <div key={`att-${row.id}`} className="rounded border border-border/50 p-2 space-y-1">
-                            <div className="text-[11px] text-muted-foreground">
-                              {ym} · {String(row.store_scope || "*") === "*" ? t("accCompAll") : row.store_scope}
-                            </div>
-                            {meta.attachmentUrls.map((u) => (
-                              <a
-                                key={u}
-                                href={u}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block text-[11px] text-primary underline truncate"
-                                title={u}
-                              >
-                                {displayNameFromUrl(u)}
-                              </a>
-                            ))}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : null}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+          <AccountingComplianceSsoTab
+            t={t}
+            lang={lang}
+            taxMonth={taxMonth}
+            setTaxMonth={setTaxMonth}
+            isOffice={isOffice}
+            externalFiling={externalFiling}
+            storeOptions={storeOptions}
+            storeOptionLabel={storeOptionLabel}
+            canApproveCompliance={canApproveCompliance}
+            ssoSubView={ssoSubView}
+            setSsoSubView={setSsoSubView}
+            ssoStoreFilter={ssoStoreFilter}
+            setSsoStoreFilter={setSsoStoreFilter}
+            ssoSelectedStore={ssoSelectedStore}
+            ssoOnlineEnabled={ssoOnlineEnabled}
+            setSsoOnlineEnabled={setSsoOnlineEnabled}
+            ssoEmployeeRegReady={ssoEmployeeRegReady}
+            setSsoEmployeeRegReady={setSsoEmployeeRegReady}
+            ssoStep1Ready={ssoStep1Ready}
+            ssoQueried={ssoQueried}
+            ssoPayrollLoading={ssoPayrollLoading}
+            ssoPayrollRows={ssoPayrollRows}
+            ssoPayrollPreview={ssoPayrollPreview}
+            ssoPayrollLoadedAt={ssoPayrollLoadedAt}
+            ssoEmployeePreviewRows={ssoEmployeePreviewRows}
+            ssoStep2Ready={ssoStep2Ready}
+            ssoFilingWageMode={ssoFilingWageMode}
+            setSsoFilingWageMode={setSsoFilingWageMode}
+            ssoSearchBtnClass={ssoSearchBtnClass}
+            ssoPayrollExporting={ssoPayrollExporting}
+            ssoStep3Ready={ssoStep3Ready}
+            ssoAccountingSyncing={ssoAccountingSyncing}
+            ssoSubmissionMemo={ssoSubmissionMemo}
+            setSsoSubmissionMemo={setSsoSubmissionMemo}
+            ssoAttachmentInput={ssoAttachmentInput}
+            setSsoAttachmentInput={setSsoAttachmentInput}
+            ssoAttachmentUrls={ssoAttachmentUrls}
+            ssoEvidenceUploading={ssoEvidenceUploading}
+            ssoSubmissionSaving={ssoSubmissionSaving}
+            ssoStep4Ready={ssoStep4Ready}
+            ssoWorkflowRow={ssoWorkflowRow}
+            ssoWorkflowMeta={ssoWorkflowMeta}
+            ssoHistoryRows={ssoHistoryRows}
+            ssoHistoryLoading={ssoHistoryLoading}
+            runSsoSearch={runSsoSearch}
+            exportOfficialUploadFromPayroll={exportOfficialUploadFromPayroll}
+            exportSps110FromPayroll={exportSps110FromPayroll}
+            runSsoAccountingSync={runSsoAccountingSync}
+            markSsoSubmissionDone={markSsoSubmissionDone}
+            uploadSsoEvidenceFiles={uploadSsoEvidenceFiles}
+            loadSsoSubmissionHistory={loadSsoSubmissionHistory}
+            openSsoHistoryRow={openSsoHistoryRow}
+          />
         </TabsContent>
 
         <TabsContent value="kt20k" className={cn(tabsContentClass, "space-y-3")}>
@@ -8543,42 +5010,42 @@ export function AdminAccountingCompliance({
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                {lang === "th" ? "โครง UI และสรุปข้อมูลรายเดือนสำหรับ KT20K (MVP)" : t("accCompKt20kMvpScaffoldNote")}
+                {lang === "th" ? "à¹‚à¸„à¸£à¸‡ UI à¹à¸¥à¸°à¸ªà¸£à¸¸à¸›à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸£à¸²à¸¢à¹€à¸”à¸·à¸­à¸™à¸ªà¸³à¸«à¸£à¸±à¸š KT20K (MVP)" : t("accCompKt20kMvpScaffoldNote")}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-2">
                 <Input
-                  placeholder={lang === "th" ? "เลขผู้เสียภาษีบริษัท" : t("accCompKt20kPhCompanyTaxId")}
+                  placeholder={lang === "th" ? "à¹€à¸¥à¸‚à¸œà¸¹à¹‰à¹€à¸ªà¸µà¸¢à¸ à¸²à¸©à¸µà¸šà¸£à¸´à¸©à¸±à¸—" : t("accCompKt20kPhCompanyTaxId")}
                   value={kt20kEmployer.companyTaxId}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyTaxId: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
                   className="lg:col-span-2"
-                  placeholder={lang === "th" ? "ชื่อบริษัท" : t("accCompKt20kPhCompanyName")}
+                  placeholder={lang === "th" ? "à¸Šà¸·à¹ˆà¸­à¸šà¸£à¸´à¸©à¸±à¸—" : t("accCompKt20kPhCompanyName")}
                   value={kt20kEmployer.companyName}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyName: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "สำนักงานประกันสังคม (จังหวัด)" : t("accCompKt20kPhSsoProvince")}
+                  placeholder={lang === "th" ? "à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¸›à¸£à¸°à¸à¸±à¸™à¸ªà¸±à¸‡à¸„à¸¡ (à¸ˆà¸±à¸‡à¸«à¸§à¸±à¸”)" : t("accCompKt20kPhSsoProvince")}
                   value={kt20kEmployer.ssoProvince}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoProvince: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "เบอร์โทรสำนักงานประกันสังคม" : t("accCompKt20kPhSsoPhone")}
+                  placeholder={lang === "th" ? "à¹€à¸šà¸­à¸£à¹Œà¹‚à¸—à¸£à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¸›à¸£à¸°à¸à¸±à¸™à¸ªà¸±à¸‡à¸„à¸¡" : t("accCompKt20kPhSsoPhone")}
                   value={kt20kEmployer.ssoPhone}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoPhone: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "รหัสกิจการ 5 หลัก" : t("accCompKt20kPhBusinessCode5")}
+                  placeholder={lang === "th" ? "à¸£à¸«à¸±à¸ªà¸à¸´à¸ˆà¸à¸²à¸£ 5 à¸«à¸¥à¸±à¸" : t("accCompKt20kPhBusinessCode5")}
                   value={kt20kEmployer.businessCode5}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, businessCode5: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "อัตราเงินสมทบ %" : t("accCompKt20kPhFundRatePercent")}
+                  placeholder={lang === "th" ? "à¸­à¸±à¸•à¸£à¸²à¹€à¸‡à¸´à¸™à¸ªà¸¡à¸—à¸š %" : t("accCompKt20kPhFundRatePercent")}
                   value={kt20kEmployer.fundRatePercent}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, fundRatePercent: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
@@ -8614,11 +5081,11 @@ export function AdminAccountingCompliance({
                   onClick={() => void saveKt20kEmployerSettings()}
                   disabled={kt20kSettingsSaving || kt20kSettingsLoading}
                 >
-                  {kt20kSettingsSaving ? t("loading") : lang === "th" ? "บันทึกการตั้งค่า" : t("accCompKt20kSaveSettings")}
+                  {kt20kSettingsSaving ? t("loading") : lang === "th" ? "à¸šà¸±à¸™à¸—à¸¶à¸à¸à¸²à¸£à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸²" : t("accCompKt20kSaveSettings")}
                 </Button>
                 <Button type="button" variant="outline" asChild>
                   <a href={kt20kExportUrl} target="_blank" rel="noopener noreferrer">
-                    {lang === "th" ? "ส่งออก CSV" : t("accCompVatExport")}
+                    {lang === "th" ? "à¸ªà¹ˆà¸‡à¸­à¸­à¸ CSV" : t("accCompVatExport")}
                   </a>
                 </Button>
               </div>
@@ -8628,7 +5095,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "สรุปรายเดือน (ม.ค.-ธ.ค.)" : t("accCompKt20kMonthlySummaryTitle")}
+                {lang === "th" ? "à¸ªà¸£à¸¸à¸›à¸£à¸²à¸¢à¹€à¸”à¸·à¸­à¸™ (à¸¡.à¸„.-à¸˜.à¸„.)" : t("accCompKt20kMonthlySummaryTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -8685,7 +5152,7 @@ export function AdminAccountingCompliance({
               ) : null}
               {!kt20kLoading && !kt20kData ? (
                 <div className="p-6 text-center text-muted-foreground text-xs">
-                  {lang === "th" ? "ยังไม่มีข้อมูล" : t("accCompKt20kNoData")}
+                  {lang === "th" ? "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸‚à¹‰à¸­à¸¡à¸¹à¸¥" : t("accCompKt20kNoData")}
                 </div>
               ) : null}
             </CardContent>

@@ -97,3 +97,45 @@ export async function deleteChecklistItem(id: string | number) {
   if (!res.ok || !data.success) throw new Error(data.message || '삭제 실패')
   return true
 }
+
+export async function uploadStoreCheckPhoto(
+  store: string,
+  date: string,
+  itemId: number,
+  phase: 'before' | 'after',
+  file: File
+): Promise<{ success: boolean; url?: string; message?: string }> {
+  const { apiFetch } = await import('../api/fetch')
+  const pres = await apiFetch('/api/uploadStoreCheckPhoto/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      store,
+      date,
+      itemId,
+      phase,
+      fileName: file.name,
+      contentType: file.type || 'image/jpeg',
+      fileSize: file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
+  }
+  const ct = file.type || 'image/jpeg'
+  const body =
+    file.type === ct ? file : new File([file], file.name || 'upload', { type: ct, lastModified: file.lastModified })
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, body, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
+  }
+  return { success: true, url: pjson.publicUrl, message: undefined }
+}

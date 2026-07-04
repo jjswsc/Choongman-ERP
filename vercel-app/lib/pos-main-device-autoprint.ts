@@ -427,8 +427,9 @@ export async function printKitchenForOrder(
         : []
   if (!rawItems.length) throw new Error('empty_order_items')
 
+  const callerAlreadyReserved = Boolean(opts?.dedupeKey)
   const kitchenDedupeKey = opts?.dedupeKey ?? `order:${orderId}:kitchen`
-  if (!ctx.reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+  if (!callerAlreadyReserved && !ctx.reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
 
   try {
     const items = prepareOrderItemsForKitchenPrint(rawItems, ctx, order.deliveryAppCode)
