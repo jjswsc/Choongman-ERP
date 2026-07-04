@@ -14,7 +14,8 @@ import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate
 import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-host"
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 import { PosStoreProvider } from "@/lib/pos-store-provider"
-import { appAlert } from "@/lib/app-message"
+// appAlert는 모달 Dialog → inert 잠금 유발하므로 POS 레이아웃에서 사용 금지
+// import { appAlert } from "@/lib/app-message"
 import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
 import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
@@ -211,18 +212,15 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
           summary.mismatchFields.length > 0 || summary.usesOnlyWindowsDefault || !summary.hasExplicitPrintDevices
         if (!hasIssue) return
 
-        const lines: string[] = []
-        lines.push(t("posShellStartupHealthWarnTitle"))
-        lines.push(t("posShellStartupHealthWarnBody"))
-        if (summary.mismatchFields.length > 0) {
-          lines.push(t("posShellStartupHealthWarnMismatch"))
-        } else if (!summary.hasExplicitPrintDevices) {
-          lines.push(t("posShellStartupHealthWarnNoExplicit"))
-        } else if (summary.usesOnlyWindowsDefault) {
-          lines.push(t("posShellStartupHealthWarnDefaultOnly"))
-        }
-        lines.push(t("posShellStartupHealthWarnAction"))
-        await appAlert(lines.join("\n"))
+        // 모달 Dialog(appAlert)가 inert를 걸어 전체 POS를 잠그므로 console.warn만 사용
+        console.warn(
+          "[cm-pos] printer health:",
+          summary.mismatchFields.length > 0
+            ? `mismatch: ${summary.mismatchFields.join(", ")}`
+            : !summary.hasExplicitPrintDevices
+              ? "no explicit print devices"
+              : "uses only Windows default"
+        )
         void sendPosHealthAlert({
           eventType: "hybrid_print_mapping_mismatch",
           payload: {
