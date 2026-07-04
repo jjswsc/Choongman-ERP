@@ -293,7 +293,10 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
    * 터치/클릭한 input에 확실히 포커스를 잡아 준다.
    */
   useEffect(() => {
-    console.log("[cm-pos] layout build: 2026-07-04T17:30+07")
+    console.log("[cm-pos] layout build: 2026-07-04T17:50+07")
+    const peStyle = document.createElement("style")
+    peStyle.textContent = "body { pointer-events: auto !important; }"
+    document.head.appendChild(peStyle)
     const logDomState = () => {
       const dialogs = document.querySelectorAll("[role=dialog]").length
       const inertEls = document.querySelectorAll("[inert]")
@@ -419,6 +422,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     document.addEventListener("pointerdown", onPointerDown, true)
     const tid = window.setInterval(stripAllStaleInert, 3000)
     return () => {
+      document.head.removeChild(peStyle)
       document.removeEventListener("focusin", onFocusIn, true)
       inertObserver.disconnect()
       document.removeEventListener("pointerdown", onPointerDown, true)
