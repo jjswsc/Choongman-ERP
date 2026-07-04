@@ -412,23 +412,51 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         }
       }
     })
+    let lastPointerDownTarget: EventTarget | null = null
+    let lastPointerDownAt = 0
+    let prevFocusedEl: HTMLElement | null = null
+    let restoringFocus = false
+    const origOnPointerDown = onPointerDown
+    const wrappedOnPointerDown = (e: PointerEvent) => {
+      lastPointerDownTarget = e.target
+      lastPointerDownAt = Date.now()
+      origOnPointerDown(e)
+    }
+    const radixOverlaySelector =
+      '[data-radix-popper-content-wrapper], [role="listbox"][data-state="open"], [data-radix-select-viewport], [role="menu"][data-state="open"]'
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
-      const ds = t.dataset || {}
-      if (ds.posMemberScan === "1" || ds.posCouponScan === "1") {
-        console.trace("[cm-pos-diag] scan input FOCUSED:", describeEl(t))
+      if (restoringFocus) {
+        restoringFocus = false
+        prevFocusedEl = t
+        return
       }
+      const ds = t.dataset || {}
+      const isScanInput = ds.posMemberScan === "1" || ds.posCouponScan === "1"
+      if (isScanInput) {
+        const isUserClick = lastPointerDownTarget === t && (Date.now() - lastPointerDownAt < 300)
+        const overlayOpen = Boolean(document.querySelector(radixOverlaySelector))
+        if (!isUserClick && overlayOpen && prevFocusedEl && prevFocusedEl !== t) {
+          console.warn("[cm-pos-diag] scan autofocus blocked — overlay open, restoring:", describeEl(prevFocusedEl))
+          restoringFocus = true
+          prevFocusedEl.focus()
+          return
+        }
+        console.warn("[cm-pos-diag] scan input FOCUSED:", describeEl(t),
+          isUserClick ? "(user click)" : "(programmatic)")
+      }
+      prevFocusedEl = t
     }
     document.addEventListener("focusin", onFocusIn, true)
     inertObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["inert"], subtree: true })
-    document.addEventListener("pointerdown", onPointerDown, true)
+    document.addEventListener("pointerdown", wrappedOnPointerDown, true)
     const tid = window.setInterval(stripAllStaleInert, 3000)
     return () => {
       document.head.removeChild(peStyle)
       document.removeEventListener("focusin", onFocusIn, true)
       inertObserver.disconnect()
-      document.removeEventListener("pointerdown", onPointerDown, true)
+      document.removeEventListener("pointerdown", wrappedOnPointerDown, true)
       window.clearInterval(tid)
       window.clearInterval(domTid)
     }
