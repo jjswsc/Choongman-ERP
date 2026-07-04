@@ -5,14 +5,29 @@ import { usePathname } from "next/navigation"
 import { isMemberPortalPath } from "@/lib/member-portal-path"
 
 /**
+ * POS·ERP 경로: 탭이 항상 전체 화면(키오스크)이라 visibilitychange → hidden이 발생하지 않는다.
+ * 새 SW 활성화 감지 후 이 시간이 지나면 탭 상태와 무관하게 자동 새로고침한다.
+ */
+const POS_AUTO_RELOAD_DELAY_MS = 8_000
+const ERP_AUTO_RELOAD_DELAY_MS = 30_000
+
+function isPosPath(p: string) {
+  return p === "/pos" || p.startsWith("/pos/")
+}
+function isAdminPath(p: string) {
+  return p === "/admin" || p.startsWith("/admin/")
+}
+
+/**
  * 배포 시 새 버전(sw.js) 자동 감지 → 배너 없이 백그라운드에서만 새로고침.
  *
  * 배경: PWA(Serwist `sw.js`)라 화면 JS/HTML이 서비스워커 캐시에 들어간다.
  * POS·ERP 모두 탭을 오래 켜 두면 배포 후에도 옛 코드가 남을 수 있어 갱신이 필요하다.
  *
  * 동작: skipWaiting+clientsClaim 으로 새 sw.js 가 활성화되면 `controllerchange` 등으로 감지한다.
- *  - 주문·입력 중 강제 리로드를 피하기 위해 **즉시 새로고침하지 않는다.**
- *  - 화면이 가려질 때(다른 탭·앱으로 전환)에만 `location.reload()` — UI 배너는 표시하지 않는다.
+ *  - **POS**: 키오스크·전체 화면이라 탭이 숨겨지지 않으므로 감지 후 짧은 유예(8초) 뒤 자동 새로고침.
+ *  - **ERP/관리자**: 탭 전환이 가능하므로 hidden 시 즉시 새로고침. 30초 내 hidden이 없으면 타이머 폴백.
+ *  - **기타**: 탭이 숨겨질 때만 새로고침 (기존 동작).
  *  - IndexedDB·오프라인 큐 등은 건드리지 않는다.
  */
 export function SwAutoUpdate() {
@@ -86,6 +101,24 @@ export function SwAutoUpdate() {
   useEffect(() => {
     if (isMemberPortalPath(pathname)) return
     if (!updateReady) return
+
+    if (isPosPath(pathname)) {
+      const tid = window.setTimeout(reloadOnce, POS_AUTO_RELOAD_DELAY_MS)
+      return () => window.clearTimeout(tid)
+    }
+
+    if (isAdminPath(pathname)) {
+      const onHidden = () => {
+        if (document.visibilityState === "hidden") reloadOnce()
+      }
+      document.addEventListener("visibilitychange", onHidden)
+      const tid = window.setTimeout(reloadOnce, ERP_AUTO_RELOAD_DELAY_MS)
+      return () => {
+        document.removeEventListener("visibilitychange", onHidden)
+        window.clearTimeout(tid)
+      }
+    }
+
     const onHidden = () => {
       if (document.visibilityState === "hidden") reloadOnce()
     }
