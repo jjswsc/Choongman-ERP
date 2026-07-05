@@ -255,7 +255,7 @@ function IssueTable({
                   key={j}
                   className={cn(
                     j === 0 ? accountingResultTdCn : accountingResultTdRightCn,
-                    "font-mono text-xs"
+                    "font-mono text-sm"
                   )}
                 >
                   {c}

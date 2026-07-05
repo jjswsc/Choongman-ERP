@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
@@ -259,7 +259,7 @@ export function AdminAccountingCompliance({
   const { stores: franchiseStoreList, posStores, resolveStoreKey, storeLabels, legacyToCanonical, formatStoreLabel } = useStoreList()
   const managerStore = (auth?.store || "").trim()
   const hqUserByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
-  /** ë³¸ì‚¬Â·íšŒê³„ë§Œ ì „ ë§¤ìž¥; ë§¤ìž¥ ë§¤ë‹ˆì €Â·ê°€ë§¹ì€ ì†Œì† ë§¤ìž¥ë§Œ(ë³¸ì‚¬ store ë¬¸ìžì—´ì´ì–´ë„ ì—­í• ì´ ë§¤ìž¥ì´ë©´ ì „ì²´ ì¡°íšŒ ë¶ˆê°€) */
+  /** 본사·회계만 전 매장; 매장 매니저·가맹은 소속 매장만(본사 store 문자열이어도 역할이 매장이면 전체 조회 불가) */
   const isOffice =
     isOfficeRole(role) ||
     isAccountingRole(role) ||
@@ -282,7 +282,7 @@ export function AdminAccountingCompliance({
     onFilingYearMonthChange !== undefined &&
     filingStoreFilter !== undefined &&
     onFilingStoreFilterChange !== undefined
-  /** P.P30/P.P36 íƒ­ í•˜ë‹¨ PP36 ë¸”ë¡ë§Œ: ì¤‘ë³µ í•„í„°Â·PP36 ì œëª©Â·PP30 ê²€ìƒ‰ ì—°ë™ */
+  /** P.P30/P.P36 탭 하단 PP36 블록만: 중복 필터·PP36 제목·PP30 검색 연동 */
   const isEmbeddedPp36Section = embeddedPp36Section === true
 
   const [internalTaxMonth, setInternalTaxMonth] = React.useState(ymNow)
@@ -297,13 +297,13 @@ export function AdminAccountingCompliance({
   const storeTb = externalFiling ? filingStoreFilter : internalStoreTb
   const setStoreTb = externalFiling ? onFilingStoreFilterChange : setInternalStoreTb
 
-  /** POSÂ·ì›ìž¥ API storeFilter â€” ì‚¬ìš©ìž ì„ íƒê°’ ê·¸ëŒ€ë¡œ(ì„œë²„ì—ì„œ erp_storesë¡œ í•´ì„) */
+  /** POS·원장 API storeFilter — 사용자 선택값 그대로(서버에서 erp_stores로 해석) */
   const storeFilterForApi = React.useMemo(() => {
     const s = String(storeTb ?? "").trim()
     if (!s || s === "All" || s === "*") return "All"
     return s
   }, [storeTb])
-  /** í”„ë¡œí•„Â·UIìš© canonical store_code */
+  /** 프로필·UI용 canonical store_code */
   const storeFilterForLedger = React.useMemo(() => {
     if (storeFilterForApi === "All") return "All"
     const r = String(resolveStoreKey(storeFilterForApi) ?? "").trim()
@@ -483,11 +483,11 @@ export function AdminAccountingCompliance({
     citFilingShell ? "half_year" : "monthly"
   )
   const [ledgerStatusFilter, setLedgerStatusFilter] = React.useState<"all" | "draft" | "submitted">("all")
-  /** ë²•ì¸ì„¸ ì—°ê°„: APIëŠ” yearMonthì˜ ì—°ë„ë§Œ ì‚¬ìš© â€” UIëŠ” ì—°ë„ë§Œ ê³ ë¦„ */
+  /** 법인세 연간: API는 yearMonth의 연도만 사용 — UI는 연도만 고름 */
   const [citFiscalYear, setCitFiscalYear] = React.useState(() => Number(ymNow().slice(0, 4)))
-  /** ë¶€ê°€ì„¸(à¸ .à¸ž.30) íƒ­: ë§¤ì¶œ/ë§¤ìž…/ì •ì‚°/ì›ì²œ ì¡°íšŒ */
+  /** 부가세(ภ.พ.30) 탭: 매출/매입/정산/원천 조회 */
   const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "settlement" | "wht">(initialPp30SubView)
-  /** P.N.D.53/54 íƒ­: ë²•ì¸ ì›ì²œ(53) / í•´ì™¸ ì§€ê¸‰(54) ì‹ ê³  ë¶„ë¦¬ */
+  /** P.N.D.53/54 탭: 법인 원천(53) / 해외 지급(54) 신고 분리 */
   const [pnd5354SubView, setPnd5354SubView] = React.useState<"pnd53" | "pnd54">("pnd53")
   const [vatOutputViewMode, setVatOutputViewMode] = React.useState<"vendor" | "detail">("vendor")
   const [vatInputViewMode, setVatInputViewMode] = React.useState<"vendor" | "detail">("vendor")
@@ -502,7 +502,7 @@ export function AdminAccountingCompliance({
   )
   const [taxSummary, setTaxSummary] = React.useState<ThaiTaxFilingSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = React.useState(false)
-  /** ë¶€ê°€ì„¸(PP30) ìš”ì•½ íƒ­: ì¡°ê±´ ë³€ê²½ ì‹œ ì´ˆê¸°í™”, ê²€ìƒ‰ í›„ì—ë§Œ API ì¡°íšŒ */
+  /** 부가세(PP30) 요약 탭: 조건 변경 시 초기화, 검색 후에만 API 조회 */
   const [pp30Queried, setPp30Queried] = React.useState(false)
   const [pp30SearchSeq, setPp30SearchSeq] = React.useState(0)
   const [pp30XlsxExporting, setPp30XlsxExporting] = React.useState(false)
@@ -539,7 +539,7 @@ export function AdminAccountingCompliance({
   const [ssoStoreFilter, setSsoStoreFilter] = React.useState(() =>
     isManager && managerStore ? managerStore : "All"
   )
-  /** SSO íƒ­: ì¡°ê±´ ë³€ê²½ ì‹œ ì´ˆê¸°í™”, ê²€ìƒ‰ í›„ì—ë§Œ ê¸‰ì—¬Â·ìš”ì•½ í‘œì‹œ */
+  /** SSO 탭: 조건 변경 시 초기화, 검색 후에만 급여·요약 표시 */
   const [ssoQueried, setSsoQueried] = React.useState(false)
   const [ssoPayrollLoading, setSsoPayrollLoading] = React.useState(false)
   const [ssoPayrollExporting, setSsoPayrollExporting] = React.useState(false)
@@ -1964,7 +1964,7 @@ export function AdminAccountingCompliance({
           postedBy: auth.user || undefined,
         })
       } catch {
-        /* submission still recorded; user can retry ì§€ê¸‰ì˜ˆì • ë°˜ì˜ */
+        /* submission still recorded; user can retry 지급예정 반영 */
       }
       const effectiveStore = isManager && managerStore ? managerStore : pickStore
       const summaryLine = `SSO rows=${preview.rowCount}, employee_sso=${Math.round(
@@ -2083,7 +2083,7 @@ export function AdminAccountingCompliance({
       return
     }
     if (!pp30Queried) return
-    // summary íƒ­ ìž¬ì¡°íšŒëŠ” summaryEffectê°€ ë‹´ë‹¹í•œë‹¤(ì¤‘ë³µ í˜¸ì¶œ ë°©ì§€).
+    // summary 탭 재조회는 summaryEffect가 담당한다(중복 호출 방지).
     if (tab === "summary") return
     setPp30Queried(false)
     setVatRows([])
@@ -2441,7 +2441,7 @@ export function AdminAccountingCompliance({
             .join("\n")
           const more =
             Number(res.pendingEvidenceCount || rows.length) > rows.length
-              ? `\n... +${Number(res.pendingEvidenceCount || 0) - rows.length}ê±´`
+              ? `\n... +${Number(res.pendingEvidenceCount || 0) - rows.length}건`
               : ""
           await appAlert(
             `${t("accCompEvidencePendingInMonth")}\n\n${preview || t("accCompEvidenceRequiredForSubmit")}${more}`
@@ -3167,7 +3167,7 @@ export function AdminAccountingCompliance({
       const branchOfficeLabel = (() => {
         const st = String(storeTb || "").trim()
         if (st && st !== "All") return `${st} ${branchNo}`.trim()
-        return branchNo ? `à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¹ƒà¸«à¸à¹ˆ ${branchNo}` : ""
+        return branchNo ? `สำนักงานใหญ่ ${branchNo}` : ""
       })()
       const companyBlock = {
         companyName,
@@ -3191,13 +3191,13 @@ export function AdminAccountingCompliance({
       }
       const periodDescriptionLine =
         taxSummary?.period && taxSummary.period.startMonth !== taxSummary.period.endMonth
-          ? `à¸ªà¸³à¸«à¸£à¸±à¸šà¸‡à¸§à¸”à¸ à¸²à¸©à¸µ ${summaryPeriodLabel}`
+          ? `สำหรับงวดภาษี ${summaryPeriodLabel}`
           : mod.formatThaiVatPeriodLine(taxMonth)
       let filingRound = mod.filingRoundLabelFromTaxMonth(taxMonth)
       if (taxSummary?.period?.startMonth && taxSummary?.period?.endMonth) {
         const a = taxSummary.period.startMonth
         const b = taxSummary.period.endMonth
-        if (a !== b) filingRound = `${a.slice(5, 7)}-${a.slice(0, 4)} ~ ${b.slice(5, 7)}-${b.slice(0, 4)} (à¸¢à¸·à¹ˆà¸™à¸›à¸à¸•à¸´)`
+        if (a !== b) filingRound = `${a.slice(5, 7)}-${a.slice(0, 4)} ~ ${b.slice(5, 7)}-${b.slice(0, 4)} (ยื่นปกติ)`
       }
       const toLedger = (r: VatDraft): VatLedgerRow => ({
         id: r.id,
@@ -3231,7 +3231,7 @@ export function AdminAccountingCompliance({
           inputVat: vatSettlement.inputVat,
         },
         filingStatusLabel: (fs) =>
-          String(fs || "").toLowerCase() === "submitted" ? "à¸¢à¸·à¹ˆà¸™à¹à¸¥à¹‰à¸§" : "à¸£à¸­à¸¢à¸·à¹ˆà¸™à¹à¸šà¸šà¸ à¸²à¸©à¸µ",
+          String(fs || "").toLowerCase() === "submitted" ? "ยื่นแล้ว" : "รอยื่นแบบภาษี",
         filingRoundLabel: filingRound,
       })
       const blob = new Blob([buf], {
@@ -3523,31 +3523,31 @@ export function AdminAccountingCompliance({
     [auth?.user]
   )
   const pnd1RdPrepBtnLabel =
-    lang === "th" ? "à¸ªà¹ˆà¸‡à¸­à¸­à¸ RD Prep à¸ .à¸‡.à¸”.1 TXT" : t("accCompPnd1ExportTxt")
+    lang === "th" ? "ส่งออก RD Prep ภ.ง.ด.1 TXT" : t("accCompPnd1ExportTxt")
   const pnd1RdPrepGuideTitle =
-    lang === "th" ? "à¹à¸™à¸§à¸—à¸²à¸‡à¸¢à¸·à¹ˆà¸™ RD Prep (à¸ .à¸‡.à¸”.1 / à¸ .à¸‡.à¸”.1à¸)" : t("accCompPnd1GuideTitle")
+    lang === "th" ? "แนวทางยื่น RD Prep (ภ.ง.ด.1 / ภ.ง.ด.1ก)" : t("accCompPnd1GuideTitle")
   const pnd1RdPrepGuideNote =
     lang === "th"
-      ? "à¹„à¸Ÿà¸¥à¹Œà¸™à¸µà¹‰à¹€à¸›à¹‡à¸™à¹à¸šà¸šà¸„à¸±à¹ˆà¸™à¸”à¹‰à¸§à¸¢ | à¹€à¸žà¸·à¹ˆà¸­à¸™à¸³à¹€à¸‚à¹‰à¸²à¹ƒà¸™ RD Prep à¹‚à¸”à¸¢à¹à¸¡à¸›à¸„à¸­à¸¥à¸±à¸¡à¸™à¹Œà¹ƒà¸™à¸‚à¸±à¹‰à¸™à¸•à¸­à¸™à¹‚à¸­à¸™à¸¢à¹‰à¸²à¸¢à¸‚à¹‰à¸­à¸¡à¸¹à¸¥"
+      ? "ไฟล์นี้เป็นแบบคั่นด้วย | เพื่อนำเข้าใน RD Prep โดยแมปคอลัมน์ในขั้นตอนโอนย้ายข้อมูล"
       : t("accCompPnd1GuideNotePipe")
   const pnd1ValidateBtnLabel =
-    lang === "th" ? "à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸à¹ˆà¸­à¸™à¸ªà¹ˆà¸‡à¸­à¸­à¸" : t("accCompPnd1ValidateBeforeExport")
+    lang === "th" ? "ตรวจสอบก่อนส่งออก" : t("accCompPnd1ValidateBeforeExport")
   const pnd1FormLabel =
-    lang === "th" ? "à¹à¸šà¸šà¸¢à¸·à¹ˆà¸™" : t("accCompPnd1FilingForm")
+    lang === "th" ? "แบบยื่น" : t("accCompPnd1FilingForm")
   const pnd1PayerBoxTitle =
-    lang === "th" ? "à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸œà¸¹à¹‰à¸ˆà¹ˆà¸²à¸¢ (à¸œà¸¹à¹‰à¸«à¸±à¸ à¸“ à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢)" : t("accCompPnd1PayerInfoBox")
+    lang === "th" ? "ข้อมูลผู้จ่าย (ผู้หัก ณ ที่จ่าย)" : t("accCompPnd1PayerInfoBox")
   const pnd1ValidationTableTitle =
-    lang === "th" ? "à¸œà¸¥à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š RD Prep" : t("accCompPnd1ValidationResults")
+    lang === "th" ? "ผลตรวจสอบ RD Prep" : t("accCompPnd1ValidationResults")
   const pnd1GoLedgerBtnLabel =
-    lang === "th" ? "à¹„à¸›à¸—à¸µà¹ˆà¸£à¸²à¸¢à¸à¸²à¸£" : t("accCompPnd1GoToLedgerRow")
+    lang === "th" ? "ไปที่รายการ" : t("accCompPnd1GoToLedgerRow")
   const pnd1ClearValidationLabel =
-    lang === "th" ? "à¸¥à¹‰à¸²à¸‡à¸œà¸¥à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š" : t("accCompPnd1ClearValidation")
+    lang === "th" ? "ล้างผลตรวจสอบ" : t("accCompPnd1ClearValidation")
   const pnd1IssueFilterLabel =
-    lang === "th" ? "à¸•à¸±à¸§à¸à¸£à¸­à¸‡à¸›à¸±à¸à¸«à¸²" : t("accCompPnd1IssueFilter")
+    lang === "th" ? "ตัวกรองปัญหา" : t("accCompPnd1IssueFilter")
   const pnd1IssueExportCsvLabel =
-    lang === "th" ? "à¸ªà¹ˆà¸‡à¸­à¸­à¸à¸œà¸¥à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸š CSV" : t("accCompPnd1ExportValidationCsv")
+    lang === "th" ? "ส่งออกผลตรวจสอบ CSV" : t("accCompPnd1ExportValidationCsv")
   const pnd1NoIssueTooltip =
-    lang === "th" ? "à¹„à¸¡à¹ˆà¸¡à¸µà¸›à¸±à¸à¸«à¸²à¸›à¸£à¸°à¹€à¸ à¸—à¸™à¸µà¹‰à¹ƒà¸™à¸Šà¹ˆà¸§à¸‡à¸—à¸µà¹ˆà¹€à¸¥à¸·à¸­à¸" : t("accCompPnd1NoIssuesInFilter")
+    lang === "th" ? "ไม่มีปัญหาประเภทนี้ในช่วงที่เลือก" : t("accCompPnd1NoIssuesInFilter")
   const kt20kExportUrl = React.useMemo(() => {
     const y = Number(kt20kYear)
     if (!Number.isFinite(y) || y < 2000 || y > 2100) return "#"
@@ -3556,13 +3556,13 @@ export function AdminAccountingCompliance({
   const pnd1IssueCodeLabel = React.useCallback(
     (code: string) => {
       const th: Record<string, string> = {
-        missing_payee_name: "à¹„à¸¡à¹ˆà¸¡à¸µà¸Šà¸·à¹ˆà¸­à¸œà¸¹à¹‰à¸£à¸±à¸šà¹€à¸‡à¸´à¸™",
-        missing_payee_tax_id: "à¹„à¸¡à¹ˆà¸¡à¸µà¹€à¸¥à¸‚à¸œà¸¹à¹‰à¹€à¸ªà¸µà¸¢à¸ à¸²à¸©à¸µà¸œà¸¹à¹‰à¸£à¸±à¸šà¹€à¸‡à¸´à¸™",
-        invalid_payee_tax_id_length: "à¹€à¸¥à¸‚à¸œà¸¹à¹‰à¹€à¸ªà¸µà¸¢à¸ à¸²à¸©à¸µà¸œà¸¹à¹‰à¸£à¸±à¸šà¹€à¸‡à¸´à¸™à¹„à¸¡à¹ˆà¸„à¸£à¸š 13 à¸«à¸¥à¸±à¸",
-        missing_payment_date: "à¹„à¸¡à¹ˆà¸¡à¸µà¸§à¸±à¸™à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢",
-        invalid_payment_date: "à¸£à¸¹à¸›à¹à¸šà¸šà¸§à¸±à¸™à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢à¹„à¸¡à¹ˆà¸–à¸¹à¸à¸•à¹‰à¸­à¸‡",
-        missing_income_type: "à¹„à¸¡à¹ˆà¸¡à¸µà¸›à¸£à¸°à¹€à¸ à¸—à¹€à¸‡à¸´à¸™à¹„à¸”à¹‰",
-        non_positive_withheld_amount: "à¸ à¸²à¸©à¸µà¸«à¸±à¸ à¸“ à¸—à¸µà¹ˆà¸ˆà¹ˆà¸²à¸¢ <= 0",
+        missing_payee_name: "ไม่มีชื่อผู้รับเงิน",
+        missing_payee_tax_id: "ไม่มีเลขผู้เสียภาษีผู้รับเงิน",
+        invalid_payee_tax_id_length: "เลขผู้เสียภาษีผู้รับเงินไม่ครบ 13 หลัก",
+        missing_payment_date: "ไม่มีวันที่จ่าย",
+        invalid_payment_date: "รูปแบบวันที่จ่ายไม่ถูกต้อง",
+        missing_income_type: "ไม่มีประเภทเงินได้",
+        non_positive_withheld_amount: "ภาษีหัก ณ ที่จ่าย <= 0",
       }
       if (lang === "th") return th[code] || code
       const key = `accCompPnd1Issue_${code}`
@@ -3656,11 +3656,11 @@ export function AdminAccountingCompliance({
   const kt20kReasonTagLabel = React.useCallback(
     (tag: string) => {
       const th: Record<string, string> = {
-        missing_in_pnd1a: "à¹„à¸¡à¹ˆà¸¡à¸µà¹ƒà¸™ PND1A",
-        missing_in_kt20k: "à¹„à¸¡à¹ˆà¸¡à¸µà¹ƒà¸™ KT20K",
-        amount_mismatch: "à¸¢à¸­à¸”à¹„à¸¡à¹ˆà¸•à¸£à¸‡à¸à¸±à¸™",
-        possible_store_mismatch: "à¸­à¸²à¸ˆà¹à¸¡à¸›à¸ªà¸²à¸‚à¸²à¸œà¸´à¸”",
-        possible_name_mismatch: "à¸­à¸²à¸ˆà¹à¸¡à¸›à¸Šà¸·à¹ˆà¸­à¸œà¸´à¸”",
+        missing_in_pnd1a: "ไม่มีใน PND1A",
+        missing_in_kt20k: "ไม่มีใน KT20K",
+        amount_mismatch: "ยอดไม่ตรงกัน",
+        possible_store_mismatch: "อาจแมปสาขาผิด",
+        possible_name_mismatch: "อาจแมปชื่อผิด",
       }
       if (lang === "th") return th[tag] || tag
       const key = `accCompKt20kTag_${tag}`
@@ -3768,12 +3768,12 @@ export function AdminAccountingCompliance({
         wc.nonPositiveWithheldAmount
       appAlert(
         warningTotal > 0
-          ? `PND3/53 ê²€ì¦ ê²½ê³  ${warningTotal.toLocaleString()}ê±´`
-          : "PND3/53 ê²€ì¦ ì™„ë£Œ (ê²½ê³  ì—†ìŒ)"
+          ? `PND3/53 검증 경고 ${warningTotal.toLocaleString()}건`
+          : "PND3/53 검증 완료 (경고 없음)"
       )
     } catch {
       setPnd353ValidationResult(null)
-      appAlert("PND3/53 ê²€ì¦ì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤.")
+      appAlert("PND3/53 검증에 실패했습니다.")
     } finally {
       setPnd353Validating(false)
     }
@@ -3825,7 +3825,7 @@ export function AdminAccountingCompliance({
           .map((x) => (x.storeName ? `${x.storeName}/${x.payeeName || '-'}` : x.payeeName || '-'))
           .join(', ')
         appAlert(
-          `${t("accCompTinGapCheckDone")}: ${data.gapRowCount.toLocaleString()} Â· ${t("accCompImpactedEmployees")} ${data.uniqueEmployeeCount.toLocaleString()}\n` +
+          `${t("accCompTinGapCheckDone")}: ${data.gapRowCount.toLocaleString()} · ${t("accCompImpactedEmployees")} ${data.uniqueEmployeeCount.toLocaleString()}\n` +
             (sample ? `${t("example")}: ${sample}` : "")
         )
       } else {
@@ -3983,7 +3983,7 @@ export function AdminAccountingCompliance({
               <div>
                 <div className="font-medium text-sm mb-2">{t("accCompSched_tbl_title")}</div>
                 <div className="overflow-x-auto rounded-md border border-border/80">
-                  <table className="w-full text-xs border-collapse min-w-[520px]">
+                  <table className="w-full text-sm border-collapse min-w-[520px]">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_item")}</th>
@@ -4034,7 +4034,7 @@ export function AdminAccountingCompliance({
               <CardTitle className="text-base">{t("accCompChartTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-2">{t("accCompColCode")}</th>
@@ -4060,7 +4060,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "à¹€à¸—à¸µà¸¢à¸šà¸¢à¸­à¸” KT20K vs PND1A" : t("accCompKt20kVsPnd1aTitle")}
+                {lang === "th" ? "เทียบยอด KT20K vs PND1A" : t("accCompKt20kVsPnd1aTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -4068,7 +4068,7 @@ export function AdminAccountingCompliance({
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "à¹€à¸à¸“à¸‘à¹Œà¸ªà¹ˆà¸§à¸™à¸•à¹ˆà¸²à¸‡ (à¸šà¸²à¸—)" : t("accCompKt20kDiffToleranceLabel")}
+                      {lang === "th" ? "เกณฑ์ส่วนต่าง (บาท)" : t("accCompKt20kDiffToleranceLabel")}
                     </div>
                     <Input
                       type="number"
@@ -4107,7 +4107,7 @@ export function AdminAccountingCompliance({
                   </div>
 
                   <div className="overflow-x-auto rounded border border-border/60">
-                    <table className="w-full text-xs min-w-[760px]">
+                    <table className="w-full text-sm min-w-[760px]">
                       <thead>
                         <tr className="border-b bg-muted/40">
                           <th className="text-left p-2">{t("month")}</th>
@@ -4130,7 +4130,7 @@ export function AdminAccountingCompliance({
                         {!kt20kMonthlyDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "à¹„à¸¡à¹ˆà¸žà¸šà¸ªà¹ˆà¸§à¸™à¸•à¹ˆà¸²à¸‡à¸•à¸²à¸¡à¹€à¸à¸“à¸‘à¹Œ" : t("accCompKt20kNoMonthlyDiff")}
+                              {lang === "th" ? "ไม่พบส่วนต่างตามเกณฑ์" : t("accCompKt20kNoMonthlyDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -4140,7 +4140,7 @@ export function AdminAccountingCompliance({
 
                   <div className="space-y-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "à¸•à¸±à¸§à¸à¸£à¸­à¸‡à¹à¸—à¹‡à¸à¸ªà¸²à¹€à¸«à¸•à¸¸" : t("accCompKt20kReasonTagQuickFilter")}
+                      {lang === "th" ? "ตัวกรองแท็กสาเหตุ" : t("accCompKt20kReasonTagQuickFilter")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <Button
@@ -4149,7 +4149,7 @@ export function AdminAccountingCompliance({
                         variant={kt20kReasonTagFilter.length === 0 ? "default" : "outline"}
                         onClick={() => setKt20kReasonTagFilter([])}
                       >
-                        {lang === "th" ? "à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”" : t("all")}
+                        {lang === "th" ? "ทั้งหมด" : t("all")}
                       </Button>
                       {KT20K_REASON_TAGS.map((tag) => {
                         const cnt = kt20kReasonTagCountMap[tag] || 0
@@ -4164,7 +4164,7 @@ export function AdminAccountingCompliance({
                             title={
                               cnt === 0
                                 ? lang === "th"
-                                  ? "à¹„à¸¡à¹ˆà¸žà¸šà¸£à¸²à¸¢à¸à¸²à¸£à¹ƒà¸™à¹€à¸‡à¸·à¹ˆà¸­à¸™à¹„à¸‚à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™"
+                                  ? "ไม่พบรายการในเงื่อนไขปัจจุบัน"
                                   : t("accCompKt20kNoTagInFilter")
                                 : ""
                             }
@@ -4181,7 +4181,7 @@ export function AdminAccountingCompliance({
                   </div>
 
                   <div className="overflow-x-auto rounded border border-border/60">
-                    <table className="w-full text-xs min-w-[760px]">
+                    <table className="w-full text-sm min-w-[760px]">
                       <thead>
                         <tr className="border-b bg-muted/40">
                           <th className="text-left p-2">{t("store")}</th>
@@ -4218,7 +4218,7 @@ export function AdminAccountingCompliance({
                         {!kt20kEmployeeDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "à¹„à¸¡à¹ˆà¸žà¸šà¸ªà¹ˆà¸§à¸™à¸•à¹ˆà¸²à¸‡à¸£à¸²à¸¢à¸šà¸¸à¸„à¸„à¸¥" : t("accCompKt20kNoEmployeeDiff")}
+                              {lang === "th" ? "ไม่พบส่วนต่างรายบุคคล" : t("accCompKt20kNoEmployeeDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -4228,7 +4228,7 @@ export function AdminAccountingCompliance({
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  {lang === "th" ? "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹€à¸—à¸µà¸¢à¸šà¸¢à¸­à¸”" : t("accCompKt20kNoReconcileData")}
+                  {lang === "th" ? "ยังไม่มีข้อมูลเทียบยอด" : t("accCompKt20kNoReconcileData")}
                 </div>
               )}
             </CardContent>
@@ -4458,7 +4458,7 @@ export function AdminAccountingCompliance({
           </div>
           <Card>
             <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
                     <th className="text-left p-2">{t("accCompColCode")}</th>
@@ -4802,7 +4802,7 @@ export function AdminAccountingCompliance({
             </div>
           ) : null}
           {isCitFilingShell && citData?.months?.length ? (
-            <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs">
+            <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-sm">
               <div className="text-muted-foreground mb-1">{t("accCompCitPeriodMonths")}</div>
               <div className="flex flex-wrap gap-1.5">
                 {citData.months.map((m) => (
@@ -4855,7 +4855,7 @@ export function AdminAccountingCompliance({
                 {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
               </div>
               <div>
-                ì‹ ê³ í¼: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
+                신고폼: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
               </div>
               <div>
                 {t("accCompCitProjectedAnnualTaxableIncome")}: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
@@ -4870,7 +4870,7 @@ export function AdminAccountingCompliance({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">ì„¸ë¬´ì¡°ì •(ê°€ì‚°/ì°¨ê°) ì´ˆì•ˆ</CardTitle>
+              <CardTitle className="text-sm">세무조정(가산/차감) 초안</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex gap-2">
@@ -4886,7 +4886,7 @@ export function AdminAccountingCompliance({
                   }
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  í–‰ ì¶”ê°€
+                  행 추가
                 </Button>
                 <Button type="button" size="sm" onClick={() => void saveCitAdjustmentsDraft()}>
                   {t("accCompSave")}
@@ -4911,21 +4911,21 @@ export function AdminAccountingCompliance({
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="í•­ëª©ëª…"
+                    placeholder="항목명"
                     value={row.itemName}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, itemName: e.target.value } : x)))
                     }
                   />
                   <Input
-                    placeholder="ê¸ˆì•¡"
+                    placeholder="금액"
                     value={row.amount}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))
                     }
                   />
                   <Input
-                    placeholder="ë©”ëª¨"
+                    placeholder="메모"
                     value={row.memo}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
@@ -5009,42 +5009,42 @@ export function AdminAccountingCompliance({
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                {lang === "th" ? "à¹‚à¸„à¸£à¸‡ UI à¹à¸¥à¸°à¸ªà¸£à¸¸à¸›à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸£à¸²à¸¢à¹€à¸”à¸·à¸­à¸™à¸ªà¸³à¸«à¸£à¸±à¸š KT20K (MVP)" : t("accCompKt20kMvpScaffoldNote")}
+                {lang === "th" ? "โครง UI และสรุปข้อมูลรายเดือนสำหรับ KT20K (MVP)" : t("accCompKt20kMvpScaffoldNote")}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-2">
                 <Input
-                  placeholder={lang === "th" ? "à¹€à¸¥à¸‚à¸œà¸¹à¹‰à¹€à¸ªà¸µà¸¢à¸ à¸²à¸©à¸µà¸šà¸£à¸´à¸©à¸±à¸—" : t("accCompKt20kPhCompanyTaxId")}
+                  placeholder={lang === "th" ? "เลขผู้เสียภาษีบริษัท" : t("accCompKt20kPhCompanyTaxId")}
                   value={kt20kEmployer.companyTaxId}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyTaxId: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
                   className="lg:col-span-2"
-                  placeholder={lang === "th" ? "à¸Šà¸·à¹ˆà¸­à¸šà¸£à¸´à¸©à¸±à¸—" : t("accCompKt20kPhCompanyName")}
+                  placeholder={lang === "th" ? "ชื่อบริษัท" : t("accCompKt20kPhCompanyName")}
                   value={kt20kEmployer.companyName}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyName: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¸›à¸£à¸°à¸à¸±à¸™à¸ªà¸±à¸‡à¸„à¸¡ (à¸ˆà¸±à¸‡à¸«à¸§à¸±à¸”)" : t("accCompKt20kPhSsoProvince")}
+                  placeholder={lang === "th" ? "สำนักงานประกันสังคม (จังหวัด)" : t("accCompKt20kPhSsoProvince")}
                   value={kt20kEmployer.ssoProvince}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoProvince: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "à¹€à¸šà¸­à¸£à¹Œà¹‚à¸—à¸£à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¸›à¸£à¸°à¸à¸±à¸™à¸ªà¸±à¸‡à¸„à¸¡" : t("accCompKt20kPhSsoPhone")}
+                  placeholder={lang === "th" ? "เบอร์โทรสำนักงานประกันสังคม" : t("accCompKt20kPhSsoPhone")}
                   value={kt20kEmployer.ssoPhone}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoPhone: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "à¸£à¸«à¸±à¸ªà¸à¸´à¸ˆà¸à¸²à¸£ 5 à¸«à¸¥à¸±à¸" : t("accCompKt20kPhBusinessCode5")}
+                  placeholder={lang === "th" ? "รหัสกิจการ 5 หลัก" : t("accCompKt20kPhBusinessCode5")}
                   value={kt20kEmployer.businessCode5}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, businessCode5: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "à¸­à¸±à¸•à¸£à¸²à¹€à¸‡à¸´à¸™à¸ªà¸¡à¸—à¸š %" : t("accCompKt20kPhFundRatePercent")}
+                  placeholder={lang === "th" ? "อัตราเงินสมทบ %" : t("accCompKt20kPhFundRatePercent")}
                   value={kt20kEmployer.fundRatePercent}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, fundRatePercent: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
@@ -5080,11 +5080,11 @@ export function AdminAccountingCompliance({
                   onClick={() => void saveKt20kEmployerSettings()}
                   disabled={kt20kSettingsSaving || kt20kSettingsLoading}
                 >
-                  {kt20kSettingsSaving ? t("loading") : lang === "th" ? "à¸šà¸±à¸™à¸—à¸¶à¸à¸à¸²à¸£à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸²" : t("accCompKt20kSaveSettings")}
+                  {kt20kSettingsSaving ? t("loading") : lang === "th" ? "บันทึกการตั้งค่า" : t("accCompKt20kSaveSettings")}
                 </Button>
                 <Button type="button" variant="outline" asChild>
                   <a href={kt20kExportUrl} target="_blank" rel="noopener noreferrer">
-                    {lang === "th" ? "à¸ªà¹ˆà¸‡à¸­à¸­à¸ CSV" : t("accCompVatExport")}
+                    {lang === "th" ? "ส่งออก CSV" : t("accCompVatExport")}
                   </a>
                 </Button>
               </div>
@@ -5094,11 +5094,11 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "à¸ªà¸£à¸¸à¸›à¸£à¸²à¸¢à¹€à¸”à¸·à¸­à¸™ (à¸¡.à¸„.-à¸˜.à¸„.)" : t("accCompKt20kMonthlySummaryTitle")}
+                {lang === "th" ? "สรุปรายเดือน (ม.ค.-ธ.ค.)" : t("accCompKt20kMonthlySummaryTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse min-w-[980px]">
+              <table className="w-full text-sm border-collapse min-w-[980px]">
                 <thead>
                   <tr className="border-b bg-muted/40">
                     <th className="text-left p-2">{t("month")}</th>
@@ -5150,8 +5150,8 @@ export function AdminAccountingCompliance({
                 </div>
               ) : null}
               {!kt20kLoading && !kt20kData ? (
-                <div className="p-6 text-center text-muted-foreground text-xs">
-                  {lang === "th" ? "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸‚à¹‰à¸­à¸¡à¸¹à¸¥" : t("accCompKt20kNoData")}
+                <div className="p-6 text-center text-muted-foreground text-sm">
+                  {lang === "th" ? "ยังไม่มีข้อมูล" : t("accCompKt20kNoData")}
                 </div>
               ) : null}
             </CardContent>
@@ -5210,7 +5210,7 @@ export function AdminAccountingCompliance({
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{t("accCompFilingCalendarTitle")}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-xs">
+            <CardContent className="space-y-2 text-sm">
               <div className="text-muted-foreground">
                 {tr(t, "accCompFilingCalendarIntro", { month: taxMonth, store: storeTb })}
               </div>
@@ -5276,7 +5276,7 @@ export function AdminAccountingCompliance({
           </Card>
           <Card>
             <CardContent className="pt-6 overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-2">{t("accCompColFiling")}</th>

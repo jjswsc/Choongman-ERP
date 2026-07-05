@@ -184,7 +184,7 @@ export function AdminPayrollSalaryHistory() {
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse min-w-[900px]">
+            <table className="w-full text-sm border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-left font-medium">{t("pay_sal_hist_changed_at")}</th>

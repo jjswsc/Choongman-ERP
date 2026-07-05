@@ -9,7 +9,7 @@ export const accountingResultTableCn = "w-full text-sm border-collapse min-w-max
 export const accountingResultTheadRowCn = "border-b bg-muted/50"
 
 export const accountingResultThCn =
-  "text-left p-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap"
+  "text-left p-2.5 text-sm font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap"
 
 export const accountingResultThRightCn = cn(accountingResultThCn, "text-right")
 
@@ -23,14 +23,14 @@ export const accountingResultTdRightCn = cn(accountingResultTdCn, "text-right fo
 export const accountingResultTfootRowCn = "border-t bg-muted/40 font-medium"
 
 export const accountingLedgerEntryGridCn =
-  "rounded-lg border border-border/70 bg-background/80 p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs shadow-sm transition-shadow hover:shadow-md"
+  "rounded-lg border border-border/70 bg-background/80 p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5 text-sm shadow-sm transition-shadow hover:shadow-md"
 
 export const accountingStatGridCn = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2"
 
 export const accountingStatCardCn =
   "rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 min-w-0"
 
-export const accountingStatLabelCn = "text-[11px] font-medium text-muted-foreground truncate"
+export const accountingStatLabelCn = "text-sm font-bold text-muted-foreground truncate"
 
 export const accountingStatValueCn = "mt-0.5 text-sm font-semibold tabular-nums tracking-tight"
 
@@ -44,7 +44,7 @@ export const accountingFinancialTableCn = "w-full text-sm border-collapse"
 
 export const accountingFinancialTheadCn = "border-b bg-muted/40 text-muted-foreground"
 
-export const accountingFinancialThCn = "py-2.5 text-left font-medium first:pl-3 last:pr-3"
+export const accountingFinancialThCn = "py-2.5 text-left text-sm font-bold first:pl-3 last:pr-3"
 
 export const accountingFinancialThRightCn = cn(accountingFinancialThCn, "text-right")
 
@@ -68,8 +68,14 @@ export const accountingPlTableCn = "w-full text-sm border-collapse"
 export const accountingPlTheadCn =
   "border-b-2 border-border/60 bg-gradient-to-r from-muted/95 via-muted/60 to-muted/95 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.5)_inset]"
 
+/** 회계 리스트·드릴다운 — 섹션 제목(테이블 위) */
+export const accountingResultSectionTitleCn = "text-sm font-bold text-foreground mb-1.5"
+
+/** 회계 인라인 테이블(AccountingDataTable 외) */
+export const accountingResultInlineTableCn = "w-full text-sm border-collapse"
+
 export const accountingPlThCn =
-  "pl-8 pr-5 py-3.5 text-xs font-semibold uppercase tracking-wider"
+  "pl-8 pr-5 py-3.5 text-sm font-bold uppercase tracking-wider"
 
 export const accountingPlThRightCn = cn(accountingPlThCn, "text-right pl-5 pr-8")
 
@@ -100,7 +106,7 @@ export const accountingPlExpenseRowCn =
 export const accountingPlSubRowCn =
   "border-b border-border/35 bg-muted/15 shadow-[inset_2px_0_0_rgba(0,0,0,0.04)] dark:shadow-[inset_2px_0_0_rgba(255,255,255,0.04)]"
 
-export const accountingPlSubTdLabelCn = "pl-14 pr-5 py-2.5 text-xs text-muted-foreground align-middle"
+export const accountingPlSubTdLabelCn = "pl-14 pr-5 py-2.5 text-sm text-muted-foreground align-middle"
 
 export const accountingPlGrossProfitRowCn =
   "border-y-2 border-primary/30 bg-gradient-to-r from-primary/12 via-primary/6 to-primary/12 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.5)]"
@@ -123,7 +129,7 @@ export const accountingBsSectionTitleCn =
 export const accountingBsLineRowCn =
   "flex items-baseline justify-between gap-4 px-2 py-2.5 border-b border-border/30 last:border-0"
 
-export const accountingBsLineLabelCn = "text-xs font-medium text-muted-foreground shrink-0 pl-1"
+export const accountingBsLineLabelCn = "text-sm font-medium text-muted-foreground shrink-0 pl-1"
 
 export const accountingBsLineValueCn =
   "font-mono text-right text-sm font-medium tabular-nums text-foreground pr-2"
@@ -131,7 +137,7 @@ export const accountingBsLineValueCn =
 export const accountingBsSubLineRowCn =
   "flex items-baseline justify-between gap-4 px-3 py-2 ml-2 border-l-2 border-border/45"
 
-export const accountingBsSubLineLabelCn = "text-[11px] text-muted-foreground shrink-0 pl-1"
+export const accountingBsSubLineLabelCn = "text-sm text-muted-foreground shrink-0 pl-1"
 
 export const accountingBsSubLineValueCn =
   "font-mono text-right text-sm tabular-nums text-muted-foreground pr-2"
@@ -152,10 +158,10 @@ export const accountingBsCompareTheadCn =
   "border-b bg-gradient-to-r from-muted/90 via-muted/55 to-muted/90 text-muted-foreground"
 
 export const accountingBsCompareThStickyCn =
-  "sticky left-0 z-10 min-w-[200px] bg-gradient-to-r from-muted/95 to-muted/80 pl-8 pr-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider"
+  "sticky left-0 z-10 min-w-[200px] bg-gradient-to-r from-muted/95 to-muted/80 pl-8 pr-5 py-3.5 text-left text-sm font-bold uppercase tracking-wider"
 
 export const accountingBsCompareThColCn =
-  "pl-5 pr-8 py-3.5 text-right text-xs font-semibold uppercase tracking-wider font-mono align-bottom whitespace-nowrap"
+  "pl-5 pr-8 py-3.5 text-right text-sm font-bold uppercase tracking-wider font-mono align-bottom whitespace-nowrap"
 
 export const accountingBsCompareTdStickyCn =
   "sticky left-0 z-10 bg-card pl-8 pr-5 py-3 font-medium"

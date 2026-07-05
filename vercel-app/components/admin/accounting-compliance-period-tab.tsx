@@ -497,7 +497,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
               onChange={(e) => setClosingMemo(e.target.value)}
               placeholder={t("accCompClosingMemoPlaceholder")}
             />
-            <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
                 className="h-4 w-4"
@@ -509,7 +509,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
           </div>
           {closingPreview ? (
             <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
                 <div>{t("accCompClosingRevenueTotal")}: {closingPreview.revenueTotal.toLocaleString()}</div>
                 <div>{t("accCompClosingExpenseTotal")}: {closingPreview.expenseTotal.toLocaleString()}</div>
                 <div>{t("accCompClosingNetIncome")}: {closingPreview.netIncome.toLocaleString()}</div>
@@ -520,7 +520,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                 {closingPreview.profitLossAccountName})
               </div>
               <div className="overflow-x-auto rounded border border-border/60">
-                <table className="w-full text-xs">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
                       <th className="text-left p-2">{t("accCompAccountCode")}</th>
@@ -574,7 +574,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
               </div>
               {closingDraftDiff ? (
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-xs font-medium mb-1">{t("accCompClosingDiffVsDraft")}</div>
+                  <div className="text-sm font-bold mb-1.5">{t("accCompClosingDiffVsDraft")}</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-[11px]">
                     <div>{t("accCompClosingRevenueDiff")}: {closingDraftDiff.revenueDiff.toLocaleString()}</div>
                     <div>{t("accCompClosingExpenseDiff")}: {closingDraftDiff.expenseDiff.toLocaleString()}</div>
@@ -601,7 +601,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                 {closingPosted?.posted_by ? ` / ${closingPosted.posted_by}` : ""}
               </div>
               <div className="rounded border border-border/60 p-2">
-                <div className="text-xs font-medium mb-1">{t("accCompClosingDocHistoryRecent30")}</div>
+                <div className="text-sm font-bold mb-1.5">{t("accCompClosingDocHistoryRecent30")}</div>
                 {closingHistory.length ? (
                   <div className="space-y-1 text-[11px]">
                     {closingHistory.map((h) => (
@@ -829,7 +829,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
             })}
           </div>
           <div className="overflow-x-auto rounded border border-border/60">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left p-2">{t("accCompAuditThTime")}</th>

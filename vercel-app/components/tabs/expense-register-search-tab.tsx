@@ -618,9 +618,9 @@ export function ExpenseRegisterSearchTab() {
                         <td className="p-2">
                           <ExpenseSearchTimelineCell row={r} />
                         </td>
-                        <td className="p-2 text-xs">{r.storeName || "—"}</td>
-                        <td className="p-2 text-center text-xs">{getCategoryLabel(r.category, t)}</td>
-                        <td className="p-2 text-xs">{renderPayee(r)}</td>
+                        <td className="p-2 text-sm">{r.storeName || "—"}</td>
+                        <td className="p-2 text-center text-sm">{getCategoryLabel(r.category, t)}</td>
+                        <td className="p-2 text-sm">{renderPayee(r)}</td>
                         <td className="p-2 text-center">{renderPlanCell(r)}</td>
                         <td className="p-2 text-center">{renderBankCell(r)}</td>
                         <td className="p-2">
@@ -667,7 +667,7 @@ export function ExpenseRegisterSearchTab() {
                             ) : null}
                           </div>
                         </td>
-                        <td className="p-2 text-muted-foreground text-xs max-w-[180px] truncate" title={r.memo}>
+                        <td className="p-2 text-muted-foreground text-sm max-w-[180px] truncate" title={r.memo}>
                           {getMemo(r.memo)}
                         </td>
                         <td className="p-2 text-center">

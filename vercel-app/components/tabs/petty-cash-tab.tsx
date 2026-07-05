@@ -1220,16 +1220,16 @@ export function PettyCashTab({
         )
       }
       return (
-        <table className="w-full text-xs min-w-[640px]">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
             <tr>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettyAggDate") || "일자"}</th>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryExpenseTotal")}</th>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryInflowTotal")}</th>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryNetChange")}</th>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatTotal")}</th>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatPending")}</th>
-              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettyAggCount") || "건수"}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettyAggDate") || "일자"}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryExpenseTotal")}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryInflowTotal")}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryNetChange")}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryVatTotal")}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryVatPending")}</th>
+              <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettyAggCount") || "건수"}</th>
             </tr>
           </thead>
           <tbody>
@@ -1259,14 +1259,14 @@ export function PettyCashTab({
       )
     }
     return (
-      <table className="w-full text-xs min-w-[520px]">
+      <table className="w-full text-sm min-w-[520px]">
         <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
           <tr>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">{t("accountSubject")}</th>
-            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryExpenseTotal")}</th>
-            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatTotal")}</th>
-            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettySummaryVatPending")}</th>
-            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-muted-foreground">{t("pettyAggCount") || "건수"}</th>
+            <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground">{t("accountSubject")}</th>
+            <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryExpenseTotal")}</th>
+            <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryVatTotal")}</th>
+            <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettySummaryVatPending")}</th>
+            <th className="px-3 py-2.5 text-center text-sm font-bold text-muted-foreground">{t("pettyAggCount") || "건수"}</th>
           </tr>
         </thead>
         <tbody>
@@ -1424,7 +1424,7 @@ ${rows.map((row, ri) => {
                       <tr key={row.id} className="border-t hover:bg-muted/30">
                         <td className="p-2 text-center whitespace-nowrap">{row.transDate}</td>
                         <td className="p-2 text-right tabular-nums font-medium">{fmt(row.amount)}</td>
-                        <td className="p-2 text-xs text-muted-foreground truncate max-w-[200px]">{row.memo || "—"}</td>
+                        <td className="p-2 text-sm text-muted-foreground truncate max-w-[200px]">{row.memo || "—"}</td>
                         <td className="p-2 text-center">
                           <Button
                             size="sm"
@@ -1551,31 +1551,31 @@ ${rows.map((row, ri) => {
                 ) : filteredListData.length === 0 ? (
                   <p className="px-4 py-10 text-center text-sm text-muted-foreground">{(adminEnhancedSearch ? adminListFullRows.length : listData.length) === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className={cn("w-full text-xs", canSearchAll ? "min-w-[520px]" : "min-w-[460px]")}>
+                  <table className={cn("w-full text-sm", canSearchAll ? "min-w-[520px]" : "min-w-[460px]")}>
                     <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
                       <tr>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColDate") || "날짜"}</th>
-                        {canSearchAll && <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("store") || "매장"}</th>}
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColType") || "유형"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColAmount") || "금액"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColUser") || "등록자"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColReceipt") || "영수증"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[4.5rem]" title={t("poInvoice") || "Invoice"}>{t("poInvoice") || "Invoice"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColDate") || "날짜"}</th>
+                        {canSearchAll && <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("store") || "매장"}</th>}
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColType") || "유형"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColAmount") || "금액"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColUser") || "등록자"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[4.5rem]" title={t("poInvoice") || "Invoice"}>{t("poInvoice") || "Invoice"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredListData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40 transition-colors hover:bg-muted/20">
                           <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{r.trans_date}</td>
-                          {canSearchAll && <td className="px-3 py-2.5 text-center align-top truncate text-xs max-w-[6rem]">{formatStoreLabel(r.store)}</td>}
+                          {canSearchAll && <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[6rem]">{formatStoreLabel(r.store)}</td>}
                           <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
                           <td className={`px-3 py-2.5 text-center align-top whitespace-nowrap tabular-nums text-sm ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
                           <td className="px-3 py-2.5 align-top text-left text-sm whitespace-normal break-words min-w-[12rem] max-w-[min(85vw,_22rem)]">{formatMemo(r.memo || "")}</td>
-                          <td className="px-3 py-2.5 text-center align-top text-xs text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
+                          <td className="px-3 py-2.5 text-center align-top text-sm text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
                           <td className="px-3 py-2.5 text-center align-top w-9">
                             {r.receipt_url ? (
                               <button
@@ -1679,7 +1679,7 @@ ${rows.map((row, ri) => {
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-xs font-medium">
+                    <label className="flex items-center gap-2 text-sm font-bold">
                       <Camera className="h-3.5 w-3.5" />
                       {t("pettyReceiptPhoto")} <span className="text-muted-foreground">({t("optional")})</span>
                     </label>
@@ -1735,7 +1735,7 @@ ${rows.map((row, ri) => {
                   </div>
                   {addType === "expense" ? (
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
-                      <p className="text-xs font-medium">{t("poInvoice") || "Invoice"} · {t("expenseAccrualVat") || "VAT"} (PP30)</p>
+                      <p className="text-sm font-bold">{t("poInvoice") || "Invoice"} · {t("expenseAccrualVat") || "VAT"} (PP30)</p>
                       <div className="flex flex-wrap items-end gap-3">
                         <div className="w-[100px]">
                           <Label className="text-xs text-muted-foreground">{t("expenseAccrualVat") || "VAT"}</Label>
@@ -1925,20 +1925,20 @@ ${rows.map((row, ri) => {
                 ) : filteredMonthlyData.length === 0 ? (
                   <p className="px-4 py-10 text-center text-sm text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className={cn(accountingResultTableCn, "text-xs min-w-[720px]")}>
+                  <table className={cn(accountingResultTableCn, "min-w-[720px]")}>
                     <thead className="sticky top-0 z-[1] bg-muted/60 backdrop-blur-sm">
                       <tr className={accountingResultTheadRowCn}>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColDate") || "날짜"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("store") || "매장"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColType") || "유형"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColAmount") || "금액"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColDate") || "날짜"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("store") || "매장"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColType") || "유형"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColAmount") || "금액"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColBalance") || "잔액"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap min-w-[7rem]">{t("accountSubject") || "계정과목"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColUser") || "등록자"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap min-w-[4.5rem]" title={t("poInvoice") || "Invoice"}>{t("poInvoice") || "Invoice"}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColActions") || "수정·삭제"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap min-w-[7rem]">{t("accountSubject") || "계정과목"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColUser") || "등록자"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap min-w-[4.5rem]" title={t("poInvoice") || "Invoice"}>{t("poInvoice") || "Invoice"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColActions") || "수정·삭제"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1991,7 +1991,7 @@ ${rows.map((row, ri) => {
                             </div>
                           </td>
                           <td className="px-3 py-2.5 align-top text-left text-sm whitespace-normal break-words min-w-[12rem] max-w-[min(85vw,_22rem)]">{formatMemo(r.memo || "")}</td>
-                          <td className="px-3 py-2.5 text-center align-top text-xs text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
+                          <td className="px-3 py-2.5 text-center align-top text-sm text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
                           <td className="px-3 py-2.5 text-center w-9">
                             {r.receipt_url ? (
                               <button
@@ -2093,7 +2093,7 @@ ${rows.map((row, ri) => {
                     </Select>
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs font-medium">
+                    <label className="flex items-center gap-2 text-sm font-bold">
                       <Camera className="h-3.5 w-3.5" />
                       {t("pettyReceiptPhoto")} <span className="text-muted-foreground">({t("optional")})</span>
                     </label>
@@ -2142,7 +2142,7 @@ ${rows.map((row, ri) => {
                   </div>
                   {editType === "expense" ? (
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
-                      <p className="text-xs font-medium">{t("poInvoice") || "Invoice"} · PP30</p>
+                      <p className="text-sm font-bold">{t("poInvoice") || "Invoice"} · PP30</p>
                       <div className="w-[100px]">
                         <Label className="text-xs text-muted-foreground">{t("expenseAccrualVat") || "VAT"}</Label>
                         <Input value={editVatAmount} onChange={(e) => setEditVatAmount(e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, ""))} className="h-9 mt-1 text-xs" />

@@ -1,5 +1,6 @@
 'use client'
 
+import { CheckCircle, FileText } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
@@ -34,6 +35,66 @@ export function PosTaxInvoiceRequiredLegend({ t }: { t: TranslateFn }) {
     <p className="text-xs text-muted-foreground">
       <span className="font-medium text-destructive">*</span> {t('posRequired', '필수')}
     </p>
+  )
+}
+
+export function PosOrderTaxInvoiceStatusButton({
+  hasTaxInvoice,
+  onOpen,
+  t,
+  className,
+}: {
+  hasTaxInvoice: boolean
+  onOpen?: () => void
+  t: TranslateFn
+  className?: string
+}) {
+  const disabled = !onOpen
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen?.()}
+      disabled={disabled}
+      className={cn(
+        'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]',
+        hasTaxInvoice
+          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/35 dark:text-amber-200',
+        disabled ? 'cursor-default opacity-70' : 'cursor-pointer hover:opacity-90',
+        className
+      )}
+    >
+      {hasTaxInvoice ? <CheckCircle className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+      {hasTaxInvoice
+        ? t('posReceiptTaxInvoiceIssued', '세금계산서 발행')
+        : t('posReceiptTaxInvoiceNotIssued', '세금계산서 미발행')}
+    </button>
+  )
+}
+
+export function PosOrderTaxInvoiceEntryRow({
+  hasTaxInvoice,
+  onOpen,
+  t,
+  className,
+}: {
+  hasTaxInvoice: boolean
+  onOpen?: () => void
+  t: TranslateFn
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2',
+        className
+      )}
+    >
+      <span className="text-xs font-medium text-muted-foreground">
+        {t('posReceiptTaxInvoice', '세금계산서')}
+      </span>
+      <PosOrderTaxInvoiceStatusButton hasTaxInvoice={hasTaxInvoice} onOpen={onOpen} t={t} />
+    </div>
   )
 }
 

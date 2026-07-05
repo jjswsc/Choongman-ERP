@@ -1,5 +1,5 @@
 import type { PosTaxInvoiceRecipientRow } from '@/lib/api-client'
-import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
+import { parsePosOrderMemo, upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 
 export type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 
@@ -95,6 +95,39 @@ export function validateTaxInvoiceFields(params: {
   if (!n.address) errors.push('address')
   if (!n.emailValid) errors.push('email')
   return { errors, invalid: errors.length > 0 }
+}
+
+export type CartPanelTaxInvoiceUiSeed = {
+  needTaxInvoice: boolean
+  showTaxInvoiceDetails: boolean
+  invoiceCustomerType: TaxInvoiceCustomerType
+  taxMemberNo: string
+  taxName: string
+  taxId: string
+  taxBranchNo: string
+  taxPhone: string
+  taxEmail: string
+  taxAddress: string
+}
+
+/** 기존 주문 memo에 저장된 세금계산서 → 결제 모달 UI 초기값 */
+export function cartPanelTaxInvoiceUiSeedFromOrderMemo(
+  memo?: string | null
+): CartPanelTaxInvoiceUiSeed | null {
+  const ti = parsePosOrderMemo(memo).taxInvoice
+  if (!ti) return null
+  return {
+    needTaxInvoice: true,
+    showTaxInvoiceDetails: true,
+    invoiceCustomerType: ti.customerType === 'company' ? 'company' : 'person',
+    taxMemberNo: String(ti.memberNo || '').trim(),
+    taxName: String(ti.name || '').trim(),
+    taxId: String(ti.taxId || '').replace(/\D/g, '').slice(0, 13),
+    taxBranchNo: String(ti.branchNo || '').replace(/\D/g, '').slice(0, 5),
+    taxPhone: String(ti.phone || '').replace(/\D/g, '').slice(0, 10),
+    taxEmail: String(ti.email || '').trim(),
+    taxAddress: String(ti.address || '').trim(),
+  }
 }
 
 export function buildCartPanelOrderMemoWithTaxInvoice(params: {

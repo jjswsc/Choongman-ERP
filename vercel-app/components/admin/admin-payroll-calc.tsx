@@ -650,7 +650,7 @@ export function AdminPayrollCalc() {
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse min-w-[1220px]">
+            <table className="w-full text-sm border-collapse min-w-[1220px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
@@ -1053,7 +1053,7 @@ export function AdminPayrollCalc() {
             {explainItems.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">{t("pay_explain_no_rows")}</div>
             ) : (
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                   <tr className="border-b">
                     <th className="p-2 text-left font-medium w-[7.5rem]">{t("pay_explain_th_date")}</th>

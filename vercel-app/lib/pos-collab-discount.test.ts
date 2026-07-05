@@ -171,6 +171,22 @@ describe('pos-collab-discount exclusions', () => {
     expect(isCartLineEligibleForCollabDiscount(line, menuById, withPromo)).toBe(true)
   })
 
+  it('테이블 결제 UUID 줄 id는 메뉴명으로 카탈로그 역매칭한다', () => {
+    const percentCollab = detail({
+      posDiscountType: 'percent',
+      posDiscountValue: 5,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const line = {
+      id: 'cart-existing-0-550e8400-e29b-41d4-a716-446655440000',
+      name: 'Banban Chicken (M - Boneless)',
+      price: 330,
+      quantity: 1,
+    }
+    expect(isCartLineEligibleForCollabDiscount(line, menuById, percentCollab)).toBe(true)
+    expect(collabDiscountAmountForCart([line], menuById, percentCollab)).toBe(Math.floor(330 * 0.05))
+  })
+
   it('대분류+하위+특정메뉴는 교집합 — SNOW·C008만 대상, Bar.B.Q 치킨은 제외', () => {
     const snowOnly = detail({
       posDiscountType: 'amount',
@@ -189,6 +205,16 @@ describe('pos-collab-discount exclusions', () => {
     const alloc = collabLineDiscountAllocations(lines, menuById, snowOnly, total)
     expect(alloc[0]).toBe(229)
     expect(alloc[1]).toBe(0)
+  })
+
+  it('대분류 scope 비교는 대소문자를 무시한다', () => {
+    const collab = detail({
+      posDiscountType: 'percent',
+      posDiscountValue: 10,
+      scopeMainCategories: ['chicken'],
+    })
+    const line = { id: '10', name: 'Banban Chicken', price: 239, qty: 1, menuId: '10' }
+    expect(isCartLineEligibleForCollabDiscount(line, menuById, collab)).toBe(true)
   })
 
   it('협업 할인 줄 배분은 대상 줄에만 표시한다', () => {

@@ -237,7 +237,7 @@ export function AdminPayrollHolidays({ readOnly = false }: AdminPayrollHolidaysP
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse">
+            <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-center font-medium w-10">{t("pay_holiday_th_no")}</th>

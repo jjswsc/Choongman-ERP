@@ -2419,7 +2419,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   "bg-amber-50/80 dark:bg-amber-950/35 border-l-2 border-l-amber-500"
                               )}
                             >
-                              <td className="p-2 align-middle text-center whitespace-nowrap text-xs tabular-nums">{r.transDate}</td>
+                              <td className="p-2 align-middle text-center whitespace-nowrap text-sm tabular-nums">{r.transDate}</td>
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className="p-2 align-middle">
                                 {r.transType === "withdraw" ? (
@@ -2871,7 +2871,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 )}
                               </td>
                               <td
-                                className="p-2 align-middle text-left truncate max-w-[158px] text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                                className="p-2 align-middle text-left truncate max-w-[158px] text-muted-foreground text-sm cursor-pointer hover:bg-muted/50 rounded"
                                 onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
                                 title={r.memo?.trim() ? r.memo : undefined}
                               >
@@ -3313,7 +3313,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           {formatBankLedgerWithdrawCell(r.transType, r.amount)}
                         </td>
                         <td
-                          className="p-2 min-w-[220px] max-w-[280px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                          className="p-2 min-w-[220px] max-w-[280px] truncate text-muted-foreground text-sm cursor-pointer hover:bg-muted/50 rounded"
                           onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
                           title={r.memo?.trim() ? r.memo : undefined}
                         >
@@ -3549,7 +3549,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             const sub = (rule.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === rule.accountSubjectId)
                             return (
                               <tr key={rule.id} className={`border-t ${isEditing ? "bg-primary/5" : ""}`}>
-                                <td className="p-2 font-mono text-xs">{rule.keyword}</td>
+                                <td className="p-2 font-mono text-sm">{rule.keyword}</td>
                                 <td className="p-2">
                                   {isEditing ? (
                                     <Select value={newRuleTransType} onValueChange={(v) => { setNewRuleTransType(v as "deposit" | "withdraw"); setNewRuleCategory(""); setNewRuleAccountSubjectId("") }}>

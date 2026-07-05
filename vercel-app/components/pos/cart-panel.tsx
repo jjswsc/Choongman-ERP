@@ -90,6 +90,7 @@ import {
   buildCartPanelLineDiscountAllocations,
   collabDiscountAmountForCart,
   collabSupportsQuantityEntry,
+  resolveCartLineMenuIdFromCatalog,
 } from '@/lib/pos-collab-discount'
 import {
   computeMemberTierDiscountAmount,
@@ -185,6 +186,7 @@ import {
 } from '@/lib/cart-panel-payment-utils'
 import {
   buildCartPanelOrderMemoWithTaxInvoice,
+  cartPanelTaxInvoiceUiSeedFromOrderMemo,
   isSyntheticTaxRegistryKey,
   normalizeTaxInvoiceFields,
   profileToTaxInvoiceSavePayload,
@@ -193,6 +195,7 @@ import {
   type TaxInvoiceProfile,
   type TaxSearchField,
 } from '@/lib/cart-panel-tax-invoice-utils'
+import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { searchCartPanelTaxInvoiceProfile } from '@/lib/cart-panel-tax-invoice-search'
 import { CartPanelTaxInvoiceSection } from '@/components/pos/cart-panel-tax-invoice-section'
 import {
@@ -3097,10 +3100,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       receiptTableName?: string
       /** setState 반영 전 결제 진입 시 영수증 주문번호 고정 */
       receiptOrderNo?: string
+      /** 기존 주문 memo — 세금계산서·고객 메모 복원 */
+      orderMemo?: string
     }
   ) => {
     if (amount <= 0) return
-    resetTaxInvoiceUiState()
+    if (receiptOpts?.orderMemo != null) {
+      const seed = cartPanelTaxInvoiceUiSeedFromOrderMemo(receiptOpts.orderMemo)
+      if (seed) {
+        setNeedTaxInvoice(seed.needTaxInvoice)
+        setShowTaxInvoiceDetails(seed.showTaxInvoiceDetails)
+        setInvoiceCustomerType(seed.invoiceCustomerType)
+        setTaxMemberNo(seed.taxMemberNo)
+        setTaxName(seed.taxName)
+        setTaxId(seed.taxId)
+        setTaxBranchNo(seed.taxBranchNo)
+        setTaxPhone(seed.taxPhone)
+        setTaxEmail(seed.taxEmail)
+        setTaxAddress(seed.taxAddress)
+        setTaxSearchField('memberNo')
+        setTaxSearchKeyword('')
+        setTaxSearchMessage('')
+      } else {
+        resetTaxInvoiceUiState()
+      }
+    } else {
+      resetTaxInvoiceUiState()
+    }
     if (onBeforeOpenPayment) {
       const deliveryLabelForPrint = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
         .filter(Boolean)
@@ -4035,12 +4061,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
+    orderMemo?: string
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => {
-      const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      const menuId =
+        String(i.menuId ?? i.menuId1 ?? '').trim() ||
+        resolveCartLineMenuIdFromCatalog(i, menuByIdForCollab)
       const promoId = String(i.promoId ?? '').trim()
       const promoCode = String(i.promoCode ?? '').trim()
       return {
@@ -4082,6 +4111,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setMemberOptions,
       setPointUsed,
     })
+    if (payload.orderMemo != null) {
+      setCustomerMemo(parsePosOrderMemo(payload.orderMemo).plainMemo)
+    }
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -4091,6 +4123,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       receiptDiscountTotal,
       receiptTableName: payload.tableName,
       receiptOrderNo: payload.orderNo,
+      orderMemo: payload.orderMemo,
     })
   }
 
@@ -4111,12 +4144,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
+    orderMemo?: string
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => {
-      const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      const menuId =
+        String(i.menuId ?? i.menuId1 ?? '').trim() ||
+        resolveCartLineMenuIdFromCatalog(i, menuByIdForCollab)
       const promoId = String(i.promoId ?? '').trim()
       const promoCode = String(i.promoCode ?? '').trim()
       return {
@@ -4158,6 +4194,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setMemberOptions,
       setPointUsed,
     })
+    if (payload.orderMemo != null) {
+      setCustomerMemo(parsePosOrderMemo(payload.orderMemo).plainMemo)
+    }
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -4165,6 +4204,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       receiptLines: normalized,
       receiptSubtotal: amount,
       receiptDiscountTotal,
+      orderMemo: payload.orderMemo,
     })
   }
 
@@ -4185,12 +4225,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
+    orderMemo?: string
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => {
-      const menuId = String(i.menuId ?? i.menuId1 ?? '').trim()
+      const menuId =
+        String(i.menuId ?? i.menuId1 ?? '').trim() ||
+        resolveCartLineMenuIdFromCatalog(i, menuByIdForCollab)
       const promoId = String(i.promoId ?? '').trim()
       const promoCode = String(i.promoCode ?? '').trim()
       return {
@@ -4232,6 +4275,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setMemberOptions,
       setPointUsed,
     })
+    if (payload.orderMemo != null) {
+      setCustomerMemo(parsePosOrderMemo(payload.orderMemo).plainMemo)
+    }
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -4239,6 +4285,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       receiptLines: normalized,
       receiptSubtotal: amount,
       receiptDiscountTotal,
+      orderMemo: payload.orderMemo,
     })
   }
 

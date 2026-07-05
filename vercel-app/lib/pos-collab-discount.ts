@@ -90,8 +90,9 @@ export function menuMatchesCollabScope(menu: CollabMenuPick, detail: MarketingCo
     const hasMenus = menuIds.size > 0
     if (!hasMains && !hasCats && !hasMenus) return false
 
-    if (hasMains && (main === '' || !mains.has(main))) return false
-    if (hasCats && (main === '' || cat === '' || !categoryKeys.has(categoryScopeKey(main, cat)))) return false
+    if (hasMains && (main === '' || ![...mains].some((m) => scopeMainMatches(main, m)))) return false
+    if (hasCats && (main === '' || cat === '' || ![...categoryKeys].some((k) => categoryKeyMatches(menu, k))))
+      return false
     if (hasMenus && (menuId === '' || !menuIds.has(menuId))) return false
     return true
   }
@@ -217,6 +218,46 @@ export function menuIdsForCollabLine(line: CollabCartLineLike): string[] {
   return Array.from(new Set(out))
 }
 
+function scopeMainMatches(menuMain: string, scopeMain: string): boolean {
+  return normalizeScopeText(menuMain) === normalizeScopeText(scopeMain)
+}
+
+function categoryKeyMatches(menu: CollabMenuPick, scopeKey: string): boolean {
+  const main = String(menu.categoryMain ?? '').trim()
+  const cat = String(menu.category ?? '').trim()
+  if (!main || !cat) return false
+  return normalizeScopeText(categoryScopeKey(main, cat)) === normalizeScopeText(scopeKey)
+}
+
+/** menuId 없는 기존 주문 줄 — 메뉴명으로 POS 카탈로그 역매칭 */
+function findMenuIdsByLineName(
+  line: CollabCartLineLike,
+  menuById: Map<string, CollabMenuPick>
+): string[] {
+  const raw = String(line.name ?? '').trim()
+  if (!raw) return []
+  const normLine = normalizeScopeText(raw)
+
+  let bestId = ''
+  let bestLen = 0
+  for (const [id, menu] of menuById) {
+    const menuName = String(menu.name ?? '').trim()
+    if (!menuName) continue
+    const normMenu = normalizeScopeText(menuName)
+    if (!normMenu) continue
+    const matches =
+      normLine === normMenu ||
+      normLine.startsWith(`${normMenu} `) ||
+      normLine.startsWith(`${normMenu}(`)
+    if (!matches) continue
+    if (normMenu.length > bestLen) {
+      bestLen = normMenu.length
+      bestId = id
+    }
+  }
+  return bestId ? [bestId] : []
+}
+
 function menuIdsForCollabLineWithCatalog(
   line: CollabCartLineLike,
   menuById: Map<string, CollabMenuPick>
@@ -232,7 +273,19 @@ function menuIdsForCollabLineWithCatalog(
   for (const id of menuById.keys()) {
     if (rawId === id || rawId.startsWith(`${id}-`)) matched.push(id)
   }
-  return matched
+  if (matched.length > 0) return matched
+  return findMenuIdsByLineName(line, menuById)
+}
+
+/** 기존 주문·결제 모달 — menuId 없을 때 카탈로그에서 한 개 id 역매칭 */
+export function resolveCartLineMenuIdFromCatalog(
+  line: Pick<CollabCartLineLike, 'id' | 'name' | 'menuId' | 'menuId1' | 'menuId2'>,
+  menuById: Map<string, CollabMenuPick>
+): string {
+  const withPrice: CollabCartLineLike = { ...line, price: 0 }
+  const explicit = menuIdsForCollabLine(withPrice).find((id) => menuById.has(id))
+  if (explicit) return explicit
+  return menuIdsForCollabLineWithCatalog(withPrice, menuById)[0] ?? ''
 }
 
 /** 협업 할인 대상 여부 (영수증 줄 배분·합계 계산 공통) */

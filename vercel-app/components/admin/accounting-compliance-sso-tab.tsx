@@ -196,7 +196,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
               <AccountingEmptyState>{t("accCompSsoEmptySearchHint")}</AccountingEmptyState>
             ) : null}
             <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-2">
-              <div className="text-xs font-medium">{t("accCompSsoStep1Title")}</div>
+              <div className="text-sm font-bold">{t("accCompSsoStep1Title")}</div>
               <label className="flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
@@ -303,7 +303,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
             {ssoQueried ? (
               <>
                 <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="text-xs font-medium">{t("accCompSsoStep2Title")}</div>
+                  <div className="text-sm font-bold">{t("accCompSsoStep2Title")}</div>
                   <div className="text-[11px] text-muted-foreground">
                     {t("accCompMonth")}: {taxMonth} / {t("store")}: {ssoSelectedStore || t("accCompAll")} /{" "}
                     {t("accCompLoadTime")}:{" "}
@@ -312,7 +312,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   {ssoPayrollLoading ? (
                     <div className="text-xs text-muted-foreground">{t("loading")}</div>
                   ) : ssoPayrollPreview ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
                       <div>{t("accCompSsoTargetEmployees")}: {ssoPayrollPreview.rowCount.toLocaleString()}</div>
                       <div>{t("accCompSsoStoreCount")}: {ssoPayrollPreview.storeCount.toLocaleString()}</div>
                       <div>{t("accCompSsoEmployeeContribution")}: {Math.round(ssoPayrollPreview.totalEmployeeSso).toLocaleString()}</div>
@@ -327,7 +327,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   )}
                   {ssoEmployeePreviewRows.length > 0 ? (
                     <div className="space-y-2 pt-2">
-                      <div className="text-xs font-medium">{t("accCompSsoEmployeeListTitle")}</div>
+                      <div className="text-sm font-bold">{t("accCompSsoEmployeeListTitle")}</div>
                       {ssoPayrollRows.length > ssoEmployeePreviewRows.length ? (
                         <p className="text-[11px] text-muted-foreground">
                           {tr(t, "accCompSsoEmployeeListTruncated", {
@@ -337,7 +337,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                         </p>
                       ) : null}
                       <div className="rounded border border-border/60 overflow-auto max-h-72">
-                        <table className="w-full text-xs border-collapse">
+                        <table className="w-full text-sm border-collapse">
                           <thead>
                             <tr className="border-b bg-muted/30">
                               <th className="text-left p-2 font-medium">{t("store")}</th>
@@ -380,7 +380,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   ) : null}
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="text-xs font-medium">{t("accCompSsoStep3Title")}</div>
+                  <div className="text-sm font-bold">{t("accCompSsoStep3Title")}</div>
                   <div className="text-[11px] text-muted-foreground whitespace-pre-line">
                     {t("accCompSsoStep3Guide")}
                   </div>
@@ -405,7 +405,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   </div>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="text-xs font-medium">{t("accCompSsoStep4Title")}</div>
+                  <div className="text-sm font-bold">{t("accCompSsoStep4Title")}</div>
                   <div className="text-[11px] text-muted-foreground">
                     {t("accCompSsoStep4Guide")}
                   </div>
@@ -561,7 +561,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
               <AccountingEmptyState>{t("accCompSsoHistoryEmpty")}</AccountingEmptyState>
             ) : (
               <div className="rounded border border-border/60 overflow-auto max-h-[480px]">
-                <table className="w-full text-xs border-collapse">
+                <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b bg-muted/30">
                       <th className="text-left p-2 font-medium">{t("accCompColYearMonth")}</th>
@@ -617,7 +617,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
               return (meta?.attachmentUrls?.length || 0) > 0
             }) ? (
               <div className="space-y-2 pt-1">
-                <div className="text-xs font-medium">{t("accCompSsoHistoryAttachmentLinks")}</div>
+                <div className="text-sm font-bold">{t("accCompSsoHistoryAttachmentLinks")}</div>
                 {ssoHistoryRows.map((row) => {
                   const meta = parseSsoWorkflowNote(String(row.note || ""))
                   if (!meta?.attachmentUrls?.length) return null

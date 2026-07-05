@@ -28,7 +28,7 @@ import {
 import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
-import { Check, CheckCircle, Clock, FileText } from 'lucide-react'
+import { Check, CheckCircle, Clock } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -43,6 +43,10 @@ import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-d
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import {
+  PosOrderTaxInvoiceEntryRow,
+  PosOrderTaxInvoiceStatusButton,
+} from '@/components/pos/pos-tax-invoice-form-ui'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import { buildPosOrderLineKeys, getPosOrderLineByKey } from '@/lib/pos-order-line-keys'
 import { canStartPosLinePartialCancel } from '@/lib/pos-order-line-update'
@@ -768,27 +772,12 @@ export function DeliveryOrderPanel({
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{t('posPaymentComplete') || '결제 완료'}</span>
-                <button
-                  type="button"
-                  onClick={() => onOpenTaxInvoice?.()}
-                  disabled={!onOpenTaxInvoice}
-                  className={cn(
-                    'ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]',
-                    hasTaxInvoice
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
-                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/35 dark:text-amber-200',
-                    onOpenTaxInvoice ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
-                  )}
-                >
-                  {hasTaxInvoice ? (
-                    <CheckCircle className="h-3.5 w-3.5" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5" />
-                  )}
-                  {hasTaxInvoice
-                    ? (t('posReceiptTaxInvoiceIssued') || '세금계산서 발행')
-                    : (t('posReceiptTaxInvoiceNotIssued') || '세금계산서 미발행')}
-                </button>
+                <PosOrderTaxInvoiceStatusButton
+                  hasTaxInvoice={hasTaxInvoice}
+                  onOpen={onOpenTaxInvoice}
+                  t={(key, fallback) => t(key) || fallback || key}
+                  className="ml-auto"
+                />
               </div>
               <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
                 {isPaid
@@ -943,6 +932,12 @@ export function DeliveryOrderPanel({
                 <span>{t('posInputTotal') || '합계'}</span>
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
+
+              <PosOrderTaxInvoiceEntryRow
+                hasTaxInvoice={hasTaxInvoice}
+                onOpen={onOpenTaxInvoice}
+                t={(key, fallback) => t(key) || fallback || key}
+              />
 
               <Button onClick={handlePackComplete} className="w-full h-11 text-base font-semibold" disabled={!allPackaged}>
                 {allPackaged

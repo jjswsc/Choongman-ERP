@@ -213,7 +213,7 @@ function DataQualityBadge({
     <>
       <div
         className={cn(
-          "rounded-lg border px-3 py-2 text-xs",
+          "rounded-lg border px-3 py-2 text-sm",
           badgeClass,
           bomClickable && "cursor-pointer hover:opacity-90"
         )}
@@ -258,7 +258,7 @@ function DataQualityBadge({
           <div className="mt-4 overflow-x-auto rounded-md border">
             <table className="w-full min-w-[420px] text-sm">
               <thead>
-                <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                <tr className="border-b bg-muted/40 text-sm text-muted-foreground">
                   <th className="px-3 py-2 text-left">{t("mmBridgeDqBomColMenu")}</th>
                   <th className="px-3 py-2 text-left">{t("mmBridgeDqBomColOption")}</th>
                   <th className="px-3 py-2 text-right">{t("mmBridgeDqBomColQty")}</th>
@@ -558,7 +558,7 @@ export function ManagementMarginTab({
 
           <Card>
             <CardContent className="pt-4">
-              <p className="mb-3 text-xs font-medium text-muted-foreground">{t("mmBridgeWaterfall")}</p>
+              <p className="mb-3 text-sm font-bold text-foreground">{t("mmBridgeWaterfall")}</p>
               <ManagementMarginWaterfall
                 steps={buildPosWaterfallSteps(data, t)}
                 baseAmount={pos.grossSalesBeforeDiscount}
@@ -569,7 +569,7 @@ export function ManagementMarginTab({
           {(data.momCompare?.length || 0) > 0 && data.priorPeriod ? (
             <Card>
               <CardContent className="pt-4">
-                <p className="mb-2 text-xs font-semibold">{t("mmBridgeMomTitle")}</p>
+                <p className="mb-2 text-sm font-bold">{t("mmBridgeMomTitle")}</p>
                 <p className="mb-3 text-[11px] text-muted-foreground">
                   {t("mmBridgeMomHint").replace(
                     "{prior}",
@@ -581,7 +581,7 @@ export function ManagementMarginTab({
                 <div className="overflow-x-auto rounded-md border">
                   <table className="w-full min-w-[520px] text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/40 text-muted-foreground text-xs">
+                      <tr className="border-b bg-muted/40 text-muted-foreground text-sm">
                         <th className="px-3 py-2 text-left">{t("mmBridgeMomMetric")}</th>
                         <th className="px-3 py-2 text-right">{t("mmBridgeMomCurrent")}</th>
                         <th className="px-3 py-2 text-right">{t("mmBridgeMomPrior")}</th>
@@ -637,12 +637,12 @@ export function ManagementMarginTab({
           {(pos.byChannel?.length || 0) > 0 ? (
             <Card>
               <CardContent className="pt-4">
-                <p className="mb-2 text-xs font-semibold">{t("mmBridgeChannelTitle")}</p>
+                <p className="mb-2 text-sm font-bold">{t("mmBridgeChannelTitle")}</p>
                 <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">{t("mmBridgeChannelHint")}</p>
                 <div className="overflow-x-auto rounded-md border">
                   <table className="w-full min-w-[1100px] text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                      <tr className="border-b bg-muted/40 text-sm text-muted-foreground">
                         <th className="px-3 py-2 text-left">{t("mmBridgeChannelCol")}</th>
                         <th className="px-3 py-2 text-right">{t("mmBridgeOrders")}</th>
                         <th className="px-3 py-2 text-right">{t("mmBridgeNetSales")}</th>
@@ -739,14 +739,14 @@ export function ManagementMarginTab({
           {(data.storeRanking?.length || 0) > 0 ? (
             <Card>
               <CardContent className="pt-4">
-                <p className="mb-2 text-xs font-semibold">{t("mmBridgeStoreRankingTitle")}</p>
+                <p className="mb-2 text-sm font-bold">{t("mmBridgeStoreRankingTitle")}</p>
                 <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
                   {t("mmBridgeStoreRankingHint")}
                 </p>
                 <div className="overflow-x-auto rounded-md border">
                   <table className="w-full min-w-[1040px] text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                      <tr className="border-b bg-muted/40 text-sm text-muted-foreground">
                         <th className="px-3 py-2 text-left">{t("mmBridgeStoreCol")}</th>
                         <th className="px-3 py-2 text-right">{t("mmBridgeOrders")}</th>
                         <th className="px-3 py-2 text-right">{t("mmBridgeNetSales")}</th>
@@ -842,7 +842,7 @@ export function ManagementMarginTab({
             </CollapsibleTrigger>
             <CollapsibleContent className="px-4 pb-4">
               <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="mb-2 text-xs font-semibold">{t("mmBridgeDiscountBreakdown")}</p>
+                <p className="mb-2 text-sm font-bold">{t("mmBridgeDiscountBreakdown")}</p>
                 <SalesCombinedDiscountEmbed combined={pos.combined} tr={tr} />
                 <Link
                   href={buildSalesManagementDrillUrl({
@@ -857,7 +857,7 @@ export function ManagementMarginTab({
                 </Link>
               </div>
               <div className="mt-3 rounded-lg border bg-muted/20 p-3">
-                <p className="mb-2 text-xs font-semibold">{t("mmBridgeCostStructureTheory")}</p>
+                <p className="mb-2 text-sm font-bold">{t("mmBridgeCostStructureTheory")}</p>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">{t("mmBridgeFoodCostTheory")}</span>
@@ -915,7 +915,7 @@ export function ManagementMarginTab({
             </div>
 
             <div className="space-y-3 rounded-lg border p-3">
-              <p className="text-xs font-semibold">{t("mmBridgeActualPurchaseSplit")}</p>
+              <p className="text-sm font-bold">{t("mmBridgeActualPurchaseSplit")}</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-sm">
                 <div className="flex justify-between gap-2 rounded border px-3 py-2">
                   <span className="text-muted-foreground">{t("mmBridgeFoodCostActual")}</span>

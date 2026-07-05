@@ -75,7 +75,7 @@ export function IncomePurchaseDrillDialog({
                 {t("pL_purchaseDrillTruncated")}
               </p>
             )}
-            <div className="flex flex-wrap gap-3 text-xs">
+            <div className="flex flex-wrap gap-3 text-sm">
               {purchaseDrillData.vendorKey !== PL_PETTY_CASH_PURCHASE_VENDOR_KEY && (
                 <>
               <Link
@@ -135,11 +135,11 @@ export function IncomePurchaseDrillDialog({
 
             {purchaseDrillData.isHqOrders && (purchaseDrillData.hqOutbounds?.length || 0) > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillHqOutbound")}
                 </p>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
@@ -173,11 +173,11 @@ export function IncomePurchaseDrillDialog({
 
             {purchaseDrillData.isHqOrders && (purchaseDrillData.hqOrders?.length || 0) > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillHqOrdersRef")}
                 </p>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
@@ -205,11 +205,11 @@ export function IncomePurchaseDrillDialog({
 
             {purchaseDrillData.inbound.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillInbound")}
                 </p>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
@@ -239,11 +239,11 @@ export function IncomePurchaseDrillDialog({
 
             {purchaseDrillData.bankPayments.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillBank")}
                 </p>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
@@ -287,9 +287,9 @@ export function IncomePurchaseDrillDialog({
 
             {(purchaseDrillData.pettyCash?.length || 0) > 0 && (
               <div>
-                <p className="font-medium mb-1">{t("pL_purchaseDrillPetty") || t("pL_expenseDrillPetty") || "패티캐시"}</p>
+                <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_purchaseDrillPetty") || t("pL_expenseDrillPetty") || "패티캐시"}</p>
                 <div className="overflow-x-auto rounded border">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>

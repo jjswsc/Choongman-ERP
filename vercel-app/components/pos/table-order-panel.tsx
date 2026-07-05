@@ -33,7 +33,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Check,
   CheckCircle,
-  FileText,
   Users,
   ArrowRightLeft,
   Combine,
@@ -47,6 +46,10 @@ import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import {
+  PosOrderTaxInvoiceEntryRow,
+  PosOrderTaxInvoiceStatusButton,
+} from '@/components/pos/pos-tax-invoice-form-ui'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import {
@@ -819,27 +822,12 @@ export function TableOrderPanel({
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-5 h-5 shrink-0" />
                 <span>{t('posPrepaidPaid') || '선불 결제 완료'}</span>
-                <button
-                  type="button"
-                  onClick={() => onOpenTaxInvoice?.()}
-                  disabled={!onOpenTaxInvoice}
-                  className={cn(
-                    'ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]',
-                    hasTaxInvoice
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
-                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/35 dark:text-amber-200',
-                    onOpenTaxInvoice ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
-                  )}
-                >
-                  {hasTaxInvoice ? (
-                    <CheckCircle className="h-3.5 w-3.5" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5" />
-                  )}
-                  {hasTaxInvoice
-                    ? (t('posReceiptTaxInvoiceIssued') || '세금계산서 발행')
-                    : (t('posReceiptTaxInvoiceNotIssued') || '세금계산서 미발행')}
-                </button>
+                <PosOrderTaxInvoiceStatusButton
+                  hasTaxInvoice={hasTaxInvoice}
+                  onOpen={onOpenTaxInvoice}
+                  t={(key, fallback) => t(key) || fallback || key}
+                  className="ml-auto"
+                />
               </div>
               <Button
                 className="w-full h-11 text-base font-semibold"
@@ -960,6 +948,11 @@ export function TableOrderPanel({
                 <span>{t('posInputTotal') || '합계'}</span>
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
+              <PosOrderTaxInvoiceEntryRow
+                hasTaxInvoice={hasTaxInvoice}
+                onOpen={onOpenTaxInvoice}
+                t={(key, fallback) => t(key) || fallback || key}
+              />
               <div className={cn('grid gap-2', addOrderModeActive ? 'grid-cols-1' : 'grid-cols-2')}>
                 {!addOrderModeActive && onAddOrder ? (
                   <Button
@@ -1161,6 +1154,11 @@ export function TableOrderPanel({
                 <span>{t('posInputTotal') || '합계'}</span>
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
+              <PosOrderTaxInvoiceEntryRow
+                hasTaxInvoice={hasTaxInvoice}
+                onOpen={onOpenTaxInvoice}
+                t={(key, fallback) => t(key) || fallback || key}
+              />
 
               <Button
                 data-tour="pos-tour-serving-complete"

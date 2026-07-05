@@ -94,6 +94,7 @@ export interface CartPanelHandle {
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
+    orderMemo?: string
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
@@ -101,6 +102,7 @@ export interface CartPanelHandle {
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
+    orderMemo?: string
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
@@ -108,5 +110,6 @@ export interface CartPanelHandle {
     existingOrderId?: number | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
+    orderMemo?: string
   }) => void
 }

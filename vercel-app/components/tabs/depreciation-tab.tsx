@@ -558,13 +558,13 @@ export function DepreciationTab() {
                   <tbody>
                     {displayAssets.map((a) => (
                       <tr key={`${a.listStatus}-${a.id}`} className="border-b hover:bg-muted/20">
-                        <td className="py-2 px-2 font-mono text-xs">{a.asset_code || "-"}</td>
+                        <td className="py-2 px-2 font-mono text-sm">{a.asset_code || "-"}</td>
                         <td className="py-2 px-2">{a.name}</td>
                         <td className="py-2 px-2">{a.store_name}</td>
                         <td className="py-2 px-2 text-center">
                           <span
                             className={cn(
-                              "inline-flex rounded px-2 py-0.5 text-xs",
+                              "inline-flex rounded px-2 py-0.5 text-sm",
                               a.listStatus === "active"
                                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
                                 : "bg-muted text-muted-foreground"
@@ -582,7 +582,7 @@ export function DepreciationTab() {
                         <td className="py-2 px-2 text-right whitespace-nowrap">
                           {a.useful_life_months} {t("dep_months")}
                         </td>
-                        <td className="py-2 px-2 text-xs min-w-[180px]">
+                        <td className="py-2 px-2 text-sm min-w-[180px]">
                           <div>{labelByCode(String(a.asset_account_code || ""), "1460")}</div>
                           <div className="text-muted-foreground">
                             {labelByCode(String(a.accumulated_depreciation_account_code || ""), "1470")}
@@ -897,7 +897,7 @@ export function DepreciationTab() {
                             <td className="py-2">{a.name}</td>
                             <td className="py-2">{a.store_name}</td>
                             <td className="py-2 text-right font-mono">{formatBaht(Number(a.acquisition_cost || 0))}</td>
-                            <td className="py-2 text-xs">
+                            <td className="py-2 text-sm">
                               <div>{labelByCode(String(a.asset_account_code || ""), "1460")}</div>
                               <div className="text-muted-foreground">{labelByCode(String(a.accumulated_depreciation_account_code || ""), "1470")}</div>
                             </td>

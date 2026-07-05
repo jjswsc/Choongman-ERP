@@ -1544,7 +1544,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           key={`y-sc-${sc.key}`}
                                           className="border-b bg-muted/10 last:border-0"
                                         >
-                                          <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                          <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                             {salesBreakdownRowLabel(
                                               { key: sc.key, label: sc.label },
                                               t,
@@ -1554,7 +1554,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           {incomeCompareCols.map((c) => (
                                             <td
                                               key={c.key}
-                                              className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                              className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                               title={t("fs_compareYearAggregateHint")}
                                             >
                                               {formatBath(
@@ -1575,13 +1575,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           key={`y-pv-${pv.key}`}
                                           className="border-b bg-muted/10 last:border-0"
                                         >
-                                          <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                          <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                             {purchaseVendorRowLabel(pv, t)}
                                           </td>
                                           {incomeCompareCols.map((c) => (
                                             <td
                                               key={c.key}
-                                              className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                              className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                               title={t("fs_compareYearAggregateHint")}
                                             >
                                               {formatBath(
@@ -1595,7 +1595,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       <tr className="border-b bg-muted/10 last:border-0">
                                         <td
                                           colSpan={incomeCompareCols.length + 1}
-                                          className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed"
+                                          className="py-2 pl-6 pr-2 text-sm text-muted-foreground leading-relaxed"
                                         >
                                           {salesBreakdownIsHqOutbound(data ?? undefined)
                                             ? t("pL_purchaseCompositionNoteHq")
@@ -1610,7 +1610,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           key={`y-es-${sub.accountSubjectId ?? "u"}`}
                                           className="border-b bg-muted/10 last:border-0"
                                         >
-                                          <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                          <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                             {sub.accountSubjectId == null
                                               ? t("pL_accountUnclassified") || "Unclassified account"
                                               : formatAccountSubjectLabel(lang, {
@@ -1626,7 +1626,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           {incomeCompareCols.map((c) => (
                                             <td
                                               key={c.key}
-                                              className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                              className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                               title={t("fs_compareYearAggregateHint")}
                                             >
                                               {formatBath(
@@ -1645,13 +1645,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       showExpenseDetails && (
                                         <>
                                           <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                               - {t("pL_expenseSourcePetty")}
                                             </td>
                                             {incomeCompareCols.map((c) => (
                                               <td
                                                 key={c.key}
-                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                                 title={t("fs_compareYearAggregateHint")}
                                               >
                                                 {formatBath(
@@ -1665,13 +1665,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                             ))}
                                           </tr>
                                           <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                               - {t("pL_expenseSourceBank")}
                                             </td>
                                             {incomeCompareCols.map((c) => (
                                               <td
                                                 key={c.key}
-                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                                 title={t("fs_compareYearAggregateHint")}
                                               >
                                                 {formatBath(
@@ -1685,13 +1685,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                             ))}
                                           </tr>
                                           <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                               - {t("pL_expenseSourceDeliveryApps")}
                                             </td>
                                             {incomeCompareCols.map((c) => (
                                               <td
                                                 key={c.key}
-                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                                 title={t("fs_compareYearAggregateHint")}
                                               >
                                                 {formatBath(
@@ -1705,13 +1705,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                             ))}
                                           </tr>
                                           <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                               - {t("pL_expenseSourceCardFees")}
                                             </td>
                                             {incomeCompareCols.map((c) => (
                                               <td
                                                 key={c.key}
-                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                                 title={t("fs_compareYearAggregateHint")}
                                               >
                                                 {formatBath(
@@ -1725,13 +1725,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                             ))}
                                           </tr>
                                           <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                               - {t("pL_expenseSourceFixed")}
                                             </td>
                                             {incomeCompareCols.map((c) => (
                                               <td
                                                 key={c.key}
-                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                                 title={t("fs_compareYearAggregateHint")}
                                               >
                                                 {formatBath(
@@ -1802,7 +1802,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                 {compareUnifiedExpandSales &&
                                   compareMergedSalesBreakdown.map((sc) => (
                                     <tr key={`m-sc-${sc.key}`} className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         {salesBreakdownRowLabel(
                                           { key: sc.key, label: sc.label },
                                           t,
@@ -1814,7 +1814,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         return (
                                           <td
                                             key={ym}
-                                            className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                            className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                           >
                                             {rowData.error ? "—" : formatBath(amt)}
                                           </td>
@@ -1863,7 +1863,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                 {compareUnifiedExpandPurchases &&
                                   compareMergedPurchaseVendors.map((pv) => (
                                     <tr key={pv.key} className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         {purchaseVendorRowLabel(pv, t)}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => {
@@ -1872,7 +1872,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         return (
                                           <td
                                             key={ym}
-                                            className={`p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap ${
+                                            className={`p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap ${
                                               canDrill ? "cursor-pointer hover:bg-muted/50 underline-offset-2" : ""
                                             }`}
                                             title={canDrill ? t("pL_purchaseDrillClickHint") : undefined}
@@ -1895,7 +1895,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   <tr className="border-b bg-muted/10">
                                     <td
                                       colSpan={compareIncomeRows.length + 1}
-                                      className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed"
+                                      className="py-2 pl-6 pr-2 text-sm text-muted-foreground leading-relaxed"
                                     >
                                       {salesBreakdownIsHqOutbound(data ?? undefined)
                                         ? t("pL_purchaseCompositionNoteHq")
@@ -1980,7 +1980,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                 {compareUnifiedExpandExpenses &&
                                   compareMergedExpenseSubjects.map((sub) => (
                                     <tr key={String(sub.accountSubjectId ?? "u")} className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         {sub.accountSubjectId == null
                                           ? t("pL_accountUnclassified") || "Unclassified account"
                                           : formatAccountSubjectLabel(lang, {
@@ -1996,7 +1996,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
                                           key={ym}
-                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                         >
                                           {rowData.error
                                             ? "—"
@@ -2010,13 +2010,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                 {compareUnifiedExpandExpenses && showExpenseDetails && (
                                   <>
                                     <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         - {t("pL_expenseSourcePetty")}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
                                           key={ym}
-                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                         >
                                           {rowData.error
                                             ? "—"
@@ -2025,13 +2025,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       ))}
                                     </tr>
                                     <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         - {t("pL_expenseSourceBank")}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
                                           key={ym}
-                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                         >
                                           {rowData.error
                                             ? "—"
@@ -2040,13 +2040,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       ))}
                                     </tr>
                                     <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         - {t("pL_expenseSourceDeliveryApps")}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
                                           key={ym}
-                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                         >
                                           {rowData.error
                                             ? "—"
@@ -2055,13 +2055,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       ))}
                                     </tr>
                                     <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         - {t("pL_expenseSourceCardFees")}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
                                           key={ym}
-                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                         >
                                           {rowData.error
                                             ? "—"
@@ -2070,13 +2070,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       ))}
                                     </tr>
                                     <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         - {t("pL_expenseSourceFixed")}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
                                           key={ym}
-                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
                                         >
                                           {rowData.error
                                             ? "—"

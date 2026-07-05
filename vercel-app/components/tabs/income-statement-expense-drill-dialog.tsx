@@ -65,7 +65,7 @@ export function IncomeExpenseDrillDialog({
                 {t("pL_expenseDrillTruncated")}
               </p>
             )}
-            <div className="flex flex-wrap gap-3 text-xs">
+            <div className="flex flex-wrap gap-3 text-sm">
               <Link
                 href={
                   drillNavCtx
@@ -92,9 +92,9 @@ export function IncomeExpenseDrillDialog({
 
             {expenseDrillData.petty.length > 0 && (
               <div>
-                <p className="font-medium mb-1">{t("pL_expenseDrillPetty")}</p>
+                <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillPetty")}</p>
                 <div className="overflow-x-auto rounded border">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
@@ -124,9 +124,9 @@ export function IncomeExpenseDrillDialog({
 
             {expenseDrillData.bankWithdrawals.length > 0 && (
               <div>
-                <p className="font-medium mb-1">{t("pL_expenseDrillBank")}</p>
+                <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillBank")}</p>
                 <div className="overflow-x-auto rounded border">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
@@ -156,10 +156,10 @@ export function IncomeExpenseDrillDialog({
 
             {expenseDrillData.fixedExpenses.length > 0 && (
               <div>
-                <p className="font-medium mb-1">{t("pL_expenseDrillFixed")}</p>
+                <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillFixed")}</p>
                 <p className="text-xs text-muted-foreground mb-2">{t("pL_expenseDrillFixedNote")}</p>
                 <div className="overflow-x-auto rounded border">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="text-left p-2">{t("pL_expenseDrillColName")}</th>

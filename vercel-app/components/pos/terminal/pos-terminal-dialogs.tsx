@@ -203,7 +203,8 @@ export function PosTerminalDialogs({
             <DialogDescription className="text-left">
               <span className="font-mono text-foreground">{ti.targetOrder?.orderNo || '-'}</span>
               <span className="mt-2 block text-xs text-muted-foreground">
-                {t('posTaxInvoiceAfterPaymentHint') || '결제 완료 후에도 세금계산서 정보를 저장할 수 있습니다.'}
+                {t('posTaxInvoicePrePaymentHint') ||
+                  '결제 전에도 저장할 수 있습니다. 결제 시 영수증에 반영되며, 메인 포스에서 인쇄됩니다.'}
               </span>
             </DialogDescription>
           </DialogHeader>

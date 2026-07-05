@@ -127,7 +127,7 @@ export function ReceivablePairedLedgerList({
               <PairGroupNumber groupId={group.groupId} />
               <PairStatusBadge status={group.status} label={statusLabel} />
               {group.status === "open" || group.status === "partial" ? (
-                <span className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
+                <span className="text-sm text-amber-800 dark:text-amber-200 tabular-nums">
                   {labels.openRemain}: {fmtBahtSigned(group.openAmount)}
                 </span>
               ) : null}
@@ -137,11 +137,11 @@ export function ReceivablePairedLedgerList({
             </div>
             {accrual ? (
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pl-1">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
                   {labels.salesDate} {String(accrual.trans_date || "").slice(0, 10)}
                 </span>
-                <span className="text-xs font-medium">{formatRefType(accrual.ref_type)}</span>
-                <span className="text-xs text-muted-foreground truncate max-w-[200px]">{formatOrderNo(accrual)}</span>
+                <span className="text-sm font-medium">{formatRefType(accrual.ref_type)}</span>
+                <span className="text-sm text-muted-foreground truncate max-w-[200px]">{formatOrderNo(accrual)}</span>
                 <span className="text-sm font-semibold tabular-nums ml-auto">{fmtBahtSigned(accrual.amount)}</span>
               </div>
             ) : null}
@@ -166,7 +166,7 @@ export function ReceivablePairedLedgerList({
             ) : null}
             {!accrual && group.settlements[0] ? (
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pl-1">
-                <span className="text-xs font-medium">{formatRefType(group.settlements[0].ref_type)}</span>
+                <span className="text-sm font-medium">{formatRefType(group.settlements[0].ref_type)}</span>
                 <span className="text-sm font-semibold tabular-nums ml-auto">
                   {fmtBahtSigned(group.settlements[0].amount)}
                 </span>
@@ -238,7 +238,7 @@ export function PayablePairedLedgerList({
               <PairGroupNumber groupId={group.groupId} />
               <PairStatusBadge status={group.status} label={statusLabel} />
               {group.status === "open" || group.status === "partial" ? (
-                <span className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
+                <span className="text-sm text-amber-800 dark:text-amber-200 tabular-nums">
                   {labels.openRemain}: {fmtBahtSigned(group.openAmount)}
                 </span>
               ) : null}
@@ -247,11 +247,11 @@ export function PayablePairedLedgerList({
             {accrual ? (
               <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 pl-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">
                     {labels.purchaseDate} {String(accrual.trans_date || "").slice(0, 10)}
                   </span>
-                  <span className="text-xs font-medium">{formatRefType(accrual.ref_type)}</span>
-                  <span className="text-xs">{formatInvoiceCell(accrual)}</span>
+                  <span className="text-sm font-medium">{formatRefType(accrual.ref_type)}</span>
+                  <span className="text-sm">{formatInvoiceCell(accrual)}</span>
                   <span className="text-[11px] text-muted-foreground">{formatStore(accrual.attributed_store)}</span>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-right">{fmtBahtSigned(accrual.amount)}</span>
@@ -280,7 +280,7 @@ export function PayablePairedLedgerList({
             ) : null}
             {!accrual && group.settlements[0] ? (
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pl-1">
-                <span className="text-xs font-medium">{formatRefType(group.settlements[0].ref_type)}</span>
+                <span className="text-sm font-medium">{formatRefType(group.settlements[0].ref_type)}</span>
                 <span className="text-sm font-semibold tabular-nums ml-auto">
                   {fmtBahtSigned(group.settlements[0].amount)}
                 </span>

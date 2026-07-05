@@ -356,6 +356,8 @@ type PendingPayRequest = {
   orderDiscount?: PosExistingOrderCheckoutDiscount
   /** 기존 주문에 연결된 회원 — 결제 시 포인트 적립용 */
   orderMember?: PosExistingOrderCheckoutMember
+  /** 기존 주문 memo — 결제 모달에서 세금계산서 복원 */
+  orderMemo?: string
 } | null
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
@@ -1685,6 +1687,7 @@ export default function PosTerminalPage() {
       ...pendingPayRequest,
       existingOrderId: pendingDineInOrderId,
       orderMember: pendingPayRequest.orderMember,
+      orderMemo: pendingPayRequest.orderMemo,
     })
     setPendingPayRequest(null)
   }, [pendingPayRequest])
@@ -1698,6 +1701,7 @@ export default function PosTerminalPage() {
       existingOrderId: pendingTakeoutOrderId,
       orderDiscount: pendingTakeoutPayRequest.orderDiscount,
       orderMember: pendingTakeoutPayRequest.orderMember,
+      orderMemo: pendingTakeoutPayRequest.orderMemo,
     })
     setPendingTakeoutPayRequest(null)
   }, [pendingTakeoutPayRequest, pendingTakeoutOrderId])
@@ -1711,6 +1715,7 @@ export default function PosTerminalPage() {
       existingOrderId: pendingDeliveryOrderId,
       orderDiscount: pendingDeliveryPayRequest.orderDiscount,
       orderMember: pendingDeliveryPayRequest.orderMember,
+      orderMemo: pendingDeliveryPayRequest.orderMemo,
     })
     setPendingDeliveryPayRequest(null)
   }, [pendingDeliveryPayRequest, pendingDeliveryOrderId])
@@ -7238,7 +7243,11 @@ export default function PosTerminalPage() {
         return
       }
       /** 결제 후 세금 정보 저장 시: 결제(세금계산서) 영수증 재인쇄 — 홀 주문표는 매장·VAT·결제 수단이 빠짐 */
-      if (isMainPosDevice) {
+      const orderPaymentRecorded =
+        taxInvoiceTargetOrder.status === 'paid' ||
+        taxInvoiceTargetOrder.status === 'completed' ||
+        orderPaymentsSum(taxInvoiceTargetOrder) > 0.005
+      if (isMainPosDevice && orderPaymentRecorded) {
         const settings = await getPrinterSettingsForStore(currentStoreId)
         const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
           taxInvoiceTargetOrder,
@@ -7300,7 +7309,7 @@ export default function PosTerminalPage() {
           phone: normalizedTiPhone,
           email: normalizedTiEmail,
           address: normalizedTiAddress,
-          source: 'terminal_after_payment',
+          source: orderPaymentRecorded ? 'terminal_after_payment' : 'terminal_pre_payment',
         })
       }
       await appAlert(t('msg_saved'))
@@ -11012,6 +11021,7 @@ export default function PosTerminalPage() {
                     items: servingTable.order.items,
                   }),
                   orderMember: posOrderToCheckoutMemberSnapshot(servingTable.order),
+                  orderMemo: servingTable.order.memo,
                 })
                 setServingTableId(null)
               }}
@@ -11084,6 +11094,7 @@ export default function PosTerminalPage() {
                     items: selectedDeliveryOrder.items,
                   }),
                   orderMember: posOrderToCheckoutMemberSnapshot(selectedDeliveryOrder),
+                  orderMemo: selectedDeliveryOrder.memo,
                 })
                 setSelectedDeliveryTargetId(null)
                 setSelectedDeliveryTargetLabel('')
@@ -11166,6 +11177,7 @@ export default function PosTerminalPage() {
                     items: selectedTakeoutOrder.items,
                   }),
                   orderMember: posOrderToCheckoutMemberSnapshot(selectedTakeoutOrder),
+                  orderMemo: selectedTakeoutOrder.memo,
                 })
                 setSelectedTakeoutTargetId(null)
                 setSelectedTakeoutTargetLabel('')

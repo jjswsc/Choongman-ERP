@@ -599,12 +599,12 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             ) : (
               <>
                 <div className="rounded-lg border border-border/70 bg-background p-3 space-y-2 text-sm">
-                  <div className="text-xs font-medium">{t("accCompVatPeriodLockTitle")}</div>
+                  <div className="text-sm font-bold">{t("accCompVatPeriodLockTitle")}</div>
                   <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompVatPeriodLockHint")}</p>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs">{taxMonth}</span>
+                    <span className="font-mono text-sm">{taxMonth}</span>
                     <span className="text-muted-foreground">·</span>
-                    <span className="font-mono text-xs">{storeFilterForLedger}</span>
+                    <span className="font-mono text-sm">{storeFilterForLedger}</span>
                     {pp30PeriodCloseLoading ? (
                       <span className="text-xs text-muted-foreground">{t("loading")}</span>
                     ) : pp30PeriodClose?.isClosed ? (
@@ -630,13 +630,13 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <p className="text-xs text-muted-foreground">{t("accCompIntercompanyProbeLoading")}</p>
                 ) : hqSupplyReconcileApplicable ? (
                 <div className="rounded-lg border border-border/70 bg-background p-3 space-y-2 text-sm">
-                  <div className="text-xs font-medium">{t("accCompIntercompanyReconcileTitle")}</div>
+                  <div className="text-sm font-bold">{t("accCompIntercompanyReconcileTitle")}</div>
                   <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompIntercompanyReconcileHint")}</p>
                   <Button type="button" size="sm" variant="secondary" onClick={() => void loadIntercompanyVatRecon()} disabled={intercompanyVatReconLoading}>
                     {intercompanyVatReconLoading ? t("loading") : t("accCompReloadReconcile")}
                   </Button>
                   {intercompanyVatRecon ? (
-                    <div className="space-y-2 text-xs">
+                    <div className="space-y-2 text-sm">
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                         <div>{t("accCompIntercompanyIssued")}: <b>{intercompanyVatRecon.issuedCount.toLocaleString()}</b></div>
                         <div>{t("accCompIntercompanyMissing")}: <b>{intercompanyVatRecon.missingInStoreCount.toLocaleString()}</b></div>
@@ -645,7 +645,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       </div>
                       {intercompanyVatRecon.rows.length > 0 ? (
                         <div className="rounded border border-border/60 overflow-auto max-h-48">
-                          <table className="w-full text-xs">
+                          <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2">{t("accCompColStatus")}</th>
@@ -900,7 +900,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             <Card>
               <CardContent className="p-2 overflow-x-auto space-y-3">
                 {posFilingOutputSummaries.length > 0 ? (
-                  <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2 text-xs">
+                  <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2 text-sm">
                     <div className="font-medium text-foreground">{t("accCompPosSalesAutoTitle")}</div>
                     <div className="space-y-2">
                       {posFilingOutputSummaries.map((row, sidx) => (
@@ -1162,7 +1162,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 {!posFilingOutputSummaries.length &&
                 ((vatOutputViewMode === "vendor" && !vatOutputVendorSummaries.length) ||
                   (vatOutputViewMode === "detail" && !nonPosOutputCount)) ? (
-                  <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                  <div className="p-6 text-center text-muted-foreground text-sm">{t("emp_result_empty")}</div>
                 ) : null}
               </CardContent>
             </Card>
@@ -1316,7 +1316,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               <CardContent className="p-2 overflow-x-auto space-y-3">
                 {vatInputViewMode === "vendor" ? (
                   <div className="rounded-md border border-border/70 overflow-x-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-sm">
                       <thead className="bg-muted/30">
                         <tr className="border-b border-border/70">
                           <th className="p-2 text-left">{t("accCompColVendorName")}</th>
@@ -1545,7 +1545,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 }) : null}
                 {(vatInputViewMode === "vendor" && !vatInputVendorSummaries.length) ||
                 (vatInputViewMode === "detail" && !vatInputRowsFiltered.length) ? (
-                  <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                  <div className="p-6 text-center text-muted-foreground text-sm">{t("emp_result_empty")}</div>
                 ) : null}
               </CardContent>
             </Card>
@@ -1707,7 +1707,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             ) : null}
             {showPnd1Area ? (
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                <div className="text-xs font-medium">{pnd1PayerBoxTitle}</div>
+                <div className="text-sm font-bold">{pnd1PayerBoxTitle}</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
                   <Input
                     placeholder="payer tax id (13 digits)"
@@ -1742,7 +1742,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       <SelectItem value="all">All</SelectItem>
                     </SelectContent>
                   </Select>
-                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={pnd1IncludeHeader}
@@ -1927,7 +1927,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     </Button>
                   </div>
                   {isPnd5354CompactList ? (
-                    <table className="w-full text-xs border-collapse min-w-[720px]">
+                    <table className="w-full text-sm border-collapse min-w-[720px]">
                       <thead>
                         <tr className="border-b bg-muted/30">
                           <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
@@ -2045,7 +2045,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 ) : null}
                 {pnd91Summary && pnd91Summary.employees.length > 0 ? (
                   <div className="overflow-x-auto rounded border border-border/60">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/30">
                           <th className="text-left p-2">{t("accCompPnd91ColEmployee")}</th>
@@ -2120,7 +2120,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             {showPnd1Area && payrollTinGapResult ? (
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-xs font-medium">
+                  <div className="text-sm font-bold">
                     {lang === "th" ? "ผลตรวจ TIN พนักงาน (รายเดือน)" : t("accCompPayrollTinGapTitleMonthly")}
                   </div>
                   <Button
@@ -2147,7 +2147,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   </div>
                 </div>
                 <div className="overflow-x-auto rounded border border-border/60">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
                         <th className="text-left p-2">{t("month")}</th>
@@ -2196,7 +2196,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             {showPnd1Area && pnd1ValidationResult ? (
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-medium">{pnd1ValidationTableTitle}</div>
+                  <div className="text-sm font-bold">{pnd1ValidationTableTitle}</div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -2264,7 +2264,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   </div>
                 </div>
                 <div className="overflow-x-auto rounded border border-border/60">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
                         <th className="text-left p-2">Line</th>
@@ -2316,7 +2316,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               ) : null}
               <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto space-y-3"}>
                 {isPnd5354CompactList ? (
-                  <table className="w-full text-xs border-collapse min-w-[880px]">
+                  <table className="w-full text-sm border-collapse min-w-[880px]">
                     <thead>
                       <tr className="border-b bg-muted/30">
                         <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
@@ -2522,7 +2522,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   )
                 })}
                 {!whtRowsFiltered.length ? (
-                  <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                  <div className="p-6 text-center text-muted-foreground text-sm">{t("emp_result_empty")}</div>
                 ) : null}
                 </>
                 )}

@@ -287,7 +287,7 @@ export function IncomePlDetailTableContent({
                     <td className={accountingPlSubTdLabelCn}>
                       {salesBreakdownRowLabel(row, t, salesBreakdownIsDaily(data))}
                     </td>
-                    <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                       {formatBath(
                         lineDisplayAmount(
                           row,
@@ -298,7 +298,7 @@ export function IncomePlDetailTableContent({
                         )
                       )}
                     </td>
-                    <td className={`${accountingPlTdPctCn} text-xs`}>
+                    <td className={`${accountingPlTdPctCn}`}>
                       {view.pct(
                         lineDisplayAmount(
                           row,
@@ -360,12 +360,12 @@ export function IncomePlDetailTableContent({
                 }
               >
                 <td className={accountingPlSubTdLabelCn}>{purchaseVendorRowLabel(row, t)}</td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(
                     lineDisplayAmount(row, vatMode, data.displayAmounts?.purchasesStockVatBuckets)
                   )}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>
+                <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(
                     lineDisplayAmount(row, vatMode, data.displayAmounts?.purchasesStockVatBuckets)
                   )}
@@ -439,10 +439,10 @@ export function IncomePlDetailTableContent({
                         nameTh: row.nameTh,
                       }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")}
                 </td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(row.amount)}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>{view.pct(row.amount)}</td>
+                <td className={`${accountingPlTdPctCn}`}>{view.pct(row.amount)}</td>
               </tr>
             ))}
           {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
@@ -456,19 +456,19 @@ export function IncomePlDetailTableContent({
             <>
               <tr className={accountingPlSubRowCn}>
                 <td className={`${accountingPlSubTdLabelCn} pl-12`}>- {t("pL_expenseSourcePetty") || "Petty Cash"}</td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>
+                <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(data.expenseBreakdown?.pettyCash ?? 0)}
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
                 <td className={`${accountingPlSubTdLabelCn} pl-12`}>- {t("pL_expenseSourceBank") || "Bank Withdrawal"}</td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>
+                <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(data.expenseBreakdown?.bankWithdraw ?? 0)}
                 </td>
               </tr>
@@ -476,10 +476,10 @@ export function IncomePlDetailTableContent({
                 <td className={`${accountingPlSubTdLabelCn} pl-12`}>
                   - {t("pL_expenseSourceDeliveryApps")}
                 </td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.deliveryAppFees ?? 0)}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>
+                <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(data.expenseBreakdown?.deliveryAppFees ?? 0)}
                 </td>
               </tr>
@@ -487,19 +487,19 @@ export function IncomePlDetailTableContent({
                 <td className={`${accountingPlSubTdLabelCn} pl-12`}>
                   - {t("pL_expenseSourceCardFees")}
                 </td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.cardFees ?? 0)}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>
+                <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(data.expenseBreakdown?.cardFees ?? 0)}
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
                 <td className={`${accountingPlSubTdLabelCn} pl-12`}>- {t("pL_expenseSourceFixed") || "Fixed Cost"}</td>
-                <td className={`${accountingPlTdAmountCn} text-xs text-muted-foreground`}>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
-                <td className={`${accountingPlTdPctCn} text-xs`}>
+                <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
               </tr>
@@ -527,10 +527,10 @@ export function IncomePlDetailTableContent({
               {(data.ebitdaBridge?.depreciation ?? 0) > 0 && (
                 <tr className={accountingPlSubRowCn}>
                   <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaDepreciation")}</td>
-                  <td className={`${accountingPlTdAmountCn} text-xs`}>
+                  <td className={`${accountingPlTdAmountCn}`}>
                     {formatBath(data.ebitdaBridge!.depreciation)}
                   </td>
-                  <td className={`${accountingPlTdPctCn} text-xs`}>
+                  <td className={`${accountingPlTdPctCn}`}>
                     {view.pct(data.ebitdaBridge!.depreciation)}
                   </td>
                 </tr>
@@ -538,10 +538,10 @@ export function IncomePlDetailTableContent({
               {(data.ebitdaBridge?.interest ?? 0) > 0 && (
                 <tr className={accountingPlSubRowCn}>
                   <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaInterest")}</td>
-                  <td className={`${accountingPlTdAmountCn} text-xs`}>
+                  <td className={`${accountingPlTdAmountCn}`}>
                     {formatBath(data.ebitdaBridge!.interest)}
                   </td>
-                  <td className={`${accountingPlTdPctCn} text-xs`}>
+                  <td className={`${accountingPlTdPctCn}`}>
                     {view.pct(data.ebitdaBridge!.interest)}
                   </td>
                 </tr>
@@ -549,10 +549,10 @@ export function IncomePlDetailTableContent({
               {(data.ebitdaBridge?.incomeTax ?? 0) > 0 && (
                 <tr className={accountingPlSubRowCn}>
                   <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaIncomeTax")}</td>
-                  <td className={`${accountingPlTdAmountCn} text-xs`}>
+                  <td className={`${accountingPlTdAmountCn}`}>
                     {formatBath(data.ebitdaBridge!.incomeTax)}
                   </td>
-                  <td className={`${accountingPlTdPctCn} text-xs`}>
+                  <td className={`${accountingPlTdPctCn}`}>
                     {view.pct(data.ebitdaBridge!.incomeTax)}
                   </td>
                 </tr>

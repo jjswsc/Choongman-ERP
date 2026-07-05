@@ -142,10 +142,10 @@ function renderReceivableLedgerDateCell(
   if (salesDate && receiveDate && salesDate !== receiveDate) {
     return (
       <div className="flex flex-col items-start gap-0.5 leading-tight">
-        <span className="tabular-nums text-xs whitespace-nowrap">
+        <span className="tabular-nums text-sm whitespace-nowrap">
           <span className="text-muted-foreground">{labels.sales}</span> {salesDate}
         </span>
-        <span className="tabular-nums text-xs whitespace-nowrap">
+        <span className="tabular-nums text-sm whitespace-nowrap">
           <span className="text-muted-foreground">{labels.receive}</span> {receiveDate}
         </span>
       </div>
@@ -165,10 +165,10 @@ function renderPayableLedgerDateCell(
   if (purchaseDate && paymentDate && purchaseDate !== paymentDate) {
     return (
       <div className="flex flex-col items-start gap-0.5 leading-tight">
-        <span className="tabular-nums text-xs whitespace-nowrap">
+        <span className="tabular-nums text-sm whitespace-nowrap">
           <span className="text-muted-foreground">{labels.purchase}</span> {purchaseDate}
         </span>
-        <span className="tabular-nums text-xs whitespace-nowrap">
+        <span className="tabular-nums text-sm whitespace-nowrap">
           <span className="text-muted-foreground">{labels.payment}</span> {paymentDate}
         </span>
       </div>
@@ -1050,7 +1050,7 @@ export function ReceivablePayableTab() {
 
   const amountGridCols =
     "grid grid-cols-[minmax(0,2fr)_repeat(4,minmax(6rem,1fr))] gap-x-2 sm:gap-x-3 gap-y-1 items-center w-full min-w-0"
-  const ledgerSummaryHeaderCellCn = "text-center min-w-0 px-1 text-xs sm:text-sm leading-tight"
+  const ledgerSummaryHeaderCellCn = "text-center min-w-0 px-1 text-sm sm:text-sm leading-tight"
   const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
   const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
@@ -1320,7 +1320,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                 <div key={key} className="break-inside-avoid">
                   <h2 className="font-semibold text-sm mb-1">{name}</h2>
                   <p className="text-primary font-bold mb-2">{fmtBaht(item.balance ?? 0)}</p>
-                  <table className="w-full text-xs border-collapse table-fixed">
+                  <table className="w-full text-sm border-collapse table-fixed">
                     <thead>
                       <tr className="border-b">
                         <th className="text-center py-1 px-2 w-[115px]">{t("date") || "Date"}</th>
@@ -1380,7 +1380,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           )}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
                           {isRec && (
-                            <td className="py-1 px-2 text-center text-xs">
+                            <td className="py-1 px-2 text-center text-sm">
                               {row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO"
                                 ? (row.receive_checked ? (t("recCheckPaid") || "Collected") : (t("recCheckWait") || "Pending"))
                                 : "—"}
@@ -1701,10 +1701,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap" title={tt("recColReceiveCheckHint", "통장 수금은 「미수 연결」로 처리합니다. 체크는 통장 없는 수금(현금 등) 또는 연동 결과 표시용입니다.")}>
                                       {t("recColReceiveCheck") || "수금확인"}
                                     </th>
-                                    <th className="text-center py-2 px-1 w-[76px] text-xs font-semibold whitespace-nowrap">
+                                    <th className="text-center py-2 px-1 w-[76px] text-sm font-bold whitespace-nowrap">
                                       {t("acct_rec_bank_link") || tt("acct_rec_bank_link", "통장")}
                                     </th>
-                                    <th className="text-center py-2 px-1 w-[72px] text-xs font-semibold whitespace-nowrap">
+                                    <th className="text-center py-2 px-1 w-[72px] text-sm font-bold whitespace-nowrap">
                                       {t("recColTaxInvoice") || "Tax Invoice"}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
@@ -1716,7 +1716,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     )}
                                     {showStorePurchaseJournalCol && (
                                       <th
-                                        className="text-center py-2 px-1 w-[44px] text-xs font-semibold text-muted-foreground"
+                                        className="text-center py-2 px-1 w-[44px] text-sm font-bold text-muted-foreground"
                                         title={tt("recStorePurchaseJournalBtnTitle", "매장 매입 분개 (store_purchase) 조회·삭제")}
                                       >
                                         {tt("recStorePurchaseJournalColShort", "분개")}
@@ -1913,7 +1913,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </td>
                                       <td className="py-1.5 px-4 w-[95px] text-center">
                                         <span className={cn(
-                                          "text-xs font-medium px-2 py-0.5 rounded",
+                                          "text-sm font-medium px-2 py-0.5 rounded",
                                           row.ref_type === "Receive" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
                                         )}>
                                           {row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")}
@@ -2081,10 +2081,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       <tr className="border-b border-border/50 bg-muted/10">
                                         <td colSpan={recLineColSpan} className="py-2 px-4">
                                           {recLinesLoading ? (
-                                            <p className="text-xs text-muted-foreground py-2">{t("loadingItems")}</p>
+                                            <p className="text-sm text-muted-foreground py-2">{t("loadingItems")}</p>
                                           ) : recLineItems.length > 0 ? (
-                                            <div className="ml-4 rounded border border-border/50 bg-background p-3 text-xs">
-                                              <div className="mb-2 font-semibold text-muted-foreground">
+                                            <div className="ml-4 rounded border border-border/50 bg-background p-3 text-sm">
+                                              <div className="mb-2 text-sm font-bold text-foreground">
                                                 {t("outColItem") || "품목"}
                                               </div>
                                               <p className="mb-2 text-[11px] text-muted-foreground">
@@ -2093,7 +2093,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                   "행 금액은 VAT 포함 합계입니다. 아래 품목 금액은 공급가(단가×수량)이며, 맨 아래 소계·VAT·합계로 맞춥니다."
                                                 )}
                                               </p>
-                                              <table className="w-full text-xs">
+                                              <table className="w-full text-sm">
                                                 <thead>
                                                   <tr className="border-b">
                                                     <th className="py-1 px-2 text-left font-medium">
@@ -2517,20 +2517,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           >
                                             {(row.ref_type === "Inbound" || row.ref_type === "PO") ? (
                                               row.invoice_received ? (
-                                                <span className="text-xs text-green-700 dark:text-green-400" title={row.invoice_no || ""}>
+                                                <span className="text-sm text-green-700 dark:text-green-400" title={row.invoice_no || ""}>
                                                   ✓ {row.invoice_no ? String(row.invoice_no).slice(0, 12) + (String(row.invoice_no).length > 12 ? "…" : "") : (t("poInvoiceReceived") || "수령")}
                                                 </span>
                                               ) : (
-                                                <span className="text-xs text-amber-700 dark:text-amber-400">{t("poInvoiceNotReceived") || "미수령"}</span>
+                                                <span className="text-sm text-amber-700 dark:text-amber-400">{t("poInvoiceNotReceived") || "미수령"}</span>
                                               )
                                             ) : "-"}
                                           </td>
-                                          <td className="py-1.5 px-4 w-[92px] text-center text-muted-foreground text-xs whitespace-nowrap">
+                                          <td className="py-1.5 px-4 w-[92px] text-center text-muted-foreground text-sm whitespace-nowrap">
                                             {formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store)}
                                           </td>
                                           <td className="py-1.5 px-4 w-[95px] text-center">
                                             <span className={cn(
-                                              "text-xs font-medium px-2 py-0.5 rounded",
+                                              "text-sm font-medium px-2 py-0.5 rounded",
                                               row.ref_type === "Payment" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
                                             )}>
                                               {row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")}
@@ -2582,11 +2582,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <tr className="border-b border-border/50 bg-muted/10">
                                             <td colSpan={showPayableManualActions ? 9 : 8} className="py-2 px-4">
                                               {isLoading ? (
-                                                <p className="text-xs text-muted-foreground py-2">{t("loadingItems")}</p>
+                                                <p className="text-sm text-muted-foreground py-2">{t("loadingItems")}</p>
                                               ) : items.length > 0 ? (
-                                                <div className="ml-4 rounded border border-border/50 bg-background p-3 text-xs">
-                                                  <div className="mb-2 font-semibold text-muted-foreground">{t("outColItem") || "품목"}</div>
-                                                  <table className="w-full text-xs">
+                                                <div className="ml-4 rounded border border-border/50 bg-background p-3 text-sm">
+                                                  <div className="mb-2 text-sm font-bold text-foreground">{t("outColItem") || "품목"}</div>
+                                                  <table className="w-full text-sm">
                                                     <thead>
                                                       <tr className="border-b">
                                                         <th className="py-1 px-2 text-left font-medium">

@@ -964,8 +964,8 @@ export function ExpenseManagementTab() {
                                   return (
                                     <>
                                       <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
-                                      <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                      <td className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={getPayeeLine(r.payeeName, codeLabel)}>{getPayeeLine(r.payeeName, codeLabel)}</td>
+                                      <td className="py-2 px-2 text-muted-foreground align-top break-words text-sm leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
+                                      <td className="py-2 px-2 align-top text-sm leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={getPayeeLine(r.payeeName, codeLabel)}>{getPayeeLine(r.payeeName, codeLabel)}</td>
                                     </>
                                   )
                                 })()}
@@ -975,7 +975,7 @@ export function ExpenseManagementTab() {
                             </td>
                             <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
                             <td
-                              className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
+                              className="py-2 px-2 text-muted-foreground align-top text-sm leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
                               title={r.memo || ""}
                               onClick={() => setPlanDetailRow(r)}
                             >{getMemo(r.memo)}</td>
@@ -1249,9 +1249,9 @@ export function ExpenseManagementTab() {
                             <React.Fragment key={r.id}>
                               <tr className="border-b">
                                 <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
-                                <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
+                                <td className="py-2 px-2 text-muted-foreground align-top break-words text-sm leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
                                 <td
-                                  className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words"
+                                  className="py-2 px-2 align-top text-sm leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words"
                                   title={
                                     r.payeeCode && !r.payeeCode.startsWith("auto_")
                                       ? getPayeeLine(r.payeeName, ` (${r.payeeCode})`)
@@ -1268,7 +1268,7 @@ export function ExpenseManagementTab() {
                                 </td>
                                 <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
                                 <td
-                                  className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
+                                  className="py-2 px-2 text-muted-foreground align-top text-sm leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
                                   title={r.memo || ""}
                                   onClick={() => setPlanDetailRow(r)}
                                 >{getMemo(r.memo)}</td>
@@ -1524,7 +1524,7 @@ export function ExpenseManagementTab() {
                   onClick={() => handleLinkBank(b.id)}
                 >
                   <span className="text-sm">{b.transDate} · ฿{b.amount.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">{getMemo(b.memo)}</span>
+                  <span className="text-sm text-muted-foreground truncate max-w-[200px]">{getMemo(b.memo)}</span>
                 </div>
               ))}
             </div>

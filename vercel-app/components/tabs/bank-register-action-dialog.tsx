@@ -628,7 +628,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         </div>
                       ) : null}
                       {showMismatchFields ? (
-                        <p className="text-xs text-amber-800 dark:text-amber-200 tabular-nums">
+                        <p className="text-sm text-amber-800 dark:text-amber-200 tabular-nums">
                           {tt("bankReceivablePickDiff", "차이")}: ฿{gap.toLocaleString()}
                         </p>
                       ) : null}
