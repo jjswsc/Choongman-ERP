@@ -10,6 +10,7 @@ import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-in
 import {
   dedupePayablePaymentsForBankTransaction,
   dedupePayablePaymentsForExpenseAccrual,
+  upsertPayableFromBankPurchasePayment,
 } from '@/lib/receivable-payable'
 import { registerPettyReplenishFromBankTransaction, collectLinkedBankTransactionIds } from '@/lib/petty-bank-expense-link-server'
 import { registerCardExpenseFromBankTransaction } from '@/lib/card-bank-expense-link-server'
@@ -586,20 +587,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await supabaseInsert('payable_transactions', {
-      vendor_code: vendorCode,
-      amount: -Math.abs(amount),
-      ref_type: 'Payment',
-      ref_id: null,
-      trans_date: transDate,
-      memo: `${paymentMethod === 'bank' ? '통장' : '패티'} 지급: ${paymentMemo}`.slice(0, 240),
-      expense_accrual_id: expenseAccrualId,
-      bank_transaction_id: bankId,
-      petty_cash_transaction_id: pettyId,
-      expense_date: source.expense_date || transDate,
-      due_date: source.due_date || null,
-      account_subject_id: accrualAccountSubjectId,
-    })
+    const paymentMemoLine = `${paymentMethod === 'bank' ? '통장' : '패티'} 지급: ${paymentMemo}`.slice(0, 240)
+    if (bankId) {
+      await upsertPayableFromBankPurchasePayment({
+        bankTransactionId: bankId,
+        vendorCode,
+        amountAbs: amount,
+        transDate,
+        memo: paymentMemoLine,
+        expenseAccrualId,
+        expenseDate: source.expense_date || transDate,
+        dueDate: source.due_date || null,
+        accountSubjectId: accrualAccountSubjectId,
+      })
+    } else {
+      await supabaseInsert('payable_transactions', {
+        vendor_code: vendorCode,
+        amount: -Math.abs(amount),
+        ref_type: 'Payment',
+        ref_id: null,
+        trans_date: transDate,
+        memo: paymentMemoLine,
+        expense_accrual_id: expenseAccrualId,
+        bank_transaction_id: null,
+        petty_cash_transaction_id: pettyId,
+        expense_date: source.expense_date || transDate,
+        due_date: source.due_date || null,
+        account_subject_id: accrualAccountSubjectId,
+      })
+    }
 
     const nextRemaining = Math.max(0, remaining - amount)
     await supabaseUpdate('expense_accruals', expenseAccrualId, {

@@ -1,3 +1,4 @@
+import { dedupePayablePaymentsForBankTransaction, pickPayablePaymentKeeperId } from '@/lib/receivable-payable'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -464,6 +465,55 @@ export function dedupeInboundPayableLedgerRows(rows: PayableTransactionRow[]): P
   return [...rest, ...bestByInboundRef.values()]
 }
 
+/** 동일 통장 출금(bank_transaction_id)에 Payment 2행 이상이면 지급예정 연동 행 우선 1행만 원장에 반영 */
+export function dedupePayablePaymentLedgerRows(rows: PayableTransactionRow[]): PayableTransactionRow[] {
+  const byBankId = new Map<number, PayableTransactionRow[]>()
+  const rest: PayableTransactionRow[] = []
+
+  for (const row of rows) {
+    if (String(row.ref_type || '') !== 'Payment') {
+      rest.push(row)
+      continue
+    }
+    const bankId = Number(row.bank_transaction_id || 0)
+    if (!bankId) {
+      rest.push(row)
+      continue
+    }
+    const bucket = byBankId.get(bankId) || []
+    bucket.push(row)
+    byBankId.set(bankId, bucket)
+  }
+
+  const keptPayments: PayableTransactionRow[] = []
+  for (const bucket of byBankId.values()) {
+    const keeperId = pickPayablePaymentKeeperId(
+      bucket.map((r) => ({ id: r.id, expense_accrual_id: r.expense_accrual_id }))
+    )
+    const keeper = keeperId != null ? bucket.find((r) => Number(r.id) === keeperId) : bucket[0]
+    if (keeper) keptPayments.push(keeper)
+  }
+
+  return [...rest, ...keptPayments]
+}
+
+/** 조회 시 DB에 남은 통장 Payment 중복을 정리 (표시 dedupe와 별도 — 물리 행 삭제) */
+async function reconcileDuplicatePayablePaymentsInRows(rows: PayableTransactionRow[]): Promise<void> {
+  const counts = new Map<number, number>()
+  for (const row of rows) {
+    if (String(row.ref_type || '') !== 'Payment') continue
+    const bankId = Number(row.bank_transaction_id || 0)
+    if (!bankId) continue
+    counts.set(bankId, (counts.get(bankId) || 0) + 1)
+  }
+  const duplicateBankIds = [...counts.entries()].filter(([, n]) => n >= 2).map(([id]) => id)
+  if (!duplicateBankIds.length) return
+  const limit = 24
+  await Promise.all(
+    duplicateBankIds.slice(0, limit).map((bankId) => dedupePayablePaymentsForBankTransaction(bankId))
+  )
+}
+
 export async function loadPayableTransactionsToEnd(params: {
   vendorFilter?: string
   endStr: string
@@ -477,7 +527,8 @@ export async function loadPayableTransactionsToEnd(params: {
     pageSize: 8000,
     maxRows: 2_000_000,
   })) as PayableTransactionRow[]
-  return dedupeInboundPayableLedgerRows(rows)
+  await reconcileDuplicatePayablePaymentsInRows(rows)
+  return dedupePayablePaymentLedgerRows(dedupeInboundPayableLedgerRows(rows))
 }
 
 export async function scopePayableLedgerRows(

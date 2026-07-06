@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { upsertPayableFromBankPurchasePayment } from '@/lib/receivable-payable'
 import { postExpenseAccrualJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
@@ -189,16 +190,17 @@ export async function POST(request: NextRequest) {
       due_date: expenseDate,
     })
 
-    await supabaseInsert('payable_transactions', {
-      vendor_code: payeeCode,
-      amount: -Math.abs(amount),
-      ref_type: 'Payment',
-      ref_id: null,
-      trans_date: expenseDate,
+    await upsertPayableFromBankPurchasePayment({
+      bankTransactionId,
+      vendorCode: payeeCode,
+      amountAbs: amount,
+      transDate: expenseDate,
       memo: `통장 지급: ${payeeName || payeeCode}`.slice(0, 240),
-      expense_accrual_id: expenseAccrualId,
-      bank_transaction_id: bankTransactionId,
-      expense_date: expenseDate,
+      expenseAccrualId,
+      expenseDate,
+      dueDate: expenseDate,
+      accountSubjectId:
+        accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
     })
 
     await supabaseUpdate('bank_transactions', bankTransactionId, {

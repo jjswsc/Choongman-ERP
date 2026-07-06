@@ -448,8 +448,9 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
 }
 
 /**
- * 통장 연동 매입 지급(ref Payment, 지출발생 미연동) — bank_transaction_id당 1행 유지.
- * CSV 재저장·출금관리 등으로 동일 통장 건에 insert가 반복되면 미지급 내역이 중복되어 보일 수 있어 upsert.
+ * 통장 출금 1건당 Payment 1행 유지.
+ * 지급예정 집행(expense_accrual_id 있음)과 통장 매입지급(purchase_payment)이 겹쳐 insert되면
+ * 미지급 원장에 동일 지급이 2번 보이므로 bank_transaction_id 기준으로 통합한다.
  */
 export async function upsertPayableFromBankPurchasePayment(params: {
   bankTransactionId: number
@@ -457,40 +458,46 @@ export async function upsertPayableFromBankPurchasePayment(params: {
   amountAbs: number
   transDate: string
   memo: string
+  expenseAccrualId?: number | null
+  expenseDate?: string | null
+  dueDate?: string | null
+  accountSubjectId?: number | null
 }): Promise<void> {
-  const { bankTransactionId, vendorCode, amountAbs, transDate, memo } = params
-  if (!bankTransactionId || !vendorCode || !amountAbs) return
-  const filter = `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Payment&expense_accrual_id=is.null`
-  const rows = (await supabaseSelectFilter('payable_transactions', filter, {
-    order: 'id.asc',
-    limit: 50,
-    select: 'id',
-  })) as { id?: number }[]
-  const row = {
+  const bankId = Number(params.bankTransactionId || 0)
+  const vendorCode = String(params.vendorCode || '').trim()
+  if (!bankId || !vendorCode || !params.amountAbs) return
+
+  const row: Record<string, unknown> = {
     vendor_code: vendorCode,
-    amount: -Math.abs(amountAbs),
-    ref_type: 'Payment' as const,
-    ref_id: null as null,
-    trans_date: transDate.slice(0, 10),
-    memo: memo.slice(0, 240),
-    bank_transaction_id: bankTransactionId,
+    amount: -Math.abs(params.amountAbs),
+    ref_type: 'Payment',
+    ref_id: null,
+    trans_date: params.transDate.slice(0, 10),
+    memo: params.memo.slice(0, 240),
+    bank_transaction_id: bankId,
   }
-  if (rows?.length) {
-    const keepId = rows[0].id
-    if (keepId) {
-      await supabaseUpdate('payable_transactions', keepId, {
-        vendor_code: row.vendor_code,
-        amount: row.amount,
-        trans_date: row.trans_date,
-        memo: row.memo,
-      })
-    }
-    for (const r of rows.slice(1)) {
-      if (r.id) await supabaseDeleteByFilter('payable_transactions', `id=eq.${r.id}`)
-    }
-  } else {
-    await supabaseInsert('payable_transactions', row)
+  const accrualId = Number(params.expenseAccrualId || 0)
+  if (accrualId > 0) row.expense_accrual_id = accrualId
+  if (params.expenseDate) row.expense_date = params.expenseDate
+  if (params.dueDate) row.due_date = params.dueDate
+  if (params.accountSubjectId != null && !isNaN(Number(params.accountSubjectId))) {
+    row.account_subject_id = Number(params.accountSubjectId)
   }
+
+  const existing = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment`,
+    { order: 'id.asc', limit: 50, select: 'id,expense_accrual_id' }
+  )) as PayablePaymentLinkRow[]
+
+  const keeperId = pickPayablePaymentKeeperId(existing || [])
+  if (keeperId) {
+    await supabaseUpdate('payable_transactions', keeperId, row)
+    await dedupePayablePaymentsForBankTransaction(bankId)
+    return
+  }
+
+  await supabaseInsert('payable_transactions', row)
 }
 
 /**
