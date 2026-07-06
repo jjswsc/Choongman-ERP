@@ -124,6 +124,43 @@ export async function loadPurchasePaymentAccrualIds(accrualIds: number[]): Promi
   return out
 }
 
+export async function loadBankCategoryByIdForPayables(
+  rows: PayableTransactionRow[]
+): Promise<Map<number, string>> {
+  const bankIds = [
+    ...new Set(
+      (rows || [])
+        .filter((r) => r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0)
+        .map((r) => Number(r.bank_transaction_id))
+    ),
+  ]
+  const out = new Map<number, string>()
+  if (!bankIds.length) return out
+  const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIds.join(',')})`, {
+    select: 'id,category',
+    limit: 10000,
+  })) as { id?: number; category?: string | null }[] | null
+  for (const bt of banks || []) {
+    if (bt.id == null) continue
+    out.set(Number(bt.id), String(bt.category || '').trim().toLowerCase())
+  }
+  return out
+}
+
+/** 일반 경비(expense) 통장 연동 지급은 매입채무 원장에서 제외 */
+export function isPurchasePayableLedgerRowWithBankCategory(
+  r: PayableTransactionRow,
+  options: PurchasePayableLedgerFilterOptions & { bankCategoryById?: Map<number, string> }
+): boolean {
+  if (!isPurchasePayableLedgerRow(r, options)) return false
+  const bankId = Number(r.bank_transaction_id || 0)
+  if (!bankId) return true
+  const cat = options.bankCategoryById?.get(bankId) || ''
+  if (cat !== 'expense') return true
+  const accrualId = Number(r.expense_accrual_id || 0)
+  return accrualId > 0 && (options.purchaseAccrualIds?.has(accrualId) ?? false)
+}
+
 export async function filterPurchasePayableLedgerRowsAsync(
   rows: PayableTransactionRow[]
 ): Promise<PayableTransactionRow[]> {
@@ -131,7 +168,10 @@ export async function filterPurchasePayableLedgerRowsAsync(
     .filter((r) => String(r.ref_type || '') === 'Payment' && Number(r.expense_accrual_id || 0) > 0)
     .map((r) => Number(r.expense_accrual_id))
   const purchaseAccrualIds = await loadPurchasePaymentAccrualIds(accrualIds)
-  return rows.filter((r) => isPurchasePayableLedgerRow(r, { purchaseAccrualIds }))
+  const bankCategoryById = await loadBankCategoryByIdForPayables(rows)
+  return rows.filter((r) =>
+    isPurchasePayableLedgerRowWithBankCategory(r, { purchaseAccrualIds, bankCategoryById })
+  )
 }
 
 /** @deprecated 동기 필터 — 지급예정 매입 지급은 누락될 수 있음. API는 filterPurchasePayableLedgerRowsAsync 사용 */

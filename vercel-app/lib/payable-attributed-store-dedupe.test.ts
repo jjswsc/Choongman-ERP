@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { dedupePayablePaymentLedgerRows } from './payable-attributed-store'
+import {
+  dedupePayablePaymentLedgerRows,
+  isPurchasePayableLedgerRowWithBankCategory,
+} from './payable-attributed-store'
 
 describe('dedupePayablePaymentLedgerRows', () => {
   it('keeps accrual-linked payment over legacy bank-only duplicate', () => {
@@ -27,5 +30,39 @@ describe('dedupePayablePaymentLedgerRows', () => {
       { id: 2, ref_type: 'Payment', amount: -200, vendor_code: 'V1' },
     ])
     expect(rows).toHaveLength(2)
+  })
+})
+
+describe('isPurchasePayableLedgerRowWithBankCategory', () => {
+  it('excludes general expense bank payment from purchase payable ledger', () => {
+    const bankCategoryById = new Map<number, string>([[55, 'expense']])
+    expect(
+      isPurchasePayableLedgerRowWithBankCategory(
+        {
+          id: 1,
+          ref_type: 'Payment',
+          amount: -32267.5,
+          vendor_code: '1015',
+          bank_transaction_id: 55,
+        },
+        { purchaseAccrualIds: new Set(), bankCategoryById }
+      )
+    ).toBe(false)
+  })
+
+  it('keeps purchase_payment bank withdrawal in ledger', () => {
+    const bankCategoryById = new Map<number, string>([[56, 'purchase_payment']])
+    expect(
+      isPurchasePayableLedgerRowWithBankCategory(
+        {
+          id: 2,
+          ref_type: 'Payment',
+          amount: -32367.5,
+          vendor_code: '1015',
+          bank_transaction_id: 56,
+        },
+        { purchaseAccrualIds: new Set(), bankCategoryById }
+      )
+    ).toBe(true)
   })
 })

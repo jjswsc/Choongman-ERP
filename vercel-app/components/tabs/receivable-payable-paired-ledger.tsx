@@ -164,19 +164,6 @@ export function ReceivablePairedLedgerList({
             ) : accrual ? (
               <p className="text-[11px] text-muted-foreground pl-4 mt-1">{labels.noSettlement}</p>
             ) : null}
-            {!accrual && group.settlements[0] ? (
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pl-1">
-                <span className="text-sm font-medium">{formatRefType(group.settlements[0].ref_type)}</span>
-                <span className="text-sm font-semibold tabular-nums ml-auto">
-                  {fmtBahtSigned(group.settlements[0].amount)}
-                </span>
-                {group.settlements[0].memo ? (
-                  <span className="w-full text-[11px] text-muted-foreground truncate">
-                    {getMemo(group.settlements[0].memo)}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         )
       })}
@@ -277,19 +264,6 @@ export function PayablePairedLedgerList({
               ))
             ) : accrual ? (
               <p className="text-[11px] text-muted-foreground pl-4 mt-1">{labels.noSettlement}</p>
-            ) : null}
-            {!accrual && group.settlements[0] ? (
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pl-1">
-                <span className="text-sm font-medium">{formatRefType(group.settlements[0].ref_type)}</span>
-                <span className="text-sm font-semibold tabular-nums ml-auto">
-                  {fmtBahtSigned(group.settlements[0].amount)}
-                </span>
-                {group.settlements[0].memo ? (
-                  <span className="w-full text-[11px] text-muted-foreground truncate">
-                    {getMemo(group.settlements[0].memo)}
-                  </span>
-                ) : null}
-              </div>
             ) : null}
           </div>
         )
