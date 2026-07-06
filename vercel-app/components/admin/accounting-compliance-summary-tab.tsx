@@ -111,8 +111,8 @@ export interface AccountingComplianceSummaryTabProps {
   setPp30Queried: (v: boolean) => void
   setPp30SearchSeq: React.Dispatch<React.SetStateAction<number>>
   onFilingSearch?: () => void
-  pp30XlsxExporting: boolean
-  handleDownloadPp30VatReconcileXlsx: () => Promise<void>
+  handleDownloadPp30RdPrepTxt: () => void
+  handleDownloadPnd53RdFilingTxt: () => void
 
   // PP30 sub-views
   pp30SubView: "output" | "input" | "settlement" | "wht"
@@ -210,7 +210,6 @@ export interface AccountingComplianceSummaryTabProps {
   whtExportUrl: string
   whtSubmissionFormHint: "PND3" | "PND53" | "ALL"
   setWhtSubmissionFormHint: (v: "PND3" | "PND53" | "ALL") => void
-  whtSubmissionExportUrl: string
   printWhtCertificates: (rows: WhtDraft[]) => Promise<void>
   saveWhtRow: (row: WhtDraft) => Promise<void>
   removeWht: (row: WhtDraft) => Promise<void>
@@ -325,8 +324,8 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     setPp30Queried,
     setPp30SearchSeq,
     onFilingSearch,
-    pp30XlsxExporting,
-    handleDownloadPp30VatReconcileXlsx,
+    handleDownloadPp30RdPrepTxt,
+    handleDownloadPnd53RdFilingTxt,
     pp30SubView,
     setPp30SubView,
     allowedPp30Views,
@@ -392,7 +391,6 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     whtExportUrl,
     whtSubmissionFormHint,
     setWhtSubmissionFormHint,
-    whtSubmissionExportUrl,
     printWhtCertificates,
     saveWhtRow,
     removeWht,
@@ -561,12 +559,13 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
                 "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
               )}
-              disabled={loading || summaryLoading || pp30XlsxExporting}
-              onClick={() => void handleDownloadPp30VatReconcileXlsx()}
+              disabled={loading || summaryLoading}
+              onClick={() => void handleDownloadPp30RdPrepTxt()}
             >
               <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
-              {pp30XlsxExporting ? t("loading") : t("accCompPp30VatReconcileXlsx")}
+              {t("accCompPp30RdPrepTxt")}
             </Button>
+            <p className="text-xs text-muted-foreground w-full basis-full">{t("accCompRdFilingWorkflowNote")}</p>
           </div>
         </div>
         ) : null}
@@ -1827,10 +1826,13 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 </Select>
               ) : null}
               {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <a href={whtSubmissionExportUrl} target="_blank" rel="noopener noreferrer">
-                    {t("accCompPnd53SubmissionCsv")}
-                  </a>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleDownloadPnd53RdFilingTxt()}
+                >
+                  {t("accCompPnd53RdFilingTxt")}
                 </Button>
               ) : null}
               {showPnd1Area ? (

@@ -1,6 +1,12 @@
 import 'server-only'
 
-import { supabaseSelect, supabaseSelectFilter, supabaseUpdate } from './supabase-server'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelect,
+  supabaseSelectFilter,
+  supabaseUpdate,
+} from './supabase-server'
 import {
   buildItemTaxMapFromRows,
   computeInboundBatchAmounts,
@@ -69,19 +75,57 @@ export async function syncPayableFromInboundBatch(batchId: number): Promise<void
     total_amount: grossTotal,
   })
 
-  const payables = (await supabaseSelectFilter('payable_transactions', `ref_type=eq.Inbound&ref_id=eq.${id}`, {
-    limit: 1,
+  await upsertInboundPayableTransaction({
+    batchId: id,
+    vendorCode: payVendorCode,
+    amount: grossTotal,
+    transDate: batchDateYmd,
+    memo,
+  })
+}
+
+/** 입고 배치당 payable_transactions 1행 유지 — 중복 INSERT·이중 잔액 방지 */
+export async function upsertInboundPayableTransaction(params: {
+  batchId: number
+  vendorCode: string
+  amount: number
+  transDate: string
+  memo: string
+}): Promise<void> {
+  const batchId = Number(params.batchId || 0)
+  if (!batchId || params.amount <= 0) return
+
+  const payables = (await supabaseSelectFilter('payable_transactions', `ref_type=eq.Inbound&ref_id=eq.${batchId}`, {
+    limit: 50,
     select: 'id',
+    order: 'id.asc',
   })) as { id?: number }[] | null
 
-  if (payables?.length && payables[0].id) {
-    await supabaseUpdate('payable_transactions', payables[0].id, {
-      amount: grossTotal,
-      trans_date: batchDateYmd,
+  const ids = (payables || []).map((p) => p.id).filter((id): id is number => id != null && id > 0)
+  const vendorCode = String(params.vendorCode || '').trim()
+  const memo = String(params.memo || '').slice(0, 240)
+
+  if (ids.length > 0) {
+    await supabaseUpdate('payable_transactions', ids[0], {
+      amount: params.amount,
+      trans_date: params.transDate,
       memo,
-      ...(payVendorCode ? { vendor_code: payVendorCode } : {}),
+      ...(vendorCode ? { vendor_code: vendorCode } : {}),
     })
+    for (let i = 1; i < ids.length; i++) {
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${ids[i]}`)
+    }
+    return
   }
+
+  await supabaseInsert('payable_transactions', {
+    vendor_code: vendorCode,
+    amount: params.amount,
+    ref_type: 'Inbound',
+    ref_id: batchId,
+    trans_date: params.transDate,
+    memo,
+  })
 }
 
 /** 등록 직후 payable 행 생성용 (sync와 동일 산식) */

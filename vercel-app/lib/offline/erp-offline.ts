@@ -237,8 +237,15 @@ export async function getReceivablePayableListWithCache(params: {
 }
 
 /** 미수/미지급 목록 캐시 무효화 (통장 거래 수정/삭제 후 즉시 재조회 반영용) */
-export async function invalidateReceivablePayableListCache(): Promise<void> {
+export async function invalidateReceivablePayableListCache(opts?: {
+  /** false: 같은 탭에서 재조회 중일 때 중복 fetch 방지 */
+  notifyOtherTabs?: boolean
+}): Promise<void> {
   await deleteErpCacheByPrefix('erp:recPay')
+  if (opts?.notifyOtherTabs !== false) {
+    const { publishReceivablePayableListInvalidated } = await import('../receivable-payable-list-sync')
+    publishReceivablePayableListInvalidated()
+  }
 }
 
 export interface PayableTransactionItem {

@@ -130,6 +130,7 @@ import {
   clientHasBillToAddress,
   resolveTaxInvoiceClientFromPoBillTo,
 } from "./receivable-payable-tab-utils"
+import { subscribeReceivablePayableListInvalidated, publishReceivablePayableListInvalidated } from "@/lib/receivable-payable-list-sync"
 
 function renderReceivableLedgerDateCell(
   row: { ref_type?: string; trans_date?: string; amount?: number },
@@ -549,7 +550,12 @@ export function ReceivablePayableTab() {
   }, [canSelectStores, isManager, tab, applyTab])
 
   const loadList = React.useCallback(
-    async (opts?: { fresh?: boolean; overrides?: ReceivablePayableListLoadOverrides }) => {
+    async (opts?: {
+      fresh?: boolean
+      overrides?: ReceivablePayableListLoadOverrides
+      /** 다른 탭에서 온 무효화 알림으로 재조회할 때 — ping-pong 방지 */
+      skipCrossTabNotify?: boolean
+    }) => {
       const seq = ++listLoadSeqRef.current
       const effectiveTab = opts?.overrides?.type ?? tab
       const storeFilterVal =
@@ -588,7 +594,7 @@ export function ReceivablePayableTab() {
       setLoading(true)
       try {
         if (opts?.fresh) {
-          await invalidateReceivablePayableListCache()
+          await invalidateReceivablePayableListCache({ notifyOtherTabs: false })
         }
         const [listRes, summaryRes] = await Promise.all([
           getReceivablePayableList(listParams),
@@ -602,6 +608,9 @@ export function ReceivablePayableTab() {
           totalAmount,
           byKey,
         })
+        if (opts?.fresh && !opts?.skipCrossTabNotify) {
+          publishReceivablePayableListInvalidated()
+        }
       } catch {
         if (seq !== listLoadSeqRef.current) return
         setListData([])
@@ -710,6 +719,17 @@ export function ReceivablePayableTab() {
   }, [purchaseVendorMatchForOutlet, canSelectStores, loadList, applyTab])
 
   const [hasSearchedList, setHasSearchedList] = React.useState(false)
+  const hasSearchedListRef = React.useRef(false)
+  React.useEffect(() => {
+    hasSearchedListRef.current = hasSearchedList
+  }, [hasSearchedList])
+
+  React.useEffect(() => {
+    return subscribeReceivablePayableListInvalidated(() => {
+      if (!hasSearchedListRef.current) return
+      void loadList({ fresh: true, skipCrossTabNotify: true })
+    })
+  }, [loadList])
 
   const handleLoadList = React.useCallback(() => {
     setHasSearchedList(true)

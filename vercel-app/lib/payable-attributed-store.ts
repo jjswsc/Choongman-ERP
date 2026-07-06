@@ -434,6 +434,36 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
   }
 }
 
+/** 동일 입고(ref_id)에 payable이 2행 이상이면 id가 가장 작은 1행만 원장에 반영 */
+export function dedupeInboundPayableLedgerRows(rows: PayableTransactionRow[]): PayableTransactionRow[] {
+  const bestByInboundRef = new Map<number, PayableTransactionRow>()
+  const rest: PayableTransactionRow[] = []
+
+  for (const row of rows) {
+    if (String(row.ref_type || '') !== 'Inbound') {
+      rest.push(row)
+      continue
+    }
+    const refId = Number(row.ref_id || 0)
+    if (!refId) {
+      rest.push(row)
+      continue
+    }
+    const prev = bestByInboundRef.get(refId)
+    if (!prev) {
+      bestByInboundRef.set(refId, row)
+      continue
+    }
+    const prevId = Number(prev.id ?? 0)
+    const rowId = Number(row.id ?? 0)
+    if (rowId > 0 && (prevId <= 0 || rowId < prevId)) {
+      bestByInboundRef.set(refId, row)
+    }
+  }
+
+  return [...rest, ...bestByInboundRef.values()]
+}
+
 export async function loadPayableTransactionsToEnd(params: {
   vendorFilter?: string
   endStr: string
@@ -442,11 +472,12 @@ export async function loadPayableTransactionsToEnd(params: {
   if (params.vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(params.vendorFilter)}`)
   if (params.endStr) parts.push(`trans_date=lte.${params.endStr}`)
   const filter = parts.length ? parts.join('&') : 'id=gt.0'
-  return (await supabaseSelectFilterAllPages('payable_transactions', filter, {
+  const rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
     select: PAYABLE_LEDGER_SELECT,
     pageSize: 8000,
     maxRows: 2_000_000,
   })) as PayableTransactionRow[]
+  return dedupeInboundPayableLedgerRows(rows)
 }
 
 export async function scopePayableLedgerRows(

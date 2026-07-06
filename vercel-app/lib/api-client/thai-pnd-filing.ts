@@ -116,6 +116,70 @@ export function getExportPnd1RdPrepTxtUrl(params: {
   return `/api/exportPnd1RdPrepTxt?${q}`
 }
 
+export function getExportPnd53RdFilingTxtUrl(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+  formHint?: 'PND3' | 'PND53' | 'ALL'
+  payerTaxId?: string
+  payerBranchNo?: string
+  rdUserId?: string
+  deptName?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.formHint) q.set('formHint', params.formHint)
+  if (params.payerTaxId) q.set('payerTaxId', params.payerTaxId)
+  if (params.payerBranchNo) q.set('payerBranchNo', params.payerBranchNo)
+  if (params.rdUserId) q.set('rdUserId', params.rdUserId)
+  if (params.deptName) q.set('deptName', params.deptName)
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportPnd53RdFilingTxt?${q}`
+  }
+  return `/api/exportPnd53RdFilingTxt?${q}`
+}
+
+export function getExportPp30RdPrepTxtUrl(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+  payerTaxId?: string
+  payerBranchNo?: string
+  payerName?: string
+  placeOfBusiness?: string
+  outputNet?: number
+  outputVat?: number
+  inputNet?: number
+  inputVat?: number
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.payerTaxId) q.set('payerTaxId', params.payerTaxId)
+  if (params.payerBranchNo) q.set('payerBranchNo', params.payerBranchNo)
+  if (params.payerName) q.set('payerName', params.payerName)
+  if (params.placeOfBusiness) q.set('placeOfBusiness', params.placeOfBusiness)
+  if (params.outputNet != null && Number.isFinite(params.outputNet)) q.set('outputNet', String(params.outputNet))
+  if (params.outputVat != null && Number.isFinite(params.outputVat)) q.set('outputVat', String(params.outputVat))
+  if (params.inputNet != null && Number.isFinite(params.inputNet)) q.set('inputNet', String(params.inputNet))
+  if (params.inputVat != null && Number.isFinite(params.inputVat)) q.set('inputVat', String(params.inputVat))
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportPp30RdPrepTxt?${q}`
+  }
+  return `/api/exportPp30RdPrepTxt?${q}`
+}
+
 export type ValidatePnd1RdPrepResult = {
   period: {
     periodType: 'monthly' | 'half_year' | 'annual'

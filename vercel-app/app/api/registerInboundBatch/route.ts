@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseInsertMany, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { deletePayableFromPO } from '@/lib/receivable-payable'
 import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/inbound-payable-amount'
-import { computeInboundRegisterTotals } from '@/lib/inbound-payable-sync'
+import { computeInboundRegisterTotals, upsertInboundPayableTransaction } from '@/lib/inbound-payable-sync'
 import { roundErp3 } from '@/lib/utils'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
@@ -120,12 +120,11 @@ export async function POST(request: NextRequest) {
     // 3. 미지급금 생성 (입고 건별 VAT 포함 합계, From HQ 제외)
     if (batchId && grossTotal > 0 && vendorName && vendorName !== 'From HQ') {
       const payVendorCode = effectiveVendorCode || vendorCode || vendorName
-      await supabaseInsert('payable_transactions', {
-        vendor_code: payVendorCode,
+      await upsertInboundPayableTransaction({
+        batchId,
+        vendorCode: payVendorCode,
         amount: grossTotal,
-        ref_type: 'Inbound',
-        ref_id: batchId,
-        trans_date: batchDateYmd,
+        transDate: batchDateYmd,
         memo: `입고 ${batchDateYmd} ${vendorName}`,
       })
     }

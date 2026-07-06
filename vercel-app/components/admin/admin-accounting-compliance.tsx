@@ -73,6 +73,8 @@ import {
   deletePnd54LedgerEntry,
   getExportVatLedgerCsvUrl,
   getExportWithholdingTaxLedgerCsvUrl,
+  getExportPnd53RdFilingTxtUrl,
+  getExportPp30RdPrepTxtUrl,
   getExportPp36LedgerCsvUrl,
   getExportPnd54LedgerCsvUrl,
   getExportPnd1RdPrepTxtUrl,
@@ -505,7 +507,6 @@ export function AdminAccountingCompliance({
   /** 부가세(PP30) 요약 탭: 조건 변경 시 초기화, 검색 후에만 API 조회 */
   const [pp30Queried, setPp30Queried] = React.useState(false)
   const [pp30SearchSeq, setPp30SearchSeq] = React.useState(0)
-  const [pp30XlsxExporting, setPp30XlsxExporting] = React.useState(false)
   const pp30FilterBootRef = React.useRef(true)
   const vatLoadSeqRef = React.useRef(0)
   const whtLoadSeqRef = React.useRef(0)
@@ -3116,165 +3117,62 @@ export function AdminAccountingCompliance({
     return `${taxSummary.period.startMonth} ~ ${taxSummary.period.endMonth}`
   }, [taxSummary?.period, taxMonth])
 
-  const handleDownloadPp30VatReconcileXlsx = React.useCallback(async () => {
+  const pp30RdPrepUrl = React.useMemo(
+    () =>
+      getExportPp30RdPrepTxtUrl({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForApi,
+        payerTaxId: pnd1PayerTaxId,
+        payerBranchNo: pnd1PayerBranchNo,
+        payerName: pnd1PayerName,
+        outputNet: vatSettlement.outputNet,
+        outputVat: vatSettlement.outputVat,
+        inputNet: vatSettlement.inputNet,
+        inputVat: vatSettlement.inputVat,
+      }),
+    [
+      role,
+      taxMonth,
+      periodType,
+      ledgerStatusFilter,
+      storeFilterForApi,
+      pnd1PayerTaxId,
+      pnd1PayerBranchNo,
+      pnd1PayerName,
+      vatSettlement.outputNet,
+      vatSettlement.outputVat,
+      vatSettlement.inputNet,
+      vatSettlement.inputVat,
+    ]
+  )
+
+  const handleDownloadPp30RdPrepTxt = React.useCallback(() => {
     if (!pp30Queried) {
       appAlert(t("accCompPp30ExportNeedSearch"))
       return
     }
-    setPp30XlsxExporting(true)
-    try {
-      const y = Number(taxMonth.slice(0, 4))
-      let companyName = String(kt20kEmployer.companyName || "").trim()
-      let taxDigits = String(etaxTaxId || kt20kEmployer.companyTaxId || "")
-        .replace(/\D/g, "")
-        .trim()
-      let placeOfBusiness = ""
-      let branchNo = String(etaxBranchCode || "").trim() || "00000"
-      if (storeFilterForLedger !== "All") {
-        try {
-          const { profile } = await getStoreTaxFilingProfile(storeFilterForLedger)
-          if (profile) {
-            const profileTaxDigits = String(profile.taxId || "")
-              .replace(/\D/g, "")
-              .trim()
-            const profileName = String(profile.taxpayerName || "").trim()
-            if (profileName && profileTaxDigits.length === 13) {
-              companyName = profileName
-              taxDigits = profileTaxDigits
-              placeOfBusiness = String(profile.placeOfBusiness || "").trim()
-              branchNo =
-                String(profile.branchNo || "")
-                  .replace(/\D/g, "")
-                  .trim() || "00000"
-            }
-          }
-        } catch {
-          /* fallback to KT20k / E-tax below */
-        }
-      }
-      if ((!companyName || taxDigits.length !== 13) && canUse && Number.isFinite(y) && y >= 2000) {
-        try {
-          const data = await getKt20kSettings({ userRole: role, year: y })
-          companyName = companyName || String(data.settings.companyName || "").trim()
-          const t2 = String(data.settings.companyTaxId || "")
-            .replace(/\D/g, "")
-            .trim()
-          if (t2.length === 13) taxDigits = t2
-        } catch {
-          // ignore
-        }
-      }
-      const branchOfficeLabel = (() => {
-        const st = String(storeTb || "").trim()
-        if (st && st !== "All") return `${st} ${branchNo}`.trim()
-        return branchNo ? `สำนักงานใหญ่ ${branchNo}` : ""
-      })()
-      const companyBlock = {
-        companyName,
-        companyTaxIdDigits: taxDigits,
-        placeOfBusiness,
-        branchOfficeLabel,
-      }
-      const mod = await import("@/lib/pp30-vat-reconcile-xlsx")
-      const gaps = mod.listPp30VatReconcileFieldGaps(companyBlock)
-      if (gaps.required.length > 0) {
-        const fields = gaps.required.map((k) => t(`accCompPp30ExportField_${k}`)).join(", ")
-        appAlert(tr(t, "accCompPp30ExportRequiredMissing", { fields }))
-        return
-      }
-      if (gaps.optional.length > 0) {
-        appAlert(
-          `${tr(t, "accCompPp30ExportOptionalGaps", {
-            fields: gaps.optional.map((k) => t(`accCompPp30ExportField_${k}`)).join(", "),
-          })}\n${t("accCompPp30ExportRowGapsNote")}`
-        )
-      }
-      const periodDescriptionLine =
-        taxSummary?.period && taxSummary.period.startMonth !== taxSummary.period.endMonth
-          ? `สำหรับงวดภาษี ${summaryPeriodLabel}`
-          : mod.formatThaiVatPeriodLine(taxMonth)
-      let filingRound = mod.filingRoundLabelFromTaxMonth(taxMonth)
-      if (taxSummary?.period?.startMonth && taxSummary?.period?.endMonth) {
-        const a = taxSummary.period.startMonth
-        const b = taxSummary.period.endMonth
-        if (a !== b) filingRound = `${a.slice(5, 7)}-${a.slice(0, 4)} ~ ${b.slice(5, 7)}-${b.slice(0, 4)} (ยื่นปกติ)`
-      }
-      const toLedger = (r: VatDraft): VatLedgerRow => ({
-        id: r.id,
-        doc_date: r.doc_date,
-        tax_month: r.tax_month,
-        direction: r.direction,
-        counterparty_name: r.counterparty_name,
-        counterparty_tax_id: r.counterparty_tax_id,
-        invoice_number: r.invoice_number,
-        net_amount: r.net_amount,
-        vat_amount: r.vat_amount,
-        total_amount: r.total_amount,
-        vat_status: r.vat_status,
-        filing_status: r.filing_status,
-        submitted_at: r.submitted_at,
-        submitted_by: r.submitted_by,
-        memo: r.memo,
-        store_name: r.store_name,
-      })
-      const buf = mod.buildPp30VatReconcileXlsxBuffer({
-        taxMonth,
-        periodDescriptionLine,
-        company: companyBlock,
-        storeLabel: storeTb !== "All" ? storeTb : undefined,
-        outputRows: vatOutputRowsFiltered.map(toLedger),
-        inputRows: vatInputRowsFiltered.map(toLedger),
-        totals: {
-          outputNet: vatSettlement.outputNet,
-          outputVat: vatSettlement.outputVat,
-          inputNet: vatSettlement.inputNet,
-          inputVat: vatSettlement.inputVat,
-        },
-        filingStatusLabel: (fs) =>
-          String(fs || "").toLowerCase() === "submitted" ? "ยื่นแล้ว" : "รอยื่นแบบภาษี",
-        filingRoundLabel: filingRound,
-      })
-      const blob = new Blob([buf], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      const safeStore = String(storeTb || "All")
-        .replace(/[^\w\u0E00-\u0E7F\-]+/g, "_")
-        .slice(0, 80)
-      a.download = `VAT-Reconcile_${taxMonth}_${safeStore}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    } catch {
-      appAlert(t("msg_save_fail"))
-    } finally {
-      setPp30XlsxExporting(false)
+    const taxDigits = String(pnd1PayerTaxId || "")
+      .replace(/\D/g, "")
+      .trim()
+    if (taxDigits.length !== 13 || !String(pnd1PayerName || "").trim()) {
+      appAlert(
+        tr(t, "accCompPp30ExportRequiredMissing", {
+          fields: [
+            !String(pnd1PayerName || "").trim() ? t("accCompPp30ExportField_companyName") : "",
+            taxDigits.length !== 13 ? t("accCompPp30ExportField_companyTaxId13") : "",
+          ]
+            .filter(Boolean)
+            .join(", "),
+        })
+      )
+      return
     }
-  }, [
-    pp30Queried,
-    taxMonth,
-    taxSummary?.period,
-    summaryPeriodLabel,
-    kt20kEmployer.companyName,
-    kt20kEmployer.companyTaxId,
-    etaxTaxId,
-    etaxBranchCode,
-    storeTb,
-    storeFilterForLedger,
-    role,
-    canUse,
-    vatOutputRowsFiltered,
-    vatInputRowsFiltered,
-    vatSettlement.outputNet,
-    vatSettlement.outputVat,
-    vatSettlement.inputNet,
-    vatSettlement.inputVat,
-    t,
-    tr,
-  ])
+    window.open(pp30RdPrepUrl, "_blank", "noopener,noreferrer")
+  }, [pp30Queried, pnd1PayerTaxId, pnd1PayerName, pp30RdPrepUrl, t, tr])
 
   const closingDraftPayload = React.useMemo<IncomeExpenseClosingPreview | null>(() => {
     const raw = closingDraft?.payload
@@ -3380,20 +3278,45 @@ export function AdminAccountingCompliance({
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
-  const whtSubmissionExportUrl = React.useMemo(
+  const pnd53RdFilingUrl = React.useMemo(
     () =>
-      getExportWithholdingTaxLedgerCsvUrl({
+      getExportPnd53RdFilingTxtUrl({
         userRole: role,
         taxMonth,
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
         storeFilter: storeFilterForApi,
-        format: "submission",
         formHint: whtSubmissionFormHint,
+        payerTaxId: pnd1PayerTaxId,
+        payerBranchNo: pnd1PayerBranchNo,
       }),
-    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, whtSubmissionFormHint]
+    [
+      role,
+      taxMonth,
+      periodType,
+      ledgerStatusFilter,
+      storeFilterForApi,
+      whtSubmissionFormHint,
+      pnd1PayerTaxId,
+      pnd1PayerBranchNo,
+      pnd1PayerName,
+    ]
   )
+  const handleDownloadPnd53RdFilingTxt = React.useCallback(() => {
+    const taxDigits = String(pnd1PayerTaxId || "")
+      .replace(/\D/g, "")
+      .trim()
+    if (taxDigits.length !== 13) {
+      appAlert(
+        tr(t, "accCompPp30ExportRequiredMissing", {
+          fields: t("accCompPp30ExportField_companyTaxId13"),
+        })
+      )
+      return
+    }
+    window.open(pnd53RdFilingUrl, "_blank", "noopener,noreferrer")
+  }, [pnd1PayerTaxId, pnd53RdFilingUrl, t, tr])
   const pp36ExportUrl = React.useMemo(
     () =>
       getExportPp36LedgerCsvUrl({
@@ -4518,8 +4441,8 @@ export function AdminAccountingCompliance({
             setPp30Queried={setPp30Queried}
             setPp30SearchSeq={setPp30SearchSeq}
             onFilingSearch={onFilingSearch}
-            pp30XlsxExporting={pp30XlsxExporting}
-            handleDownloadPp30VatReconcileXlsx={handleDownloadPp30VatReconcileXlsx}
+            handleDownloadPp30RdPrepTxt={handleDownloadPp30RdPrepTxt}
+            handleDownloadPnd53RdFilingTxt={handleDownloadPnd53RdFilingTxt}
             pp30SubView={pp30SubView}
             setPp30SubView={setPp30SubView}
             allowedPp30Views={allowedPp30Views}
@@ -4585,7 +4508,6 @@ export function AdminAccountingCompliance({
             whtExportUrl={whtExportUrl}
             whtSubmissionFormHint={whtSubmissionFormHint}
             setWhtSubmissionFormHint={setWhtSubmissionFormHint}
-            whtSubmissionExportUrl={whtSubmissionExportUrl}
             printWhtCertificates={printWhtCertificates}
             saveWhtRow={saveWhtRow}
             removeWht={removeWht}

@@ -30,6 +30,7 @@ export function normalizePndFormHint(v: unknown): PndFormHint {
     .toUpperCase()
     .replace(/\s+/g, '')
   if (!raw || raw === 'ALL') return 'ALL'
+  if (raw.includes('53')) return 'PND53'
   if (raw.includes('3')) return 'PND3'
   return 'PND53'
 }

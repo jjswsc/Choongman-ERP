@@ -3,10 +3,9 @@ import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
-import {
-  withholdingTaxLedgerToCsv,
-  type WithholdingTaxLedgerRow,
-} from '@/lib/withholding-tax-csv'
+import { normalizePndFormHint, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
+import { buildRdFilingTxtFilename, rdDigitsOnly } from '@/lib/rd-filing-common'
+import { pnd53LedgerToRdFilingTxt } from '@/lib/pnd53-rd-filing-txt'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -36,14 +35,12 @@ export async function GET(request: NextRequest) {
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
-  const exportFormat = String(searchParams.get('format') || 'raw').trim().toLowerCase()
-  if (exportFormat === 'submission') {
-    return NextResponse.json(
-      { error: 'DEPRECATED_USE_EXPORT_PND53_RD_FILING_TXT' },
-      { status: 410, headers }
-    )
-  }
   const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
+  const formHint = normalizePndFormHint(searchParams.get('formHint'))
+  const payerTaxId = String(searchParams.get('payerTaxId') || '').trim()
+  const payerBranchNo = String(searchParams.get('payerBranchNo') || '').trim()
+  const rdUserId = String(searchParams.get('rdUserId') || '').trim()
+  const deptName = String(searchParams.get('deptName') || '').trim()
   const allowedStores =
     (Array.isArray(authResult.auth.allowedStores) ? authResult.auth.allowedStores : [])
       .map((s) => String(s || '').trim())
@@ -77,6 +74,9 @@ export async function GET(request: NextRequest) {
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
     return NextResponse.json({ error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })
   }
+  if (rdDigitsOnly(payerTaxId).length !== 13) {
+    return NextResponse.json({ error: 'INVALID_PAYER_TAX_ID' }, { status: 400, headers })
+  }
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
@@ -94,21 +94,36 @@ export async function GET(request: NextRequest) {
         ? scopedRows
         : scopedRows.filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
 
-    const csv = withholdingTaxLedgerToCsv(filteredRows)
-    return new NextResponse(csv, {
+    const txt = pnd53LedgerToRdFilingTxt(
+      filteredRows,
+      {
+        payerTaxId,
+        payerBranchNo,
+        deptName,
+        rdUserId,
+        taxMonth: yearMonth,
+      },
+      formHint
+    )
+    const filename = buildRdFilingTxtFilename({
+      taxType: 'PND53',
+      taxId13: payerTaxId,
+      taxMonth: yearMonth,
+      branchNo6: payerBranchNo,
+    })
+    return new NextResponse(txt, {
       status: 200,
       headers: {
         ...Object.fromEntries(headers.entries()),
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="withholding-tax-ledger-${period.periodKey}.csv"`,
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
       },
     })
   } catch (e) {
-    console.error('exportWithholdingTaxLedgerCsv:', e)
+    console.error('exportPnd53RdFilingTxt:', e)
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
       { status: 500, headers }
     )
   }
 }
-
