@@ -38,7 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check, AlertCircle } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check, AlertCircle, Link2 } from "lucide-react"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { ReceivableAgingPanel } from "@/components/admin/receivable-aging-panel"
 import {
@@ -53,7 +53,6 @@ import {
   pairReceivableLedgerDates,
   pairPayableLedgerDates,
   groupReceivableLedgerRows,
-  groupPayableLedgerRows,
   buildLedgerRowGroupMeta,
   filterLedgerPairGroupsForDisplay,
   sortLedgerPairGroupsDesc,
@@ -66,6 +65,13 @@ import {
   PayablePairedLedgerList,
   LedgerPairRowBadge,
 } from "@/components/tabs/receivable-payable-paired-ledger"
+import { PayableSettlementLinkDialog } from "@/components/tabs/payable-settlement-link-dialog"
+import {
+  groupPayableLedgerRowsWithLinks,
+  isPayableLinkableAccrualRow,
+  isPayableLinkablePaymentRow,
+  payableRowLinkStatus,
+} from "@/lib/payable-settlement-link"
 import { canManuallyToggleReceivableReceiveCheck } from "@/lib/receivable-unallocated-bank"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -302,6 +308,16 @@ export function ReceivablePayableTab() {
 
   const showReceivableManualActions = !(tab === "receivable" && isManagerOnly)
   const showPayableManualActions = canSelectStores
+  const showPayableLinkActions =
+    showPayableManualActions && canMutateManualPayableBalance(auth?.role || "")
+
+  const [payableLinkDialog, setPayableLinkDialog] = React.useState<{
+    vendorCode: string
+    vendorLabel: string
+    items: ReceivablePayableItem["items"]
+    settlementLinks?: { paymentId: number; accrualId: number }[]
+    anchorRow: ReceivablePayableItem["items"][number]
+  } | null>(null)
 
   const openManualBalanceEdit = React.useCallback(
     (
@@ -2312,6 +2328,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       "payLedgerHint",
                       "※ 매입채무는 입고 시 발생하고, 실제 지급은 「지급」 구분 행(통장 매입대금·지급예정 집행)으로 차감됩니다. 인보이스 열은 부가세(ภ.พ.30) 참고용입니다."
                     )}
+                    {showPayableLinkActions ? (
+                      <span className="block mt-1">
+                        {tt(
+                          "payLedgerLinkHint",
+                          "입고·지급 금액이 나뉜 경우 행 오른쪽 「연결」로 짝짓기(완결 표시)를 맞출 수 있습니다. 잔액 합계는 변하지 않습니다."
+                        )}
+                      </span>
+                    ) : null}
                   </p>
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
@@ -2355,7 +2379,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           )
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const payableDatePairs = pairPayableLedgerDates(allItems)
-                          const payableAllGroups = groupPayableLedgerRows(allItems)
+                          const payableSettlementLinkRows = (item.settlementLinks ?? []).map((l) => ({
+                            payment_id: l.paymentId,
+                            accrual_id: l.accrualId,
+                          }))
+                          const payableAllGroups = groupPayableLedgerRowsWithLinks(allItems, payableSettlementLinkRows)
                           const payableRowGroupMeta = buildLedgerRowGroupMeta(payableAllGroups)
                           const payablePairGroups = sortLedgerPairGroupsDesc(
                             filterLedgerPairGroupsForDisplay(payableAllGroups, tableItems, filterUnpaidOnly)
@@ -2448,7 +2476,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                     {showPayableManualActions && (
                                       <th className="text-center py-2 px-1 w-[72px] font-semibold whitespace-nowrap">
-                                        {t("btnEdit") || "수정"}
+                                        {showPayableLinkActions
+                                          ? tt("paySettlementLinkCol", "연결")
+                                          : t("btnEdit") || "수정"}
                                       </th>
                                     )}
                                   </tr>
@@ -2471,6 +2501,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       isPayAccrualRow && Number(row.amount ?? 0) > 0
                                         ? agingDaysBetween(endStr, row.trans_date || endStr)
                                         : 0
+                                    const canLinkPayRow =
+                                      showPayableLinkActions &&
+                                      row.id != null &&
+                                      (isPayableLinkableAccrualRow(row) || isPayableLinkablePaymentRow(row))
+                                    const payRowLinkStatus =
+                                      row.id != null ? payableRowLinkStatus(row.id, payableSettlementLinkRows) : "open"
                                     const rowPairMeta = row.id != null ? payableRowGroupMeta.get(row.id) : undefined
                                     return (
                                       <React.Fragment key={row.id ?? rowKey}>
@@ -2562,41 +2598,72 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                           {showPayableManualActions && (
                                             <td className="py-1.5 px-1 w-[72px] text-center align-middle">
-                                              {canEditManualPayRow ? (
-                                                <div className="flex justify-center items-center gap-0.5">
+                                              <div className="flex justify-center items-center gap-0.5">
+                                                {canLinkPayRow ? (
                                                   <Button
                                                     type="button"
                                                     variant="ghost"
                                                     size="sm"
-                                                    className="h-8 w-8 p-0 shrink-0"
-                                                    title={t("btnEdit") || "수정"}
-                                                    aria-label={t("btnEdit") || "수정"}
+                                                    className={cn(
+                                                      "h-8 w-8 p-0 shrink-0",
+                                                      payRowLinkStatus === "linked" && "text-green-700 dark:text-green-400"
+                                                    )}
+                                                    title={
+                                                      payRowLinkStatus === "linked"
+                                                        ? tt("paySettlementLinked", "연결됨 — 클릭하여 보기/해제")
+                                                        : tt("paySettlementLinkAction", "매입·지급 연결")
+                                                    }
+                                                    aria-label={tt("paySettlementLinkAction", "매입·지급 연결")}
                                                     onClick={(e) => {
                                                       e.stopPropagation()
-                                                      openManualBalanceEdit("payable", row, item.vendorCode || "")
+                                                      setPayableLinkDialog({
+                                                        vendorCode: item.vendorCode || "",
+                                                        vendorLabel: formatVendorDisplay(item.vendorCode),
+                                                        items: allItems,
+                                                        settlementLinks: item.settlementLinks,
+                                                        anchorRow: row,
+                                                      })
                                                     }}
                                                   >
-                                                    <PencilLine className="h-4 w-4" />
+                                                    <Link2 className="h-4 w-4" />
                                                   </Button>
-                                                  <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive"
-                                                    title={t("delete") || "삭제"}
-                                                    aria-label={t("delete") || "삭제"}
-                                                    disabled={manualEditSaving}
-                                                    onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      if (row.id != null) void handleManualBalanceDelete("payable", row.id)
-                                                    }}
-                                                  >
-                                                    <Trash2 className="h-4 w-4" />
-                                                  </Button>
-                                                </div>
-                                              ) : (
-                                                <span className="text-muted-foreground text-xs">—</span>
-                                              )}
+                                                ) : null}
+                                                {canEditManualPayRow ? (
+                                                  <>
+                                                    <Button
+                                                      type="button"
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      className="h-8 w-8 p-0 shrink-0"
+                                                      title={t("btnEdit") || "수정"}
+                                                      aria-label={t("btnEdit") || "수정"}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        openManualBalanceEdit("payable", row, item.vendorCode || "")
+                                                      }}
+                                                    >
+                                                      <PencilLine className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                      type="button"
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      className="h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive"
+                                                      title={t("delete") || "삭제"}
+                                                      aria-label={t("delete") || "삭제"}
+                                                      disabled={manualEditSaving}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        if (row.id != null) void handleManualBalanceDelete("payable", row.id)
+                                                      }}
+                                                    >
+                                                      <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                  </>
+                                                ) : !canLinkPayRow ? (
+                                                  <span className="text-muted-foreground text-xs">—</span>
+                                                ) : null}
+                                              </div>
                                             </td>
                                           )}
                                         </tr>
@@ -2946,6 +3013,24 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PayableSettlementLinkDialog
+        open={payableLinkDialog != null}
+        onOpenChange={(open) => {
+          if (!open) setPayableLinkDialog(null)
+        }}
+        vendorCode={payableLinkDialog?.vendorCode || ""}
+        vendorLabel={payableLinkDialog?.vendorLabel || ""}
+        items={payableLinkDialog?.items ?? []}
+        settlementLinks={payableLinkDialog?.settlementLinks}
+        anchorRow={payableLinkDialog?.anchorRow ?? null}
+        t={t}
+        tt={tt}
+        onSaved={() => {
+          publishReceivablePayableListInvalidated()
+          void loadList({ fresh: true })
+        }}
+      />
     </div>
   )
 }

@@ -214,10 +214,11 @@ export function PayablePairedLedgerList({
                 ? labels.statusPartial
                 : labels.statusStandalone
         const accrual = group.accrual
+        const accrualRows = group.accruals?.length ? group.accruals : accrual ? [accrual] : []
         const primarySettlement = group.settlements[0]
         const daysHint =
-          accrual && primarySettlement
-            ? daysBetweenLabel(accrual.trans_date, primarySettlement.trans_date, labels.daysBetween)
+          accrualRows[0] && primarySettlement
+            ? daysBetweenLabel(accrualRows[0].trans_date, primarySettlement.trans_date, labels.daysBetween)
             : null
         return (
           <div key={group.groupId} className={cn(getLedgerPairCardClass(group.groupId), "px-3 py-2 text-sm")}>
@@ -231,21 +232,23 @@ export function PayablePairedLedgerList({
               ) : null}
               {daysHint ? <span className="text-[10px] text-muted-foreground">{daysHint}</span> : null}
             </div>
-            {accrual ? (
-              <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 pl-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    {labels.purchaseDate} {String(accrual.trans_date || "").slice(0, 10)}
-                  </span>
-                  <span className="text-sm font-medium">{formatRefType(accrual.ref_type)}</span>
-                  <span className="text-sm">{formatInvoiceCell(accrual)}</span>
-                  <span className="text-[11px] text-muted-foreground">{formatStore(accrual.attributed_store)}</span>
+            {accrualRows.length > 0 ? (
+              accrualRows.map((accRow) => (
+                <div key={accRow.id ?? `${group.groupId}-accrual`} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 pl-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {labels.purchaseDate} {String(accRow.trans_date || "").slice(0, 10)}
+                    </span>
+                    <span className="text-sm font-medium">{formatRefType(accRow.ref_type)}</span>
+                    <span className="text-sm">{formatInvoiceCell(accRow)}</span>
+                    <span className="text-[11px] text-muted-foreground">{formatStore(accRow.attributed_store)}</span>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-right">{fmtBahtSigned(accRow.amount)}</span>
+                  {accRow.memo ? (
+                    <span className="col-span-2 text-[11px] text-muted-foreground truncate">{getMemo(accRow.memo)}</span>
+                  ) : null}
                 </div>
-                <span className="text-sm font-semibold tabular-nums text-right">{fmtBahtSigned(accrual.amount)}</span>
-                {accrual.memo ? (
-                  <span className="col-span-2 text-[11px] text-muted-foreground truncate">{getMemo(accrual.memo)}</span>
-                ) : null}
-              </div>
+              ))
             ) : null}
             {group.settlements.length > 0 ? (
               group.settlements.map((row) => (
@@ -262,7 +265,7 @@ export function PayablePairedLedgerList({
                   ) : null}
                 </div>
               ))
-            ) : accrual ? (
+            ) : accrualRows.length > 0 ? (
               <p className="text-[11px] text-muted-foreground pl-4 mt-1">{labels.noSettlement}</p>
             ) : null}
           </div>

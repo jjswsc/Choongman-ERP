@@ -36,6 +36,8 @@ export interface ReceivablePayableItem {
     /** 미지급: 입고·발주·지출·통장·패티에서 해석한 귀속 매장 */
     attributed_store?: string
   }[]
+  /** 수동 매입·지급 연결 (payable_settlement_links) */
+  settlementLinks?: { paymentId: number; accrualId: number }[]
 }
 
 export interface ReceivablePayableSummaryItem {
@@ -304,4 +306,28 @@ export async function deleteStorePurchaseJournal(params: { orderId: number }) {
     orderId?: number
     deletedCount?: number
   }>
+}
+
+/** 미지급 — 입고·지급 수동 연결 (합산 금액 일치) */
+export async function linkPayableSettlement(params: {
+  vendorCode: string
+  accrualIds: number[]
+  paymentIds: number[]
+}) {
+  const res = await apiFetchWithOffline('/api/linkPayableSettlement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; linkCount?: number }>
+}
+
+/** 미지급 — 수동 연결 해제 (연결 묶음 전체) */
+export async function unlinkPayableSettlement(params: { transactionId: number }) {
+  const res = await apiFetchWithOffline('/api/unlinkPayableSettlement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionId: params.transactionId }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; removed?: number }>
 }

@@ -21,6 +21,7 @@ import {
   scopePayableLedgerRows,
   type PayableTransactionRow,
 } from '@/lib/payable-attributed-store'
+import { loadPayableSettlementLinksForTransactionIds } from '@/lib/payable-settlement-link-server'
 import {
   buildReceivableListWithCumulative,
   scopeReceivableLedger,
@@ -159,8 +160,21 @@ export async function GET(request: NextRequest) {
       }
 
       const list = buildPayableListWithCumulative({ cumulativeByVendor, periodByVendor: byVendor })
+      const scopedIds = scopedRows
+        .map((r) => Number(r.id || 0))
+        .filter((id) => id > 0)
+      const settlementLinkRows = await loadPayableSettlementLinksForTransactionIds(scopedIds)
+      const listWithLinks = list.map((item) => {
+        const itemIds = new Set(
+          (item.items || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
+        )
+        const settlementLinks = settlementLinkRows
+          .filter((l) => itemIds.has(l.payment_id) || itemIds.has(l.accrual_id))
+          .map((l) => ({ paymentId: l.payment_id, accrualId: l.accrual_id }))
+        return settlementLinks.length > 0 ? { ...item, settlementLinks } : item
+      })
 
-      return NextResponse.json({ type: 'payable', list, cumulativeByVendor }, { headers })
+      return NextResponse.json({ type: 'payable', list: listWithLinks, cumulativeByVendor }, { headers })
     }
 
     // receivable — 종료일까지 단일 집계 후 기간 분리(목록·누적 일치)
