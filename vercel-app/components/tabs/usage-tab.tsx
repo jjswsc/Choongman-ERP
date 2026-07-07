@@ -53,6 +53,7 @@ import {
   filterStockListRows,
   type StockViewKind,
 } from "@/lib/stock-history-filter"
+import { useItemCategoryOptions } from "@/lib/use-item-category-options"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -116,6 +117,7 @@ export function UsageTab() {
   const [histStockList, setHistStockList] = useState<
     { code: string; name: string; spec: string; category: string; qty: number; safeQty: number }[]
   >([])
+  const masterCategories = useItemCategoryOptions()
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
@@ -221,15 +223,16 @@ export function UsageTab() {
 
   const histCategoryOptions = useMemo(() => {
     const fromItems = items.map((i) => i.category || "").filter(Boolean)
+    const extra = [...fromItems, ...masterCategories]
     if (histKind === "list") {
       return collectCategoryOptions(
         histStockList.map((r) => ({ item: r.name, itemCode: r.code, category: r.category })),
-        fromItems
+        extra
       )
     }
     const active = histKind === "usage" ? history : adjustHistory
-    return collectCategoryOptions(active, fromItems)
-  }, [items, history, adjustHistory, histStockList, histKind])
+    return collectCategoryOptions(active, extra)
+  }, [items, history, adjustHistory, histStockList, histKind, masterCategories])
 
   const filteredUsageHistory = useMemo(
     () => filterStockHistoryRows(history, histCategory, histSearch),
@@ -613,7 +616,7 @@ export function UsageTab() {
                   </Select>
                 </div>
               </div>
-              {histCategoryOptions.length > 0 && (
+              {(histCategoryOptions.length > 0 || masterCategories.length > 0) && (
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {t("itemsCategory")}
@@ -627,7 +630,7 @@ export function UsageTab() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
-                      {histCategoryOptions.map((c) => (
+                      {(histCategoryOptions.length > 0 ? histCategoryOptions : masterCategories).map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>

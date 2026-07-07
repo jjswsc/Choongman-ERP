@@ -30,6 +30,7 @@ import {
   filterStockListRows,
   type StockViewKind,
 } from "@/lib/stock-history-filter"
+import { useItemCategoryOptions } from "@/lib/use-item-category-options"
 
 interface StockListRow {
   code: string
@@ -65,6 +66,7 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
   const [viewKind, setViewKind] = React.useState<StockViewKind>("adjustment")
+  const masterCategories = useItemCategoryOptions()
 
   const storesForFilter = React.useMemo(() => {
     if (isManager && userStore) return [userStore]
@@ -78,11 +80,12 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
   const categoryOptions = React.useMemo(() => {
     if (viewKind === "list") {
       return collectCategoryOptions(
-        stockList.map((r) => ({ item: r.name, itemCode: r.code, category: r.category }))
+        stockList.map((r) => ({ item: r.name, itemCode: r.code, category: r.category })),
+        masterCategories
       )
     }
-    return collectCategoryOptions(activeHistoryRows)
-  }, [viewKind, stockList, activeHistoryRows])
+    return collectCategoryOptions(activeHistoryRows, masterCategories)
+  }, [viewKind, stockList, activeHistoryRows, masterCategories])
 
   const filteredAdjustList = React.useMemo(
     () => filterStockHistoryRows(adjustList, categoryFilter, searchTerm),
@@ -211,7 +214,7 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
               </SelectContent>
             </Select>
           </AdminFilterField>
-          {categoryOptions.length > 0 && (
+          {(categoryOptions.length > 0 || masterCategories.length > 0) && (
             <AdminFilterField label={t("itemsCategory")}>
               <Select
                 value={categoryFilter || "__all__"}
@@ -222,7 +225,7 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
-                  {categoryOptions.map((c) => (
+                  {(categoryOptions.length > 0 ? categoryOptions : masterCategories).map((c) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
