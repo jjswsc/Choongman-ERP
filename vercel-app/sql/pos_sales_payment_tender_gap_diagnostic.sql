@@ -168,4 +168,20 @@ ORDER BY biz_day;
 --   "paymentOther": 1046,
 --   "paymentDeliveryApp": 0
 -- }
--- 합계는 total 과 ±0.02 이내여야 함. 영업일 기준 오늘·어제 주문만 허용.
+-- ============================================================
+-- 6) 자동 보정 SQL (서비스 컴·배달앱 단독) — §1 실행 후 적용
+-- ============================================================
+-- 서비스(컴) gap = service_amt:
+-- UPDATE public.pos_orders o SET
+--   payment_other = coalesce(o.payment_other, 0) + round((coalesce(o.total,0) - (
+--     coalesce(o.payment_cash,0)+coalesce(o.payment_card,0)+coalesce(o.payment_qr,0)+
+--     coalesce(o.payment_other,0)+coalesce(o.payment_delivery_app,0)
+--   ))::numeric, 2),
+--   payment_other_breakdown = coalesce(o.payment_other_breakdown, '{}'::jsonb)
+--     || jsonb_build_object('service_comp', round((coalesce(o.total,0) - (...))::numeric, 2)),
+--   memo = coalesce(o.memo, '') || E'\n[PAY_GAP_FIX auto] service_comp'
+-- FROM gaps g WHERE o.id = g.id AND abs(g.gap - coalesce(o.service_amt,0)) <= 0.02;
+--
+-- 배달앱 단독(다른 채널 0):
+-- UPDATE public.pos_orders SET payment_delivery_app = total, payment_cash = 0, ...
+-- WHERE order_type = 'delivery' AND delivery_app_code IS NOT NULL AND gap > 0.02;

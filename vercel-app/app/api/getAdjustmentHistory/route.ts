@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { fetchAdjustmentHistoryRows } from '@/lib/stock-logs-history-rpc'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
@@ -21,65 +21,21 @@ export async function GET(request: NextRequest) {
     let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
     if (isManager && userStore) storeFilter = userStore
 
-    const startD = startStr ? new Date(startStr) : new Date()
-    const endD = endStr ? new Date(endStr) : new Date()
-    startD.setHours(0, 0, 0, 0)
-    endD.setHours(23, 59, 59, 999)
-
-    const logs = (await supabaseSelectFilter(
-      'stock_logs',
-      'log_type=eq.Adjustment',
-      {
-        order: 'log_date.desc',
-        limit: 500,
-        select: 'log_date,location,item_code,item_name,qty,vendor_target',
-      }
-    )) as {
-      log_date?: string
-      location?: string
-      item_code?: string
-      item_name?: string
-      qty?: number
-      vendor_target?: string
-    }[] | null
-
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,category' })) as {
-      code?: string
-      spec?: string
-      category?: string
-    }[] | null
-    const specMap: Record<string, string> = {}
-    const categoryMap: Record<string, string> = {}
-    for (const r of itemRows || []) {
-      if (r?.code) {
-        specMap[r.code] = r.spec || '-'
-        categoryMap[r.code] = String(r.category || '').trim()
-      }
+    if (!startStr || !endStr) {
+      return NextResponse.json([], { headers })
     }
 
-    const list: { date: string; store: string; item: string; itemCode: string; category: string; spec: string; diff: number; reason: string }[] = []
-    for (const row of logs || []) {
-      const rowDate = row.log_date ? new Date(row.log_date) : null
-      if (!rowDate || isNaN(rowDate.getTime())) continue
-      if (rowDate < startD || rowDate > endD) continue
-
-      const store = String(row.location || '')
-      if (storeFilter && storeFilter.toLowerCase() !== 'all' && store.toLowerCase() !== storeFilter.toLowerCase()) continue
-
-      const dateStr = rowDate.toISOString().slice(0, 10)
-      const itemCode = String(row.item_code || '').trim()
-      list.push({
-        date: dateStr,
-        store,
-        item: row.item_name || '-',
-        itemCode,
-        category: categoryMap[itemCode] || '',
-        spec: specMap[itemCode] || '-',
-        diff: Number(row.qty) || 0,
-        reason: resolveVendorName(String(row.vendor_target || '')),
-      })
-      if (list.length >= 300) break
-    }
+    const rows = await fetchAdjustmentHistoryRows({ startStr, endStr, storeFilter })
+    const list = rows.map((row) => ({
+      date: row.date,
+      store: row.store,
+      item: row.item,
+      itemCode: row.itemCode,
+      category: row.category,
+      spec: row.spec,
+      diff: row.diff,
+      reason: resolveVendorName(row.vendorTarget),
+    }))
 
     return NextResponse.json(list, { headers })
   } catch (e) {

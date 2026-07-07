@@ -40,6 +40,10 @@ import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
+import {
+  paymentOtherBreakdownAfterReconcile,
+  reconcilePosOrderPaymentTenderGap,
+} from '@/lib/pos-order-payment-reconcile'
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -210,7 +214,7 @@ export async function POST(req: NextRequest) {
     const serviceReason = String(body.serviceReason ?? body.service_reason ?? '').trim()
     const deliveryFee = Math.max(0, Number(body.deliveryFee ?? 0))
     const packagingFee = Math.max(0, Number(body.packagingFee ?? 0))
-    const paymentCash = Math.max(0, Number(body.paymentCash ?? 0))
+    let paymentCash = Math.max(0, Number(body.paymentCash ?? 0))
     const paymentCashTendered = Math.max(0, Number(body.paymentCashTendered ?? body.payment_cash_tendered ?? 0))
     const paymentQrType = String(body.paymentQrType ?? body.payment_qr_type ?? '').trim()
     const normalizedTender = normalizePosPaymentTender({
@@ -218,14 +222,14 @@ export async function POST(req: NextRequest) {
       paymentQr: Number(body.paymentQr ?? 0),
       paymentQrType,
     })
-    const paymentCard = normalizedTender.paymentCard
-    const paymentQr = normalizedTender.paymentQr
-    const paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
-    const paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
+    let paymentCard = normalizedTender.paymentCard
+    let paymentQr = normalizedTender.paymentQr
+    let paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
+    let paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
       paymentOther,
       body.paymentOtherBreakdown ?? body.payment_other_breakdown
     )
-    const paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
+    let paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
     const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
     const memberId = Math.max(0, Number(body.memberId ?? 0))
     const memberNo = String(body.memberNo ?? '').trim()
@@ -328,7 +332,7 @@ export async function POST(req: NextRequest) {
     })
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
-    const paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
+    let paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
       paymentDeliveryApp,
       paymentCash,
       paymentCard,
@@ -336,10 +340,68 @@ export async function POST(req: NextRequest) {
       paymentOther,
       total,
     })
+    let deliveryAppCodeForReconcile: string | null = null
+    if (orderType === 'delivery') {
+      let code = String(body.deliveryAppCode ?? body.delivery_app_code ?? '')
+        .trim()
+        .toLowerCase()
+      if (!code) {
+        for (const it of items) {
+          const c = String((it as { deliveryAppCode?: string }).deliveryAppCode ?? '')
+            .trim()
+            .toLowerCase()
+          if (c) {
+            code = c
+            break
+          }
+        }
+      }
+      if (!code) {
+        code = parseDeliveryAppCodeFromItemsJson(JSON.stringify(items))
+      }
+      deliveryAppCodeForReconcile = code || null
+    }
+    let paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    if (paymentSumForStatus > 0.02) {
+      const reconciled = reconcilePosOrderPaymentTenderGap({
+        total,
+        serviceAmt,
+        orderType,
+        deliveryAppCode: deliveryAppCodeForReconcile,
+        payment: {
+          paymentCash,
+          paymentCard,
+          paymentQr,
+          paymentOther,
+          paymentDeliveryApp: paymentDeliveryAppFinal,
+        },
+        paymentOtherBreakdown: body.paymentOtherBreakdown ?? body.payment_other_breakdown,
+      })
+      if (reconciled.reconciledGap > 0.02) {
+        paymentCash = reconciled.payment.paymentCash
+        paymentCard = reconciled.payment.paymentCard
+        paymentQr = reconciled.payment.paymentQr
+        paymentOther = reconciled.payment.paymentOther
+        paymentDeliveryAppFinal = reconciled.payment.paymentDeliveryApp
+        paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
+          paymentOther,
+          reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown
+        )
+        const br = paymentOtherBreakdownAfterReconcile({
+          paymentOther,
+          paymentOtherBreakdown: reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown,
+          reconciledGap: reconciled.reconciledGap,
+          serviceAmt,
+        })
+        paymentOtherBreakdownDb =
+          br !== undefined ? br : paymentOtherBreakdownForDb(paymentOtherBreakdown)
+        paymentSumForStatus =
+          paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+      }
+    }
     const adj = pricingAdjustments as { cardRate?: number } | undefined
     const cardRateSnapshot = Math.max(0, Number(adj?.cardRate ?? 0) || 0)
 
-    const paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
     const closeStatusRaw = String(body.closeStatus ?? body.close_status ?? '').trim().toLowerCase()
     const closeStatus =
       closeStatusRaw === 'paid' || closeStatusRaw === 'completed' ? closeStatusRaw : null
@@ -550,7 +612,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const paymentSum = paymentSumForStatus
     const paymentComplete = isPosOrderCouponPaymentSettled({
       total,
       paymentSum: paymentSumForStatus,

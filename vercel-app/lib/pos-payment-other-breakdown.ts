@@ -12,6 +12,8 @@ export type PosPaymentOtherBreakdown = {
   shopeePay?: number
   /** POS 기타(직접입력) */
   misc?: number
+  /** 서비스(컴) — DB JSON 키 service_comp */
+  serviceComp?: number
   /** pos_payment_method_items.id → 금액 */
   admin?: Record<string, number>
 }
@@ -33,6 +35,7 @@ export function sumPaymentOtherBreakdown(b: PosPaymentOtherBreakdown | null | un
   s += num(b.linePay)
   s += num(b.shopeePay)
   s += num(b.misc)
+  s += num(b.serviceComp)
   if (b.admin && typeof b.admin === 'object') {
     for (const v of Object.values(b.admin)) {
       s += num(v)
@@ -74,6 +77,9 @@ export function parsePaymentOtherBreakdown(raw: unknown): PosPaymentOtherBreakdo
     ...(num(o.linePay) > 0 ? { linePay: num(o.linePay) } : {}),
     ...(num(o.shopeePay) > 0 ? { shopeePay: num(o.shopeePay) } : {}),
     ...(num(o.misc) > 0 ? { misc: num(o.misc) } : {}),
+    ...(num(o.serviceComp ?? o.service_comp) > 0
+      ? { serviceComp: num(o.serviceComp ?? o.service_comp) }
+      : {}),
     ...(admin ? { admin } : {}),
   }
   if (sumPaymentOtherBreakdown(out) <= 0) return null

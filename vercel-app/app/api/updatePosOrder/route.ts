@@ -35,6 +35,12 @@ import { assertPosBusinessOpenForExistingOrderSave } from '@/lib/pos-business-op
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import { syncPosPaymentDeliveryAppToNetTotal } from '@/lib/pos-delivery-app-settlement-amount'
+import {
+  paymentOtherBreakdownAfterReconcile,
+  readPreservedPosOrderPaymentAmounts,
+  reconcilePosOrderPaymentTenderGap,
+  shouldPreserveExistingPosOrderPayment,
+} from '@/lib/pos-order-payment-reconcile'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
     const discountReason = String(body?.discountReason ?? '').trim()
     const serviceAmt = Math.max(0, Number(body?.serviceAmt ?? body?.service_amt ?? 0))
     const serviceReason = String(body?.serviceReason ?? body?.service_reason ?? '').trim()
-    const paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
+    let paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
     const paymentCashTendered = Math.max(0, Number(body?.paymentCashTendered ?? body?.payment_cash_tendered ?? 0))
     const paymentQrType = String(body?.paymentQrType ?? body?.payment_qr_type ?? '').trim()
     const normalizedTender = normalizePosPaymentTender({
@@ -84,10 +90,10 @@ export async function POST(req: NextRequest) {
       paymentQr: Number(body?.paymentQr ?? 0),
       paymentQrType,
     })
-    const paymentCard = normalizedTender.paymentCard
-    const paymentQr = normalizedTender.paymentQr
-    const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
-    const paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
+    let paymentCard = normalizedTender.paymentCard
+    let paymentQr = normalizedTender.paymentQr
+    let paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
+    let paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
     const guestCountBody = body?.guestCount ?? body?.guest_count
     const pricingAdjustments = body?.pricingAdjustments || {}
@@ -120,7 +126,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
       },
       'updatePosOrder'
     )) as {
@@ -140,8 +146,10 @@ export async function POST(req: NextRequest) {
       payment_card?: number
       payment_qr?: number
       payment_other?: number
+      payment_other_breakdown?: unknown
       payment_delivery_app?: number
       delivery_payment_channel?: string | null
+      delivery_app_code?: string | null
       member_id?: number | null
       member_no?: string | null
       coupon_code?: string | null
@@ -161,6 +169,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
     const current = existing[0]
+
+    const incomingPaymentSum = posOrderPaymentSumFromAmounts({
+      paymentCash,
+      paymentCard,
+      paymentQr,
+      paymentOther,
+      paymentDeliveryApp,
+    })
+    const existingPaymentSum = posOrderPaymentSumFromAmounts({
+      paymentCash: Number(current?.payment_cash ?? 0),
+      paymentCard: Number(current?.payment_card ?? 0),
+      paymentQr: Number(current?.payment_qr ?? 0),
+      paymentOther: Number(current?.payment_other ?? 0),
+      paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
+    })
+    if (
+      shouldPreserveExistingPosOrderPayment({
+        body,
+        currentPaymentSum: existingPaymentSum,
+        incomingPaymentSum,
+      })
+    ) {
+      const preserved = readPreservedPosOrderPaymentAmounts(current)
+      paymentCash = preserved.paymentCash
+      paymentCard = preserved.paymentCard
+      paymentQr = preserved.paymentQr
+      paymentOther = preserved.paymentOther
+      paymentDeliveryApp = preserved.paymentDeliveryApp
+    }
 
     if (!(await authCanAccessPosStoreWrite(auth, String(current?.store_code ?? '')))) {
       return NextResponse.json(
@@ -305,7 +342,7 @@ export async function POST(req: NextRequest) {
     })
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
-    const paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
+    let paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
       paymentDeliveryApp,
       paymentCash,
       paymentCard,
@@ -314,11 +351,11 @@ export async function POST(req: NextRequest) {
       total,
     })
 
-    const paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
+    let paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
       paymentOther,
       body?.paymentOtherBreakdown ?? body?.payment_other_breakdown
     )
-    const paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
+    let paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
 
     const previousPaymentSum = posOrderPaymentSumFromAmounts({
       paymentCash: Number(current?.payment_cash ?? 0),
@@ -327,7 +364,50 @@ export async function POST(req: NextRequest) {
       paymentOther: Number(current?.payment_other ?? 0),
       paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
     })
-    const nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    let nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    if (nextPaymentSum > 0.02) {
+      const reconciled = reconcilePosOrderPaymentTenderGap({
+        total,
+        serviceAmt,
+        orderType: String(current?.order_type ?? ''),
+        deliveryAppCode: current?.delivery_app_code,
+        payment: {
+          paymentCash,
+          paymentCard,
+          paymentQr,
+          paymentOther,
+          paymentDeliveryApp: paymentDeliveryAppFinal,
+        },
+        paymentOtherBreakdown:
+          body?.paymentOtherBreakdown ??
+          body?.payment_other_breakdown ??
+          current?.payment_other_breakdown,
+      })
+      if (reconciled.reconciledGap > 0.02) {
+        paymentCash = reconciled.payment.paymentCash
+        paymentCard = reconciled.payment.paymentCard
+        paymentQr = reconciled.payment.paymentQr
+        paymentOther = reconciled.payment.paymentOther
+        paymentDeliveryAppFinal = reconciled.payment.paymentDeliveryApp
+        paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
+          paymentOther,
+          reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown
+        )
+        const br = paymentOtherBreakdownAfterReconcile({
+          paymentOther,
+          paymentOtherBreakdown: reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown,
+          reconciledGap: reconciled.reconciledGap,
+          serviceAmt,
+        })
+        if (br !== undefined) {
+          paymentOtherBreakdownDb = br
+        } else {
+          paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
+        }
+        nextPaymentSum =
+          paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+      }
+    }
     if (total > 0.02 && nextPaymentSum > total + 0.02) {
       return NextResponse.json(
         { success: false, message: 'payment_exceeds_total' },

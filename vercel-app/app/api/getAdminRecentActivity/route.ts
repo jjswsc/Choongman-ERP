@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { stockLogBangkokDateRangeFilter } from '@/lib/bangkok-date'
+import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
@@ -32,21 +34,22 @@ export async function GET() {
   try {
     const resolveVendorName = await createVendorNameResolver()
     const items: ActivityItem[] = []
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+    const { startStr: monthStart, endStr: monthEnd } = getBangkokMonthRange()
+    const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(monthStart, monthEnd)
+    const { gtePart, ltPart } = stockLogBangkokDateRangeFilter(monthStart, monthEnd)
 
     const [orders, inboundLogs, outboundLogs, leaveRows] = await Promise.all([
-      supabaseSelectFilter('orders', `order_date=gte.${monthStart}`, {
+      supabaseSelectFilter('orders', `order_date=gte.${encodeURIComponent(dayStartUtcIso)}&order_date=lt.${encodeURIComponent(nextDayStartUtcIso)}`, {
         order: 'order_date.desc',
         limit: 50,
         select: 'id,order_date,store_name,status,total',
       }) as Promise<{ id: number; order_date?: string; store_name?: string; status?: string; total?: number }[]>,
-      supabaseSelectFilter('stock_logs', 'log_type=eq.Inbound', {
+      supabaseSelectFilter('stock_logs', `log_type=eq.Inbound&${gtePart}&${ltPart}`, {
         order: 'log_date.desc',
         limit: 30,
         select: 'log_date,location,vendor_target,qty',
       }) as Promise<{ log_date?: string; location?: string; vendor_target?: string; qty?: number }[]>,
-      supabaseSelectFilter('stock_logs', 'log_type=eq.Outbound&is_deleted=is.false', {
+      supabaseSelectFilter('stock_logs', `log_type=eq.Outbound&is_deleted=is.false&${gtePart}&${ltPart}`, {
         order: 'log_date.desc',
         limit: 30,
         select: 'log_date,vendor_target,qty',

@@ -8,6 +8,9 @@
  * 4. warehouse_locations.sort_order 순으로 창고 정렬. (미지정)은 items에 outbound_location 없는 품목
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { addBangkokCalendarDays, getBangkokDateRangeUtc } from '@/lib/bangkok-time'
+import { stockLogBangkokDateRangeFilter } from '@/lib/bangkok-date'
+import { isOutboundLogDateInBangkokYmdRange } from '@/lib/hq-outbound-income-total'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +49,9 @@ export async function GET(request: NextRequest) {
   }
 
   const filterByOrder = filterBy !== 'delivery'
-  const endIso = endStr + 'T23:59:59.999Z'
+  const lo = startStr <= endStr ? startStr : endStr
+  const hi = startStr <= endStr ? endStr : startStr
+  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(lo, hi)
 
   try {
     const itemRows = (await supabaseSelect('items', {
@@ -86,14 +91,14 @@ export async function GET(request: NextRequest) {
     // 1. Approved orders
     let orderFilter: string
     if (filterByOrder) {
-      orderFilter = `status=eq.Approved&order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endIso)}`
+      orderFilter = `status=eq.Approved&order_date=gte.${encodeURIComponent(dayStartUtcIso)}&order_date=lt.${encodeURIComponent(nextDayStartUtcIso)}`
     } else {
-      orderFilter = `status=eq.Approved&delivery_date=gte.${encodeURIComponent(startStr)}&delivery_date=lte.${encodeURIComponent(endIso)}`
+      orderFilter = `status=eq.Approved&delivery_date=gte.${encodeURIComponent(lo)}&delivery_date=lte.${encodeURIComponent(hi)}`
     }
 
     const orderRows = (await supabaseSelectFilter('orders', orderFilter, {
       order: 'order_date.desc',
-      limit: 300,
+      limit: 10000,
       select: 'store_name,delivery_date,delivery_dates_by_outbound,cart_json',
     })) as { store_name?: string; delivery_date?: string; delivery_dates_by_outbound?: string; cart_json?: string }[]
 
@@ -125,16 +130,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 2. ForceOutbound stock_logs
-    const allLogs = (await supabaseSelectFilter(
-      'stock_logs',
-      'location=eq.본사&log_type=eq.ForceOutbound&is_deleted=is.false',
-      {
-        order: 'log_date.desc',
-        limit: 500,
-        select: 'log_date,vendor_target,item_code,item_name,qty,delivery_status',
-      }
-    )) as {
+    // 2. ForceOutbound stock_logs — 배송일 기준은 log_date보다 앞설 수 있어 조회 창을 넓힘
+    const logRange = filterByOrder
+      ? stockLogBangkokDateRangeFilter(lo, hi)
+      : stockLogBangkokDateRangeFilter(addBangkokCalendarDays(lo, -90), addBangkokCalendarDays(hi, 7))
+    const forceFilter = [
+      'location=eq.본사',
+      'log_type=eq.ForceOutbound',
+      'is_deleted=is.false',
+      logRange.gtePart,
+      logRange.ltPart,
+    ].join('&')
+    const allLogs = (await supabaseSelectFilter('stock_logs', forceFilter, {
+      order: 'log_date.desc',
+      limit: 50000,
+      select: 'log_date,vendor_target,item_code,item_name,qty,delivery_status',
+    })) as {
       log_date?: string
       vendor_target?: string
       item_code?: string
@@ -143,25 +154,16 @@ export async function GET(request: NextRequest) {
       delivery_status?: string
     }[]
 
-    const startDate = new Date(startStr)
-    startDate.setHours(0, 0, 0, 0)
-    const endDate = new Date(endStr)
-    endDate.setHours(23, 59, 59, 999)
-
     for (const row of allLogs || []) {
-      let dateToCheck: Date
       if (filterByOrder) {
-        dateToCheck = new Date(row.log_date || '')
+        if (!isOutboundLogDateInBangkokYmdRange(row.log_date, lo, hi)) continue
       } else {
         const dStr =
           row.delivery_status && String(row.delivery_status).match(/^\d{4}-\d{2}-\d{2}/)
             ? String(row.delivery_status).substring(0, 10)
             : ''
-        if (!dStr) continue
-        dateToCheck = new Date(dStr)
-        dateToCheck.setHours(12, 0, 0, 0)
+        if (!dStr || dStr < lo || dStr > hi) continue
       }
-      if (dateToCheck < startDate || dateToCheck > endDate) continue
 
       const code = String(row.item_code || '').trim()
       const name = String(row.item_name || '').trim()

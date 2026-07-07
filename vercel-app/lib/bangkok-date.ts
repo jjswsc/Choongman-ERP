@@ -1,5 +1,10 @@
 /** 방콕(Asia/Bangkok) 달력 날짜 — 모바일 공지 기간·당일 등 */
-import { addBangkokCalendarDays, getBangkokEndOfDayUtcIso, getBangkokStartOfDayUtcIso } from "./bangkok-time"
+import {
+  addBangkokCalendarDays,
+  getBangkokDateRangeUtc,
+  getBangkokEndOfDayUtcIso,
+  getBangkokStartOfDayUtcIso,
+} from "./bangkok-time"
 
 const TZ = "Asia/Bangkok"
 
@@ -34,6 +39,26 @@ export function bangkokYmdRangeToIsoBounds(startYmd: string, endYmd: string): { 
   return {
     gteIso: getBangkokStartOfDayUtcIso(a),
     lteIso: getBangkokEndOfDayUtcIso(b),
+  }
+}
+
+/** 방콕 달력 start~end(포함) — stock_logs.log_date PostgREST 반열린 구간 [gte, lt) */
+export function stockLogBangkokDateRangeFilter(startYmd: string, endYmd: string): {
+  lo: string
+  hi: string
+  gtePart: string
+  ltPart: string
+} {
+  const a = String(startYmd || "").trim().slice(0, 10)
+  const b = String(endYmd || "").trim().slice(0, 10)
+  const lo = a <= b ? a : b
+  const hi = a <= b ? b : a
+  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(lo, hi)
+  return {
+    lo,
+    hi,
+    gtePart: `log_date=gte.${encodeURIComponent(dayStartUtcIso)}`,
+    ltPart: `log_date=lt.${encodeURIComponent(nextDayStartUtcIso)}`,
   }
 }
 
