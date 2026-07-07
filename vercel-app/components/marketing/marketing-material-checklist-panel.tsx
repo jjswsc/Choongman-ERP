@@ -24,6 +24,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from "@/lib/permissions"
@@ -263,7 +264,7 @@ export function MarketingMaterialChecklistPanel({
           file: photoFile,
         })
         if (!up.success || !up.url) {
-          await appAlert(up.message || tr("사진 업로드 실패", "Photo upload failed", "อัปโหลดรูปไม่สำเร็จ"))
+          await appAlert(translateApiMessage(up.message, t) || tr("사진 업로드 실패", "Photo upload failed", "อัปโหลดรูปไม่สำเร็จ"))
           return
         }
         installedPhotoUrl = up.url

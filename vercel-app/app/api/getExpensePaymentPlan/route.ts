@@ -4,6 +4,7 @@ import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { buildExpenseAccrualPlanDateFilters } from '@/lib/expense-accrual-plan-filters'
+import { parseExpenseAttachmentUrls } from '@/lib/expense-attachment-urls'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function canViewExpensePaymentPlan(role: string): boolean {
@@ -46,15 +47,7 @@ type ExpenseAccrualRow = {
 }
 
 function parseAttachmentUrls(raw: string | null | undefined): string[] {
-  const s = String(raw ?? '').trim()
-  if (!s) return []
-  try {
-    const p = JSON.parse(s) as unknown
-    if (!Array.isArray(p)) return []
-    return p.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 8)
-  } catch {
-    return []
-  }
+  return parseExpenseAttachmentUrls(raw)
 }
 
 type PayableTxRow = {

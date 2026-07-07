@@ -43,16 +43,21 @@ export async function GET(request: NextRequest) {
       vendor_target?: string
     }[] | null
 
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec' })) as {
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,category' })) as {
       code?: string
       spec?: string
+      category?: string
     }[] | null
     const specMap: Record<string, string> = {}
+    const categoryMap: Record<string, string> = {}
     for (const r of itemRows || []) {
-      if (r?.code) specMap[r.code] = r.spec || '-'
+      if (r?.code) {
+        specMap[r.code] = r.spec || '-'
+        categoryMap[r.code] = String(r.category || '').trim()
+      }
     }
 
-    const list: { date: string; store: string; item: string; spec: string; diff: number; reason: string }[] = []
+    const list: { date: string; store: string; item: string; itemCode: string; category: string; spec: string; diff: number; reason: string }[] = []
     for (const row of logs || []) {
       const rowDate = row.log_date ? new Date(row.log_date) : null
       if (!rowDate || isNaN(rowDate.getTime())) continue
@@ -62,11 +67,14 @@ export async function GET(request: NextRequest) {
       if (storeFilter && storeFilter.toLowerCase() !== 'all' && store.toLowerCase() !== storeFilter.toLowerCase()) continue
 
       const dateStr = rowDate.toISOString().slice(0, 10)
+      const itemCode = String(row.item_code || '').trim()
       list.push({
         date: dateStr,
         store,
         item: row.item_name || '-',
-        spec: specMap[row.item_code || ''] || '-',
+        itemCode,
+        category: categoryMap[itemCode] || '',
+        spec: specMap[itemCode] || '-',
         diff: Number(row.qty) || 0,
         reason: resolveVendorName(String(row.vendor_target || '')),
       })

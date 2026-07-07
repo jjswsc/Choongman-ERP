@@ -11,6 +11,7 @@ import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { canonicalOfficeStore } from '@/lib/office-store-canonical'
+import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -40,26 +41,6 @@ function normalizeWithdrawalCategory(mainRaw: string, subRaw: string, explicitRa
   if (main === 'correction') return 'correction'
   if (main === 'dividend') return 'dividend'
   return 'expense'
-}
-
-function normalizeAttachmentUrlsJson(body: { attachmentUrls?: unknown; attachment_urls?: unknown }): string | null {
-  const raw = body.attachmentUrls ?? body.attachment_urls
-  if (raw == null) return null
-  let urls: string[] = []
-  if (Array.isArray(raw)) {
-    urls = raw.map((x) => String(x ?? '').trim()).filter(Boolean)
-  } else if (typeof raw === 'string' && raw.trim()) {
-    try {
-      const p = JSON.parse(raw) as unknown
-      if (Array.isArray(p)) urls = p.map((x) => String(x ?? '').trim()).filter(Boolean)
-    } catch {
-      return null
-    }
-  }
-  urls = urls.slice(0, 5).map((u) => (u.length > 400_000 ? u.slice(0, 400_000) : u))
-  if (urls.length === 0) return null
-  const json = JSON.stringify(urls)
-  return json.length > 2_000_000 ? JSON.stringify([urls[0]!.slice(0, 1_500_000)]) : json
 }
 
 function encodePayeeCode(payeeCode: string, withdrawalCategory: string): string {
@@ -190,7 +171,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const attachmentUrlsJson = normalizeAttachmentUrlsJson(body as { attachmentUrls?: unknown; attachment_urls?: unknown })
+    const attachmentRaw = (body as { attachmentUrls?: unknown; attachment_urls?: unknown }).attachmentUrls
+      ?? (body as { attachmentUrls?: unknown; attachment_urls?: unknown }).attachment_urls
+    let attachmentUrlsJson: string | null = null
+    if (attachmentRaw != null) {
+      const attachmentResult = normalizeExpenseAttachmentUrlsInput(attachmentRaw)
+      if (!attachmentResult.ok) {
+        return NextResponse.json({ success: false, message: attachmentResult.message }, { status: 400, headers })
+      }
+      attachmentUrlsJson = attachmentResult.json
+    }
 
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no

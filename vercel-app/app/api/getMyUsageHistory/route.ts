@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getBangkokDateRangeUtc } from '@/lib/bangkok-time'
+import { isOutboundLogDateInBangkokYmdRange } from '@/lib/hq-outbound-income-total'
+import { formatDateBangkok, formatDateHourMinBangkok } from '@/lib/outbound-order-line-match'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
@@ -14,16 +17,27 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,price' })) as { code?: string; price?: number }[]
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,price,category' })) as { code?: string; price?: number; category?: string }[]
     const priceByCode: Record<string, number> = {}
+    const categoryByCode: Record<string, string> = {}
     ;(itemRows || []).forEach((it) => {
-      priceByCode[String(it.code || '')] = Number(it.price) || 0
+      const code = String(it.code || '')
+      priceByCode[code] = Number(it.price) || 0
+      categoryByCode[code] = String(it.category || '').trim()
     })
 
-    const filter = `location=ilike.${encodeURIComponent(store)}&log_type=eq.Usage`
+    const lo = startStr <= endStr ? startStr : endStr
+    const hi = startStr <= endStr ? endStr : startStr
+    const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(lo, hi)
+    const filter = [
+      `location=ilike.${encodeURIComponent(store)}`,
+      'log_type=eq.Usage',
+      `log_date=gte.${encodeURIComponent(dayStartUtcIso)}`,
+      `log_date=lt.${encodeURIComponent(nextDayStartUtcIso)}`,
+    ].join('&')
     const logs = (await supabaseSelectFilter('stock_logs', filter, {
       order: 'log_date.desc',
-      limit: 20000,
+      limit: 50000,
       select: 'log_date,item_code,item_name,qty,user_name',
     })) as { log_date?: string; item_code?: string; item_name?: string; qty?: number; user_name?: string }[]
 
@@ -39,24 +53,22 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
 
-    const startD = new Date(startStr)
-    startD.setHours(0, 0, 0, 0)
-    const endD = new Date(endStr)
-    endD.setHours(23, 59, 59, 999)
-
-    const list: { date: string; dateTime: string; item: string; qty: number; amount: number; userName?: string; userNick?: string }[] = []
+    const list: { date: string; dateTime: string; item: string; itemCode: string; category: string; qty: number; amount: number; userName?: string; userNick?: string }[] = []
     for (const row of logs || []) {
+      if (!isOutboundLogDateInBangkokYmdRange(row.log_date, lo, hi)) continue
       const rowDate = new Date(row.log_date || '')
-      if (isNaN(rowDate.getTime()) || rowDate < startD || rowDate > endD) continue
+      if (isNaN(rowDate.getTime())) continue
       const qty = Math.abs(Number(row.qty) || 0)
       const code = String(row.item_code || '').trim()
       const price = priceByCode[code] ?? 0
       const userName = String(row.user_name || '').trim() || undefined
       const userNick = userName ? nameToNick[userName] : undefined
       list.push({
-        date: rowDate.toISOString().slice(0, 10),
-        dateTime: rowDate.toISOString().slice(0, 16).replace('T', ' '),
+        date: formatDateBangkok(rowDate),
+        dateTime: formatDateHourMinBangkok(rowDate),
         item: String(row.item_name || '').trim(),
+        itemCode: code,
+        category: categoryByCode[code] || '',
         qty,
         amount: price * qty,
         userName,

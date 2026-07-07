@@ -43,9 +43,16 @@ import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAppData, processUsage, getMyUsageHistory, translateTexts, type AppItem, type UsageHistoryItem } from "@/lib/api-client"
-import { Plus, ShoppingCart, Trash2, Package, Info } from "lucide-react"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { getAppData, processUsage, getMyUsageHistory, getAdjustmentHistory, translateTexts, type AppItem, type UsageHistoryItem, type AdjustmentHistoryItem } from "@/lib/api-client"
+import { Plus, ShoppingCart, Trash2, Package, Info, Search } from "lucide-react"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import {
+  collectCategoryOptions,
+  filterStockHistoryRows,
+  filterStockListRows,
+  type StockViewKind,
+} from "@/lib/stock-history-filter"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -77,10 +84,6 @@ function formatUsageQty(n: number): string {
   return parseFloat(n.toFixed(3)).toString()
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 interface CartItem {
   code: string
   name: string
@@ -103,9 +106,16 @@ export function UsageTab() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [history, setHistory] = useState<UsageHistoryItem[]>([])
+  const [adjustHistory, setAdjustHistory] = useState<AdjustmentHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [histStart, setHistStart] = useState(todayStr)
-  const [histEnd, setHistEnd] = useState(todayStr)
+  const [histStart, setHistStart] = useState(() => getBangkokTodayDateString())
+  const [histEnd, setHistEnd] = useState(() => getBangkokTodayDateString())
+  const [histSearch, setHistSearch] = useState("")
+  const [histCategory, setHistCategory] = useState("")
+  const [histKind, setHistKind] = useState<StockViewKind>("usage")
+  const [histStockList, setHistStockList] = useState<
+    { code: string; name: string; spec: string; category: string; qty: number; safeQty: number }[]
+  >([])
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
@@ -181,10 +191,69 @@ export function UsageTab() {
   const loadHistory = useCallback(() => {
     if (!effectiveStore) return
     setHistoryLoading(true)
-    getMyUsageHistory({ store: effectiveStore, startStr: histStart, endStr: histEnd })
-      .then(setHistory)
-      .finally(() => setHistoryLoading(false))
-  }, [effectiveStore, histStart, histEnd])
+    const p =
+      histKind === "usage"
+        ? getMyUsageHistory({ store: effectiveStore, startStr: histStart, endStr: histEnd }).then((rows) => {
+            setHistory(Array.isArray(rows) ? rows : [])
+          })
+        : histKind === "list"
+          ? getAppData(effectiveStore, histStart).then((r) => {
+              setHistStockList(
+                r.items.map((i) => ({
+                  code: i.code,
+                  name: i.name,
+                  spec: i.spec,
+                  category: i.category || "",
+                  qty: r.stock[i.code] ?? 0,
+                  safeQty: i.safeQty ?? 0,
+                }))
+              )
+            })
+          : getAdjustmentHistory({
+              startStr: histStart,
+              endStr: histEnd,
+              storeFilter: effectiveStore,
+            }).then((rows) => {
+              setAdjustHistory(Array.isArray(rows) ? rows : [])
+            })
+    p.finally(() => setHistoryLoading(false))
+  }, [effectiveStore, histStart, histEnd, histKind])
+
+  const histCategoryOptions = useMemo(() => {
+    const fromItems = items.map((i) => i.category || "").filter(Boolean)
+    if (histKind === "list") {
+      return collectCategoryOptions(
+        histStockList.map((r) => ({ item: r.name, itemCode: r.code, category: r.category })),
+        fromItems
+      )
+    }
+    const active = histKind === "usage" ? history : adjustHistory
+    return collectCategoryOptions(active, fromItems)
+  }, [items, history, adjustHistory, histStockList, histKind])
+
+  const filteredUsageHistory = useMemo(
+    () => filterStockHistoryRows(history, histCategory, histSearch),
+    [history, histCategory, histSearch]
+  )
+
+  const filteredAdjustHistory = useMemo(
+    () => filterStockHistoryRows(adjustHistory, histCategory, histSearch),
+    [adjustHistory, histCategory, histSearch]
+  )
+
+  const filteredHistStockList = useMemo(
+    () => filterStockListRows(histStockList, histCategory, histSearch),
+    [histStockList, histCategory, histSearch]
+  )
+
+  const filteredHistory =
+    histKind === "usage"
+      ? filteredUsageHistory
+      : histKind === "list"
+        ? filteredHistStockList
+        : filteredAdjustHistory
+  const rawHistoryCount =
+    histKind === "usage" ? history.length : histKind === "list" ? histStockList.length : adjustHistory.length
 
   const addUsageRow = () => setUsageRows((prev) => [...prev, defaultUsageRow()])
   const removeUsageRow = (idx: number) => setUsageRows((prev) => prev.filter((_, i) => i !== idx))
@@ -508,8 +577,88 @@ export function UsageTab() {
         </TabsContent>
         <TabsContent value="history" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col gap-2">
+            <CardHeader className="pb-3 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("stockHistFilterUsageCat")}
+                  </label>
+                  <Select
+                    value={histKind === "usage" ? "usage" : undefined}
+                    onValueChange={() => setHistKind("usage")}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="usage">{t("useHistory")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("stockHistFilterStockStatus")}
+                  </label>
+                  <Select
+                    value={histKind === "list" ? "list" : histKind === "adjustment" ? "adjustment" : undefined}
+                    onValueChange={(v) => setHistKind(v as "list" | "adjustment")}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="list">{t("stockTabList")}</SelectItem>
+                      <SelectItem value="adjustment">{t("stockTabHistory")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {histCategoryOptions.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("itemsCategory")}
+                  </label>
+                  <Select
+                    value={histCategory || "__all__"}
+                    onValueChange={(v) => setHistCategory(v === "__all__" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
+                      {histCategoryOptions.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  value={histSearch}
+                  onChange={(e) => setHistSearch(e.target.value)}
+                  placeholder={t("stockHistSearchPh")}
+                  className="h-9 pl-8 text-xs"
+                />
+              </div>
+              {histKind === "list" ? (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("stockFilterDate")}
+                  </label>
+                  <Input
+                    type="date"
+                    value={histStart}
+                    onChange={(e) => setHistStart(e.target.value)}
+                    className="h-9 w-full text-xs"
+                  />
+                </div>
+              ) : (
                 <div className="flex items-center gap-2">
                   <Input
                     type="date"
@@ -525,29 +674,84 @@ export function UsageTab() {
                     className="h-9 flex-1 min-w-0 text-xs"
                   />
                 </div>
-                <Button size="sm" className="h-9 font-medium" onClick={loadHistory} disabled={historyLoading}>
-                  {historyLoading ? t('loading') : t('search') || '검색'}
-                </Button>
-              </div>
+              )}
+              <Button size="sm" className="h-9 w-full font-medium" onClick={loadHistory} disabled={historyLoading}>
+                {historyLoading ? t("loading") : t("search")}
+              </Button>
             </CardHeader>
             <CardContent>
-              {history.length === 0 ? (
+              {filteredHistory.length === 0 ? (
                 <div className="py-10 text-center">
                   <Package className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                  <p className="mt-3 text-sm text-muted-foreground">{t('useHistoryEmpty')}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {rawHistoryCount === 0
+                      ? histKind === "list"
+                        ? t("stockHistNoData")
+                        : t("useHistoryEmpty")
+                      : t("stockHistNoMatch")}
+                  </p>
                 </div>
-              ) : (
+              ) : histKind === "list" ? (
                 <div className="space-y-1">
-                  {history.map((h, i) => (
+                  {filteredHistStockList.map((row) => {
+                    const isLow = row.safeQty > 0 && row.qty < row.safeQty
+                    return (
+                      <div
+                        key={row.code}
+                        className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <p className="text-xs text-muted-foreground tabular-nums">{row.code}</p>
+                          <p className="font-medium truncate">{row.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{row.spec}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-bold tabular-nums">{formatStock(row.qty)}</p>
+                          {isLow && (
+                            <p className="text-[10px] font-semibold text-destructive">{t("stockLow")}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : histKind === "usage" ? (
+                <div className="space-y-1">
+                  {filteredUsageHistory.map((h, i) => (
                     <div key={i} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
                       <div>
                         <p className="text-xs text-muted-foreground">
                           {h.dateTime}
-                          {(h.userNick || h.userName) && <span className="ml-2">({t('useUsedBy') || '사용자'} {h.userNick || h.userName})</span>}
+                          {(h.userNick || h.userName) && (
+                            <span className="ml-2">
+                              ({t("useUsedBy") || "사용자"} {h.userNick || h.userName})
+                            </span>
+                          )}
                         </p>
                         <p className="font-medium">{h.item}</p>
                       </div>
                       <span className="font-bold text-primary">-{formatStock(h.qty)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredAdjustHistory.map((h, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <p className="text-xs text-muted-foreground">{h.date}</p>
+                        <p className="font-medium truncate">{h.item}</p>
+                        {h.reason && <p className="text-[11px] text-muted-foreground truncate">{h.reason}</p>}
+                      </div>
+                      <span
+                        className={cn(
+                          "shrink-0 font-bold tabular-nums",
+                          h.diff > 0 ? "text-primary" : "text-destructive"
+                        )}
+                      >
+                        {h.diff > 0 ? "+" : ""}
+                        {formatStock(h.diff)}
+                      </span>
                     </div>
                   ))}
                 </div>

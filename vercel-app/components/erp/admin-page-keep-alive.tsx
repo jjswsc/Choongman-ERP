@@ -12,6 +12,7 @@ import {
   isErpKeepAliveExcluded,
   resolveErpKeepAliveCacheHref,
 } from "@/lib/erp-keep-alive-config"
+import { shouldReuseKeepAliveCacheEntry } from "@/lib/erp-keep-alive-cache"
 import { ErpPageVisibilityProvider } from "@/lib/erp-page-visibility"
 
 const MAX_CACHED_PAGES = 16
@@ -35,13 +36,15 @@ function syncCacheWithNavigationStack(
 
 /**
  * 관리자 메뉴 이동 시 페이지를 unmount하지 않고 숨김 보관.
- * 뒤로가기·화면 닫기·브라우저 뒤로가기 시 스택 밖 캐시는 제거한다.
+ * 다른 메뉴에 있다가 돌아올 때(사이드바·헤더 뒤로가기) 캐시된 인스턴스를 재사용한다.
+ * 화면 닫기·스택 밖·캐시 한도 초과 시에만 제거한다.
  */
 export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const erpNav = useErpNavigationOptional()
   const cacheRef = React.useRef(new Map<string, CacheEntry>())
+  const prevCacheHrefRef = React.useRef<string | null>(null)
   const [, bump] = React.useReducer((n: number) => n + 1, 0)
 
   const href = React.useMemo(() => {
@@ -53,9 +56,23 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
 
   const keepAliveCurrent = !isErpKeepAliveExcluded(href)
 
+  const prevCacheHref = prevCacheHrefRef.current
+  const reactivating = shouldReuseKeepAliveCacheEntry(
+    prevCacheHref,
+    cacheHref,
+    cacheRef.current.has(cacheHref)
+  )
+
   if (keepAliveCurrent) {
-    cacheRef.current.set(cacheHref, { node: children, lastSeen: Date.now() })
+    const existing = cacheRef.current.get(cacheHref)
+    if (existing && reactivating) {
+      existing.lastSeen = Date.now()
+    } else {
+      cacheRef.current.set(cacheHref, { node: children, lastSeen: Date.now() })
+    }
   }
+
+  prevCacheHrefRef.current = cacheHref
 
   const clearAll = React.useCallback(() => {
     if (cacheRef.current.size === 0) return

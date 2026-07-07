@@ -56,10 +56,10 @@ function removeHrefFromStack(href: string) {
   writeStack(stack.slice(0, idx))
 }
 
-export function markErpBackNavigation(fromHref?: string) {
+export function markErpBackNavigation(opts?: { evictHref?: string }) {
   if (typeof window === "undefined") return
   sessionStorage.setItem(BACK_FLAG_KEY, "1")
-  if (fromHref) sessionStorage.setItem(BACK_EVICT_KEY, fromHref)
+  if (opts?.evictHref) sessionStorage.setItem(BACK_EVICT_KEY, opts.evictHref)
 }
 
 export function consumeErpBackEvictHref(): string | null {
@@ -196,7 +196,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     const qs = window.location.search
     const current = normalizeErpHref(p, qs)
     if (current === "/admin") return
-    markErpBackNavigation(current)
+    markErpBackNavigation({ evictHref: current })
     removeHrefFromStack(current)
     router.push("/admin")
   }, [router])
@@ -222,13 +222,13 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
     const prev = popStackAndGetPrev(current)
     if (prev) {
-      markErpBackNavigation(current)
+      markErpBackNavigation()
       router.push(prev)
       return
     }
 
     if (window.history.length > 1) {
-      markErpBackNavigation(current)
+      markErpBackNavigation()
       router.back()
       return
     }

@@ -13,6 +13,8 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { ExpenseAttachmentPreviewItem } from "@/components/erp/expense-attachment-preview"
+import { expenseAttachmentKind } from "@/lib/expense-attachment-urls"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -721,7 +723,7 @@ export function ExpenseManagementTab() {
   const renderAttachmentCell = React.useCallback(
     (r: ExpenseAccrualPlanItem) => {
       const urls = r.attachmentUrls || []
-      const firstImage = urls.find((u) => /^data:image\//i.test(u) || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(u))
+      const firstImage = urls.find((u) => expenseAttachmentKind(u) === "image")
       return (
         <td className="py-2 px-1 text-center align-top">
           {urls.length > 0 ? (
@@ -1412,16 +1414,15 @@ export function ExpenseManagementTab() {
               <div className="space-y-4">
                 {(attachmentPreview?.urls || []).map((url, i) => (
                   <div key={i} className="rounded-md border border-border/60 p-2">
-                    {url.startsWith("data:image/") || /^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) ? (
-                       
-                      <img src={url} alt="" className="max-h-[70vh] w-auto max-w-full rounded mx-auto" />
-                    ) : url.startsWith("data:application/pdf") || /\.pdf(\?|$)/i.test(url) ? (
-                      <iframe title={`pdf-${i}`} src={url} className="h-[min(70vh,520px)] w-full rounded border-0" />
-                    ) : (
-                      <a href={url} target="_blank" rel="noreferrer" className="text-primary underline break-all text-sm">
-                        {tt("expenseOpenFile", "Open File")} #{i + 1}
-                      </a>
-                    )}
+                    <ExpenseAttachmentPreviewItem
+                      url={url}
+                      index={i}
+                      openFileLabel={tt("expenseOpenFile", "Open File")}
+                      corruptedPdfLabel={tt(
+                        "expenseAttachmentCorrupted",
+                        "This PDF may have been damaged while saving. Please re-attach it from Withdrawal Management."
+                      )}
+                    />
                   </div>
                 ))}
               </div>
@@ -1472,7 +1473,7 @@ export function ExpenseManagementTab() {
                               })
                             }
                           >
-                            {/^data:image\//i.test(url) || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(url) ? (
+                            {expenseAttachmentKind(url) === "image" ? (
                               <img src={url} alt="" className="h-full w-full object-cover" />
                             ) : (
                               <span className="text-[10px] p-1">PDF</span>

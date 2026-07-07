@@ -205,7 +205,7 @@ ${filteredList.map((r) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{t("stockFilterStoreAll")}</SelectItem>
+                <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
                 {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}

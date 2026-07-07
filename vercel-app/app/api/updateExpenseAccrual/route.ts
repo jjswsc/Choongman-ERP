@@ -8,6 +8,7 @@ import {
 } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
 import { canEditExpenseAccrualPlan } from '@/lib/expense-accrual-approve-policy'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -47,30 +48,6 @@ function encodePayeeCode(payeeCode: string, withdrawalCategory: string): string 
   const cat = String(withdrawalCategory || '').trim().toLowerCase() || 'expense'
   if (!base) return `auto_${cat}::wm::${cat}`
   return `${base}::wm::${cat}`
-}
-
-function normalizeAttachmentUrlsFromBody(body: Record<string, unknown>): string | null | undefined {
-  const has =
-    Object.prototype.hasOwnProperty.call(body, 'attachmentUrls') ||
-    Object.prototype.hasOwnProperty.call(body, 'attachment_urls')
-  if (!has) return undefined
-  const raw = body.attachmentUrls ?? body.attachment_urls
-  if (raw == null) return null
-  let urls: string[] = []
-  if (Array.isArray(raw)) {
-    urls = raw.map((x) => String(x ?? '').trim()).filter(Boolean)
-  } else if (typeof raw === 'string' && raw.trim()) {
-    try {
-      const p = JSON.parse(raw) as unknown
-      if (Array.isArray(p)) urls = p.map((x) => String(x ?? '').trim()).filter(Boolean)
-    } catch {
-      return null
-    }
-  }
-  urls = urls.slice(0, 5).map((u) => (u.length > 400_000 ? u.slice(0, 400_000) : u))
-  if (urls.length === 0) return null
-  const json = JSON.stringify(urls)
-  return json.length > 2_000_000 ? JSON.stringify([urls[0]!.slice(0, 1_500_000)]) : json
 }
 
 function mapMainSubToCategory(main: string, sub: string): string {
@@ -232,7 +209,18 @@ export async function POST(request: NextRequest) {
         : decoded.withdrawalCategory
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)
 
-    const attachmentUrlsSerialized = normalizeAttachmentUrlsFromBody(body as Record<string, unknown>)
+    const hasAttachmentField =
+      Object.prototype.hasOwnProperty.call(body, 'attachmentUrls') ||
+      Object.prototype.hasOwnProperty.call(body, 'attachment_urls')
+    let attachmentUrlsSerialized: string | null | undefined = undefined
+    if (hasAttachmentField) {
+      const raw = (body as Record<string, unknown>).attachmentUrls ?? (body as Record<string, unknown>).attachment_urls
+      const attachmentResult = normalizeExpenseAttachmentUrlsInput(raw)
+      if (!attachmentResult.ok) {
+        return NextResponse.json({ success: false, message: attachmentResult.message }, { status: 400, headers })
+      }
+      attachmentUrlsSerialized = attachmentResult.json
+    }
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
     const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo

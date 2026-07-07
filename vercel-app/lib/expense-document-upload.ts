@@ -1,4 +1,47 @@
+import { apiFetch } from '@/lib/api/fetch'
+import { putFileToSupabaseSignedUploadUrl } from '@/lib/storage-client-upload'
+import { MAX_EXPENSE_DATA_URL_CHARS } from '@/lib/expense-attachment-urls'
 import { compressImageForUpload } from '@/lib/utils'
+
+function isPdfFile(file: File): boolean {
+  if (file.type === 'application/pdf') return true
+  return file.name.toLowerCase().endsWith('.pdf')
+}
+
+async function uploadExpenseAttachmentToStorage(file: File): Promise<string> {
+  const contentType =
+    file.type && file.type.length > 0
+      ? file.type
+      : isPdfFile(file)
+        ? 'application/pdf'
+        : 'application/octet-stream'
+  const pres = await apiFetch('/api/uploadExpenseAttachment/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType,
+      fileSize: file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    throw new Error(pjson.message || 'UPLOAD_PRESIGN_FAIL')
+  }
+  const fileForUpload =
+    file.type && file.type.length > 0 ? file : new File([file], file.name, { type: contentType })
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, fileForUpload, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    throw new Error(t || `UPLOAD_FAIL_${putRes.status}`)
+  }
+  return pjson.publicUrl
+}
 
 export async function fileToExpenseAttachmentDataUrl(file: File): Promise<string> {
   if (file.type.startsWith('image/')) {
@@ -22,11 +65,24 @@ export async function processExpenseAttachmentFiles(
   const urls: string[] = []
   let invoicePhotoUrl: string | undefined
   for (const f of files.slice(0, 3)) {
-    const url = await fileToExpenseAttachmentDataUrl(f)
-    urls.push(url)
-    if (!invoicePhotoUrl && f.type.startsWith('image/')) {
-      invoicePhotoUrl = url
+    if (isPdfFile(f)) {
+      const url = await uploadExpenseAttachmentToStorage(f)
+      urls.push(url)
+      continue
     }
+    if (f.type.startsWith('image/') || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name)) {
+      const dataUrl = await fileToExpenseAttachmentDataUrl(f)
+      if (dataUrl.length > MAX_EXPENSE_DATA_URL_CHARS) {
+        const url = await uploadExpenseAttachmentToStorage(f)
+        urls.push(url)
+      } else {
+        urls.push(dataUrl)
+      }
+      if (!invoicePhotoUrl) invoicePhotoUrl = urls[urls.length - 1]
+      continue
+    }
+    const url = await uploadExpenseAttachmentToStorage(f)
+    urls.push(url)
   }
   return { attachmentUrls: urls, invoicePhotoUrl }
 }

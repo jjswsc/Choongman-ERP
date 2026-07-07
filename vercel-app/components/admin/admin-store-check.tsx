@@ -54,6 +54,7 @@ import {
 } from "@/lib/api-client"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { Badge } from "@/components/ui/badge"
 import { StorePageShell } from "@/components/erp/store-page-shell"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
@@ -443,7 +444,7 @@ export function AdminStoreCheck() {
         if (res.success && res.url) {
           newUrls.push(res.url)
         } else {
-          await appAlert(res.message || "업로드 실패")
+          await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
         }
       }
       if (newUrls.length > 0) {

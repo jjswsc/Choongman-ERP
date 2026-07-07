@@ -190,7 +190,14 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "수리 사진 저장소가 설정되지 않았습니다.": "repair_photo_storage_not_configured",
   "이미지 또는 동영상 파일만 업로드할 수 있습니다.": "repair_upload_media_type",
   "이미지는 5MB 이하여야 합니다.": "repair_upload_image_max_5mb",
+  "이미지는 5MB 이하만 업로드할 수 있습니다.": "repair_upload_image_max_5mb",
   "동영상은 50MB 이하여야 합니다.": "repair_upload_video_max_50mb",
+  "동영상은 50MB 이하만 업로드할 수 있습니다.": "repair_upload_video_max_50mb",
+  "업로드 준비 실패": "msg_upload_fail",
+  "업로드 준비에 실패했습니다.": "msg_upload_fail",
+  "첨부 파일이 너무 커서 저장할 수 없습니다. PDF·이미지를 다시 업로드해 주세요.":
+    "expenseAccrualAttachTooLarge",
+  "첨부 URL 형식이 올바르지 않습니다.": "expenseAccrualAttachFail",
 
   // 주문 수령 / 공통 API 타임아웃 (클라이언트)
   "요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.": "apiRequestTimeout",
@@ -272,6 +279,10 @@ export function translateApiMessage(
     return t("msg_modify_fail") + trimmed.slice("수정 실패:".length)
   if (trimmed.startsWith("추가 실패:"))
     return t("msg_add_fail") + trimmed.slice("추가 실패:".length)
+  if (trimmed.startsWith("업로드 준비 실패:"))
+    return t("msg_upload_fail") + trimmed.slice("업로드 준비 실패:".length)
+  if (trimmed.startsWith("업로드 실패:"))
+    return t("msg_upload_fail") + trimmed.slice("업로드 실패:".length)
   if (trimmed.startsWith("action은 approve 또는 reject 이어야 합니다."))
     return t("approveRejectActionRequired")
   if (trimmed.startsWith("승인 권한이 없습니다."))

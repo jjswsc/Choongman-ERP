@@ -33,6 +33,8 @@ export interface AdjustmentHistoryItem {
   date: string
   store: string
   item: string
+  itemCode?: string
+  category?: string
   spec: string
   diff: number
   reason: string
@@ -176,6 +178,8 @@ export interface UsageHistoryItem {
   date: string
   dateTime: string
   item: string
+  itemCode?: string
+  category?: string
   qty: number
   amount: number
   userName?: string
