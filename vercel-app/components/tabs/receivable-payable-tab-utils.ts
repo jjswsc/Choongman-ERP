@@ -2,6 +2,7 @@ import { formatMoneyBaht } from "@/lib/money-amount"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { receivableStoreGroupKey } from "@/lib/receivable-store-key"
+import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from "@/lib/office-store-canonical"
 import type { InvoiceDataClient } from "@/lib/api-client"
 import type { PoInvoiceBillToVendor } from "@/lib/po-invoice-bill-to"
 import type {
@@ -78,6 +79,65 @@ export function buildCumulativeByKey(
     byKey[key] = (byKey[key] || 0) + Number(row.balance ?? 0)
   }
   return byKey
+}
+
+/** 목록 API·요약 API 누적 잔액을 한 맵으로 합침 (동일 조회의 cumulative 맵 우선) */
+export function mergeReceivablePayableCumulativeByKey(params: {
+  tab: "receivable" | "payable"
+  summaryRows: { storeName?: string; vendorCode?: string; balance?: number }[]
+  listItems?: { storeName?: string; vendorCode?: string; cumulativeBalance?: number }[]
+  payableCumulativeByVendor?: Record<string, number>
+  receivableCumulativeByStoreGroup?: Record<string, number>
+}): Record<string, number> {
+  const byKey = buildCumulativeByKey(params.tab, params.summaryRows)
+  if (params.tab === "payable" && params.payableCumulativeByVendor) {
+    for (const [vc, bal] of Object.entries(params.payableCumulativeByVendor)) {
+      const key = String(vc || "").trim().toLowerCase()
+      if (!key) continue
+      byKey[key] = Number(bal ?? 0)
+    }
+  }
+  if (params.tab === "receivable" && params.receivableCumulativeByStoreGroup) {
+    for (const [groupKey, bal] of Object.entries(params.receivableCumulativeByStoreGroup)) {
+      const key = String(groupKey || "").trim().toLowerCase()
+      if (!key) continue
+      byKey[key] = Number(bal ?? 0)
+    }
+  }
+  for (const item of params.listItems ?? []) {
+    const cum = item.cumulativeBalance
+    if (cum == null || !Number.isFinite(cum)) continue
+    const key =
+      params.tab === "receivable"
+        ? receivableStoreGroupKey(String(item.storeName || ""))
+        : String(item.vendorCode || "").trim().toLowerCase()
+    if (!key) continue
+    if (
+      (params.tab === "payable" && params.payableCumulativeByVendor) ||
+      (params.tab === "receivable" && params.receivableCumulativeByStoreGroup)
+    ) {
+      continue
+    }
+    byKey[key] = cum
+  }
+  return byKey
+}
+
+/** 본사/회계 — 매장 목록 로드 전 검색해도 CM Office 기본 귀속이 적용되도록 */
+export function resolveEffectivePayableStoreFilter(params: {
+  payableStoreFilter: string
+  canSelectStores: boolean
+  storeList?: string[]
+  /** useEffect로 CM Office 기본값이 이미 반영된 뒤 사용자가 All을 고른 경우 */
+  officeDefaultApplied: boolean
+}): string {
+  if (params.payableStoreFilter !== "All") return params.payableStoreFilter
+  if (params.officeDefaultApplied) return params.payableStoreFilter
+  if (!params.canSelectStores || !params.storeList?.length) return params.payableStoreFilter
+  const office =
+    params.storeList.find((s) => String(s || "").toLowerCase().includes("office")) ||
+    params.storeList.find((s) => canonicalOfficeStore(s) === CANONICAL_OFFICE_STORE)
+  return office || params.payableStoreFilter
 }
 
 export function isOfficeLikeLabel(label: string): boolean {

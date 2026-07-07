@@ -116,7 +116,12 @@ export async function getReceivablePayableList(params: {
   userStore?: string
   userRole?: string
   fresh?: boolean
-}) {
+}): Promise<{
+  type: string
+  list: ReceivablePayableItem[]
+  cumulativeByVendor?: Record<string, number>
+  cumulativeByStoreGroup?: Record<string, number>
+}> {
   return getReceivablePayableListWithCache(params)
 }
 

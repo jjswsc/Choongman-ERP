@@ -1,4 +1,8 @@
 import type { AccountSubjectItem } from '@/lib/api-client'
+import {
+  filterExpenseWithdrawAccountSubjects,
+  filterTransferWithdrawAccountSubjects,
+} from '@/lib/account-subject-withdraw-options'
 
 /** 통장 조회 필터 — 입금 용도 (조회 전에도 드롭다운 표시) */
 export const BANK_FILTER_DEPOSIT_CATEGORIES = [
@@ -57,10 +61,10 @@ export function resolveBankQueryFilterAccountSubjects(params: {
     return revenueAccountOptions
   }
   if (cat === 'transfer') {
-    return accountSubjectOptions.filter((a) => a.type === 'transfer')
+    return filterTransferWithdrawAccountSubjects(accountSubjectOptions)
   }
   if (cat === 'expense') {
-    return accountSubjectOptions.filter((a) => a.type === 'expense' && a.pAndLSection !== 'cost')
+    return filterExpenseWithdrawAccountSubjects(accountSubjectOptions)
   }
   if (['purchase_payment', 'loan', 'correction', 'unclassified'].includes(cat)) {
     return []
@@ -70,17 +74,17 @@ export function resolveBankQueryFilterAccountSubjects(params: {
     return revenueAccountOptions
   }
   if (filterTransType === 'withdraw') {
-    return accountSubjectOptions.filter(
-      (a) => a.type === 'transfer' || (a.type === 'expense' && a.pAndLSection !== 'cost')
-    )
+    return [
+      ...filterTransferWithdrawAccountSubjects(accountSubjectOptions),
+      ...filterExpenseWithdrawAccountSubjects(accountSubjectOptions),
+    ]
   }
 
   const seen = new Set<number>()
   const merged = [
     ...revenueAccountOptions,
-    ...accountSubjectOptions.filter(
-      (a) => a.type === 'transfer' || (a.type === 'expense' && a.pAndLSection !== 'cost')
-    ),
+    ...filterTransferWithdrawAccountSubjects(accountSubjectOptions),
+    ...filterExpenseWithdrawAccountSubjects(accountSubjectOptions),
   ]
   return merged.filter((a) => {
     const id = Number(a.id || 0)

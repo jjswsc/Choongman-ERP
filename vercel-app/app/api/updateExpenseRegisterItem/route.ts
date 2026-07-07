@@ -4,6 +4,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 import { composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
 import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
+import { syncPayableLedgerAfterBankWithdrawCategoryChange } from '@/lib/receivable-payable'
 import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -15,6 +16,8 @@ type BankTxRow = {
   trans_date?: string
   memo?: string
   note?: string
+  category?: string | null
+  vendor_code?: string | null
 }
 
 type PayableRow = {
@@ -118,7 +121,7 @@ export async function POST(request: NextRequest) {
     const bankRows = (await supabaseSelectFilter(
       'bank_transactions',
       `id=eq.${bankTransactionId}`,
-      { limit: 1, select: 'id,account_id,trans_type,amount,trans_date,memo,note' }
+      { limit: 1, select: 'id,account_id,trans_type,amount,trans_date,memo,note,category,vendor_code' }
     )) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
     if (!bankRow?.id) return NextResponse.json({ success: false, message: '대상 거래를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -144,6 +147,9 @@ export async function POST(request: NextRequest) {
       }
       if (category === 'transfer' && !accountSubjectId) {
         return NextResponse.json({ success: false, message: '이체 계정과목을 선택해 주세요.' }, { status: 400, headers })
+      }
+      if (bankCat === 'purchase_payment' && !vendorCode) {
+        return NextResponse.json({ success: false, message: '매입처를 입력해 주세요.' }, { status: 400, headers })
       }
       if (accountSubjectId) {
         const hdr = await assertAccountSubjectNotHeader(accountSubjectId)
@@ -220,6 +226,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '출금 거래만 수정할 수 있습니다.' }, { status: 400, headers })
     }
 
+    await assertAccountingDateOpen(String(bankRow.trans_date || transDate || '').slice(0, 10))
+
     const linkedPayables = (await supabaseSelectFilter(
       'payable_transactions',
       `bank_transaction_id=eq.${bankTransactionId}`,
@@ -234,6 +242,7 @@ export async function POST(request: NextRequest) {
     }
 
     const bankCategory = mapToBankTransactionCategory(category!)
+    const prevCategory = String(bankRow.category || '').toLowerCase()
     const existingNote = String(bankRow.note || '')
     const composedNote = composeBankNoteWithCategoryAndOptionalAccrualPrefix(existingNote, memo, category!)
     const patch: Record<string, unknown> = {
@@ -252,6 +261,16 @@ export async function POST(request: NextRequest) {
     patch.invoice_no = invoiceNo || null
     patch.invoice_photo_url = invoicePhotoUrl || null
     await supabaseUpdate('bank_transactions', bankTransactionId, patch)
+
+    await syncPayableLedgerAfterBankWithdrawCategoryChange({
+      bankTransactionId,
+      prevCategory,
+      nextCategory: bankCategory,
+      vendorCode: vendorCode || null,
+      amountAbs: amount,
+      transDate,
+      bankMemo: memo,
+    })
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {

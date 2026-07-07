@@ -177,6 +177,7 @@ export interface ReceivablePayableItem {
   vendorCode?: string
   vendorName?: string
   balance: number
+  cumulativeBalance?: number
   items: {
     id?: number
     trans_date?: string
@@ -201,7 +202,12 @@ export async function getReceivablePayableListWithCache(params: {
   userRole?: string
   /** true: SW·IDB 캐시 우회 후 네트워크 우선 (검색·저장 후 재조회) */
   fresh?: boolean
-}): Promise<{ type: string; list: ReceivablePayableItem[] }> {
+}): Promise<{
+  type: string
+  list: ReceivablePayableItem[]
+  cumulativeByVendor?: Record<string, number>
+  cumulativeByStoreGroup?: Record<string, number>
+}> {
   const key = cacheKey('erp:recPay', {
     type: params.type,
     store: params.storeFilter || '',
@@ -209,7 +215,15 @@ export async function getReceivablePayableListWithCache(params: {
     start: params.startStr,
     end: params.endStr,
   })
-  const fallback: { type: string; list: ReceivablePayableItem[] } = { type: params.type, list: [] }
+  const fallback: {
+    type: string
+    list: ReceivablePayableItem[]
+    cumulativeByVendor?: Record<string, number>
+    cumulativeByStoreGroup?: Record<string, number>
+  } = {
+    type: params.type,
+    list: [],
+  }
   const fetcher = async () => {
     const q = new URLSearchParams({
       type: params.type,
@@ -222,7 +236,12 @@ export async function getReceivablePayableListWithCache(params: {
     if (params.userRole) q.set('userRole', params.userRole)
     if (params.fresh) q.set('_t', String(Date.now()))
     const res = await apiFetch(`/api/getReceivablePayableList?${q}`)
-    return res.json() as Promise<{ type: string; list: ReceivablePayableItem[] }>
+    return res.json() as Promise<{
+      type: string
+      list: ReceivablePayableItem[]
+      cumulativeByVendor?: Record<string, number>
+      cumulativeByStoreGroup?: Record<string, number>
+    }>
   }
   if (params.fresh) {
     try {

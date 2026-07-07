@@ -35,6 +35,7 @@ import {
   type ExpenseSearchRelation,
   type AccountSubjectItem,
 } from "@/lib/api-client"
+import { EXPENSE_WITHDRAW_SUBJECT_FETCH } from "@/lib/account-subject-withdraw-options"
 import { useAuth } from "@/lib/auth-context"
 import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
@@ -125,7 +126,7 @@ export function ExpenseRegisterSearchTab() {
   React.useEffect(() => {
     Promise.all([
       getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).catch(() => []),
-      getAccountSubjects({ forExpense: true, excludeHeaders: true }).catch(() => []),
+      getAccountSubjects(EXPENSE_WITHDRAW_SUBJECT_FETCH).catch(() => []),
       getVendorsForPurchase().catch(() => []),
     ]).then(([a, s, v]) => {
       setAccounts(a || [])

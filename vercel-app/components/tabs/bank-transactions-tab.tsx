@@ -151,6 +151,11 @@ import {
   resolveBankQueryFilterAccountSubjects,
   resolveBankQueryFilterCategories,
 } from "@/lib/bank-query-filter-options"
+import {
+  EXPENSE_WITHDRAW_SUBJECT_FETCH,
+  TRANSFER_WITHDRAW_SUBJECT_FETCH,
+  filterExpenseWithdrawAccountSubjects,
+} from "@/lib/account-subject-withdraw-options"
 
 const BANK_EDIT_BTN_CN = `${ADMIN_BTN_XS_CN} shrink-0 h-7 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15`
 
@@ -595,8 +600,7 @@ export function BankTransactionsTab() {
       setExpenseSubjectEnglishNames({})
       return
     }
-    const candidates = accountSubjectOptions
-      .filter((a) => a.type === "expense")
+    const candidates = filterExpenseWithdrawAccountSubjects(accountSubjectOptions)
       .filter((a) => !a.nameEn && (a.name || "").trim())
     if (candidates.length === 0) {
       setExpenseSubjectEnglishNames({})
@@ -1027,8 +1031,8 @@ export function BankTransactionsTab() {
   }, [loadPurchaseVendorOptions])
   const reloadAccountSubjectOptions = React.useCallback(() => {
     Promise.all([
-      getAccountSubjects({ forExpense: true, excludeHeaders: true }),
-      getAccountSubjects({ forTransfer: true, excludeHeaders: true }),
+      getAccountSubjects(EXPENSE_WITHDRAW_SUBJECT_FETCH),
+      getAccountSubjects(TRANSFER_WITHDRAW_SUBJECT_FETCH),
       getAccountSubjects({ forRevenue: true, excludeHeaders: true }),
       getAccountSubjects({ type: "asset", excludeHeaders: true }),
     ])
@@ -1557,6 +1561,18 @@ export function BankTransactionsTab() {
         prepaymentSubject,
       }),
     [filterTransType, filterCategory, accountSubjectOptions, revenueAccountOptions, prepaymentSubject]
+  )
+
+  const pickRowAccountSubjectOptions = React.useCallback(
+    (transType: string, category: string) =>
+      resolveBankQueryFilterAccountSubjects({
+        filterTransType: transType,
+        filterCategory: category,
+        accountSubjectOptions,
+        revenueAccountOptions,
+        prepaymentSubject,
+      }),
+    [accountSubjectOptions, revenueAccountOptions, prepaymentSubject]
   )
 
   React.useEffect(() => {
@@ -2605,10 +2621,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="__none__">—</SelectItem>
-                                      {(cat === "transfer"
-                                        ? accountSubjectOptions.filter((a) => a.type === "transfer")
-                                        : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "cost")
-                                      ).map((a) => (
+                                      {pickRowAccountSubjectOptions(r.transType, cat).map((a) => (
                                         <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                                       ))}
                                     </SelectContent>
@@ -3240,10 +3253,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__none__">—</SelectItem>
-                                {(impCat === "transfer"
-                                  ? accountSubjectOptions.filter((a) => a.type === "transfer")
-                                  : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "cost")
-                                ).map((a) => (
+                                {pickRowAccountSubjectOptions(r.transType, impCat).map((a) => (
                                   <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                                 ))}
                               </SelectContent>

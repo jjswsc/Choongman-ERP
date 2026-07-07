@@ -133,6 +133,8 @@ import {
   buildClientFromPosTaxMemo,
   cumulativeBalanceKey,
   buildCumulativeByKey,
+  mergeReceivablePayableCumulativeByKey,
+  resolveEffectivePayableStoreFilter,
   isOfficeLikeLabel,
   clientHasBillToAddress,
   resolveTaxInvoiceClientFromPoBillTo,
@@ -576,13 +578,24 @@ export function ReceivablePayableTab() {
     }) => {
       const seq = ++listLoadSeqRef.current
       const effectiveTab = opts?.overrides?.type ?? tab
+      const effectivePayableStore =
+        opts?.overrides?.storeFilter !== undefined
+          ? opts.overrides.storeFilter
+          : effectiveTab === "payable"
+            ? resolveEffectivePayableStoreFilter({
+                payableStoreFilter,
+                canSelectStores,
+                storeList,
+                officeDefaultApplied: initPayableStoreRef.current,
+              })
+            : undefined
       const storeFilterVal =
         opts?.overrides?.storeFilter !== undefined
           ? opts.overrides.storeFilter
           : effectiveTab === "receivable" && recStoreFilter !== "All"
             ? recStoreFilter
-            : effectiveTab === "payable" && payStoreFilter !== "All"
-              ? payStoreFilter
+            : effectiveTab === "payable" && effectivePayableStore !== "All"
+              ? effectivePayableStore
               : undefined
       const vendorFilterVal =
         opts?.overrides?.vendorFilter !== undefined
@@ -620,7 +633,15 @@ export function ReceivablePayableTab() {
         ])
         if (seq !== listLoadSeqRef.current) return
         setListData(listRes.list || [])
-        const byKey = buildCumulativeByKey(effectiveTab, summaryRes.list || [])
+        const byKey = mergeReceivablePayableCumulativeByKey({
+          tab: effectiveTab,
+          summaryRows: summaryRes.list || [],
+          listItems: listRes.list || [],
+          payableCumulativeByVendor:
+            effectiveTab === "payable" ? listRes.cumulativeByVendor : undefined,
+          receivableCumulativeByStoreGroup:
+            effectiveTab === "receivable" ? listRes.cumulativeByStoreGroup : undefined,
+        })
         const totalAmount = Object.values(byKey).reduce((sum, v) => sum + v, 0)
         setCumulativeSummary({
           totalAmount,
@@ -637,7 +658,7 @@ export function ReceivablePayableTab() {
         if (seq === listLoadSeqRef.current) setLoading(false)
       }
     },
-    [tab, recStoreFilter, payStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role]
+    [tab, recStoreFilter, payableStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role, canSelectStores, storeList]
   )
 
   const handleManualBalanceSave = React.useCallback(async () => {
@@ -1009,13 +1030,15 @@ export function ReceivablePayableTab() {
 
   const getCumulativeBalanceForItem = React.useCallback(
     (item: ReceivablePayableItem) => {
+      const key = cumulativeBalanceKey(tab, item)
+      if (key) {
+        const fromMap = cumulativeSummary.byKey[key]
+        if (fromMap != null && Number.isFinite(fromMap)) return fromMap
+      }
       if (item.cumulativeBalance != null && Number.isFinite(item.cumulativeBalance)) {
         return item.cumulativeBalance
       }
-      const key = cumulativeBalanceKey(tab, item)
-      if (!key) return undefined
-      const balance = cumulativeSummary.byKey[key]
-      return balance == null ? undefined : balance
+      return undefined
     },
     [tab, cumulativeSummary.byKey]
   )

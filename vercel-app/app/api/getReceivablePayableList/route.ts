@@ -15,6 +15,7 @@ import {
   buildPayableListWithCumulative,
   cumulativeBalanceByVendor,
   filterPurchasePayableLedgerRowsAsync,
+  isPayableStoreFilterActive,
   loadPayableTransactionsToEnd,
   payableRowsOnOrAfterStart,
   resolvePayableAttributedStore,
@@ -83,7 +84,8 @@ export async function GET(request: NextRequest) {
           endStr: endStr || '',
         })
       )
-      const { maps: attributionMaps, scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
+      const payableStoreScope = isPayableStoreFilterActive(storeFilter) ? storeFilter : undefined
+      const { maps: attributionMaps, scopedRows } = await scopePayableLedgerRows(ledgerRows, payableStoreScope)
       const cumulativeByVendor = cumulativeBalanceByVendor(scopedRows)
       const rows = payableRowsOnOrAfterStart(scopedRows, startStr || undefined)
 
@@ -193,7 +195,10 @@ export async function GET(request: NextRequest) {
       cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
     })
 
-    return NextResponse.json({ type: 'receivable', list }, { headers })
+    return NextResponse.json(
+      { type: 'receivable', list, cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup },
+      { headers }
+    )
   } catch (e) {
     console.error('getReceivablePayableList:', e)
     return NextResponse.json(

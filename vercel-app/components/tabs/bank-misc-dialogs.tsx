@@ -23,6 +23,7 @@ import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { appAlert } from "@/lib/app-message"
 import { registerExpenseFromBankTransaction, type AccountSubjectItem } from "@/lib/api-client"
+import { filterExpenseWithdrawAccountSubjects } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import type { BankTransactionRow } from "./bank-transactions-tab-utils"
 
@@ -392,7 +393,7 @@ function RegisterExpenseDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">—</SelectItem>
-                {accountSubjectOptions.filter((a) => a.type === "expense").map((a) => (
+                {filterExpenseWithdrawAccountSubjects(accountSubjectOptions).map((a) => (
                   <SelectItem key={a.id} value={String(a.id)}>{a.code} {getAccountSubjectLabel(a)}</SelectItem>
                 ))}
               </SelectContent>

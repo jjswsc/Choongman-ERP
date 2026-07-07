@@ -447,6 +447,51 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
   })
 }
 
+/** 통장 출금 용도 변경 시 미지급 Payment 행 생성·갱신·삭제 (통장·지출검색 공통) */
+export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
+  bankTransactionId: number
+  prevCategory: string
+  nextCategory: string
+  vendorCode?: string | null
+  amountAbs: number
+  transDate: string
+  bankMemo: string
+}): Promise<void> {
+  const bankId = Number(params.bankTransactionId || 0)
+  if (!bankId) return
+
+  const prev = String(params.prevCategory || '').toLowerCase()
+  const next = String(params.nextCategory || '').toLowerCase()
+  const wasPurchasePay = prev === 'purchase_payment'
+  const isPurchasePay = next === 'purchase_payment'
+
+  if (wasPurchasePay && !isPurchasePay) {
+    await supabaseDeleteByFilter(
+      'payable_transactions',
+      `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment&expense_accrual_id=is.null`
+    )
+  }
+
+  const linkedPaymentRows = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment`,
+    { limit: 1, select: 'id' }
+  )) as { id?: number }[]
+  const hasLinkedPayment = Boolean(linkedPaymentRows?.length)
+
+  const vendorCode = String(params.vendorCode || '').trim()
+  if (!vendorCode || (!isPurchasePay && !hasLinkedPayment)) return
+
+  const memoText = String(params.bankMemo || '').trim()
+  await syncPayableLedgerFromBankPurchasePayment({
+    bankTransactionId: bankId,
+    vendorCode,
+    amountAbs: Math.abs(Number(params.amountAbs) || 0),
+    transDate: params.transDate,
+    memo: memoText ? `통장 지급: ${memoText.slice(0, 200)}` : '통장 지급',
+  })
+}
+
 /**
  * 통장 출금 1건당 Payment 1행 유지.
  * 지급예정 집행(expense_accrual_id 있음)과 통장 매입지급(purchase_payment)이 겹쳐 insert되면

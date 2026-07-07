@@ -50,6 +50,7 @@ import {
   type BankAccount,
   type ExpenseAccrualPlanItem,
 } from "@/lib/api-client"
+import { EXPENSE_WITHDRAW_SUBJECT_FETCH } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { canApproveExpenseAccrual, canEditExpenseAccrualPlan } from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
@@ -154,7 +155,7 @@ export function ExpenseManagementTab() {
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
   React.useEffect(() => {
-    getAccountSubjects({ excludeHeaders: true }).catch(() => []).then(setSubjects)
+    getAccountSubjects(EXPENSE_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setSubjects)
   }, [])
 
   React.useEffect(() => {

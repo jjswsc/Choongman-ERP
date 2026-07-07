@@ -46,6 +46,11 @@ import {
   type CardAccount,
   type InboundBatchForLink,
 } from "@/lib/api-client"
+import {
+  EXPENSE_WITHDRAW_SUBJECT_FETCH,
+  TRANSFER_WITHDRAW_SUBJECT_FETCH,
+  filterExpenseWithdrawAccountSubjects,
+} from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { stripWithdrawalCategoryMetaFromNote } from "@/lib/bank-transaction-note-meta"
 import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
@@ -462,9 +467,25 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   }, [availableStores, pickOfficeStore, storeName, resolveStoreInList])
 
   React.useEffect(() => {
+    const reloadSubjects = () => {
+      getAccountSubjects(EXPENSE_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setSubjects)
+      getAccountSubjects(TRANSFER_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setTransferSubjects)
+    }
+    reloadSubjects()
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reloadSubjects()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [])
+
+  const expenseSubjectOptions = React.useMemo(
+    () => filterExpenseWithdrawAccountSubjects(subjects),
+    [subjects]
+  )
+
+  React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
-    getAccountSubjects({ forExpense: true, excludeHeaders: true }).catch(() => []).then(setSubjects)
-    getAccountSubjects({ forTransfer: true, excludeHeaders: true }).catch(() => []).then(setTransferSubjects)
     getCardAccounts().catch(() => []).then((list) => setCardAccounts(list || []))
   }, [])
 
@@ -581,7 +602,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         }
       }
       if (categoryMain === "expense" && !accountSubjectId) {
-        const subjectOpts = subjects
+        const subjectOpts = expenseSubjectOptions
           .filter((s) => s.id != null)
           .map((s) => ({ id: s.id!, code: s.code, name: s.name, nameEn: s.nameEn }))
         const sid = suggestAccountSubjectId(subjectOpts, {
@@ -592,7 +613,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         if (sid) setAccountSubjectId(String(sid))
       }
     },
-    [accountSubjectId, categoryMain, memo, payeeCode, payeeName, subjects, vendors]
+    [accountSubjectId, categoryMain, memo, payeeCode, payeeName, expenseSubjectOptions, vendors]
   )
 
   const accrualNetPreview = React.useMemo(() => {
@@ -2149,7 +2170,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       </SelectTrigger>
                       <SelectContent>
                         {isLaterPayment ? <SelectItem value="__none__">-</SelectItem> : null}
-                        {subjects.map((s) => (
+                        {expenseSubjectOptions.map((s) => (
                           <SelectItem key={s.id} value={String(s.id)}>
                             {s.code} {getSubjectLabel(s)}
                           </SelectItem>

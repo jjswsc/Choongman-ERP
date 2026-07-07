@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAccrualStoreByVendorDate,
   buildPayableListWithCumulative,
+  cumulativeBalanceByVendor,
   filterPayableRowsByStore,
   filterPurchasePayableLedgerRows,
   isPurchasePayableLedgerRow,
+  payableRowsOnOrAfterStart,
   resolvePayableAttributedStore,
   type PayableAttributionMaps,
   type PayableTransactionRow,
@@ -115,6 +117,34 @@ describe('buildPayableListWithCumulative', () => {
     expect(list[0].balance).toBe(0)
     expect(list[0].cumulativeBalance).toBe(50000)
     expect(list[0].items).toHaveLength(0)
+  })
+
+  it('keeps cumulative balance stable when only startStr changes', () => {
+    const scopedRows: PayableTransactionRow[] = [
+      { vendor_code: '1014', ref_type: 'Inbound', amount: 100000, trans_date: '2026-01-15' },
+      { vendor_code: '1014', ref_type: 'Payment', amount: -40000, trans_date: '2026-02-01' },
+      { vendor_code: '1014', ref_type: 'Inbound', amount: 50000, trans_date: '2026-04-01' },
+      { vendor_code: '1014', ref_type: 'Payment', amount: -20000, trans_date: '2026-05-01' },
+    ]
+    const cumulativeByVendor = cumulativeBalanceByVendor(scopedRows)
+    expect(cumulativeByVendor['1014']).toBe(90000)
+
+    for (const startStr of ['2025-12-01', '2026-03-01', '2026-06-01']) {
+      const periodRows = payableRowsOnOrAfterStart(scopedRows, startStr)
+      const periodByVendor: Record<string, { total: number; items: PayableTransactionRow[] }> = {}
+      for (const r of periodRows) {
+        const vc = String(r.vendor_code || '').trim()
+        if (!periodByVendor[vc]) periodByVendor[vc] = { total: 0, items: [] }
+        periodByVendor[vc].items.push(r)
+        periodByVendor[vc].total += Number(r.amount ?? 0)
+      }
+      const list = buildPayableListWithCumulative({ cumulativeByVendor, periodByVendor })
+      expect(list[0].cumulativeBalance).toBe(90000)
+      if (startStr === '2026-03-01') {
+        expect(list[0].balance).toBe(30000)
+        expect(list[0].balance).not.toBe(list[0].cumulativeBalance)
+      }
+    }
   })
 })
 

@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     let storeFilterVal = requestedStoreFilter
     if (!canSelectStores) {
       if (!requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체') {
-        storeFilterVal = String(allowedStores[0] || '').trim()
+        storeFilterVal = userStore || String(allowedStores[0] || '').trim()
       } else {
         const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
         if (!allowed) {
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
       if (!canSelectStores) {
         fallbackStoreFilter =
           !requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체'
-            ? String(allowedStores[0] || '').trim()
+            ? userStore || String(allowedStores[0] || '').trim()
             : requestedStoreFilter
       }
       const receivableSummary = await buildReceivableSummaryList({
