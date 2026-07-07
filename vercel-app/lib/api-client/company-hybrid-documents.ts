@@ -270,3 +270,31 @@ export async function getCompanyHybridDocumentsSummary(params: {
   }
   return { ...data, httpStatus: res.status }
 }
+
+export async function issueCompanyHybridDocumentWatermark(params: {
+  id: number
+  issuedTo: string
+  purpose: string
+}): Promise<
+  {
+    success: boolean
+    message?: string
+    blob?: Blob
+    fileName?: string
+  } & CompanyHybridHttpMeta
+> {
+  const res = await apiFetchWithOffline('/api/issueCompanyHybridDocumentWatermark', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { message?: string }
+    return { success: false, message: data.message, httpStatus: res.status }
+  }
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const fileNameMatch = /filename="([^"]+)"/i.exec(disposition)
+  const fileName = fileNameMatch?.[1] || 'document-watermarked.pdf'
+  const blob = await res.blob()
+  return { success: true, blob, fileName, httpStatus: res.status }
+}

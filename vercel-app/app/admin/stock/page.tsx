@@ -32,23 +32,12 @@ import {
   updateItemOrderDisabled,
   type StockStatusItem,
 } from "@/lib/api-client"
-import { OFFICE_STORES } from "@/lib/permissions"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { dedupeOfficeStoreOptions, isOfficeStoreVariant } from "@/lib/office-store-canonical"
 
 /** 본사/오피스/본점/CM Office 등 → CM Office 로 통일 (중복 제거) */
 function normalizeStoreList(stores: string[]): string[] {
-  const result: string[] = []
-  let hasOffice = false
-  for (const s of stores) {
-    const isOfficeVariant = OFFICE_STORES.some((o) => s === o || s.toLowerCase() === o.toLowerCase())
-    if (isOfficeVariant) {
-      hasOffice = true
-    } else {
-      result.push(s)
-    }
-  }
-  if (hasOffice) result.push("CM Office")
-  return [...new Set(result)].sort()
+  return dedupeOfficeStoreOptions(stores)
 }
 
 export default function StockPage() {
@@ -83,11 +72,7 @@ export default function StockPage() {
   const isOffice = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
 
   const matrixStoreTargets = React.useMemo(() => {
-    return stores.filter((s) => {
-      if (s === "CM Office") return false
-      const low = s.toLowerCase()
-      return !OFFICE_STORES.some((o) => s === o || low === o.toLowerCase())
-    })
+    return stores.filter((s) => !isOfficeStoreVariant(s))
   }, [stores])
 
   const storesForFilter = React.useMemo(() => {

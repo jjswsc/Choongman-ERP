@@ -38,6 +38,7 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ['sharp'],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co", pathname: "/**" },

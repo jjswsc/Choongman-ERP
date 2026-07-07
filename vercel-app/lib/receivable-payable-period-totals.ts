@@ -145,14 +145,14 @@ export type PayableLedgerDatePair = {
   paymentDate?: string
 }
 
-function isPayableAccrualRow(refType: string | undefined, amount: number): boolean {
+export function isPayableAccrualRow(refType: string | undefined, amount: number): boolean {
   const t = String(refType || '')
   if (t === 'Inbound' || t === 'PO') return amount > 0
   if (t === 'Opening') return amount > 0
   return false
 }
 
-function isPayableSettlementRow(refType: string | undefined, amount: number): boolean {
+export function isPayableSettlementRow(refType: string | undefined, amount: number): boolean {
   if (String(refType || '') === 'Payment') return true
   return amount < 0
 }
@@ -214,9 +214,13 @@ export type LedgerPairStatus = 'settled' | 'open' | 'partial' | 'standalone'
 export type LedgerPairGroup<T extends { id?: number }> = {
   groupId: number
   accrual: T | null
+  /** 수동 연결로 묶인 매입 발생이 2건 이상일 때 */
+  accruals?: T[]
   settlements: T[]
   status: LedgerPairStatus
   openAmount: number
+  /** 미지급 수동 연결(payable_settlement_links)로 묶인 그룹 */
+  manualLink?: boolean
 }
 
 export type LedgerRowGroupMeta = {
@@ -224,13 +228,13 @@ export type LedgerRowGroupMeta = {
   role: 'accrual' | 'settlement' | 'standalone'
 }
 
-function resolveLedgerPairStatus(
-  accrual: { amount?: number } | null,
+export function resolveLedgerPairStatusForAmounts(
+  accrualAmtGross: number,
   settlements: { amount?: number }[]
 ): { status: LedgerPairStatus; openAmount: number } {
-  const accrualAmt = accrual ? Math.max(0, Number(accrual.amount ?? 0)) : 0
+  const accrualAmt = Math.max(0, Number(accrualAmtGross) || 0)
   const settledAmt = settlements.reduce((s, r) => s + Math.abs(Number(r.amount ?? 0)), 0)
-  if (!accrual) {
+  if (accrualAmt <= 0.009 && settlements.length > 0) {
     return { status: 'standalone', openAmount: 0 }
   }
   if (settlements.length === 0) {
@@ -245,6 +249,16 @@ function resolveLedgerPairStatus(
   return { status: 'open', openAmount: roundMoney(accrualAmt) }
 }
 
+function resolveLedgerPairStatus(
+  accrual: { amount?: number } | null,
+  settlements: { amount?: number }[]
+): { status: LedgerPairStatus; openAmount: number } {
+  if (!accrual) {
+    return { status: 'standalone', openAmount: 0 }
+  }
+  return resolveLedgerPairStatusForAmounts(Math.max(0, Number(accrual.amount ?? 0)), settlements)
+}
+
 type LedgerPairRow = {
   id?: number
   ref_type?: string
@@ -253,7 +267,9 @@ type LedgerPairRow = {
   trans_date?: string
 }
 
-function groupLedgerRowsByAccrualSettlement(
+export type { LedgerPairRow }
+
+export function groupLedgerRowsByAccrualSettlement(
   rows: LedgerPairRow[],
   isAccrual: (refType: string | undefined, amount: number) => boolean,
   isSettlement: (refType: string | undefined, amount: number) => boolean,
@@ -367,12 +383,18 @@ export function buildLedgerRowGroupMeta<T extends { id?: number }>(
 ): Map<number, LedgerRowGroupMeta> {
   const map = new Map<number, LedgerRowGroupMeta>()
   for (const g of groups) {
-    if (g.accrual?.id != null) {
-      map.set(g.accrual.id, { groupId: g.groupId, role: 'accrual' })
+    const accrualRows = g.accruals?.length ? g.accruals : g.accrual ? [g.accrual] : []
+    for (const a of accrualRows) {
+      if (a.id != null) {
+        map.set(a.id, { groupId: g.groupId, role: 'accrual' })
+      }
     }
     for (const s of g.settlements) {
       if (s.id != null) {
-        map.set(s.id, { groupId: g.groupId, role: g.accrual ? 'settlement' : 'standalone' })
+        map.set(s.id, {
+          groupId: g.groupId,
+          role: accrualRows.length > 0 ? 'settlement' : 'standalone',
+        })
       }
     }
   }
@@ -388,7 +410,8 @@ export function filterLedgerPairGroupsForDisplay<T extends { id?: number }>(
     visibleRows.map((r) => r.id).filter((id): id is number => id != null && id > 0)
   )
   return groups.filter((g) => {
-    const accrualVisible = g.accrual?.id != null && visibleIds.has(g.accrual.id)
+    const accrualRows = g.accruals?.length ? g.accruals : g.accrual ? [g.accrual] : []
+    const accrualVisible = accrualRows.some((a) => a.id != null && visibleIds.has(a.id))
     const settlementVisible = g.settlements.some((s) => s.id != null && visibleIds.has(s.id))
     if (unpaidOnly) {
       return accrualVisible && g.status !== 'settled'

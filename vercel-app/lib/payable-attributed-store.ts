@@ -5,6 +5,7 @@ import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import { INBOUND_HQ_LOCATION } from '@/lib/stock-location-patterns'
+import { canonicalOfficeStore } from '@/lib/office-store-canonical'
 import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
 import type { ErpStoreMatchIndex } from '@/lib/erp-store-identity'
 import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
@@ -294,39 +295,36 @@ export function resolvePayableAttributedStore(
   r: PayableTransactionRow,
   maps: PayableAttributionMaps
 ): string | null {
+  let store: string | null = null
   if (r.ref_type === 'Inbound' && r.ref_id != null) {
-    return maps.locationByInboundId.get(Number(r.ref_id)) || null
-  }
-  if (r.ref_type === 'PO' && r.ref_id != null) {
-    return maps.storeByPoId.get(Number(r.ref_id)) || null
-  }
-  if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) {
-    return maps.storeByAccrualId.get(Number(r.expense_accrual_id)) || null
-  }
-  if (r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0) {
-    return maps.storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
-  }
-  if (isPurchasePaymentRow(r)) {
+    store = maps.locationByInboundId.get(Number(r.ref_id)) || null
+  } else if (r.ref_type === 'PO' && r.ref_id != null) {
+    store = maps.storeByPoId.get(Number(r.ref_id)) || null
+  } else if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) {
+    store = maps.storeByAccrualId.get(Number(r.expense_accrual_id)) || null
+  } else if (r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0) {
+    store = maps.storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
+  } else if (isPurchasePaymentRow(r)) {
     const bankId = r.bank_transaction_id != null ? Number(r.bank_transaction_id) : 0
     if (bankId > 0) {
-      const linked = maps.storeByBankInboundLink.get(bankId)
-      if (linked) return linked
+      store = maps.storeByBankInboundLink.get(bankId) || null
     }
-    const vc = String(r.vendor_code || '').trim().toLowerCase()
-    const dt = String(r.trans_date || '').trim().slice(0, 10)
-    const amountAbs = Math.abs(Number(r.amount ?? 0))
-    const byDate = maps.accrualStoreByVendorDate.get(vendorDateStoreKey(vc, dt))
-    if (byDate) return byDate
-    if (amountAbs > 0) {
-      const byAmount = maps.accrualStoreByVendorAmount.get(vendorAmountStoreKey(vc, amountAbs))
-      if (byAmount) return byAmount
+    if (!store) {
+      const vc = String(r.vendor_code || '').trim().toLowerCase()
+      const dt = String(r.trans_date || '').trim().slice(0, 10)
+      const amountAbs = Math.abs(Number(r.amount ?? 0))
+      store = maps.accrualStoreByVendorDate.get(vendorDateStoreKey(vc, dt)) || null
+      if (!store && amountAbs > 0) {
+        store = maps.accrualStoreByVendorAmount.get(vendorAmountStoreKey(vc, amountAbs)) || null
+      }
     }
   }
-  if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
-    const bankStore = maps.storeByBankId.get(Number(r.bank_transaction_id))
-    if (bankStore) return bankStore
+  if (!store && r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
+    store = maps.storeByBankId.get(Number(r.bank_transaction_id)) || null
   }
-  return null
+  if (!store) return null
+  if (store === INBOUND_HQ_LOCATION) return store
+  return canonicalOfficeStore(store)
 }
 
 export async function buildPayableAttributionMaps(rows: PayableTransactionRow[]): Promise<PayableAttributionMaps> {

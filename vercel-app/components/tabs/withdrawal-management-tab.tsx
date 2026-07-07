@@ -52,6 +52,7 @@ import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-p
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { useSearchParams, useRouter } from "next/navigation"
 import { isOfficeStore } from "@/lib/permissions"
+import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from "@/lib/office-store-canonical"
 import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import { encodeCardPayeeCode, parseCardAccountIdFromPayeeCode } from "@/lib/prepayment-accrual-categories"
@@ -159,6 +160,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const isEditAccrualMode = !!editAccrualIdParam && !!Number(editAccrualIdParam)
   const isEditMode = searchParams.get("editMode") === "1" && !!bankTransactionIdParam && !!Number(bankTransactionIdParam)
   const isBankLinkMode = !isEditMode && !!bankTransactionIdParam && !!Number(bankTransactionIdParam)
+  /** 기존 통장 출금 건 수정·연동 — 지급예정(나중 지급) UI와 분리 */
+  const isExistingBankTxMode = isEditMode || isBankLinkMode
   const updateExistingParam = searchParams.get("updateExisting") === "1"
   const startStrParam = searchParams.get("startStr")
   const endStrParam = searchParams.get("endStr")
@@ -169,8 +172,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const showBankAccountOutsideTransfer = categoryMain !== "transfer"
 
   React.useEffect(() => {
+    if (isExistingBankTxMode) return
     if (categoryMain === "purchase") setExpensePayMode("later")
-  }, [categoryMain])
+  }, [categoryMain, isExistingBankTxMode])
 
   const mapCategoryToMainSub = React.useCallback((catRaw: string): { main: string; sub: string } => {
     const c = String(catRaw || "").trim().toLowerCase()
@@ -394,19 +398,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const pickOfficeStore = React.useCallback((list: string[]) => {
     if (list.length === 0) return ""
-    const office = list.find(
-      (s) =>
-        ["office", "본사", "오피스"].includes(String(s).toLowerCase()) ||
-        String(s).toLowerCase().includes("office")
-    )
-    return office || list[0]
+    if (list.includes(CANONICAL_OFFICE_STORE)) return CANONICAL_OFFICE_STORE
+    const office = list.find((s) => isOfficeStore(s))
+    return office ? canonicalOfficeStore(office) : list[0]
   }, [])
 
   const availableStores = React.useMemo(() => {
     const merged = Array.from(
       new Set(
         [...(stores || []), String(auth?.store || "").trim()]
-          .map((s) => String(s || "").trim())
+          .map((s) => canonicalOfficeStore(String(s || "").trim()))
           .filter(isSelectableStoreOption)
       )
     )
@@ -499,7 +500,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   React.useEffect(() => {
     const list = availableStores
-    const effectiveStore = storeName || (list[0] ? pickOfficeStore(list) : "")
+    const effectiveStore = isExistingBankTxMode
+      ? ""
+      : storeName || (list[0] ? pickOfficeStore(list) : "")
     getBankAccounts({
       store: effectiveStore || undefined,
       userStore: auth?.store,
@@ -509,13 +512,19 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       .then((accounts) => {
         setBankAccounts(accounts || [])
         setAccountId((prev) => {
+          const urlAccountId = String(searchParams.get("accountId") || "").trim()
+          const pinned = prev || urlAccountId
+          if (isExistingBankTxMode && pinned) {
+            const exists = (accounts || []).some((a) => String(a.id) === pinned)
+            if (exists) return pinned
+          }
           const exists = (accounts || []).some((a) => String(a.id) === prev)
           if (exists) return prev
           const first = (accounts || [])[0]
           return first ? String(first.id) : ""
         })
       })
-  }, [storeName, auth?.role, auth?.store, availableStores, pickOfficeStore])
+  }, [storeName, auth?.role, auth?.store, availableStores, pickOfficeStore, isExistingBankTxMode, searchParams])
 
   const currentMain = CATEGORY_MAIN_OPTIONS.find((c) => c.value === categoryMain)
   const hasSub = currentMain && currentMain.sub.length > 0
@@ -526,8 +535,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     categoryMain === "transfer" && isTransferPrepaymentKind(transferKind)
 
   const isLaterPayment =
-    isTransferPrepaymentAccrual ||
-    ((categoryMain === "purchase" || categoryMain === "expense") && expensePayMode === "later")
+    !isExistingBankTxMode &&
+    (isTransferPrepaymentAccrual ||
+      ((categoryMain === "purchase" || categoryMain === "expense") && expensePayMode === "later"))
+
+  const resolveAccountIdForSave = React.useCallback((): number => {
+    const fromState = Number(accountId || 0)
+    if (fromState > 0) return fromState
+    const fromUrl = Number(searchParams.get("accountId") || 0)
+    if (fromUrl > 0) return fromUrl
+    const first = bankAccounts[0]
+    return first ? Number(first.id) : 0
+  }, [accountId, bankAccounts, searchParams])
 
   const showRecurringTemplatesBar = categoryMain === "purchase" || categoryMain === "expense"
 
@@ -875,7 +894,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("wm_selectCategory", "Please select a withdrawal category."))
       return
     }
-    if (!accountId) {
+    const resolvedAccountId = resolveAccountIdForSave()
+    if (!resolvedAccountId) {
       await appAlert(tt("bankAccount", "Please select an account."))
       return
     }
@@ -909,7 +929,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     try {
       const res = await updateExpenseRegisterItem({
         bankTransactionId: Number(bankTransactionIdParam),
-        accountId: Number(accountId),
+        accountId: resolvedAccountId,
         amount: amt,
         transDate,
         memo: memo.trim() || undefined,
@@ -1583,7 +1603,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
         return
       }
-      if (!accountId) {
+      const resolvedAccountId = resolveAccountIdForSave()
+      if (!resolvedAccountId) {
         await appAlert(tt("bankAccount", "Please select an account."))
         return
       }
@@ -1602,13 +1623,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         }
       }
 
-      await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
+      if (!updateExistingParam) {
+        await appAlert(tt("purchasePaymentViaExpenseOnly", PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE))
+      }
 
       setSaving(true)
       try {
         const res = await updateExpenseRegisterItem({
           bankTransactionId: bankTxId,
-          accountId: Number(accountId),
+          accountId: resolvedAccountId,
           transDate,
           amount: amt,
           memo: memo.trim() || undefined,
@@ -1689,7 +1712,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         await appAlert(tt("wm_transferAccountSubjectRequired", "이체 계정과목을 선택해 주세요."))
         return
       }
-      if (!accountId) {
+      const resolvedAccountId = resolveAccountIdForSave()
+      if (!resolvedAccountId) {
         await appAlert(tt("bankAccount", "Please select an account."))
         return
       }
@@ -1706,7 +1730,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       try {
         const res = await updateExpenseRegisterItem({
           bankTransactionId: bankTxId,
-          accountId: Number(accountId),
+          accountId: resolvedAccountId,
           transDate,
           amount: amt,
           memo: memo.trim() || undefined,
@@ -1733,7 +1757,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
     }
-    if (!accountId) {
+    const resolvedAccountId = resolveAccountIdForSave()
+    if (!resolvedAccountId) {
       await appAlert(tt("bankAccount", "Please select an account."))
       return
     }
@@ -1748,7 +1773,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     try {
       const res = await updateExpenseRegisterItem({
         bankTransactionId: bankTxId,
-        accountId: Number(accountId),
+        accountId: resolvedAccountId,
         transDate,
         amount: amt,
         memo: memoText,
@@ -2351,7 +2376,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               {!isLaterPayment && showBankAccountOutsideTransfer && (
                 <div className="w-[220px]">
                   <Label>{tt("bankAccount", "Account")}</Label>
-                  <Select value={accountId} onValueChange={setAccountId} disabled={isBankLinkMode}>
+                  <Select
+                    value={accountId || "__none__"}
+                    onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)}
+                    disabled={isExistingBankTxMode}
+                  >
                     <SelectTrigger className="w-[220px] h-9 mt-1">
                       <SelectValue placeholder={tt("bankAccount", "Select Account")} />
                     </SelectTrigger>

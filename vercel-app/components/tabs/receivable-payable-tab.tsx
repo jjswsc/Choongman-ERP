@@ -116,6 +116,7 @@ import { useErpTabActive } from "@/lib/erp-page-visibility"
 
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
 import { INBOUND_HQ_LOCATION } from "@/lib/stock-location-patterns"
+import { canonicalOfficeStore } from "@/lib/office-store-canonical"
 import {
   type LineItemsCacheEntry,
   type ReceivablePayableListLoadOverrides,
@@ -215,8 +216,9 @@ export function ReceivablePayableTab() {
       if (v === INBOUND_HQ_LOCATION) {
         return t("inLocationHQ") || tt("inLocationHQ", "입고등록(본사)")
       }
-      const resolved = formatStoreLabel(resolveStoreKey(v))
-      return resolved || v
+      const officeCanon = canonicalOfficeStore(v)
+      const resolved = formatStoreLabel(resolveStoreKey(officeCanon))
+      return resolved || officeCanon || v
     },
     [formatStoreLabel, resolveStoreKey, t, tt]
   )

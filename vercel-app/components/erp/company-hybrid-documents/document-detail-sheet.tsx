@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ExternalLink, FileUp, Link2, Pencil, Trash2 } from "lucide-react"
+import { ExternalLink, FileUp, Link2, Pencil, Stamp, Trash2 } from "lucide-react"
+import { canShowCompanyHybridWatermarkAction } from "@/components/erp/company-hybrid-documents/document-watermark-dialog"
 import type { CompanyHybridDocumentEvent, CompanyHybridDocumentListItem } from "@/lib/api-client"
 import { getCompanyHybridDocumentEvents } from "@/lib/api-client"
 import { formatCompanyHybridDocDateForInput, companyHybridDocVisibilityFromDocType } from "@/lib/company-hybrid-documents"
@@ -27,12 +28,21 @@ type Props = {
   labelCorrStatus: (s: string | undefined) => string
   canMutate: boolean
   onOpenUrl: (row: CompanyHybridDocumentListItem) => void
+  onIssueWatermark: (row: CompanyHybridDocumentListItem) => void
   onEdit: (row: CompanyHybridDocumentListItem) => void
   onDelete: (row: CompanyHybridDocumentListItem) => void
   onUnauthorized: (httpStatus: number) => boolean
+  eventsRefreshKey?: number
 }
 
-function auditActionLabel(action: string, t: (key: string) => string): string {
+function auditActionLabel(
+  action: string,
+  detail: Record<string, unknown> | null | undefined,
+  t: (key: string) => string
+): string {
+  if (action === "view" && detail && String(detail.kind || "") === "watermark_issue") {
+    return t("companyHybridDocAuditActionWatermark")
+  }
   if (action === "create") return t("companyHybridDocAuditActionCreate")
   if (action === "update") return t("companyHybridDocAuditActionUpdate")
   if (action === "delete") return t("companyHybridDocAuditActionDelete")
@@ -52,9 +62,11 @@ export function CompanyHybridDocumentDetailSheet({
   labelCorrStatus,
   canMutate,
   onOpenUrl,
+  onIssueWatermark,
   onEdit,
   onDelete,
   onUnauthorized,
+  eventsRefreshKey = 0,
 }: Props) {
   const [events, setEvents] = React.useState<CompanyHybridDocumentEvent[]>([])
   const [eventsLoading, setEventsLoading] = React.useState(false)
@@ -75,7 +87,7 @@ export function CompanyHybridDocumentDetailSheet({
     return () => {
       cancelled = true
     }
-  }, [open, row?.id, onUnauthorized])
+  }, [open, row?.id, onUnauthorized, eventsRefreshKey])
 
   const corr = row ? getCorrespondenceFromMetadata(row.metadata) : null
   const hasCorr = row ? documentHasCorrespondence(row.metadata) : false
@@ -186,6 +198,18 @@ export function CompanyHybridDocumentDetailSheet({
                 {t("companyHybridDocOpen")}
                 <ExternalLink className="h-3.5 w-3.5 opacity-70" />
               </Button>
+              {canShowCompanyHybridWatermarkAction(row) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5"
+                  onClick={() => onIssueWatermark(row)}
+                >
+                  <Stamp className="h-4 w-4" />
+                  {t("companyHybridDocWatermarkIssue")}
+                </Button>
+              ) : null}
               {canMutate ? (
                 <>
                   <Button type="button" size="sm" variant="secondary" className="gap-1.5" onClick={() => onEdit(row)}>
@@ -221,7 +245,7 @@ export function CompanyHybridDocumentDetailSheet({
                   {events.map((ev) => (
                     <li key={ev.id} className="rounded-md border px-2 py-1.5">
                       <div className="flex flex-wrap items-center justify-between gap-1">
-                        <span className="font-medium">{auditActionLabel(ev.action, t)}</span>
+                        <span className="font-medium">{auditActionLabel(ev.action, ev.detail, t)}</span>
                         <span className="text-muted-foreground">{formatHybridDocumentCreatedAt(ev.created_at)}</span>
                       </div>
                       <p className="text-muted-foreground">

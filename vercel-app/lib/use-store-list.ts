@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getStoreListWithCache } from './offline/erp-offline'
+import { dedupeOfficeStoreOptions } from './office-store-canonical'
 import { buildPosTerminalStoreCodes } from './pos-sales-test-office'
 import { resolveStoreListKey, labelForStore } from './store-list-keys'
 
@@ -38,7 +39,7 @@ export function useStoreList() {
   )
 
   const posStores = useMemo(
-    () => buildPosTerminalStoreCodes(catalogStores, storeLabels),
+    () => dedupeOfficeStoreOptions(buildPosTerminalStoreCodes(catalogStores, storeLabels)),
     [catalogStores, storeLabels]
   )
 

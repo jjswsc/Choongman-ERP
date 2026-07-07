@@ -6,6 +6,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
 import { vatSplitFromTaxInvoiceGross } from '@/lib/invoice-backed-input-vat-ledger'
 import { requireAuth } from '@/lib/verify-auth'
+import { canonicalOfficeStore } from '@/lib/office-store-canonical'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 type BankTxRow = {
@@ -136,8 +137,9 @@ export async function POST(request: NextRequest) {
 
     const amount = Math.abs(Number(bankRow.amount || 0))
     const expenseDate = String(bankRow.trans_date || '').slice(0, 10)
-    const effectiveStoreName =
-      storeName || String(bankRow.store_name || bankRow.store || '').trim() || null
+    const effectiveStoreName = canonicalOfficeStore(
+      storeName || String(bankRow.store_name || bankRow.store || '').trim()
+    ) || null
     const vatAmount = resolveVatAmountFromBank(bankRow, amount, body)
     if (!amount || !expenseDate || !/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) {
       return NextResponse.json({ success: false, message: '통장 거래 정보가 올바르지 않습니다.' }, { status: 400, headers })

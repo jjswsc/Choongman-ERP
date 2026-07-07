@@ -10,6 +10,7 @@ import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { canonicalOfficeStore } from '@/lib/office-store-canonical'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
     const dueDateRaw = String(body.dueDate || body.due_date || '').trim()
     const dueDate = dueDateRaw ? dueDateRaw.slice(0, 10) : null
     const memo = String(body.memo || '').trim()
-    const storeName = String(body.storeName || body.store_name || '').trim()
+    const storeName = canonicalOfficeStore(String(body.storeName || body.store_name || '').trim())
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const userRole = String(auth.role || '').trim()
     const callerStore = String(auth.store || '').trim()

@@ -698,6 +698,7 @@ export function ExpenseRegisterSearchTab() {
                                     q.set("editMode", "1")
                                     q.set("bankTransactionId", String(r.bankTransactionId))
                                     if (r.accountId) q.set("accountId", String(r.accountId))
+                                    if (r.storeName) q.set("storeName", r.storeName)
                                     if (r.bankTransDate) q.set("transDate", r.bankTransDate)
                                     if (r.bankAmount) q.set("amount", String(r.bankAmount))
                                     if (r.memo) {

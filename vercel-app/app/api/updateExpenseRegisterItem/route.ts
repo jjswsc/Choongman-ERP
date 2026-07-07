@@ -9,6 +9,7 @@ import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
   id?: number
+  account_id?: number
   trans_type?: string
   amount?: number
   trans_date?: string
@@ -113,8 +114,19 @@ export async function POST(request: NextRequest) {
     const invoicePhotoUrl = String(body.invoicePhotoUrl || '').trim()
 
     if (!bankTransactionId) return NextResponse.json({ success: false, message: '거래 ID가 필요합니다.' }, { status: 400, headers })
+
+    const bankRows = (await supabaseSelectFilter(
+      'bank_transactions',
+      `id=eq.${bankTransactionId}`,
+      { limit: 1, select: 'id,account_id,trans_type,amount,trans_date,memo,note' }
+    )) as BankTxRow[] | null
+    const bankRow = bankRows?.[0]
+    if (!bankRow?.id) return NextResponse.json({ success: false, message: '대상 거래를 찾을 수 없습니다.' }, { status: 404, headers })
+
+    const effectiveAccountId = accountId || Number(bankRow.account_id || 0)
+
     if (action !== 'delete') {
-      if (!accountId) return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
+      if (!effectiveAccountId) return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
       if (!amount || amount <= 0) return NextResponse.json({ success: false, message: '금액을 입력해 주세요.' }, { status: 400, headers })
       if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) return NextResponse.json({ success: false, message: '날짜 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
@@ -141,13 +153,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const bankRows = (await supabaseSelectFilter(
-      'bank_transactions',
-      `id=eq.${bankTransactionId}`,
-      { limit: 1, select: 'id,trans_type,amount,trans_date,memo,note' }
-    )) as BankTxRow[] | null
-    const bankRow = bankRows?.[0]
-    if (!bankRow?.id) return NextResponse.json({ success: false, message: '대상 거래를 찾을 수 없습니다.' }, { status: 404, headers })
     const transTypeLower = String(bankRow.trans_type || '').toLowerCase()
 
     if (action === 'delete') {
@@ -232,7 +237,7 @@ export async function POST(request: NextRequest) {
     const existingNote = String(bankRow.note || '')
     const composedNote = composeBankNoteWithCategoryAndOptionalAccrualPrefix(existingNote, memo, category!)
     const patch: Record<string, unknown> = {
-      account_id: accountId,
+      account_id: effectiveAccountId,
       trans_date: transDate,
       amount: -amount,
       memo: memo || null,

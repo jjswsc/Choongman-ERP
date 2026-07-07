@@ -80,6 +80,7 @@ import {
 import { CompanyHybridDocumentListSkeleton } from "@/components/erp/company-hybrid-documents/document-list-skeleton"
 import { CompanyHybridDocumentListTable } from "@/components/erp/company-hybrid-documents/document-list-table"
 import { CompanyHybridDocumentDetailSheet } from "@/components/erp/company-hybrid-documents/document-detail-sheet"
+import { CompanyHybridDocumentWatermarkDialog } from "@/components/erp/company-hybrid-documents/document-watermark-dialog"
 import {
   CompanyHybridDocumentRegisterSheet,
   type RegisterFormState,
@@ -243,6 +244,9 @@ export function CompanyHybridDocumentsPanel() {
   const [registerOpen, setRegisterOpen] = React.useState(false)
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailRow, setDetailRow] = React.useState<CompanyHybridDocumentListItem | null>(null)
+  const [watermarkOpen, setWatermarkOpen] = React.useState(false)
+  const [watermarkRow, setWatermarkRow] = React.useState<CompanyHybridDocumentListItem | null>(null)
+  const [detailEventsRefreshKey, setDetailEventsRefreshKey] = React.useState(0)
   const [editing, setEditing] = React.useState<CompanyHybridDocumentListItem | null>(null)
   const [registerForm, setRegisterForm] = React.useState<RegisterFormState>(() => defaultRegisterForm(""))
   const [fileBusy, setFileBusy] = React.useState(false)
@@ -1520,9 +1524,30 @@ export function CompanyHybridDocumentsPanel() {
         labelCorrStatus={labelCorrStatusCell}
         canMutate={detailRow ? canMutateDocStore(detailRow.store) : false}
         onOpenUrl={(row) => void onOpen(row)}
+        onIssueWatermark={(row) => {
+          setWatermarkRow(row)
+          setWatermarkOpen(true)
+        }}
         onEdit={(row) => openEditRegister(row)}
         onDelete={(row) => void onDelete(row)}
         onUnauthorized={onUnauthorized}
+        eventsRefreshKey={detailEventsRefreshKey}
+      />
+
+      <CompanyHybridDocumentWatermarkDialog
+        open={watermarkOpen}
+        onOpenChange={(open) => {
+          setWatermarkOpen(open)
+          if (!open) setWatermarkRow(null)
+        }}
+        row={watermarkRow}
+        t={t}
+        onUnauthorized={onUnauthorized}
+        onIssued={() => {
+          if (watermarkRow?.id && detailRow?.id === watermarkRow.id) {
+            setDetailEventsRefreshKey((k) => k + 1)
+          }
+        }}
       />
 
       <CompanyHybridDocumentRegisterSheet
