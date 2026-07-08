@@ -90,10 +90,15 @@ import {
   mpCardSearchInputClass,
   memberPortalGreetingKey,
 } from "@/lib/member-portal-design"
-import { DEFAULT_MEMBER_PORTAL_UI_THEME, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
+import {
+  DEFAULT_MEMBER_PORTAL_UI_THEME,
+  memberPortalUiThemeStyle,
+  type MemberPortalUiTheme,
+} from "@/lib/member-portal-theme"
 import { clearMemberPortalMemberLocalData, readFavoriteStoreCodesFromLocalStorage, writeFavoriteStoreCodesToLocalStorage } from "@/lib/member-portal-client-storage"
 import { sortStoresWithFavoritesFirst, toggleFavoriteStoreCode } from "@/lib/member-portal-favorite-stores"
 import {
+  MP_PAGE_BG_CLASS,
   mpGenderBtnActiveClass,
   mpGenderBtnClass,
   mpInputClass,
@@ -712,12 +717,14 @@ export function MemberPortalApp() {
 
   if (!member) {
     const birthDateReady = /^\d{4}-\d{2}-\d{2}$/.test(birthDate)
-    const portalFieldClass =
-      "h-12 rounded-2xl border-stone-200 bg-white text-stone-900 shadow-sm placeholder:text-stone-400 focus-visible:border-amber-500/50 focus-visible:ring-amber-400/20"
-    const portalLabelClass = "text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500"
+    const portalFieldClass = `${mpInputClass} h-12`
+    const portalLabelClass = `text-[11px] font-medium uppercase tracking-[0.14em] ${MP_CARD_TEXT_SECONDARY}`
 
     return (
-      <div className={`relative bg-[#faf7f2] text-stone-900 ${embedPreview ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh] overflow-x-hidden"}`}>
+      <div
+        className={`relative ${MP_PAGE_BG_CLASS} ${MP_CARD_TEXT_PRIMARY} ${embedPreview ? "h-[100dvh] overflow-hidden" : "min-h-[100dvh] overflow-x-hidden"}`}
+        style={memberPortalUiThemeStyle(uiTheme)}
+      >
         <MemberPortalLoungeBackdrop
           customFullBackgroundUrl={designBackgrounds.loginBackgroundUrl}
           heroFoodImageUrl={designBackgrounds.heroFoodImageUrl}
@@ -764,7 +771,7 @@ export function MemberPortalApp() {
           </div>
 
           <div className="rounded-[28px] border border-stone-200/80 bg-white/95 p-5 shadow-[0_12px_40px_rgba(28,21,16,0.08)]">
-            <div className="mb-4 flex items-center gap-2 text-stone-600">
+            <div className={`mb-4 flex items-center gap-2 ${MP_CARD_TEXT_SECONDARY}`}>
               <Sparkles className="h-4 w-4 text-amber-600" aria-hidden />
               <p className="text-sm font-medium tracking-wide">{t("lineLoginDesc")}</p>
             </div>
@@ -816,8 +823,8 @@ export function MemberPortalApp() {
             </div>
 
             {authPanel === "signup" ? (
-              <div className="mt-5 border-t border-white/10 pt-5">
-                <p className="mb-4 text-sm font-medium text-white/80">{t("signupTitle")}</p>
+              <div className="mt-5 border-t border-stone-200/80 pt-5">
+                <p className={`mb-4 text-sm font-medium ${MP_CARD_TEXT_PRIMARY}`}>{t("signupTitle")}</p>
                 <div className="space-y-3.5">
                   <div className="space-y-1.5">
                     <Label className={portalLabelClass}>{t("signupStoreLabel")}</Label>
@@ -826,14 +833,14 @@ export function MemberPortalApp() {
                       onChange={(e) => setSignupStoreCode(e.target.value)}
                       className={`${portalFieldClass} w-full px-3 text-sm`}
                     >
-                      <option value="" className="bg-[#141418] text-white/70">
+                      <option value="" className="bg-white text-stone-500">
                         {t("signupStorePlaceholder")}
                       </option>
-                      <option value={signupOfficeStoreCode} className="bg-[#141418] text-white">
+                      <option value={signupOfficeStoreCode} className="bg-white text-stone-900">
                         {t("signupStoreOffice")}
                       </option>
                       {signupStoreOptions.map((store) => (
-                        <option key={store.storeCode} value={store.storeCode} className="bg-[#141418] text-white">
+                        <option key={store.storeCode} value={store.storeCode} className="bg-white text-stone-900">
                           {store.displayName}
                         </option>
                       ))}
@@ -860,7 +867,7 @@ export function MemberPortalApp() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className={portalLabelClass}>{t("birthDateLabel")}</Label>
-                    <BirthDateFields value={birthDate} onChange={setBirthDate} />
+                    <BirthDateFields value={birthDate} onChange={setBirthDate} variant="light" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className={portalLabelClass}>{t("genderLabel")}</Label>
@@ -872,11 +879,7 @@ export function MemberPortalApp() {
                             key={value}
                             type="button"
                             onClick={() => setSignupGender(value)}
-                            className={`h-11 rounded-2xl border text-sm font-medium transition ${
-                              active
-                                ? "border-[#ef233c]/60 bg-[#ef233c]/90 text-white"
-                                : "border-white/10 bg-white/[0.04] text-white/80 hover:bg-white/[0.07]"
-                            }`}
+                            className={active ? mpGenderBtnActiveClass : mpGenderBtnClass}
                           >
                             {value === "M" ? t("genderMale") : t("genderFemale")}
                           </button>
@@ -887,23 +890,23 @@ export function MemberPortalApp() {
                   <label
                     className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 text-sm transition ${
                       signupConsentMarketing
-                        ? "border-amber-400/35 bg-amber-400/[0.08]"
-                        : "border-white/10 bg-black/25"
+                        ? "border-amber-300/50 bg-amber-50"
+                        : "border-stone-200 bg-stone-50/90"
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={signupConsentMarketing}
                       onChange={(e) => setSignupConsentMarketing(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-amber-400"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
                     />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-2 font-medium text-white/90">
-                        <Gift className="h-4 w-4 shrink-0 text-amber-300" aria-hidden />
+                      <span className={`flex items-center gap-2 font-medium ${MP_CARD_TEXT_PRIMARY}`}>
+                        <Gift className="h-4 w-4 shrink-0 text-amber-600" aria-hidden />
                         {t("consentMarketing")}
                       </span>
                       {signupWelcomeCouponEnabled ? (
-                        <span className="mt-1 block text-xs leading-relaxed text-amber-100/75">
+                        <span className={`mt-1 block text-xs leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>
                           {signupConsentMarketing ? t("consentMarketingSignupHint") : t("consentMarketingCouponHint")}
                         </span>
                       ) : null}
@@ -943,8 +946,8 @@ export function MemberPortalApp() {
             ) : null}
 
             {authPanel === "login" ? (
-              <div className="mt-5 border-t border-white/10 pt-5">
-                <p className="mb-4 text-sm font-medium text-white/80">{t("phoneBirthTitle")}</p>
+              <div className="mt-5 border-t border-stone-200/80 pt-5">
+                <p className={`mb-4 text-sm font-medium ${MP_CARD_TEXT_PRIMARY}`}>{t("phoneBirthTitle")}</p>
                 <div className="space-y-3.5">
                   <div className="space-y-1.5">
                     <Label className={portalLabelClass}>{t("phoneLabel")}</Label>
@@ -958,12 +961,12 @@ export function MemberPortalApp() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className={portalLabelClass}>{t("birthDateLabel")}</Label>
-                    <BirthDateFields value={birthDate} onChange={setBirthDate} />
+                    <BirthDateFields value={birthDate} onChange={setBirthDate} variant="light" />
                   </div>
                   <Button
                     onClick={loginWithPhoneBirth}
                     disabled={actionLoading || !normalizeMemberPhone(phone) || !birthDateReady}
-                    className="h-12 w-full rounded-2xl border border-amber-400/30 bg-amber-400/10 text-base font-semibold text-amber-50 hover:bg-amber-400/15"
+                    className={`w-full ${mpPrimaryBtn}`}
                   >
                     {actionLoading ? t("loginChecking") : t("loginBtn")}
                   </Button>

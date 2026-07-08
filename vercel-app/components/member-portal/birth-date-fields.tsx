@@ -9,7 +9,11 @@ import {
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 import { cn } from "@/lib/utils"
-import { mpSelectClass, mpSelectDarkClass, MP_CARD_TEXT_SUBTLE } from "@/lib/member-portal-design"
+import {
+  mpSelectClass,
+  mpSelectDarkClass,
+  MP_CARD_TEXT_SECONDARY,
+} from "@/lib/member-portal-design"
 
 const MONTH_KEYS = [
   "month1",
@@ -64,9 +68,9 @@ export function BirthDateFields({ value, onChange, className, variant = "dark" }
 
   const light = variant === "light"
   const selectClass = light ? mpSelectClass : mpSelectDarkClass
-  const subLabelClass = light ? `text-[11px] ${MP_CARD_TEXT_SUBTLE}` : "text-[11px] text-white/45"
-  const hintClass = light ? `text-[11px] ${MP_CARD_TEXT_SUBTLE}` : "text-[11px] text-white/35"
-  const previewClass = light ? "text-[11px] text-amber-700" : "text-[11px] text-amber-200/70"
+  const subLabelClass = light ? `text-[11px] ${MP_CARD_TEXT_SECONDARY}` : "text-[11px] text-white/45"
+  const hintClass = light ? `text-[11px] ${MP_CARD_TEXT_SECONDARY}` : "text-[11px] text-white/35"
+  const previewClass = light ? `text-[11px] ${MP_CARD_TEXT_SECONDARY}` : "text-[11px] text-amber-200/70"
   const optionClass = light ? "bg-white text-stone-900" : "bg-[#121214]"
 
   return (
