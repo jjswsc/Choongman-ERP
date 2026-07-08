@@ -4,6 +4,7 @@ import {
   supabaseSelectFilterStrippingUnknownColumns,
   supabaseUpdateByFilterWithPgrst204Fallback,
 } from '@/lib/supabase-pgrst204-retry'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { applyLoyaltyOnOrder, ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
 import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
     let paymentQr = normalizedTender.paymentQr
     let paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
     let paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
-    const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
+    const pointEarnedReq = roundMemberPointsEarn(body?.pointEarned)
     const guestCountBody = body?.guestCount ?? body?.guest_count
     const pricingAdjustments = body?.pricingAdjustments || {}
     const linkposPayment =
@@ -216,8 +217,8 @@ export async function POST(req: NextRequest) {
         : String(current?.member_no || '').trim()
     const pointUsed =
       body?.pointUsed != null && body?.pointUsed !== ''
-        ? Math.max(0, Math.trunc(Number(body.pointUsed)))
-        : Math.max(0, Math.trunc(Number(current?.point_used || 0)))
+        ? roundMemberPointsEarn(body.pointUsed)
+        : roundMemberPointsEarn(current?.point_used)
 
     const memo = preserveGrabDeliveryMemoAnchor(String(body?.memo ?? ''), String(current?.memo ?? ''))
 

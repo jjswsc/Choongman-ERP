@@ -18,6 +18,7 @@ import {
   resolvePointEarnChannel,
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
+import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -211,13 +212,13 @@ export async function adjustMemberPoints(params: {
   note?: string
 }) {
   const memberId = Number(params.memberId || 0)
-  const points = Math.trunc(Number(params.points || 0))
+  const points = normalizeMemberPoints(params.points)
   if (!memberId) throw new Error('유효한 memberId가 필요합니다.')
   if (!points) throw new Error('포인트 변경값이 필요합니다.')
   const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
   if (!rows?.length) throw new Error('회원을 찾을 수 없습니다.')
   const member = rows[0]
-  const nextBalance = Number(member.point_balance || 0) + points
+  const nextBalance = normalizeMemberPoints(Number(member.point_balance || 0) + points)
   if (nextBalance < 0) throw new Error('포인트가 부족합니다.')
   await supabaseInsert('member_points_ledger', {
     member_id: memberId,
@@ -230,7 +231,7 @@ export async function adjustMemberPoints(params: {
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
     point_balance: nextBalance,
     updated_at: getBangkokDateTimeString(),
-    ...(points > 0 ? { tier_points: Math.max(0, Math.trunc(Number(member.tier_points || 0))) + points } : {}),
+    ...(points > 0 ? { tier_points: roundMemberPointsEarn(Number(member.tier_points || 0) + points) } : {}),
   })
   await recalculateMemberTier(memberId)
 }
@@ -350,7 +351,7 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   const paidLike = status === 'paid' || status === 'completed' || isPosCompletionStatus(status)
   if (!paymentComplete && !paidLike) return 0
 
-  const priorEarned = Math.max(0, Math.trunc(Number(order.point_earned || 0)))
+  const priorEarned = roundMemberPointsEarn(order.point_earned)
   if (priorEarned > 0) return priorEarned
 
   try {
@@ -359,7 +360,7 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
       `member_id=eq.${memberId}&order_id=eq.${id}&kind=eq.earn`,
       { limit: 1, select: 'points' }
     )) as Array<{ points?: number | null }>
-    const ledgerPts = Math.max(0, Math.trunc(Number(ledger?.[0]?.points || 0)))
+    const ledgerPts = roundMemberPointsEarn(ledger?.[0]?.points)
     if (ledgerPts > 0) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: ledgerPts })
       return ledgerPts
@@ -373,13 +374,13 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
     orderId: id,
     storeCode: String(order.store_code || '').trim(),
     totalAmount: total,
-    pointUsed: Math.max(0, Math.trunc(Number(order.point_used || 0))),
+    pointUsed: roundMemberPointsEarn(order.point_used),
     orderNo: String(order.order_no || ''),
     couponCode: String(order.coupon_code || '').trim() || undefined,
     orderType: String(order.order_type || ''),
     createdBy: String(order.created_by || ''),
   })
-  const earned = Math.max(0, Math.trunc(Number(loyalty.pointEarned || 0)))
+  const earned = roundMemberPointsEarn(loyalty.pointEarned)
   if (earned > 0) {
     await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: earned })
   }
@@ -430,7 +431,7 @@ export async function applyLoyaltyOnOrder(params: {
   if (!member) return { pointEarned: 0, tierCode: 'BRONZE', stamp }
   const tiers = await getActiveTiers()
   const { tierCode: currentTierCode, pointRate } = resolveMemberTierPointRate(tiers, toText(member.tier_code))
-  const pointUsed = Math.max(0, Math.trunc(Number(params.pointUsed || 0)))
+  const pointUsed = roundMemberPointsEarn(params.pointUsed)
   const earnBreakdown = computeMemberPointEarn({
     totalAmount: params.totalAmount,
     pointRate,
@@ -442,7 +443,7 @@ export async function applyLoyaltyOnOrder(params: {
     birthDate: toText(member.birth_date) || null,
     todayYmd: params.orderAtYmd,
   })
-  const explicitEarn = params.pointEarned != null ? Math.trunc(Number(params.pointEarned)) : null
+  const explicitEarn = params.pointEarned != null ? roundMemberPointsEarn(params.pointEarned) : null
   const pointEarned =
     explicitEarn != null && explicitEarn > 0 ? explicitEarn : earnBreakdown.pointEarned
   const earnNote = formatPointEarnLedgerNote(toText(params.orderNo), earnBreakdown)
@@ -455,12 +456,12 @@ export async function applyLoyaltyOnOrder(params: {
       )) as Array<{ kind?: string }>)
     : []
   const existingKinds = new Set((existingByOrder || []).map((x) => toText(x.kind)))
-  const balanceBefore = Math.max(0, Math.trunc(Number(member.point_balance || 0)))
+  const balanceBefore = roundMemberPointsEarn(member.point_balance)
   const shouldInsertUse = pointUsed > 0 && !existingKinds.has('use')
   const shouldInsertEarn = pointEarned > 0 && !existingKinds.has('earn')
   const appliedUse = shouldInsertUse ? Math.min(pointUsed, balanceBefore) : 0
   const appliedEarn = shouldInsertEarn ? pointEarned : 0
-  const nextBalance = Math.max(0, balanceBefore - appliedUse + appliedEarn)
+  const nextBalance = roundMemberPointsEarn(balanceBefore - appliedUse + appliedEarn)
   const shouldApplyLifetime = shouldInsertUse || shouldInsertEarn
   const nextLifetime =
     Number(member.lifetime_amount || 0) + (shouldApplyLifetime ? Math.max(0, Number(params.totalAmount || 0)) : 0)
@@ -491,9 +492,12 @@ export async function applyLoyaltyOnOrder(params: {
   // persistPosOrderCouponRedemptions 한 곳에서만 수행한다. 여기서 중복 처리하면
   // 결제·재처리마다 phantom used 행이 쌓여 회원앱에 중복 쿠폰이 남는다.
 
-  const nextTierPoints =
-    Math.max(0, Math.trunc(Number(member.tier_points || 0)), Math.trunc(Number(member.line_tier_points || 0))) +
-    (appliedEarn > 0 ? appliedEarn : 0)
+  const nextTierPoints = roundMemberPointsEarn(
+    Math.max(
+      roundMemberPointsEarn(member.tier_points),
+      roundMemberPointsEarn(member.line_tier_points)
+    ) + (appliedEarn > 0 ? appliedEarn : 0)
+  )
 
   if (!shouldInsertUse && !shouldInsertEarn) {
     return { pointEarned: 0, tierCode: currentTierCode, stamp }

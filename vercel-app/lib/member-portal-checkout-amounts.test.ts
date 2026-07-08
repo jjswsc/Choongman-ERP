@@ -30,7 +30,7 @@ describe('resolveMemberPortalPointAndQr', () => {
         requestedPointUsed: 100,
         minQrBaht: 1,
       })
-    ).toEqual({ pointUsed: 99, qrAmount: 1.5, requiresQr: true })
+    ).toEqual({ pointUsed: 99.5, qrAmount: 1, requiresQr: true })
   })
 
   it('respects point balance cap', () => {

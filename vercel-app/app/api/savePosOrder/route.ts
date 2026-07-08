@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
@@ -233,8 +234,8 @@ export async function POST(req: NextRequest) {
     const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
     const memberId = Math.max(0, Number(body.memberId ?? 0))
     const memberNo = String(body.memberNo ?? '').trim()
-    const pointUsed = Math.max(0, Math.trunc(Number(body.pointUsed ?? 0)))
-    const pointEarnedReq = Math.max(0, Math.trunc(Number(body.pointEarned ?? 0)))
+    const pointUsed = roundMemberPointsEarn(body.pointUsed)
+    const pointEarnedReq = roundMemberPointsEarn(body.pointEarned)
     const guestCountReq = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
     const itemsRaw = Array.isArray(body.items) ? body.items : []
     const itemsWithOption = await enrichOrderItemsWithOptionCode(itemsRaw)

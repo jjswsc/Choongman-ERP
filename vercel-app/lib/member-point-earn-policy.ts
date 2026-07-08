@@ -1,4 +1,5 @@
 import { addBangkokCalendarDays, getBangkokStartOfDayUtcIso, getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 
 export type MemberPointEarnChannel = 'dine_in' | 'takeout' | 'delivery' | 'member_portal'
 
@@ -175,7 +176,7 @@ export function computeMemberPointEarn(params: {
   const channel = params.channel
   const total = Math.max(0, Number(params.totalAmount || 0))
   const pointRate = Math.max(0, Number(params.pointRate || 0))
-  const baseEarn = Math.max(0, Math.floor(total * pointRate))
+  const baseEarn = roundMemberPointsEarn(total * pointRate)
 
   const channelMultiplier = Math.max(1, policy.channelMultipliers[channel] || 1)
   const birthdayApplied =
@@ -189,7 +190,7 @@ export function computeMemberPointEarn(params: {
   if (birthdayApplied) candidates.push(Math.max(1, policy.birthday.multiplier))
   if (periodPromoApplied) candidates.push(Math.max(1, policy.periodPromo.multiplier))
   const effectiveMultiplier = Math.max(1, ...candidates)
-  const pointEarned = Math.max(0, Math.floor(baseEarn * effectiveMultiplier))
+  const pointEarned = roundMemberPointsEarn(baseEarn * effectiveMultiplier)
 
   return {
     pointEarned,

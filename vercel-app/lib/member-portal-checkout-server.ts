@@ -1,5 +1,6 @@
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 import { resolveMemberPortalPointAndQr } from '@/lib/member-portal-checkout-amounts'
 import {
   loadMemberPortalPrepayConfig,
@@ -75,7 +76,7 @@ export async function ensureMemberPortalOrderLoyaltyApplied(orderId: number): Pr
 
   const createdBy = String(order.created_by || '')
   if (!createdBy.startsWith('member_portal:')) {
-    return Math.max(0, Math.trunc(Number(order.point_earned || 0)))
+    return roundMemberPointsEarn(order.point_earned)
   }
 
   return ensurePosOrderLoyaltyApplied(id)
@@ -163,8 +164,8 @@ async function resolveMemberPortalCheckoutPricing(params: {
     cardPaymentAmount: 0,
   })
   const totalBeforePoints = pricingAfterCoupon.finalTotal
-  const pointBalance = Math.max(0, Math.trunc(Number(params.member.pointBalance || 0)))
-  const maxPointUsable = Math.min(pointBalance, Math.trunc(totalBeforePoints))
+  const pointBalance = roundMemberPointsEarn(params.member.pointBalance)
+  const maxPointUsable = Math.min(pointBalance, normalizeMemberPoints(totalBeforePoints))
   const split = resolveMemberPortalPointAndQr({
     totalBeforePoints,
     pointBalance,

@@ -1,5 +1,6 @@
 import type { MemberSummary } from '@/lib/members-server'
 import { normalizeMemberBirthDateInput } from '@/lib/member-phone-lookup'
+import { formatMemberPointsDisplay } from '@/lib/member-points-math'
 
 export type PortalTab = 'home' | 'order' | 'location' | 'privilege' | 'me'
 
@@ -130,7 +131,7 @@ export function formatBaht(n: number): string {
 }
 
 export function formatPoints(n: number): string {
-  return `${Math.round(Number(n || 0)).toLocaleString('en-US')} P`
+  return `${formatMemberPointsDisplay(n)} P`
 }
 
 export function formatDateTime(raw: string, locale = 'th-TH'): string {

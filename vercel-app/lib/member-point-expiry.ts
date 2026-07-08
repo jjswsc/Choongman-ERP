@@ -1,5 +1,6 @@
 import { getBangkokDateTimeString, isBangkokDateTimeBefore, normalizeBangkokDateTimeCompareKey } from '@/lib/bangkok-time'
 import { MEMBER_POINT_RETENTION_YEARS } from '@/lib/member-point-expiry-policy'
+import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 
 export type MemberPointLedgerEntry = {
   id?: number
@@ -50,7 +51,7 @@ export function computeMemberPointExpiryState(
 
   for (const row of sorted) {
     const kind = String(row.kind || '').trim().toLowerCase()
-    const points = Math.trunc(Number(row.points || 0))
+    const points = normalizeMemberPoints(row.points)
     if (!points) continue
 
     if (isPositiveCredit(kind, points)) {
@@ -89,8 +90,8 @@ export function computeMemberPointExpiryState(
   }
 
   return {
-    tierPoints: Math.max(0, tierPoints),
-    pointBalance: Math.max(0, pointBalance),
-    expirePoints: Math.max(0, expirePoints),
+    tierPoints: roundMemberPointsEarn(tierPoints),
+    pointBalance: roundMemberPointsEarn(pointBalance),
+    expirePoints: roundMemberPointsEarn(expirePoints),
   }
 }

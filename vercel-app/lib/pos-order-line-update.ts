@@ -1,6 +1,7 @@
 import type { Order, OrderItem } from '@/lib/pos-types'
 import type { PosOrderItem } from '@/lib/api-client'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 
@@ -143,8 +144,8 @@ export function buildUpdatePosOrderParamsFromOrder(order: Order, nextItems: PosO
     ...(Array.isArray(order.appliedCoupons) && order.appliedCoupons.length > 0
       ? { appliedCoupons: order.appliedCoupons }
       : {}),
-    pointUsed: Math.max(0, Math.trunc(Number(order.pointUsed ?? 0) || 0)),
-    pointEarned: Math.max(0, Math.trunc(Number(order.pointEarned ?? 0) || 0)),
+    pointUsed: roundMemberPointsEarn(order.pointUsed),
+    pointEarned: roundMemberPointsEarn(order.pointEarned),
   }
   if (order.type === 'dine-in') {
     const g = Math.trunc(Number(order.guestCount ?? 0) || 0)

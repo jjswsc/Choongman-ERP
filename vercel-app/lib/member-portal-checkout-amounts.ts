@@ -1,4 +1,5 @@
 import { MEMBER_PORTAL_PREPAY_MIN_QR_BAHT } from '@/lib/member-portal-prepay-config'
+import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 
 export type MemberPortalCheckoutAmounts = {
   pointUsed: number
@@ -17,10 +18,10 @@ export function resolveMemberPortalPointAndQr(params: {
 }): MemberPortalCheckoutAmounts {
   const minQr = Math.max(0, Number(params.minQrBaht ?? MEMBER_PORTAL_PREPAY_MIN_QR_BAHT))
   const total = Math.max(0, Math.round(Number(params.totalBeforePoints || 0) * 100) / 100)
-  const balance = Math.max(0, Math.trunc(Number(params.pointBalance || 0)))
-  const requested = Math.max(0, Math.trunc(Number(params.requestedPointUsed || 0)))
+  const balance = roundMemberPointsEarn(params.pointBalance)
+  const requested = roundMemberPointsEarn(params.requestedPointUsed)
 
-  let pointUsed = Math.min(requested, balance, Math.trunc(total))
+  let pointUsed = Math.min(requested, balance, normalizeMemberPoints(total))
   let qrAmount = Math.round((total - pointUsed) * 100) / 100
 
   if (qrAmount <= 0.0001) {
@@ -32,7 +33,7 @@ export function resolveMemberPortalPointAndQr(params: {
   }
 
   // 0 < qrAmount < minQr → 포인트를 줄여 QR을 minQr 이상으로
-  const maxPointForMinQr = Math.max(0, Math.trunc(total - minQr))
+  const maxPointForMinQr = roundMemberPointsEarn(total - minQr)
   pointUsed = Math.min(pointUsed, maxPointForMinQr, balance)
   qrAmount = Math.round((total - pointUsed) * 100) / 100
 

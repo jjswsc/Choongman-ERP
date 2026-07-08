@@ -16,6 +16,17 @@ describe('member-point-earn-policy', () => {
     expect(resolvePointEarnChannel({ orderType: 'takeout' })).toBe('takeout')
   })
 
+  it('earns fractional points for low-percent orders', () => {
+    const result = computeMemberPointEarn({
+      totalAmount: 259,
+      pointRate: 0.01,
+      policy: DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY,
+      channel: 'dine_in',
+    })
+    expect(result.baseEarn).toBe(2.59)
+    expect(result.pointEarned).toBe(2.59)
+  })
+
   it('does not stack multipliers — uses max only', () => {
     const policy = normalizeMemberPointEarnBonusPolicy({
       channelMultipliers: { dine_in: 1, takeout: 1, delivery: 1, member_portal: 2 },

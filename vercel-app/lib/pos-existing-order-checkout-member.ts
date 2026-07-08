@@ -1,3 +1,5 @@
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
+
 /** 기존 pos_orders 행 결제 모달에 넘기는 회원 스냅샷 */
 export type PosExistingOrderCheckoutMember = {
   memberId?: number
@@ -24,8 +26,8 @@ export function resolvePosOrderMemberFieldsForAddonUpdate(
     (memberId && memberId === existingMemberId ? String(existing.memberNo ?? '').trim() : '')
   const pointUsed =
     payload.pointUsed != null
-      ? Math.max(0, Math.trunc(Number(payload.pointUsed)))
-      : Math.max(0, Math.trunc(Number(existing.pointUsed ?? 0))) || undefined
+      ? roundMemberPointsEarn(payload.pointUsed)
+      : roundMemberPointsEarn(existing.pointUsed) || undefined
   return {
     ...(memberId ? { memberId } : {}),
     ...(memberNo ? { memberNo } : {}),
@@ -40,7 +42,7 @@ export function posOrderToCheckoutMemberSnapshot(order: {
 }): PosExistingOrderCheckoutMember {
   const memberId = Math.max(0, Number(order.memberId || 0))
   const memberNo = String(order.memberNo || '').trim()
-  const pointUsed = Math.max(0, Math.trunc(Number(order.pointUsed || 0)))
+  const pointUsed = roundMemberPointsEarn(order.pointUsed)
   return {
     ...(memberId > 0 ? { memberId } : {}),
     ...(memberNo ? { memberNo } : {}),
@@ -85,7 +87,7 @@ export function seedCheckoutMemberFromExistingOrder(
     if (prev.some((row) => row.value === key)) return prev
     return [{ value: key, label: `${labelName}${memberNo ? ` (${memberNo})` : ''}` }, ...prev]
   })
-  const pointUsed = Math.max(0, Math.trunc(Number(member?.pointUsed || 0)))
+  const pointUsed = roundMemberPointsEarn(member?.pointUsed)
   if (pointUsed > 0) {
     setters.setPointUsed(String(pointUsed))
   }

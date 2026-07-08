@@ -15,6 +15,7 @@ import {
   MEMBER_POINT_EXPIRY_BATCH_DEFAULT_MAX,
   MEMBER_POINT_EXPIRY_BATCH_PAGE_SIZE,
 } from '@/lib/member-point-expiry-batch'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { recalculateMemberTier } from '@/lib/members-server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
@@ -45,8 +46,8 @@ export async function expireMemberPointsForMember(
   })) as MemberPointLedgerEntry[]
 
   const { tierPoints, pointBalance, expirePoints } = computeMemberPointExpiryState(ledger || [], resolvedCutoff)
-  const prevBalance = Math.max(0, Math.trunc(Number(member.point_balance || 0)))
-  const prevTierPoints = Math.max(0, Math.trunc(Number(member.tier_points || 0)))
+  const prevBalance = roundMemberPointsEarn(member.point_balance)
+  const prevTierPoints = roundMemberPointsEarn(member.tier_points)
 
   const needsExpireLedger = expirePoints > 0
   const needsMemberUpdate = prevBalance !== pointBalance || prevTierPoints !== tierPoints
