@@ -43,6 +43,7 @@ import {
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalLineOaFriendBanner } from "@/components/member-portal/member-portal-line-oa-friend-banner"
+import { MemberPortalJoinStoreDialog } from "@/components/member-portal/member-portal-join-store-dialog"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
 import type { PortalCouponOfferRow } from "@/lib/member-portal-coupon-claim"
 import { MemberPortalPrivilegeTab } from "@/components/member-portal/member-portal-privilege-tab"
@@ -1087,6 +1088,13 @@ export function MemberPortalApp() {
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
       <MemberPortalShell embedPreview={embedPreview}>
+        {!member.joinStoreCode ? (
+          <MemberPortalJoinStoreDialog
+            officeStoreCode={signupOfficeStoreCode}
+            storeOptions={signupStoreOptions}
+            onComplete={(updated) => applyLoggedInMember(updated)}
+          />
+        ) : null}
         {tab === "home" ? (
           <MemberPortalHomeTopBar
             greeting={t(memberPortalGreetingKey())}

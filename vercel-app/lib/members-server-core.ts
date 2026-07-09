@@ -794,9 +794,8 @@ export async function registerLineMember(input: {
   }
 
   const joinStoreCode = toText(input.joinStoreCode)
-  if (!joinStoreCode) throw new Error('missing_store')
   const { isAllowedMemberSignupStoreCode } = await import('@/lib/member-signup-store')
-  if (!(await isAllowedMemberSignupStoreCode(joinStoreCode))) {
+  if (joinStoreCode && !(await isAllowedMemberSignupStoreCode(joinStoreCode))) {
     throw new Error('invalid_store')
   }
 
@@ -806,7 +805,7 @@ export async function registerLineMember(input: {
     email: input.email,
     source: 'line',
     joinChannel: 'line',
-    joinStoreCode: joinStoreCode,
+    joinStoreCode: joinStoreCode || undefined,
     lineUserId,
     lineDisplayName: toText(input.displayName),
     linePictureUrl: toText(input.pictureUrl),
