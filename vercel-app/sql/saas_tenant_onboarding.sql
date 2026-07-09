@@ -27,10 +27,8 @@ declare
   v_modules int := 0;
   v_integrations int := 0;
 begin
-  select
-    coalesce(t.onboarding_flags, '{}'::jsonb),
-    coalesce(t.is_active, true)
-  into v_flags, v_company_ok
+  select coalesce(t.onboarding_flags, '{}'::jsonb)
+  into v_flags
   from public.tenants t
   where t.id = p_tenant_id;
 
@@ -44,6 +42,8 @@ begin
       )
     );
   end if;
+
+  v_company_ok := true;
 
   select count(*)::int into v_active_stores
   from public.erp_stores s
@@ -74,7 +74,7 @@ begin
   where mp.tenant_id = p_tenant_id
     and coalesce(mp.is_enabled, false) = true;
 
-  v_pricing_ok := coalesce((v_flags->>'pricingConfirmed')::boolean, false) or v_modules > 0;
+  v_pricing_ok := coalesce((v_flags->>'pricingConfirmed')::boolean, false);
 
   select count(*)::int into v_integrations
   from public.tenant_integrations ti

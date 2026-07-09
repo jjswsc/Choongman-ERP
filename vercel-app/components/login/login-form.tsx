@@ -317,6 +317,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const effectiveIsAdminPage =
     normalizeLoginPathname(pathname) === "/saas-admin/login" ? true : loginApp === "erp"
   const isAdminLoginRoute = pathname === "/admin/login" || pathname === "/saas-admin/login"
+  const loginPath = useMemo(() => normalizeLoginPathname(pathname), [pathname])
+  const isSaasAdminLogin = loginPath === "/saas-admin/login"
+  /** Omni SaaS·ERP 관리 로그인만 회사명 직접 입력 (충만은 단일 회사·기존 목록 UX 유지) */
+  const useManualCompanyField =
+    isSaasAdminLogin || (loginPath === "/admin/login" && brand.key === "omnifoodtech")
+  /** SaaS 관리 로그인 — 매장·이름도 직접 입력 (대리점·신규 고객 확장) */
+  const useManualStoreUserFields = isSaasAdminLogin
 
   useEffect(() => {
     if (!isAdminLoginRoute) return
@@ -505,6 +512,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       return
     }
+    if (isSaasAdminLogin) {
+      setLoading(false)
+      return
+    }
     /** HMR/라우트 전환 직후 unmount 레이스를 피하려고 취소 가능한 매크로태스크로 지연 */
     const timer = window.setTimeout(() => {
       fetchLoginData()
@@ -512,7 +523,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return () => {
       window.clearTimeout(timer)
     }
-  }, [auth, effectiveRedirectTo, router, fetchLoginData])
+  }, [auth, effectiveRedirectTo, router, fetchLoginData, isSaasAdminLogin])
 
   useEffect(() => {
     if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
@@ -529,6 +540,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       companyPrefillAppliedRef.current = true
       return
     }
+    if (useManualCompanyField) {
+      setCompany(targetCompany)
+      if (queryCompany) {
+        setStore("")
+        setUser("")
+      }
+      companyPrefillAppliedRef.current = true
+      return
+    }
     if (companies.length === 0) return
     const found = companies.find(
       (x) => String(x || "").trim().toLowerCase() === targetCompany.toLowerCase()
@@ -541,7 +561,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
     }
     companyPrefillAppliedRef.current = true
-  }, [companies, queryCompany])
+  }, [companies, queryCompany, useManualCompanyField])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -559,6 +579,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const effectiveCompany = company.trim()
     const effectiveStore = store.trim()
     const effectiveUser = user.trim()
     if (!effectiveStore || !effectiveUser) {
@@ -566,10 +587,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       setError(tMsg("msg_select_store_name"))
       return
     }
+    if (useManualCompanyField && !effectiveCompany) {
+      setErrorIsConnectivity(false)
+      setError(tMsg("msg_select_store_name"))
+      return
+    }
     setSubmitting(true)
     clearFormError()
     const loginListReady =
-      (loginDataSource === "api" || loginDataSource === "cache") && stores.length > 0
+      !useManualCompanyField &&
+      (loginDataSource === "api" || loginDataSource === "cache") &&
+      stores.length > 0
     if (!loginListReady) {
       if (typeof navigator !== "undefined" && !isBrowserOnline()) {
         await runReachabilityProbe()
@@ -583,7 +611,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
     try {
       const res = await loginCheck({
-        company: company || undefined,
+        company: effectiveCompany || company || undefined,
         store: effectiveStore,
         name: effectiveUser,
         pw,
@@ -710,15 +738,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     : stores
   /** 목록은 왔는데 회사 태그 불일치로 매장 0개만 되는 경우 — 목록 API 실패와 구분해 선택만 해제 */
   useEffect(() => {
+    if (useManualCompanyField) return
     if (loading || !company) return
     if (stores.length === 0 || filteredStores.length > 0) return
     setCompany("")
-  }, [loading, company, stores.length, filteredStores.length])
+  }, [loading, company, stores.length, filteredStores.length, useManualCompanyField])
   useEffect(() => {
     if (storePrefillAppliedRef.current) return
     const savedStore = lastLoginSelectionRef.current?.store || ""
     const targetStore = queryStore || savedStore
     if (!targetStore) {
+      storePrefillAppliedRef.current = true
+      return
+    }
+    if (useManualStoreUserFields) {
+      setStore(targetStore)
+      if (queryStore) setUser("")
       storePrefillAppliedRef.current = true
       return
     }
@@ -731,7 +766,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (queryStore) setUser("")
     }
     storePrefillAppliedRef.current = true
-  }, [filteredStores, queryStore])
+  }, [filteredStores, queryStore, useManualStoreUserFields])
   const users = store ? (loginData[store] || []) : []
   useEffect(() => {
     if (userPrefillAppliedRef.current) return
@@ -741,12 +776,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       userPrefillAppliedRef.current = true
       return
     }
+    if (useManualStoreUserFields) {
+      if (store) setUser(targetUser)
+      userPrefillAppliedRef.current = true
+      return
+    }
     if (!store) return
     if (users.length === 0) return
     const found = users.find((x) => String(x || "").trim().toLowerCase() === targetUser.toLowerCase())
     if (found) setUser(found)
     userPrefillAppliedRef.current = true
-  }, [queryUser, store, users])
+  }, [queryUser, store, users, useManualStoreUserFields])
   useEffect(() => {
     if (!store) return
     if (filteredStores.includes(store)) return
@@ -831,6 +871,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectStore: "매장 선택",
       selectCompany: "회사 선택",
       selectName: "이름 선택",
+      typeCompany: "회사명 입력",
+      typeStore: "매장명 입력",
+      typeName: "이름 입력",
       pinPlaceholder: "비밀번호 (PIN)",
       login: "로그인",
       loggingIn: "로그인 중...",
@@ -862,6 +905,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectStore: "Select Store",
       selectCompany: "Select Company",
       selectName: "Select Name",
+      typeCompany: "Company name",
+      typeStore: "Store name",
+      typeName: "Name",
       pinPlaceholder: "Password (PIN)",
       login: "Login",
       loggingIn: "Logging in...",
@@ -892,6 +938,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectStore: "เลือกสาขา",
       selectCompany: "เลือกบริษัท",
       selectName: "เลือกชื่อ",
+      typeCompany: "ชื่อบริษัท",
+      typeStore: "ชื่อสาขา",
+      typeName: "ชื่อ",
       pinPlaceholder: "รหัสผ่าน (PIN)",
       login: "เข้าสู่ระบบ",
       loggingIn: "กำลังเข้าสู่ระบบ...",
@@ -922,6 +971,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectStore: "ဆိုင်ရွေးပါ",
       selectCompany: "ကုမ္ပဏီရွေးပါ",
       selectName: "အမည်ရွေးပါ",
+      typeCompany: "ကုမ္ပဏီအမည်",
+      typeStore: "ဆိုင်အမည်",
+      typeName: "အမည်",
       pinPlaceholder: "လျှို့ဝှက်နံပါတ် (PIN)",
       login: "ဝင်ရောက်မည်",
       loggingIn: "ဝင်နေသည်...",
@@ -952,6 +1004,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectStore: "ເລືອກສາຂາ",
       selectCompany: "ເລືອກບໍລິສັດ",
       selectName: "ເລືອກຊື່",
+      typeCompany: "ຊື່ບໍລິສັດ",
+      typeStore: "ຊື່ຮ້ານ",
+      typeName: "ຊື່",
       pinPlaceholder: "ລະຫັດ (PIN)",
       login: "ເຂົ້າສູ່ລະບົບ",
       loggingIn: "ກຳລັງເຂົ້າສູ່ລະບົບ...",
@@ -1011,8 +1066,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           </div>
 
           {normalizeLoginPathname(pathname) === "/login" ||
-          normalizeLoginPathname(pathname) === "/admin/login" ||
-          normalizeLoginPathname(pathname) === "/saas-admin/login" ? (
+          normalizeLoginPathname(pathname) === "/admin/login" ? (
             <div className="mb-4 w-full max-w-sm space-y-2 px-0.5">
               <div
                 className="flex gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-white/10"
@@ -1150,44 +1204,90 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               </div>
             ) : null}
 
-            <Select value={company} onValueChange={handleCompanyChange} disabled={companies.length === 0}>
-              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
-                <SelectValue placeholder={`${t.selectCompany}...`} />
-              </SelectTrigger>
-              <SelectContent className="login-select-content">
-                {companies.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {useManualCompanyField ? (
+              <input
+                type="text"
+                value={company}
+                onChange={(e) => {
+                  setCompany(e.target.value)
+                  setStore("")
+                  setUser("")
+                }}
+                placeholder={t.typeCompany}
+                className="login-input-field"
+                autoComplete="organization"
+                aria-label={t.typeCompany}
+                data-testid="login-input-company"
+              />
+            ) : (
+              <Select value={company} onValueChange={handleCompanyChange} disabled={companies.length === 0}>
+                <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
+                  <SelectValue placeholder={`${t.selectCompany}...`} />
+                </SelectTrigger>
+                <SelectContent className="login-select-content">
+                  {companies.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
-            <Select value={store} onValueChange={handleStoreChange}>
-              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }} data-testid="login-select-store">
-                <SelectValue placeholder={`${t.selectStore}...`} />
-              </SelectTrigger>
-              <SelectContent className="login-select-content">
-                {filteredStores.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {labelForStore(loginStoreLabels, s)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {useManualStoreUserFields ? (
+              <input
+                type="text"
+                value={store}
+                onChange={(e) => {
+                  setStore(e.target.value)
+                  setUser("")
+                }}
+                placeholder={t.typeStore}
+                className="login-input-field"
+                autoComplete="organization"
+                aria-label={t.typeStore}
+                data-testid="login-input-store"
+              />
+            ) : (
+              <Select value={store} onValueChange={handleStoreChange}>
+                <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }} data-testid="login-select-store">
+                  <SelectValue placeholder={`${t.selectStore}...`} />
+                </SelectTrigger>
+                <SelectContent className="login-select-content">
+                  {filteredStores.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {labelForStore(loginStoreLabels, s)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
-            <Select value={user} onValueChange={setUser} disabled={!store}>
-              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }} data-testid="login-select-user">
-                <SelectValue placeholder={`${t.selectName}...`} />
-              </SelectTrigger>
-              <SelectContent className="login-select-content">
-                {users.map((u) => (
-                  <SelectItem key={u} value={u}>
-                    {u}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {useManualStoreUserFields ? (
+              <input
+                type="text"
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                placeholder={t.typeName}
+                className="login-input-field"
+                autoComplete="username"
+                aria-label={t.typeName}
+                data-testid="login-input-user"
+              />
+            ) : (
+              <Select value={user} onValueChange={setUser} disabled={!store}>
+                <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }} data-testid="login-select-user">
+                  <SelectValue placeholder={`${t.selectName}...`} />
+                </SelectTrigger>
+                <SelectContent className="login-select-content">
+                  {users.map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {showOfflineResumeBanner && effectiveOfflineResume ? (
               <div className="mb-3 rounded-lg border border-emerald-500/45 bg-emerald-950/35 px-3 py-3 text-center">

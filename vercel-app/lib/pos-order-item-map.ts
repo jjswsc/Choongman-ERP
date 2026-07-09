@@ -1,4 +1,5 @@
 import type { PosOrderItem } from '@/lib/api-client'
+import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
 import type { OrderItem } from '@/lib/pos-types'
 
 export type CartLineForPosOrder = {
@@ -217,44 +218,55 @@ export function isDineInAddonOnlyIncomingCart(
 /**
  * 홀(dine-in) 추가 주문: 카트에 **신규 줄만** 있을 때(기존 줄이 카트에 안 올라온 경우)
  * `updatePosOrder`가 `items_json` 전체를 덮어쓰므로, DB에 있던 줄을 유지하고 카트 줄을 이어붙인다.
+ * 저장 직전 미서빙·동일 메뉴 줄은 수량을 합산한다(합석·영수증 표시와 동일 규칙).
  * 카트에 기존 id가 하나라도 있으면 카트를 전체 스냅샷으로 보고(수량·삭제 반영) 그대로 둔다.
  */
 export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[], fromCart: PosOrderItem[]): PosOrderItem[] {
   if (fromCart.length === 0) return existing
   const baseIds = new Set(existing.map((b) => normPosOrderItemId(b.id)).filter(Boolean))
   const allCartLinesAreNewIds = fromCart.every((c) => !baseIds.has(normPosOrderItemId(c.id)))
+  let merged: PosOrderItem[]
   if (allCartLinesAreNewIds) {
-    return [...existing.map((e) => ({ ...e })), ...fromCart.map((c) => ({ ...c }))]
-  }
-  const baseById = new Map<string, PosOrderItem>()
-  for (const b of existing) {
-    const k = normPosOrderItemId(b.id)
-    if (k) baseById.set(k, b)
-  }
-  return fromCart.map((c) => {
-    const k = normPosOrderItemId(c.id)
-    const b = k ? baseById.get(k) : undefined
-    if (!b) return { ...c }
-    const promoItems =
-      Array.isArray(c.promoItems) && c.promoItems.length > 0
-        ? c.promoItems
-        : Array.isArray(b.promoItems) && b.promoItems.length > 0
-          ? b.promoItems
-          : undefined
-    const promoId = String(c.promoId ?? b.promoId ?? '').trim() || undefined
-    const promoCode = String(c.promoCode ?? b.promoCode ?? '').trim() || undefined
-    return {
-      ...b,
-      ...c,
-      id: k || String(b.id ?? c.id ?? ''),
-      ...(promoId ? { promoId, ...(promoCode ? { promoCode } : {}) } : {}),
-      ...(promoItems ? { promoItems } : {}),
-      servedAt: c.servedAt ?? b.servedAt ?? null,
-      servedBy: c.servedBy ?? b.servedBy ?? null,
-      cancelledAt: c.cancelledAt ?? b.cancelledAt ?? null,
-      cancelledBy: c.cancelledBy ?? b.cancelledBy ?? null,
-      cancelReason: c.cancelReason ?? b.cancelReason ?? null,
+    merged = [...existing.map((e) => ({ ...e })), ...fromCart.map((c) => ({ ...c }))]
+  } else {
+    const baseById = new Map<string, PosOrderItem>()
+    for (const b of existing) {
+      const k = normPosOrderItemId(b.id)
+      if (k) baseById.set(k, b)
     }
+    merged = fromCart.map((c) => {
+      const k = normPosOrderItemId(c.id)
+      const b = k ? baseById.get(k) : undefined
+      if (!b) return { ...c }
+      const promoItems =
+        Array.isArray(c.promoItems) && c.promoItems.length > 0
+          ? c.promoItems
+          : Array.isArray(b.promoItems) && b.promoItems.length > 0
+            ? b.promoItems
+            : undefined
+      const promoId = String(c.promoId ?? b.promoId ?? '').trim() || undefined
+      const promoCode = String(c.promoCode ?? b.promoCode ?? '').trim() || undefined
+      return {
+        ...b,
+        ...c,
+        id: k || String(b.id ?? c.id ?? ''),
+        ...(promoId ? { promoId, ...(promoCode ? { promoCode } : {}) } : {}),
+        ...(promoItems ? { promoItems } : {}),
+        servedAt: c.servedAt ?? b.servedAt ?? null,
+        servedBy: c.servedBy ?? b.servedBy ?? null,
+        cancelledAt: c.cancelledAt ?? b.cancelledAt ?? null,
+        cancelledBy: c.cancelledBy ?? b.cancelledBy ?? null,
+        cancelReason: c.cancelReason ?? b.cancelReason ?? null,
+      }
+    })
+  }
+  /** 미서빙·동일 메뉴 줄은 수량 합산(합석 규칙과 동일) — 추가 주문·영수증 중복 방지 */
+  const consolidated = consolidatePosOrderLinesAfterMerge(
+    merged as unknown as Record<string, unknown>[]
+  ) as unknown as PosOrderItem[]
+  return consolidated.map((line) => {
+    const q = resolveCartLineQuantityForSave(line as { quantity?: unknown; qty?: unknown })
+    return { ...line, qty: q, quantity: q }
   })
 }
 

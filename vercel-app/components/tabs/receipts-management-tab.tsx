@@ -95,10 +95,8 @@ import {
   POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
   printPosHtmlDocument,
-  resolveAfterKitchenToReceiptDelayMs,
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
-import { storeAutoPrintFlagsFromSettings } from '@/lib/pos-terminal-auto-print'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { printPosVoidReceiptForOrder } from '@/lib/print-pos-void-receipt'
 import { isPosReversalStatus } from '@/lib/pos-order-policy'
@@ -1070,50 +1068,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
   }
 
-  const sleepMs = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
-
-  /** 결제 수단 정정 저장 후: 매장 프린터 설정(자동 인쇄)에 따라 주방·홀·손님 영수증 순서 출력 */
+  /** 결제 수단 정정 저장 후: 결제 완료 손님 영수증만 재출력 (주방·홀 주문서는 제외) */
   const runAutoPrintAfterPayCorrect = React.useCallback(
     async (order: PosOrder) => {
-      const store = String(order.storeCode ?? '').trim()
-      if (!store || !order.items?.length) return
-      let flags
-      try {
-        const settings = await getPosPrinterSettings({ storeCode: store })
-        flags = storeAutoPrintFlagsFromSettings(settings)
-      } catch {
-        return
-      }
-      if (!flags.kitchenOnOrder && !flags.receiptOnOrder && !flags.receiptOnPayment) return
-
-      const initialDelayMs = 180
-      let gapMs = initialDelayMs
-
-      if (flags.kitchenOnOrder) {
-        await sleepMs(gapMs)
-        await handlePrintKitchenSlip(order)
-        gapMs =
-          flags.receiptOnOrder || flags.receiptOnPayment
-            ? resolveAfterKitchenToReceiptDelayMs()
-            : 0
-      } else if (flags.receiptOnOrder || flags.receiptOnPayment) {
-        gapMs = initialDelayMs
-      }
-
-      if (flags.receiptOnOrder) {
-        if (gapMs > 0) await sleepMs(gapMs)
-        await handlePrintHallOrderSlip(order)
-        gapMs = flags.receiptOnPayment ? resolveAfterKitchenToReceiptDelayMs() : 0
-      } else if (flags.receiptOnPayment) {
-        gapMs = initialDelayMs
-      }
-
-      if (flags.receiptOnPayment) {
-        if (gapMs > 0) await sleepMs(gapMs)
-        await handlePrintCustomerReceipt(order)
-      }
+      if (!order.items?.length) return
+      await handlePrintCustomerReceipt(order)
     },
-    [handlePrintKitchenSlip, handlePrintHallOrderSlip, handlePrintCustomerReceipt]
+    [handlePrintCustomerReceipt]
   )
 
   /**

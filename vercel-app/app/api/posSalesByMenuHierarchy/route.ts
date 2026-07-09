@@ -113,6 +113,8 @@ export async function GET(request: NextRequest) {
       orderRows: rows,
       menus: menuList,
       options: Array.isArray(options) ? options : [],
+      searchTokens,
+      searchAnd,
     })
 
     const levels = applySearchSliceLevels(
@@ -141,6 +143,8 @@ export async function GET(request: NextRequest) {
           orderRows: chRows,
           menus: menuList,
           options: Array.isArray(options) ? options : [],
+          searchTokens,
+          searchAnd,
         })
         byOrderType[ch] = {
           levels: applySearchSliceLevels({ ...chAgg.levels }, searchTokens, searchAnd, sliceLimit),

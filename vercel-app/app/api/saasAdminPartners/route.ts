@@ -391,7 +391,11 @@ export async function POST(req: NextRequest) {
             { status: 400, headers }
           )
         }
-        const account = await createSaasPartnerAdminEmployee({ name: loginName, password: loginPassword })
+        const account = await createSaasPartnerAdminEmployee({
+          name: loginName,
+          password: loginPassword,
+          company: name,
+        })
         await supabaseUpsert(
           "saas_partner_users",
           [

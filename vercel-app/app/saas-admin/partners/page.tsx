@@ -13,10 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
-import {
-  resolveSaasPartnerLoginCompany,
-  resolveSaasPartnerLoginStore,
-} from "@/lib/saas-partner-login-defaults"
+import { resolveSaasPartnerLoginStore } from "@/lib/saas-partner-login-defaults"
 
 type PartnerRow = {
   id: string
@@ -41,7 +38,6 @@ export default function SaasPartnersPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const scope = useSaasScope()
-  const loginCompany = useMemo(() => resolveSaasPartnerLoginCompany(), [])
   const loginStore = useMemo(() => resolveSaasPartnerLoginStore(), [])
   const [partners, setPartners] = useState<PartnerRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -245,7 +241,10 @@ export default function SaasPartnersPage() {
             <div>
               <p className="text-sm font-medium">{t("saasAdminPartners_loginSectionTitle")}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {tr(t, "saasAdminPartners_loginSectionDesc", { company: loginCompany, store: loginStore })}
+                {tr(t, "saasAdminPartners_loginSectionDesc", {
+                  company: partnerName.trim() || t("saasAdminPartners_nameLabel"),
+                  store: loginStore,
+                })}
               </p>
             </div>
             <div className="space-y-2">

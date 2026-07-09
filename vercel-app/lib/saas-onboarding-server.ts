@@ -3,6 +3,7 @@ import { supabaseCountFilter, supabaseRpc, supabaseSelect, supabaseSelectFilter 
 import { countErpStoresForTenant } from "./saas-tenant-stores-server"
 import {
   emptyOnboardingSteps,
+  hasPricingConfiguredInData,
   parseOnboardingFlags,
   parseOnboardingSteps,
   resolveOnboardingSteps,
@@ -181,7 +182,7 @@ export async function buildOnboardingStatusForTenant(params: {
     adminOk: managers > 0 || usage.managerAccounts > 0,
   })
 
-  if (enabledModules > 0 && !flags.pricingConfirmed) {
+  if (!flags.pricingConfirmed && hasPricingConfiguredInData({ pricing }, flags, enabledModules)) {
     steps.pricing = true
   }
 
@@ -231,7 +232,16 @@ export async function buildAllOnboardingStatuses(
       storeOk: activeStores > 0 || usage.stores > 0,
       adminOk: managers > 0 || usage.managerAccounts > 0,
     })
-    if (enabledModules > 0 && !flags.pricingConfirmed) steps.pricing = true
+    if (
+      !flags.pricingConfirmed &&
+      hasPricingConfiguredInData(
+        { pricing: { modulePrices: tenant.pricing?.modulePrices } as Pick<TenantItem["pricing"], "modulePrices"> },
+        flags,
+        enabledModules
+      )
+    ) {
+      steps.pricing = true
+    }
 
     rows.push({
       tenantId: tenant.id,

@@ -22,7 +22,7 @@ export function SaasOnboardingStepIndicator({ current, completed, labels, onStep
         {ONBOARDING_STEP_ORDER.map((step, idx) => {
           const done = completed[step] === true
           const active = step === current
-          const clickable = Boolean(onStepClick) && (done || idx <= currentIdx)
+          const clickable = Boolean(onStepClick) && idx <= currentIdx
           const content = (
             <>
               <span

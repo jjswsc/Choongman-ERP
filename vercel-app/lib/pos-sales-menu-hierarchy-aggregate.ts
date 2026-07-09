@@ -210,6 +210,61 @@ function resolveLineOptionDisplayName(
   return DEFAULT_OPTION_LABEL
 }
 
+/** `[Super Deal] Set 3` → `Super Deal` */
+export function parsePromoBracketName(lineName: string): string {
+  const m = str(lineName).match(/^\[([^\]]+)\]/)
+  return m?.[1]?.trim() ?? ''
+}
+
+function promoParentSearchHaystack(row: Record<string, unknown>): string {
+  const lineName = str(row.name)
+  return [lineName, str(row.promoCode ?? row.promo_code), parsePromoBracketName(lineName)]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+export function parentPromoLineMatchesSearch(
+  row: Record<string, unknown>,
+  searchTokens: string[],
+  searchAnd: boolean
+): boolean {
+  if (searchTokens.length === 0) return false
+  const haystack = promoParentSearchHaystack(row)
+  return searchAnd
+    ? searchTokens.every((t) => haystack.includes(t))
+    : searchTokens.some((t) => haystack.includes(t))
+}
+
+export function orderLineMatchesMenuSearch(
+  row: Record<string, unknown>,
+  searchTokens: string[],
+  searchAnd: boolean,
+  menuCatalog: ReturnType<typeof buildMenuCatalog>
+): boolean {
+  if (searchTokens.length === 0) return true
+
+  const parts = [
+    str(row.name),
+    str(row.promoCode ?? row.promo_code),
+    str(row.promoId ?? row.promo_id),
+    parsePromoBracketName(str(row.name)),
+  ]
+
+  for (const child of promoChildLines(row)) {
+    parts.push(child.menuName)
+    const meta = resolveMenuMeta(child.menuId, child.menuName, menuCatalog)
+    if (meta?.name) parts.push(str(meta.name))
+    if (meta?.category) parts.push(str(meta.category))
+    if (meta?.category_main) parts.push(str(meta.category_main))
+  }
+
+  const haystack = parts.filter(Boolean).join(' ').toLowerCase()
+  return searchAnd
+    ? searchTokens.every((t) => haystack.includes(t))
+    : searchTokens.some((t) => haystack.includes(t))
+}
+
 function promoChildLines(row: Record<string, unknown>): LineContribution[] {
   const raw = row.promoItems ?? row.promo_items
   if (!Array.isArray(raw) || raw.length === 0) return []
@@ -241,11 +296,38 @@ function promoChildLines(row: Record<string, unknown>): LineContribution[] {
 function lineToContributions(
   row: Record<string, unknown>,
   menuCatalog: ReturnType<typeof buildMenuCatalog>,
-  optionCatalog: ReturnType<typeof buildOptionCatalog>
+  optionCatalog: ReturnType<typeof buildOptionCatalog>,
+  searchTokens: string[] = [],
+  searchAnd = false
 ): LineContribution[] {
   const promoChildren = promoChildLines(row)
   const qty = resolveItemsJsonLineQty(row)
   if (qty <= 0) return []
+
+  const parentMatchesSearch =
+    searchTokens.length > 0 &&
+    promoChildren.length > 0 &&
+    parentPromoLineMatchesSearch(row, searchTokens, searchAnd)
+
+  if (parentMatchesSearch) {
+    const lineName = str(row.name) || EMPTY_MENU
+    const promoGroup = parsePromoBracketName(lineName)
+    const menuId = resolveLineMenuId(row)
+    const sales = resolveLineSales(row, qty)
+    return [
+      {
+        menuId: menuId || lineName,
+        optionId: '',
+        optionCode: '',
+        menuName: lineName,
+        optionName: DEFAULT_OPTION_LABEL,
+        categoryMain: promoGroup || EMPTY_MAIN,
+        category: promoGroup || EMPTY_CATEGORY,
+        qty,
+        sales,
+      },
+    ]
+  }
 
   if (promoChildren.length > 0) {
     const parentSales = resolveLineSales(row, qty)
@@ -339,6 +421,9 @@ export function aggregatePosSalesMenuHierarchy(params: {
   menus: PosMenuCatalogRow[]
   options: PosOptionCatalogRow[]
   completedStatuses?: string[]
+  /** 검색 시 프로모 세트명·구성 메뉴명으로 주문 줄 선별 */
+  searchTokens?: string[]
+  searchAnd?: boolean
 }): {
   levels: Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]>
   totals: { qty: number; sales: number }
@@ -346,6 +431,8 @@ export function aggregatePosSalesMenuHierarchy(params: {
   const completed = new Set(
     params.completedStatuses ?? ['completed', 'paid', 'ready']
   )
+  const searchTokens = params.searchTokens ?? []
+  const searchAnd = params.searchAnd ?? false
   const menuCatalog = buildMenuCatalog(params.menus)
   const optionCatalog = buildOptionCatalog(params.options)
 
@@ -369,7 +456,19 @@ export function aggregatePosSalesMenuHierarchy(params: {
 
     for (const row of items) {
       if (isLineCancelled(row)) continue
-      const contributions = lineToContributions(row, menuCatalog, optionCatalog)
+      if (
+        searchTokens.length > 0 &&
+        !orderLineMatchesMenuSearch(row, searchTokens, searchAnd, menuCatalog)
+      ) {
+        continue
+      }
+      const contributions = lineToContributions(
+        row,
+        menuCatalog,
+        optionCatalog,
+        searchTokens,
+        searchAnd
+      )
       for (const c of contributions) {
         totalQty += c.qty
         totalSales += c.sales

@@ -13,6 +13,51 @@ function storeRowLabel(r: Record<string, unknown>): string {
   return String(r.store_name ?? r.display_name ?? "").trim()
 }
 
+function scoreErpStoreRow(r: Record<string, unknown>): number {
+  let s = 0
+  if (String(r.tenant_id ?? "").trim()) s += 4
+  if (String(r.store_name ?? "").trim()) s += 2
+  if (String(r.store_code ?? "").trim()) s += 1
+  if (String(r.display_name ?? "").trim()) s += 1
+  return s
+}
+
+/** 동일 테넌트·표시명 중복 행(store_name vs display_name legacy) 제거 */
+export function dedupeErpStoreRowsForTenant(
+  rows: Record<string, unknown>[],
+  tenantId: string
+): Record<string, unknown>[] {
+  const tid = tenantId.trim().toLowerCase()
+  const byLabel = new Map<string, Record<string, unknown>>()
+  for (const r of rows) {
+    const label = storeRowLabel(r).toLowerCase()
+    if (!label) continue
+    const rowTid = String(r.tenant_id ?? "").trim().toLowerCase()
+    if (rowTid && rowTid !== tid) continue
+    const prev = byLabel.get(label)
+    if (!prev || scoreErpStoreRow(r) > scoreErpStoreRow(prev)) {
+      byLabel.set(label, r)
+    }
+  }
+  return Array.from(byLabel.values())
+}
+
+export async function tenantHasErpStoreName(
+  tenantId: string,
+  storeName: string,
+  companyName = ""
+): Promise<boolean> {
+  const norm = storeName.trim().toLowerCase()
+  if (!norm) return false
+  const rows = await loadErpStoreRowsForTenant({
+    tenantId,
+    companyName,
+    offset: 0,
+    limit: 500,
+  })
+  return rows.some((r) => storeRowLabel(r).toLowerCase() === norm)
+}
+
 async function employeeStoreNamesForTenant(tenantId: string, companyName: string): Promise<Set<string>> {
   const names = new Set<string>()
   const tid = tenantId.trim().toLowerCase()
@@ -110,7 +155,7 @@ export async function loadErpStoreRowsForTenant(params: {
       rangeStart: offset,
       rangeEnd: offset + limit - 1,
     })) as Record<string, unknown>[]
-    if (direct.length > 0) return direct
+    if (direct.length > 0) return dedupeErpStoreRowsForTenant(direct, tenantId)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (!isTenantColumnError(msg)) throw e
@@ -118,7 +163,10 @@ export async function loadErpStoreRowsForTenant(params: {
 
   const employeeStores = await employeeStoreNamesForTenant(tenantId, companyName)
   const all = await loadAllErpStoreRows()
-  const matched = all.filter((r) => rowBelongsToTenant(r, tenantId, employeeStores))
+  const matched = dedupeErpStoreRowsForTenant(
+    all.filter((r) => rowBelongsToTenant(r, tenantId, employeeStores)),
+    tenantId
+  )
   return matched.slice(offset, offset + limit)
 }
 

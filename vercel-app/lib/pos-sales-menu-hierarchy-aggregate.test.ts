@@ -4,6 +4,7 @@ import {
   extractOptionSuffixFromOrderLineName,
   filterHierarchyRows,
   filterHierarchyRowsByDrill,
+  parsePromoBracketName,
 } from '@/lib/pos-sales-menu-hierarchy-aggregate'
 
 describe('aggregatePosSalesMenuHierarchy', () => {
@@ -105,6 +106,76 @@ describe('aggregatePosSalesMenuHierarchy', () => {
     const filtered = filterHierarchyRows(rows, ['snow'], false)
     expect(filtered).toHaveLength(1)
     expect(filtered[0]?.label).toBe('Snow Onion')
+  })
+
+  it('aggregates promo set by parent name when searching promo group', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [],
+      options: [],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              id: 'set-line',
+              name: '[Super Deal] Set 3',
+              price: 333,
+              qty: 2,
+              promoId: '99',
+              promoItems: [
+                { menuId: '1', optionId: null, quantity: 1, menuName: 'Rice' },
+                { menuId: '2', optionId: '3', quantity: 1, menuName: 'CURRY Bar.B.Q FRIED CHICKEN' },
+              ],
+            },
+          ]),
+        },
+      ],
+      searchTokens: ['super deal'],
+      searchAnd: false,
+    })
+
+    expect(result.levels.menu).toHaveLength(1)
+    expect(result.levels.menu[0]?.label).toBe('[Super Deal] Set 3')
+    expect(result.levels.menu[0]?.qty).toBe(2)
+    expect(result.levels.menu[0]?.sales).toBe(666)
+    expect(result.levels.category.some((r) => r.label === 'Super Deal')).toBe(true)
+    expect(result.levels.main.some((r) => r.label === 'Super Deal')).toBe(true)
+  })
+
+  it('expands promo set to child menus when not searching by promo parent', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [],
+      options: [],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              id: 'set-line',
+              name: '[Super Deal] Set 3',
+              price: 333,
+              qty: 1,
+              promoId: '99',
+              promoItems: [
+                { menuId: '1', optionId: null, quantity: 1, menuName: 'Rice' },
+                { menuId: '2', optionId: '3', quantity: 1, menuName: 'CURRY Bar.B.Q FRIED CHICKEN' },
+              ],
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu.map((r) => r.label).sort()).toEqual([
+      'CURRY Bar.B.Q FRIED CHICKEN',
+      'Rice',
+    ])
+    expect(filterHierarchyRows(result.levels.menu, ['super deal'], false)).toHaveLength(0)
+  })
+
+  it('parsePromoBracketName extracts group label', () => {
+    expect(parsePromoBracketName('[Super Deal] Set 3')).toBe('Super Deal')
+    expect(parsePromoBracketName('Snow Onion')).toBe('')
   })
 
   it('filters child levels by drill parent', () => {

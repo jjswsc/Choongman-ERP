@@ -22,6 +22,10 @@ export type MemberPortalKey =
   | 'contactViaFacebook'
   | 'contactViaInstagram'
   | 'contactViaLineOfficial'
+  | 'lineOaFriendBannerTitle'
+  | 'lineOaFriendBannerSub'
+  | 'lineOaFriendBannerBtn'
+  | 'lineOaFriendBannerDismiss'
   | 'contactMenuClose'
   | 'contactViaInAppComplaint'
   | 'complaintSectionTitle'
@@ -528,6 +532,26 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'LINE Official',
     th: 'LINE Official',
     ko: '라인 오피셜',
+  },
+  lineOaFriendBannerTitle: {
+    en: 'Get updates on LINE',
+    th: 'รับข่าวสารผ่าน LINE',
+    ko: 'LINE으로 알림 받기',
+  },
+  lineOaFriendBannerSub: {
+    en: 'Add Choongman Chicken as a LINE friend to get point alerts, coupons, and pickup notices.',
+    th: 'เพิ่ม Choongman Chicken เป็นเพื่อน LINE เพื่อรับแจ้งแต้ม คูปอง และสถานะพร้อมรับอาหาร',
+    ko: 'LINE 공식 계정을 친구 추가하면 포인트·쿠폰·픽업 알림을 받을 수 있습니다.',
+  },
+  lineOaFriendBannerBtn: {
+    en: 'Add LINE Official friend',
+    th: 'เพิ่มเพื่อน LINE Official',
+    ko: 'LINE 공식 계정 친구 추가',
+  },
+  lineOaFriendBannerDismiss: {
+    en: 'Dismiss',
+    th: 'ปิด',
+    ko: '닫기',
   },
   contactMenuClose: {
     en: 'Close',

@@ -17,18 +17,23 @@ export type SaasPartnerLoginAccount = {
 export async function createSaasPartnerAdminEmployee(params: {
   name: string
   password: string
+  /** 대리점명 — employees.company 및 /saas-admin/login 회사 입력값 */
+  company?: string
+  store?: string
 }): Promise<SaasPartnerLoginAccount> {
   const name = String(params.name || "").trim()
   const rawPassword = String(params.password || "").trim()
+  const company = String(params.company || "").trim() || resolveSaasPartnerLoginCompany()
+  const store = String(params.store || "").trim() || resolveSaasPartnerLoginStore()
   if (!name) {
     throw new Error("로그인 이름을 입력해 주세요.")
+  }
+  if (!company) {
+    throw new Error("대리점명(회사)이 필요합니다.")
   }
   if (rawPassword.length < 4) {
     throw new Error("비밀번호는 4자 이상 입력해 주세요.")
   }
-
-  const company = resolveSaasPartnerLoginCompany()
-  const store = resolveSaasPartnerLoginStore()
 
   const dup = (await supabaseSelectFilter(
     "employees",

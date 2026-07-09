@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
@@ -86,6 +86,7 @@ export default function SaasOnboardingPage() {
   const [adminPw, setAdminPw] = useState("")
   const [adminPw2, setAdminPw2] = useState("")
   const [openLoginAfter, setOpenLoginAfter] = useState(true)
+  const storeCreateInFlightRef = useRef(false)
 
   const stepLabels = useMemo(
     (): Record<OnboardingStepKey, string> => ({
@@ -114,14 +115,13 @@ export default function SaasOnboardingPage() {
     const row = statusMap[activeTenant.id]
     const localFlags = readLocalOnboardingFlags(activeTenant.id)
     const flags: OnboardingFlags = { ...row?.flags, ...localFlags }
-    if (row?.steps && Object.keys(localFlags).length === 0) return row.steps
     return resolveOnboardingSteps({
       tenant: activeTenant,
       flags,
       enabledIntegrationCount: row?.counts?.enabledIntegrations ?? (integrationConfigured ? 1 : 0),
-      companyOk: row?.steps?.company ?? true,
-      storeOk: row?.steps?.store ?? activeTenant.usage.stores > 0,
-      adminOk: row?.steps?.admin ?? activeTenant.usage.managerAccounts > 0,
+      companyOk: row?.steps?.company ?? Boolean(activeTenantId),
+      storeOk: row?.steps?.store === true || activeTenant.usage.stores > 0,
+      adminOk: row?.steps?.admin === true || activeTenant.usage.managerAccounts > 0,
     })
   }, [activeTenant, activeTenantId, statusMap, step, integrationConfigured])
 
@@ -282,9 +282,17 @@ export default function SaasOnboardingPage() {
       const opts = (json.rows || [])
         .map((r) => ({ storeName: String(r.storeName || "").trim(), storeCode: String(r.storeCode || "").trim() }))
         .filter((r) => r.storeName)
-      setStoreOptions(opts)
-      if (opts.length > 0 && !selectedStoreName) {
-        setSelectedStoreName(opts[0]!.storeName)
+      const deduped: StoreOpt[] = []
+      const seen = new Set<string>()
+      for (const opt of opts) {
+        const key = opt.storeName.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        deduped.push(opt)
+      }
+      setStoreOptions(deduped)
+      if (deduped.length > 0 && !selectedStoreName) {
+        setSelectedStoreName(deduped[0]!.storeName)
       }
     } catch {
       /* optional */
@@ -361,7 +369,19 @@ export default function SaasOnboardingPage() {
     setActiveCompanyName(hit.companyName)
     setPricingDraft({ ...hit })
     const row = statusMap[hit.id]
-    const steps = row?.steps ?? resolveOnboardingSteps({ tenant: hit })
+    const localFlags = readLocalOnboardingFlags(hit.id)
+    const flags: OnboardingFlags = { ...row?.flags, ...localFlags }
+    const steps =
+      row != null
+        ? resolveOnboardingSteps({
+            tenant: hit,
+            flags,
+            enabledIntegrationCount: row.counts?.enabledIntegrations ?? 0,
+            companyOk: row.steps?.company ?? true,
+            storeOk: row.steps?.store === true || hit.usage.stores > 0,
+            adminOk: row.steps?.admin === true || hit.usage.managerAccounts > 0,
+          })
+        : resolveOnboardingSteps({ tenant: hit })
     if (isOnboardingComplete(steps)) {
       setStep("verify")
       return
@@ -432,6 +452,7 @@ export default function SaasOnboardingPage() {
   }
 
   const createStore = async () => {
+    if (storeCreateInFlightRef.current) return
     const tenantId = activeTenantId.trim()
     const name = storeName.trim()
     const code = storeCode.trim()
@@ -446,6 +467,7 @@ export default function SaasOnboardingPage() {
         return
       }
     }
+    storeCreateInFlightRef.current = true
     setLoading(true)
     try {
       const res = await apiFetch("/api/saasAdminStores", {
@@ -474,6 +496,7 @@ export default function SaasOnboardingPage() {
     } catch (error) {
       await appAlert(String(error))
     } finally {
+      storeCreateInFlightRef.current = false
       setLoading(false)
     }
   }
@@ -628,7 +651,7 @@ export default function SaasOnboardingPage() {
     if (s === "company") return mode === "new"
     if (!activeTenantId) return false
     const currentIdx = ONBOARDING_STEP_ORDER.indexOf(step)
-    return idx <= currentIdx || activeSteps[s] === true
+    return idx <= currentIdx
   }
 
   return (

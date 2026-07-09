@@ -42,6 +42,7 @@ import {
 } from "@/lib/member-portal-home-privileges-config"
 import { MemberPortalStoreLocationCard } from "@/components/member-portal/member-portal-store-location-card"
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
+import { MemberPortalLineOaFriendBanner } from "@/components/member-portal/member-portal-line-oa-friend-banner"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
 import type { PortalCouponOfferRow } from "@/lib/member-portal-coupon-claim"
 import { MemberPortalPrivilegeTab } from "@/components/member-portal/member-portal-privilege-tab"
@@ -1162,6 +1163,12 @@ export function MemberPortalApp() {
                 onAction: portalTiers.length > 0 ? () => setTierBenefitsOpen(true) : undefined,
               }}
               pointRetentionYears={pointRetentionYears}
+            />
+
+            <MemberPortalLineOaFriendBanner
+              memberId={member.id}
+              lineOaFriend={member.lineOaFriend}
+              lineOfficialUrl={contactUrls.lineOfficialUrl}
             />
 
             <MemberPortalComplaintPromoCard onOpen={openInAppComplaint} />

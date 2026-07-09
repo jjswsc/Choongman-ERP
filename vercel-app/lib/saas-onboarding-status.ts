@@ -44,8 +44,19 @@ export function emptyOnboardingSteps(): OnboardingStepStatus {
   }
 }
 
-export function hasPricingConfigured(tenant: { pricing?: Pick<TenantItem["pricing"], "modulePrices"> }, flags?: OnboardingFlags): boolean {
+/** 온보딩·요금 확정 여부 — 기본 모듈 ON 초안만으로는 완료 처리하지 않음 */
+export function hasPricingConfigured(_tenant?: { pricing?: Pick<TenantItem["pricing"], "modulePrices"> }, flags?: OnboardingFlags): boolean {
+  return flags?.pricingConfirmed === true
+}
+
+/** 대시보드 등 — DB에 활성 모듈이 있으면 요금 설정된 것으로 간주 */
+export function hasPricingConfiguredInData(
+  tenant: { pricing?: Pick<TenantItem["pricing"], "modulePrices"> },
+  flags?: OnboardingFlags,
+  enabledModuleCount = 0
+): boolean {
   if (flags?.pricingConfirmed === true) return true
+  if (enabledModuleCount > 0) return true
   const modules = normalizeModulePrices(tenant.pricing?.modulePrices)
   return SAAS_MODULE_KEYS.some((key) => modules[key]?.isEnabled === true)
 }
@@ -65,9 +76,9 @@ export function resolveOnboardingSteps(params: {
 }): OnboardingStepStatus {
   const { tenant, flags, enabledIntegrationCount = 0 } = params
   return {
-    company: params.companyOk ?? true,
-    store: params.storeOk ?? tenant.usage.stores > 0,
-    admin: params.adminOk ?? tenant.usage.managerAccounts > 0,
+    company: params.companyOk === true,
+    store: params.storeOk === true || tenant.usage.stores > 0,
+    admin: params.adminOk === true || tenant.usage.managerAccounts > 0,
     pricing: hasPricingConfigured(tenant, flags),
     integrations: hasIntegrationsConfigured(flags, enabledIntegrationCount),
     verify: flags?.loginVerified === true,

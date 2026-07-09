@@ -6,7 +6,6 @@ import {
   type SaasScope,
 } from "@/lib/saas-control-plane-scope"
 import {
-  supabaseInsert,
   supabaseSelect,
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
@@ -15,7 +14,8 @@ import {
 } from "@/lib/supabase-server"
 import { invalidateLoginDataCache } from "@/lib/login-data-cache-server"
 import { invalidateErpStoresMasterCache } from "@/lib/erp-store-master"
-import { loadErpStoreRowsForTenant } from "@/lib/saas-tenant-stores-server"
+import { loadErpStoreRowsForTenant, tenantHasErpStoreName } from "@/lib/saas-tenant-stores-server"
+import { supabaseInsertWithPgrst204Fallback } from "@/lib/supabase-pgrst204-retry"
 
 function bustStoreListCaches(): void {
   invalidateLoginDataCache()
@@ -287,51 +287,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "선택한 고객사를 찾지 못했습니다." }, { status: 404, headers })
     }
 
-    try {
-      const dupRows = (await supabaseSelectFilter(
-        "erp_stores",
-        `tenant_id=eq.${encodeURIComponent(tenantId)}&store_name=eq.${encodeURIComponent(storeName)}`,
-        { limit: 1, select: "id" }
-      )) as { id?: number }[]
-      if ((dupRows || []).length > 0) {
-        return NextResponse.json({ success: false, message: "이미 같은 이름의 매장이 있습니다." }, { status: 409, headers })
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (!/column|42703|tenant_id|store_name/i.test(msg)) throw e
+    const companyName = String(tenant.company_name || tenantId)
+
+    if (await tenantHasErpStoreName(tenantId, storeName, companyName)) {
+      return NextResponse.json(
+        {
+          success: true,
+          tenantId,
+          companyName,
+          storeName,
+          storeCode,
+          alreadyExists: true,
+        },
+        { headers }
+      )
     }
 
     try {
-      await supabaseInsert("erp_stores", {
-        tenant_id: tenantId,
-        store_name: storeName,
-        store_code: storeCode,
-        is_active: true,
-      })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (/(duplicate key|23505)/i.test(msg)) {
-        return NextResponse.json({ success: false, message: "이미 사용 중인 매장 코드/매장명입니다." }, { status: 409, headers })
-      }
-      if (/column|42703|tenant_id|store_name/i.test(msg)) {
-        await supabaseInsert("erp_stores", {
+      await supabaseInsertWithPgrst204Fallback(
+        "erp_stores",
+        {
+          tenant_id: tenantId,
+          store_name: storeName,
           store_code: storeCode,
           display_name: storeName,
           aliases: [storeName],
           is_active: true,
           sort_order: 999,
-        })
-        try {
-          await supabaseUpdateByFilter("erp_stores", `store_code=eq.${encodeURIComponent(storeCode)}`, {
-            tenant_id: tenantId,
-            store_name: storeName,
-          })
-        } catch {
-          /* tenant_id/store_name 컬럼 없으면 legacy 행만 유지 */
+        },
+        "saasAdminStores create"
+      )
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/(duplicate key|23505)/i.test(msg)) {
+        if (await tenantHasErpStoreName(tenantId, storeName, companyName)) {
+          return NextResponse.json(
+            {
+              success: true,
+              tenantId,
+              companyName,
+              storeName,
+              storeCode,
+              alreadyExists: true,
+            },
+            { headers }
+          )
         }
-      } else {
-        throw e
+        return NextResponse.json({ success: false, message: "이미 사용 중인 매장 코드/매장명입니다." }, { status: 409, headers })
       }
+      throw e
     }
 
     bustStoreListCaches()
@@ -340,7 +344,7 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         tenantId,
-        companyName: String(tenant.company_name || tenantId),
+        companyName,
         storeName,
         storeCode,
       },
