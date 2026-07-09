@@ -5678,7 +5678,16 @@ export const i18n = {
     memberTierPointRatePh: '예: 1',
     memberTierDiscountRate: '할인율 (%)',
     memberTierDiscountRatePh: '예: 5',
-    memberTierDiscountPosHint: 'POS에서 회원 연결 시 주문 금액에 자동 적용됩니다.',
+    memberTierDiscountPosHint:
+      'POS에서 회원 연결 시 선택한 메뉴 범위에만 등급 할인이 적용됩니다. 세트·프로모션 제외, 협업/쿠폰과 중복 불가(기본).',
+    memberTierDiscountScopeTitle: '등급 할인 적용 범위 (POS)',
+    memberTierDiscountScopeHint:
+      '협업관리와 같이 대분류·카테고리·메뉴를 선택하세요. 범위를 지정해야 POS에서 등급 할인이 적용됩니다.',
+    memberTierDiscountScopeSave: '적용 범위 저장',
+    memberTierDiscountScopeSaved: '등급 할인 범위를 저장했습니다.',
+    memberTierDiscountExcludePromoSets: '세트·프로모션 메뉴 제외 (권장)',
+    memberTierDiscountStackCollab: '협업(Collab) 할인과 중복 허용',
+    memberTierDiscountStackCoupons: '쿠폰 할인과 중복 허용',
     memberPointExpiryTitle: '포인트·등급 유지 ({years}년 롤링)',
     memberPointExpiryDesc:
       '별도 「유지 포인트」 없이, 적립일로부터 {years}년이 지난 포인트는 매일 자동 소멸합니다. 최근 {years}년간 적립한 포인트만 등급 산정·사용 가능 잔액에 반영됩니다.',
@@ -6918,9 +6927,9 @@ export const i18n = {
     helpHow_admin_members_visits:
       '① memberId 또는 기간으로 방문·주문 이력을 조회합니다.\n② 방문 횟수·객단가·최근 방문일 등 분석 KPI를 확인합니다.\n③ VIP·휴면 판단은 CRM 세그먼트·RFM과 함께 봅니다.',
     helpSum_admin_members_tiers:
-      '회원 등급 기준과 등급별 회원 분포를 관리하는 화면입니다.',
+      '회원 등급 기준, 등급별 할인율·POS 적용 범위, 회원 분포를 관리하는 화면입니다.',
     helpHow_admin_members_tiers:
-      '① 등급 코드·혜택 기준을 확인·수정합니다.\n② 등급별 회원 수와 전환 조건을 점검합니다.\n③ 등급 변경 후 포인트·쿠폰 정책과 맞는지 확인합니다.',
+      '① 등급 코드·혜택 기준을 확인·수정합니다.\n② 등급별 할인율(%)과 「등급 할인 적용 범위」에서 POS 메뉴 범위를 지정합니다(세트·프로모 제외, 협업/쿠폰 중복 기본 불가).\n③ 등급별 회원 수와 전환 조건을 점검합니다.\n④ 등급 변경 후 포인트·쿠폰 정책과 맞는지 확인합니다.',
     helpSum_admin_crm:
       'CRM KPI를 한눈에 보고 휴면/신규/VIP 운영 우선순위를 정하는 화면입니다.',
     helpHow_admin_crm:
@@ -13003,7 +13012,16 @@ orderItemQty: 'Qty',
     memberTierPointRatePh: 'e.g. 1',
     memberTierDiscountRate: 'Discount rate (%)',
     memberTierDiscountRatePh: 'e.g. 5',
-    memberTierDiscountPosHint: 'Applied automatically in POS when a member is linked to the order.',
+    memberTierDiscountPosHint:
+      'Tier discount applies only to selected menu scope in POS. Promo/set excluded; no stack with collab/coupon by default.',
+    memberTierDiscountScopeTitle: 'Tier discount scope (POS)',
+    memberTierDiscountScopeHint:
+      'Pick main category, category, or menus like Collab management. Scope must be set before tier discount applies.',
+    memberTierDiscountScopeSave: 'Save scope',
+    memberTierDiscountScopeSaved: 'Tier discount scope saved.',
+    memberTierDiscountExcludePromoSets: 'Exclude set & promotion menus (recommended)',
+    memberTierDiscountStackCollab: 'Allow stacking with Collab discount',
+    memberTierDiscountStackCoupons: 'Allow stacking with coupon discount',
     memberPointExpiryTitle: 'Points & tier retention ({years}-year rolling)',
     memberPointExpiryDesc:
       'No separate “maintenance points”. Points earned more than {years} years ago expire daily. Only points earned in the last {years} years count toward tier and available balance.',
@@ -14246,9 +14264,9 @@ orderItemQty: 'Qty',
     helpHow_admin_members_visits:
       '① Query visits and orders by memberId or date range.\n② Review visit count, average ticket, and last visit KPIs.\n③ Combine with CRM segments and RFM for VIP or dormant decisions.',
     helpSum_admin_members_tiers:
-      'Manage tier rules and review members by tier.',
+      'Manage tier rules, discount rates, POS scope, and members by tier.',
     helpHow_admin_members_tiers:
-      '① Review or edit tier codes and benefit thresholds.\n② Check member counts and upgrade conditions per tier.\n③ Align point and coupon policies after tier changes.',
+      '① Review or edit tier codes and benefit thresholds.\n② Set tier discount % and POS menu scope under Tier discount scope (excludes promo/set; no stack with collab/coupon by default).\n③ Check member counts and upgrade conditions per tier.\n④ Align point and coupon policies after tier changes.',
     helpSum_admin_crm:
       'CRM KPI dashboard for prioritizing dormant/new/VIP customer operations.',
     helpHow_admin_crm:

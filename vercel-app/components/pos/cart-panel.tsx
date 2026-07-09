@@ -93,9 +93,16 @@ import {
   resolveCartLineMenuIdFromCatalog,
 } from '@/lib/pos-collab-discount'
 import {
-  computeMemberTierDiscountAmount,
   normalizeMemberTierCodeForDiscount,
 } from '@/lib/member-tier-discount'
+import {
+  DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+  type MemberTierDiscountPolicy,
+} from '@/lib/member-tier-discount-policy'
+import {
+  computeMemberTierDiscountEligibleSubtotal,
+  resolveMemberTierDiscountAmount,
+} from '@/lib/pos-member-tier-discount'
 import { buildCouponDiscountLineAllocations, summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
@@ -489,6 +496,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
   const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }>>({})
   const [tierDiscountRates, setTierDiscountRates] = useState<Record<string, number>>({})
+  const [tierDiscountPolicy, setTierDiscountPolicy] = useState<MemberTierDiscountPolicy>(
+    DEFAULT_MEMBER_TIER_DISCOUNT_POLICY
+  )
   const [, setRecentMemberIds] = useState<string[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [guestCount, setGuestCount] = useState(0)
@@ -1009,8 +1019,39 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [memberMap, selectedMemberId, tierDiscountRates])
   const tierDiscountAmt = useMemo(() => {
     if (!selectedMemberId || selectedMemberTierDiscountRate <= 0) return 0
-    return computeMemberTierDiscountAmount(discountScopeSubtotal, selectedMemberTierDiscountRate)
-  }, [discountScopeSubtotal, selectedMemberId, selectedMemberTierDiscountRate])
+    const eligibleSubtotal = computeMemberTierDiscountEligibleSubtotal({
+      lines: cartItems.map((i) => ({
+        id: String(i.id ?? ''),
+        name: String(i.name ?? ''),
+        price: Number(i.price ?? 0),
+        quantity: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
+        ...(i.promoId ? { promoId: String(i.promoId) } : {}),
+        ...(i.menuId ? { menuId: String(i.menuId) } : {}),
+        ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
+      })),
+      menuById: menuByIdForCollab,
+      policy: tierDiscountPolicy,
+      lineDiscountModeByItemId,
+      hasSelectedDiscountScope,
+    })
+    return resolveMemberTierDiscountAmount({
+      eligibleSubtotal,
+      discountRate: selectedMemberTierDiscountRate,
+      policy: tierDiscountPolicy,
+      hasCollab: Boolean(appliedCollab),
+      hasCoupons: appliedCoupons.length > 0,
+    })
+  }, [
+    appliedCollab,
+    appliedCoupons.length,
+    cartItems,
+    hasSelectedDiscountScope,
+    lineDiscountModeByItemId,
+    menuByIdForCollab,
+    selectedMemberId,
+    selectedMemberTierDiscountRate,
+    tierDiscountPolicy,
+  ])
   const manualDiscountInputAmt =
     discountType === 'percent' ? Math.floor((discountScopeSubtotal * discountValue) / 100) : discountValue
   const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
@@ -2054,6 +2095,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     getPosMemberTierRates()
       .then((res) => {
         if (res.success && res.rates) setTierDiscountRates(res.rates)
+        if (res.success && res.discountPolicy) setTierDiscountPolicy(res.discountPolicy)
       })
       .catch(() => {})
   }, [])

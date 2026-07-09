@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { MemberTierBenefitsPreview } from "@/components/admin/member-tier-benefits-preview"
+import { MemberTierDiscountScopeForm } from "@/components/admin/member-tier-discount-scope-form"
 import { CrmTierLadder } from "@/components/crm/crm-tier-ladder"
 import { getMemberTierPolicy, getMemberTiers, recalculateMemberTier, saveMemberTier, saveMemberTierPolicy } from "@/lib/api-client"
 import type { MemberPortalLang } from "@/lib/member-tier-public"
@@ -15,6 +16,10 @@ import {
   DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY,
   type MemberPointEarnBonusPolicy,
 } from "@/lib/member-point-earn-policy"
+import {
+  DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+  type MemberTierDiscountPolicy,
+} from "@/lib/member-tier-discount-policy"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
 import {
@@ -65,6 +70,10 @@ export function MemberPointsPolicyTab() {
   const [rowSavingCode, setRowSavingCode] = React.useState("")
   const [pointRetentionYears, setPointRetentionYears] = React.useState(2)
   const [pointRetentionSaving, setPointRetentionSaving] = React.useState(false)
+  const [tierDiscountPolicy, setTierDiscountPolicy] = React.useState<MemberTierDiscountPolicy>(
+    DEFAULT_MEMBER_TIER_DISCOUNT_POLICY
+  )
+  const [tierDiscountPolicySaving, setTierDiscountPolicySaving] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const [tiers, policy] = await Promise.all([getMemberTiers(), getMemberTierPolicy()])
@@ -91,6 +100,15 @@ export function MemberPointsPolicyTab() {
           ...DEFAULT_MEMBER_POINT_EARN_BONUS_POLICY.periodPromo,
           ...policy.earnBonus.periodPromo,
         },
+      })
+    }
+    if (policy.tierDiscountPolicy) {
+      setTierDiscountPolicy({
+        ...DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+        ...policy.tierDiscountPolicy,
+        scopeMainCategories: [...(policy.tierDiscountPolicy.scopeMainCategories || [])],
+        scopeCategoryKeys: [...(policy.tierDiscountPolicy.scopeCategoryKeys || [])],
+        scopeMenuIds: [...(policy.tierDiscountPolicy.scopeMenuIds || [])],
       })
     }
   }, [])
@@ -509,6 +527,38 @@ export function MemberPointsPolicyTab() {
         </CardContent>
         <CardContent className="border-t pt-4">
           <p className="text-xs text-muted-foreground">{t("memberPointsPolicyExample")}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("memberTierDiscountScopeTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <MemberTierDiscountScopeForm
+            t={t}
+            policy={tierDiscountPolicy}
+            onChange={setTierDiscountPolicy}
+          />
+          <Button
+            disabled={tierDiscountPolicySaving}
+            onClick={() => {
+              setTierDiscountPolicySaving(true)
+              saveMemberTierPolicy({ tierDiscountPolicy })
+                .then((res) => {
+                  if (!res.success) {
+                    void appAlert(res.message || t("saveFailed"))
+                    return
+                  }
+                  if (res.tierDiscountPolicy) setTierDiscountPolicy(res.tierDiscountPolicy)
+                  void appAlert(t("memberTierDiscountScopeSaved"))
+                })
+                .catch(() => appAlert(t("saveFailed")))
+                .finally(() => setTierDiscountPolicySaving(false))
+            }}
+          >
+            {tierDiscountPolicySaving ? t("loading") : t("memberTierDiscountScopeSave")}
+          </Button>
         </CardContent>
       </Card>
 

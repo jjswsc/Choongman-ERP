@@ -230,6 +230,7 @@ export async function getMemberTierPolicy() {
     upgradeBasis?: 'amount' | 'points'
     earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
     pointRetentionYears?: number
+    tierDiscountPolicy?: import('@/lib/member-tier-discount-policy').MemberTierDiscountPolicy
     message?: string
   }>
 }
@@ -238,6 +239,7 @@ export async function saveMemberTierPolicy(params: {
   upgradeBasis?: 'amount' | 'points'
   earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
   pointRetentionYears?: number
+  tierDiscountPolicy?: import('@/lib/member-tier-discount-policy').MemberTierDiscountPolicy
 }) {
   const res = await apiFetchWithOffline('/api/member-tiers/policy', {
     method: 'POST',
@@ -249,13 +251,18 @@ export async function saveMemberTierPolicy(params: {
     upgradeBasis?: 'amount' | 'points'
     earnBonus?: import('@/lib/member-point-earn-policy').MemberPointEarnBonusPolicy
     pointRetentionYears?: number
+    tierDiscountPolicy?: import('@/lib/member-tier-discount-policy').MemberTierDiscountPolicy
     message?: string
   }>
 }
 
 export async function getPosMemberTierRates() {
   const res = await apiFetchWithOffline('/api/pos/member-tier-rates')
-  return res.json() as Promise<{ success: boolean; rates: Record<string, number> }>
+  return res.json() as Promise<{
+    success: boolean
+    rates: Record<string, number>
+    discountPolicy?: import('@/lib/member-tier-discount-policy').MemberTierDiscountPolicy
+  }>
 }
 
 export async function saveMemberTier(params: {

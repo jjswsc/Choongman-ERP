@@ -258,7 +258,7 @@ function findMenuIdsByLineName(
   return bestId ? [bestId] : []
 }
 
-function menuIdsForCollabLineWithCatalog(
+export function menuIdsForCollabLineWithCatalog(
   line: CollabCartLineLike,
   menuById: Map<string, CollabMenuPick>
 ): string[] {
