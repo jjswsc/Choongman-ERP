@@ -7,7 +7,8 @@ import {
   normalizeMemberBirthDateInput,
   normalizeMemberPhone,
 } from '@/lib/member-phone-lookup'
-import { createMember, getMemberSummaryById, type MemberSummary } from '@/lib/members-server'
+import { createMember, getMemberSummaryById, updateMember, type MemberSummary } from '@/lib/members-server'
+import { mergeMembers } from '@/lib/member-merge-server'
 import {
   supabaseInsert,
   supabaseSelectFilter,
@@ -553,5 +554,130 @@ export async function revokeMemberSession(tokenRaw: string): Promise<void> {
 
 export function readMemberTokenFromRequest(req: NextRequest): string {
   return toText(req.cookies.get(MEMBER_SESSION_COOKIE)?.value)
+}
+
+export type LinkLinePhoneBirthErrorCode =
+  | 'missing_phone'
+  | 'missing_birth'
+  | 'rate_limited'
+  | 'not_found'
+  | 'inactive'
+  | 'exists_other_birth'
+  | 'no_line_identity'
+  | 'already_linked'
+
+export class LinkLinePhoneBirthError extends Error {
+  code: LinkLinePhoneBirthErrorCode
+
+  constructor(code: LinkLinePhoneBirthErrorCode, message: string) {
+    super(message)
+    this.name = 'LinkLinePhoneBirthError'
+    this.code = code
+  }
+}
+
+export async function linkLineMemberToPhoneBirth(params: {
+  lineMemberId: number
+  phone: string
+  birthDate: string
+  deviceLabel?: string
+  userAgent?: string
+  ip?: string
+}): Promise<{
+  member: MemberSummary
+  sessionToken: string
+  expiresAt: string
+  merged: boolean
+}> {
+  const lineMemberId = Number(params.lineMemberId || 0)
+  const phone = normalizeMemberPhone(params.phone)
+  const birthDate = normalizeBirthDateInput(params.birthDate)
+  if (!lineMemberId) throw new LinkLinePhoneBirthError('not_found', '회원 정보를 찾을 수 없습니다.')
+  if (!phone) throw new LinkLinePhoneBirthError('missing_phone', '전화번호를 입력해 주세요.')
+  if (!birthDate) throw new LinkLinePhoneBirthError('missing_birth', '생년월일을 입력해 주세요.')
+
+  const lineMember = await getMemberSummaryById(lineMemberId)
+  if (!lineMember) throw new LinkLinePhoneBirthError('not_found', '회원 정보를 찾을 수 없습니다.')
+  if (toText(lineMember.status) === 'inactive') {
+    throw new LinkLinePhoneBirthError('inactive', '비활성화된 회원입니다.')
+  }
+  if (!toText(lineMember.lineUserId)) {
+    throw new LinkLinePhoneBirthError('no_line_identity', 'LINE 계정 연결이 없습니다.')
+  }
+  if (toText(lineMember.phone) && toText(lineMember.birthDate)) {
+    throw new LinkLinePhoneBirthError('already_linked', '이미 전화번호가 연결된 회원입니다.')
+  }
+
+  const failCount = await countRecentBirthLoginFailures(phone)
+  if (failCount >= BIRTH_LOGIN_MAX_TRIES) {
+    throw new LinkLinePhoneBirthError('rate_limited', '시도 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요.')
+  }
+
+  const rows = await findMembersByPhoneVariants(phone)
+  let matched =
+    (rows || []).find((row) => birthDatesMatch(toText(row.birth_date), birthDate)) || null
+  if (!matched && rows.length === 1 && !toText(rows[0]?.birth_date)) {
+    matched = rows[0]
+  }
+
+  if (matched?.id) {
+    const matchedId = Number(matched.id || 0)
+    if (toText(matched.status) === 'inactive') {
+      throw new LinkLinePhoneBirthError('inactive', '비활성화된 회원입니다.')
+    }
+    if (matchedId === lineMemberId) {
+      const member = await updateMember({
+        id: lineMemberId,
+        phone,
+        birthDate,
+      })
+      const session = await createMemberPortalSession({
+        memberId: lineMemberId,
+        deviceLabel: params.deviceLabel || 'line-phone-link',
+        userAgent: params.userAgent,
+        ip: params.ip,
+      })
+      return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, merged: false }
+    }
+
+    await mergeMembers({
+      targetMemberId: matchedId,
+      sourceMemberId: lineMemberId,
+      actor: 'member-portal:line-phone-link',
+    })
+    if (!toText(matched.birth_date)) {
+      await updateMember({ id: matchedId, birthDate })
+    }
+    const member = await getMemberSummaryById(matchedId)
+    if (!member) throw new LinkLinePhoneBirthError('not_found', '회원 정보를 찾을 수 없습니다.')
+    const session = await createMemberPortalSession({
+      memberId: matchedId,
+      deviceLabel: params.deviceLabel || 'line-phone-link',
+      userAgent: params.userAgent,
+      ip: params.ip,
+    })
+    return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, merged: true }
+  }
+
+  if (rows.length > 0) {
+    await recordBirthLoginFailure(phone)
+    throw new LinkLinePhoneBirthError(
+      'exists_other_birth',
+      '등록된 전화번호와 생년월일이 일치하지 않습니다.'
+    )
+  }
+
+  const member = await updateMember({
+    id: lineMemberId,
+    phone,
+    birthDate,
+  })
+  const session = await createMemberPortalSession({
+    memberId: lineMemberId,
+    deviceLabel: params.deviceLabel || 'line-phone-link',
+    userAgent: params.userAgent,
+    ip: params.ip,
+  })
+  return { member, sessionToken: session.sessionToken, expiresAt: session.expiresAt, merged: false }
 }
 

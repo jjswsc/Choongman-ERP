@@ -26,6 +26,11 @@ export type MemberPortalKey =
   | 'lineOaFriendBannerSub'
   | 'lineOaFriendBannerBtn'
   | 'lineOaFriendBannerDismiss'
+  | 'linePhoneLinkTitle'
+  | 'linePhoneLinkDesc'
+  | 'linePhoneLinkBtn'
+  | 'linePhoneLinkSkip'
+  | 'linePhoneLinkMergedNotice'
   | 'contactMenuClose'
   | 'contactViaInAppComplaint'
   | 'complaintSectionTitle'
@@ -387,6 +392,8 @@ export type MemberPortalKey =
   | 'err_line_not_configured'
   | 'err_line_bad_channel_id'
   | 'err_line_state_mismatch'
+  | 'err_already_linked'
+  | 'err_no_line_identity'
   | 'err_access_denied'
   | 'pointKind_earn'
   | 'pointKind_use'
@@ -552,6 +559,31 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Dismiss',
     th: 'ปิด',
     ko: '닫기',
+  },
+  linePhoneLinkTitle: {
+    en: 'Link your membership',
+    th: 'เชื่อมข้อมูลสมาชิก',
+    ko: '회원 정보 연결',
+  },
+  linePhoneLinkDesc: {
+    en: 'Enter the phone number and birth date you used before to sync your points and membership.',
+    th: 'กรอกเบอร์โทรและวันเกิดที่เคยสมัครไว้ เพื่อดึงแต้มและข้อมูลสมาชิกเดิมมาใช้',
+    ko: '기존에 등록한 전화번호와 생년월일을 입력하면 포인트·회원 정보가 연결됩니다.',
+  },
+  linePhoneLinkBtn: {
+    en: 'Link and continue',
+    th: 'เชื่อมข้อมูลและใช้งานต่อ',
+    ko: '연결하고 계속',
+  },
+  linePhoneLinkSkip: {
+    en: 'Skip for now',
+    th: 'ข้ามไปก่อน',
+    ko: '나중에 하기',
+  },
+  linePhoneLinkMergedNotice: {
+    en: 'Your LINE account is now linked to your existing membership.',
+    th: 'เชื่อมบัญชี LINE กับสมาชิกเดิมเรียบร้อยแล้ว',
+    ko: 'LINE 계정이 기존 회원 정보와 연결되었습니다.',
   },
   contactMenuClose: {
     en: 'Close',
@@ -1604,6 +1636,16 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'LINE Login expired. Please try again.',
     th: 'LINE Login หมดอายุ กรุณาลองใหม่อีกครั้ง',
     ko: 'LINE 로그인이 만료되었습니다. 다시 시도해 주세요.',
+  },
+  err_already_linked: {
+    en: 'Phone number is already linked to this account.',
+    th: 'เชื่อมเบอร์โทรกับบัญชีนี้แล้ว',
+    ko: '이미 전화번호가 연결된 계정입니다.',
+  },
+  err_no_line_identity: {
+    en: 'LINE account link not found. Please sign in with LINE again.',
+    th: 'ไม่พบการเชื่อม LINE กรุณาเข้าสู่ระบบ LINE ใหม่',
+    ko: 'LINE 연결 정보를 찾을 수 없습니다. LINE으로 다시 로그인해 주세요.',
   },
   err_access_denied: {
     en: 'LINE sign-in was cancelled',

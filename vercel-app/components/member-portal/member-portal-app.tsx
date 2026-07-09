@@ -44,6 +44,7 @@ import { MemberPortalStoreLocationCard } from "@/components/member-portal/member
 import { MemberPwaInstallBanner } from "@/components/member-portal/member-pwa-install-banner"
 import { MemberPortalLineOaFriendBanner } from "@/components/member-portal/member-portal-line-oa-friend-banner"
 import { MemberPortalJoinStoreDialog } from "@/components/member-portal/member-portal-join-store-dialog"
+import { MemberPortalLinePhoneLinkDialog } from "@/components/member-portal/member-portal-line-phone-link-dialog"
 import { MemberPortalMembershipCard } from "@/components/member-portal/member-portal-membership-card"
 import type { PortalCouponOfferRow } from "@/lib/member-portal-coupon-claim"
 import { MemberPortalPrivilegeTab } from "@/components/member-portal/member-portal-privilege-tab"
@@ -181,6 +182,7 @@ export function MemberPortalApp() {
     Array<{ storeCode: string; displayName: string }>
   >([])
   const [signupOfficeStoreCode, setSignupOfficeStoreCode] = React.useState("office")
+  const [phoneLinkSkipped, setPhoneLinkSkipped] = React.useState(false)
   const [signupConsentMarketing, setSignupConsentMarketing] = React.useState(true)
   const [loading, setLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState(false)
@@ -430,6 +432,15 @@ export function MemberPortalApp() {
   React.useEffect(() => {
     setFavoriteStoreCodes(readFavoriteStoreCodesFromLocalStorage())
   }, [])
+
+  React.useEffect(() => {
+    if (!member?.id) return
+    try {
+      setPhoneLinkSkipped(localStorage.getItem(`member-line-phone-link-skipped-${member.id}`) === "1")
+    } catch {
+      setPhoneLinkSkipped(false)
+    }
+  }, [member?.id])
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -1088,7 +1099,24 @@ export function MemberPortalApp() {
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
       <MemberPortalShell embedPreview={embedPreview}>
-        {!member.joinStoreCode ? (
+        {member.lineUserId && (!member.phone || !member.birthDate) && !phoneLinkSkipped ? (
+          <MemberPortalLinePhoneLinkDialog
+            onComplete={(updated, merged) => {
+              applyLoggedInMember(updated)
+              void loadSession()
+              if (merged) setNotice(t("linePhoneLinkMergedNotice"))
+            }}
+            onSkip={() => {
+              if (!member.id) return
+              try {
+                localStorage.setItem(`member-line-phone-link-skipped-${member.id}`, "1")
+              } catch {
+                /* ignore */
+              }
+              setPhoneLinkSkipped(true)
+            }}
+          />
+        ) : !member.joinStoreCode ? (
           <MemberPortalJoinStoreDialog
             officeStoreCode={signupOfficeStoreCode}
             storeOptions={signupStoreOptions}
