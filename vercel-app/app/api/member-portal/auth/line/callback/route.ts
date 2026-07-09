@@ -7,6 +7,7 @@ import {
   readLineJoinStoreCookie,
   readLineOAuthStateCookie,
   resolveMemberPortalOrigin,
+  verifyLineOAuthState,
 } from '@/lib/member-line-login'
 import {
   buildMemberSessionCookie,
@@ -49,15 +50,18 @@ export async function GET(req: NextRequest) {
   const oauthError = String(req.nextUrl.searchParams.get('error') || '').trim()
   const friendshipStatusChanged = String(req.nextUrl.searchParams.get('friendship_status_changed') || '').trim() === 'true'
   const cookieState = readLineOAuthStateCookie(req.headers.get('cookie'))
+  const verifiedState = state ? verifyLineOAuthState(state) : { ok: false as const }
+  const stateOk = Boolean(state) && (verifiedState.ok || (cookieState && state === cookieState))
 
   if (oauthError) return redirectWithError(req, oauthError)
-  if (!code || !state || !cookieState || state !== cookieState) {
+  if (!code || !stateOk) {
     return redirectWithError(req, 'line_state_mismatch')
   }
 
   try {
     const origin = resolveMemberPortalOrigin(req.nextUrl.origin)
-    const joinStoreCode = readLineJoinStoreCookie(req.headers.get('cookie'))
+    const joinStoreCode =
+      verifiedState.joinStoreCode || readLineJoinStoreCookie(req.headers.get('cookie'))
     const { profile, friendFlag } = await exchangeLineAuthCode({ code, origin })
     const member = await loginMemberWithLineProfile(profile, {
       friendFlag,

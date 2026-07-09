@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = resolveMemberPortalOrigin(req.nextUrl.origin)
-  const state = createLineOAuthState()
+  const state = createLineOAuthState(joinStore || undefined)
   const url = buildLineAuthorizeUrl({ origin, state })
   const secure = isProdLike()
   const res = NextResponse.redirect(url)

@@ -1,5 +1,7 @@
-import crypto from 'crypto'
+import crypto, { createHmac, timingSafeEqual } from 'crypto'
 import { registerLineMember, updateMemberLineOaFriend } from '@/lib/members-server'
+
+const LINE_OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 
 function toText(v: unknown): string {
   return String(v || '').trim()
@@ -65,8 +67,67 @@ export function buildLineLoginCallbackUrl(origin: string): string {
   return `${origin.replace(/\/+$/, '')}/api/member-portal/auth/line/callback`
 }
 
-export function createLineOAuthState(): string {
-  return crypto.randomBytes(24).toString('hex')
+function getLineOAuthStateSecret(): string {
+  const explicit = toText(process.env.LINE_LOGIN_STATE_SECRET)
+  if (explicit.length >= 16) return explicit
+  const loginSecret =
+    toText(process.env.LINE_LOGIN_CHANNEL_SECRET) || toText(process.env.LINE_CHANNEL_SECRET)
+  if (loginSecret.length >= 16) return loginSecret
+  const jwt = toText(process.env.JWT_SECRET)
+  if (jwt.length >= 16) return jwt
+  return 'cm-erp-line-oauth-dev-only'
+}
+
+function signLineOAuthStateBody(body: string): string {
+  return createHmac('sha256', getLineOAuthStateSecret()).update(body, 'utf8').digest('base64url')
+}
+
+/** LINE 앱 복귀 시 쿠키가 빠지는 모바일 환경용 — state 자체에 서명·만료를 담음 */
+export function createLineOAuthState(joinStoreCode?: string): string {
+  const nonce = crypto.randomBytes(16).toString('hex')
+  const issuedAt = Date.now()
+  const joinStore = encodeURIComponent(toText(joinStoreCode))
+  const body = `${nonce}.${issuedAt}.${joinStore}`
+  const sig = signLineOAuthStateBody(body)
+  return `${body}.${sig}`
+}
+
+export function verifyLineOAuthState(state: string): {
+  ok: boolean
+  joinStoreCode?: string
+  reason?: 'invalid_format' | 'bad_signature' | 'expired'
+} {
+  const raw = toText(state)
+  const parts = raw.split('.')
+  if (parts.length !== 4) return { ok: false, reason: 'invalid_format' }
+  const [nonce, issuedAtStr, joinStoreEnc, sig] = parts
+  if (!nonce || !issuedAtStr || joinStoreEnc === undefined || !sig) {
+    return { ok: false, reason: 'invalid_format' }
+  }
+  const issuedAt = Number(issuedAtStr)
+  if (!Number.isFinite(issuedAt)) return { ok: false, reason: 'invalid_format' }
+  const ageMs = Date.now() - issuedAt
+  if (ageMs > LINE_OAUTH_STATE_TTL_MS || ageMs < -60_000) {
+    return { ok: false, reason: 'expired' }
+  }
+  const body = `${nonce}.${issuedAtStr}.${joinStoreEnc}`
+  const expected = signLineOAuthStateBody(body)
+  try {
+    const a = Buffer.from(sig)
+    const b = Buffer.from(expected)
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return { ok: false, reason: 'bad_signature' }
+    }
+  } catch {
+    return { ok: false, reason: 'bad_signature' }
+  }
+  let joinStoreCode = ''
+  try {
+    joinStoreCode = decodeURIComponent(joinStoreEnc)
+  } catch {
+    joinStoreCode = ''
+  }
+  return { ok: true, joinStoreCode: joinStoreCode || undefined }
 }
 
 export function buildLineOAuthStateCookie(state: string, secure: boolean): string {
