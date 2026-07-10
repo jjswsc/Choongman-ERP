@@ -511,5 +511,22 @@ export async function applyLoyaltyOnOrder(params: {
     updated_at: getBangkokDateTimeString(),
   })
   const recalc = await recalculateMemberTier(memberId)
+  if (appliedEarn > 0 || appliedUse > 0) {
+    void import('@/lib/member-point-line-notify')
+      .then(({ notifyMemberPointLineOnOrder }) =>
+        notifyMemberPointLineOnOrder({
+          memberId,
+          earned: appliedEarn,
+          used: appliedUse,
+          balanceAfter: nextBalance,
+          tierCode: recalc.tierCode,
+          storeCode: toText(params.storeCode) || undefined,
+          orderNo: toText(params.orderNo) || undefined,
+        })
+      )
+      .catch((err) => {
+        console.warn('member-point-line-notify hook:', err)
+      })
+  }
   return { pointEarned: appliedEarn, tierCode: recalc.tierCode, stamp }
 }
