@@ -623,23 +623,38 @@ export async function POST(req: NextRequest) {
     let pointEarned = pointEarnedReq
     let stampResult: import('@/lib/member-stamp-card').MemberStampRecordResult | null = null
     if (memberId > 0 && paymentComplete && created?.id) {
-      const loyalty = await applyLoyaltyOnOrder({
-        memberId,
-        orderId: Number(created.id),
-        storeCode,
-        totalAmount: total,
-        pointUsed,
-        pointEarned: pointEarnedReq,
-        orderNo,
-        couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
-        orderType,
-        createdBy,
-      })
-      pointEarned = loyalty.pointEarned
-      stampResult = loyalty.stamp ?? null
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
-        point_earned: pointEarned,
-      })
+      try {
+        const loyalty = await applyLoyaltyOnOrder({
+          memberId,
+          orderId: Number(created.id),
+          storeCode,
+          totalAmount: total,
+          pointUsed,
+          pointEarned: pointEarnedReq,
+          orderNo,
+          couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
+          orderType,
+          createdBy,
+        })
+        pointEarned = loyalty.pointEarned
+        stampResult = loyalty.stamp ?? null
+        await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
+          point_earned: pointEarned,
+        })
+      } catch (loyaltyErr) {
+        console.error('savePosOrder loyalty:', loyaltyErr)
+      }
+      try {
+        const { notifyMemberPointLineForPaidOrder } = await import('@/lib/member-point-line-notify')
+        await notifyMemberPointLineForPaidOrder({
+          orderId: Number(created.id),
+          memberId,
+          storeCode,
+          orderNo,
+        })
+      } catch (notifyErr) {
+        console.error('savePosOrder point line notify:', notifyErr)
+      }
     }
 
     if (paymentComplete && Number(created?.id) > 0) {

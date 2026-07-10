@@ -552,25 +552,46 @@ export async function POST(req: NextRequest) {
     let pointEarned = pointEarnedReq
     const previousEarned = Number(current?.point_earned || 0)
     if (memberId > 0 && paymentComplete && previousEarned <= 0) {
-      const loyalty = await applyLoyaltyOnOrder({
-        memberId,
-        orderId: id,
-        storeCode: String(current?.store_code ?? '').trim(),
-        totalAmount: total,
-        pointUsed,
-        pointEarned: pointEarnedReq,
-        couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
-        orderNo: String(current?.order_no ?? ''),
-        orderType: String(current?.order_type ?? body?.orderType ?? ''),
-        createdBy: String(current?.created_by ?? body?.createdBy ?? body?.created_by ?? ''),
-      })
-      pointEarned = loyalty.pointEarned
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
-        point_earned: pointEarned,
-      })
+      try {
+        const loyalty = await applyLoyaltyOnOrder({
+          memberId,
+          orderId: id,
+          storeCode: String(current?.store_code ?? '').trim(),
+          totalAmount: total,
+          pointUsed,
+          pointEarned: pointEarnedReq,
+          couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
+          orderNo: String(current?.order_no ?? ''),
+          orderType: String(current?.order_type ?? body?.orderType ?? ''),
+          createdBy: String(current?.created_by ?? body?.createdBy ?? body?.created_by ?? ''),
+        })
+        pointEarned = loyalty.pointEarned
+        await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
+          point_earned: pointEarned,
+        })
+      } catch (loyaltyErr) {
+        console.error('updatePosOrder loyalty:', loyaltyErr)
+      }
     } else if (paymentComplete && previousEarned <= 0) {
-      const ensured = await ensurePosOrderLoyaltyApplied(id)
-      if (ensured > 0) pointEarned = ensured
+      try {
+        const ensured = await ensurePosOrderLoyaltyApplied(id)
+        if (ensured > 0) pointEarned = ensured
+      } catch (loyaltyErr) {
+        console.error('updatePosOrder ensure loyalty:', loyaltyErr)
+      }
+    }
+    if (memberId > 0 && paymentComplete) {
+      try {
+        const { notifyMemberPointLineForPaidOrder } = await import('@/lib/member-point-line-notify')
+        await notifyMemberPointLineForPaidOrder({
+          orderId: id,
+          memberId,
+          storeCode: String(current?.store_code ?? '').trim(),
+          orderNo: String(current?.order_no ?? ''),
+        })
+      } catch (notifyErr) {
+        console.error('updatePosOrder point line notify:', notifyErr)
+      }
     }
 
     let couponsForRedeem = appliedPre.length > 0 ? appliedPre : appliedCoupons

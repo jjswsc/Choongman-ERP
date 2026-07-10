@@ -19,7 +19,7 @@ import {
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
-import { notifyMemberPointLineOnOrder } from '@/lib/member-point-line-notify'
+import { notifyMemberPointLineForPaidOrder } from '@/lib/member-point-line-notify'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -353,7 +353,19 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   if (!paymentComplete && !paidLike) return 0
 
   const priorEarned = roundMemberPointsEarn(order.point_earned)
-  if (priorEarned > 0) return priorEarned
+  if (priorEarned > 0) {
+    try {
+      await notifyMemberPointLineForPaidOrder({
+        orderId: id,
+        memberId,
+        storeCode: String(order.store_code || '').trim(),
+        orderNo: String(order.order_no || ''),
+      })
+    } catch (notifyErr) {
+      console.warn('ensurePosOrderLoyaltyApplied point notify:', notifyErr)
+    }
+    return priorEarned
+  }
 
   try {
     const ledger = (await supabaseSelectFilter(
@@ -390,6 +402,16 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
     await redeemMemberCouponIssuesForPaidOrder(id)
   } catch (redeemErr) {
     console.error('ensurePosOrderLoyaltyApplied coupon redeem:', redeemErr)
+  }
+  try {
+    await notifyMemberPointLineForPaidOrder({
+      orderId: id,
+      memberId,
+      storeCode: String(order.store_code || '').trim(),
+      orderNo: String(order.order_no || ''),
+    })
+  } catch (notifyErr) {
+    console.warn('ensurePosOrderLoyaltyApplied point notify:', notifyErr)
   }
   return earned
 }
@@ -512,20 +534,5 @@ export async function applyLoyaltyOnOrder(params: {
     updated_at: getBangkokDateTimeString(),
   })
   const recalc = await recalculateMemberTier(memberId)
-  if (appliedEarn > 0 || appliedUse > 0) {
-    try {
-      await notifyMemberPointLineOnOrder({
-        memberId,
-        earned: appliedEarn,
-        used: appliedUse,
-        balanceAfter: nextBalance,
-        tierCode: recalc.tierCode,
-        storeCode: toText(params.storeCode) || undefined,
-        orderNo: toText(params.orderNo) || undefined,
-      })
-    } catch (err) {
-      console.warn('member-point-line-notify hook:', err)
-    }
-  }
   return { pointEarned: appliedEarn, tierCode: recalc.tierCode, stamp }
 }

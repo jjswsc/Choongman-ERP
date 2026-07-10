@@ -97,7 +97,6 @@ export function buildMemberPointLineFlexMessage(params: {
 
   const bubble: Record<string, unknown> = {
     type: 'bubble',
-    size: 'mega',
     header: {
       type: 'box',
       layout: 'vertical',
