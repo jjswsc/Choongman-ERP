@@ -54,6 +54,9 @@ comment on column public.pos_orders.point_used is '주문 사용 포인트 (소�
 drop function if exists public.search_members_points_cursor(
   bigint, integer, text, text, text, integer, integer, integer, integer
 );
+drop function if exists public.search_members_points_cursor(
+  bigint, integer, text, text, text, numeric, numeric, numeric, numeric
+);
 
 create function public.search_members_points_cursor(
   p_after_id bigint default null,

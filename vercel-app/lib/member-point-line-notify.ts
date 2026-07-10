@@ -1,4 +1,5 @@
-import { pushLineTextMessage } from '@/lib/line-messaging-server'
+import { buildMemberPointLineFlexMessage } from '@/lib/member-point-line-flex'
+import { pushLineMessages, pushLineTextMessage } from '@/lib/line-messaging-server'
 import { formatMemberPointsDisplay } from '@/lib/member-points-math'
 import { isMemberPointLineNotifyEnabled } from '@/lib/member-point-line-notify-settings'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
@@ -47,7 +48,7 @@ export function buildMemberPointLineNotifyText(params: {
   return lines.join('\n').slice(0, 5000)
 }
 
-/** POS·회원앱 결제 후 포인트 적립/사용 시 LINE 텍스트 push (실패해도 주문 처리는 유지) */
+/** POS·회원앱 결제 후 포인트 적립/사용 시 LINE Flex 카드 push (실패 시 텍스트 폴백) */
 export async function notifyMemberPointLineOnOrder(params: {
   memberId: number
   earned: number
@@ -77,13 +78,26 @@ export async function notifyMemberPointLineOnOrder(params: {
     return
   }
 
+  const flex = buildMemberPointLineFlexMessage(params)
+  const flexResult = await pushLineMessages({
+    userId: lineUserId,
+    messages: [{ type: 'flex', altText: flex.altText, contents: flex.contents }],
+  })
+  if (flexResult.ok) return
+
+  console.warn('member-point-line-notify: flex_push_failed', {
+    memberId,
+    lineUserId,
+    message: flexResult.message || 'flex_push_failed',
+  })
+
   const text = buildMemberPointLineNotifyText(params)
-  const result = await pushLineTextMessage({ userId: lineUserId, text })
-  if (!result.ok) {
+  const textResult = await pushLineTextMessage({ userId: lineUserId, text })
+  if (!textResult.ok) {
     console.warn('member-point-line-notify: push_failed', {
       memberId,
       lineUserId,
-      message: result.message || 'push_failed',
+      message: textResult.message || 'push_failed',
     })
   }
 }

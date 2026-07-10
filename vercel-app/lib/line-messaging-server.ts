@@ -52,12 +52,41 @@ export async function pushLineTextMessage(params: {
   userId: string
   text: string
 }): Promise<{ ok: boolean; message?: string }> {
+  return pushLineMessages({
+    userId: params.userId,
+    messages: [{ type: 'text', text: params.text }],
+  })
+}
+
+export type LinePushMessage =
+  | { type: 'text'; text: string }
+  | { type: 'flex'; altText: string; contents: Record<string, unknown> }
+
+export async function pushLineMessages(params: {
+  userId: string
+  messages: LinePushMessage[]
+}): Promise<{ ok: boolean; message?: string }> {
   const token = getLineAccessToken()
   if (!token) return { ok: false, message: 'no_token' }
 
   const userId = String(params.userId || '').trim()
-  const text = String(params.text || '').trim()
-  if (!userId || !text) return { ok: false, message: 'invalid_params' }
+  const messages = (params.messages || [])
+    .map((msg) => {
+      if (msg.type === 'text') {
+        const text = String(msg.text || '').trim()
+        if (!text) return null
+        return { type: 'text' as const, text: text.slice(0, 5000) }
+      }
+      const altText = String(msg.altText || '').trim()
+      if (!altText || !msg.contents) return null
+      return {
+        type: 'flex' as const,
+        altText: altText.slice(0, 400),
+        contents: msg.contents,
+      }
+    })
+    .filter(Boolean)
+  if (!userId || messages.length === 0) return { ok: false, message: 'invalid_params' }
 
   const res = await fetch(`${getLineApiBase()}/v2/bot/message/push`, {
     method: 'POST',
@@ -65,10 +94,7 @@ export async function pushLineTextMessage(params: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      to: userId,
-      messages: [{ type: 'text', text: text.slice(0, 5000) }],
-    }),
+    body: JSON.stringify({ to: userId, messages }),
     cache: 'no-store',
   })
   if (!res.ok) {
