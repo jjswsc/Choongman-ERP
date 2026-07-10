@@ -19,6 +19,7 @@ import {
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
+import { notifyMemberPointLineOnOrder } from '@/lib/member-point-line-notify'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -512,21 +513,19 @@ export async function applyLoyaltyOnOrder(params: {
   })
   const recalc = await recalculateMemberTier(memberId)
   if (appliedEarn > 0 || appliedUse > 0) {
-    void import('@/lib/member-point-line-notify')
-      .then(({ notifyMemberPointLineOnOrder }) =>
-        notifyMemberPointLineOnOrder({
-          memberId,
-          earned: appliedEarn,
-          used: appliedUse,
-          balanceAfter: nextBalance,
-          tierCode: recalc.tierCode,
-          storeCode: toText(params.storeCode) || undefined,
-          orderNo: toText(params.orderNo) || undefined,
-        })
-      )
-      .catch((err) => {
-        console.warn('member-point-line-notify hook:', err)
+    try {
+      await notifyMemberPointLineOnOrder({
+        memberId,
+        earned: appliedEarn,
+        used: appliedUse,
+        balanceAfter: nextBalance,
+        tierCode: recalc.tierCode,
+        storeCode: toText(params.storeCode) || undefined,
+        orderNo: toText(params.orderNo) || undefined,
       })
+    } catch (err) {
+      console.warn('member-point-line-notify hook:', err)
+    }
   }
   return { pointEarned: appliedEarn, tierCode: recalc.tierCode, stamp }
 }

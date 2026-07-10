@@ -6,11 +6,17 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 const BRAND_NAME = 'Choongman Chicken'
 
 async function resolveMemberLineUserId(memberId: number): Promise<string> {
-  const rows = (await supabaseSelectFilter(
-    'member_identities',
-    `provider=eq.line&member_id=eq.${memberId}`,
-    { limit: 1, select: 'provider_user_id' }
-  )) as Array<{ provider_user_id?: string | null }>
+  const base = `provider=eq.line&member_id=eq.${memberId}`
+  const activeRows = (await supabaseSelectFilter('member_identities', `${base}&status=eq.active`, {
+    limit: 1,
+    select: 'provider_user_id',
+  })) as Array<{ provider_user_id?: string | null }>
+  const active = String(activeRows?.[0]?.provider_user_id || '').trim()
+  if (active) return active
+  const rows = (await supabaseSelectFilter('member_identities', base, {
+    limit: 1,
+    select: 'provider_user_id',
+  })) as Array<{ provider_user_id?: string | null }>
   return String(rows?.[0]?.provider_user_id || '').trim()
 }
 
@@ -54,17 +60,30 @@ export async function notifyMemberPointLineOnOrder(params: {
   const memberId = Number(params.memberId || 0)
   const earned = Number(params.earned || 0)
   const used = Number(params.used || 0)
-  if (!memberId || (earned <= 0 && used <= 0)) return
+  if (!memberId || (earned <= 0 && used <= 0)) {
+    console.info('member-point-line-notify: skip_no_points', { memberId, earned, used })
+    return
+  }
 
   const enabled = await isMemberPointLineNotifyEnabled()
-  if (!enabled) return
+  if (!enabled) {
+    console.info('member-point-line-notify: skip_disabled', { memberId })
+    return
+  }
 
   const lineUserId = await resolveMemberLineUserId(memberId)
-  if (!lineUserId) return
+  if (!lineUserId) {
+    console.info('member-point-line-notify: skip_no_line_identity', { memberId })
+    return
+  }
 
   const text = buildMemberPointLineNotifyText(params)
   const result = await pushLineTextMessage({ userId: lineUserId, text })
   if (!result.ok) {
-    console.warn('member-point-line-notify:', result.message || 'push_failed', { memberId })
+    console.warn('member-point-line-notify: push_failed', {
+      memberId,
+      lineUserId,
+      message: result.message || 'push_failed',
+    })
   }
 }
