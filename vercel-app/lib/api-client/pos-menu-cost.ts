@@ -239,6 +239,85 @@ export interface PosCostAnalysisAuditRow {
   afterItemCode?: string | null
 }
 
+export type PosCostSalesWeightedChannelFilter = 'all' | 'dine_in' | 'takeout' | 'delivery' | 'other'
+
+export type PosCostSalesWeightedResult = {
+  startStr: string
+  endStr: string
+  storeFilter: string
+  channel: PosCostSalesWeightedChannelFilter
+  posTruncated: boolean
+  warnings: string[]
+  summary: {
+    netSales: number
+    grossSalesBeforeDiscount: number
+    totalCost: number
+    foodCost: number
+    packagingCost: number
+    costPctOfNet: number
+    costPctOfGross: number
+    matchedLineQty: number
+    unmatchedLineQty: number
+    periodOrderCount: number
+    miseRatePercent: number
+  } | null
+  byChannel: {
+    channel: string
+    orderCount: number
+    netSales: number
+    bundleDiscount: number
+    paymentDiscount: number
+    totalDiscount: number
+    foodCost: number
+    packagingCost: number
+    totalCost: number
+    contributionMargin: number
+    costPctOfNet: number
+  }[]
+  byCategory: {
+    categoryMain: string
+    netSales: number
+    totalCost: number
+    foodCost: number
+    packagingCost: number
+    costPctOfNet: number
+    matchedQty: number
+    unmatchedQty: number
+  }[]
+  bomUnmatchedLines: {
+    menuId: string
+    optionId: string
+    menuLabel: string
+    optionLabel: string
+    reason: 'missing_menu_id' | 'missing_bom'
+    lineQty: number
+  }[]
+}
+
+export async function getPosCostSalesWeighted(params: {
+  startStr: string
+  endStr: string
+  storeFilter?: string
+  channel?: PosCostSalesWeightedChannelFilter
+  misePercent?: number
+}): Promise<PosCostSalesWeightedResult> {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.channel) q.set('channel', params.channel)
+  if (params.misePercent != null && Number.isFinite(params.misePercent)) {
+    q.set('misePercent', String(params.misePercent))
+  }
+  const res = await apiFetchWithOffline(`/api/getPosCostSalesWeighted?${q}`)
+  const data = (await res.json()) as PosCostSalesWeightedResult & { error?: string }
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`)
+  }
+  return data
+}
+
 export async function getPosCostAnalysisAudit(params?: {
   limit?: number
   startDate?: string

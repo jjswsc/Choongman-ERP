@@ -21,7 +21,7 @@ import { CostCalculatorTab } from "@/components/cost-analysis/cost-calculator-ta
 import { SauceCostTab } from "@/components/cost-analysis/sauce-cost-tab"
 import { PosCostListPanel } from "@/components/cost-analysis/pos-cost-list-panel"
 import { PosCostAuditPanel } from "@/components/cost-analysis/pos-cost-audit-panel"
-import { PosCostInsightsTab } from "@/components/cost-analysis/pos-cost-insights-tab"
+import { PosCostActualTab } from "@/components/cost-analysis/pos-cost-actual-tab"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessPosCostAnalysis, canEditPosCostAnalysis } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -60,7 +60,12 @@ export default function PosCostAnalysisPage() {
   const [loading, setLoading] = React.useState(false)
   const [listQueried, setListQueried] = React.useState(false)
   const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null)
-  const [activeTab, setActiveTab] = React.useState("list")
+  const [activeTab, setActiveTab] = React.useState(() => {
+    const tab = (searchParams.get("tab") || "").trim()
+    if (tab === "actual" || tab === "insights") return "actual"
+    if (tab === "list" || tab === "sauce" || tab === "calculator" || tab === "audit") return tab
+    return "list"
+  })
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
   const [settings, setSettings] = React.useState<PosCostListSettings>(DEFAULT_POS_COST_LIST_SETTINGS)
   const initialDeepLinkHandledRef = React.useRef(false)
@@ -208,9 +213,9 @@ export default function PosCostAnalysisPage() {
                 <List className={adminTabsIconCn} aria-hidden />
                 {t("posCostTabList")}
               </TabsTrigger>
-              <TabsTrigger value="insights" className={adminTabsTriggerCn}>
+              <TabsTrigger value="actual" className={adminTabsTriggerCn}>
                 <BarChart3 className={adminTabsIconCn} aria-hidden />
-                {t("posCostTabInsights")}
+                {t("posCostTabActual")}
               </TabsTrigger>
               <TabsTrigger value="sauce" className={adminTabsTriggerCn}>
                 <FlaskConical className={adminTabsIconCn} aria-hidden />
@@ -244,8 +249,8 @@ export default function PosCostAnalysisPage() {
             />
           </TabsContent>
 
-          <TabsContent value="insights" className={cn(adminTabsContentCn, "space-y-4")}>
-            <PosCostInsightsTab
+          <TabsContent value="actual" className={cn(adminTabsContentCn, "space-y-4")}>
+            <PosCostActualTab
               rows={rows}
               settings={settings}
               listQueried={listQueried}

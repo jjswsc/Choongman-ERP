@@ -280,7 +280,7 @@ function DataQualityBadge({
             </table>
           </div>
           <Link
-            href="/admin/pos-cost-analysis"
+            href="/admin/pos-cost-analysis?tab=actual"
             className="mt-4 inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
             {t("mmBridgeOpenCostAnalysis")}
@@ -343,7 +343,7 @@ function buildPosWaterfallSteps(
       label: t("mmBridgeFoodCostTheory"),
       amount: theory.foodCost,
       kind: "subtract",
-      href: "/admin/pos-cost-analysis",
+      href: "/admin/pos-cost-analysis?tab=actual",
       pct: pctNet(theory.foodCost),
     },
     {
@@ -351,7 +351,7 @@ function buildPosWaterfallSteps(
       label: t("mmBridgePackagingCostTheory"),
       amount: theory.packagingCost,
       kind: "subtract",
-      href: "/admin/pos-cost-analysis",
+      href: "/admin/pos-cost-analysis?tab=actual",
       pct: pctNet(theory.packagingCost),
     },
     {
@@ -880,7 +880,7 @@ export function ManagementMarginTab({
                   ) : null}
                 </div>
                 <Link
-                  href="/admin/pos-cost-analysis"
+                  href="/admin/pos-cost-analysis?tab=actual"
                   className="mt-2 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
                 >
                   {t("mmBridgeOpenCostAnalysis")}
