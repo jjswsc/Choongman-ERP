@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import * as XLSX from 'xlsx'
 import { createMember } from '@/lib/members-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { normalizeMemberPoints } from '@/lib/member-points-math'
 import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 type ReportType = 'customer' | 'point' | 'coupon'
@@ -183,6 +184,35 @@ function findColumnIndex(headers: string[], tokens: string[]): number {
   return headers.findIndex((h) => includesAnyToken(h, tokens))
 }
 
+/** LINE CRM 엑셀 → ERP members 포인트 필드 매핑 (단위 테스트용 export) */
+export function resolveLineCrmMemberPointPatch(params: {
+  hasCurrentPointsCol: boolean
+  hasTotalPointsCol: boolean
+  hasTierPointsCol: boolean
+  currentPoints: number
+  totalPoints: number
+  tierPoints: number
+}): {
+  point_balance?: number
+  tier_points?: number
+  line_current_points?: number
+  line_total_points?: number
+  line_tier_points?: number
+} {
+  const current = normalizeMemberPoints(params.currentPoints)
+  const total = normalizeMemberPoints(params.totalPoints)
+  const tierFromCol = normalizeMemberPoints(params.tierPoints)
+  const tierQual =
+    params.hasTierPointsCol ? tierFromCol : params.hasTotalPointsCol ? total : undefined
+
+  return {
+    ...(params.hasCurrentPointsCol ? { point_balance: current, line_current_points: current } : {}),
+    ...(tierQual !== undefined ? { tier_points: tierQual } : {}),
+    ...(params.hasTotalPointsCol ? { line_total_points: total } : {}),
+    ...(params.hasTierPointsCol ? { line_tier_points: tierFromCol } : {}),
+  }
+}
+
 function scoreHeaderRow(headers: string[]): number {
   let score = 0
   if (findColumnIndex(headers, ['membertype']) >= 0) score += 2
@@ -197,7 +227,8 @@ function scoreHeaderRow(headers: string[]): number {
   if (findColumnIndex(headers, ['couponcode']) >= 0) score += 1
   if (findColumnIndex(headers, ['point', 'points']) >= 0) score += 1
   if (findColumnIndex(headers, ['membershiptier']) >= 0) score += 1
-  if (findColumnIndex(headers, ['currentpoints']) >= 0) score += 1
+  if (findColumnIndex(headers, ['currentpoints', 'currentpoint', 'pointbalance']) >= 0) score += 1
+  if (findColumnIndex(headers, ['totalpoints', 'totalpoint']) >= 0) score += 1
   if (findColumnIndex(headers, ['lastactivedate']) >= 0) score += 1
   return score
 }
@@ -218,8 +249,28 @@ function detectHeaderRowIndex(data: unknown[][]): number {
   return bestScore >= 2 ? bestIndex : 0
 }
 
-function parseSheetRows(data: unknown[][]): { reportType: ReportType; rows: ParsedRow[]; meta: ReportMeta } {
-  if (data.length < 2) return { reportType: 'customer', rows: [], meta: {} }
+function parseSheetRows(data: unknown[][]): {
+  reportType: ReportType
+  rows: ParsedRow[]
+  meta: ReportMeta
+  columnFlags: {
+    hasCurrentPointsCol: boolean
+    hasTotalPointsCol: boolean
+    hasTierPointsCol: boolean
+  }
+} {
+  if (data.length < 2) {
+    return {
+      reportType: 'customer',
+      rows: [],
+      meta: {},
+      columnFlags: {
+        hasCurrentPointsCol: false,
+        hasTotalPointsCol: false,
+        hasTierPointsCol: false,
+      },
+    }
+  }
   const meta = parseReportMeta(data)
   const headerRowIndex = detectHeaderRowIndex(data)
   const headerRow = data[headerRowIndex] || []
@@ -243,9 +294,26 @@ function parseSheetRows(data: unknown[][]): { reportType: ReportType; rows: Pars
     membershipTier: findColumnIndex(normalizedHeaders, ['membershiptier']),
     tag: findColumnIndex(normalizedHeaders, ['tag']),
     branch: findColumnIndex(normalizedHeaders, ['branch']),
-    currentPoints: findColumnIndex(normalizedHeaders, ['currentpoints']),
-    totalPoints: findColumnIndex(normalizedHeaders, ['totalpoints']),
-    tierPoints: findColumnIndex(normalizedHeaders, ['pointsformembershiptiercalculation', 'tiercalculation']),
+    currentPoints: findColumnIndex(normalizedHeaders, [
+      'currentpoints',
+      'currentpoint',
+      'pointbalance',
+      'availablepoints',
+    ]),
+    totalPoints: findColumnIndex(normalizedHeaders, [
+      'totalpoints',
+      'totalpoint',
+      'lifetimepoints',
+      'accumulatedpoints',
+    ]),
+    tierPoints: findColumnIndex(normalizedHeaders, [
+      'pointsformembershiptiercalculation',
+      'pointsformembershiptier',
+      'membershiptiercalculation',
+      'membershiptierpoints',
+      'tiercalculation',
+      'tierpoints',
+    ]),
     usageCount: findColumnIndex(normalizedHeaders, ['usage']),
     lastActiveAt: findColumnIndex(normalizedHeaders, ['lastactivedate']),
     lastActiveDays: findColumnIndex(normalizedHeaders, ['lastactivedays']),
@@ -291,9 +359,9 @@ function parseSheetRows(data: unknown[][]): { reportType: ReportType; rows: Pars
     const membershipTier = idx.membershipTier >= 0 ? String(row[idx.membershipTier] || '').trim() : ''
     const tag = idx.tag >= 0 ? String(row[idx.tag] || '').trim() : ''
     const branch = idx.branch >= 0 ? String(row[idx.branch] || '').trim() : ''
-    const currentPoints = idx.currentPoints >= 0 ? Math.trunc(toNumber(row[idx.currentPoints])) : 0
-    const totalPoints = idx.totalPoints >= 0 ? Math.trunc(toNumber(row[idx.totalPoints])) : 0
-    const tierPoints = idx.tierPoints >= 0 ? Math.trunc(toNumber(row[idx.tierPoints])) : 0
+    const currentPoints = idx.currentPoints >= 0 ? toNumber(row[idx.currentPoints]) : 0
+    const totalPoints = idx.totalPoints >= 0 ? toNumber(row[idx.totalPoints]) : 0
+    const tierPoints = idx.tierPoints >= 0 ? toNumber(row[idx.tierPoints]) : 0
     const usageCount = idx.usageCount >= 0 ? Math.trunc(toNumber(row[idx.usageCount])) : 0
     const lastActiveAt = idx.lastActiveAt >= 0 ? normalizeDateTime(row[idx.lastActiveAt]) : ''
     const lastActiveDays = idx.lastActiveDays >= 0 ? Math.trunc(toNumber(row[idx.lastActiveDays])) : 0
@@ -342,7 +410,16 @@ function parseSheetRows(data: unknown[][]): { reportType: ReportType; rows: Pars
       points,
     })
   }
-  return { reportType, rows, meta }
+  return {
+    reportType,
+    rows,
+    meta,
+    columnFlags: {
+      hasCurrentPointsCol: idx.currentPoints >= 0,
+      hasTotalPointsCol: idx.totalPoints >= 0,
+      hasTierPointsCol: idx.tierPoints >= 0,
+    },
+  }
 }
 
 async function findMemberIdByPhone(phone: string): Promise<number> {
@@ -461,6 +538,14 @@ export async function processLineCrmImport(params: {
       const membershipTierCode = String(row.membershipTier || '')
         .trim()
         .toUpperCase()
+      const pointPatch = resolveLineCrmMemberPointPatch({
+        hasCurrentPointsCol: parsed.columnFlags.hasCurrentPointsCol,
+        hasTotalPointsCol: parsed.columnFlags.hasTotalPointsCol,
+        hasTierPointsCol: parsed.columnFlags.hasTierPointsCol,
+        currentPoints: row.currentPoints,
+        totalPoints: row.totalPoints,
+        tierPoints: row.tierPoints,
+      })
       const memberPatch = {
         name: row.fullName || row.lineDisplayName || 'LINE 고객',
         full_name: row.fullName || null,
@@ -480,9 +565,6 @@ export async function processLineCrmImport(params: {
         line_membership_tier: row.membershipTier || null,
         line_member_tag: row.tag || null,
         line_member_branch: row.branch || null,
-        line_current_points: row.currentPoints,
-        line_total_points: row.totalPoints,
-        line_tier_points: row.tierPoints,
         line_usage_count: row.usageCount,
         line_last_active_at: row.lastActiveAt || null,
         line_last_active_days: row.lastActiveDays,
@@ -490,7 +572,7 @@ export async function processLineCrmImport(params: {
         line_registered_at: row.registeredAt || null,
         line_exported_at: parsed.meta.exportedAt || null,
         tier_code: membershipTierCode || undefined,
-        point_balance: row.currentPoints > 0 ? row.currentPoints : undefined,
+        ...pointPatch,
         updated_at: now,
       }
       try {

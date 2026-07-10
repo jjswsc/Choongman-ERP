@@ -10,6 +10,7 @@ import {
 } from '@/lib/supabase-server'
 import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { normalizeMemberPoints } from '@/lib/member-points-math'
 import { type MemberTierUpgradeBasis } from '@/lib/member-tier-policy'
 import { buildMemberSearchPostgrestOrFilter } from '@/lib/member-search-filter'
 
@@ -896,8 +897,8 @@ export function resolveMemberTierQualificationValue(
   if (basis === 'amount') return Math.max(0, Number(member.lifetime_amount || 0))
   return Math.max(
     0,
-    Math.trunc(Number(member.tier_points || 0)),
-    Math.trunc(Number(member.line_tier_points || 0))
+    normalizeMemberPoints(member.tier_points),
+    normalizeMemberPoints(member.line_tier_points)
   )
 }
 
