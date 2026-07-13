@@ -34,14 +34,7 @@ export function fmtBahtSigned(n: number | null | undefined): string {
   return `${v >= 0 ? "+" : ""}฿${formatMoneyBaht(v)}`
 }
 
-export function buildTaxInvoiceDocNo(issueDate: string, refText: string): string {
-  const dateDigits = String(issueDate || "").replace(/\D/g, "")
-  const safeDate = dateDigits.length >= 8 ? dateDigits.slice(0, 8) : bangkokTodayStr().replace(/\D/g, "")
-  const yyyymm = safeDate.slice(0, 6)
-  const refDigits = String(refText || "").replace(/\D/g, "")
-  const suffix = (refDigits.slice(-3) || "1").padStart(3, "0")
-  return `IV.${yyyymm}XX-${suffix}`
-}
+export { buildTaxInvoiceDocNo, parseTaxInvoiceDocNoSuffix } from "@/lib/tax-invoice-doc-no"
 
 export function buildClientFromPosTaxMemo(
   memo: string | undefined,

@@ -106,6 +106,7 @@ import {
   updateReceivableReceiveCheck,
   translateTexts,
   invalidateReceivablePayableListCache,
+  getTaxInvoiceDepositSeq,
   type ReceivablePayableItem,
   type PayableTransactionItem,
   type OrderInvoiceTotals,
@@ -444,8 +445,15 @@ export function ReceivablePayableTab() {
             : (hasResolvedMasterInfo ? resolvedClient : (memoClient ?? resolvedClient))
         }
         const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
-        const refForDoc = (row.invoice_no || "").trim() || String(refId)
-        const docNo = buildTaxInvoiceDocNo(dateStr, refForDoc)
+        const accrualId = Number(row.id || 0)
+        let depositSeq = 1
+        if (accrualId > 0) {
+          const seqRes = await getTaxInvoiceDepositSeq({ accrualId, issueDate: dateStr })
+          if (seqRes?.success && Number(seqRes.seq) > 0) {
+            depositSeq = Number(seqRes.seq)
+          }
+        }
+        const docNo = buildTaxInvoiceDocNo(dateStr, depositSeq)
         const data: InvoiceData = buildThaiSalesInvoiceData({
           documentType: "Tax Invoice/Receipt",
           documentNo: docNo,

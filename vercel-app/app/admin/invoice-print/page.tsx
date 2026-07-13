@@ -13,22 +13,26 @@ import { useT } from "@/lib/i18n"
 import {
   getInvoicePrintOverrides,
   updateInvoicePrintOverrides,
+  getTaxInvoiceDepositSeq,
   type InvoicePrintOverridePayload,
 } from "@/lib/api-client"
+import { buildTaxInvoiceDocNo, parseTaxInvoiceDocNoSuffix } from "@/lib/tax-invoice-doc-no"
 
 const STORAGE_KEY = "invoice-print-data"
 
-function extractDigits(value: string): string {
-  return String(value || "").replace(/\D/g, "")
-}
-
-function makeTaxInvoiceDocNo(issueDate: string, refText: string): string {
-  const dateDigits = extractDigits(issueDate)
-  const yyyymmdd = dateDigits.length >= 8 ? dateDigits.slice(0, 8) : new Date().toISOString().slice(0, 10).replace(/\D/g, "")
-  const yyyymm = yyyymmdd.slice(0, 6)
-  const refDigits = extractDigits(refText)
-  const suffix = (refDigits.slice(-3) || "1").padStart(3, "0")
-  return `IV.${yyyymm}XX-${suffix}`
+async function resolveTaxInvoiceDocNo(
+  issueDate: string,
+  data: InvoiceData
+): Promise<string> {
+  const accrualId = Number(data.sourceRefId || 0)
+  if (accrualId > 0) {
+    const res = await getTaxInvoiceDepositSeq({ accrualId, issueDate })
+    if (res?.success && Number(res.seq) > 0) {
+      return buildTaxInvoiceDocNo(issueDate, Number(res.seq))
+    }
+  }
+  const preserved = parseTaxInvoiceDocNoSuffix(data.documentNo)
+  return buildTaxInvoiceDocNo(issueDate, preserved ?? 1)
 }
 
 function InvoicePrintLoadingLine() {
@@ -221,7 +225,10 @@ function InvoicePrintPageInner() {
                         const nextIssueDate = e.target.value
                         const patch: Partial<InvoiceData> = { issueDate: nextIssueDate }
                         if (taxDoc) {
-                          patch.documentNo = makeTaxInvoiceDocNo(nextIssueDate, data.referenceNo || data.documentNo)
+                          void resolveTaxInvoiceDocNo(nextIssueDate, data).then((documentNo) => {
+                            updateField(i, { ...patch, documentNo })
+                          })
+                          return
                         }
                         updateField(i, patch)
                       }}
@@ -234,14 +241,7 @@ function InvoicePrintPageInner() {
                     <Input
                       value={data.referenceNo || ""}
                       placeholder="Reference"
-                      onChange={(e) => {
-                        const nextRef = e.target.value
-                        const patch: Partial<InvoiceData> = { referenceNo: nextRef }
-                        if (taxDoc) {
-                          patch.documentNo = makeTaxInvoiceDocNo(data.issueDate, nextRef || data.documentNo)
-                        }
-                        updateField(i, patch)
-                      }}
+                      onChange={(e) => updateField(i, { referenceNo: e.target.value })}
                     />
                     <Input
                       value={data.documentNo || ""}

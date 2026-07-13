@@ -336,3 +336,13 @@ export async function unlinkPayableSettlement(params: { transactionId: number })
   })
   return res.json() as Promise<{ success: boolean; message?: string; removed?: number }>
 }
+
+/** Tax Invoice — 당일 입금(수금) 처리 순번 */
+export async function getTaxInvoiceDepositSeq(params: { accrualId: number; issueDate: string }) {
+  const q = new URLSearchParams({
+    accrualId: String(params.accrualId),
+    issueDate: String(params.issueDate || '').trim().slice(0, 10),
+  })
+  const res = await apiFetchWithOffline(`/api/getTaxInvoiceDepositSeq?${q}`)
+  return res.json() as Promise<{ success: boolean; seq?: number; message?: string }>
+}
