@@ -7,9 +7,10 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
 import { canAccessSaasAdmin } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
+import { PLATFORM_SCOPE_CLIENT_META, type SaasScopeClientMeta } from "@/lib/saas-control-plane-scope"
 import { SaasSidebar } from "@/components/saas/saas-sidebar"
 import { SaasHeader } from "@/components/saas/saas-header"
-import { SaasScopeLoader } from "@/components/saas/saas-scope-loader"
+import { SaasScopeProvider } from "@/components/saas/saas-scope-context"
 
 export default function SaasAdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -18,7 +19,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   const { lang, setLang } = useLang()
   const isLoginPage = pathname === "/saas-admin/login"
   const roleAllowed = Boolean(auth && canAccessSaasAdmin(auth.role || ""))
-  const [partnerGateOk, setPartnerGateOk] = useState<boolean | null>(roleAllowed ? true : null)
+  const [saasScope, setSaasScope] = useState<SaasScopeClientMeta | null>(roleAllowed ? PLATFORM_SCOPE_CLIENT_META : null)
 
   useEffect(() => {
     const n = normalizeAdminUiLang(lang)
@@ -32,16 +33,20 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
       return
     }
     if (roleAllowed) {
-      setPartnerGateOk(true)
+      setSaasScope(PLATFORM_SCOPE_CLIENT_META)
       return
     }
     let cancelled = false
-    setPartnerGateOk(null)
+    setSaasScope(null)
     void apiFetch("/api/getSaasTenantSettings")
-      .then((res) => {
+      .then(async (res) => {
         if (cancelled) return
-        if (res.ok) setPartnerGateOk(true)
-        else router.replace("/saas-admin/login?msg=no_admin")
+        const json = (await res.json()) as { scope?: SaasScopeClientMeta }
+        if (res.ok && json.scope) {
+          setSaasScope(json.scope)
+          return
+        }
+        router.replace("/saas-admin/login?msg=no_admin")
       })
       .catch(() => {
         if (!cancelled) router.replace("/saas-admin/login?msg=no_admin")
@@ -52,7 +57,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   }, [auth, initialized, isLoginPage, roleAllowed, router])
 
   if (isLoginPage) return <>{children}</>
-  if (!initialized || !auth || partnerGateOk !== true) {
+  if (!initialized || !auth || !saasScope) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -61,7 +66,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <SaasScopeLoader>
+    <SaasScopeProvider scope={saasScope}>
       <SidebarProvider>
         <SaasSidebar />
         <SidebarInset>
@@ -69,6 +74,6 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
           {children}
         </SidebarInset>
       </SidebarProvider>
-    </SaasScopeLoader>
+    </SaasScopeProvider>
   )
 }

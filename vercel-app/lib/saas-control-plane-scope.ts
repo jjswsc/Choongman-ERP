@@ -24,6 +24,16 @@ export type SaasScopeClientMeta = {
   defaultMarginPct: number
 }
 
+/** 본사 SaaS 관리자 UI 스코프 — 역할(Director/Officer/Accounting)로 즉시 확정 가능 */
+export const PLATFORM_SCOPE_CLIENT_META: SaasScopeClientMeta = {
+  kind: "platform",
+  isPlatform: true,
+  isPartner: false,
+  partnerId: null,
+  partnerName: null,
+  defaultMarginPct: 0,
+}
+
 export function saasScopeToClientMeta(scope: SaasScope): SaasScopeClientMeta {
   if (scope.kind === "partner") {
     return {
