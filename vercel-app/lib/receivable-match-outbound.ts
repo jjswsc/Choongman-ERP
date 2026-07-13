@@ -321,6 +321,124 @@ async function buildFilteredOutboundRowsForOrder(
   return { rows: filteredList, stockLogRowCount: (logs || []).length }
 }
 
+export type OrderOutboundPayableItem = {
+  code?: string
+  name?: string
+  spec?: string
+  line_remarks?: string
+  qty: number
+  unitCost?: number
+  amount: number
+}
+
+/** Tax Invoice·미수 품목 — 출고 관리와 동일 줄·단가·직접정산 (cart_json 단독 조회와 구분) */
+export async function buildPayableItemsFromOrderOutbound(orderId: number): Promise<{
+  items: OrderOutboundPayableItem[]
+  orderInvoiceTotals?: ReturnType<typeof thaiInvoiceTotalsFromRawSubtotal>
+  outboundInvoiceNo?: string
+}> {
+  if (!orderId || Number.isNaN(orderId)) {
+    return { items: [] }
+  }
+
+  const orders = (await supabaseSelectFilter('orders', `id=eq.${orderId}`, {
+    limit: 1,
+    select:
+      'id,store_name,cart_json,delivery_status,delivery_date,delivery_dates_by_outbound,order_date,received_indices,received_qty_json,original_order_qty_json,approved_original_qty_json',
+  })) as Record<string, unknown>[]
+
+  const o = orders?.[0] as {
+    id?: number
+    store_name?: string
+    cart_json?: string
+    order_date?: string
+    received_indices?: string | number[] | null
+    received_qty_json?: string
+    original_order_qty_json?: string
+    approved_original_qty_json?: string
+    delivery_status?: string
+    delivery_date?: string
+    delivery_dates_by_outbound?: string
+  }
+
+  if (!o?.id) return { items: [] }
+
+  const itemsMaster = (await supabaseSelect('items', {
+    order: 'id.asc',
+    select: 'code,spec,price,outbound_location',
+    limit: 10000,
+  })) as { code?: string; spec?: string; price?: number; outbound_location?: string }[]
+
+  const itemMap: Record<string, ItemInfo> = {}
+  for (const it of itemsMaster || []) {
+    const c = String(it.code || '').trim()
+    itemMap[c] = {
+      spec: String(it.spec || '').trim() || '-',
+      price: Number(it.price) || 0,
+      outboundLocation: String(it.outbound_location || '').trim() || '(미지정)',
+    }
+  }
+
+  let cart: OrderCartLine[] = []
+  try {
+    if (o.cart_json) cart = JSON.parse(o.cart_json) || []
+  } catch {
+    cart = []
+  }
+
+  const { rows, stockLogRowCount } = await buildFilteredOutboundRowsForOrder(orderId, itemMap, o)
+
+  if (stockLogRowCount === 0 && cart.length > 0) {
+    const codes = cart.map((it) => String(it.code || '').trim()).filter(Boolean)
+    const directMap = codes.length > 0 ? await getDirectSettlementMap(codes) : {}
+    const fallbackItems: OrderOutboundPayableItem[] = []
+    for (const c of cart) {
+      const code = String(c.code || '').trim()
+      if (code && directMap[code]) continue
+      const qty = Number(c.qty) || 0
+      const price = Number(c.price) || 0
+      if (qty <= 0) continue
+      fallbackItems.push({
+        code: code || undefined,
+        name: c.name ? String(c.name) : '-',
+        spec: c.spec != null ? String(c.spec) : undefined,
+        qty,
+        unitCost: price,
+        amount: qty * price,
+      })
+    }
+    const rawSum = fallbackItems.reduce((s, it) => s + Number(it.amount || 0), 0)
+    const datePart = String(o.order_date || '').replace(/\D/g, '').slice(0, 8)
+    return {
+      items: fallbackItems,
+      orderInvoiceTotals: fallbackItems.length > 0 ? thaiInvoiceTotalsFromRawSubtotal(rawSum) : undefined,
+      outboundInvoiceNo: datePart.length >= 8 ? `IV${datePart}-${orderId}` : undefined,
+    }
+  }
+
+  const payableItems: OrderOutboundPayableItem[] = rows
+    .filter((r) => Number(r.amount || 0) > 0)
+    .map((r) => {
+      const qty = Math.abs(Number(r.qty) || 0)
+      const amount = Math.abs(Number(r.amount) || 0)
+      return {
+        code: r.code || undefined,
+        name: r.name || '-',
+        spec: r.spec || undefined,
+        qty,
+        unitCost: qty > 0 ? amount / qty : 0,
+        amount,
+      }
+    })
+
+  const rawSum = payableItems.reduce((s, it) => s + Number(it.amount || 0), 0)
+  return {
+    items: payableItems,
+    orderInvoiceTotals: payableItems.length > 0 ? thaiInvoiceTotalsFromRawSubtotal(rawSum) : undefined,
+    outboundInvoiceNo: rows[0]?.invoiceNo ? String(rows[0].invoiceNo) : undefined,
+  }
+}
+
 export type SyncReceivableToOutboundResult = {
   ok: boolean
   orderId: number

@@ -111,6 +111,7 @@ export async function getReceivablePayableList(params: {
   type: 'receivable' | 'payable'
   storeFilter?: string
   vendorFilter?: string
+  invoiceFilter?: string
   startStr: string
   endStr: string
   userStore?: string

@@ -17,6 +17,7 @@ export type ReceivablePayableListLoadOverrides = {
   type?: "receivable" | "payable"
   storeFilter?: string
   vendorFilter?: string
+  invoiceFilter?: string
 }
 
 /** 방콕 달력 날짜 (YYYY-MM-DD). 로컬 PC 타임존/UTC와 어긋나면 종료일 필터로 행이 잘릴 수 있음. */
@@ -34,7 +35,7 @@ export function fmtBahtSigned(n: number | null | undefined): string {
   return `${v >= 0 ? "+" : ""}฿${formatMoneyBaht(v)}`
 }
 
-export { buildTaxInvoiceDocNo, parseTaxInvoiceDocNoSuffix } from "@/lib/tax-invoice-doc-no"
+export { buildTaxInvoiceDocNo, isOutboundReceivableInvoiceNo, isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from "@/lib/tax-invoice-doc-no"
 
 export function buildClientFromPosTaxMemo(
   memo: string | undefined,

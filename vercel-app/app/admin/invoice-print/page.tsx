@@ -16,7 +16,7 @@ import {
   getTaxInvoiceDepositSeq,
   type InvoicePrintOverridePayload,
 } from "@/lib/api-client"
-import { buildTaxInvoiceDocNo, parseTaxInvoiceDocNoSuffix } from "@/lib/tax-invoice-doc-no"
+import { buildTaxInvoiceDocNo, isOutboundReceivableInvoiceNo, isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from "@/lib/tax-invoice-doc-no"
 
 const STORAGE_KEY = "invoice-print-data"
 
@@ -96,12 +96,24 @@ function InvoicePrintPageInner() {
                   const key = buildOverrideCode(refType, refId, normalizeDocKind(d))
                   const ov = res.map[key]
                   if (!ov) return d
+                  const taxDoc = isTaxInvoiceDoc(d)
+                  const ovDocNo = String(ov.documentNo || "").trim()
+                  let documentNo = d.documentNo
+                  if (ovDocNo) {
+                    if (taxDoc) {
+                      if (isTaxInvoiceDocumentNo(ovDocNo) && !isOutboundReceivableInvoiceNo(ovDocNo)) {
+                        documentNo = ovDocNo
+                      }
+                    } else {
+                      documentNo = ovDocNo
+                    }
+                  }
                   return {
                     ...d,
                     issueDate: ov.issueDate || d.issueDate,
                     dueDate: ov.dueDate || d.dueDate,
                     referenceNo: ov.referenceNo || d.referenceNo,
-                    documentNo: ov.documentNo || d.documentNo,
+                    documentNo,
                     shipTo: ov.shipTo ?? d.shipTo,
                   }
                 })

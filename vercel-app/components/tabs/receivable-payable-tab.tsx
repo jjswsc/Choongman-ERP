@@ -267,6 +267,8 @@ export function ReceivablePayableTab() {
   const storeFilter = tab === "receivable" ? recStoreFilter : payStoreFilter
   const [startStr, setStartStr] = React.useState(bangkokTodayStr)
   const [endStr, setEndStr] = React.useState(bangkokTodayStr)
+  const [invoiceSearch, setInvoiceSearch] = React.useState("")
+  const invoiceFilterActive = invoiceSearch.trim().length > 0
   const [listData, setListData] = React.useState<ReceivablePayableItem[]>([])
   const [cumulativeSummary, setCumulativeSummary] = React.useState<{ totalAmount: number; byKey: Record<string, number> }>({
     totalAmount: 0,
@@ -454,12 +456,13 @@ export function ReceivablePayableTab() {
           }
         }
         const docNo = buildTaxInvoiceDocNo(dateStr, depositSeq)
+        const outboundRef = (row.invoice_no || "").trim()
         const data: InvoiceData = buildThaiSalesInvoiceData({
           documentType: "Tax Invoice/Receipt",
           documentNo: docNo,
           issueDate: dateStr,
           dueDate: dateStr,
-          referenceNo: refType === "ForceOutbound" && (row.invoice_no || "").trim() ? (row.invoice_no || "").trim() : docNo,
+          referenceNo: outboundRef || docNo,
           company,
           client,
           invSettings: settings,
@@ -611,10 +614,15 @@ export function ReceivablePayableTab() {
           : effectiveTab === "payable" && vendorFilter !== "All"
             ? vendorFilter
             : undefined
+      const invoiceFilterVal =
+        opts?.overrides?.invoiceFilter !== undefined
+          ? opts.overrides.invoiceFilter
+          : invoiceSearch.trim() || undefined
       const listParams = {
         type: effectiveTab,
         storeFilter: storeFilterVal,
         vendorFilter: vendorFilterVal,
+        invoiceFilter: invoiceFilterVal,
         startStr,
         endStr,
         userStore: auth?.store || undefined,
@@ -666,7 +674,7 @@ export function ReceivablePayableTab() {
         if (seq === listLoadSeqRef.current) setLoading(false)
       }
     },
-    [tab, recStoreFilter, payableStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role, canSelectStores, storeList]
+    [tab, recStoreFilter, payableStoreFilter, vendorFilter, invoiceSearch, startStr, endStr, auth?.store, auth?.role, canSelectStores, storeList]
   )
 
   const handleManualBalanceSave = React.useCallback(async () => {
@@ -1014,14 +1022,16 @@ export function ReceivablePayableTab() {
     return refType || "—"
   }
 
-  const filterRowsByLedgerPeriod = <T extends { trans_date?: string }>(items: T[]): T[] =>
-    items.filter((r) => {
+  const filterRowsByLedgerPeriod = <T extends { trans_date?: string }>(items: T[]): T[] => {
+    if (invoiceFilterActive) return items
+    return items.filter((r) => {
       const d = String(r.trans_date || "").slice(0, 10)
       if (!d) return false
       if (startStr && d < startStr) return false
       if (endStr && d > endStr) return false
       return true
     })
+  }
 
   const filterItemsByUnpaid = <T extends { ref_type?: string }>(items: T[] | undefined, isRec: boolean): T[] => {
     if (!filterUnpaidOnly || !items?.length) return items ?? []
@@ -1375,6 +1385,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         <h1 className="text-lg font-bold mb-2">{printTitle}</h1>
         <p className="text-sm text-muted-foreground mb-4">
           {startStr} ~ {endStr}
+          {invoiceFilterActive && ` · ${t("outInvoiceSearchPh") || tt("outInvoiceSearchPh", "인보이스번호 검색")}: ${invoiceSearch.trim()}`}
           {storeFilter !== "All" && (isRec ? ` · ${t("outColStore")}: ${storeFilter}` : ` · ${t("payColAttributedStore") || tt("payColAttributedStore", "Attributed Store")}: ${formatAttributedStoreLabel(storeFilter)}`)}
           {!isRec && vendorFilter !== "All" && ` · ${t("vendor")}: ${vendorFilter}`}
         </p>
@@ -1514,6 +1525,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-xs text-muted-foreground">{t("outInvoiceSearchPh") || tt("outInvoiceSearchPh", "인보이스번호 검색")}</label>
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          value={invoiceSearch}
+                          onChange={(e) => setInvoiceSearch(e.target.value)}
+                          placeholder={t("outInvoiceSearchPh") || tt("outInvoiceSearchPh", "인보이스번호 검색")}
+                          className="h-9 w-[160px] max-w-full text-[13px] pr-8"
+                        />
+                        <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      </div>
                     </div>
                     <Input
                       type="date"
@@ -2323,6 +2347,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         {t("inv_account_no") || "계좌"}: {vendors.find((v) => v.code === vendorFilter)?.bankAccountNo || "—"}
                       </div>
                     )}
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-xs text-muted-foreground">{t("outInvoiceSearchPh") || tt("outInvoiceSearchPh", "인보이스번호 검색")}</label>
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          value={invoiceSearch}
+                          onChange={(e) => setInvoiceSearch(e.target.value)}
+                          placeholder={t("outInvoiceSearchPh") || tt("outInvoiceSearchPh", "인보이스번호 검색")}
+                          className="h-9 w-[160px] max-w-full text-[13px] pr-8"
+                        />
+                        <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      </div>
+                    </div>
                     <Input
                       type="date"
                       value={startStr}

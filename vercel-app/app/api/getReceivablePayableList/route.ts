@@ -13,6 +13,7 @@ import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   buildPayableListWithCumulative,
+  buildPayableListForInvoiceFilter,
   cumulativeBalanceByVendor,
   filterPurchasePayableLedgerRowsAsync,
   isPayableStoreFilterActive,
@@ -25,8 +26,8 @@ import {
 import { loadPayableSettlementLinksForTransactionIds } from '@/lib/payable-settlement-link-server'
 import {
   buildReceivableListWithCumulative,
+  buildReceivableListForInvoiceFilter,
   scopeReceivableLedger,
-  type ReceivableTransactionRow,
 } from '@/lib/receivable-ledger-scope'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
   const vendorFilter = searchParams.get('vendorFilter') || searchParams.get('vendor') || ''
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
+  const invoiceFilter = String(searchParams.get('invoiceFilter') || searchParams.get('invoice') || '').trim()
   const userStore = String(auth.store || '').trim()
   const userRole = String(auth.role || '').toLowerCase()
   const allowedStores =
@@ -89,71 +91,83 @@ export async function GET(request: NextRequest) {
       const cumulativeByVendor = cumulativeBalanceByVendor(scopedRows)
       const rows = payableRowsOnOrAfterStart(scopedRows, startStr || undefined)
 
-      // 인보이스 여부: Inbound→inbound_batches, PO→purchase_orders, bank_transaction_id→bank_transactions (마이그레이션 미적용 시 스킵)
-      const invoiceByInbound: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
-      const invoiceByPo: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
-      const invoiceByBank: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
+      const attachPayableInvoiceInfo = async (sourceRows: PayableTransactionRow[]) => {
+        const invoiceByInbound: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
+        const invoiceByPo: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
+        const invoiceByBank: Record<number, { invoice_received?: boolean; invoice_no?: string | null }> = {}
 
-      try {
-        const inboundIds = [...new Set((rows || []).filter((r) => r.ref_type === 'Inbound' && r.ref_id).map((r) => Number(r.ref_id!)))]
-        const poIds = [...new Set((rows || []).filter((r) => r.ref_type === 'PO' && r.ref_id).map((r) => Number(r.ref_id!)))]
-        const bankIds = [...new Set((rows || []).filter((r) => r.bank_transaction_id).map((r) => Number(r.bank_transaction_id!)))]
+        try {
+          const inboundIds = [...new Set((sourceRows || []).filter((r) => r.ref_type === 'Inbound' && r.ref_id).map((r) => Number(r.ref_id!)))]
+          const poIds = [...new Set((sourceRows || []).filter((r) => r.ref_type === 'PO' && r.ref_id).map((r) => Number(r.ref_id!)))]
+          const bankIds = [...new Set((sourceRows || []).filter((r) => r.bank_transaction_id).map((r) => Number(r.bank_transaction_id!)))]
 
-        if (inboundIds.length > 0) {
-          const batches = (await supabaseSelectFilter('inbound_batches', `id=in.(${inboundIds.join(',')})`, {
-            limit: 5000,
-          })) as { id?: number; invoice_received?: boolean; invoice_no?: string | null }[] | null
-          for (const b of batches || []) {
-            if (b.id) invoiceByInbound[b.id] = { invoice_received: Boolean(b.invoice_received), invoice_no: b.invoice_no }
+          if (inboundIds.length > 0) {
+            const batches = (await supabaseSelectFilter('inbound_batches', `id=in.(${inboundIds.join(',')})`, {
+              limit: 5000,
+            })) as { id?: number; invoice_received?: boolean; invoice_no?: string | null }[] | null
+            for (const b of batches || []) {
+              if (b.id) invoiceByInbound[b.id] = { invoice_received: Boolean(b.invoice_received), invoice_no: b.invoice_no }
+            }
           }
-        }
-        if (poIds.length > 0) {
-          const pos = (await supabaseSelectFilter('purchase_orders', `id=in.(${poIds.join(',')})`, {
-            limit: 5000,
-          })) as { id?: number; invoice_received?: boolean; invoice_no?: string | null }[] | null
-          for (const p of pos || []) {
-            if (p.id) invoiceByPo[p.id] = { invoice_received: Boolean(p.invoice_received), invoice_no: p.invoice_no }
+          if (poIds.length > 0) {
+            const pos = (await supabaseSelectFilter('purchase_orders', `id=in.(${poIds.join(',')})`, {
+              limit: 5000,
+            })) as { id?: number; invoice_received?: boolean; invoice_no?: string | null }[] | null
+            for (const p of pos || []) {
+              if (p.id) invoiceByPo[p.id] = { invoice_received: Boolean(p.invoice_received), invoice_no: p.invoice_no }
+            }
           }
-        }
-        if (bankIds.length > 0) {
-          const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIds.join(',')})`, {
-            limit: 5000,
-          })) as { id?: number; invoice_received?: boolean; invoice_no?: string | null }[] | null
-          for (const bt of banks || []) {
-            if (bt.id) invoiceByBank[bt.id] = { invoice_received: Boolean(bt.invoice_received), invoice_no: bt.invoice_no }
+          if (bankIds.length > 0) {
+            const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIds.join(',')})`, {
+              limit: 5000,
+            })) as { id?: number; invoice_received?: boolean; invoice_no?: string | null }[] | null
+            for (const bt of banks || []) {
+              if (bt.id) invoiceByBank[bt.id] = { invoice_received: Boolean(bt.invoice_received), invoice_no: bt.invoice_no }
+            }
           }
+        } catch (_inv) {
+          // invoice 컬럼 미존재 등 시 인보이스 정보 없이 진행
         }
-      } catch (_inv) {
-        // invoice 컬럼 미존재 등 시 인보이스 정보 없이 진행
+
+        return (sourceRows || []).map((r) => {
+          const attributed_store = resolvePayableAttributedStore(r, attributionMaps) || undefined
+          const base = { ...r, attributed_store }
+          if (r.ref_type === 'Inbound' && r.ref_id) {
+            const inv = invoiceByInbound[Number(r.ref_id)]
+            if (inv) {
+              ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_received = inv.invoice_received
+              ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_no = inv.invoice_no
+            }
+          } else if (r.ref_type === 'PO' && r.ref_id) {
+            const inv = invoiceByPo[Number(r.ref_id)]
+            if (inv) {
+              ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_received = inv.invoice_received
+              ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_no = inv.invoice_no
+            }
+          } else if (r.bank_transaction_id) {
+            const inv = invoiceByBank[Number(r.bank_transaction_id)]
+            if (inv) {
+              ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_received = inv.invoice_received
+              ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_no = inv.invoice_no
+            }
+          }
+          return base
+        })
       }
 
-      const rowsWithInvoice = (rows || []).map((r) => {
-        const attributed_store = resolvePayableAttributedStore(r, attributionMaps) || undefined
-        const base = { ...r, attributed_store }
-        if (r.ref_type === 'Inbound' && r.ref_id) {
-          const inv = invoiceByInbound[Number(r.ref_id)]
-          if (inv) {
-            ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_received = inv.invoice_received
-            ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_no = inv.invoice_no
-          }
-        } else if (r.ref_type === 'PO' && r.ref_id) {
-          const inv = invoiceByPo[Number(r.ref_id)]
-          if (inv) {
-            ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_received = inv.invoice_received
-            ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_no = inv.invoice_no
-          }
-        } else if (r.bank_transaction_id) {
-          const inv = invoiceByBank[Number(r.bank_transaction_id)]
-          if (inv) {
-            ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_received = inv.invoice_received
-            ;(base as { invoice_received?: boolean; invoice_no?: string | null }).invoice_no = inv.invoice_no
-          }
-        }
-        return base
-      })
+      const invoiceLookupRows = invoiceFilter ? scopedRows : rows
+      const rowsWithInvoice = await attachPayableInvoiceInfo(invoiceLookupRows)
+      const periodRowsWithInvoice = invoiceFilter
+        ? rowsWithInvoice.filter((r) => {
+            const d = String(r.trans_date || '').slice(0, 10)
+            if (!d) return false
+            if (startStr && d < startStr) return false
+            return true
+          })
+        : rowsWithInvoice
 
       const byVendor: Record<string, { total: number; items: typeof rowsWithInvoice }> = {}
-      for (const r of rowsWithInvoice) {
+      for (const r of periodRowsWithInvoice) {
         const vc = String(r.vendor_code || '').trim()
         if (!vc) continue
         if (!byVendor[vc]) byVendor[vc] = { total: 0, items: [] }
@@ -161,7 +175,14 @@ export async function GET(request: NextRequest) {
         byVendor[vc].total += Number(r.amount ?? 0)
       }
 
-      const list = buildPayableListWithCumulative({ cumulativeByVendor, periodByVendor: byVendor })
+      const list = invoiceFilter
+        ? buildPayableListForInvoiceFilter({
+            invoiceFilter,
+            scopedRows: rowsWithInvoice,
+            periodRows: periodRowsWithInvoice,
+            cumulativeByVendor,
+          })
+        : buildPayableListWithCumulative({ cumulativeByVendor, periodByVendor: byVendor })
       const scopedIds = scopedRows
         .map((r) => Number(r.id || 0))
         .filter((id) => id > 0)
@@ -187,13 +208,22 @@ export async function GET(request: NextRequest) {
       filterByVendorLink: canSelectStores,
     })
 
-    const list = buildReceivableListWithCumulative({
-      periodRows: receivableScoped.periodRows,
-      scopedRows: receivableScoped.scopedRows,
-      vendorMaps: receivableScoped.vendorMaps,
-      attributionMaps: receivableScoped.attributionMaps,
-      cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
-    })
+    const list = invoiceFilter
+      ? buildReceivableListForInvoiceFilter({
+          invoiceFilter,
+          scopedRows: receivableScoped.scopedRows,
+          periodRows: receivableScoped.periodRows,
+          vendorMaps: receivableScoped.vendorMaps,
+          attributionMaps: receivableScoped.attributionMaps,
+          cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
+        })
+      : buildReceivableListWithCumulative({
+          periodRows: receivableScoped.periodRows,
+          scopedRows: receivableScoped.scopedRows,
+          vendorMaps: receivableScoped.vendorMaps,
+          attributionMaps: receivableScoped.attributionMaps,
+          cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
+        })
 
     return NextResponse.json(
       { type: 'receivable', list, cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup },

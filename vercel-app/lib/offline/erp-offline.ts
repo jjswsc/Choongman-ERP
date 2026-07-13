@@ -196,6 +196,7 @@ export async function getReceivablePayableListWithCache(params: {
   type: 'receivable' | 'payable'
   storeFilter?: string
   vendorFilter?: string
+  invoiceFilter?: string
   startStr: string
   endStr: string
   userStore?: string
@@ -212,6 +213,7 @@ export async function getReceivablePayableListWithCache(params: {
     type: params.type,
     store: params.storeFilter || '',
     vendor: params.vendorFilter || '',
+    invoice: params.invoiceFilter || '',
     start: params.startStr,
     end: params.endStr,
   })
@@ -232,6 +234,7 @@ export async function getReceivablePayableListWithCache(params: {
     })
     if (params.storeFilter) q.set('storeFilter', params.storeFilter)
     if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+    if (params.invoiceFilter) q.set('invoiceFilter', params.invoiceFilter)
     if (params.userStore) q.set('userStore', params.userStore)
     if (params.userRole) q.set('userRole', params.userRole)
     if (params.fresh) q.set('_t', String(Date.now()))

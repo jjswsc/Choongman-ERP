@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTaxInvoiceDocNo, parseTaxInvoiceDocNoSuffix } from '@/lib/tax-invoice-doc-no'
+import { buildTaxInvoiceDocNo, isOutboundReceivableInvoiceNo, isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from '@/lib/tax-invoice-doc-no'
 
 describe('buildTaxInvoiceDocNo', () => {
   it('shows full YYYYMMDD and zero-padded seq', () => {
@@ -19,5 +19,14 @@ describe('parseTaxInvoiceDocNoSuffix', () => {
 
   it('returns null for legacy masked format', () => {
     expect(parseTaxInvoiceDocNoSuffix('IV.202606XX-632')).toBeNull()
+  })
+})
+
+describe('invoice no format helpers', () => {
+  it('distinguishes outbound vs tax invoice numbers', () => {
+    expect(isOutboundReceivableInvoiceNo('IV20260629-1830')).toBe(true)
+    expect(isTaxInvoiceDocumentNo('IV20260629-1830')).toBe(false)
+    expect(isTaxInvoiceDocumentNo('IV.20260629-003')).toBe(true)
+    expect(isOutboundReceivableInvoiceNo('IV.20260629-003')).toBe(false)
   })
 })

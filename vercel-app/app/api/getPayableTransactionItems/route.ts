@@ -17,6 +17,7 @@ import {
 } from '@/lib/po-invoice-bill-to'
 import { roundMoney2, thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import { getLineRemarksFromCartLine, type OrderCartLine, unitPriceFromOutboundLogSnapshot } from '@/lib/outbound-order-line-match'
+import { buildPayableItemsFromOrderOutbound } from '@/lib/receivable-match-outbound'
 
 export interface PayableItemRow {
   code?: string
@@ -50,38 +51,44 @@ export async function GET(request: NextRequest) {
     let poBillTo: PoInvoiceBillToVendor | undefined
 
     if (refType === 'Order') {
-      const orderRows = (await supabaseSelectFilter('orders', `id=eq.${refId}`, {
-        select: 'cart_json',
-        limit: 1,
-      })) as { cart_json?: string | null }[] | null
-      const cartJson = orderRows?.[0]?.cart_json
-      if (cartJson) {
-        try {
-          const cart = JSON.parse(cartJson) as unknown
-          if (Array.isArray(cart)) {
-            for (const raw of cart) {
-              const c = raw as OrderCartLine
-              const qty = Number(c.qty) || 0
-              const price = Number(c.price) || 0
-              const lr = getLineRemarksFromCartLine(c)
-              items.push({
-                code: c.code ? String(c.code).trim() : undefined,
-                name: c.name ? String(c.name) : '-',
-                spec: c.spec != null ? String(c.spec) : undefined,
-                ...(lr ? { line_remarks: lr } : {}),
-                qty,
-                unitCost: price,
-                amount: qty * price,
-              })
+      const outbound = await buildPayableItemsFromOrderOutbound(refId)
+      if (outbound.items.length > 0) {
+        items.push(...outbound.items)
+        orderInvoiceTotals = outbound.orderInvoiceTotals
+      } else {
+        const orderRows = (await supabaseSelectFilter('orders', `id=eq.${refId}`, {
+          select: 'cart_json',
+          limit: 1,
+        })) as { cart_json?: string | null }[] | null
+        const cartJson = orderRows?.[0]?.cart_json
+        if (cartJson) {
+          try {
+            const cart = JSON.parse(cartJson) as unknown
+            if (Array.isArray(cart)) {
+              for (const raw of cart) {
+                const c = raw as OrderCartLine
+                const qty = Number(c.qty) || 0
+                const price = Number(c.price) || 0
+                const lr = getLineRemarksFromCartLine(c)
+                items.push({
+                  code: c.code ? String(c.code).trim() : undefined,
+                  name: c.name ? String(c.name) : '-',
+                  spec: c.spec != null ? String(c.spec) : undefined,
+                  ...(lr ? { line_remarks: lr } : {}),
+                  qty,
+                  unitCost: price,
+                  amount: qty * price,
+                })
+              }
             }
+          } catch {
+            // ignore parse error
           }
-        } catch {
-          // ignore parse error
         }
-      }
-      const rawSum = items.reduce((s, it) => s + Number(it.amount || 0), 0)
-      if (items.length > 0) {
-        orderInvoiceTotals = thaiInvoiceTotalsFromRawSubtotal(rawSum)
+        const rawSum = items.reduce((s, it) => s + Number(it.amount || 0), 0)
+        if (items.length > 0) {
+          orderInvoiceTotals = thaiInvoiceTotalsFromRawSubtotal(rawSum)
+        }
       }
     } else if (refType === 'Inbound') {
       const logRows = (await supabaseSelectFilter('stock_logs', `inbound_batch_id=eq.${refId}`, {

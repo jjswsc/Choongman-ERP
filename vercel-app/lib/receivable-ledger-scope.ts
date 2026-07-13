@@ -21,6 +21,7 @@ import {
   type ReceivableVendorMaps,
 } from '@/lib/receivable-ledger-pure'
 import { normalizeReceivableStoreKey, pickReceivableDisplayStoreName, receivableStoreGroupKey } from '@/lib/receivable-store-key'
+import { rowMatchesInvoiceFilter } from '@/lib/receivable-payable-invoice-filter'
 
 export {
   buildReceivableAccrualStoreIndex,
@@ -121,6 +122,61 @@ export function buildReceivableListWithCumulative(params: {
         items: period?.items ?? [],
       }
     })
+    .sort((a, b) => Math.abs(b.cumulativeBalance) - Math.abs(a.cumulativeBalance))
+}
+
+/** 인보이스 번호 검색 — 종료일까지 이력에서 매칭 행을 보여 주고, 기간 합계는 조회 기간 내 매칭만 */
+export function buildReceivableListForInvoiceFilter(params: {
+  invoiceFilter: string
+  scopedRows: ReceivableTransactionRow[]
+  periodRows: ReceivableTransactionRow[]
+  vendorMaps: ReceivableVendorMaps
+  attributionMaps: ReceivableAttributionMaps
+  cumulativeByStoreGroup: Record<string, number>
+}): {
+  storeName: string
+  vendorCode?: string
+  vendorName?: string
+  balance: number
+  cumulativeBalance: number
+  unallocatedBankReceiveTotal: number
+  unallocatedBankDeposits: UnallocatedBankReceiveItem[]
+  items: ReceivableTransactionRow[]
+}[] {
+  const q = String(params.invoiceFilter || '').trim()
+  if (!q) return []
+
+  const matches = (r: ReceivableTransactionRow) => rowMatchesInvoiceFilter(r, q)
+  const matchedScoped = params.scopedRows.filter(matches)
+  if (matchedScoped.length === 0) return []
+
+  const matchedPeriod = params.periodRows.filter(matches)
+  const periodGrouped = groupReceivableRowsByStore(
+    matchedPeriod,
+    params.vendorMaps,
+    params.attributionMaps,
+    params.cumulativeByStoreGroup
+  )
+  const periodByKey = new Map(periodGrouped.map((g) => [g.groupKey, g]))
+  const scopedGrouped = groupReceivableRowsByStore(
+    matchedScoped,
+    params.vendorMaps,
+    params.attributionMaps,
+    params.cumulativeByStoreGroup
+  )
+  const unallocatedByGroup = sumUnallocatedBankReceiveByStoreGroup(params.scopedRows, params.attributionMaps)
+
+  return scopedGrouped
+    .map((g) => ({
+      storeName: g.storeName,
+      vendorCode: g.vendorCode,
+      vendorName: g.vendorName,
+      balance: periodByKey.get(g.groupKey)?.balance ?? 0,
+      cumulativeBalance: g.cumulativeBalance,
+      unallocatedBankReceiveTotal: unallocatedByGroup[g.groupKey] ?? 0,
+      unallocatedBankDeposits: listUnallocatedBankReceives(params.scopedRows, params.attributionMaps, g.groupKey),
+      items: g.items,
+    }))
     .sort((a, b) => Math.abs(b.cumulativeBalance) - Math.abs(a.cumulativeBalance))
 }
 

@@ -9,6 +9,7 @@ import { canonicalOfficeStore } from '@/lib/office-store-canonical'
 import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
 import type { ErpStoreMatchIndex } from '@/lib/erp-store-identity'
 import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
+import { rowMatchesInvoiceFilter } from '@/lib/receivable-payable-invoice-filter'
 
 const PAYABLE_LEDGER_SELECT =
   'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id'
@@ -621,6 +622,53 @@ export function buildPayableListWithCumulative(params: {
       balance: periodByVendor[vendorCode]?.total ?? 0,
       cumulativeBalance: cumulativeByVendor[vendorCode] ?? 0,
       items: (periodByVendor[vendorCode]?.items ?? []).sort((a, b) =>
+        String(b.trans_date || '').localeCompare(String(a.trans_date || ''))
+      ),
+    }))
+    .sort((a, b) => Math.abs(b.cumulativeBalance) - Math.abs(a.cumulativeBalance))
+}
+
+/** 인보이스 번호 검색 — 종료일까지 이력에서 매칭 행을 보여 주고, 기간 합계는 조회 기간 내 매칭만 */
+export function buildPayableListForInvoiceFilter(params: {
+  invoiceFilter: string
+  scopedRows: PayableTransactionRow[]
+  periodRows: PayableTransactionRow[]
+  cumulativeByVendor: Record<string, number>
+}): {
+  vendorCode: string
+  balance: number
+  cumulativeBalance: number
+  items: PayableTransactionRow[]
+}[] {
+  const q = String(params.invoiceFilter || '').trim()
+  if (!q) return []
+
+  const matches = (r: PayableTransactionRow) => rowMatchesInvoiceFilter(r, q)
+  const matchedScoped = params.scopedRows.filter(matches)
+  if (matchedScoped.length === 0) return []
+
+  const matchedPeriod = params.periodRows.filter(matches)
+  const periodByVendor: Record<string, number> = {}
+  for (const r of matchedPeriod) {
+    const vc = String(r.vendor_code || '').trim()
+    if (!vc) continue
+    periodByVendor[vc] = (periodByVendor[vc] || 0) + Number(r.amount ?? 0)
+  }
+
+  const byVendor: Record<string, PayableTransactionRow[]> = {}
+  for (const r of matchedScoped) {
+    const vc = String(r.vendor_code || '').trim()
+    if (!vc) continue
+    if (!byVendor[vc]) byVendor[vc] = []
+    byVendor[vc].push(r)
+  }
+
+  return Object.keys(byVendor)
+    .map((vendorCode) => ({
+      vendorCode,
+      balance: periodByVendor[vendorCode] ?? 0,
+      cumulativeBalance: params.cumulativeByVendor[vendorCode] ?? 0,
+      items: byVendor[vendorCode].sort((a, b) =>
         String(b.trans_date || '').localeCompare(String(a.trans_date || ''))
       ),
     }))
