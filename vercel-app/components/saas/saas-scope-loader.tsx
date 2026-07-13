@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { apiFetch } from "@/lib/api/fetch"
-import type { SaasScopeClientMeta } from "@/lib/saas-control-plane-scope"
+import type { SaasScopeClientMeta } from "@/lib/saas-control-plane-scope-client"
 import { SaasScopeProvider } from "@/components/saas/saas-scope-context"
 
 /** 레이아웃에서 스코프를 선확정하지 않는 경우에만 사용. 로드 전에는 children을 렌더하지 않는다. */

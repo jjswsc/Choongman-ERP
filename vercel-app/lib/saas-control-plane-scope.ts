@@ -3,6 +3,10 @@ import type { JwtPayload } from "./jwt-auth"
 import { canAccessSaasAdmin } from "./permissions"
 import { supabaseSelectFilter } from "./supabase-server"
 import { requireAuth } from "./verify-auth"
+import type { SaasScopeClientMeta } from "./saas-control-plane-scope-client"
+
+export type { SaasScopeClientMeta, SaasScopeKind } from "./saas-control-plane-scope-client"
+export { PLATFORM_SCOPE_CLIENT_META } from "./saas-control-plane-scope-client"
 
 export type SaasScope =
   | { kind: "platform"; employeeId: number; employeeName: string }
@@ -14,25 +18,6 @@ export type SaasScope =
       employeeId: number
       employeeName: string
     }
-
-export type SaasScopeClientMeta = {
-  kind: SaasScope["kind"]
-  isPlatform: boolean
-  isPartner: boolean
-  partnerId: string | null
-  partnerName: string | null
-  defaultMarginPct: number
-}
-
-/** 본사 SaaS 관리자 UI 스코프 — 역할(Director/Officer/Accounting)로 즉시 확정 가능 */
-export const PLATFORM_SCOPE_CLIENT_META: SaasScopeClientMeta = {
-  kind: "platform",
-  isPlatform: true,
-  isPartner: false,
-  partnerId: null,
-  partnerName: null,
-  defaultMarginPct: 0,
-}
 
 export function saasScopeToClientMeta(scope: SaasScope): SaasScopeClientMeta {
   if (scope.kind === "partner") {
