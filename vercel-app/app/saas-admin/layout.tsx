@@ -8,6 +8,7 @@ import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
 import { canAccessSaasAdmin } from "@/lib/permissions"
 import { apiFetch } from "@/lib/api/fetch"
 import { PLATFORM_SCOPE_CLIENT_META, type SaasScopeClientMeta } from "@/lib/saas-control-plane-scope-client"
+import { isSaasAdminLoginPath } from "@/lib/saas-partner-login-defaults-client"
 import { SaasSidebar } from "@/components/saas/saas-sidebar"
 import { SaasHeader } from "@/components/saas/saas-header"
 import { SaasScopeProvider } from "@/components/saas/saas-scope-context"
@@ -17,7 +18,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const { auth, initialized } = useAuth()
   const { lang, setLang } = useLang()
-  const isLoginPage = pathname === "/saas-admin/login"
+  const isLoginPage = isSaasAdminLoginPath(pathname)
   const roleAllowed = Boolean(auth && canAccessSaasAdmin(auth.role || ""))
   const [saasScope, setSaasScope] = useState<SaasScopeClientMeta | null>(roleAllowed ? PLATFORM_SCOPE_CLIENT_META : null)
 

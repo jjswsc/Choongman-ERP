@@ -47,6 +47,11 @@ import {
   reportNetworkFailure,
 } from "@/lib/offline/network"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
+import {
+  isSaasPlatformDefaultLoginCompany,
+  isSaasAdminLoginPath,
+  SAAS_PARTNER_LOGIN_STORE_DEFAULT,
+} from "@/lib/saas-partner-login-defaults-client"
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
@@ -164,6 +169,11 @@ function normalizeLoginPathname(pathname: string): string {
   return p
 }
 
+function isSaasAdminLoginPathFromBrowser(): boolean {
+  if (typeof window === "undefined") return false
+  return isSaasAdminLoginPath(window.location.pathname || "")
+}
+
 function deriveLoginAppFromRoute(pathname: string, isAdminPage: boolean, redirectTo: string): LoginApp {
   const p = normalizeLoginPathname(pathname)
   if (p === "/pos/login") return "pos"
@@ -208,7 +218,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [store, setStore] = useState("")
   const [user, setUser] = useState("")
   const [pw, setPw] = useState("")
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true
+    return !isSaasAdminLoginPathFromBrowser()
+  })
   /** getLoginData 출처 — 매장 0개여도 API 성공이면 '오프라인' 배너로 오인하지 않음 */
   const [loginDataSource, setLoginDataSource] = useState<"api" | "cache" | "fallback" | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -318,7 +331,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     normalizeLoginPathname(pathname) === "/saas-admin/login" ? true : loginApp === "erp"
   const isAdminLoginRoute = pathname === "/admin/login" || pathname === "/saas-admin/login"
   const loginPath = useMemo(() => normalizeLoginPathname(pathname), [pathname])
-  const isSaasAdminLogin = loginPath === "/saas-admin/login"
+  const isSaasAdminLogin = isSaasAdminLoginPath(loginPath)
+
+  const resolveSaasAdminLogin = useCallback((): boolean => {
+    if (isSaasAdminLoginPath(loginPath)) return true
+    return isSaasAdminLoginPathFromBrowser()
+  }, [loginPath])
   /** Omni SaaS·ERP 관리 로그인만 회사명 직접 입력 (충만은 단일 회사·기존 목록 UX 유지) */
   const useManualCompanyField =
     isSaasAdminLogin || (loginPath === "/admin/login" && brand.key === "omnifoodtech")
@@ -507,12 +525,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     void run()
   }, [applyLoginDataResult, loginApp])
 
+  useLayoutEffect(() => {
+    if (resolveSaasAdminLogin()) setLoading(false)
+  }, [resolveSaasAdminLogin])
+
   useEffect(() => {
     if (auth) {
       replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       return
     }
-    if (isSaasAdminLogin) {
+    if (resolveSaasAdminLogin()) {
       setLoading(false)
       return
     }
@@ -523,7 +545,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return () => {
       window.clearTimeout(timer)
     }
-  }, [auth, effectiveRedirectTo, router, fetchLoginData, isSaasAdminLogin])
+  }, [auth, effectiveRedirectTo, router, fetchLoginData, resolveSaasAdminLogin])
 
   useEffect(() => {
     if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
@@ -535,7 +557,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   useEffect(() => {
     if (companyPrefillAppliedRef.current) return
     const savedCompany = lastLoginSelectionRef.current?.company || ""
-    const targetCompany = queryCompany || savedCompany
+    let targetCompany = queryCompany || savedCompany
+    if (isSaasAdminLogin && !queryCompany && isSaasPlatformDefaultLoginCompany(targetCompany)) {
+      targetCompany = ""
+    }
     if (!targetCompany) {
       companyPrefillAppliedRef.current = true
       return
@@ -561,7 +586,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
     }
     companyPrefillAppliedRef.current = true
-  }, [companies, queryCompany, useManualCompanyField])
+  }, [companies, queryCompany, useManualCompanyField, isSaasAdminLogin])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -746,7 +771,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   useEffect(() => {
     if (storePrefillAppliedRef.current) return
     const savedStore = lastLoginSelectionRef.current?.store || ""
-    const targetStore = queryStore || savedStore
+    const targetStore =
+      queryStore || savedStore || (isSaasAdminLogin ? SAAS_PARTNER_LOGIN_STORE_DEFAULT : "")
     if (!targetStore) {
       storePrefillAppliedRef.current = true
       return
@@ -766,7 +792,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (queryStore) setUser("")
     }
     storePrefillAppliedRef.current = true
-  }, [filteredStores, queryStore, useManualStoreUserFields])
+  }, [filteredStores, queryStore, useManualStoreUserFields, isSaasAdminLogin])
   const users = store ? (loginData[store] || []) : []
   useEffect(() => {
     if (userPrefillAppliedRef.current) return
