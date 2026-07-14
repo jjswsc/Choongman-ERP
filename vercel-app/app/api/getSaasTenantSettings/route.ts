@@ -538,6 +538,7 @@ export async function GET(req: NextRequest) {
         success: false,
         message,
         tenants: [],
+        scope: scopeMeta,
       },
       { status: 500, headers }
     )

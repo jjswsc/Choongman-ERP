@@ -55,6 +55,7 @@ export async function loginCheck(params: {
     employeeCode?: string
     allowedStores?: string[]
     canManageOfficePayroll?: boolean
+    saasPartnerLogin?: boolean
     code?: string
   }
   return data

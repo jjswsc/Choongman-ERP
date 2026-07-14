@@ -676,7 +676,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         })
         setAuth({
           ...(res.companyName ? { company: res.companyName } : {}),
-          ...(res.tenantId ? { tenantId: res.tenantId } : {}),
+          ...(res.tenantId && !res.saasPartnerLogin ? { tenantId: res.tenantId } : {}),
           store: res.storeName,
           user: res.userName,
           role: res.role || "",
@@ -688,7 +688,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             : {}),
           ...(res.canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
         })
-        replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
+        const postLoginPath =
+          res.saasPartnerLogin && loginPath === "/admin/login" ? "/saas-admin" : effectiveRedirectTo
+        replacePosOfflineAware(postLoginPath, (p) => router.replace(p))
       } else {
         const apiMsg = res.message || ""
         if (isLoginCheckBackendFailureMessage(apiMsg)) {

@@ -17,6 +17,7 @@ import {
 } from '@/lib/erp-store-master'
 import { loginCheckFailureFromError } from '@/lib/login-check-error'
 import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
+import { resolveSaasScope } from '@/lib/saas-control-plane-scope'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -98,11 +99,19 @@ export async function POST(req: NextRequest) {
 
     const userName = String(row.name || '').trim()
     const companyName = normalizeCompanyName(row.company) || companyInput
-    const tenantId = deriveTenantIdFromCompany(companyName)
+    const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
+    const partnerScope = await resolveSaasScope({
+      store: storeName,
+      name: userName,
+      role: finalRole,
+      ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
+      ...(companyName ? { company: companyName } : {}),
+    })
+    const saasPartnerLogin = partnerScope.kind === 'partner'
+    const tenantId = saasPartnerLogin ? undefined : deriveTenantIdFromCompany(companyName)
     const multiSettings = await getFranchiseeMultiStoreSettings()
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
-    const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
     let canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(row.can_manage_office_payroll)
     if (!canManageOfficePayroll && empIdRaw > 0) {
@@ -145,6 +154,7 @@ export async function POST(req: NextRequest) {
         ...(empCodeRaw ? { employeeCode: empCodeRaw } : {}),
         ...(canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
         ...(attachAllowedStores ? { allowedStores } : {}),
+        ...(saasPartnerLogin ? { saasPartnerLogin: true } : {}),
       },
       { headers }
     )

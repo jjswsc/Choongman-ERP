@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { JwtPayload } from "./jwt-auth"
 import { canAccessSaasAdmin } from "./permissions"
+import { resolveSaasPartnerLoginStore } from "./saas-partner-login-defaults"
 import { supabaseSelectFilter } from "./supabase-server"
 import { requireAuth } from "./verify-auth"
 import type { SaasScopeClientMeta } from "./saas-control-plane-scope-client"
@@ -18,6 +19,123 @@ export type SaasScope =
       employeeId: number
       employeeName: string
     }
+
+type PartnerRow = { id?: string; name?: string; default_margin_pct?: number | null }
+
+function isPartnerStoreKey(store: string): boolean {
+  const s = String(store || "").trim().toLowerCase()
+  const partnerStore = resolveSaasPartnerLoginStore().trim().toLowerCase()
+  return Boolean(s && partnerStore && s === partnerStore)
+}
+
+/** JWT에 employeeId가 없을 때(구 토큰·세션) company/store/name으로 employees.id 복구 */
+export async function resolveEmployeeIdForSaasAuth(auth: JwtPayload): Promise<number> {
+  const fromJwt = auth.employeeId != null ? Math.floor(Number(auth.employeeId)) : 0
+  if (fromJwt > 0) return fromJwt
+
+  const name = String(auth.name || "").trim()
+  const store = String(auth.store || "").trim()
+  const company = String(auth.company || "").trim()
+  if (!name || !store) return 0
+
+  try {
+    const parts = [`name=eq.${encodeURIComponent(name)}`, `store=eq.${encodeURIComponent(store)}`]
+    if (company) parts.push(`company=eq.${encodeURIComponent(company)}`)
+    const rows = (await supabaseSelectFilter("employees", parts.join("&"), {
+      limit: 5,
+      select: "id,company,resign_date",
+    })) as Array<{ id?: number; company?: string | null; resign_date?: string | null }>
+    const active = (rows || []).filter((r) => !String(r.resign_date || "").trim())
+    const pool = active.length > 0 ? active : rows || []
+    if (company && pool.length > 1) {
+      const exact = pool.find((r) => String(r.company || "").trim() === company)
+      if (exact?.id) return Math.floor(Number(exact.id))
+    }
+    const id = Math.floor(Number(pool[0]?.id || 0))
+    return id > 0 ? id : 0
+  } catch {
+    return 0
+  }
+}
+
+async function loadPartnerScopeByEmployeeId(
+  employeeId: number,
+  employeeName: string
+): Promise<SaasScope | null> {
+  try {
+    const userRows = (await supabaseSelectFilter(
+      "saas_partner_users",
+      `employee_id=eq.${employeeId}&is_active=eq.true`,
+      { limit: 1, select: "partner_id,role,is_active" }
+    )) as Array<{ partner_id?: string | null }>
+    const partnerId = String(userRows?.[0]?.partner_id || "").trim()
+    if (!partnerId) return null
+
+    const partnerRows = (await supabaseSelectFilter(
+      "saas_partners",
+      `id=eq.${encodeURIComponent(partnerId)}&is_active=eq.true`,
+      { limit: 1, select: "id,name,default_margin_pct,is_active" }
+    )) as PartnerRow[]
+    const partner = partnerRows?.[0]
+    if (!partner?.id) return null
+
+    return {
+      kind: "partner",
+      partnerId: String(partner.id),
+      partnerName: String(partner.name || partner.id),
+      defaultMarginPct: Math.max(0, Number(partner.default_margin_pct ?? 0)),
+      employeeId,
+      employeeName,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** saas_partner_users 행이 없어도 employees.company = 대리점명이면 복구(수동 연결 누락·마이그레이션) */
+async function loadPartnerScopeByCompanyMatch(params: {
+  company: string
+  store: string
+  name: string
+  employeeId: number
+}): Promise<SaasScope | null> {
+  const company = String(params.company || "").trim()
+  const store = String(params.store || "").trim()
+  const name = String(params.name || "").trim()
+  if (!company || !store || !name || !isPartnerStoreKey(store)) return null
+
+  try {
+    const partnerRows = (await supabaseSelectFilter(
+      "saas_partners",
+      `name=eq.${encodeURIComponent(company)}&is_active=eq.true`,
+      { limit: 1, select: "id,name,default_margin_pct,is_active" }
+    )) as PartnerRow[]
+    const partner = partnerRows?.[0]
+    if (!partner?.id) return null
+
+    let employeeId = params.employeeId
+    if (employeeId <= 0) {
+      employeeId = await resolveEmployeeIdForSaasAuth({
+        store,
+        name,
+        role: "",
+        company,
+      })
+    }
+    if (employeeId <= 0) return null
+
+    return {
+      kind: "partner",
+      partnerId: String(partner.id),
+      partnerName: String(partner.name || partner.id),
+      defaultMarginPct: Math.max(0, Number(partner.default_margin_pct ?? 0)),
+      employeeId,
+      employeeName: name,
+    }
+  } catch {
+    return null
+  }
+}
 
 export function saasScopeToClientMeta(scope: SaasScope): SaasScopeClientMeta {
   if (scope.kind === "partner") {
@@ -41,45 +159,36 @@ export function saasScopeToClientMeta(scope: SaasScope): SaasScopeClientMeta {
 }
 
 export async function resolveSaasScope(auth: JwtPayload): Promise<SaasScope> {
-  const rawId = auth.employeeId
-  const employeeId = rawId != null && Number.isFinite(Number(rawId)) ? Math.floor(Number(rawId)) : 0
+  const employeeId = await resolveEmployeeIdForSaasAuth(auth)
+  const employeeName = String(auth.name || "")
 
   if (employeeId > 0) {
-    try {
-      const userRows = (await supabaseSelectFilter(
-        "saas_partner_users",
-        `employee_id=eq.${employeeId}&is_active=eq.true`,
-        { limit: 1, select: "partner_id,role,is_active" }
-      )) as Array<{ partner_id?: string | null }>
-      const partnerId = String(userRows?.[0]?.partner_id || "").trim()
-      if (partnerId) {
-        const partnerRows = (await supabaseSelectFilter(
-          "saas_partners",
-          `id=eq.${encodeURIComponent(partnerId)}&is_active=eq.true`,
-          { limit: 1, select: "id,name,default_margin_pct,is_active" }
-        )) as Array<{ id?: string; name?: string; default_margin_pct?: number | null }>
-        const partner = partnerRows?.[0]
-        if (partner?.id) {
-          return {
-            kind: "partner",
-            partnerId: String(partner.id),
-            partnerName: String(partner.name || partner.id),
-            defaultMarginPct: Math.max(0, Number(partner.default_margin_pct ?? 0)),
-            employeeId,
-            employeeName: String(auth.name || ""),
-          }
-        }
-      }
-    } catch {
-      // partner tables not deployed — fall through to platform
-    }
+    const byLink = await loadPartnerScopeByEmployeeId(employeeId, employeeName)
+    if (byLink) return byLink
+  }
+
+  const company = String(auth.company || "").trim()
+  const store = String(auth.store || "").trim()
+  if (company && store && employeeName) {
+    const byCompany = await loadPartnerScopeByCompanyMatch({
+      company,
+      store,
+      name: employeeName,
+      employeeId,
+    })
+    if (byCompany) return byCompany
   }
 
   return {
     kind: "platform",
     employeeId,
-    employeeName: String(auth.name || ""),
+    employeeName,
   }
+}
+
+export async function isSaasPartnerAuth(auth: JwtPayload): Promise<boolean> {
+  const scope = await resolveSaasScope(auth)
+  return scope.kind === "partner"
 }
 
 export async function canAccessSaasControlPlane(auth: JwtPayload): Promise<boolean> {

@@ -42,11 +42,12 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
     void apiFetch("/api/getSaasTenantSettings")
       .then(async (res) => {
         if (cancelled) return
-        const json = (await res.json()) as { scope?: SaasScopeClientMeta }
-        if (res.ok && json.scope) {
+        const json = (await res.json()) as { scope?: SaasScopeClientMeta; success?: boolean }
+        if (json.scope) {
           setSaasScope(json.scope)
           return
         }
+        if (res.ok) return
         router.replace("/saas-admin/login?msg=no_admin")
       })
       .catch(() => {
