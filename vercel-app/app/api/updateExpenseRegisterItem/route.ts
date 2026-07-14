@@ -85,6 +85,14 @@ function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
   return map[cat] || 'expense'
 }
 
+function encodePayeeCodeForRegister(payeeCode: string, category: WithdrawalCategory): string {
+  let base = String(payeeCode || '').trim()
+  if (base.includes('::wm::')) base = base.split('::wm::')[0].trim()
+  const cat = String(category || '').trim().toLowerCase() || 'expense'
+  if (!base) return `auto_${cat}::wm::${cat}`
+  return `${base}::wm::${cat}`
+}
+
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -234,12 +242,13 @@ export async function POST(request: NextRequest) {
       { limit: 20, select: 'id,expense_accrual_id' }
     )) as PayableRow[] | null
 
-    if ((linkedPayables || []).some((p) => Number(p.expense_accrual_id || 0) > 0)) {
-      return NextResponse.json(
-        { success: false, message: '지급예정에서 생성된 지급 건입니다. 지급예정 탭에서 수정해 주세요.' },
-        { status: 400, headers }
-      )
-    }
+    const linkedAccrualIds = [
+      ...new Set(
+        (linkedPayables || [])
+          .map((p) => Number(p.expense_accrual_id || 0))
+          .filter((id) => id > 0)
+      ),
+    ]
 
     const bankCategory = mapToBankTransactionCategory(category!)
     const prevCategory = String(bankRow.category || '').toLowerCase()
@@ -271,6 +280,24 @@ export async function POST(request: NextRequest) {
       transDate,
       bankMemo: memo,
     })
+
+    // 지급예정 연동 건: 통장 수정 시 계정과목·지급처·메모·유형을 지급예정에도 반영 (수정 루프 방지)
+    for (const accrualId of linkedAccrualIds) {
+      const accrualPatch: Record<string, unknown> = {
+        memo: memo || null,
+        store_name: storeName || null,
+        account_subject_id: accountSubjectId,
+        updated_at: new Date().toISOString(),
+      }
+      if (vendorCode) {
+        accrualPatch.payee_code = encodePayeeCodeForRegister(vendorCode, category!)
+        accrualPatch.payee_name = vendorCode
+      }
+      if (invoiceReceived !== undefined) accrualPatch.invoice_received = invoiceReceived
+      accrualPatch.invoice_no = invoiceNo || null
+      accrualPatch.invoice_photo_url = invoicePhotoUrl || null
+      await supabaseUpdate('expense_accruals', accrualId, accrualPatch)
+    }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {

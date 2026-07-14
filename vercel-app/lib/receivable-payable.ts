@@ -13,6 +13,22 @@ import { bankTransactionHasReceivableOrderLink } from './bank-receivable-link-se
 import { shouldCreateFranchiseReceivableSubledgerFromBankReceive } from './franchise-receivable-subledger-gate'
 import { storeHasPosCompletedOrders } from './bank-settlement-guards'
 import { formatReceivableInvoiceNo } from './receivable-invoice-format'
+
+/** 통장 연동 미지급 「지급」적요 — 실제 은행 적요를 우선한다. */
+export function buildBankLinkedPayablePaymentMemo(params: {
+  bankMemo?: string | null
+  fallbackDetail?: string | null
+}): string {
+  const bank = String(params.bankMemo || '').trim()
+  const fallback = String(params.fallbackDetail || '').trim() || '지급'
+  return `통장 지급: ${bank || fallback}`.slice(0, 240)
+}
+
+/** 패티 연동 미지급 「지급」적요 */
+export function buildPettyLinkedPayablePaymentMemo(detail?: string | null): string {
+  const d = String(detail || '').trim() || '지급'
+  return `패티 지급: ${d}`.slice(0, 240)
+}
 import {
   isAccountingPurchaseOrderByCartJson,
   purchaseOrderMetaOrderDate,
@@ -384,9 +400,28 @@ export async function dedupePayablePaymentsForBankTransaction(bankTransactionId:
 }
 
 /**
- * 통장 매입대금 거래처 변경 시 연결된 미지급 Payment·지급예정 payee 동기화 + 중복 제거.
- * (통장 화면만 수정하면 payable_transactions.vendor_code가 안 바뀌던 문제)
+ * 통장 출금 용도 변경 시 미지급 Payment 동기화 분기.
+ * 매입대금(purchase_payment) 분류만으로는 Payment를 만들지 않음 — 지출관리 연동 행만 유지·동기화.
  */
+export function resolvePayableSyncAfterBankCategoryChange(params: {
+  prevCategory: string
+  nextCategory: string
+  hasLinkedPayment: boolean
+  vendorCode: string
+}): { deleteStandalonePayment: boolean; syncExistingPayment: boolean } {
+  const prev = String(params.prevCategory || '').toLowerCase()
+  const next = String(params.nextCategory || '').toLowerCase()
+  const wasPurchasePay = prev === 'purchase_payment'
+  const isPurchasePay = next === 'purchase_payment'
+  const vendor = String(params.vendorCode || '').trim()
+  // 매입대금 관련 출금: 분류만으로 생긴 orphan(Payment, expense_accrual_id 없음) 제거
+  const deleteStandalonePayment = wasPurchasePay || isPurchasePay
+  // 이미 지출관리 등으로 연동된 Payment만 거래처·금액 동기화 (신규 생성 없음)
+  const syncExistingPayment = Boolean(vendor) && params.hasLinkedPayment
+  return { deleteStandalonePayment, syncExistingPayment }
+}
+
+/** 통장 매입대금 분류 저장 시 — 기존(지출관리 연동) Payment만 갱신. 없으면 생성하지 않음. */
 export async function syncPayableLedgerFromBankPurchasePayment(params: {
   bankTransactionId: number
   vendorCode: string
@@ -399,6 +434,8 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
   if (!bankTransactionId || !vc || !amountAbs) return
 
   const keeperId = await dedupePayablePaymentsForBankTransaction(bankTransactionId)
+  if (!keeperId) return
+
   const paymentMemo = memo.slice(0, 240)
   const paymentPatch = {
     vendor_code: vc,
@@ -407,47 +444,36 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
     memo: paymentMemo,
   }
 
-  if (keeperId) {
-    await supabaseUpdate('payable_transactions', keeperId, paymentPatch)
-    const keeperRows = (await supabaseSelectFilter('payable_transactions', `id=eq.${keeperId}`, {
+  await supabaseUpdate('payable_transactions', keeperId, paymentPatch)
+  const keeperRows = (await supabaseSelectFilter('payable_transactions', `id=eq.${keeperId}`, {
+    limit: 1,
+    select: 'expense_accrual_id',
+  })) as { expense_accrual_id?: number | null }[]
+  const accrualId = Number(keeperRows?.[0]?.expense_accrual_id || 0)
+  if (accrualId > 0) {
+    const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
       limit: 1,
-      select: 'expense_accrual_id',
-    })) as { expense_accrual_id?: number | null }[]
-    const accrualId = Number(keeperRows?.[0]?.expense_accrual_id || 0)
-    if (accrualId > 0) {
-      const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
-        limit: 1,
-        select: 'payee_code',
-      })) as { payee_code?: string | null }[]
-      const payeeName = await resolveVendorDisplayName(vc)
-      await supabaseUpdate('expense_accruals', accrualId, {
-        payee_code: mergeVendorIntoPayeeCode(accrualRows?.[0]?.payee_code, vc),
-        payee_name: payeeName,
-      })
-      const siblingPayables = (await supabaseSelectFilter(
-        'payable_transactions',
-        `expense_accrual_id=eq.${accrualId}`,
-        { limit: 20, select: 'id' }
-      )) as { id?: number }[]
-      for (const p of siblingPayables || []) {
-        if (p.id && Number(p.id) !== keeperId) {
-          await supabaseUpdate('payable_transactions', p.id, { vendor_code: vc })
-        }
+      select: 'payee_code',
+    })) as { payee_code?: string | null }[]
+    const payeeName = await resolveVendorDisplayName(vc)
+    await supabaseUpdate('expense_accruals', accrualId, {
+      payee_code: mergeVendorIntoPayeeCode(accrualRows?.[0]?.payee_code, vc),
+      payee_name: payeeName,
+    })
+    const siblingPayables = (await supabaseSelectFilter(
+      'payable_transactions',
+      `expense_accrual_id=eq.${accrualId}`,
+      { limit: 20, select: 'id' }
+    )) as { id?: number }[]
+    for (const p of siblingPayables || []) {
+      if (p.id && Number(p.id) !== keeperId) {
+        await supabaseUpdate('payable_transactions', p.id, { vendor_code: vc })
       }
     }
-    return
   }
-
-  await upsertPayableFromBankPurchasePayment({
-    bankTransactionId,
-    vendorCode: vc,
-    amountAbs,
-    transDate,
-    memo: paymentMemo,
-  })
 }
 
-/** 통장 출금 용도 변경 시 미지급 Payment 행 생성·갱신·삭제 (통장·지출검색 공통) */
+/** 통장 출금 용도 변경 시 미지급 Payment 갱신·orphan 삭제 (통장·지출검색 공통). 분류만으로 신규 생성하지 않음. */
 export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
   bankTransactionId: number
   prevCategory: string
@@ -465,7 +491,7 @@ export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
   const wasPurchasePay = prev === 'purchase_payment'
   const isPurchasePay = next === 'purchase_payment'
 
-  if (wasPurchasePay && !isPurchasePay) {
+  if (wasPurchasePay || isPurchasePay) {
     await supabaseDeleteByFilter(
       'payable_transactions',
       `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment&expense_accrual_id=is.null`
@@ -478,9 +504,14 @@ export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
     { limit: 1, select: 'id' }
   )) as { id?: number }[]
   const hasLinkedPayment = Boolean(linkedPaymentRows?.length)
-
   const vendorCode = String(params.vendorCode || '').trim()
-  if (!vendorCode || (!isPurchasePay && !hasLinkedPayment)) return
+  const { syncExistingPayment } = resolvePayableSyncAfterBankCategoryChange({
+    prevCategory: prev,
+    nextCategory: next,
+    hasLinkedPayment,
+    vendorCode,
+  })
+  if (!syncExistingPayment) return
 
   const memoText = String(params.bankMemo || '').trim()
   await syncPayableLedgerFromBankPurchasePayment({
@@ -493,9 +524,8 @@ export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
 }
 
 /**
- * 통장 출금 1건당 Payment 1행 유지.
- * 지급예정 집행(expense_accrual_id 있음)과 통장 매입지급(purchase_payment)이 겹쳐 insert되면
- * 미지급 원장에 동일 지급이 2번 보이므로 bank_transaction_id 기준으로 통합한다.
+ * 통장 출금 1건당 Payment 1행 유지 (지출관리 지급·통장→지출등록 등).
+ * bank_transaction_id 기준으로 통합한다.
  */
 export async function upsertPayableFromBankPurchasePayment(params: {
   bankTransactionId: number
@@ -512,6 +542,15 @@ export async function upsertPayableFromBankPurchasePayment(params: {
   const vendorCode = String(params.vendorCode || '').trim()
   if (!bankId || !vendorCode || !params.amountAbs) return
 
+  const accrualId = Number(params.expenseAccrualId || 0)
+  // 지출관리 연동 시 통장 매입대금 분류만으로 생긴 orphan Payment 제거
+  if (accrualId > 0) {
+    await supabaseDeleteByFilter(
+      'payable_transactions',
+      `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment&expense_accrual_id=is.null`
+    )
+  }
+
   const row: Record<string, unknown> = {
     vendor_code: vendorCode,
     amount: -Math.abs(params.amountAbs),
@@ -521,7 +560,6 @@ export async function upsertPayableFromBankPurchasePayment(params: {
     memo: params.memo.slice(0, 240),
     bank_transaction_id: bankId,
   }
-  const accrualId = Number(params.expenseAccrualId || 0)
   if (accrualId > 0) row.expense_accrual_id = accrualId
   if (params.expenseDate) row.expense_date = params.expenseDate
   if (params.dueDate) row.due_date = params.dueDate

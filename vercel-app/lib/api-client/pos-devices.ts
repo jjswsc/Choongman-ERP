@@ -3,7 +3,13 @@
  */
 import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
-import type { PosTableItem } from './pos-table-printer'
+import { setErpCache } from '../offline/cache'
+import { notifyPosCatalogUpdated } from '../offline/pos-catalog-offline'
+import {
+  posTableLayoutCacheKey,
+  type PosFloorLabels,
+  type PosTableItem,
+} from './pos-table-printer'
 
 export async function clearPosMainDevice(params: { storeCode: string; deviceToken?: string }) {
   const res = await apiFetchWithOffline('/api/clearPosMainDevice', {
@@ -208,5 +214,20 @@ export async function savePosTableLayout(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = (await res.json()) as { success: boolean; message?: string }
+  if (json?.success) {
+    const cacheKey = posTableLayoutCacheKey(params.storeCode)
+    const cached = {
+      layout: params.layout,
+      floorLabels: (params.floorLabels ?? {}) as PosFloorLabels,
+      storeCode: params.storeCode,
+    }
+    try {
+      await setErpCache(cacheKey, cached)
+      notifyPosCatalogUpdated(cacheKey, cached)
+    } catch {
+      /* IndexedDB 없으면 무시 */
+    }
+  }
+  return json
 }

@@ -1,16 +1,21 @@
 -- =============================================================================
--- 매입대금 통장 ↔ 미지급원장(payable_transactions) 일괄 백필
+-- 【DEPRECATED — 실행 금지】매입대금 통장 → 미지급 Payment 백필
 --
--- 대상 (지출검색에서 유형만 바꾸고 미지급에 안 잡힌 건 등):
---   · 통장 category = purchase_payment + 매입처 있는 출금 → Payment 행 없으면 생성
---   · 이미 있는 독립 Payment(지급예정 미연동) → 통장과 vendor·금액·일자·메모 동기화
---   · 통장당 Payment 2건 이상 → 지급예정 연동 우선, 없으면 최신 id 1건만 유지
---   · 통장이 expense 등(매입대금 아님)인데 독립 Payment만 남은 건 → 삭제 (원장 이중 방지)
+-- 2026-07 정책 변경:
+--   · 통장 purchase_payment 분류만으로는 미지급 Payment를 만들지 않음
+--   · 미지급 「지급」은 지출관리 연결(지급예정 집행) / 통장→지출등록 경로만 생성
+--   · 통장 연동 시 적요는 은행 memo 우선
 --
--- Supabase SQL Editor: 전체 복사 → Run (BEGIN/COMMIT 포함, 재실행 안전)
+-- 정리 스크립트:
+--   node scripts/apply-payable-bank-link-cleanup.mjs --dry-run
+--   node scripts/apply-payable-bank-link-cleanup.mjs --execute
+--
+-- 아래 본문은 과거 운영용으로 보관만 합니다. BEGIN 이하를 실행하지 마세요.
 -- =============================================================================
 
+/*
 BEGIN;
+
 
 -- ── (0) 실행 전 요약 ───────────────────────────────────────────────────────
 SELECT '【0-A】매입대금 통장인데 Payment 없음' AS step,
@@ -212,3 +217,5 @@ ORDER BY bt.trans_date DESC, bt.id DESC
 LIMIT 50;
 
 COMMIT;
+*/
+

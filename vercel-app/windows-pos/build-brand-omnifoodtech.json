@@ -4,6 +4,16 @@
     "name": "omnifoodtech-pos-windows"
   },
   "forceCodeSigning": false,
+  "files": [
+    "main.js",
+    "preload.js",
+    "offline.html",
+    "runtime-config.json",
+    {
+      "from": "../lib/deploy-public-origin.cjs",
+      "to": "lib/deploy-public-origin.cjs"
+    }
+  ],
   "win": {
     "signAndEditExecutable": false
   }

@@ -22,6 +22,11 @@ import {
   stripLeadingPrintCodeBrackets,
 } from '@/lib/pos-print-item-line'
 import { buildKitchenPrintTrackingId } from '@/lib/pos-kitchen-print-tracking'
+import {
+  resolveKitchenSlipPrintLayout,
+  type KitchenSlipPrintLayout,
+  type PosPrintLayoutCalibrationInput,
+} from '@/lib/pos-print-layout-calibration'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
@@ -88,10 +93,12 @@ function typographyForScale(scale: KitchenSlipFontScale) {
 /** @page + body 기본 (폰트 크기는 design 반영) */
 export function getKitchenSlipPaperCss(
   design: KitchenSlipDesignResolved,
-  printColorAdjust: 'exact' | 'economy' = 'exact'
+  printColorAdjust: 'exact' | 'economy' = 'exact',
+  printLayout?: KitchenSlipPrintLayout | null
 ): string {
   const tp = typographyForScale(design.fontScale)
   const color = printColorAdjust === 'economy' ? 'economy' : 'exact'
+  const pad = printLayout ?? resolveKitchenSlipPrintLayout(null)
   return `
   @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
   html, body { margin: 0; padding: 0; }
@@ -108,7 +115,7 @@ export function getKitchenSlipPaperCss(
     box-sizing: border-box;
     font-family: "Noto Sans Thai", "Leelawadee UI", Tahoma, "Sukhumvit Set", Inter, Pretendard, "Noto Sans KR", "Malgun Gothic", Arial, sans-serif;
     font-size: ${tp.body}px;
-    padding: ${KITCHEN_SLIP_PADDING_MM.t}mm ${KITCHEN_SLIP_PADDING_MM.r}mm ${KITCHEN_SLIP_PADDING_MM.b}mm ${KITCHEN_SLIP_PADDING_MM.l}mm;
+    padding: ${pad.paddingTopMm}mm ${pad.paddingRightMm}mm ${pad.paddingBottomMm}mm ${pad.paddingLeftMm}mm;
     -webkit-print-color-adjust: ${color};
     print-color-adjust: ${color};
   }
@@ -714,6 +721,7 @@ export function buildKitchenSlipHtml(params: {
   design: KitchenSlipDesignResolved
   printTrackingId?: string
   printColorAdjust?: 'exact' | 'economy'
+  printLayout?: KitchenSlipPrintLayout | null
   /** 홀 인원 등. 1 이상일 때만 표시 */
   guestCount?: number
   /** `guestCount` 표시용 라벨(번역). 없으면 `Guests` */
@@ -732,10 +740,11 @@ export function buildKitchenSlipHtml(params: {
     design,
     printTrackingId,
     printColorAdjust = 'exact',
+    printLayout,
     guestCount,
     guestCountLabel,
   } = params
-  const paperCss = getKitchenSlipPaperCss(design, printColorAdjust)
+  const paperCss = getKitchenSlipPaperCss(design, printColorAdjust, printLayout)
   const classCss = kitchenSlipClassCss(design)
   const orderNoPrint = formatPosOrderNoForPrint(orderNo)
   const traceId =
@@ -814,6 +823,9 @@ export function buildKitchenSlipDocumentHtml(params: {
   design: KitchenSlipDesignResolved
   printTrackingId?: string
   printColorAdjust?: 'exact' | 'economy'
+  printLayout?: KitchenSlipPrintLayout | null
+  /** 미전달 시 printLayout 은 전역 기본값 */
+  printerSettings?: PosPrintLayoutCalibrationInput | null
   prependItemsHtml?: string
   guestCount?: number
   guestCountLabel?: string
@@ -834,6 +846,8 @@ export function buildKitchenSlipDocumentHtml(params: {
     design,
     printTrackingId,
     printColorAdjust,
+    printLayout,
+    printerSettings,
     prependItemsHtml,
     guestCount,
     guestCountLabel,
@@ -848,6 +862,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     optionNameByCode
   )
   const memoHtml = buildKitchenSlipMemoBlockHtml(String(memoLine ?? ''), escapeHtml, design)
+  const kitchenPrintLayout = printLayout ?? resolveKitchenSlipPrintLayout(printerSettings)
   return buildKitchenSlipHtml({
     label,
     orderNo,
@@ -861,6 +876,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     design,
     printTrackingId,
     printColorAdjust,
+    printLayout: kitchenPrintLayout,
     guestCount,
     guestCountLabel,
   })

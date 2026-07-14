@@ -39,6 +39,7 @@ import {
 import { loadLicensedPosByTenant } from "@/lib/saas-tenant-pos-licensed-server"
 import { normalizePosDeviceBillingBasis, resolvePosDeviceBillingBasis } from "@/lib/saas-tenant-pos-licensed"
 import { mapTenantBillingCompanyFromRow } from "@/lib/saas-billing-company-profile"
+import { isSaasPlatformInternalTenantId } from "@/lib/saas-platform-internal-tenant"
 import { supabaseSelectFilterStrippingUnknownColumns } from "@/lib/supabase-pgrst204-retry"
 
 const TENANT_SELECT =
@@ -525,10 +526,14 @@ export async function GET(req: NextRequest) {
         auditTrail: auditMap.get(tenant.id) || [],
         partnerId: partnerAssignmentMap.get(tenant.id)?.partnerId ?? null,
         partnerName: partnerAssignmentMap.get(tenant.id)?.partnerName ?? null,
+        isPlatformInternal: isSaasPlatformInternalTenantId(tenant.id),
       })
     }
 
-    return NextResponse.json({ success: true, tenants: rows, scope: scopeMeta }, { headers })
+    const visibleRows =
+      scope.kind === "partner" ? rows.filter((r) => !r.isPlatformInternal) : rows
+
+    return NextResponse.json({ success: true, tenants: visibleRows, scope: scopeMeta }, { headers })
   } catch (error) {
     console.error("getSaasTenantSettings:", error)
     const message =

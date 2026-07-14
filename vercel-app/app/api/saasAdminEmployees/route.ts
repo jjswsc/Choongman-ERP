@@ -11,6 +11,7 @@ import {
   requireSaasControlPlane,
   type SaasScope,
 } from "@/lib/saas-control-plane-scope"
+import { isSaasPlatformInternalTenantId } from "@/lib/saas-platform-internal-tenant"
 import { hashPassword } from "@/lib/password"
 import {
   supabaseInsert,
@@ -59,7 +60,7 @@ async function loadTenantOptions(scope: SaasScope): Promise<TenantOpt[]> {
     })) as { id?: string; company_name?: string }[]
     let opts = (rows || [])
       .map((r) => ({ id: String(r.id || "").trim(), companyName: String(r.company_name || "").trim() }))
-      .filter((t) => t.id)
+      .filter((t) => t.id && !isSaasPlatformInternalTenantId(t.id))
     if (scope.kind === "partner") {
       const allowed = await loadPartnerTenantIdSet(scope.partnerId)
       opts = opts.filter((t) => allowed.has(t.id))
@@ -73,6 +74,17 @@ async function loadTenantOptions(scope: SaasScope): Promise<TenantOpt[]> {
 const EMP_SELECT_FULL =
   "id,tenant_id,company,store,name,role,job,employee_code,resign_date,created_at"
 const EMP_SELECT_NO_TID = "id,company,store,name,role,job,employee_code,resign_date,created_at"
+
+function joinEmployeeFilters(...parts: string[]): string {
+  return parts.filter(Boolean).join("&")
+}
+
+function resolveEmploymentStatusFilter(raw: string): string {
+  const v = String(raw || "all").trim().toLowerCase()
+  if (v === "active") return "resign_date=is.null"
+  if (v === "resigned") return "resign_date=not.is.null"
+  return ""
+}
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -97,6 +109,21 @@ export async function GET(req: NextRequest) {
     }
 
     const tenantOptions = await loadTenantOptions(cp.scope)
+    const metaOnly = searchParams.get("metaOnly") === "1"
+    if (metaOnly) {
+      return NextResponse.json(
+        {
+          success: true,
+          tenantOptions,
+          rows: [],
+          pagination: { offset: 0, limit: 0, hasMore: false },
+        },
+        { headers }
+      )
+    }
+
+    const employmentStatus = (searchParams.get("employmentStatus") || searchParams.get("status") || "all").trim().toLowerCase()
+    const resignFilter = resolveEmploymentStatusFilter(employmentStatus)
     const cap = Math.min(limit, supabaseSelectPageCap())
 
     async function loadRaw(): Promise<Record<string, unknown>[]> {
@@ -116,12 +143,16 @@ export async function GET(req: NextRequest) {
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           if (/column|42703|tenant_id/i.test(msg) && filterByCompany) {
-            return (await supabaseSelectFilterAllPages("employees", filterByCompany, {
-              order: "id.desc",
-              select: EMP_SELECT_NO_TID,
-              maxRows: 8000,
-              pageSize: 800,
-            })) as Record<string, unknown>[]
+            return (await supabaseSelectFilterAllPages(
+              "employees",
+              joinEmployeeFilters(filterByCompany, resignFilter),
+              {
+                order: "id.desc",
+                select: EMP_SELECT_NO_TID,
+                maxRows: 8000,
+                pageSize: 800,
+              }
+            )) as Record<string, unknown>[]
           }
           if (/column|42703/i.test(msg) && select === EMP_SELECT_FULL) {
             return (await supabaseSelectFilterAllPages("employees", f, {
@@ -137,14 +168,14 @@ export async function GET(req: NextRequest) {
 
       if (q) {
         if (tenantId) {
-          return loadAllPagesForSearch(filterByTenant, EMP_SELECT_FULL)
+          return loadAllPagesForSearch(joinEmployeeFilters(filterByTenant, resignFilter), EMP_SELECT_FULL)
         }
-        return loadAllPagesForSearch("id=gte.0", EMP_SELECT_FULL)
+        return loadAllPagesForSearch(joinEmployeeFilters("id=gte.0", resignFilter), EMP_SELECT_FULL)
       }
 
       if (tenantId) {
         try {
-          return (await supabaseSelectFilterRange("employees", filterByTenant, {
+          return (await supabaseSelectFilterRange("employees", joinEmployeeFilters(filterByTenant, resignFilter), {
             order: "id.desc",
             select: EMP_SELECT_FULL,
             rangeStart: offset,
@@ -153,14 +184,39 @@ export async function GET(req: NextRequest) {
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           if (/column|42703|tenant_id/i.test(msg) && companyName) {
-            return (await supabaseSelectFilterRange("employees", filterByCompany, {
+            return (await supabaseSelectFilterRange(
+              "employees",
+              joinEmployeeFilters(filterByCompany, resignFilter),
+              {
+                order: "id.desc",
+                select: EMP_SELECT_NO_TID,
+                rangeStart: offset,
+                rangeEnd: offset + cap - 1,
+              }
+            )) as Record<string, unknown>[]
+          }
+          if (/column|42703|tenant_id/i.test(msg)) return []
+          throw e
+        }
+      }
+      if (resignFilter) {
+        try {
+          return (await supabaseSelectFilterRange("employees", resignFilter, {
+            order: "id.desc",
+            select: EMP_SELECT_FULL,
+            rangeStart: offset,
+            rangeEnd: offset + cap - 1,
+          })) as Record<string, unknown>[]
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          if (/column|42703/i.test(msg)) {
+            return (await supabaseSelectFilterRange("employees", resignFilter, {
               order: "id.desc",
               select: EMP_SELECT_NO_TID,
               rangeStart: offset,
               rangeEnd: offset + cap - 1,
             })) as Record<string, unknown>[]
           }
-          if (/column|42703|tenant_id/i.test(msg)) return []
           throw e
         }
       }
@@ -205,6 +261,11 @@ export async function GET(req: NextRequest) {
         const b = `${row.tenantId} ${row.company} ${row.store} ${row.name} ${row.role} ${row.job} ${row.employeeCode}`.toLowerCase()
         return b.includes(q)
       })
+    }
+    if (employmentStatus === "active") {
+      rows = rows.filter((row) => !row.resignDate)
+    } else if (employmentStatus === "resigned") {
+      rows = rows.filter((row) => Boolean(row.resignDate))
     }
 
     return NextResponse.json(

@@ -21,6 +21,7 @@ type ExpenseAccrualRow = {
   vat_amount?: number | null
   withholding_tax_amount?: number | null
   expense_date?: string
+  due_date?: string | null
   memo?: string | null
   account_subject_id?: number | null
   created_by?: string | null
@@ -30,6 +31,7 @@ type ExpenseAccrualRow = {
 type PayableRow = {
   id?: number
   amount?: number
+  bank_transaction_id?: number | null
 }
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,status,payee_code,store_name,amount,expense_date,memo,account_subject_id,created_by,payee_name,vat_amount,withholding_tax_amount',
+      select: 'id,status,payee_code,store_name,amount,expense_date,due_date,memo,account_subject_id,created_by,payee_name,vat_amount,withholding_tax_amount',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const row = rows?.[0]
@@ -105,7 +107,7 @@ export async function POST(request: NextRequest) {
     const isNoStore = !rowStoreName
 
     const payableForEdit = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`, {
-      select: 'id,amount',
+      select: 'id,amount,bank_transaction_id',
       limit: 50,
     })) as PayableRow[] | null
     let paidAmountForEdit = 0
@@ -119,20 +121,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: '요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.' }, { status: 400, headers })
       }
     } else if (!canEditExpenseAccrualPlan({ status, paidAmount: paidAmountForEdit })) {
-      if (status === 'paid' || status === 'done' || paidAmountForEdit > 0.005) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              paidAmountForEdit > 0.005
-                ? '이미 지급된 금액이 있어 수정할 수 없습니다.'
-                : '이미 지급 완료된 건입니다.',
-          },
-          { status: 400, headers }
-        )
+      if (!(status === 'paid' || status === 'done' || paidAmountForEdit > 0.005)) {
+        return NextResponse.json({ success: false, message: '승인 전(요청) 상태에서만 수정할 수 있습니다.' }, { status: 400, headers })
       }
-      return NextResponse.json({ success: false, message: '승인 전(요청) 상태에서만 수정할 수 있습니다.' }, { status: 400, headers })
+      // 이미 지급된 건: 금액·일자는 잠그고 계정과목·유형·지급처·메모만 허용 (지급예정↔지출검색 수정 루프 해소)
     }
+
+    const paidLocked =
+      status === 'paid' || status === 'done' || paidAmountForEdit > 0.005
 
     if (action === 'delete') {
       await deleteExpenseAccrualInputVatLedger(expenseAccrualId)
@@ -142,13 +138,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
     }
 
-    const amount = Math.abs(Number(body.amount || 0))
-    const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
-    const withholdingTaxAmount = Math.max(0, Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0))
+    const amountRaw = Math.abs(Number(body.amount || 0))
+    const vatAmountRaw = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
+    const withholdingTaxAmountRaw = Math.max(
+      0,
+      Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0)
+    )
+    const expenseDateRaw = String(body.expenseDate || body.expense_date || '').slice(0, 10)
+    const dueDateRawInput = String(body.dueDate || body.due_date || '').trim()
+    const dueDateRaw = dueDateRawInput ? dueDateRawInput.slice(0, 10) : null
+
+    // 지급 완료 건: 금액·발생일 변경은 차단(또는 무시)하고 분류 필드만 반영
+    const amount = paidLocked ? Math.abs(Number(row.amount || 0)) : amountRaw
+    const vatAmount = paidLocked
+      ? Math.max(0, Math.abs(Number(row.vat_amount || 0) || 0))
+      : vatAmountRaw
+    const withholdingTaxAmount = paidLocked
+      ? Math.max(0, Math.abs(Number(row.withholding_tax_amount || 0) || 0))
+      : withholdingTaxAmountRaw
+    const expenseDate = paidLocked
+      ? String(row.expense_date || '').slice(0, 10)
+      : expenseDateRaw
+    const dueDate = paidLocked
+      ? (String(row.due_date || '').slice(0, 10) || null)
+      : dueDateRaw
+
     const netPayable = expenseAccrualNetPayable(amount, withholdingTaxAmount)
-    const expenseDate = String(body.expenseDate || body.expense_date || '').slice(0, 10)
-    const dueDateRaw = String(body.dueDate || body.due_date || '').trim()
-    const dueDate = dueDateRaw ? dueDateRaw.slice(0, 10) : null
     const memo = String(body.memo || '').trim()
     const payeeCodeInput = String(body.payeeCode || body.payee_code || '').trim()
     let payeeName = String(body.payeeName || body.payee_name || '').trim()
@@ -248,19 +263,52 @@ export async function POST(request: NextRequest) {
     }
     await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
 
+    const bankIdsToSync = new Set<number>()
     for (const p of payableForEdit || []) {
       if (!p.id) continue
       const a = Number(p.amount || 0)
-      if (a <= 0) continue
-      await supabaseUpdate('payable_transactions', p.id, {
+      const bankId = Number(p.bank_transaction_id || 0)
+      if (bankId > 0) bankIdsToSync.add(bankId)
+      if (a > 0) {
+        if (!paidLocked) {
+          await supabaseUpdate('payable_transactions', p.id, {
+            vendor_code: payeeCode || null,
+            amount: netPayable,
+            trans_date: expenseDate,
+            memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
+            account_subject_id: accountSubjectId,
+            expense_date: expenseDate,
+            due_date: dueDate,
+          })
+        } else {
+          await supabaseUpdate('payable_transactions', p.id, {
+            vendor_code: payeeCode || null,
+            account_subject_id: accountSubjectId,
+            memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
+          })
+        }
+      } else {
+        await supabaseUpdate('payable_transactions', p.id, {
+          vendor_code: payeeCode || null,
+          account_subject_id: accountSubjectId,
+        })
+      }
+    }
+
+    const bankCategoryFromWithdrawal =
+      withdrawalCategory === 'purchase_payment' || withdrawalCategory === 'purchase_advance'
+        ? 'purchase_payment'
+        : withdrawalCategory === 'expense' || withdrawalCategory === 'expense_advance' || withdrawalCategory === 'fixed_asset'
+          ? 'expense'
+          : null
+    for (const bankId of bankIdsToSync) {
+      const bankPatch: Record<string, unknown> = {
         vendor_code: payeeCode || null,
-        amount: netPayable,
-        trans_date: expenseDate,
-        memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
         account_subject_id: accountSubjectId,
-        expense_date: expenseDate,
-        due_date: dueDate,
-      })
+        note: memo || null,
+      }
+      if (bankCategoryFromWithdrawal) bankPatch.category = bankCategoryFromWithdrawal
+      await supabaseUpdate('bank_transactions', bankId, bankPatch)
     }
 
     let subjectCode = '5520'

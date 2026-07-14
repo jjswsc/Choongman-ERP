@@ -8,6 +8,8 @@ import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
 import {
+  buildBankLinkedPayablePaymentMemo,
+  buildPettyLinkedPayablePaymentMemo,
   dedupePayablePaymentsForBankTransaction,
   dedupePayablePaymentsForExpenseAccrual,
   upsertPayableFromBankPurchasePayment,
@@ -273,6 +275,8 @@ export async function POST(request: NextRequest) {
     }
     const paymentMemo = memo || `지출 지급(${source.payee_name || payeeCode})`
     const accrualAccountSubjectId = resolveAccrualAccountSubjectId(source)
+    /** 기존 통장 출금 연결 시 은행 적요 — 미지급 지급 행 표시 기준 */
+    let linkedBankMemo = ''
 
     if (paymentMethod === 'bank') {
       const existingBankId = bankTransactionId != null ? Number(bankTransactionId) : null
@@ -309,6 +313,7 @@ export async function POST(request: NextRequest) {
           if (linkedIds.has(existingBankId)) {
             return NextResponse.json({ success: false, message: '이미 연결된 통장 출금입니다.' }, { status: 400, headers })
           }
+          linkedBankMemo = String(bankRow.memo || '').trim()
           const reg = await registerPettyReplenishFromBankTransaction({
             bankTransactionId: existingBankId,
             store: pettyStore,
@@ -392,6 +397,7 @@ export async function POST(request: NextRequest) {
           if (linkedIds.has(existingBankId)) {
             return NextResponse.json({ success: false, message: '이미 연결된 통장 출금입니다.' }, { status: 400, headers })
           }
+          linkedBankMemo = String(bankRow.memo || '').trim()
           const reg = await registerCardExpenseFromBankTransaction({
             bankTransactionId: existingBankId,
             cardAccountId,
@@ -486,6 +492,7 @@ export async function POST(request: NextRequest) {
         if (linkedPayable?.length) {
           return NextResponse.json({ success: false, message: '이미 다른 지출/매입과 연결된 통장 거래입니다.' }, { status: 400, headers })
         }
+        linkedBankMemo = String(bankRow.memo || '').trim()
         bankId = existingBankId
         await updateBankTransactionWithIdentityFallback(bankId, {
           note,
@@ -587,7 +594,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const paymentMemoLine = `${paymentMethod === 'bank' ? '통장' : '패티'} 지급: ${paymentMemo}`.slice(0, 240)
+    const paymentMemoLine = bankId
+      ? buildBankLinkedPayablePaymentMemo({
+          bankMemo: linkedBankMemo,
+          fallbackDetail: paymentMemo,
+        })
+      : buildPettyLinkedPayablePaymentMemo(paymentMemo)
     if (bankId) {
       await upsertPayableFromBankPurchasePayment({
         bankTransactionId: bankId,

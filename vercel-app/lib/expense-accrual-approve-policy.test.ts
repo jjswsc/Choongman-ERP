@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { canEditExpenseAccrualPlan } from '@/lib/expense-accrual-approve-policy'
+import {
+  canEditExpenseAccrualClassification,
+  canEditExpenseAccrualPlan,
+} from '@/lib/expense-accrual-approve-policy'
 
 describe('canEditExpenseAccrualPlan', () => {
   it('allows planned, approved, and rejected when unpaid', () => {
@@ -12,5 +15,13 @@ describe('canEditExpenseAccrualPlan', () => {
     expect(canEditExpenseAccrualPlan({ status: 'approved', paidAmount: 100 })).toBe(false)
     expect(canEditExpenseAccrualPlan({ status: 'paid', paidAmount: 0 })).toBe(false)
     expect(canEditExpenseAccrualPlan({ status: 'done', paidAmount: 0 })).toBe(false)
+  })
+})
+
+describe('canEditExpenseAccrualClassification', () => {
+  it('allows classification edits after payment', () => {
+    expect(canEditExpenseAccrualClassification({ status: 'paid' })).toBe(true)
+    expect(canEditExpenseAccrualClassification({ status: 'done' })).toBe(true)
+    expect(canEditExpenseAccrualClassification({ status: 'approved' })).toBe(true)
   })
 })

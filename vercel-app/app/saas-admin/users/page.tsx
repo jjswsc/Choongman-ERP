@@ -31,6 +31,13 @@ type EmpRow = {
 }
 type RoleOption = "Staff" | "Manager" | "Franchisee" | "Officer" | "Director"
 type RowDraft = { role: RoleOption; job: string }
+type EmploymentStatusFilter = "all" | "active" | "resigned"
+
+type SearchFilters = {
+  tenantId: string
+  q: string
+  employmentStatus: EmploymentStatusFilter
+}
 
 const ROLE_OPTIONS: RoleOption[] = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
 
@@ -45,11 +52,14 @@ export default function SaasUsersPage() {
   const [tenantFilter, setTenantFilter] = useState<string>("")
   const [qInput, setQInput] = useState("")
   const [qApplied, setQApplied] = useState("")
+  const [employmentStatusInput, setEmploymentStatusInput] = useState<EmploymentStatusFilter>("active")
+  const [employmentStatusApplied, setEmploymentStatusApplied] = useState<EmploymentStatusFilter>("active")
+  const [hasSearched, setHasSearched] = useState(false)
   const [offset, setOffset] = useState(0)
   const [rows, setRows] = useState<EmpRow[]>([])
   const [tenantOptions, setTenantOptions] = useState<TenantOpt[]>([])
   const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState("")
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({})
   const [savingIds, setSavingIds] = useState<number[]>([])
@@ -57,13 +67,19 @@ export default function SaasUsersPage() {
   const [bulkRole, setBulkRole] = useState<RoleOption>("Staff")
 
   const load = useCallback(
-    async (opts: { nextOffset: number; append: boolean }) => {
+    async (opts: { nextOffset: number; append: boolean; filters?: SearchFilters }) => {
+      const filters = opts.filters ?? {
+        tenantId: tenantFilter,
+        q: qApplied,
+        employmentStatus: employmentStatusApplied,
+      }
       setLoading(true)
       setNotice("")
       try {
         const params = new URLSearchParams()
-        if (tenantFilter) params.set("tenantId", tenantFilter)
-        if (qApplied.trim()) params.set("q", qApplied.trim())
+        if (filters.tenantId) params.set("tenantId", filters.tenantId)
+        if (filters.q.trim()) params.set("q", filters.q.trim())
+        if (filters.employmentStatus !== "all") params.set("employmentStatus", filters.employmentStatus)
         params.set("offset", String(opts.nextOffset))
         params.set("limit", "200")
         const res = await apiFetch(`/api/saasAdminEmployees?${params.toString()}`)
@@ -91,13 +107,22 @@ export default function SaasUsersPage() {
         setLoading(false)
       }
     },
-    [tenantFilter, qApplied, t]
+    [tenantFilter, qApplied, employmentStatusApplied, t]
   )
 
   useEffect(() => {
-    setOffset(0)
-    void load({ nextOffset: 0, append: false })
-  }, [tenantFilter, qApplied, load])
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/saasAdminEmployees?metaOnly=1")
+        const json = (await res.json()) as { success?: boolean; tenantOptions?: TenantOpt[] }
+        if (res.ok && json.success === true && Array.isArray(json.tenantOptions)) {
+          setTenantOptions(json.tenantOptions)
+        }
+      } catch {
+        // tenant dropdown is optional until first search
+      }
+    })()
+  }, [])
 
   useEffect(() => {
     const allowed = new Set(rows.map((r) => r.id))
@@ -105,11 +130,20 @@ export default function SaasUsersPage() {
   }, [rows])
 
   const applySearch = () => {
-    setQApplied(qInput.trim())
+    const nextFilters: SearchFilters = {
+      tenantId: tenantFilter,
+      q: qInput.trim(),
+      employmentStatus: employmentStatusInput,
+    }
+    setHasSearched(true)
+    setQApplied(nextFilters.q)
+    setEmploymentStatusApplied(nextFilters.employmentStatus)
+    setOffset(0)
+    void load({ nextOffset: 0, append: false, filters: nextFilters })
   }
 
   const loadMore = () => {
-    if (!hasMore || loading) return
+    if (!hasSearched || !hasMore || loading) return
     void load({ nextOffset: offset, append: true })
   }
   const isSaving = (id: number) => savingIds.includes(id)
@@ -311,7 +345,7 @@ export default function SaasUsersPage() {
           <CardTitle className="text-lg">{t("saasAdmin_filter")}</CardTitle>
           <CardDescription>{t("saasAdmin_filterTenantHint")}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 md:flex-row md:items-end">
+        <CardContent className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end">
           <div className="space-y-2 md:min-w-[220px]">
             <Label>{t("saasAdmin_labelTenant")}</Label>
             <Select value={tenantFilter || "__all__"} onValueChange={(v) => setTenantFilter(v === "__all__" ? "" : v)}>
@@ -325,6 +359,22 @@ export default function SaasUsersPage() {
                     {opt.companyName || opt.id}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2 md:min-w-[180px]">
+            <Label>{t("saasAdminUser_statusFilter")}</Label>
+            <Select
+              value={employmentStatusInput}
+              onValueChange={(v) => setEmploymentStatusInput(v as EmploymentStatusFilter)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("emp_status_all")}</SelectItem>
+                <SelectItem value="active">{t("emp_status_active")}</SelectItem>
+                <SelectItem value="resigned">{t("emp_status_resigned")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -353,12 +403,17 @@ export default function SaasUsersPage() {
         <CardHeader>
           <CardTitle className="text-lg">{t("saasAdminUser_listTitle")}</CardTitle>
           <CardDescription>
-            {loading ? t("saasAdmin_loading") : tr(t, "saasAdmin_rowsShown", { n: rows.length })}
-            {qApplied ? t("saasAdmin_searchModeUsers") : ""}
+            {!hasSearched
+              ? t("saasAdminUser_searchHint")
+              : loading
+                ? t("saasAdmin_loading")
+                : tr(t, "saasAdmin_rowsShown", { n: rows.length })}
+            {hasSearched && qApplied ? t("saasAdmin_searchModeUsers") : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border p-3">
+          {hasSearched ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border p-3">
             <span className="text-sm text-muted-foreground">{tr(t, "saasAdminUser_selectedCount", { n: selectedIds.length })}</span>
             <Select value={bulkRole} onValueChange={(v) => setBulkRole(normalizeRole(v))}>
               <SelectTrigger className="h-8 w-[150px]">
@@ -388,6 +443,7 @@ export default function SaasUsersPage() {
               {t("saasAdminUser_bulkRestore")}
             </Button>
           </div>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow>
@@ -406,10 +462,22 @@ export default function SaasUsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && !loading ? (
+              {!hasSearched ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
+                    {t("saasAdminUser_searchHint")}
+                  </TableCell>
+                </TableRow>
+              ) : rows.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center text-muted-foreground">
                     {t("saasAdmin_noData")}
+                  </TableCell>
+                </TableRow>
+              ) : loading && rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
+                    {t("saasAdmin_loading")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -485,7 +553,7 @@ export default function SaasUsersPage() {
               )}
             </TableBody>
           </Table>
-          {hasMore ? (
+          {hasSearched && hasMore ? (
             <div className="mt-4 flex justify-center">
               <Button type="button" variant="outline" onClick={loadMore} disabled={loading}>
                 {t("saasAdmin_loadMore")}

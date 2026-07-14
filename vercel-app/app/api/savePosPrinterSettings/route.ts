@@ -40,6 +40,13 @@ function parseBoolParam(v: unknown, defaultVal: boolean): boolean {
   return defaultVal
 }
 
+function parseLayoutMmParam(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : Number(String(v).trim())
+  if (!Number.isFinite(n)) return null
+  return Math.round(n * 10) / 10
+}
+
 function parseCookingInt(v: unknown, fallback: number): number {
   if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
   const n = Number(String(v ?? '').trim())
@@ -313,6 +320,11 @@ export async function POST(req: NextRequest) {
     const kitchenSlipPrintLangRaw = String(body?.kitchenSlipPrintLang ?? '').trim()
     const kitchenSlipPrintLang =
       kitchenSlipPrintLangRaw && validPrintLangs.includes(kitchenSlipPrintLangRaw) ? kitchenSlipPrintLangRaw : ''
+    const receiptInsetLeftMm = parseLayoutMmParam(body?.receiptInsetLeftMm)
+    const receiptInsetRightMm = parseLayoutMmParam(body?.receiptInsetRightMm)
+    const receiptContentNudgeLeftMm = parseLayoutMmParam(body?.receiptContentNudgeLeftMm)
+    const kitchenSlipPaddingLeftMm = parseLayoutMmParam(body?.kitchenSlipPaddingLeftMm)
+    const kitchenSlipPaddingRightMm = parseLayoutMmParam(body?.kitchenSlipPaddingRightMm)
 
     const routeMenuPatch =
       body?.kitchenRouteByMenu !== undefined ? normalizeKitchenRouteMapInput(body.kitchenRouteByMenu) : undefined
@@ -437,6 +449,11 @@ export async function POST(req: NextRequest) {
       kitchen_slip_show_line_notes: kitchenSlipShowLineNotes,
       kitchen_slip_show_order_memo: kitchenSlipShowOrderMemo,
       kitchen_slip_option_group_print: kitchenSlipOptionGroupPrint,
+      receipt_inset_left_mm: receiptInsetLeftMm,
+      receipt_inset_right_mm: receiptInsetRightMm,
+      receipt_content_nudge_left_mm: receiptContentNudgeLeftMm,
+      kitchen_slip_padding_left_mm: kitchenSlipPaddingLeftMm,
+      kitchen_slip_padding_right_mm: kitchenSlipPaddingRightMm,
       esc_pos_cut_after_kitchen_html: escPosCutAfterKitchenHtml,
       esc_pos_cut_after_hall_order_html: escPosCutAfterHallOrderHtml,
       esc_pos_cut_after_payment_receipt_html: escPosCutAfterPaymentReceiptHtml,

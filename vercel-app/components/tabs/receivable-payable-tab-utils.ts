@@ -13,6 +13,20 @@ import type {
 
 export type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 
+/** 미수·미지급 조회 UI — 메뉴 이동 후 복원용 sessionStorage draft */
+export type ReceivablePayableQueryDraft = {
+  tab?: "receivable" | "payable"
+  startStr?: string
+  endStr?: string
+  salesOutletFilter?: string
+  payableStoreFilter?: string
+  vendorFilter?: string
+  invoiceSearch?: string
+  filterUnpaidOnly?: boolean
+  ledgerViewMode?: "ledger" | "paired"
+  hasSearchedList?: boolean
+}
+
 export type ReceivablePayableListLoadOverrides = {
   type?: "receivable" | "payable"
   storeFilter?: string

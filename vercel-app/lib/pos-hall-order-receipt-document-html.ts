@@ -1,4 +1,6 @@
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import { resolvePosPrintLayoutCalibration } from '@/lib/pos-print-layout-calibration'
+import type { PosPrinterSettings } from '@/lib/api-client'
 import { isLangCode } from '@/lib/lang-context'
 import {
   buildReceiptChannelOrderNoHeaderHtml,
@@ -490,9 +492,11 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   menuNameById?: (menuId: string) => string
   menuCodeByMenuId?: Record<string, string>
   optionNameByCode?: Map<string, string> | Record<string, string>
+  printerSettings?: PosPrinterSettings | null
 }): string {
-  const { payload, t, lang, resolveOrderItemDisplayName, menuNameById, menuCodeByMenuId, optionNameByCode } =
+  const { payload, t, lang, resolveOrderItemDisplayName, menuNameById, menuCodeByMenuId, optionNameByCode, printerSettings } =
     params
+  const receiptPrintLayout = resolvePosPrintLayoutCalibration(printerSettings).receipt
   const esc = (value: string) =>
     String(value || '')
       .replace(/&/g, '&amp;')
@@ -888,6 +892,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     title: t('posReceipt') || '영수증',
     htmlLang: lang,
     bodyContent: printContent,
+    printLayout: receiptPrintLayout,
     extraStyles:
       '.receipt-order-simple .receipt-order-label{font-weight:800;line-height:1.35}.receipt-order-simple .receipt-order-type-chip{display:inline-block;vertical-align:middle;border:1.4px solid #000;border-radius:999px;font-weight:800;color:#000;background:#fff}.receipt-order-simple .receipt-order-type-chip--inline{margin-left:5px;padding:1px 8px;font-size:10px;letter-spacing:.02em;line-height:1.2}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#000;font-weight:700}.receipt-order-simple .receipt-row,.receipt-order-simple .receipt-item-head{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-row>span:first-child,.receipt-order-simple .receipt-item-head>span:first-child{display:table-cell;width:calc(100% - ' +
       String(RECEIPT_AMOUNT_COL_MM) +

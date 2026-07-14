@@ -127,6 +127,7 @@ import { canonicalOfficeStore } from "@/lib/office-store-canonical"
 import {
   type LineItemsCacheEntry,
   type ReceivablePayableListLoadOverrides,
+  type ReceivablePayableQueryDraft,
   bangkokTodayStr,
   fmtBaht,
   fmtBahtSigned,
@@ -310,6 +311,18 @@ export function ReceivablePayableTab() {
   const [pendingDeepLinkSearch, setPendingDeepLinkSearch] = React.useState(false)
   const urlDeepLinkAppliedRef = React.useRef(false)
   const listLoadSeqRef = React.useRef(0)
+  const queryDraftStorageKey = React.useMemo(() => {
+    const uid = String(auth?.user || "anon")
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 64)
+    return `receivable_payable_query_draft_v1:${uid}`
+  }, [auth?.user])
+  const restoreQueryListRef = React.useRef(false)
+  const skipNextTabClearRef = React.useRef(false)
+  const draftHydratedRef = React.useRef(false)
+  const [listRestoreTick, setListRestoreTick] = React.useState(0)
+  const [queryDraftReady, setQueryDraftReady] = React.useState(false)
 
   const showReceivableManualActions = !(tab === "receivable" && isManagerOnly)
   const showPayableManualActions = canSelectStores
@@ -820,6 +833,7 @@ export function ReceivablePayableTab() {
     const bankTxParam = searchParams.get("bankTransactionId")
     const hasDeepLink =
       typeParam === "receivable" ||
+      typeParam === "payable" ||
       Boolean(storeParam) ||
       Boolean(startParam) ||
       Boolean(endParam) ||
@@ -838,6 +852,95 @@ export function ReceivablePayableTab() {
     setPendingDeepLinkSearch(true)
   }, [searchParams, resolveSalesOutletFilterFromStoreName, applyTab])
 
+  const restoreReceivablePayableQueryDraft = React.useCallback(
+    (data: ReceivablePayableQueryDraft | null | undefined) => {
+      if (!data) return false
+      const today = bangkokTodayStr()
+      const hasDraft =
+        Boolean(data.hasSearchedList) ||
+        data.tab === "payable" ||
+        Boolean(data.salesOutletFilter && data.salesOutletFilter !== "All") ||
+        Boolean(data.vendorFilter && data.vendorFilter !== "All") ||
+        Boolean(data.invoiceSearch?.trim()) ||
+        Boolean(data.filterUnpaidOnly) ||
+        data.ledgerViewMode === "paired" ||
+        Boolean(data.startStr && data.startStr !== today) ||
+        Boolean(data.endStr && data.endStr !== today) ||
+        Boolean(data.payableStoreFilter && data.payableStoreFilter !== "All")
+      if (!hasDraft) return false
+
+      if (data.tab === "payable" && canSelectStores) {
+        skipNextTabClearRef.current = true
+        setTabUi("payable")
+        setTab("payable")
+      } else if (data.tab === "receivable") {
+        setTabUi("receivable")
+        setTab("receivable")
+      }
+      if (data.startStr && /^\d{4}-\d{2}-\d{2}$/.test(data.startStr)) setStartStr(data.startStr)
+      if (data.endStr && /^\d{4}-\d{2}-\d{2}$/.test(data.endStr)) setEndStr(data.endStr)
+      if (typeof data.salesOutletFilter === "string" && data.salesOutletFilter) {
+        setSalesOutletFilter(data.salesOutletFilter)
+      }
+      if (canSelectStores && typeof data.payableStoreFilter === "string" && data.payableStoreFilter) {
+        setPayableStoreFilter(data.payableStoreFilter)
+        initPayableStoreRef.current = true
+      }
+      if (typeof data.vendorFilter === "string" && data.vendorFilter) setVendorFilter(data.vendorFilter)
+      if (typeof data.invoiceSearch === "string") setInvoiceSearch(data.invoiceSearch)
+      if (typeof data.filterUnpaidOnly === "boolean") setFilterUnpaidOnly(data.filterUnpaidOnly)
+      if (data.ledgerViewMode === "ledger" || data.ledgerViewMode === "paired") {
+        setLedgerViewMode(data.ledgerViewMode)
+      }
+      if (data.hasSearchedList) {
+        restoreQueryListRef.current = true
+        setListRestoreTick((n) => n + 1)
+      }
+      return true
+    },
+    [canSelectStores]
+  )
+
+  React.useEffect(() => {
+    if (draftHydratedRef.current) return
+    draftHydratedRef.current = true
+    const typeParam = searchParams.get("type")
+    const storeParam = searchParams.get("storeFilter") || searchParams.get("store")
+    const startParam = searchParams.get("startStr") || searchParams.get("start")
+    const endParam = searchParams.get("endStr") || searchParams.get("end")
+    const bankTxParam = searchParams.get("bankTransactionId")
+    const hasDeepLink =
+      typeParam === "receivable" ||
+      typeParam === "payable" ||
+      Boolean(storeParam) ||
+      Boolean(startParam) ||
+      Boolean(endParam) ||
+      Boolean(bankTxParam)
+    if (!hasDeepLink) {
+      try {
+        const raw = sessionStorage.getItem(queryDraftStorageKey)
+        if (raw) {
+          const draft = JSON.parse(raw) as ReceivablePayableQueryDraft
+          if (!restoreReceivablePayableQueryDraft(draft)) {
+            sessionStorage.removeItem(queryDraftStorageKey)
+          }
+        }
+      } catch {
+        try {
+          sessionStorage.removeItem(queryDraftStorageKey)
+        } catch {}
+      }
+    }
+    setQueryDraftReady(true)
+  }, [queryDraftStorageKey, restoreReceivablePayableQueryDraft, searchParams])
+
+  React.useEffect(() => {
+    if (!restoreQueryListRef.current) return
+    restoreQueryListRef.current = false
+    setHasSearchedList(true)
+    void loadList({ fresh: true })
+  }, [listRestoreTick, loadList])
+
   React.useEffect(() => {
     if (!pendingDeepLinkSearch) return
     setPendingDeepLinkSearch(false)
@@ -846,12 +949,68 @@ export function ReceivablePayableTab() {
   }, [pendingDeepLinkSearch, loadList])
 
   React.useEffect(() => {
+    if (skipNextTabClearRef.current) {
+      skipNextTabClearRef.current = false
+      return
+    }
     listLoadSeqRef.current += 1
     setHasSearchedList(false)
     setListData([])
     setCumulativeSummary({ totalAmount: 0, byKey: {} })
     setLoading(false)
   }, [tab])
+
+  const todayForDraft = bangkokTodayStr()
+  const hasQueryDraft = Boolean(
+    hasSearchedList ||
+      tab === "payable" ||
+      salesOutletFilter !== "All" ||
+      vendorFilter !== "All" ||
+      invoiceSearch.trim() ||
+      filterUnpaidOnly ||
+      ledgerViewMode !== "ledger" ||
+      startStr !== todayForDraft ||
+      endStr !== todayForDraft ||
+      (canSelectStores && payableStoreFilter !== "All")
+  )
+
+  React.useEffect(() => {
+    if (!queryDraftReady) return
+    try {
+      if (!hasQueryDraft) {
+        sessionStorage.removeItem(queryDraftStorageKey)
+        return
+      }
+      const draft: ReceivablePayableQueryDraft = {
+        tab,
+        startStr,
+        endStr,
+        salesOutletFilter,
+        payableStoreFilter,
+        vendorFilter,
+        invoiceSearch,
+        filterUnpaidOnly,
+        ledgerViewMode,
+        hasSearchedList,
+      }
+      sessionStorage.setItem(queryDraftStorageKey, JSON.stringify(draft))
+    } catch {}
+  }, [
+    canSelectStores,
+    endStr,
+    filterUnpaidOnly,
+    hasQueryDraft,
+    hasSearchedList,
+    invoiceSearch,
+    ledgerViewMode,
+    payableStoreFilter,
+    queryDraftReady,
+    queryDraftStorageKey,
+    salesOutletFilter,
+    startStr,
+    tab,
+    vendorFilter,
+  ])
 
   const bankTxLinkedAccrualIds = React.useMemo(() => {
     const byBank = new Map<number, Set<number>>()

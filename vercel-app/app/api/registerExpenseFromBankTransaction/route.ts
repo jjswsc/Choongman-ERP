@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
-import { upsertPayableFromBankPurchasePayment } from '@/lib/receivable-payable'
-import { postExpenseAccrualJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelectFilter,
+  supabaseUpdate,
+} from '@/lib/supabase-server'
+import { upsertPayableFromBankPurchasePayment, buildBankLinkedPayablePaymentMemo } from '@/lib/receivable-payable'
+import {
+  deleteJournalEntriesBySource,
+  postExpenseAccrualJournal,
+  postPayableSettlementJournal,
+} from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
 import { vatSplitFromTaxInvoiceGross } from '@/lib/invoice-backed-input-vat-ledger'
@@ -15,6 +24,7 @@ type BankTxRow = {
   trans_date?: string
   trans_type?: string
   amount?: number
+  memo?: string | null
   invoice_received?: boolean | null
   invoice_no?: string | null
   invoice_photo_url?: string | null
@@ -87,7 +97,7 @@ export async function POST(request: NextRequest) {
     const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
       limit: 1,
       select:
-        'id,account_id,trans_date,trans_type,amount,invoice_received,invoice_no,invoice_photo_url,store,store_name',
+        'id,account_id,trans_date,trans_type,amount,memo,invoice_received,invoice_no,invoice_photo_url,store,store_name',
     })) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
     if (!bankRow?.id) {
@@ -98,41 +108,103 @@ export async function POST(request: NextRequest) {
     }
 
     const updateExisting = Boolean(body.updateExisting ?? body.update_existing)
-    const linkedPayable = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 })) as { id?: number; expense_accrual_id?: number }[] | null
+    const linkedPayable = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, {
+      limit: 5,
+      select: 'id,expense_accrual_id',
+    })) as { id?: number; expense_accrual_id?: number }[] | null
 
     if (linkedPayable?.length && !updateExisting) {
       return NextResponse.json({ success: false, message: '이미 연결된 통장 거래입니다.' }, { status: 400, headers })
     }
     if (linkedPayable?.length && updateExisting) {
-      const accrualId = Number(linkedPayable[0].expense_accrual_id || 0)
-      if (!accrualId) {
-        return NextResponse.json({ success: false, message: '연결된 지출 정보를 찾을 수 없습니다.' }, { status: 404, headers })
+      const accrualId = Number(linkedPayable.find((p) => Number(p.expense_accrual_id || 0) > 0)?.expense_accrual_id || 0)
+      if (accrualId) {
+        const linkedAmount = Math.abs(Number(bankRow.amount || 0))
+        const linkedVat = resolveVatAmountFromBank(bankRow, linkedAmount, body)
+        const asId =
+          accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null
+        let subjectCode = '5520'
+        let subjectName = '기타경비'
+        if (asId) {
+          const subject = (await supabaseSelectFilter('account_subjects', `id=eq.${asId}`, {
+            select: 'id,code,name',
+            limit: 1,
+          })) as AccountSubjectRow[] | null
+          if (subject?.[0]?.code) subjectCode = String(subject[0].code)
+          if (subject?.[0]?.name) subjectName = String(subject[0].name)
+        }
+        const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
+          select: 'id,store_name,expense_date,memo,payee_name,created_by,amount',
+          limit: 1,
+        })) as {
+          id?: number
+          store_name?: string | null
+          expense_date?: string
+          memo?: string | null
+          payee_name?: string | null
+          created_by?: string | null
+          amount?: number
+        }[] | null
+        const accrualRow = accrualRows?.[0]
+        const expenseDate = String(accrualRow?.expense_date || bankRow.trans_date || '').slice(0, 10)
+        await supabaseUpdate('expense_accruals', accrualId, {
+          payee_code: `${payeeCode}::wm::expense`,
+          payee_name: payeeName || payeeCode,
+          account_subject_id: asId,
+          memo: memo ?? undefined,
+          status: 'done',
+          ...invoiceFieldsFromBankRow(bankRow),
+          ...(linkedVat != null ? { vat_amount: linkedVat } : {}),
+        })
+        const allPayables = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${accrualId}`, {
+          limit: 20,
+        })) as { id?: number }[]
+        for (const p of allPayables || []) {
+          if (p.id) {
+            await supabaseUpdate('payable_transactions', p.id, {
+              vendor_code: payeeCode,
+              account_subject_id: asId,
+            })
+          }
+        }
+        await supabaseUpdate('bank_transactions', bankTransactionId, {
+          vendor_code: payeeCode,
+          category: 'expense',
+          account_subject_id: asId,
+          note: memo,
+        })
+        try {
+          await deleteJournalEntriesBySource('expense_accrual', accrualId)
+          await postExpenseAccrualJournal({
+            expenseAccrualId: accrualId,
+            accountingDate: expenseDate,
+            amountAbs: Math.abs(Number(accrualRow?.amount || linkedAmount)),
+            expenseAccountCode: subjectCode,
+            expenseAccountName: subjectName,
+            expenseAccountSubjectId: asId,
+            memo: memo || String(accrualRow?.memo || '') || `지출 발생 ${payeeName || payeeCode}`,
+            storeName: String(accrualRow?.store_name || bankRow.store_name || bankRow.store || '').trim() || undefined,
+            postedBy: String(accrualRow?.created_by || userName || '').trim() || undefined,
+          })
+          await syncExpenseAccrualInvoiceEvidence(accrualId)
+        } catch (syncErr) {
+          console.warn('registerExpenseFromBankTransaction updateExisting VAT/journal sync:', syncErr)
+        }
+        return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
       }
-      const linkedAmount = Math.abs(Number(bankRow.amount || 0))
-      const linkedVat = resolveVatAmountFromBank(bankRow, linkedAmount, body)
-      await supabaseUpdate('expense_accruals', accrualId, {
-        payee_code: payeeCode,
-        payee_name: payeeName || payeeCode,
-        account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
-        memo: memo ?? undefined,
-        ...invoiceFieldsFromBankRow(bankRow),
-        ...(linkedVat != null ? { vat_amount: linkedVat } : {}),
-      })
-      const allPayables = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${accrualId}`, { limit: 10 })) as { id?: number }[]
-      for (const p of allPayables || []) {
-        if (p.id) await supabaseUpdate('payable_transactions', p.id, { vendor_code: payeeCode })
-      }
-      await supabaseUpdate('bank_transactions', bankTransactionId, {
-        vendor_code: payeeCode,
-        account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
-        note: memo,
-      })
+      // 매입대금 등: Payment만 있고 지출발생이 없음 → 연결 해제 후 경비로 신규 전환
+      await supabaseDeleteByFilter(
+        'payable_transactions',
+        `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`
+      )
       try {
-        await syncExpenseAccrualInvoiceEvidence(accrualId)
-      } catch (syncErr) {
-        console.warn('registerExpenseFromBankTransaction updateExisting VAT sync:', syncErr)
+        await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
+          memoIncludes: ['통장 거래 자동분개', '매입', '지급'],
+        })
+      } catch (journalErr) {
+        console.warn('registerExpenseFromBankTransaction convert clear journals:', journalErr)
       }
-      return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+      // fall through: 신규 경비 등록과 동일
     }
 
     const amount = Math.abs(Number(bankRow.amount || 0))
@@ -197,7 +269,10 @@ export async function POST(request: NextRequest) {
       vendorCode: payeeCode,
       amountAbs: amount,
       transDate: expenseDate,
-      memo: `통장 지급: ${payeeName || payeeCode}`.slice(0, 240),
+      memo: buildBankLinkedPayablePaymentMemo({
+        bankMemo: bankRow.memo,
+        fallbackDetail: payeeName || payeeCode,
+      }),
       expenseAccrualId,
       expenseDate,
       dueDate: expenseDate,

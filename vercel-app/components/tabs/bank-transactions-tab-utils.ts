@@ -87,6 +87,8 @@ export type BankQueryDraft = {
   filterAccountSubjectEmpty?: boolean
   filterPlExpenseOnly?: boolean
   filterInvoiceNotReceived?: boolean
+  filterAmount?: string
+  filterKeyword?: string
   queryRowEdits?: Record<
     number,
     Partial<{

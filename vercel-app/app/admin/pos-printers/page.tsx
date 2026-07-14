@@ -68,6 +68,11 @@ import {
 import { mapKitchenSlipGroupItemsForPrint } from "@/lib/pos-kitchen-slip-display"
 import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-receipt-document-html"
 import { PosHallOrderReceiptPreview } from "@/components/pos/pos-hall-order-receipt-preview"
+import {
+  PosPrintLayoutCalibrationFields,
+  defaultPosPrintLayoutCalibrationFieldsValue,
+  type PosPrintLayoutCalibrationFieldsValue,
+} from "@/components/pos/pos-print-layout-calibration-fields"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import {
   bangkokTodayYmdCompact,
@@ -78,13 +83,13 @@ import {
 import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import {
   RECEIPT_AMOUNT_COL_MM,
-  RECEIPT_CONTENT_NUDGE_LEFT_MM,
   RECEIPT_GRID_COL_GAP_PX,
   RECEIPT_INNER_INSET_LEFT_MM,
   RECEIPT_INNER_INSET_RIGHT_MM,
   RECEIPT_TRAILING_BOTTOM_MM,
 } from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
+import { resolvePosPrintLayoutCalibration } from "@/lib/pos-print-layout-calibration"
 import { PosScreenConfigStoreSelect } from "@/components/pos/pos-screen-config-store-select"
 import {
   printPosHtmlDocument,
@@ -460,10 +465,28 @@ export default function PosPrintersPage() {
   const [kitchenSlipShowOrderMemo, setKitchenSlipShowOrderMemo] = React.useState(true)
   const [kitchenSlipOptionGroupPrint, setKitchenSlipOptionGroupPrint] =
     React.useState<KitchenSlipOptionGroupPrintState>({})
+  const [printLayoutCalib, setPrintLayoutCalib] = React.useState<PosPrintLayoutCalibrationFieldsValue>(
+    defaultPosPrintLayoutCalibrationFieldsValue
+  )
   const [optionGroups, setOptionGroups] = React.useState<PosOptionGroup[]>([])
 
   const canSearchAll = canPickPosTerminalStore(auth?.role || "", auth?.store || "")
   const effectiveStore = String(canSearchAll && storeCode ? storeCode : auth?.store || "").trim()
+
+  const printLayoutSettingsInput = React.useMemo(
+    () => ({
+      receiptInsetLeftMm: printLayoutCalib.receiptInsetLeftMm,
+      receiptInsetRightMm: printLayoutCalib.receiptInsetRightMm,
+      receiptContentNudgeLeftMm: printLayoutCalib.receiptContentNudgeLeftMm,
+      kitchenSlipPaddingLeftMm: printLayoutCalib.kitchenSlipPaddingLeftMm,
+      kitchenSlipPaddingRightMm: printLayoutCalib.kitchenSlipPaddingRightMm,
+    }),
+    [printLayoutCalib]
+  )
+  const resolvedPrintLayout = React.useMemo(
+    () => resolvePosPrintLayoutCalibration(printLayoutSettingsInput),
+    [printLayoutSettingsInput]
+  )
 
   const menusFilteredForRoute = React.useMemo(() => {
     const q = menuRouteFilter.trim().toLowerCase()
@@ -665,6 +688,14 @@ export default function PosPrintersPage() {
     setKitchenSlipOptionGroupPrint(
       normalizeKitchenSlipOptionGroupPrintMap(settings.kitchenSlipOptionGroupPrint)
     )
+    const layout = resolvePosPrintLayoutCalibration(settings)
+    setPrintLayoutCalib({
+      receiptInsetLeftMm: layout.receipt.insetLeftMm,
+      receiptInsetRightMm: layout.receipt.insetRightMm,
+      receiptContentNudgeLeftMm: layout.receipt.contentNudgeLeftMm,
+      kitchenSlipPaddingLeftMm: layout.kitchen.paddingLeftMm,
+      kitchenSlipPaddingRightMm: layout.kitchen.paddingRightMm,
+    })
   }, [])
 
   const loadData = React.useCallback(() => {
@@ -882,6 +913,11 @@ export default function PosPrintersPage() {
           kitchenSlipOptionGroupChoices,
           kitchenSlipOptionGroupPrint
         ),
+        receiptInsetLeftMm: printLayoutCalib.receiptInsetLeftMm,
+        receiptInsetRightMm: printLayoutCalib.receiptInsetRightMm,
+        receiptContentNudgeLeftMm: printLayoutCalib.receiptContentNudgeLeftMm,
+        kitchenSlipPaddingLeftMm: printLayoutCalib.kitchenSlipPaddingLeftMm,
+        kitchenSlipPaddingRightMm: printLayoutCalib.kitchenSlipPaddingRightMm,
       }
       const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
       if (res.success) {
@@ -1329,10 +1365,12 @@ export default function PosPrintersPage() {
       },
       t,
       lang,
+      printerSettings: printLayoutSettingsInput as PosPrinterSettings,
     })
-  }, [previewData, t, lang])
+  }, [previewData, t, lang, printLayoutSettingsInput])
 
   const buildReceiptHtml = React.useCallback(() => {
+    const receiptLayout = resolvedPrintLayout.receipt
     const logoUrl = receiptLogoImageUrl || `${window.location.origin}/company-stamp.png`
     const previewIsTaxInvoice = false
     const footerPrimary =
@@ -1369,8 +1407,8 @@ export default function PosPrintersPage() {
           <title>${escapeHtml(t("posReceipt") || "영수증")}</title>
           <style>
             ${getPosPaperBaseCss("'Inter', 'Pretendard', 'Noto Sans KR', 'Sukhumvit Set', 'Noto Sans Thai', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
-            .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${receiptLayout.insetLeftMm}mm; padding-right: ${receiptLayout.insetRightMm}mm; }
+            .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${receiptLayout.contentNudgeLeftMm}mm; }
             .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
             .receipt-brand-logo.sm { width: 84px; }
@@ -1454,7 +1492,7 @@ export default function PosPrintersPage() {
         </body>
       </html>
     `
-  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptShowBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t])
+  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptShowBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t, resolvedPrintLayout])
 
   const buildKitchenSlipHtmlForSlip = React.useCallback(
     (slip: { label: string; items: { name: string; qty: number; note?: string }[] }) => {
@@ -1479,6 +1517,7 @@ export default function PosPrintersPage() {
         memoLine,
         escapeHtml,
         design,
+        printerSettings: printLayoutSettingsInput,
         printColorAdjust: "economy",
       })
     },
@@ -1495,6 +1534,7 @@ export default function PosPrintersPage() {
       kitchenSlipOptionGroupPrint,
       kitchenSlipPrintLang,
       lang,
+      printLayoutSettingsInput,
     ]
   )
 
@@ -2021,6 +2061,16 @@ export default function PosPrintersPage() {
               <p className="text-sm text-muted-foreground">
                 {tr("posReceiptDesignHint", "손님 영수증·주방 주문서 레이아웃을 설정합니다.")}
               </p>
+
+              <PosPrintLayoutCalibrationFields
+                value={printLayoutCalib}
+                onChange={setPrintLayoutCalib}
+                t={t}
+                onTestReceipt={() => void handleTestPrint("receipt")}
+                onTestKitchen={() => void handleTestPrint("kitchen")}
+                testReceiptDisabled={quickTesting}
+                testKitchenDisabled={quickTesting}
+              />
 
               <div className="rounded-lg border p-4 space-y-3">
                 <p className="text-sm font-semibold">{tr("posKitchenSlipDesignSection", "주방 주문서")}</p>

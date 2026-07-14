@@ -29,3 +29,21 @@ export function canEditExpenseAccrualPlan(input: {
   if (paid > 0.005) return false
   return status === 'planned' || status === 'approved' || status === 'rejected'
 }
+
+/**
+ * 계정과목·유형·지급처·메모 등 분류 수정 — 지급 완료 후에도 허용
+ * (금액·일자는 API에서 잠금)
+ */
+export function canEditExpenseAccrualClassification(input: {
+  status?: string
+}): boolean {
+  const status = String(input.status || '').toLowerCase()
+  return (
+    status === 'planned' ||
+    status === 'approved' ||
+    status === 'rejected' ||
+    status === 'partial' ||
+    status === 'paid' ||
+    status === 'done'
+  )
+}

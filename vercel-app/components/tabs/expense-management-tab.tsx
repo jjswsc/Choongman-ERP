@@ -54,7 +54,7 @@ import {
 } from "@/lib/api-client"
 import { EXPENSE_WITHDRAW_SUBJECT_FETCH } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { canApproveExpenseAccrual, canEditExpenseAccrualPlan } from "@/lib/expense-accrual-approve-policy"
+import { canApproveExpenseAccrual, canEditExpenseAccrualClassification } from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
@@ -65,7 +65,7 @@ function todayStrBkk() {
 }
 
 function planRowEditable(r: ExpenseAccrualPlanItem): boolean {
-  return canEditExpenseAccrualPlan({ status: r.status, paidAmount: r.paidAmount })
+  return canEditExpenseAccrualClassification({ status: r.status })
 }
 
 function renderPlanPayAmountCell(

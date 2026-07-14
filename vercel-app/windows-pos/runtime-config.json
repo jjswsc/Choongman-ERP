@@ -11,9 +11,9 @@
                   "escPosCutAfterHallOrderHtml":  true,
                   "kitchen2DeviceName":  ""
               },
-    "allowedOrigin":  "https://www.omnifoodtech.com",
+    "allowedOrigin":  "https://app.omnifoodtech.com",
     "openDevtools":  false,
-    "updateManifestUrl":  "https://www.omnifoodtech.com/downloads/windows-pos/latest.json",
+    "updateManifestUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/latest.json",
     "kiosk":  "1",
-    "posUrl":  "https://www.omnifoodtech.com/pos/login"
+    "posUrl":  "https://app.omnifoodtech.com/pos/login"
 }

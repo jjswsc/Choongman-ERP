@@ -28,6 +28,9 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
 import { SaasBillingCompanyFields } from "@/components/saas/saas-billing-company-fields"
+import { SaasCustomerLoginInfoPanel } from "@/components/saas/saas-customer-login-info-panel"
+import { useSaasCustomerLoginAccounts } from "@/hooks/use-saas-customer-login-accounts"
+import { isSaasPlatformInternalTenant } from "@/lib/saas-platform-internal-tenant"
 import { emptySaasBillingCompanyInfo } from "@/lib/saas-billing-company-profile"
 import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { useLang } from "@/lib/lang-context"
@@ -64,6 +67,7 @@ const STATUS_VARIANT = {
 const CUSTOMER_DETAIL_TABS = [
   "plan",
   "company",
+  "login",
   "limits",
   "usage",
   "billing",
@@ -290,6 +294,7 @@ export default function SaasCustomersPage() {
   const [auditActorQuery, setAuditActorQuery] = useState("")
   const [auditPeriod, setAuditPeriod] = useState<AuditPeriodFilter>("all")
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>("plan")
+  const [showPlatformInternal, setShowPlatformInternal] = useState(false)
   const [partnerOptions, setPartnerOptions] = useState<Array<{ id: string; name: string }>>([])
 
   const selectedTenant = useMemo(
@@ -297,9 +302,21 @@ export default function SaasCustomersPage() {
     [selectedTenantId, tenants]
   )
 
+  const { loginHref: selectedTenantLoginHref } = useSaasCustomerLoginAccounts(
+    selectedTenant?.id,
+    selectedTenant?.companyName ?? ""
+  )
+
+  const billableTenants = useMemo(
+    () => tenants.filter((tenant) => !isSaasPlatformInternalTenant(tenant)),
+    [tenants]
+  )
+
   const filteredTenants = useMemo(() => {
     const keyword = searchApplied.trim().toLowerCase()
     const rows = tenants.filter((tenant) => {
+      if (!scope.isPlatform && isSaasPlatformInternalTenant(tenant)) return false
+      if (scope.isPlatform && !showPlatformInternal && isSaasPlatformInternalTenant(tenant)) return false
       if (statusFilter !== "all" && tenant.status !== statusFilter) return false
       if (scope.isPlatform && partnerFilter !== "all") {
         if (partnerFilter === "__direct__" && tenant.partnerId) return false
@@ -324,21 +341,21 @@ export default function SaasCustomersPage() {
       })
     }
     return withExpiry
-  }, [expiryOnly, partnerFilter, scope.isPlatform, searchApplied, sortBy, statusFilter, t, tenants])
+  }, [expiryOnly, partnerFilter, scope.isPlatform, searchApplied, showPlatformInternal, sortBy, statusFilter, t, tenants])
 
   const applySearch = () => {
     setSearchApplied(searchInput.trim())
   }
 
   const stats = useMemo(() => {
-    const active = tenants.filter((x) => x.status === "active").length
-    const trial = tenants.filter((x) => x.status === "trial").length
-    const grace = tenants.filter((x) => x.status === "grace").length
-    const suspended = tenants.filter((x) => x.status === "suspended").length
-    const highRisk = tenants.filter((x) => tenantRiskCount(x) > 0).length
-    const totalOrders = tenants.reduce((acc, x) => acc + x.usage.monthlyOrders, 0)
-    return { active, trial, grace, suspended, highRisk, totalOrders }
-  }, [tenants])
+    const active = billableTenants.filter((x) => x.status === "active").length
+    const trial = billableTenants.filter((x) => x.status === "trial").length
+    const grace = billableTenants.filter((x) => x.status === "grace").length
+    const suspended = billableTenants.filter((x) => x.status === "suspended").length
+    const highRisk = billableTenants.filter((x) => tenantRiskCount(x) > 0).length
+    const totalOrders = billableTenants.reduce((acc, x) => acc + x.usage.monthlyOrders, 0)
+    return { active, trial, grace, suspended, highRisk, totalOrders, totalCustomers: billableTenants.length }
+  }, [billableTenants])
 
   const filteredAuditTrail = useMemo(() => {
     const rows = selectedTenant?.auditTrail || []
@@ -765,13 +782,6 @@ export default function SaasCustomersPage() {
     updateTenant((tenant) => ({ ...tenant, status }))
   }
 
-  const selectedTenantLoginHref = useMemo(() => {
-    const p = new URLSearchParams()
-    p.set("redirect", "/admin")
-    if (selectedTenant?.companyName) p.set("company", selectedTenant.companyName)
-    return `/admin/login?${p.toString()}`
-  }, [selectedTenant?.companyName])
-
   const employeeAuditLink = (employeeId: number): string => {
     const p = new URLSearchParams()
     if (selectedTenant?.companyName) p.set("company", selectedTenant.companyName)
@@ -798,7 +808,7 @@ export default function SaasCustomersPage() {
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">{t("saasAdminCust_statTotal")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : tenants.length}</p>
+            <p className="text-2xl font-semibold">{loading ? "…" : stats.totalCustomers}</p>
           </CardContent>
         </Card>
         <Card>
@@ -905,6 +915,18 @@ export default function SaasCustomersPage() {
             </Select>
           </div>
         ) : null}
+        {scope.isPlatform ? (
+          <div className="flex items-center gap-2 md:col-span-2 xl:col-span-1">
+            <Checkbox
+              id="show-platform-internal"
+              checked={showPlatformInternal}
+              onCheckedChange={(v) => setShowPlatformInternal(Boolean(v))}
+            />
+            <Label htmlFor="show-platform-internal" className="text-sm font-normal cursor-pointer">
+              {t("saasAdminCust_showPlatformInternal")}
+            </Label>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -938,7 +960,7 @@ export default function SaasCustomersPage() {
         </Card>
       ) : null}
 
-      {tenants.length > 0 && selectedTenant ? <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_minmax(0,2fr)]">
+      {tenants.length > 0 && selectedTenant ? <div className="grid gap-4 lg:grid-cols-[minmax(420px,1.1fr)_minmax(0,1.8fr)]">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">{t("saasAdminCust_listTitle")}</CardTitle>
@@ -983,7 +1005,12 @@ export default function SaasCustomersPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{tenant.companyName}</div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium">{tenant.companyName}</span>
+                          {isSaasPlatformInternalTenant(tenant) ? (
+                            <Badge variant="secondary">{t("saasAdminCust_platformInternalBadge")}</Badge>
+                          ) : null}
+                        </div>
                         <p className="text-xs text-muted-foreground">{tenant.ownerName}</p>
                       </TableCell>
                       <TableCell>
@@ -1031,7 +1058,12 @@ export default function SaasCustomersPage() {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <CardTitle className="text-lg">{selectedTenant.companyName}</CardTitle>
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-lg">{selectedTenant.companyName}</CardTitle>
+                  {isSaasPlatformInternalTenant(selectedTenant) ? (
+                    <Badge variant="secondary">{t("saasAdminCust_platformInternalBadge")}</Badge>
+                  ) : null}
+                </div>
                 <CardDescription>{tr(t, "saasAdminCust_tenantIdLine", { id: selectedTenant.id })}</CardDescription>
               </div>
               <Button
@@ -1069,6 +1101,7 @@ export default function SaasCustomersPage() {
                 <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                   <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
                   <TabsTrigger value="company">{t("saasAdminCust_tabCompany")}</TabsTrigger>
+                  <TabsTrigger value="login">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
                   <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
                   <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
                   <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
@@ -1586,6 +1619,14 @@ export default function SaasCustomersPage() {
                     />
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="login" className="space-y-4 pt-2">
+                <SaasCustomerLoginInfoPanel
+                  tenantId={selectedTenant.id}
+                  companyName={selectedTenant.companyName}
+                  isPlatformInternal={selectedTenant.isPlatformInternal}
+                />
               </TabsContent>
 
               <TabsContent value="company" className="space-y-4 pt-2">

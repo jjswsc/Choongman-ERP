@@ -29,6 +29,7 @@ import {
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import { resolvePosPrintLayoutCalibration } from '@/lib/pos-print-layout-calibration'
 import {
   buildReceiptVoidBannerHtml,
   POS_RECEIPT_VOID_EXTRA_STYLES,
@@ -432,6 +433,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     optionNameByCode: optionNameByCodeParam,
     menuOptions,
   } = params
+  const receiptPrintLayout = resolvePosPrintLayoutCalibration(printerSettings).receipt
   const optionNameByCode =
     optionNameByCodeParam instanceof Map
       ? optionNameByCodeParam
@@ -837,6 +839,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       title: t('posReceipt') || '영수증',
       htmlLang: lang,
       bodyContent: simpleHtml,
+      printLayout: receiptPrintLayout,
       extraStyles: `
         .receipt-payment-simple { color: #000; font-weight: 700; }
         .simple-title { text-align: center; font-size: 13px; font-weight: 800; margin-bottom: 2px; color: #000; }
@@ -1117,6 +1120,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     title: t('posReceipt') || '영수증',
     htmlLang: lang,
     bodyContent: printContent,
+    printLayout: receiptPrintLayout,
     extraStyles: `
         .receipt-brand-wrap { text-align: center; }
         .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.35); }

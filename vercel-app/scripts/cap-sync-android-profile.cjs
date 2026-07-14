@@ -28,4 +28,13 @@ const r = spawnSync("npx", ["cap", "sync", "android"], {
   shell: process.platform === "win32",
 });
 
-process.exit(typeof r.status === "number" ? r.status : 1);
+if (typeof r.status !== "number" || r.status !== 0) {
+  process.exit(typeof r.status === "number" ? r.status : 1);
+}
+
+const prune = spawnSync("node", ["scripts/prune-android-cap-assets.cjs"], {
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+
+process.exit(typeof prune.status === "number" ? prune.status : 1);

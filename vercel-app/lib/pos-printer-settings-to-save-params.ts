@@ -163,6 +163,11 @@ export function posPrinterSettingsToSaveParams(
     kitchenSlipOptionGroupPrint: normalizeKitchenSlipOptionGroupPrintMap(
       s.kitchenSlipOptionGroupPrint
     ),
+    receiptInsetLeftMm: s.receiptInsetLeftMm ?? null,
+    receiptInsetRightMm: s.receiptInsetRightMm ?? null,
+    receiptContentNudgeLeftMm: s.receiptContentNudgeLeftMm ?? null,
+    kitchenSlipPaddingLeftMm: s.kitchenSlipPaddingLeftMm ?? null,
+    kitchenSlipPaddingRightMm: s.kitchenSlipPaddingRightMm ?? null,
     escPosCutAfterKitchenHtml: s.escPosCutAfterKitchenHtml !== false,
     escPosCutAfterHallOrderHtml: Boolean(s.escPosCutAfterHallOrderHtml),
     escPosCutAfterPaymentReceiptHtml: Boolean(s.escPosCutAfterPaymentReceiptHtml),

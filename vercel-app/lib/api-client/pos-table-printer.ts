@@ -27,11 +27,19 @@ export interface PosTableItem {
 /** 매장별 구역(층·방 등) 표시명. 키는 슬롯 1~3 */
 export type PosFloorLabels = Partial<Record<1 | 2 | 3, string>>
 
-export async function getPosTableLayout(params: { storeCode: string }) {
+export function posTableLayoutCacheKey(storeCode: string): string {
+  return `erp:posTableLayout:${storeCode.trim()}`
+}
+
+export async function getPosTableLayout(params: {
+  storeCode: string
+  /** true면 IndexedDB 즉시 반환을 건너뛰고 서버 응답을 기다림(관리자 저장·재조회용) */
+  forceNetwork?: boolean
+}) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
   const url = '/api/getPosTableLayout?' + q.toString()
-  const cacheKey = `erp:posTableLayout:${params.storeCode.trim()}`
+  const cacheKey = posTableLayoutCacheKey(params.storeCode)
   const empty = {
     layout: [] as PosTableItem[],
     floorLabels: {} as PosFloorLabels,
@@ -42,7 +50,7 @@ export async function getPosTableLayout(params: { storeCode: string }) {
     floorLabels?: PosFloorLabels
     storeCode: string
     isFallback?: boolean
-  }>(cacheKey, url, empty)
+  }>(cacheKey, url, empty, { forceNetwork: Boolean(params.forceNetwork) })
 }
 
 export interface PosPrinterSettings {
@@ -124,6 +132,14 @@ export interface PosPrinterSettings {
   kitchenSlipShowOrderMemo?: boolean
   /** 주방 주문서 옵션 그룹 노출 정책 (group key -> print enabled) */
   kitchenSlipOptionGroupPrint?: Record<string, boolean>
+  /** 80mm 영수증 가로 보정 — body padding-left(mm). 미설정 시 전역 기본값 */
+  receiptInsetLeftMm?: number | null
+  receiptInsetRightMm?: number | null
+  /** 영수증 본문 가로 미세조정(mm, left:-n). 미설정 시 전역 기본값 */
+  receiptContentNudgeLeftMm?: number | null
+  /** 주방 슬립 padding-left/right(mm) */
+  kitchenSlipPaddingLeftMm?: number | null
+  kitchenSlipPaddingRightMm?: number | null
   /** Windows 하이브리드: 주방 주문서 ESC/POS 절단 (기본 true) */
   escPosCutAfterKitchenHtml?: boolean
   /** Windows 하이브리드: 홀 주문서(주문·터미널) 절단 */
@@ -305,6 +321,11 @@ export async function savePosPrinterSettings(params: {
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
   kitchenSlipOptionGroupPrint?: Record<string, boolean>
+  receiptInsetLeftMm?: number | null
+  receiptInsetRightMm?: number | null
+  receiptContentNudgeLeftMm?: number | null
+  kitchenSlipPaddingLeftMm?: number | null
+  kitchenSlipPaddingRightMm?: number | null
   escPosCutAfterKitchenHtml?: boolean
   escPosCutAfterHallOrderHtml?: boolean
   escPosCutAfterPaymentReceiptHtml?: boolean

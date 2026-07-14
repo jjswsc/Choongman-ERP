@@ -932,6 +932,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("wm_transferAccountSubjectRequired", "이체 계정과목을 선택해 주세요."))
       return
     }
+    if (categoryMain === "expense") {
+      const code = payeeCode.trim() || vendorCode.trim()
+      const name = payeeName.trim() || code
+      if (!code && !name) {
+        await appAlert(tt("expensePayeeRequired", "Please select or enter a payee."))
+        return
+      }
+    }
 
     let invoicePhotoUrl: string | undefined
     if (
@@ -948,6 +956,28 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
     setSaving(true)
     try {
+      if (categoryMain === "expense") {
+        const code = payeeCode.trim() || vendorCode.trim()
+        const name = payeeName.trim() || code
+        const res = await registerExpenseFromBankTransaction({
+          bankTransactionId: Number(bankTransactionIdParam),
+          payeeCode: code || name,
+          payeeName: name || code,
+          accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
+          memo: memo.trim() || undefined,
+          storeName: storeName || undefined,
+          userName: auth?.user,
+          userRole: auth?.role,
+          updateExisting: true,
+        })
+        if (!res.success) {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return
+        }
+        await appAlert(res.message || tt("saved", "Saved."))
+        return
+      }
+
       const res = await updateExpenseRegisterItem({
         bankTransactionId: Number(bankTransactionIdParam),
         accountId: resolvedAccountId,
@@ -959,13 +989,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
         vendorCode: categoryMain === "purchase" ? vendorCode || undefined : undefined,
         accountSubjectId:
-          categoryMain === "expense" && accountSubjectId
+          categoryMain === "transfer" && transferKind === "bank_general" && accountSubjectId
             ? Number(accountSubjectId)
-            : categoryMain === "transfer" && transferKind === "bank_general" && accountSubjectId
-              ? Number(accountSubjectId)
-              : undefined,
-        invoiceReceived: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceReceived : undefined,
-        invoiceNo: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceNo.trim() || undefined : undefined,
+            : undefined,
+        invoiceReceived: categoryMain === "purchase" ? invoiceReceived : undefined,
+        invoiceNo: categoryMain === "purchase" ? invoiceNo.trim() || undefined : undefined,
         invoicePhotoUrl,
         userRole: auth?.role,
       })

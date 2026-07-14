@@ -3,6 +3,24 @@ import {
   filterExpenseWithdrawAccountSubjects,
   filterTransferWithdrawAccountSubjects,
 } from '@/lib/account-subject-withdraw-options'
+import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
+
+/** 조회 목록 금액 필터 — 빈 값이면 통과, 입·출금 절대값으로 비교(±0.01) */
+export function bankRowMatchesAmountFilter(
+  rowAmount: number | null | undefined,
+  filterAmountRaw: string
+): boolean {
+  const raw = String(filterAmountRaw || '').trim()
+  if (!raw || !/\d/.test(raw)) return true
+  return moneyEqual(Math.abs(Number(rowAmount) || 0), parseMoneyAmount(raw))
+}
+
+/** 조회 목록 검색어 필터 — 적요·메모·거래처 등 텍스트에 부분 일치(대소문자 무시) */
+export function bankRowMatchesKeywordFilter(haystacks: string[], keywordRaw: string): boolean {
+  const q = String(keywordRaw || '').trim().toLowerCase()
+  if (!q) return true
+  return haystacks.some((h) => String(h || '').toLowerCase().includes(q))
+}
 
 /** 통장 조회 필터 — 입금 용도 (조회 전에도 드롭다운 표시) */
 export const BANK_FILTER_DEPOSIT_CATEGORIES = [

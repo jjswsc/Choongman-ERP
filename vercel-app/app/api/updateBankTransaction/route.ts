@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdate, supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   deleteReceivableFromBankReceive,
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 매입 지급(미지급): purchase_payment·지출관리 연동 통장 모두 거래처 변경 시 payable·지급예정 동기화
+    // 매입 지급(미지급): 지출관리 연동 Payment만 거래처 동기화. purchase_payment 분류만으로는 Payment 미생성.
     if (transType === 'withdraw') {
       const bankMemo = String(existing[0].memo || '').trim()
       await syncPayableLedgerAfterBankWithdrawCategoryChange({

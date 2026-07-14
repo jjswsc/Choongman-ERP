@@ -209,6 +209,11 @@ export async function GET(request: NextRequest) {
     customerDisplayShowOrderTotal: true,
     customerDisplayIdleMediaType: 'none' as const,
     customerDisplayIdleMediaUrl: '',
+    receiptInsetLeftMm: null as number | null,
+    receiptInsetRightMm: null as number | null,
+    receiptContentNudgeLeftMm: null as number | null,
+    kitchenSlipPaddingLeftMm: null as number | null,
+    kitchenSlipPaddingRightMm: null as number | null,
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -324,6 +329,11 @@ export async function GET(request: NextRequest) {
       customer_display_show_order_total?: boolean
       customer_display_idle_media_type?: string
       customer_display_idle_media_url?: string
+      receipt_inset_left_mm?: number | null
+      receipt_inset_right_mm?: number | null
+      receipt_content_nudge_left_mm?: number | null
+      kitchen_slip_padding_left_mm?: number | null
+      kitchen_slip_padding_right_mm?: number | null
     }[] | null
 
     const raw = rows?.[0]
@@ -444,6 +454,16 @@ export async function GET(request: NextRequest) {
       kitchenSlipShowLineNotes: raw?.kitchen_slip_show_line_notes !== false,
       kitchenSlipShowOrderMemo: raw?.kitchen_slip_show_order_memo !== false,
       kitchenSlipOptionGroupPrint: rawKitchenOptionGroupPrint,
+      receiptInsetLeftMm:
+        raw?.receipt_inset_left_mm == null ? null : Number(raw.receipt_inset_left_mm),
+      receiptInsetRightMm:
+        raw?.receipt_inset_right_mm == null ? null : Number(raw.receipt_inset_right_mm),
+      receiptContentNudgeLeftMm:
+        raw?.receipt_content_nudge_left_mm == null ? null : Number(raw.receipt_content_nudge_left_mm),
+      kitchenSlipPaddingLeftMm:
+        raw?.kitchen_slip_padding_left_mm == null ? null : Number(raw.kitchen_slip_padding_left_mm),
+      kitchenSlipPaddingRightMm:
+        raw?.kitchen_slip_padding_right_mm == null ? null : Number(raw.kitchen_slip_padding_right_mm),
       escPosCutAfterKitchenHtml:
         raw?.esc_pos_cut_after_kitchen_html === false
           ? false

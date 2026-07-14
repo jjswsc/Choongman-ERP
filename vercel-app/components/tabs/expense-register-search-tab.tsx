@@ -41,7 +41,7 @@ import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
-import { canEditExpenseAccrualPlan } from "@/lib/expense-accrual-approve-policy"
+import { canEditExpenseAccrualClassification } from "@/lib/expense-accrual-approve-policy"
 
 function getCategoryLabel(cat: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
@@ -594,12 +594,14 @@ export function ExpenseRegisterSearchTab() {
                     const canEditBank = Boolean(r.bankTransactionId)
                     const canEditPlan = Boolean(
                       r.accrualId &&
-                        !r.bankTransactionId &&
-                        canEditExpenseAccrualPlan({
+                        canEditExpenseAccrualClassification({
                           status: r.accrualStatus ?? r.planStatus,
-                          paidAmount: r.paidAmount,
                         })
                     )
+                    // 지급예정 연동 건은 지급예정 수정(계정과목·유형), bank_only만 통장 수정 — 수정 루프 방지
+                    const showPlanEdit = canEditPlan
+                    const showBankEdit = canEditBank && !r.accrualId
+                    const showBankDelete = canEditBank
                     const invoiceTargetId = r.bankTransactionId ?? r.accrualId
                     return (
                       <tr key={r.rowKey} className="border-t align-top">
@@ -673,7 +675,7 @@ export function ExpenseRegisterSearchTab() {
                         </td>
                         <td className="p-2 text-center">
                           <div className="flex items-center justify-center gap-1">
-                            {canEditPlan ? (
+                            {showPlanEdit ? (
                               <Button
                                 type="button"
                                 size="icon"
@@ -685,87 +687,70 @@ export function ExpenseRegisterSearchTab() {
                                 <Pencil className="h-4 w-4" />
                               </Button>
                             ) : null}
-                            {canEditBank ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8"
-                                  title={tt("btnEdit", "Edit")}
-                                  onClick={() => {
-                                    const q = new URLSearchParams()
-                                    q.set("tab", "expenseRegister")
-                                    q.set("editMode", "1")
-                                    q.set("bankTransactionId", String(r.bankTransactionId))
-                                    if (r.accountId) q.set("accountId", String(r.accountId))
-                                    if (r.storeName) q.set("storeName", r.storeName)
-                                    if (r.bankTransDate) q.set("transDate", r.bankTransDate)
-                                    if (r.bankAmount) q.set("amount", String(r.bankAmount))
-                                    if (r.memo) {
-                                      q.set("bankNote", r.memo)
-                                      q.set("bankMemo", r.memo)
-                                    }
-                                    if (r.category) q.set("category", r.category)
-                                    if (r.vendorCode) q.set("vendorCode", r.vendorCode)
-                                    if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
-                                    q.set("startStr", startStr)
-                                    q.set("endStr", endStr)
-                                    router.push(`/admin/expense-management?${q.toString()}`)
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8 border-destructive/40 text-destructive"
-                                  title={tt("delete", "Delete")}
-                                  disabled={deletingId === r.bankTransactionId}
-                                  onClick={async () => {
-                                    if (!r.bankTransactionId) return
-                                    const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
-                                    if (!ok) return
-                                    setDeletingId(r.bankTransactionId)
-                                    try {
-                                      const res = await deleteExpenseRegisterItem({
-                                        bankTransactionId: r.bankTransactionId,
-                                        userRole: auth?.role,
-                                      })
-                                      if (!res.success) {
-                                        await appAlert(res.message || tt("msg_delete_fail", "Delete failed"))
-                                        return
-                                      }
-                                      setList((prev) => prev.filter((x) => x.rowKey !== r.rowKey))
-                                    } catch (e) {
-                                      await appAlert(tt("msg_delete_fail", "Delete failed") + ": " + (e instanceof Error ? e.message : String(e)))
-                                    } finally {
-                                      setDeletingId(null)
-                                    }
-                                  }}
-                                >
-                                  {deletingId === r.bankTransactionId ? <span className="text-xs">...</span> : <Trash2 className="h-4 w-4" />}
-                                </Button>
-                              </>
-                            ) : null}
-                            {r.accrualId && !canEditBank && !canEditPlan ? (
+                            {showBankEdit ? (
                               <Button
                                 type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                title={tt("btnEdit", "Edit")}
                                 onClick={() => {
-                                  const q = new URLSearchParams({ tab: "plan" })
-                                  const d = r.dueDate || r.expenseDate
-                                  if (d) {
-                                    q.set("startStr", d)
-                                    q.set("endStr", d)
+                                  const q = new URLSearchParams()
+                                  q.set("tab", "expenseRegister")
+                                  q.set("editMode", "1")
+                                  q.set("bankTransactionId", String(r.bankTransactionId))
+                                  if (r.accountId) q.set("accountId", String(r.accountId))
+                                  if (r.storeName) q.set("storeName", r.storeName)
+                                  if (r.bankTransDate) q.set("transDate", r.bankTransDate)
+                                  if (r.bankAmount) q.set("amount", String(r.bankAmount))
+                                  if (r.memo) {
+                                    q.set("bankNote", r.memo)
+                                    q.set("bankMemo", r.memo)
                                   }
+                                  if (r.category) q.set("category", r.category)
+                                  if (r.vendorCode) q.set("vendorCode", r.vendorCode)
+                                  if (r.accountSubjectId) q.set("accountSubjectId", String(r.accountSubjectId))
+                                  if (r.payeeCode) q.set("payeeCode", r.payeeCode)
+                                  if (r.payeeName) q.set("payeeName", r.payeeName)
+                                  q.set("startStr", startStr)
+                                  q.set("endStr", endStr)
                                   router.push(`/admin/expense-management?${q.toString()}`)
                                 }}
                               >
-                                {tt("expensePlanTab", "Payment Plan")}
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            {showBankDelete ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8 border-destructive/40 text-destructive"
+                                title={tt("delete", "Delete")}
+                                disabled={deletingId === r.bankTransactionId}
+                                onClick={async () => {
+                                  if (!r.bankTransactionId) return
+                                  const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
+                                  if (!ok) return
+                                  setDeletingId(r.bankTransactionId)
+                                  try {
+                                    const res = await deleteExpenseRegisterItem({
+                                      bankTransactionId: r.bankTransactionId,
+                                      userRole: auth?.role,
+                                    })
+                                    if (!res.success) {
+                                      await appAlert(res.message || tt("msg_delete_fail", "Delete failed"))
+                                      return
+                                    }
+                                    setList((prev) => prev.filter((x) => x.rowKey !== r.rowKey))
+                                  } catch (e) {
+                                    await appAlert(tt("msg_delete_fail", "Delete failed") + ": " + (e instanceof Error ? e.message : String(e)))
+                                  } finally {
+                                    setDeletingId(null)
+                                  }
+                                }}
+                              >
+                                {deletingId === r.bankTransactionId ? <span className="text-xs">...</span> : <Trash2 className="h-4 w-4" />}
                               </Button>
                             ) : null}
                           </div>

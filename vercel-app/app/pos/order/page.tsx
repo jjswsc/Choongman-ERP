@@ -1619,6 +1619,7 @@ export default function PosOrderPage() {
       lang,
       menuNameById: (menuId: string) =>
         menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || "",
+      printerSettings: posPrinterSettingsRef.current,
     })
     try {
       await printInIframe(fullHtml, t("posReceipt") || "영수증", {
@@ -1772,6 +1773,7 @@ export default function PosOrderPage() {
           memoLine: memoLine || null,
           escapeHtml,
           design: slipDesign,
+          printerSettings: settings,
           printColorAdjust: "economy",
         })
         await printInIframe(html, slip.label, {

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { type TenantItem } from "@/lib/saas-admin-control-plane"
 import { aggregateSaasRevenueStats } from "@/lib/saas-module-billing"
 import { completedStepCount, firstIncompleteStep, isOnboardingComplete, ONBOARDING_STEP_ORDER, resolveOnboardingSteps, type OnboardingStatusRow, type OnboardingStepKey } from "@/lib/saas-onboarding-status"
+import { isSaasPlatformInternalTenant } from "@/lib/saas-platform-internal-tenant"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import { useSaasScope } from "@/components/saas/saas-scope-context"
@@ -73,31 +74,39 @@ export default function SaasAdminPage() {
     void loadTenants()
   }, [loadTenants])
 
+  const billableTenants = useMemo(
+    () => tenants.filter((tenant) => !isSaasPlatformInternalTenant(tenant)),
+    [tenants]
+  )
+
   const stats = useMemo(() => {
     let complete = 0
     let incomplete = 0
-    for (const tenant of tenants) {
+    for (const tenant of billableTenants) {
       const steps = statusMap[tenant.id]?.steps ?? resolveOnboardingSteps({ tenant })
       if (isOnboardingComplete(steps)) complete += 1
       else incomplete += 1
     }
-    return { complete, incomplete, total: tenants.length }
-  }, [statusMap, tenants])
+    return { complete, incomplete, total: billableTenants.length }
+  }, [billableTenants, statusMap])
 
-  const revenue = useMemo(() => aggregateSaasRevenueStats(tenants), [tenants])
+  const revenue = useMemo(() => aggregateSaasRevenueStats(billableTenants), [billableTenants])
 
   const checklistRows = useMemo(() => {
-    const rows = tenants.map((tenant) => {
+    const rows = billableTenants.map((tenant) => {
       const steps = statusMap[tenant.id]?.steps ?? resolveOnboardingSteps({ tenant })
       return { tenant, steps }
     })
     if (!showIncompleteOnly) return rows
     return rows.filter((x) => !isOnboardingComplete(x.steps))
-  }, [showIncompleteOnly, statusMap, tenants])
+  }, [billableTenants, showIncompleteOnly, statusMap])
 
   const incompleteRows = useMemo(
-    () => tenants.filter((tenant) => !isOnboardingComplete(statusMap[tenant.id]?.steps ?? resolveOnboardingSteps({ tenant }))),
-    [statusMap, tenants]
+    () =>
+      billableTenants.filter(
+        (tenant) => !isOnboardingComplete(statusMap[tenant.id]?.steps ?? resolveOnboardingSteps({ tenant }))
+      ),
+    [billableTenants, statusMap]
   )
 
   const missingStepLabel = (steps: Record<OnboardingStepKey, boolean>): string => {

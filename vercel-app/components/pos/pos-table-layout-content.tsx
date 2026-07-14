@@ -206,7 +206,7 @@ export function PosTableLayoutContent() {
     if (!storeCode) return
     setLoading(true)
     setIsFallbackLayout(false)
-    getPosTableLayout({ storeCode })
+    getPosTableLayout({ storeCode, forceNetwork: true })
       .then(({ layout: l, floorLabels: labels, isFallback }) => {
         setLayout((l || []).map(normalizeLayoutItem))
         setFloorLabels(normalizePosFloorLabels(labels ?? {}))
@@ -542,7 +542,10 @@ export function PosTableLayoutContent() {
     }
     setCopyLoading(true)
     try {
-      const { layout: sourceLayout, floorLabels: sourceLabels } = await getPosTableLayout({ storeCode: source })
+      const { layout: sourceLayout, floorLabels: sourceLabels } = await getPosTableLayout({
+        storeCode: source,
+        forceNetwork: true,
+      })
       const items = sourceLayout || []
       if (items.length === 0) {
         await appAlert(t("posTableLayoutCopyEmpty") || "선택한 매장에 저장된 테이블 배치가 없습니다.")

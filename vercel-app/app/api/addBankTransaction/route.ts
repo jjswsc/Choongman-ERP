@@ -6,10 +6,7 @@ import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
-import {
-  upsertPayableFromBankPurchasePayment,
-  upsertReceivableFromBankReceive,
-} from '@/lib/receivable-payable'
+import { upsertReceivableFromBankReceive } from '@/lib/receivable-payable'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   assertPosRevenueDepositCategorySafe,
@@ -243,16 +240,7 @@ export async function POST(request: NextRequest) {
         memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
       })
     }
-
-    if (bankId && transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {
-      await upsertPayableFromBankPurchasePayment({
-        bankTransactionId: bankId,
-        vendorCode,
-        amountAbs: Math.abs(amount),
-        transDate,
-        memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
-      })
-    }
+    // purchase_payment: 분류만 저장. 미지급 Payment는 지출관리 연결 시에만 생성.
 
     if (bankId && transType === 'deposit') {
       try {

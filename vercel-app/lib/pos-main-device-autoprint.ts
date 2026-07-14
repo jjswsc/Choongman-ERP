@@ -380,6 +380,7 @@ export async function printHallReceiptPayload(
       ctx.menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
     ),
     optionNameByCode: ctx.optionNameByCode,
+    printerSettings: ctx.printerSettings,
   })
 
   await printPosHtmlDocument(receiptHtml, {
@@ -476,6 +477,7 @@ export async function printKitchenForOrder(
         memoLine: memoLine || null,
         escapeHtml,
         design: slipDesign,
+        printerSettings: ctx.printerSettings,
         optionNameByCode: optionNameByCodeForPrint,
         printColorAdjust: 'exact',
         ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bankRowMatchesAmountFilter,
+  bankRowMatchesKeywordFilter,
   resolveBankQueryFilterAccountSubjects,
   resolveBankQueryFilterCategories,
 } from '@/lib/bank-query-filter-options'
@@ -26,5 +28,18 @@ describe('bank-query-filter-options', () => {
       revenueAccountOptions: [],
     })
     expect(rows.map((r) => r.code)).toEqual(['5520'])
+  })
+
+  it('matches amount filter by absolute value', () => {
+    expect(bankRowMatchesAmountFilter(1500.5, '')).toBe(true)
+    expect(bankRowMatchesAmountFilter(1500.5, '1500.50')).toBe(true)
+    expect(bankRowMatchesAmountFilter(-1500.5, '1,500.5')).toBe(true)
+    expect(bankRowMatchesAmountFilter(1500.5, '1501')).toBe(false)
+  })
+
+  it('matches keyword filter case-insensitively across haystacks', () => {
+    expect(bankRowMatchesKeywordFilter(['Grab Food', 'note'], '')).toBe(true)
+    expect(bankRowMatchesKeywordFilter(['Grab Food', 'note'], 'grab')).toBe(true)
+    expect(bankRowMatchesKeywordFilter(['Grab Food', 'note'], 'memo')).toBe(false)
   })
 })

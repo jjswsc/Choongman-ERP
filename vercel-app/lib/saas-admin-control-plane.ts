@@ -126,6 +126,8 @@ export type TenantItem = {
   /** 담당 외부 대리점 (없으면 본사 직영) */
   partnerId?: string | null
   partnerName?: string | null
+  /** 플랫폼 운영(시드·본사) 테넌트 — 판매 고객과 구분 */
+  isPlatformInternal?: boolean
 }
 
 export const FEATURE_KEYS = [

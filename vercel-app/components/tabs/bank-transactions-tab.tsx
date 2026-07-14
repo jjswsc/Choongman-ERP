@@ -117,7 +117,7 @@ import {
 import { BankAccountManageDialog } from "./bank-account-manage-dialog"
 import { BankRegisterActionDialog } from "./bank-register-action-dialog"
 import { BankQuickMemoChipBar, BankMiscDialogs } from "./bank-misc-dialogs"
-import { formatMoneyAmountParam, formatMoneyBaht, moneyEqual, parseMoneyAmount } from "@/lib/money-amount"
+import { formatMoneyAmountParam, formatMoneyBaht, moneyEqual, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import {
   AccountingDataTable,
@@ -148,6 +148,8 @@ import {
   resolvePrepaymentAccountSubject,
 } from "@/lib/bank-advance-display"
 import {
+  bankRowMatchesAmountFilter,
+  bankRowMatchesKeywordFilter,
   resolveBankQueryFilterAccountSubjects,
   resolveBankQueryFilterCategories,
 } from "@/lib/bank-query-filter-options"
@@ -270,6 +272,8 @@ export function BankTransactionsTab() {
   const [filterPlExpenseOnly, setFilterPlExpenseOnly] = React.useState(false)
   const [filterNeedsAttention, setFilterNeedsAttention] = React.useState(false)
   const [filterInvoiceNotReceived, setFilterInvoiceNotReceived] = React.useState(false)
+  const [filterAmount, setFilterAmount] = React.useState("")
+  const [filterKeyword, setFilterKeyword] = React.useState("")
   const [importSaving, setImportSaving] = React.useState(false)
   const [applyCarryOverSaving, setApplyCarryOverSaving] = React.useState(false)
   const [importVendorSearch, setImportVendorSearch] = React.useState("")
@@ -643,7 +647,9 @@ export function BankTransactionsTab() {
     filterAccountSubjectId ||
     filterAccountSubjectEmpty ||
     filterPlExpenseOnly ||
-    filterInvoiceNotReceived
+    filterInvoiceNotReceived ||
+    filterAmount.trim() ||
+    filterKeyword.trim()
   )
   const urlParamsApplied = React.useRef(false)
   const plDrillNavReadyRef = React.useRef(false)
@@ -665,6 +671,8 @@ export function BankTransactionsTab() {
       Boolean(data.filterAccountSubjectId) ||
       Boolean(data.filterAccountSubjectEmpty) ||
       Boolean(data.filterInvoiceNotReceived) ||
+      Boolean(data.filterAmount?.trim()) ||
+      Boolean(data.filterKeyword?.trim()) ||
       Object.keys(data.queryRowEdits || {}).length > 0
     if (!hasDraft) return false
     if (data.accountId) setAccountId(data.accountId)
@@ -676,6 +684,8 @@ export function BankTransactionsTab() {
     if (typeof data.filterAccountSubjectId === "string") setFilterAccountSubjectId(data.filterAccountSubjectId)
     setFilterAccountSubjectEmpty(Boolean(data.filterAccountSubjectEmpty))
     setFilterInvoiceNotReceived(Boolean(data.filterInvoiceNotReceived))
+    if (typeof data.filterAmount === "string") setFilterAmount(data.filterAmount)
+    if (typeof data.filterKeyword === "string") setFilterKeyword(data.filterKeyword)
     // filterVendorCode · filterPlExpenseOnly — 손익/매입 드릴다운 전용(URL). 세션 복원 시 입금이 숨겨져 혼란을 줌.
     setQueryRowEdits((data.queryRowEdits || {}) as Record<number, QueryRowEdit>)
     setActiveBankTab("query")
@@ -818,6 +828,8 @@ export function BankTransactionsTab() {
         filterAccountSubjectId,
         filterAccountSubjectEmpty,
         filterInvoiceNotReceived,
+        filterAmount,
+        filterKeyword,
         queryRowEdits,
       }
       sessionStorage.setItem(queryDraftStorageKey, JSON.stringify(draft))
@@ -829,8 +841,10 @@ export function BankTransactionsTab() {
     endStr,
     filterAccountSubjectEmpty,
     filterAccountSubjectId,
+    filterAmount,
     filterCategory,
     filterInvoiceNotReceived,
+    filterKeyword,
     filterTransType,
     hasBankQueryDraft,
     queryDraftStorageKey,
@@ -1475,6 +1489,22 @@ export function BankTransactionsTab() {
           return false
         }
       }
+      if (!bankRowMatchesAmountFilter(r.amount, filterAmount)) return false
+      const noteText =
+        edits?.note !== undefined
+          ? String(edits.note || "")
+          : stripWithdrawalCategoryMetaFromNote(r.note || "")
+      const vendorCode = String(edits?.vendorCode ?? r.vendorCode ?? "").trim()
+      const vendorName = vendorOptions.find((v) => v.code === vendorCode)?.name || ""
+      const storeName = String(edits?.storeName ?? r.storeName ?? "").trim()
+      if (
+        !bankRowMatchesKeywordFilter(
+          [r.memo || "", noteText, vendorCode, vendorName, storeName],
+          filterKeyword
+        )
+      ) {
+        return false
+      }
       return true
     })
   }, [
@@ -1487,7 +1517,10 @@ export function BankTransactionsTab() {
     filterInvoiceNotReceived,
     filterPlExpenseOnly,
     filterNeedsAttention,
+    filterAmount,
+    filterKeyword,
     queryRowEdits,
+    vendorOptions,
   ])
 
   const listFilterActive = Boolean(
@@ -1498,7 +1531,9 @@ export function BankTransactionsTab() {
       filterAccountSubjectEmpty ||
       filterInvoiceNotReceived ||
       filterPlExpenseOnly ||
-      filterNeedsAttention
+      filterNeedsAttention ||
+      filterAmount.trim() ||
+      filterKeyword.trim()
   )
 
   const clearListFilters = React.useCallback(() => {
@@ -1510,6 +1545,8 @@ export function BankTransactionsTab() {
     setFilterInvoiceNotReceived(false)
     setFilterPlExpenseOnly(false)
     setFilterNeedsAttention(false)
+    setFilterAmount("")
+    setFilterKeyword("")
   }, [])
 
   const displayPeriodDeposits = React.useMemo(() => {
@@ -1645,14 +1682,22 @@ export function BankTransactionsTab() {
     if (filterInvoiceNotReceived) chips.push(t("poInvoiceNotReceived") || "인보이스 미수령만")
     if (filterPlExpenseOnly) chips.push(tt("bankFilterPlExpenseActive", "손익 비용(출금)만"))
     if (filterNeedsAttention) chips.push(t("acct_bank_attention_filter"))
+    if (filterAmount.trim()) {
+      chips.push(`${t("bankFilterAmount") || "금액"}: ${filterAmount.trim()}`)
+    }
+    if (filterKeyword.trim()) {
+      chips.push(`${t("bankFilterKeyword") || "검색어"}: ${filterKeyword.trim()}`)
+    }
     return chips
   }, [
     accountSubjectOptions,
     asDisplayName,
     filterAccountSubjectEmpty,
     filterAccountSubjectId,
+    filterAmount,
     filterCategory,
     filterInvoiceNotReceived,
+    filterKeyword,
     filterPlExpenseOnly,
     filterNeedsAttention,
     filterTransType,
@@ -2256,6 +2301,23 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         ))}
                       </SelectContent>
                     </Select>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={filterAmount}
+                      onChange={(e) => setFilterAmount(normalizeMoneyInputString(e.target.value))}
+                      placeholder={t("bankFilterAmountPh") || "금액"}
+                      title={t("bankFilterAmountHint") || "입·출금 절대 금액으로 검색"}
+                      className="w-[110px] h-9"
+                    />
+                    <Input
+                      type="search"
+                      value={filterKeyword}
+                      onChange={(e) => setFilterKeyword(e.target.value)}
+                      placeholder={t("bankFilterKeywordPh") || "적요·메모 검색"}
+                      title={t("bankFilterKeywordHint") || "은행 적요, 메모, 거래처, 매장명"}
+                      className="w-[180px] h-9 min-w-[140px]"
+                    />
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
