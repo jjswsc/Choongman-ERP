@@ -103,3 +103,58 @@ describe('computePosPricing payment total rounding', () => {
     expect(pricing.finalTotal).toBe(969.99)
   })
 })
+
+describe('computePosPricing fee stack order', () => {
+  it('parallel keeps independent base for VAT and service (legacy)', () => {
+    const pricing = computePosPricing({
+      subtotal: 1000,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'parallel',
+        roundPaymentTotalToWholeBaht: false,
+      },
+    })
+    expect(pricing.serviceFeeAmt).toBe(100)
+    expect(pricing.vatFeeAmt).toBe(70)
+    expect(pricing.finalTotal).toBe(1170)
+  })
+
+  it('sequential service→vat stacks VAT on base+service', () => {
+    const pricing = computePosPricing({
+      subtotal: 1000,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'sequential',
+        feeStackOrder: ['service', 'vat', 'other'],
+        roundPaymentTotalToWholeBaht: false,
+      },
+    })
+    expect(pricing.serviceFeeAmt).toBe(100)
+    expect(pricing.vatFeeAmt).toBe(77)
+    expect(pricing.finalTotal).toBe(1177)
+  })
+
+  it('sequential vat→service stacks service on base+VAT', () => {
+    const pricing = computePosPricing({
+      subtotal: 1000,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'sequential',
+        feeStackOrder: ['vat', 'service', 'other'],
+        roundPaymentTotalToWholeBaht: false,
+      },
+    })
+    expect(pricing.vatFeeAmt).toBe(70)
+    expect(pricing.serviceFeeAmt).toBe(107)
+    expect(pricing.finalTotal).toBe(1177)
+  })
+})

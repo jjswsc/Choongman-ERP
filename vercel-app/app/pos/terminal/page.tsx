@@ -110,6 +110,8 @@ import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import {
   computePosPricing,
+  normalizeFeeStackMode,
+  normalizeFeeStackOrder,
   receiptTaxDisplayFieldsFromPricing,
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
@@ -452,6 +454,7 @@ export default function PosTerminalPage() {
     currentStore,
     currentStoreId,
     currentLayout,
+    currentFloorLabels,
     deliveryOrders,
     packagedDeliveryOrders,
     completedDeliveryOrders,
@@ -708,6 +711,8 @@ export default function PosTerminalPage() {
   const [cardBaseMode, setCardBaseMode] = useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
   const [otherRate, setOtherRate] = useState(0)
   const [otherMode, setOtherMode] = useState<'included' | 'separate'>('separate')
+  const [feeStackMode, setFeeStackMode] = useState<'parallel' | 'sequential'>('parallel')
+  const [feeStackOrder, setFeeStackOrder] = useState<Array<'vat' | 'service' | 'other'>>(['service', 'vat', 'other'])
   const [dualMonitorEnabled, setDualMonitorEnabled] = useState(false)
   const [customerDisplayAutoOpen, setCustomerDisplayAutoOpen] = useState(true)
   const [customerDisplayMonitorPreference, setCustomerDisplayMonitorPreference] = useState<'secondary-first' | 'primary-only'>('secondary-first')
@@ -1554,6 +1559,8 @@ export default function PosTerminalPage() {
         )
         setOtherRate(Math.max(0, Number(s.otherRate ?? 0)))
         setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
+        setFeeStackMode(normalizeFeeStackMode(s.feeStackMode))
+        setFeeStackOrder(normalizeFeeStackOrder(s.feeStackOrder))
         setDualMonitorEnabled(Boolean(s.dualMonitorEnabled))
         setCustomerDisplayAutoOpen(s.customerDisplayAutoOpen !== false)
         setCustomerDisplayMonitorPreference(
@@ -1966,7 +1973,9 @@ export default function PosTerminalPage() {
     cardBaseMode,
     otherRate,
     otherMode,
-  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
+    feeStackMode,
+    feeStackOrder,
+  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode, feeStackMode, feeStackOrder])
 
   const customerDisplayBreakdown = useMemo(() => {
     const subtotal = customerDisplayOrderTotal
@@ -10770,6 +10779,7 @@ export default function PosTerminalPage() {
                         onTableSelect={handleTableSelect}
                         activeFloor={activeFloor}
                         onFloorChange={setActiveFloor}
+                        floorLabels={currentFloorLabels}
                         t={t}
                         freshMaxMin={cookingRules.freshMaxMin}
                         warningMaxMin={cookingRules.warningMaxMin}

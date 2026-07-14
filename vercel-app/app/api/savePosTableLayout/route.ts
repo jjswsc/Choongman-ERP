@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import {
+  normalizePosFloorLabels,
+  parsePosTableLayoutJson,
+  serializePosTableLayoutJson,
+  type PosFloorLabels,
+  type PosTableLayoutTableRow,
+} from '@/lib/pos-table-layout-payload'
+import { clampPosTableFloor } from '@/lib/pos-table-floor-match'
 
 /** POS 테이블 배치 저장 */
 export async function POST(req: NextRequest) {
@@ -10,21 +18,22 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const storeCode = String(body?.storeCode ?? '').trim()
     const layout = Array.isArray(body?.layout) ? body.layout : []
+    const floorLabelsProvided = body != null && typeof body === 'object' && 'floorLabels' in body
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
     }
 
-    const layoutRows = layout
+    const layoutRows: PosTableLayoutTableRow[] = layout
       .filter((t: unknown) => t && typeof t === 'object' && (t as Record<string, unknown>).id)
       .map((t: Record<string, unknown>) => ({
         id: String(t.id ?? ''),
         name: String(t.name ?? ''),
-        x: Number(t.x) ?? 0,
-        y: Number(t.y) ?? 0,
-        w: Number(t.w) ?? 80,
-        h: Number(t.h) ?? 60,
-        floor: Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)),
+        x: Number(t.x) || 0,
+        y: Number(t.y) || 0,
+        w: Number(t.w) || 80,
+        h: Number(t.h) || 60,
+        floor: clampPosTableFloor(Number(t.floor ?? 1) || 1),
         shape: String(t.shape ?? 'rect'),
         seats: Number(t.seats ?? 0) || 0,
         rotation: Number(t.rotation ?? 0) || 0,
@@ -34,18 +43,27 @@ export async function POST(req: NextRequest) {
       'pos_table_layouts',
       `store_code=eq.${encodeURIComponent(storeCode)}`,
       { limit: 1 }
-    )) as { store_code?: string }[] | null
+    )) as { store_code?: string; layout_json?: unknown }[] | null
+
+    let floorLabels: PosFloorLabels = {}
+    if (floorLabelsProvided) {
+      floorLabels = normalizePosFloorLabels(body.floorLabels)
+    } else if (existing?.[0]?.layout_json != null) {
+      floorLabels = parsePosTableLayoutJson(existing[0].layout_json).floorLabels
+    }
+
+    const layoutJson = serializePosTableLayoutJson(layoutRows, floorLabels)
 
     if (existing?.length) {
       await supabaseUpdateByFilter(
         'pos_table_layouts',
         `store_code=eq.${encodeURIComponent(storeCode)}`,
-        { layout_json: layoutRows, updated_at: new Date().toISOString() }
+        { layout_json: layoutJson, updated_at: new Date().toISOString() }
       )
     } else {
       await supabaseInsert('pos_table_layouts', {
         store_code: storeCode,
-        layout_json: layoutRows,
+        layout_json: layoutJson,
       })
     }
 

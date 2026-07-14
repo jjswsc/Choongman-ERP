@@ -36,12 +36,17 @@ import {
   getPosTableLayout,
   savePosTableLayout,
   useStoreList,
+  type PosFloorLabels,
   type PosTableItem,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { getPosTableAabb } from "@/lib/pos-table-layout-aabb"
+import {
+  normalizePosFloorLabels,
+  resolvePosFloorDisplayLabel,
+} from "@/lib/pos-table-layout-payload"
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 
 const FLOOR_W = 720
@@ -124,6 +129,7 @@ export function PosTableLayoutContent() {
   const [gridCols, setGridCols] = React.useState(6)
   const [gridRows, setGridRows] = React.useState(5)
   const [activeFloor, setActiveFloor] = React.useState<1 | 2 | 3>(1)
+  const [floorLabels, setFloorLabels] = React.useState<PosFloorLabels>({})
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
   const [isFallbackLayout, setIsFallbackLayout] = React.useState(false)
@@ -156,6 +162,11 @@ export function PosTableLayoutContent() {
   const formatAutoTableName = React.useCallback(
     (floor: 1 | 2 | 3, number: number) => `${floor}F-${number}`,
     []
+  )
+  const floorLabelFallback = t("posFloorLabel") || "{n}F"
+  const getFloorTabLabel = React.useCallback(
+    (floor: 1 | 2 | 3) => resolvePosFloorDisplayLabel(floor, floorLabels, floorLabelFallback),
+    [floorLabels, floorLabelFallback]
   )
   const currentFloorLayout = React.useMemo(
     () => layout.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) === activeFloor),
@@ -196,11 +207,15 @@ export function PosTableLayoutContent() {
     setLoading(true)
     setIsFallbackLayout(false)
     getPosTableLayout({ storeCode })
-      .then(({ layout: l, isFallback }) => {
+      .then(({ layout: l, floorLabels: labels, isFallback }) => {
         setLayout((l || []).map(normalizeLayoutItem))
+        setFloorLabels(normalizePosFloorLabels(labels ?? {}))
         setIsFallbackLayout(Boolean(isFallback))
       })
-      .catch(() => setLayout([]))
+      .catch(() => {
+        setLayout([])
+        setFloorLabels({})
+      })
       .finally(() => setLoading(false))
   }, [storeCode])
 
@@ -503,7 +518,13 @@ export function PosTableLayoutContent() {
   }, [currentFloorLayout, selectBox])
 
   const handleReset = async () => {
-    if (!(await appConfirm((t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?") + ` (${activeFloor}F)`))) return
+    if (
+      !(await appConfirm(
+        (t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?") +
+          ` (${getFloorTabLabel(activeFloor)})`
+      ))
+    )
+      return
     setLayout((prev) => prev.filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) !== activeFloor))
     setSelectedId(null)
     setSelectedIds([])
@@ -521,7 +542,7 @@ export function PosTableLayoutContent() {
     }
     setCopyLoading(true)
     try {
-      const { layout: sourceLayout } = await getPosTableLayout({ storeCode: source })
+      const { layout: sourceLayout, floorLabels: sourceLabels } = await getPosTableLayout({ storeCode: source })
       const items = sourceLayout || []
       if (items.length === 0) {
         await appAlert(t("posTableLayoutCopyEmpty") || "선택한 매장에 저장된 테이블 배치가 없습니다.")
@@ -532,6 +553,7 @@ export function PosTableLayoutContent() {
         id: generateId(),
       })).map(normalizeLayoutItem)
       setLayout(copied)
+      setFloorLabels(normalizePosFloorLabels(sourceLabels ?? {}))
       setSelectedId(null)
       setSelectedIds([])
       await appAlert(t("posTableLayoutCopyDone") || "테이블 배치를 복사했습니다. 저장 버튼을 눌러 적용하세요.")
@@ -540,6 +562,16 @@ export function PosTableLayoutContent() {
     } finally {
       setCopyLoading(false)
     }
+  }
+
+  const setActiveFloorLabel = (raw: string) => {
+    const clipped = String(raw ?? '').slice(0, 24)
+    setFloorLabels((prev) => {
+      const out: PosFloorLabels = { ...prev }
+      if (clipped.trim()) out[activeFloor] = clipped
+      else delete out[activeFloor]
+      return out
+    })
   }
 
   const handleAutoName = () => {
@@ -720,7 +752,13 @@ export function PosTableLayoutContent() {
     try {
       const normalizedLayout = layout.map(normalizeLayoutItem)
       setLayout(normalizedLayout)
-      const res = await savePosTableLayout({ storeCode, layout: normalizedLayout })
+      const labelsToSave = normalizePosFloorLabels(floorLabels)
+      setFloorLabels(labelsToSave)
+      const res = await savePosTableLayout({
+        storeCode,
+        layout: normalizedLayout,
+        floorLabels: labelsToSave,
+      })
       if (res.success) {
         await appAlert(t("msg_saved") || "저장되었습니다.")
         loadLayout()
@@ -814,19 +852,39 @@ export function PosTableLayoutContent() {
 
       {/* 그리드 설정 & 테이블 생성 */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-white p-3">
-        <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
-          {[1, 2, 3].map((floor) => (
-            <Button
-              key={floor}
-              type="button"
-              size="sm"
-              variant={activeFloor === floor ? "default" : "ghost"}
-              className="h-7 px-2 text-xs"
-              onClick={() => setActiveFloor(floor as 1 | 2 | 3)}
-            >
-              {(t("posFloorLabel") || "{n}F").replaceAll("{n}", String(floor))}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+            {([1, 2, 3] as const).map((floor) => (
+              <Button
+                key={floor}
+                type="button"
+                size="sm"
+                variant={activeFloor === floor ? "default" : "ghost"}
+                className="h-7 max-w-[7.5rem] truncate px-2 text-xs"
+                title={getFloorTabLabel(floor)}
+                onClick={() => setActiveFloor(floor)}
+              >
+                {getFloorTabLabel(floor)}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="whitespace-nowrap text-xs font-medium text-slate-600">
+              {t("posTableZoneName") || "구역명"}
+            </span>
+            <Input
+              className="h-8 w-36 text-sm"
+              value={floorLabels[activeFloor] ?? ""}
+              placeholder={
+                (t("posFloorLabel") || "{n}F").replaceAll("{n}", String(activeFloor))
+              }
+              onChange={(e) => setActiveFloorLabel(e.target.value)}
+              maxLength={24}
+            />
+          </div>
+          <span className="text-[11px] text-slate-500">
+            {t("posTableZoneNameHint") || "층·방·테라스 등 매장에 맞게 이름을 바꿀 수 있습니다."}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-600">{t("posTableGrid") || "가로"}</span>

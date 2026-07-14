@@ -4,6 +4,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parsePosDeviceRoleLimitsRow } from '@/lib/pos-device-role-limits'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
+import { normalizeFeeStackMode, normalizeFeeStackOrder } from '@/lib/pos-pricing'
 import { requireAuth } from '@/lib/verify-auth'
 import { canPickPosTerminalStore } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
@@ -182,6 +183,8 @@ export async function GET(request: NextRequest) {
     cardBaseMode: 'card_only' as const,
     otherRate: 0,
     otherMode: 'separate' as const,
+    feeStackMode: 'parallel' as const,
+    feeStackOrder: ['service', 'vat', 'other'] as ('vat' | 'service' | 'other')[],
     receiptPrintLang: '' as string,
     kitchenSlipPrintLang: '' as string,
     mainDeviceToken: null as string | null,
@@ -297,6 +300,8 @@ export async function GET(request: NextRequest) {
       card_base_mode?: string
       other_rate?: number
       other_mode?: string
+      fee_stack_mode?: string
+      fee_stack_order?: unknown
       main_device_token?: string | null
       main_device_max_count?: unknown
       order_device_max_count?: unknown
@@ -473,6 +478,8 @@ export async function GET(request: NextRequest) {
             : 'card_only',
       otherRate: Math.max(0, Number(raw?.other_rate ?? 0)),
       otherMode: String(raw?.other_mode || 'separate') === 'included' ? 'included' : 'separate',
+      feeStackMode: normalizeFeeStackMode(raw?.fee_stack_mode),
+      feeStackOrder: normalizeFeeStackOrder(raw?.fee_stack_order),
       mainDeviceTokens,
       mainDeviceToken: mainDeviceTokenResolved,
       mainDeviceMaxCount: deviceRoleLimits.mainDeviceMaxCount,

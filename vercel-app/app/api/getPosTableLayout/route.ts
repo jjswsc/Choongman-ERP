@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { parsePosTableLayoutJson } from '@/lib/pos-table-layout-payload'
 
 /** POS 테이블 배치 조회 (매장별). 관리자 테이블 구성과 동일한 DB(pos_table_layouts) 사용. */
 export async function GET(request: NextRequest) {
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
   const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
 
   if (!storeCode) {
-    return NextResponse.json({ layout: [], occupiedTables: [] }, { headers })
+    return NextResponse.json({ layout: [], floorLabels: {}, occupiedTables: [] }, { headers })
   }
 
   try {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
       storeCode.replace(/\s+/g, '-').trim(),
     ].filter((v, i, arr) => v && arr.indexOf(v) === i)
 
-    type Row = { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }
+    type Row = { store_code?: string; layout_json?: string | unknown[] | Record<string, unknown>; updated_at?: string }
     let rows: Row[] | null = null
     for (const code of candidates) {
       try {
@@ -62,31 +63,15 @@ export async function GET(request: NextRequest) {
     }
 
     const raw = rows?.[0]
-    let layout: { id: string; name: string; x: number; y: number; w: number; h: number; floor?: number; shape?: string; seats?: number; rotation?: number }[] = []
-    if (raw?.layout_json) {
-      const arr = Array.isArray(raw.layout_json) ? raw.layout_json : []
-      layout = arr
-        .filter((t): t is Record<string, unknown> => Boolean(t && typeof t === 'object' && t !== null))
-        .map((t) => ({
-          id: String(t.id ?? ''),
-          name: String(t.name ?? ''),
-          x: Number(t.x) ?? 0,
-          y: Number(t.y) ?? 0,
-          w: Number(t.w) ?? 80,
-          h: Number(t.h) ?? 60,
-          floor: Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)),
-          shape: String(t.shape ?? 'rect'),
-          seats: Number(t.seats ?? 0) || 0,
-          rotation: Number(t.rotation ?? 0) || 0,
-        }))
-        .filter((t) => t.id)
-    }
+    const parsed = parsePosTableLayoutJson(raw?.layout_json)
 
     // 관리자 테이블 구성과 POS 터미널이 항상 동일한 데이터를 보이도록, DB에 없으면 빈 배열만 반환.
-    // (이전: 개발 환경에서만 기본 6칸 레이아웃 반환 → 로컬 POS가 관리자 화면과 달라짐)
-    return NextResponse.json({ layout, storeCode }, { headers })
+    return NextResponse.json(
+      { layout: parsed.tables, floorLabels: parsed.floorLabels, storeCode },
+      { headers }
+    )
   } catch (e) {
     console.error('getPosTableLayout:', e)
-    return NextResponse.json({ layout: [], storeCode }, { headers })
+    return NextResponse.json({ layout: [], floorLabels: {}, storeCode }, { headers })
   }
 }

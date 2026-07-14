@@ -200,6 +200,8 @@ export async function savePosDeviceRoleLimits(params: {
 export async function savePosTableLayout(params: {
   storeCode: string
   layout: PosTableItem[]
+  /** 매장별 구역 표시명 (1~3). 생략 시 기본「n층」유지 */
+  floorLabels?: Partial<Record<1 | 2 | 3, string>>
 }) {
   const res = await apiFetchWithOffline('/api/savePosTableLayout', {
     method: 'POST',

@@ -11,7 +11,8 @@ import {
   posCookStageTableSurfaceClass,
   posCookStageTableTextClass,
 } from '@/lib/pos-ui-tokens'
-import type { PosTableItem } from '@/lib/api-client'
+import type { PosFloorLabels, PosTableItem } from '@/lib/api-client'
+import { resolvePosFloorDisplayLabel } from '@/lib/pos-table-layout-payload'
 
 const FLOOR_W = 720
 const FLOOR_H = 480
@@ -78,6 +79,8 @@ export interface TableFloorViewProps {
   delayAlertOverMin?: number
   activeFloor?: 1 | 2 | 3
   onFloorChange?: (floor: 1 | 2 | 3) => void
+  /** 매장별 구역 표시명 (없으면 i18n posFloorLabel) */
+  floorLabels?: PosFloorLabels
   /** 그리드 배경 칸 수 — 720×480 픽셀 그리드와 맞추려면 30×20 (24px 칸) */
   gridCols?: number
   gridRows?: number
@@ -182,6 +185,7 @@ export function TableFloorView({
   delayAlertOverMin = 0,
   activeFloor = 1,
   onFloorChange,
+  floorLabels,
   gridCols = 30,
   gridRows = 20,
   tableListMode = 'all',
@@ -189,6 +193,7 @@ export function TableFloorView({
   displayScale = 1,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
+  const floorLabelFallback = t('posFloorLabel') || 'Floor {n}'
   const availableFloors = useMemo<(1 | 2 | 3)[]>(() => {
     const floors = Array.from(
       new Set(layout.map((item) => Math.min(3, Math.max(1, Number(item.floor ?? 1) || 1)) as 1 | 2 | 3))
@@ -196,7 +201,7 @@ export function TableFloorView({
     return floors.length > 0 ? floors : [1]
   }, [layout])
 
-  /** 2층 이상 구성이 있을 때만 층 전환(1·2·3층) 표시 — 1층만인 매장은 탭을 숨김 */
+  /** 구역이 2개 이상일 때만 전환 탭 표시 — 하나만 쓰는 매장은 탭 숨김 */
   const showFloorTabs = availableFloors.length > 1
 
   useEffect(() => {
@@ -340,7 +345,7 @@ export function TableFloorView({
                 activeFloor === floor ? 'bg-primary text-primary-foreground' : 'text-slate-700 hover:bg-slate-100'
               )}
             >
-              {(t('posFloorLabel') || 'Floor {n}').replaceAll('{n}', String(floor))}
+              {resolvePosFloorDisplayLabel(floor, floorLabels, floorLabelFallback)}
             </button>
           ))}
         </div>

@@ -40,6 +40,8 @@ import { ensurePosBusinessOpenForOrder } from "@/lib/pos-business-open-gate-clie
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import {
   computePosPricing,
+  normalizeFeeStackMode,
+  normalizeFeeStackOrder,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
   type PosPricingAdjustments,
@@ -347,6 +349,8 @@ export default function PosOrderPage() {
   const [cardBaseMode, setCardBaseMode] = React.useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
   const [otherRate, setOtherRate] = React.useState(0)
   const [otherMode, setOtherMode] = React.useState<'included' | 'separate'>('separate')
+  const [feeStackMode, setFeeStackMode] = React.useState<'parallel' | 'sequential'>('parallel')
+  const [feeStackOrder, setFeeStackOrder] = React.useState<Array<'vat' | 'service' | 'other'>>(['service', 'vat', 'other'])
   const [showPaymentModal, setShowPaymentModal] = React.useState(false)
   const [payCash, setPayCash] = React.useState("")
   const [payCard, setPayCard] = React.useState("")
@@ -447,6 +451,8 @@ export default function PosOrderPage() {
         )
         setOtherRate(Math.max(0, Number(s.otherRate ?? 0)))
         setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
+        setFeeStackMode(normalizeFeeStackMode(s.feeStackMode))
+        setFeeStackOrder(normalizeFeeStackOrder(s.feeStackOrder))
       })
       .catch(() => {
         posPrinterSettingsRef.current = null
@@ -463,6 +469,8 @@ export default function PosOrderPage() {
         setCardBaseMode('card_only')
         setOtherRate(0)
         setOtherMode('separate')
+        setFeeStackMode('parallel')
+        setFeeStackOrder(['service', 'vat', 'other'])
       })
   }, [storeCode])
 
@@ -1290,6 +1298,8 @@ export default function PosOrderPage() {
     cardBaseMode,
     otherRate,
     otherMode,
+    feeStackMode,
+    feeStackOrder,
   }
   const pricing = computePosPricing({
     subtotal,

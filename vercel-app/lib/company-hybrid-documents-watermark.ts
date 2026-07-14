@@ -72,7 +72,9 @@ export async function fetchCompanyHybridDocumentBytes(storagePath: string): Prom
 }
 
 export async function applyCompanyHybridPdfWatermark(pdfBytes: Buffer, lines: string[]): Promise<Buffer> {
-  const pdfDoc = await PDFDocument.load(pdfBytes)
+  // 사업등록증 등 권한 잠금(암호화) PDF도 워터마크 출력이 되도록 허용.
+  // ignoreEncryption: 내용 복호화가 아니라 권한 플래그를 무시하고 로드·재저장한다.
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const diagonalText = COMPANY_HYBRID_WATERMARK_HEADER_LINES[0]

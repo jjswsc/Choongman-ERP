@@ -1,5 +1,11 @@
 export type PosFeeMode = 'included' | 'separate'
 export type PosCardFeeBaseMode = 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
+/** 주문 합계에 누적되는 % 항목(카드비 제외) */
+export type PosFeeStackKey = 'vat' | 'service' | 'other'
+/** parallel=각각 기준금액에 독립, sequential=순서로 누적 */
+export type PosFeeStackMode = 'parallel' | 'sequential'
+
+export const DEFAULT_FEE_STACK_ORDER: readonly PosFeeStackKey[] = ['service', 'vat', 'other'] as const
 
 export interface PosPricingAdjustments {
   vatRate?: number
@@ -11,6 +17,10 @@ export interface PosPricingAdjustments {
   cardBaseMode?: PosCardFeeBaseMode
   otherRate?: number
   otherMode?: PosFeeMode
+  /** 미설정 시 parallel(기존 동작 유지) */
+  feeStackMode?: PosFeeStackMode
+  /** sequential일 때 위에서 아래 적용 순서. 미설정 시 service→vat→other */
+  feeStackOrder?: PosFeeStackKey[]
   /**
    * 결제·영수증·EDC 합계를 정수 바트(Math.round)로 맞춤.
    * 미설정 시 true(태국 현장·카드 단말기 정수 승인과 일치).
@@ -75,10 +85,89 @@ function normalizeCardBaseMode(v: unknown): PosCardFeeBaseMode {
   return 'card_only'
 }
 
+export function normalizeFeeStackMode(v: unknown): PosFeeStackMode {
+  return String(v || 'parallel') === 'sequential' ? 'sequential' : 'parallel'
+}
+
+export function normalizeFeeStackOrder(v: unknown): PosFeeStackKey[] {
+  const allowed = new Set<PosFeeStackKey>(['vat', 'service', 'other'])
+  let raw: unknown[] = []
+  if (Array.isArray(v)) {
+    raw = v
+  } else if (typeof v === 'string') {
+    const s = v.trim()
+    if (s.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(s) as unknown
+        if (Array.isArray(parsed)) raw = parsed
+      } catch {
+        raw = []
+      }
+    } else if (s) {
+      raw = s.split(/[,|]/).map((x) => x.trim()).filter(Boolean)
+    }
+  }
+  const seen = new Set<PosFeeStackKey>()
+  const out: PosFeeStackKey[] = []
+  for (const item of raw) {
+    const k = String(item || '').trim() as PosFeeStackKey
+    if (!allowed.has(k) || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  for (const k of DEFAULT_FEE_STACK_ORDER) {
+    if (!seen.has(k)) out.push(k)
+  }
+  return out
+}
+
 function calcFeeAmount(baseTotal: number, rate: number, mode: PosFeeMode): number {
   if (rate <= 0 || baseTotal <= 0) return 0
   if (mode === 'included') return round2(baseTotal * (rate / (100 + rate)))
   return round2(baseTotal * (rate / 100))
+}
+
+/** 카드비 기준액: VAT/서비스 포함 시 누적 순서 반영 */
+function calcCardFeeBaseAmount(params: {
+  cardPaymentAmount: number
+  cardBaseMode: PosCardFeeBaseMode
+  feeStackMode: PosFeeStackMode
+  feeStackOrder: PosFeeStackKey[]
+  vatRate: number
+  vatMode: PosFeeMode
+  serviceRate: number
+  serviceMode: PosFeeMode
+}): number {
+  const {
+    cardPaymentAmount,
+    cardBaseMode,
+    feeStackMode,
+    feeStackOrder,
+    vatRate,
+    vatMode,
+    serviceRate,
+    serviceMode,
+  } = params
+  if (cardPaymentAmount <= 0 || cardBaseMode === 'card_only') return cardPaymentAmount
+
+  const includeVat = cardBaseMode === 'card_plus_vat' || cardBaseMode === 'card_plus_vat_service'
+  const includeService = cardBaseMode === 'card_plus_vat_service'
+
+  if (feeStackMode === 'sequential' && includeService) {
+    let running = cardPaymentAmount
+    for (const key of feeStackOrder) {
+      if (key === 'vat' && includeVat) {
+        running = round2(running + calcFeeAmount(running, vatRate, vatMode))
+      } else if (key === 'service' && includeService) {
+        running = round2(running + calcFeeAmount(running, serviceRate, serviceMode))
+      }
+    }
+    return running
+  }
+
+  const cardVatPart = includeVat ? calcFeeAmount(cardPaymentAmount, vatRate, vatMode) : 0
+  const cardServicePart = includeService ? calcFeeAmount(cardPaymentAmount, serviceRate, serviceMode) : 0
+  return round2(cardPaymentAmount + cardVatPart + cardServicePart)
 }
 
 /** VAT 포함 합계(정수 바트 앵커)를 공급가액·세액 정수로 나눔 — 합계 = 앵커 */
@@ -212,22 +301,51 @@ export function computePosPricing(params: {
   const cardMode = normalizeMode(params.adjustments?.cardMode)
   const cardBaseMode = normalizeCardBaseMode(params.adjustments?.cardBaseMode)
   const otherMode = normalizeMode(params.adjustments?.otherMode)
+  const feeStackMode = normalizeFeeStackMode(params.adjustments?.feeStackMode)
+  const feeStackOrder = normalizeFeeStackOrder(params.adjustments?.feeStackOrder)
 
   const cardPaymentAmount = toNonNegative(params.cardPaymentAmount)
-  const cardVatPart =
-    cardBaseMode === 'card_plus_vat' || cardBaseMode === 'card_plus_vat_service'
-      ? calcFeeAmount(cardPaymentAmount, vatRate, vatMode)
-      : 0
-  const cardServicePart =
-    cardBaseMode === 'card_plus_vat_service'
-      ? calcFeeAmount(cardPaymentAmount, serviceRate, serviceMode)
-      : 0
-  const cardFeeBase = round2(cardPaymentAmount + cardVatPart + cardServicePart)
+  const cardFeeBase = calcCardFeeBaseAmount({
+    cardPaymentAmount,
+    cardBaseMode,
+    feeStackMode,
+    feeStackOrder,
+    vatRate,
+    vatMode,
+    serviceRate,
+    serviceMode,
+  })
 
-  const vatFeeAmt = calcFeeAmount(baseTotal, vatRate, vatMode)
-  const serviceFeeAmt = calcFeeAmount(baseTotal, serviceRate, serviceMode)
+  let vatFeeAmt = 0
+  let serviceFeeAmt = 0
+  let otherFeeAmt = 0
+
+  // 포함(included): 기준금액에서 분해만 (합계에 더하지 않음)
+  if (vatMode === 'included') vatFeeAmt = calcFeeAmount(baseTotal, vatRate, 'included')
+  if (serviceMode === 'included') serviceFeeAmt = calcFeeAmount(baseTotal, serviceRate, 'included')
+  if (otherMode === 'included') otherFeeAmt = calcFeeAmount(baseTotal, otherRate, 'included')
+
+  if (feeStackMode === 'sequential') {
+    let running = baseTotal
+    for (const key of feeStackOrder) {
+      if (key === 'vat' && vatMode === 'separate') {
+        vatFeeAmt = calcFeeAmount(running, vatRate, 'separate')
+        running = round2(running + vatFeeAmt)
+      } else if (key === 'service' && serviceMode === 'separate') {
+        serviceFeeAmt = calcFeeAmount(running, serviceRate, 'separate')
+        running = round2(running + serviceFeeAmt)
+      } else if (key === 'other' && otherMode === 'separate') {
+        otherFeeAmt = calcFeeAmount(running, otherRate, 'separate')
+        running = round2(running + otherFeeAmt)
+      }
+    }
+  } else {
+    if (vatMode === 'separate') vatFeeAmt = calcFeeAmount(baseTotal, vatRate, 'separate')
+    if (serviceMode === 'separate') serviceFeeAmt = calcFeeAmount(baseTotal, serviceRate, 'separate')
+    if (otherMode === 'separate') otherFeeAmt = calcFeeAmount(baseTotal, otherRate, 'separate')
+  }
+
   const cardFeeAmt = calcFeeAmount(cardFeeBase, cardRate, cardMode)
-  const otherFeeAmt = calcFeeAmount(baseTotal, otherRate, otherMode)
 
   const includedTotal = round2(
     (vatMode === 'included' ? vatFeeAmt : 0) +

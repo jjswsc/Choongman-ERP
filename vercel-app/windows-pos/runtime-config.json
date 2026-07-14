@@ -11,9 +11,9 @@
                   "escPosCutAfterHallOrderHtml":  true,
                   "kitchen2DeviceName":  ""
               },
-    "allowedOrigin":  "https://choongman-erp.vercel.app",
+    "allowedOrigin":  "https://www.omnifoodtech.com",
     "openDevtools":  false,
-    "updateManifestUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
+    "updateManifestUrl":  "https://www.omnifoodtech.com/downloads/windows-pos/latest.json",
     "kiosk":  "1",
-    "posUrl":  "https://choongman-erp.vercel.app/pos/login"
+    "posUrl":  "https://www.omnifoodtech.com/pos/login"
 }

@@ -338,10 +338,24 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return isSaasAdminLoginPathFromBrowser()
   }, [loginPath])
   /** Omni SaaS·ERP 관리 로그인만 회사명 직접 입력 (충만은 단일 회사·기존 목록 UX 유지) */
-  const useManualCompanyField =
-    isSaasAdminLogin || (loginPath === "/admin/login" && brand.key === "omnifoodtech")
-  /** SaaS 관리 로그인 — 매장·이름도 직접 입력 (대리점·신규 고객 확장) */
-  const useManualStoreUserFields = isSaasAdminLogin
+  const isOmniAdminLogin = loginPath === "/admin/login" && brand.key === "omnifoodtech"
+  const useManualCompanyField = isSaasAdminLogin || isOmniAdminLogin
+  /**
+   * Omni /admin/login·SaaS 관리: 매장·이름 직접 입력.
+   * 충만 /admin/login 은 기존 Select UX 유지.
+   */
+  const useManualStoreUserFields = isSaasAdminLogin || isOmniAdminLogin
+  /** SaaS 대리점 — 매장 Partner 자동. 플랫폼 본사(OmniFoodTech 등)는 매장 직접 입력 */
+  const saasPartnerLoginFlow =
+    isSaasAdminLogin &&
+    (() => {
+      const c = company.trim()
+      if (!c) return true
+      return !isSaasPlatformDefaultLoginCompany(c)
+    })()
+  const hideSaasPartnerStoreField = saasPartnerLoginFlow
+  /** 수동 회사·매장·이름(Omni·SaaS)만 로그인 목록 API 스킵 — 충만은 기존 getLoginData 유지 */
+  const skipLoginDataFetch = useManualStoreUserFields
 
   useEffect(() => {
     if (!isAdminLoginRoute) return
@@ -413,8 +427,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     ).sort((a, b) => a.localeCompare(b))
     setCompanies(companyList)
     setCompany((prev) => {
-      if (prev && companyList.includes(prev)) return prev
-      return companyList[0] || ""
+      const cur = String(prev || "").trim()
+      if (!cur) return companyList[0] || ""
+      if (companyList.includes(cur)) return cur
+      const ci = companyList.find((c) => c.toLowerCase() === cur.toLowerCase())
+      if (ci) return ci
+      /** 수동 입력·쿼리 프리필(신규 회사)은 목록에 없어도 덮어쓰지 않음 — 예전엔 companyList[0]=Omni로 고정됨 */
+      return cur
     })
     const src = d._source ?? "fallback"
     setLoginDataSource(src)
@@ -526,15 +545,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [applyLoginDataResult, loginApp])
 
   useLayoutEffect(() => {
-    if (resolveSaasAdminLogin()) setLoading(false)
-  }, [resolveSaasAdminLogin])
+    if (skipLoginDataFetch || resolveSaasAdminLogin()) setLoading(false)
+  }, [skipLoginDataFetch, resolveSaasAdminLogin])
 
   useEffect(() => {
     if (auth) {
       replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       return
     }
-    if (resolveSaasAdminLogin()) {
+    if (skipLoginDataFetch || resolveSaasAdminLogin()) {
       setLoading(false)
       return
     }
@@ -545,7 +564,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return () => {
       window.clearTimeout(timer)
     }
-  }, [auth, effectiveRedirectTo, router, fetchLoginData, resolveSaasAdminLogin])
+  }, [auth, effectiveRedirectTo, router, fetchLoginData, resolveSaasAdminLogin, skipLoginDataFetch])
 
   useEffect(() => {
     if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
@@ -568,7 +587,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (useManualCompanyField) {
       setCompany(targetCompany)
       if (queryCompany) {
-        setStore("")
+        if (isSaasAdminLogin && !isSaasPlatformDefaultLoginCompany(targetCompany)) {
+          setStore(queryStore || SAAS_PARTNER_LOGIN_STORE_DEFAULT)
+        } else {
+          setStore(queryStore || "")
+        }
         setUser("")
       }
       companyPrefillAppliedRef.current = true
@@ -586,7 +609,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
     }
     companyPrefillAppliedRef.current = true
-  }, [companies, queryCompany, useManualCompanyField, isSaasAdminLogin])
+  }, [companies, queryCompany, queryStore, useManualCompanyField, isSaasAdminLogin])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -605,7 +628,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const effectiveCompany = company.trim()
-    const effectiveStore = store.trim()
+    /** SaaS 대리점 로그인: 매장은 가상 키(Partner). UI 비노출·비워도 기본값 사용 */
+    const effectiveStore = hideSaasPartnerStoreField
+      ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
+      : store.trim()
     const effectiveUser = user.trim()
     if (!effectiveStore || !effectiveUser) {
       setErrorIsConnectivity(false)
@@ -758,7 +784,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const filteredStores = company
     ? stores.filter((s) => {
         const tagged = String(loginStoreCompanies[s] || "").trim()
-        return !tagged || tagged === company
+        if (!tagged) return true
+        return tagged.toLowerCase() === company.trim().toLowerCase()
       })
     : stores
   /** 목록은 왔는데 회사 태그 불일치로 매장 0개만 되는 경우 — 목록 API 실패와 구분해 선택만 해제 */
@@ -772,7 +799,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (storePrefillAppliedRef.current) return
     const savedStore = lastLoginSelectionRef.current?.store || ""
     const targetStore =
-      queryStore || savedStore || (isSaasAdminLogin ? SAAS_PARTNER_LOGIN_STORE_DEFAULT : "")
+      queryStore ||
+      savedStore ||
+      (isSaasAdminLogin && saasPartnerLoginFlow ? SAAS_PARTNER_LOGIN_STORE_DEFAULT : "")
     if (!targetStore) {
       storePrefillAppliedRef.current = true
       return
@@ -792,7 +821,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (queryStore) setUser("")
     }
     storePrefillAppliedRef.current = true
-  }, [filteredStores, queryStore, useManualStoreUserFields, isSaasAdminLogin])
+  }, [filteredStores, queryStore, useManualStoreUserFields, isSaasAdminLogin, saasPartnerLoginFlow])
   const users = store ? (loginData[store] || []) : []
   useEffect(() => {
     if (userPrefillAppliedRef.current) return
@@ -814,11 +843,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     userPrefillAppliedRef.current = true
   }, [queryUser, store, users, useManualStoreUserFields])
   useEffect(() => {
+    if (useManualStoreUserFields) return
     if (!store) return
     if (filteredStores.includes(store)) return
     setStore("")
     setUser("")
-  }, [filteredStores, store])
+  }, [filteredStores, store, useManualStoreUserFields])
   const noStores = !loading && stores.length === 0
   /** 매장 목록이 비어 있어도 서버/캐시에서 정상 조회면 연결 문제로 보지 않음 */
   const serverListDegraded =
@@ -898,6 +928,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "회사 선택",
       selectName: "이름 선택",
       typeCompany: "회사명 입력",
+      typePartnerCompany: "대리점명(회사명) 입력",
       typeStore: "매장명 입력",
       typeName: "이름 입력",
       pinPlaceholder: "비밀번호 (PIN)",
@@ -932,6 +963,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "Select Company",
       selectName: "Select Name",
       typeCompany: "Company name",
+      typePartnerCompany: "Partner / company name",
       typeStore: "Store name",
       typeName: "Name",
       pinPlaceholder: "Password (PIN)",
@@ -965,6 +997,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "เลือกบริษัท",
       selectName: "เลือกชื่อ",
       typeCompany: "ชื่อบริษัท",
+      typePartnerCompany: "ชื่อตัวแทน/บริษัท",
       typeStore: "ชื่อสาขา",
       typeName: "ชื่อ",
       pinPlaceholder: "รหัสผ่าน (PIN)",
@@ -998,6 +1031,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "ကုမ္ပဏီရွေးပါ",
       selectName: "အမည်ရွေးပါ",
       typeCompany: "ကုမ္ပဏီအမည်",
+      typePartnerCompany: "ကိုယ်စားလှယ်/ကုမ္ပဏီအမည်",
       typeStore: "ဆိုင်အမည်",
       typeName: "အမည်",
       pinPlaceholder: "လျှို့ဝှက်နံပါတ် (PIN)",
@@ -1031,6 +1065,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "ເລືອກບໍລິສັດ",
       selectName: "ເລືອກຊື່",
       typeCompany: "ຊື່ບໍລິສັດ",
+      typePartnerCompany: "ຊື່ຕົວແທນ/ບໍລິສັດ",
       typeStore: "ຊື່ຮ້ານ",
       typeName: "ຊື່",
       pinPlaceholder: "ລະຫັດ (PIN)",
@@ -1235,14 +1270,25 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 type="text"
                 value={company}
                 onChange={(e) => {
-                  setCompany(e.target.value)
-                  setStore("")
+                  const nextCompany = e.target.value
+                  setCompany(nextCompany)
+                  const nextPartnerFlow =
+                    isSaasAdminLogin &&
+                    (!nextCompany.trim() || !isSaasPlatformDefaultLoginCompany(nextCompany.trim()))
+                  if (nextPartnerFlow) {
+                    /** 대리점 — Partner 기본값 유지 */
+                    setStore((prev) => prev.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT)
+                  } else if (isSaasAdminLogin) {
+                    setStore("")
+                  } else {
+                    setStore("")
+                  }
                   setUser("")
                 }}
-                placeholder={t.typeCompany}
+                placeholder={isSaasAdminLogin ? t.typePartnerCompany : t.typeCompany}
                 className="login-input-field"
                 autoComplete="organization"
-                aria-label={t.typeCompany}
+                aria-label={isSaasAdminLogin ? t.typePartnerCompany : t.typeCompany}
                 data-testid="login-input-company"
               />
             ) : (
@@ -1260,7 +1306,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               </Select>
             )}
 
-            {useManualStoreUserFields ? (
+            {hideSaasPartnerStoreField ? null : useManualStoreUserFields ? (
               <input
                 type="text"
                 value={store}

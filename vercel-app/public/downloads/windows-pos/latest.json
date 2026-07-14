@@ -1,29 +1,29 @@
-﻿{
-    "version":  "0.1.1",
+{
+    "version":  "0.1.5",
     "files":  [
                   {
                       "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "468163336a5fb3a4ab285932c922e834efdf51d6f937748bdfee344b45854111"
+                      "sha256":  "b99b51841f10330b653109db58bfda8d368f36cfc3f7d1a5114d0457d2cde3f8"
                   },
                   {
-                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.1-setup.exe",
-                      "name":  "cm-pos-windows-0.1.1-setup.exe",
-                      "sha256":  "468163336a5fb3a4ab285932c922e834efdf51d6f937748bdfee344b45854111"
+                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.5-setup.exe",
+                      "name":  "cm-pos-windows-0.1.5-setup.exe",
+                      "sha256":  "b99b51841f10330b653109db58bfda8d368f36cfc3f7d1a5114d0457d2cde3f8"
                   },
                   {
                       "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-portable.exe",
                       "name":  "cm-pos-windows-latest-portable.exe",
-                      "sha256":  "a461940abaa0c45eba1b663542de3f3a796b84db850ee7982c5bcdf71fdb60bc"
+                      "sha256":  "6a10487a6f69855c20a9046606a8b4dde309ce058eeed070c3fe736c28af2d59"
                   },
                   {
-                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.1-portable.exe",
-                      "name":  "cm-pos-windows-0.1.1-portable.exe",
-                      "sha256":  "a461940abaa0c45eba1b663542de3f3a796b84db850ee7982c5bcdf71fdb60bc"
+                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.5-portable.exe",
+                      "name":  "cm-pos-windows-0.1.5-portable.exe",
+                      "sha256":  "6a10487a6f69855c20a9046606a8b4dde309ce058eeed070c3fe736c28af2d59"
                   }
               ],
-    "installerSha256":  "468163336a5fb3a4ab285932c922e834efdf51d6f937748bdfee344b45854111",
-    "publishedAtUtc":  "2026-04-16T06:58:19.1875279Z",
+    "installerSha256":  "b99b51841f10330b653109db58bfda8d368f36cfc3f7d1a5114d0457d2cde3f8",
+    "publishedAtUtc":  "2026-07-14T06:46:23.5689632Z",
     "installerUrl":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "판매용 빌드"
+    "notes":  "Omni POS Windows 0.1.5"
 }

@@ -388,6 +388,8 @@ export async function updatePosOrder(params: {
     cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
     otherRate?: number
     otherMode?: 'included' | 'separate'
+    feeStackMode?: 'parallel' | 'sequential'
+    feeStackOrder?: Array<'vat' | 'service' | 'other'>
   }
 }) {
   const res = await apiFetchWithOffline('/api/updatePosOrder', {
@@ -681,6 +683,8 @@ export async function savePosOrder(params: {
     cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
     otherRate?: number
     otherMode?: 'included' | 'separate'
+    feeStackMode?: 'parallel' | 'sequential'
+    feeStackOrder?: Array<'vat' | 'service' | 'other'>
   }
   items: PosOrderItem[]
 }) {

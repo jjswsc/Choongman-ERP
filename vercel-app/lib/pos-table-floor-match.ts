@@ -2,7 +2,7 @@ import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 
 export type PosTableFloor = 1 | 2 | 3
 
-function clampPosTableFloor(n: number): PosTableFloor {
+export function clampPosTableFloor(n: number): PosTableFloor {
   return Math.min(3, Math.max(1, Math.trunc(n) || 1)) as PosTableFloor
 }
 

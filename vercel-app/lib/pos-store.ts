@@ -7,10 +7,12 @@ import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
 import {
   getPosTableLayout,
+  type PosFloorLabels,
   type PosTableItem,
   type PosOrder,
   type PosOrderItem,
 } from '@/lib/api-client'
+import { normalizePosFloorLabels } from '@/lib/pos-table-layout-payload'
 import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { shouldPreferOfflineCache } from '@/lib/offline/network'
@@ -339,6 +341,7 @@ type StoreSnapshot = {
   storeCode: string
   store: Store
   layout: PosTableItem[]
+  floorLabels: PosFloorLabels
   activeOrders: PosOrder[]
 }
 
@@ -663,6 +666,8 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
   const [stores, setStores] = useState<Store[]>([])
   const [layoutByStoreId, setLayoutByStoreId] = useState<Record<string, PosTableItem[]>>({})
   const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
+  const [floorLabelsByStoreId, setFloorLabelsByStoreId] = useState<Record<string, PosFloorLabels>>({})
+  const floorLabelsByStoreIdRef = useRef<Record<string, PosFloorLabels>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
   const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
   const ordersByStoreIdRef = useRef<Record<string, Order[]>>({})
@@ -672,6 +677,9 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
   useEffect(() => {
     layoutByStoreIdRef.current = layoutByStoreId
   }, [layoutByStoreId])
+  useEffect(() => {
+    floorLabelsByStoreIdRef.current = floorLabelsByStoreId
+  }, [floorLabelsByStoreId])
 
   useEffect(() => {
     ordersByStoreIdRef.current = ordersByStoreId
@@ -716,16 +724,26 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       const primary = String(storeCode || '').trim()
       const snapshotTimeoutMs = shouldPreferOfflineCache() ? 2800 : 12000
       const cachedLayoutFallback = layoutByStoreIdRef.current[storeCode] || []
+      const cachedFloorLabelsFallback = floorLabelsByStoreIdRef.current[storeCode] || {}
       const layoutPromise =
         options?.layoutFromCacheOnly && cachedLayoutFallback.length > 0
-          ? Promise.resolve({ layout: cachedLayoutFallback, storeCode: primary })
+          ? Promise.resolve({
+              layout: cachedLayoutFallback,
+              floorLabels: cachedFloorLabelsFallback,
+              storeCode: primary,
+            })
           : withPosSnapshotTimeout(
               getPosTableLayout({ storeCode: primary }).catch(() => ({
                 layout: cachedLayoutFallback,
+                floorLabels: cachedFloorLabelsFallback,
                 storeCode: primary,
               })),
               snapshotTimeoutMs,
-              { layout: cachedLayoutFallback, storeCode: primary }
+              {
+                layout: cachedLayoutFallback,
+                floorLabels: cachedFloorLabelsFallback,
+                storeCode: primary,
+              }
             )
       const [layoutRes, ordersRes] = await Promise.all([
         layoutPromise,
@@ -746,6 +764,11 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       const fetchedLayout = layoutRes.layout || []
       const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
       const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
+      const floorLabels =
+        fetchedLayout.length > 0
+          ? normalizePosFloorLabels(layoutRes.floorLabels ?? {})
+          : floorLabelsByStoreIdRef.current[storeCode] ||
+            normalizePosFloorLabels(layoutRes.floorLabels ?? {})
       const activeOrders = (ordersRes || []).filter(
         (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
       )
@@ -766,6 +789,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           tables,
         },
         layout,
+        floorLabels,
         activeOrders,
       }
     },
@@ -795,8 +819,12 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         for (const r of results) loadedPosStoreIdsRef.current.add(r.storeCode)
         const storeList = results.map((r) => r.store)
         const layouts: Record<string, PosTableItem[]> = {}
+        const floorLabelsMap: Record<string, PosFloorLabels> = {}
         const nextOrdersByStore: Record<string, Order[]> = {}
-        results.forEach((r) => { layouts[r.storeCode] = r.layout })
+        results.forEach((r) => {
+          layouts[r.storeCode] = r.layout
+          floorLabelsMap[r.storeCode] = r.floorLabels
+        })
         results.forEach((r) => {
           nextOrdersByStore[r.storeCode] = (r.activeOrders || []).map(posOrderToOrder)
         })
@@ -824,6 +852,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           })
         )
         setLayoutByStoreId(layouts)
+        setFloorLabelsByStoreId(floorLabelsMap)
         setOrdersByStoreId(mergedOrdersByStore)
         setCurrentStoreId((prev) => {
           const bootstrapDefault = storeList[0]?.id ?? ''
@@ -992,6 +1021,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         for (const code of targetStoreCodes) loadedPosStoreIdsRef.current.add(code)
         const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
         const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
+        const resultFloorLabelsMap = new Map(results.map((r) => [r.storeCode, r.floorLabels]))
         const resultOrdersMap = new Map(results.map((r) => [r.storeCode, (r.activeOrders || []).map(posOrderToOrder)]))
 
         const prevOrders = ordersByStoreIdRef.current
@@ -1038,6 +1068,13 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           const next = { ...prev }
           for (const code of targetStoreCodes) {
             next[code] = resultLayoutMap.get(code) ?? []
+          }
+          return next
+        })
+        setFloorLabelsByStoreId((prev) => {
+          const next = { ...prev }
+          for (const code of targetStoreCodes) {
+            next[code] = resultFloorLabelsMap.get(code) ?? {}
           }
           return next
         })
@@ -1308,12 +1345,15 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
   )
 
   const currentLayout = (currentStoreId && layoutByStoreId[currentStoreId]) || []
+  const currentFloorLabels =
+    (currentStoreId && floorLabelsByStoreId[currentStoreId]) || ({} as PosFloorLabels)
 
   return {
     stores,
     currentStore,
     currentStoreId,
     currentLayout,
+    currentFloorLabels,
     setCurrentStoreId: setCurrentStoreIdAndPersist,
     updateStore,
     updateTable,

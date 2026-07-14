@@ -12,6 +12,7 @@ import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, canSavePosCustomerDisplayFields, hasOfficeStaffScope } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
+import { normalizeFeeStackMode, normalizeFeeStackOrder } from '@/lib/pos-pricing'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -277,6 +278,8 @@ export async function POST(req: NextRequest) {
         : 'card_only'
     const otherRate = Math.max(0, Number(body?.otherRate ?? 0))
     const otherMode = String(body?.otherMode || 'separate') === 'included' ? 'included' : 'separate'
+    const feeStackMode = normalizeFeeStackMode(body?.feeStackMode)
+    const feeStackOrder = normalizeFeeStackOrder(body?.feeStackOrder)
     const dualMonitorEnabled = Boolean(body?.dualMonitorEnabled)
     const customerDisplayAutoOpen = body?.customerDisplayAutoOpen !== false
     const rawDisplayMonitorPreference = String(body?.customerDisplayMonitorPreference || 'secondary-first')
@@ -448,6 +451,8 @@ export async function POST(req: NextRequest) {
       card_base_mode: cardBaseMode,
       other_rate: otherRate,
       other_mode: otherMode,
+      fee_stack_mode: feeStackMode,
+      fee_stack_order: feeStackOrder,
       dual_monitor_enabled: dualMonitorEnabled,
       customer_display_auto_open: customerDisplayAutoOpen,
       customer_display_monitor_preference: customerDisplayMonitorPreference,

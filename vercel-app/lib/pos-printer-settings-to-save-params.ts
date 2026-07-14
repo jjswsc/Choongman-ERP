@@ -1,6 +1,7 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
 import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
 import { normalizeKitchenOptionGroupKey } from "@/lib/pos-kitchen-slip-option-group-choices"
+import { normalizeFeeStackMode, normalizeFeeStackOrder } from "@/lib/pos-pricing"
 
 function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, boolean> {
   if (!raw || typeof raw !== "object") return {}
@@ -46,6 +47,8 @@ export function posPrinterSettingsToSaveParams(
         ? "card_plus_vat_service"
         : "card_only"
   ) as "card_only" | "card_plus_vat" | "card_plus_vat_service"
+  const feeStackMode = normalizeFeeStackMode(s.feeStackMode)
+  const feeStackOrder = normalizeFeeStackOrder(s.feeStackOrder)
   const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
   const warn = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
   const recipeWarn = Math.max(0, Number(s.cookingRecipeWarningDiffMin ?? 0))
@@ -172,6 +175,8 @@ export function posPrinterSettingsToSaveParams(
     cardBaseMode,
     otherRate: Math.max(0, Number(s.otherRate ?? 0)),
     otherMode: (String(s.otherMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",
+    feeStackMode,
+    feeStackOrder,
     dualMonitorEnabled: Boolean(s.dualMonitorEnabled),
     customerDisplayAutoOpen: s.customerDisplayAutoOpen !== false,
     customerDisplayMonitorPreference,

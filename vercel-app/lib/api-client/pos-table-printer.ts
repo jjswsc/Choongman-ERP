@@ -14,7 +14,7 @@ export interface PosTableItem {
   y: number
   w: number
   h: number
-  /** 층 (1~3) */
+  /** 구역 슬롯 (1~3). UI 표시명은 floorLabels */
   floor?: number
   /** rect | square - 테이블 형태 */
   shape?: string
@@ -24,17 +24,25 @@ export interface PosTableItem {
   rotation?: number
 }
 
+/** 매장별 구역(층·방 등) 표시명. 키는 슬롯 1~3 */
+export type PosFloorLabels = Partial<Record<1 | 2 | 3, string>>
+
 export async function getPosTableLayout(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
   const url = '/api/getPosTableLayout?' + q.toString()
   const cacheKey = `erp:posTableLayout:${params.storeCode.trim()}`
-  const empty = { layout: [] as PosTableItem[], storeCode: params.storeCode }
-  return fetchPosCatalogCached<{ layout: PosTableItem[]; storeCode: string; isFallback?: boolean }>(
-    cacheKey,
-    url,
-    empty
-  )
+  const empty = {
+    layout: [] as PosTableItem[],
+    floorLabels: {} as PosFloorLabels,
+    storeCode: params.storeCode,
+  }
+  return fetchPosCatalogCached<{
+    layout: PosTableItem[]
+    floorLabels?: PosFloorLabels
+    storeCode: string
+    isFallback?: boolean
+  }>(cacheKey, url, empty)
 }
 
 export interface PosPrinterSettings {
@@ -131,6 +139,8 @@ export interface PosPrinterSettings {
   cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
   otherRate?: number
   otherMode?: 'included' | 'separate'
+  feeStackMode?: 'parallel' | 'sequential'
+  feeStackOrder?: Array<'vat' | 'service' | 'other'>
   /**
    * 카운터(프론트) 포스 — 여러 대 가능. 해당 토큰을 가진 기기에서 주문 수신·자동 인쇄.
    * mainDeviceToken 은 하위 호환용(목록의 첫 토큰과 동일).
@@ -307,6 +317,8 @@ export async function savePosPrinterSettings(params: {
   cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
   otherRate?: number
   otherMode?: 'included' | 'separate'
+  feeStackMode?: 'parallel' | 'sequential'
+  feeStackOrder?: Array<'vat' | 'service' | 'other'>
   dualMonitorEnabled?: boolean
   customerDisplayAutoOpen?: boolean
   customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
