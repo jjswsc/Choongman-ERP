@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { sameOfficeStoreScope } from '@/lib/office-store-canonical'
 import { escapeIlikePattern } from '@/lib/postgrest-ilike'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole } from '@/lib/permissions'
@@ -145,7 +146,9 @@ export async function GET(request: NextRequest) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
       const loc = String(row.location || '').trim()
       if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장') {
-        if (!storesMatchForGradeLookup(loc, storeFilter)) continue
+        const locMatches =
+          sameOfficeStoreScope(loc, storeFilter) || storesMatchForGradeLookup(loc, storeFilter)
+        if (!locMatches) continue
       }
       const rowDate = row.log_date ? new Date(row.log_date) : null
       if (!rowDate || isNaN(rowDate.getTime())) continue

@@ -2853,15 +2853,19 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualByChannel: '채널별 실적 원가율',
     posCostActualByCategory: '대분류별 판매 가중 실적 원가율',
     posCostActualByCategoryHint:
-      '주문 라인 판매액 비중으로 원가를 대분류에 배분해 집계합니다. 하단 합계는 순매출·원가 합산 후 원가율(합÷합)입니다.',
-    posCostActualUnmatchedTitle: 'BOM 미매칭 주문 라인',
+      '세트는 구성품 카탈로그 정가 비중으로 매출을 배분합니다. 결제·서비스 할인은 대분류 분모에 반영하고, BOM 미매칭 매출은 합계에서 제외합니다. 하단 합계 원가율=합÷합.',
+    posCostActualUnmatchedTitle: 'BOM 미매칭 주문 라인 (대분류 합계 제외)',
     posCostActualUnmatchedReason: '사유',
     posCostActualUnmatchedNoMenu: '메뉴 ID 없음',
     posCostActualSelectStore: '매장을 선택하세요.',
     posCostActualOfficeNoPos: '본사 범위는 POS 실적 원가율을 표시하지 않습니다.',
     posCostActualTruncated: '주문 조회 상한에 도달해 실적이 과소할 수 있습니다.',
+    posCostActualBomExcludedWarn:
+      'BOM 미매칭 라인 매출 ฿{sales} · 수량 {qty}는 대분류 합계에서 제외했습니다. 아래 미매칭 목록을 확인하세요.',
+    posCostActualOrderDiscWarn:
+      '대분류 순매출에 결제·쿠폰 할인 ฿{payment} · 서비스(컴프) ฿{service}를 반영했습니다.',
     posCostActualFormulaHint:
-      '완료 주문 라인 × BOM 이론 원가를 판매 수량으로 가중해 순매출 대비 원가율을 계산합니다. (관리마진과 동일 엔진)',
+      '완료 주문 × BOM 이론 원가. 세트는 정가 비중 배분, 결제·서비스 할인 반영, BOM 미매칭은 대분류에서 제외. (관리마진과 동일 원가 엔진)',
     posCostActualCostPctNetHint: '순매출 대비',
     posCostActualCategoryMasterHint: '메뉴 마스터(BOM) 기준 평균 원가율입니다. 위 실적 원가율과 구분해 보세요.',
     posCostWeightedRatioTitle: '판매 가중 실적 원가율',
@@ -5871,15 +5875,19 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualByChannel: 'Actual cost % by channel',
     posCostActualByCategory: 'Sales-weighted actual cost % by category',
     posCostActualByCategoryHint:
-      'Allocates line sales and BOM cost to main categories by sold mix. Footer total = sum of sales and cost, then cost% (total÷total).',
-    posCostActualUnmatchedTitle: 'BOM unmatched order lines',
+      'Set sales allocate by catalog regular-price weight. Payment/service discounts reduce category net sales; BOM-unmatched sales are excluded from totals. Footer cost% = total÷total.',
+    posCostActualUnmatchedTitle: 'BOM unmatched order lines (excluded from category totals)',
     posCostActualUnmatchedReason: 'Reason',
     posCostActualUnmatchedNoMenu: 'Missing menu ID',
     posCostActualSelectStore: 'Select a store.',
     posCostActualOfficeNoPos: 'Office scope has no POS actual cost %.',
     posCostActualTruncated: 'Order fetch limit reached; actuals may be understated.',
+    posCostActualBomExcludedWarn:
+      'BOM-unmatched line sales ฿{sales} · qty {qty} excluded from category totals. See unmatched list below.',
+    posCostActualOrderDiscWarn:
+      'Category net sales reflect payment/coupon discount ฿{payment} and service/comp ฿{service}.',
     posCostActualFormulaHint:
-      'Weights completed order lines × BOM theoretical cost by sales qty; cost % vs net sales (same engine as management margin).',
+      'Completed orders × BOM theoretical cost. Sets use regular-price weight; payment/service discounts applied; unmatched BOM excluded from categories.',
     posCostActualCostPctNetHint: 'vs net sales',
     posCostActualCategoryMasterHint: 'Master (BOM) average cost % — compare with actual weighted % above.',
     posCostWeightedRatioTitle: 'Sales-weighted actual cost %',

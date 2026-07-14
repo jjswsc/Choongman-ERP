@@ -146,7 +146,6 @@ export function InboundFilterBar({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">{t("store_all_stores")}</SelectItem>
-              <SelectItem value="입고등록">{t("inLocationHQ")}</SelectItem>
               {stores
                 .filter((s) => s && s !== "All")
                 .map((s) => (

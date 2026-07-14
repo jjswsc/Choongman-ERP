@@ -48,6 +48,18 @@ export async function updateInboundBatch(params: {
   invoiceNo?: string
   invoiceReceived?: boolean
   purchaseOrderId?: number | null
+  /** 매장/위치. 품목 수정 시 함께 전달 */
+  storeName?: string
+  /** 있으면 품목·단가·수량까지 갱신 (재고·미지급 재계산) */
+  list?: {
+    date?: string
+    vendor: string
+    code: string
+    name?: string
+    spec?: string
+    qty: number | string
+    cost?: number | string
+  }[]
 }) {
   const res = await apiFetchWithOffline('/api/updateInboundBatch', {
     method: 'POST',

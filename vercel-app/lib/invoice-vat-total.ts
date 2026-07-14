@@ -4,9 +4,10 @@
  */
 const VAT_RATE = 0.07
 
-/** 태국 바트 금액 — 소수 둘째 자리 (PO·인보이스·미수금 공통) */
+/** 태국 바트 금액 — 소수 둘째 자리 (PO·인보이스·미수금 공통). IEEE -0 → 0 (화면 `-0.00` 방지) */
 export function roundMoney2(value: number): number {
-  return Math.round(Number(value || 0) * 100) / 100
+  const n = Math.round(Number(value || 0) * 100) / 100
+  return Object.is(n, -0) ? 0 : n
 }
 
 function roundTo2(value: number): number {

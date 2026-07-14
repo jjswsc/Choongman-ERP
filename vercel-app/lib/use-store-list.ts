@@ -11,6 +11,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000 // 5분 (메모리 캐시)
 export type StaffByStore = Record<string, { name: string; nick: string; job?: string; role?: string }[]>
 
 let cache: {
+  scopeKey: string
   data: {
     stores: string[]
     allStores?: string[]
@@ -21,7 +22,20 @@ let cache: {
     usedMaster?: boolean
   } | null
   expiry: number
-} = { data: null, expiry: 0 }
+} = { scopeKey: '', data: null, expiry: 0 }
+
+function clientStoreListScopeKey(): string {
+  if (typeof window === 'undefined') return 'ssr'
+  try {
+    const tenant = String(sessionStorage.getItem('cm_tenant_id') || '').trim().toLowerCase()
+    if (tenant) return `t:${tenant}`
+    const company = String(sessionStorage.getItem('cm_company') || '').trim().toLowerCase()
+    if (company) return `c:${company}`
+  } catch {
+    /* ignore */
+  }
+  return 'anon'
+}
 
 export function useStoreList() {
   const [stores, setStores] = useState<string[]>([])
@@ -54,8 +68,9 @@ export function useStoreList() {
   )
 
   const load = useCallback(() => {
+    const scopeKey = clientStoreListScopeKey()
     const now = Date.now()
-    if (cache.data && cache.expiry > now) {
+    if (cache.data && cache.scopeKey === scopeKey && cache.expiry > now) {
       setStores(cache.data.stores)
       setAllStores(
         Array.isArray(cache.data.allStores) ? cache.data.allStores : cache.data.stores
@@ -80,7 +95,7 @@ export function useStoreList() {
           legacyToCanonical: d.legacyToCanonical || {},
           usedMaster: d.usedMaster ?? false,
         }
-        cache = { data: payload, expiry: Date.now() + CACHE_TTL_MS }
+        cache = { scopeKey, data: payload, expiry: Date.now() + CACHE_TTL_MS }
         setStores(payload.stores)
         setAllStores(payload.allStores || payload.stores)
         setUsers(payload.users)
@@ -90,7 +105,7 @@ export function useStoreList() {
         setUsedMaster(payload.usedMaster)
       })
       .catch(() => {
-        if (cache.data) {
+        if (cache.data && cache.scopeKey === scopeKey) {
           setStores(cache.data.stores)
           setAllStores(
         Array.isArray(cache.data.allStores) ? cache.data.allStores : cache.data.stores

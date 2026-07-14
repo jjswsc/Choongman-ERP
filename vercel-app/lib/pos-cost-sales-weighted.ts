@@ -23,7 +23,11 @@ import {
 import { loadPosSalesPromoPricingCatalog } from '@/lib/pos-sales-promo-pricing-catalog-server'
 import { buildPosMenuCostIndex } from '@/lib/pos-menu-cost-index-server'
 import { isOfficeStore } from '@/lib/permissions'
-import { aggregatePosCostWeightedByCategory, type PosCostCategoryWeightedRow } from '@/lib/pos-cost-category-weighted'
+import {
+  aggregatePosCostWeightedByCategory,
+  type PosCostCategoryWeightedMeta,
+  type PosCostCategoryWeightedRow,
+} from '@/lib/pos-cost-category-weighted'
 import { buildTheoreticalCostResolveContext } from '@/lib/management-margin-theoretical-cost'
 import { supabaseSelect } from '@/lib/supabase-server'
 import type { PosMenuCatalogRow } from '@/lib/pos-sales-menu-hierarchy-aggregate'
@@ -54,6 +58,7 @@ export type PosCostSalesWeightedResult = {
   summary: PosCostSalesWeightedSummary | null
   byChannel: ManagementMarginChannelRow[]
   byCategory: PosCostCategoryWeightedRow[]
+  categoryMeta: PosCostCategoryWeightedMeta
   bomUnmatchedLines: {
     menuId: string
     optionId: string
@@ -62,6 +67,13 @@ export type PosCostSalesWeightedResult = {
     reason: 'missing_menu_id' | 'missing_bom'
     lineQty: number
   }[]
+}
+
+const EMPTY_CATEGORY_META: PosCostCategoryWeightedMeta = {
+  excludedUnmatchedSales: 0,
+  excludedUnmatchedQty: 0,
+  paymentDiscountAllocated: 0,
+  serviceAmtAllocated: 0,
 }
 
 function isHqPosScope(storeFilter: string): boolean {
@@ -102,6 +114,7 @@ export async function computePosCostSalesWeighted(params: {
       summary: null,
       byChannel: [],
       byCategory: [],
+      categoryMeta: { ...EMPTY_CATEGORY_META },
       bomUnmatchedLines: [],
     }
   }
@@ -118,6 +131,7 @@ export async function computePosCostSalesWeighted(params: {
       summary: null,
       byChannel: [],
       byCategory: [],
+      categoryMeta: { ...EMPTY_CATEGORY_META },
       bomUnmatchedLines: [],
     }
   }
@@ -164,7 +178,7 @@ export async function computePosCostSalesWeighted(params: {
     costIndex,
     miseRatePercent: params.miseRatePercent,
   })
-  const byCategory = aggregatePosCostWeightedByCategory({
+  const categoryAgg = aggregatePosCostWeightedByCategory({
     orderRows: filteredOrders,
     menus: menuList,
     costIndex,
@@ -172,6 +186,15 @@ export async function computePosCostSalesWeighted(params: {
     miseRatePercent: params.miseRatePercent,
     resolveContext,
   })
+  if (categoryAgg.meta.excludedUnmatchedQty > 0 || categoryAgg.meta.excludedUnmatchedSales > 0) {
+    warnings.push('CAT_BOM_UNMATCHED_EXCLUDED')
+  }
+  if (
+    categoryAgg.meta.paymentDiscountAllocated > 0.0001 ||
+    categoryAgg.meta.serviceAmtAllocated > 0.0001
+  ) {
+    warnings.push('CAT_ORDER_DISCOUNT_APPLIED')
+  }
 
   return {
     startStr,
@@ -194,7 +217,8 @@ export async function computePosCostSalesWeighted(params: {
       miseRatePercent: slice.theoreticalCost.miseRatePercent,
     },
     byChannel: channel === 'all' ? slice.byChannel : slice.byChannel.filter((r) => r.channel === channel),
-    byCategory,
+    byCategory: categoryAgg.rows,
+    categoryMeta: categoryAgg.meta,
     bomUnmatchedLines: slice.theoreticalCost.bomUnmatchedLines,
   }
 }

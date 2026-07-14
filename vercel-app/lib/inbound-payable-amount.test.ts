@@ -7,6 +7,10 @@ import {
 import type { ItemTaxType } from './income-statement-item-vat'
 
 const taxableOnly = new Map<string, ItemTaxType>([['A', 'taxable']])
+const gogoTax = new Map<string, ItemTaxType>([
+  ['CT025', 'taxable'],
+  ['CT026', 'taxable'],
+])
 
 describe('computeInboundBatchAmounts', () => {
   it('uses gross (net + 7% VAT) for taxable lines', () => {
@@ -16,7 +20,21 @@ describe('computeInboundBatchAmounts', () => {
     )
     expect(r.netTotal).toBe(248_400)
     expect(r.grossTotal).toBe(265_788)
+    expect(r.vatTotal).toBe(17_388)
     expect(r.batchDateYmd).toBe('2026-06-15')
+  })
+
+  it('matches inbound history line-VAT sum (Gogoprint style)', () => {
+    const r = computeInboundBatchAmounts(
+      [
+        { code: 'CT025', qty: 1106, unitCost: 2.04, dateYmd: '2026-03-06' },
+        { code: 'CT026', qty: 560, unitCost: 2.04, dateYmd: '2026-03-06' },
+      ],
+      gogoTax
+    )
+    expect(r.netTotal).toBe(3398.64)
+    expect(r.vatTotal).toBe(237.91)
+    expect(r.grossTotal).toBe(3636.55)
   })
 
   it('rounds line net to 3 decimal places', () => {

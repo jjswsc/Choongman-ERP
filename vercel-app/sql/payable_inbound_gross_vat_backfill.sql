@@ -1,6 +1,11 @@
 -- =============================================================================
--- 입고(Inbound) 미지급 금액·일자 일괄 보정 — 공급가 → VAT 포함 합계, 방콕 일자
--- Supabase SQL Editor에서 (1) 미리보기 → (2) UPDATE 순서로 실행
+-- 입고(Inbound) 미지급 금액 — 공급가 → VAT 포함 합계 (미리보기 SQL)
+--
+-- 권장 실행(입고 화면과 동일: 줄별 VAT 합산):
+--   node scripts/apply-inbound-payable-gross-vat-backfill.mjs --dry-run
+--   node scripts/apply-inbound-payable-gross-vat-backfill.mjs --execute
+--
+-- 아래 SQL은 배치 과세총액×7% 방식(입고 UI와 1~수 밧 차이 가능) — 참고용
 -- =============================================================================
 
 -- (1) 미리보기: 배치별 현재 vs 보정 후

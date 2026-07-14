@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildAccrualStoreByVendorDate,
   buildPayableListWithCumulative,
   cumulativeBalanceByVendor,
   filterPayableRowsByStore,
@@ -19,37 +18,31 @@ function maps(partial: Partial<PayableAttributionMaps>): PayableAttributionMaps 
     storeByAccrualId: new Map(),
     storeByPettyId: new Map(),
     storeByBankId: new Map(),
-    accrualStoreByVendorDate: new Map(),
-    accrualStoreByVendorAmount: new Map(),
-    storeByBankInboundLink: new Map(),
-    storesByBankInboundLink: new Map(),
     ...partial,
   }
 }
 
 describe('resolvePayableAttributedStore purchase payment', () => {
-  it('prefers same-day PO store over bank store for Payment rows', () => {
+  it('uses bank store only — never vendor/date/inbound-link guess', () => {
     const m = maps({
-      storeByPoId: new Map([[42, 'CM Bangna']]),
-      storeByBankId: new Map([[9, 'CM Office']]),
-      accrualStoreByVendorDate: new Map([['1002|2026-05-20', 'CM Bangna']]),
+      storeByPoId: new Map([[42, 'CM Office']]),
+      storeByBankId: new Map([[6061, 'CM True Digital']]),
+      locationByInboundId: new Map([[99, 'CM Office']]),
     })
     const payment: PayableTransactionRow = {
-      vendor_code: '1002',
-      amount: -201562.32,
+      vendor_code: '1008',
+      amount: -29437.1,
       ref_type: 'Payment',
-      trans_date: '2026-05-20',
-      bank_transaction_id: 9,
+      trans_date: '2026-05-29',
+      bank_transaction_id: 6061,
     }
-    expect(resolvePayableAttributedStore(payment, m)).toBe('CM Bangna')
+    expect(resolvePayableAttributedStore(payment, m)).toBe('CM True Digital')
   })
 
-  it('prefers bank inbound link store over office bank store for Payment rows', () => {
+  it('does not move Office bank payment to Bangna via inbound link', () => {
     const m = maps({
       locationByInboundId: new Map([[55, 'CM Bangna']]),
       storeByBankId: new Map([[9, 'CM Office']]),
-      storeByBankInboundLink: new Map([[9, 'CM Bangna']]),
-      storesByBankInboundLink: new Map([[9, new Set(['CM Bangna'])]]),
     })
     const payment: PayableTransactionRow = {
       vendor_code: '1002',
@@ -58,13 +51,27 @@ describe('resolvePayableAttributedStore purchase payment', () => {
       trans_date: '2026-04-20',
       bank_transaction_id: 9,
     }
-    expect(resolvePayableAttributedStore(payment, m)).toBe('CM Bangna')
+    expect(resolvePayableAttributedStore(payment, m)).toBe('CM Office')
   })
 
-  it('falls back to bank store when no matching PO accrual on that date', () => {
+  it('uses accrual store only when Payment has no bank id', () => {
+    const m = maps({
+      storeByAccrualId: new Map([[10, 'CM Silom']]),
+    })
+    const payment: PayableTransactionRow = {
+      vendor_code: '1002',
+      amount: -5000,
+      ref_type: 'Payment',
+      trans_date: '2026-05-20',
+      expense_accrual_id: 10,
+    }
+    expect(resolvePayableAttributedStore(payment, m)).toBe('CM Silom')
+  })
+
+  it('prefers bank store over accrual store when both exist', () => {
     const m = maps({
       storeByBankId: new Map([[9, 'CM Office']]),
-      accrualStoreByVendorDate: new Map(),
+      storeByAccrualId: new Map([[10, 'CM Silom']]),
     })
     const payment: PayableTransactionRow = {
       vendor_code: '1002',
@@ -72,36 +79,9 @@ describe('resolvePayableAttributedStore purchase payment', () => {
       ref_type: 'Payment',
       trans_date: '2026-05-20',
       bank_transaction_id: 9,
+      expense_accrual_id: 10,
     }
     expect(resolvePayableAttributedStore(payment, m)).toBe('CM Office')
-  })
-
-  it('falls back to vendor+amount PO store when payment date differs', () => {
-    const m = maps({
-      storeByBankId: new Map([[9, 'CM Office']]),
-      accrualStoreByVendorAmount: new Map([['1002|201562.32', 'CM Bangna']]),
-    })
-    const payment: PayableTransactionRow = {
-      vendor_code: '1002',
-      amount: -201562.32,
-      ref_type: 'Payment',
-      trans_date: '2026-06-04',
-      bank_transaction_id: 9,
-    }
-    expect(resolvePayableAttributedStore(payment, m)).toBe('CM Bangna')
-  })
-})
-
-describe('buildAccrualStoreByVendorDate', () => {
-  it('indexes PO accrual store by vendor and trans_date', () => {
-    const base = maps({
-      storeByPoId: new Map([[7, 'CM Office']]),
-    })
-    const rows: PayableTransactionRow[] = [
-      { vendor_code: '1002', ref_type: 'PO', ref_id: 7, trans_date: '2026-06-04', amount: 62916 },
-    ]
-    const index = buildAccrualStoreByVendorDate(rows, base)
-    expect(index.get('1002|2026-06-04')).toBe('CM Office')
   })
 })
 
@@ -177,58 +157,24 @@ describe('isPurchasePayableLedgerRow', () => {
     expect(
       isPurchasePayableLedgerRow({
         vendor_code: '1002',
-        amount: 12000,
+        amount: 1000,
         ref_type: 'Inbound',
-        ref_id: 55,
-        trans_date: '2026-06-05',
+        ref_id: 1,
+        trans_date: '2026-06-01',
       })
     ).toBe(true)
     expect(
       isPurchasePayableLedgerRow({
         vendor_code: '1002',
-        amount: -62916,
+        amount: -1000,
         ref_type: 'Payment',
         trans_date: '2026-06-10',
       })
     ).toBe(true)
-    expect(
-      isPurchasePayableLedgerRow({
-        vendor_code: '1002',
-        amount: 5000,
-        ref_type: 'Opening',
-        trans_date: '2026-01-01',
-      })
-    ).toBe(true)
   })
+})
 
-  it('includes purchase-payment accrual settlements but excludes general expense payments', () => {
-    const purchaseAccrualIds = new Set([42])
-    expect(
-      isPurchasePayableLedgerRow(
-        {
-          vendor_code: '1006',
-          amount: -231120,
-          ref_type: 'Payment',
-          expense_accrual_id: 42,
-          trans_date: '2026-05-27',
-        },
-        { purchaseAccrualIds }
-      )
-    ).toBe(true)
-    expect(
-      isPurchasePayableLedgerRow(
-        {
-          vendor_code: '1006',
-          amount: -5000,
-          ref_type: 'Payment',
-          expense_accrual_id: 99,
-          trans_date: '2026-05-27',
-        },
-        { purchaseAccrualIds }
-      )
-    ).toBe(false)
-  })
-
+describe('filterPurchasePayableLedgerRows', () => {
   it('filterPurchasePayableLedgerRows drops PO and expense rows', () => {
     const rows = [
       { vendor_code: '1002', amount: 1000, ref_type: 'Inbound', ref_id: 55, trans_date: '2026-06-01' },
@@ -243,28 +189,7 @@ describe('isPurchasePayableLedgerRow', () => {
 })
 
 describe('filterPayableRowsByStore', () => {
-  it('includes inbound and linked payment for the selected store only', () => {
-    const m = maps({
-      locationByInboundId: new Map([[55, 'CM Bangna']]),
-      storeByBankId: new Map([[9, 'CM Office']]),
-      storeByBankInboundLink: new Map([[9, 'CM Bangna']]),
-      storesByBankInboundLink: new Map([[9, new Set(['CM Bangna'])]]),
-    })
-    const rows: PayableTransactionRow[] = [
-      { vendor_code: '1002', ref_type: 'Inbound', ref_id: 55, trans_date: '2026-04-01', amount: 891124.04 },
-      {
-        vendor_code: '1002',
-        ref_type: 'Payment',
-        trans_date: '2026-04-20',
-        amount: -891124.04,
-        bank_transaction_id: 9,
-      },
-    ]
-    const scoped = filterPayableRowsByStore(rows, 'CM Bangna', m)
-    expect(scoped).toHaveLength(2)
-  })
-
-  it('excludes other-store inbound when only office bank payment is unmatched', () => {
+  it('keeps Bangna inbound and Office bank payment in their own store filters only', () => {
     const m = maps({
       locationByInboundId: new Map([[55, 'CM Bangna']]),
       storeByBankId: new Map([[9, 'CM Office']]),
@@ -288,6 +213,42 @@ describe('filterPayableRowsByStore', () => {
     expect(bangnaScoped[0].ref_type).toBe('Inbound')
   })
 
+  it('CM Office filter excludes other stores bank payments', () => {
+    const m = maps({
+      storeByBankId: new Map([
+        [5871, 'CM Office'],
+        [6061, 'CM True Digital'],
+        [6271, 'CM Silom'],
+      ]),
+    })
+    const rows: PayableTransactionRow[] = [
+      {
+        vendor_code: '1008',
+        ref_type: 'Payment',
+        trans_date: '2026-05-29',
+        amount: -3126.99,
+        bank_transaction_id: 5871,
+      },
+      {
+        vendor_code: '1008',
+        ref_type: 'Payment',
+        trans_date: '2026-05-29',
+        amount: -29437.1,
+        bank_transaction_id: 6061,
+      },
+      {
+        vendor_code: '1008',
+        ref_type: 'Payment',
+        trans_date: '2026-05-29',
+        amount: -18279.81,
+        bank_transaction_id: 6271,
+      },
+    ]
+    const officeScoped = filterPayableRowsByStore(rows, 'CM Office', m)
+    expect(officeScoped).toHaveLength(1)
+    expect(officeScoped[0].bank_transaction_id).toBe(5871)
+  })
+
   it('treats CM Office filter and 입고등록 inbound as the same office scope', () => {
     const m = maps({
       locationByInboundId: new Map([[77, '입고등록']]),
@@ -299,11 +260,11 @@ describe('filterPayableRowsByStore', () => {
         vendor_code: '1002',
         ref_type: 'Payment',
         trans_date: '2026-04-20',
-        amount: -50000,
+        amount: -10000,
         bank_transaction_id: 9,
       },
     ]
-    const scoped = filterPayableRowsByStore(rows, 'CM Office', m)
-    expect(scoped).toHaveLength(2)
+    const officeScoped = filterPayableRowsByStore(rows, 'CM Office', m)
+    expect(officeScoped).toHaveLength(2)
   })
 })

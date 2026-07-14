@@ -22,6 +22,13 @@ type StockLogRow = {
   log_date?: string
 }
 
+/** 입고 배치의 미지급 Inbound 행 전부 삭제 */
+export async function deleteInboundPayableTransaction(batchId: number): Promise<void> {
+  const id = Number(batchId || 0)
+  if (!id) return
+  await supabaseDeleteByFilter('payable_transactions', `ref_type=eq.Inbound&ref_id=eq.${id}`)
+}
+
 /** inbound_batches + stock_logs 기준으로 미지급 Inbound 금액(VAT 포함)·일자 동기화 */
 export async function syncPayableFromInboundBatch(batchId: number): Promise<void> {
   const id = Number(batchId || 0)
@@ -52,7 +59,11 @@ export async function syncPayableFromInboundBatch(batchId: number): Promise<void
       dateYmd: formatStockLogDateBangkokYmd(row.log_date),
     })
   }
-  if (!lines.length) return
+  if (!lines.length) {
+    await supabaseUpdate('inbound_batches', id, { total_amount: 0 })
+    await deleteInboundPayableTransaction(id)
+    return
+  }
 
   const codes = [...new Set(lines.map((l) => l.code))]
   const itemRows = (await supabaseSelect('items', {
@@ -64,8 +75,14 @@ export async function syncPayableFromInboundBatch(batchId: number): Promise<void
   )
 
   const { grossTotal, batchDateYmd } = computeInboundBatchAmounts(lines, taxByCode)
-  if (grossTotal <= 0) return
-
+  if (grossTotal <= 0) {
+    await supabaseUpdate('inbound_batches', id, {
+      batch_date: batchDateYmd,
+      total_amount: 0,
+    })
+    await deleteInboundPayableTransaction(id)
+    return
+  }
   const vendorName = String(batch.vendor_name || '').trim()
   const payVendorCode = String(batch.vendor_code || '').trim() || vendorName
   const memo = `입고 ${batchDateYmd} ${vendorName || '-'}`.slice(0, 240)

@@ -4,6 +4,7 @@ import { deletePayableFromPO } from '@/lib/receivable-payable'
 import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/inbound-payable-amount'
 import { computeInboundRegisterTotals, upsertInboundPayableTransaction } from '@/lib/inbound-payable-sync'
 import { roundErp3 } from '@/lib/utils'
+import { inboundPersistLocation } from '@/lib/office-store-canonical'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const location = storeName || '입고등록'
+    const location = inboundPersistLocation(storeName)
     const vendorName = String(list[0]?.vendor || '').trim()
 
     const itemRows = (await supabaseSelect('items', {

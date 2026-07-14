@@ -27,7 +27,7 @@ export type ReceivableVendorMaps = {
 }
 
 export type ReceivableAttributionMaps = {
-  /** 통장 수령(Receive) → 같은 일자·금액 매출 발생 store_name */
+  /** @deprecated 추측 귀속 제거 — 빈 맵. resolve는 store_name만 사용 */
   accrualStoreByDateAmount: Map<string, string>
 }
 
@@ -40,56 +40,16 @@ function normalizeVendorCode(v: string): string {
   return String(v || '').trim().toLowerCase()
 }
 
-function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100
+export function buildReceivableAccrualStoreIndex(_rows: ReceivableTransactionRow[]): ReceivableAttributionMaps {
+  return { accrualStoreByDateAmount: new Map() }
 }
 
-function dateAmountKey(transDate: string, amountAbs: number): string {
-  const dt = String(transDate || '').trim().slice(0, 10)
-  return `${dt}|${roundMoney(Math.abs(amountAbs))}`
-}
-
-function isReceivableAccrualRefType(refType: string | undefined): boolean {
-  const t = String(refType || '')
-  return t === 'Order' || t === 'AccountingPO' || t === 'ForceOutbound' || t === 'Opening'
-}
-
-function isReceiveRow(r: ReceivableTransactionRow): boolean {
-  if (String(r.ref_type || '') === 'Receive') return true
-  if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
-    return Number(r.amount ?? 0) < 0
-  }
-  return false
-}
-
-export function buildReceivableAccrualStoreIndex(rows: ReceivableTransactionRow[]): ReceivableAttributionMaps {
-  const accrualStoreByDateAmount = new Map<string, string>()
-  for (const r of rows || []) {
-    if (!isReceivableAccrualRefType(r.ref_type)) continue
-    const amount = Number(r.amount ?? 0)
-    if (amount <= 0) continue
-    const store = String(r.store_name || '').trim()
-    const dt = String(r.trans_date || '').trim().slice(0, 10)
-    if (!store || dt.length !== 10) continue
-    accrualStoreByDateAmount.set(dateAmountKey(dt, amount), store)
-  }
-  return { accrualStoreByDateAmount }
-}
-
-/** 미수금 행의 필터·집계용 store_name (통장 수령은 매출 발생 매장 우선) */
+/** 미수금 행의 필터·집계용 store_name — 행에 기록된 매장만 (추측 금지) */
 export function resolveReceivableAttributedStore(
   r: ReceivableTransactionRow,
-  maps: ReceivableAttributionMaps
+  _maps?: ReceivableAttributionMaps
 ): string {
-  const direct = String(r.store_name || '').trim()
-  if (!isReceiveRow(r)) return direct
-  const dt = String(r.trans_date || '').trim().slice(0, 10)
-  const amountAbs = Math.abs(Number(r.amount ?? 0))
-  if (dt.length === 10 && amountAbs > 0) {
-    const matched = maps.accrualStoreByDateAmount.get(dateAmountKey(dt, amountAbs))
-    if (matched) return matched
-  }
-  return direct
+  return String(r.store_name || '').trim()
 }
 
 export function matchesReceivableStoreNorm(storeName: string | null | undefined, storeFilter: string): boolean {

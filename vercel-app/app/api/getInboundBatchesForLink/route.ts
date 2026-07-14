@@ -8,19 +8,10 @@ import {
   sortInboundBatchesForLink,
   type InboundBatchLinkRow,
 } from '@/lib/inbound-batches-for-link-server'
-
-function isOfficeStore(s: string): boolean {
-  const x = String(s || '').trim()
-  const xl = x.toLowerCase()
-  return (
-    x === '본사' ||
-    x === 'Office' ||
-    x === '오피스' ||
-    x === '본점' ||
-    xl === 'hq' ||
-    xl.includes('office')
-  )
-}
+import {
+  isOfficeStoreVariant,
+  officeInboundLocationInFilterSuffix,
+} from '@/lib/office-store-canonical'
 
 /** 통장 출금 입고 연동용 - 거래처별 입고 배치 목록 (vendor_code 또는 vendor_name으로 매칭)
  * vendorCode로 조회 시: vendors 테이블에서 code→name, gps_name 조회 후 입고의 vendor_code/vendor_name과 매칭
@@ -47,8 +38,8 @@ export async function GET(request: NextRequest) {
 
     let locationFilter = ''
     if (storeFilter) {
-      if (isOfficeStore(storeFilter)) {
-        locationFilter = `&location=in.(입고등록,본사,Office,오피스,본점)`
+      if (isOfficeStoreVariant(storeFilter)) {
+        locationFilter = officeInboundLocationInFilterSuffix()
       } else {
         locationFilter = `&location=ilike.${encodeURIComponent(storeFilter)}`
       }

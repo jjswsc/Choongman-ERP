@@ -8,7 +8,8 @@ export type ReceivablePayablePeriodTotals = {
 }
 
 function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100
+  const rounded = Math.round(n * 100) / 100
+  return Object.is(rounded, -0) ? 0 : rounded
 }
 
 export function sumReceivablePayablePeriodAmounts(

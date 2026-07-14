@@ -8,12 +8,27 @@ import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } 
 import { apiFetch } from '../api/fetch'
 
 const CACHE_KEYS = {
-  STORE_LIST: 'erp:storeList:v2',
+  STORE_LIST_PREFIX: 'erp:storeList:v3:',
+  /** @deprecated v2 was global (cross-tenant leak risk on Omni); kept only for cleanup */
+  STORE_LIST_LEGACY: 'erp:storeList:v2',
   VENDORS_PURCHASE: 'erp:vendorsPurchase',
   VENDORS_SALES: 'erp:vendorsSales',
   CHECKLIST_ITEMS_ACTIVE: 'erp:checklistItems:active',
   CHECKLIST_ITEMS_ALL: 'erp:checklistItems:all',
 } as const
+
+function storeListCacheKey(): string {
+  if (typeof window === 'undefined') return `${CACHE_KEYS.STORE_LIST_PREFIX}ssr`
+  try {
+    const tenant = String(sessionStorage.getItem('cm_tenant_id') || '').trim().toLowerCase()
+    if (tenant) return `${CACHE_KEYS.STORE_LIST_PREFIX}t:${tenant}`
+    const company = String(sessionStorage.getItem('cm_company') || '').trim().toLowerCase()
+    if (company) return `${CACHE_KEYS.STORE_LIST_PREFIX}c:${company}`
+  } catch {
+    /* ignore */
+  }
+  return `${CACHE_KEYS.STORE_LIST_PREFIX}anon`
+}
 
 export interface StoreListData {
   stores: string[]
@@ -38,9 +53,13 @@ export async function getStoreListWithCache(): Promise<StoreListData> {
     legacyToCanonical: {},
     usedMaster: false,
   }
-  const readIdb = () => getFromErpCache<StoreListData>(CACHE_KEYS.STORE_LIST)
+  const cacheKey = storeListCacheKey()
+  const readIdb = () => getFromErpCache<StoreListData>(cacheKey)
   const hasStoreData = (data: StoreListData | null | undefined) =>
     Array.isArray(data?.stores) && data.stores.length > 0
+
+  // 전역 v2 캐시 제거(테넌트 혼입 방지)
+  void deleteErpCache(CACHE_KEYS.STORE_LIST_LEGACY)
 
   if (!shouldPreferOfflineCache() && isOnline()) {
     try {
@@ -52,7 +71,7 @@ export async function getStoreListWithCache(): Promise<StoreListData> {
       const data = (await res.json()) as StoreListData
       const cached = await readIdb()
       if (!hasStoreData(data) && hasStoreData(cached)) return cached as StoreListData
-      await setErpCache(CACHE_KEYS.STORE_LIST, data)
+      await setErpCache(cacheKey, data)
       return data
     } catch {
       const cached = await readIdb()
@@ -68,7 +87,7 @@ export async function getStoreListWithCache(): Promise<StoreListData> {
     const data = (await res.json()) as StoreListData
     const cached = await readIdb()
     if (!hasStoreData(data) && hasStoreData(cached)) return cached as StoreListData
-    await setErpCache(CACHE_KEYS.STORE_LIST, data)
+    await setErpCache(cacheKey, data)
     return data
   } catch {
     return fallback

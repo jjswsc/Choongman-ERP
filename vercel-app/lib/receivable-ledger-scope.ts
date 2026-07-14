@@ -12,7 +12,6 @@ import {
   cumulativeBalanceByStoreGroup,
   filterReceivableRows,
   groupReceivableRowsByStore,
-  mergeReceivableSummaryRows,
   receivableRowsOnOrAfterStart,
   resolveReceivableAttributedStore,
   RECEIVABLE_LEDGER_SELECT,
@@ -50,8 +49,10 @@ export async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
 
 export async function loadReceivableTransactionsToEnd(endStr: string): Promise<ReceivableTransactionRow[]> {
   const filter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
+  // order 필수: 없으면 PostgREST Range 페이지가 비결정적이라 조회마다 행이 빠지거나 겹침
   return (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
     select: RECEIVABLE_LEDGER_SELECT,
+    order: 'id.asc',
     pageSize: 8000,
     maxRows: 2_000_000,
   })) as ReceivableTransactionRow[]

@@ -122,7 +122,6 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { useErpTabActive } from "@/lib/erp-page-visibility"
 
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
-import { INBOUND_HQ_LOCATION } from "@/lib/stock-location-patterns"
 import { canonicalOfficeStore } from "@/lib/office-store-canonical"
 import {
   type LineItemsCacheEntry,
@@ -223,14 +222,11 @@ export function ReceivablePayableTab() {
     (raw: string | undefined | null) => {
       const v = String(raw || "").trim()
       if (!v) return "—"
-      if (v === INBOUND_HQ_LOCATION) {
-        return t("inLocationHQ") || tt("inLocationHQ", "입고등록(본사)")
-      }
       const officeCanon = canonicalOfficeStore(v)
       const resolved = formatStoreLabel(resolveStoreKey(officeCanon))
       return resolved || officeCanon || v
     },
-    [formatStoreLabel, resolveStoreKey, t, tt]
+    [formatStoreLabel, resolveStoreKey]
   )
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
 

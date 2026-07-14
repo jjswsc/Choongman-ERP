@@ -37,6 +37,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import {
   getAdminItems,
   getAdminVendors,
@@ -60,7 +61,6 @@ import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
 import {
   InboundFilterBar,
   InboundTable,
-  InboundEditDialog,
   InboundGuideContent,
   InboundCartTable,
   InboundSummaryTables,
@@ -78,9 +78,14 @@ import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/utils"
+import { buildItemTaxMapFromRows, computeInboundBatchAmounts } from "@/lib/inbound-payable-amount"
 import { sortVendorNameStrings, sortVendorsByDisplayName } from "@/lib/vendor-sort"
-
-const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
+import {
+  CANONICAL_OFFICE_STORE,
+  canonicalOfficeStore,
+  dedupeOfficeStoreOptions,
+  isOfficeStoreVariant,
+} from "@/lib/office-store-canonical"
 
 function inboundTableRowToPrintBatch(row: InboundTableRow): InboundPrintBatchInput {
   return {
@@ -127,7 +132,7 @@ export default function InboundPage() {
   const [historyList, setHistoryList] = React.useState<InboundHistoryItem[]>([])
 
   const [inDate, setInDate] = React.useState("")
-  /** 입고 매장: 본사는 선택(입고등록=본사, 또는 매장명), 매니저는 자기 매장 고정 */
+  /** 입고 매장: 본사는 CM Office(저장 location=입고등록), 매니저는 자기 매장 고정 */
   const [inStore, setInStore] = React.useState("")
   const [inVendor, setInVendor] = React.useState("")
   const [inPoNo, setInPoNo] = React.useState("")
@@ -168,6 +173,10 @@ export default function InboundPage() {
   const [fromPoOrderDate, setFromPoOrderDate] = React.useState("")
   const [fromPoDateDialogOpen, setFromPoDateDialogOpen] = React.useState(false)
   const [fromPoInboundDateDraft, setFromPoInboundDateDraft] = React.useState("")
+  /** 내역에서 수정 중일 때 inbound_batches.id — 신규 탭 전체 폼으로 편집 */
+  const [editingBatchId, setEditingBatchId] = React.useState<number | null>(null)
+  const [editingPurchaseOrderId, setEditingPurchaseOrderId] = React.useState<number | null>(null)
+  const [editLoading, setEditLoading] = React.useState(false)
   const [taxInvoicePreviewOpen, setTaxInvoicePreviewOpen] = React.useState(false)
   const [taxInvoicePreviewData, setTaxInvoicePreviewData] = React.useState<InvoiceData | null>(null)
 
@@ -175,9 +184,8 @@ export default function InboundPage() {
   const { posStores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
-    const store = (auth?.store || "").trim()
-    return OFFICE_STORES.some((s) => store.toLowerCase().includes(s.toLowerCase()))
-  }, [auth?.store])
+    return isOfficeRole(auth?.role || "") || isOfficeStoreVariant(auth?.store)
+  }, [auth?.role, auth?.store])
 
   const purchaseVendors = React.useMemo(() => {
     return sortVendorsByDisplayName(vendors.filter((v) => v.type === "purchase" || v.type === "both"))
@@ -203,19 +211,29 @@ export default function InboundPage() {
   }, [vendors])
 
   const storeOptions = React.useMemo(() => {
-    const stores = (storeList || []).filter((s) => s && s !== "All")
+    const stores = dedupeOfficeStoreOptions((storeList || []).filter((s) => s && s !== "All"))
+    if (!stores.includes(CANONICAL_OFFICE_STORE)) {
+      stores.push(CANONICAL_OFFICE_STORE)
+      stores.sort((a, b) => a.localeCompare(b, "ko"))
+    }
     return { stores, salesVendors }
   }, [storeList, salesVendors])
 
-  /** 입고 내역 필터용: 매장 + 판매처 (중복 제거) */
+  /** 입고 내역 필터용: 매장 + 판매처 (본사·입고등록은 CM Office 한 줄) */
   const histStoreOptions = React.useMemo(() => {
-    const base = (storeList || []).filter((s) => s && s !== "All")
+    const base = dedupeOfficeStoreOptions((storeList || []).filter((s) => s && s !== "All"))
+    if (!base.includes(CANONICAL_OFFICE_STORE)) {
+      base.push(CANONICAL_OFFICE_STORE)
+      base.sort((a, b) => a.localeCompare(b, "ko"))
+    }
     const salesNames = salesVendors.map((v) => v.name).filter(Boolean)
-    const seen = new Set(base)
+    const seen = new Set(base.map((s) => s.toLowerCase()))
     const out = [...base]
     for (const n of salesNames) {
-      if (!seen.has(n)) {
-        seen.add(n)
+      if (isOfficeStoreVariant(n)) continue
+      const key = n.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
         out.push(n)
       }
     }
@@ -296,7 +314,10 @@ export default function InboundPage() {
 
   React.useEffect(() => {
     if (isOffice) {
-      setInStore((prev) => prev || "입고등록")
+      setInStore((prev) => {
+        if (!prev || isOfficeStoreVariant(prev)) return CANONICAL_OFFICE_STORE
+        return prev
+      })
     } else if (auth?.store) {
       setInStore(auth.store)
     }
@@ -368,9 +389,14 @@ export default function InboundPage() {
   }, [searchParams, isOffice])
 
   React.useEffect(() => {
-    if (!fromPoId || !inDate.trim()) return
+    if ((!fromPoId && !editingBatchId) || !inDate.trim()) return
     setCart((prev) => (prev.length ? prev.map((c) => ({ ...c, date: inDate })) : prev))
-  }, [inDate, fromPoId])
+  }, [inDate, fromPoId, editingBatchId])
+
+  React.useEffect(() => {
+    if (!editingBatchId || !inVendor.trim()) return
+    setCart((prev) => (prev.length ? prev.map((c) => ({ ...c, vendor: inVendor })) : prev))
+  }, [inVendor, editingBatchId])
 
   const applyFromPoInboundDate = React.useCallback(() => {
     const ymd = fromPoInboundDateDraft.trim().slice(0, 10)
@@ -429,6 +455,35 @@ export default function InboundPage() {
     )
   }
 
+  const handleUpdateCartQty = (idx: number, qtyStr: string) => {
+    setCart((prev) => prev.map((c, i) => (i === idx ? { ...c, qty: qtyStr } : c)))
+  }
+
+  const clearEditMode = React.useCallback(() => {
+    setEditingBatchId(null)
+    setEditingPurchaseOrderId(null)
+    setCart([])
+    setInPoNo("")
+    setInInvoiceNo("")
+    setInVendor("")
+    setSelectedItem(null)
+    setInQty("")
+  }, [])
+
+  const resolveInboundStoreName = React.useCallback((): string | undefined => {
+    if (!isOffice) {
+      return auth?.store?.trim() || undefined
+    }
+    if (!inStore || isOfficeStoreVariant(inStore)) {
+      return CANONICAL_OFFICE_STORE
+    }
+    if (inStore.startsWith("sales:")) {
+      const code = inStore.slice(6)
+      return salesVendors.find((v) => v.code === code)?.name ?? inStore
+    }
+    return inStore.trim()
+  }, [isOffice, auth?.store, inStore, salesVendors])
+
   const handleSave = async () => {
     if (!cart.length) {
       await appAlert(t("inAlertNoList"))
@@ -439,47 +494,66 @@ export default function InboundPage() {
       await appAlert(t("inAlertInboundDate"))
       return
     }
-    const msg = t("inConfirmSave").replace("{count}", String(cart.length))
+    const confirmKey = editingBatchId ? "inConfirmUpdate" : "inConfirmSave"
+    const msg = t(confirmKey).replace("{count}", String(cart.length))
     if (!await appConfirm(msg)) return
     setSaving(true)
     try {
       const list = cart.map((c) => ({
         date: inboundYmd,
-        vendor: c.vendor,
+        vendor: inVendor.trim() || c.vendor,
         code: c.code,
         name: c.name,
         spec: c.spec,
         qty: c.qty,
         cost: c.cost ? parseFloat(String(c.cost).replace(/,/g, "")) : undefined,
       }))
-      let storeName: string | undefined
-      if (!isOffice) {
-        storeName = auth?.store?.trim() || undefined
-      } else if (!inStore || inStore === "입고등록") {
-        storeName = undefined
-      } else if (inStore.startsWith("sales:")) {
-        const code = inStore.slice(6)
-        storeName = salesVendors.find((v) => v.code === code)?.name ?? inStore
+      const storeName = resolveInboundStoreName()
+      const vendorCode = purchaseVendors.find((v) => v.name === (inVendor.trim() || cart[0]?.vendor))?.code
+
+      if (editingBatchId) {
+        const res = await updateInboundBatch({
+          batchId: editingBatchId,
+          vendorName: inVendor.trim() || cart[0]?.vendor,
+          vendorCode,
+          poNo: inPoNo.trim() || undefined,
+          invoiceNo: inInvoiceNo.trim() || undefined,
+          storeName: storeName || CANONICAL_OFFICE_STORE,
+          purchaseOrderId: editingPurchaseOrderId,
+          list,
+        })
+        if (res.success) {
+          await appAlert(translateApiMessage(res.message, t) || t("inUpdateSuccess"))
+          clearEditMode()
+          setFromPoId(null)
+          setFromPoNo("")
+          setFromPoOrderDate("")
+          setTabValue("hist")
+          fetchHistory()
+        } else {
+          await appAlert(translateApiMessage(res.message, t) || t("inUpdateFailed"))
+        }
       } else {
-        storeName = inStore.trim()
-      }
-      const vendorCode = purchaseVendors.find((v) => v.name === cart[0]?.vendor)?.code
-      const res = await registerInboundBatch(list, storeName, {
-        vendorCode,
-        purchaseOrderId: fromPoId ?? undefined,
-        poNo: inPoNo.trim() || undefined,
-        invoiceNo: inInvoiceNo.trim() || undefined,
-      })
-      if (res.success) {
-        await appAlert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
-        setCart([])
-        setInPoNo("")
-        setInInvoiceNo("")
-      } else {
-        await appAlert(translateApiMessage(res.message, t) || t("inSaveFailed"))
+        const res = await registerInboundBatch(list, storeName, {
+          vendorCode,
+          purchaseOrderId: fromPoId ?? undefined,
+          poNo: inPoNo.trim() || undefined,
+          invoiceNo: inInvoiceNo.trim() || undefined,
+        })
+        if (res.success) {
+          await appAlert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
+          setCart([])
+          setInPoNo("")
+          setInInvoiceNo("")
+          setFromPoId(null)
+          setFromPoNo("")
+          setFromPoOrderDate("")
+        } else {
+          await appAlert(translateApiMessage(res.message, t) || t("inSaveFailed"))
+        }
       }
     } catch {
-      await appAlert(t("inSaveFailed"))
+      await appAlert(editingBatchId ? t("inUpdateFailed") : t("inSaveFailed"))
     } finally {
       setSaving(false)
     }
@@ -816,8 +890,22 @@ export default function InboundPage() {
     })
   }, [groupedHistory, t, formatInboundLineName])
 
+  const cartTotals = React.useMemo(() => {
+    if (!cart.length) return null
+    const taxByCode = buildItemTaxMapFromRows(
+      items.map((it) => ({ code: it.code, tax: it.taxType }))
+    )
+    const lines = cart.map((c) => ({
+      code: c.code,
+      qty: parseFloat(String(c.qty).replace(/,/g, "")) || 0,
+      unitCost: parseFloat(String(c.cost).replace(/,/g, "")) || 0,
+      dateYmd: (inDate || c.date || "").slice(0, 10),
+    }))
+    const { netTotal, vatTotal, grossTotal } = computeInboundBatchAmounts(lines, taxByCode)
+    return { net: netTotal, vat: vatTotal, gross: grossTotal }
+  }, [cart, items, inDate])
+
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "summary" | "guide">("new")
-  const [editingRow, setEditingRow] = React.useState<InboundTableRow | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
   const [filtersHydrated, setFiltersHydrated] = React.useState(false)
 
@@ -831,7 +919,7 @@ export default function InboundPage() {
         setHistVendor(plNav.vendorLabel)
         setHistVendorSearch(plNav.vendorLabel)
       }
-      if (plNav.store) setHistStore(plNav.store)
+      if (plNav.store) setHistStore(canonicalOfficeStore(plNav.store) || plNav.store)
       if (searchParams.get("tab") === "hist") setTabValue("hist")
       setFiltersHydrated(true)
       return
@@ -855,7 +943,9 @@ export default function InboundPage() {
         if (typeof parsed.histVendor === "string") setHistVendor(parsed.histVendor)
         if (typeof parsed.histVendorSearch === "string") setHistVendorSearch(parsed.histVendorSearch)
         if (typeof parsed.histItemSearch === "string") setHistItemSearch(parsed.histItemSearch)
-        if (typeof parsed.histStore === "string") setHistStore(parsed.histStore)
+        if (typeof parsed.histStore === "string") {
+          setHistStore(canonicalOfficeStore(parsed.histStore) || parsed.histStore)
+        }
         if (parsed.histPurchaseSource === "" || parsed.histPurchaseSource === "hq" || parsed.histPurchaseSource === "store") {
           setHistPurchaseSource(parsed.histPurchaseSource)
         }
@@ -969,9 +1059,67 @@ export default function InboundPage() {
     void fetchSummaryHistory()
   }, [tabValue])
 
-  const handleEditRow = React.useCallback((row: InboundTableRow) => {
-    setEditingRow(row)
-  }, [])
+  const handleEditRow = React.useCallback(
+    async (row: InboundTableRow) => {
+      if (!row.inboundBatchId) {
+        await appAlert(t("inEditNoBatch"))
+        return
+      }
+      setEditLoading(true)
+      try {
+        const b = await getInboundBatch(row.inboundBatchId)
+        if (!b?.id) {
+          await appAlert(t("inEditLoadFailed"))
+          return
+        }
+        const batchDate = String(b.batchDate || row.date || getBangkokTodayDateString()).slice(0, 10)
+        const vendorName = String(b.vendorName || row.vendor || "").trim()
+        const prefill: InboundCartItem[] = (b.items || [])
+          .filter((it) => String(it.code || "").trim())
+          .map((it) => ({
+            date: batchDate,
+            vendor: vendorName,
+            code: String(it.code || "").trim(),
+            name: String(it.name || "").trim() || String(it.code || "").trim(),
+            spec: String(it.spec || "").trim(),
+            qty: String(it.qty ?? 0),
+            cost: formatErpCostInputString(it.unitCost ?? 0),
+          }))
+        if (!prefill.length) {
+          await appAlert(t("inEditLoadFailed"))
+          return
+        }
+
+        const loc = String(b.location || "").trim()
+        let storeValue = CANONICAL_OFFICE_STORE
+        if (loc && !isOfficeStoreVariant(loc)) {
+          const salesMatch = salesVendors.find((v) => v.name === loc)
+          if (salesMatch) storeValue = `sales:${salesMatch.code}`
+          else storeValue = loc
+        }
+
+        setFromPoId(null)
+        setFromPoNo("")
+        setFromPoOrderDate("")
+        setEditingBatchId(b.id)
+        setEditingPurchaseOrderId(b.purchaseOrderId ?? null)
+        setCart(prefill)
+        setInDate(batchDate)
+        setInVendor(vendorName)
+        setInPoNo(String(b.poNo || "").trim())
+        setInInvoiceNo(String(b.invoiceNo || "").trim())
+        setInStore(storeValue)
+        setSelectedItem(null)
+        setInQty("")
+        setTabValue("new")
+      } catch {
+        await appAlert(t("inEditLoadFailed"))
+      } finally {
+        setEditLoading(false)
+      }
+    },
+    [t, salesVendors]
+  )
 
   const handleDeleteRow = React.useCallback(
     async (row: InboundTableRow) => {
@@ -991,11 +1139,6 @@ export default function InboundPage() {
     },
     [t, fetchHistory]
   )
-
-  const handleEditSaved = React.useCallback(() => {
-    fetchHistory()
-  }, [fetchHistory])
-
   const handleInvoiceReceivedToggle = React.useCallback(
     async (row: InboundTableRow) => {
       if (!row.inboundBatchId) return
@@ -1300,7 +1443,17 @@ export default function InboundPage() {
               <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="md:col-span-2 space-y-4">
                   <div className="rounded-xl border bg-card p-5">
-                    <h3 className="text-sm font-bold mb-4">{t("inNewTitle")}</h3>
+                    <h3 className="text-sm font-bold mb-4">
+                      {editingBatchId ? t("inEditTitle") : t("inNewTitle")}
+                    </h3>
+                    {editingBatchId ? (
+                      <p className="mb-3 text-xs text-amber-800 dark:text-amber-300 leading-snug">
+                        {t("inEditFormHint")}
+                      </p>
+                    ) : null}
+                    {editLoading ? (
+                      <p className="mb-3 text-xs text-muted-foreground">{t("loading")}</p>
+                    ) : null}
                     <div className="space-y-3">
                       <div>
                         <label className="text-xs font-semibold">{t("inInboundDate")}</label>
@@ -1310,7 +1463,7 @@ export default function InboundPage() {
                           onChange={(e) => setInDate(e.target.value)}
                           className={cn(
                             "mt-1 h-9",
-                            fromPoId && "ring-2 ring-amber-500/60 border-amber-500/50"
+                            (fromPoId || editingBatchId) && "ring-2 ring-amber-500/60 border-amber-500/50"
                           )}
                           required
                         />
@@ -1325,7 +1478,15 @@ export default function InboundPage() {
                       <div>
                         <label className="text-xs font-semibold">{t("store")}</label>
                         {isOffice ? (
-                          <Select value={inStore || "입고등록"} onValueChange={(v) => setInStore(v)} onOpenChange={(open) => !open && setInStoreSearch("")}>
+                          <Select
+                            value={
+                              !inStore || isOfficeStoreVariant(inStore)
+                                ? CANONICAL_OFFICE_STORE
+                                : inStore
+                            }
+                            onValueChange={(v) => setInStore(v)}
+                            onOpenChange={(open) => !open && setInStoreSearch("")}
+                          >
                             <SelectTrigger className="mt-1 h-9">
                               <SelectValue placeholder={t("store")} />
                             </SelectTrigger>
@@ -1340,7 +1501,6 @@ export default function InboundPage() {
                               </div>
                               <SelectGroup>
                                 <SelectLabel className="text-muted-foreground font-medium">{t("store")}</SelectLabel>
-                                <SelectItem value="입고등록">{t("inLocationHQ")}</SelectItem>
                                 {filteredStoreOptions.stores.map((s) => (
                                   <SelectItem key={s} value={s}>{s}</SelectItem>
                                 ))}
@@ -1440,10 +1600,21 @@ export default function InboundPage() {
                   <InboundCartTable
                     cart={cart}
                     fromPoId={fromPoId}
-                    saving={saving}
+                    editingBatchId={editingBatchId}
+                    saving={saving || editLoading}
+                    totals={cartTotals}
                     onUpdateCost={handleUpdateCartCost}
+                    onUpdateQty={handleUpdateCartQty}
                     onRemove={handleRemoveFromCart}
                     onSave={handleSave}
+                    onCancelEdit={
+                      editingBatchId
+                        ? () => {
+                            clearEditMode()
+                            setTabValue("hist")
+                          }
+                        : undefined
+                    }
                   />
                 </div>
               </div>
@@ -1463,9 +1634,9 @@ export default function InboundPage() {
               totalAmount={periodTotalFormatted}
               totalVat={periodVatFormatted}
               isOffice={isOffice}
-              histStore={histStore}
+              histStore={isOfficeStoreVariant(histStore) ? CANONICAL_OFFICE_STORE : histStore}
               stores={histStoreOptions}
-              onHistStoreChange={setHistStore}
+              onHistStoreChange={(v) => setHistStore(canonicalOfficeStore(v) || v)}
               histStart={histStart}
               histEnd={histEnd}
               histMonth={histMonth}
@@ -1523,24 +1694,6 @@ export default function InboundPage() {
                 </div>
               </DialogContent>
             </Dialog>
-            <InboundEditDialog
-              open={!!editingRow}
-              onOpenChange={(open) => !open && setEditingRow(null)}
-              row={editingRow}
-              onSaved={handleEditSaved}
-              onFetchBatch={async (batchId) => {
-                const b = await getInboundBatch(batchId)
-                return b ? { vendorName: b.vendorName, vendorCode: b.vendorCode ?? undefined, poNo: b.poNo ?? undefined, invoiceNo: b.invoiceNo ?? undefined } : null
-              }}
-              onSave={async (params) => {
-                const res = await updateInboundBatch(params)
-                if (!res.success) {
-                  await appAlert(translateApiMessage(res.message, t) || res.message)
-                  return false
-                }
-                return true
-              }}
-            />
           </TabsContent>
 
           <TabsContent value="summary" className={adminTabsContentCn}>

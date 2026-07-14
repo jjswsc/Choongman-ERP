@@ -37,4 +37,12 @@ describe('money-amount', () => {
     expect(formatMoneyBaht(18669.88)).toMatch(/18,669\.88|18\.669,88/)
     expect(formatMoneyBaht(18669)).toMatch(/18,669\.00|18\.669,00/)
   })
+
+  it('does not show negative zero for near-zero residuals', () => {
+    for (const v of [-1e-14, -0.004, -0]) {
+      const s = formatMoneyBaht(v)
+      expect(s).not.toMatch(/-/)
+      expect(s).toMatch(/0[,.]00/)
+    }
+  })
 })

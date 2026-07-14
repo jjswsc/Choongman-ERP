@@ -8,7 +8,7 @@ import {
 import { receivableStoreGroupKey } from './receivable-store-key'
 
 describe('resolveReceivableAttributedStore', () => {
-  it('matches Receive row to same-day Order store by amount', () => {
+  it('keeps Receive row on its own store_name — no date/amount guess to Order store', () => {
     const rows: ReceivableTransactionRow[] = [
       {
         store_name: 'CM Bangna',
@@ -25,7 +25,7 @@ describe('resolveReceivableAttributedStore', () => {
       trans_date: '2026-06-04',
       bank_transaction_id: 1,
     }
-    expect(resolveReceivableAttributedStore(receive, maps)).toBe('CM Bangna')
+    expect(resolveReceivableAttributedStore(receive, maps)).toBe('CM Office')
   })
 
   it('keeps direct store_name for Order rows', () => {

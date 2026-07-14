@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** 입고 배치 상세 조회 (수정 다이얼로그용) */
+/** 입고 배치 상세 조회 (수정 폼 프리필용) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

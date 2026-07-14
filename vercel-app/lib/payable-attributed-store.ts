@@ -1,11 +1,8 @@
-import { dedupePayablePaymentsForBankTransaction, pickPayablePaymentKeeperId } from '@/lib/receivable-payable'
+import { pickPayablePaymentKeeperId } from '@/lib/receivable-payable'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
-import { isOfficeStore } from '@/lib/permissions'
-import { INBOUND_HQ_LOCATION } from '@/lib/stock-location-patterns'
-import { canonicalOfficeStore } from '@/lib/office-store-canonical'
+import { isOfficeStoreVariant, canonicalOfficeStore } from '@/lib/office-store-canonical'
 import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
 import type { ErpStoreMatchIndex } from '@/lib/erp-store-identity'
 import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
@@ -34,20 +31,6 @@ export type PayableAttributionMaps = {
   storeByAccrualId: Map<number, string>
   storeByPettyId: Map<number, string>
   storeByBankId: Map<number, string>
-  /** 같은 거래처·거래일 PO/입고 발생 매장 — 매입 지급(Payment) 귀속 보조 */
-  accrualStoreByVendorDate: Map<string, string>
-  /** 같은 거래처·금액 PO/입고 발생 매장 — 지급일≠발생일 폴백 */
-  accrualStoreByVendorAmount: Map<string, string>
-  /** 통장 출금 ↔ 입고 연동 — bank_transaction_id → 대표 귀속 매장 */
-  storeByBankInboundLink: Map<number, string>
-  /** 통장 출금 ↔ 입고 연동 — bank_transaction_id → 연동된 모든 귀속 매장 */
-  storesByBankInboundLink: Map<number, Set<string>>
-}
-
-function vendorDateStoreKey(vendorCode: string, transDate: string): string {
-  const vc = String(vendorCode || '').trim().toLowerCase()
-  const dt = String(transDate || '').trim().slice(0, 10)
-  return `${vc}|${dt}`
 }
 
 function decodePayeeWithdrawalCategory(payeeCode: string | undefined | null): string {
@@ -181,53 +164,8 @@ export function filterPurchasePayableLedgerRows(rows: PayableTransactionRow[]): 
   return rows.filter((r) => isPurchasePayableLedgerRow(r))
 }
 
-function vendorAmountStoreKey(vendorCode: string, amountAbs: number): string {
-  const vc = String(vendorCode || '').trim().toLowerCase()
-  return `${vc}|${roundMoney(Math.abs(amountAbs))}`
-}
-
-function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-export function buildPayableAccrualStoreIndexes(
-  rows: PayableTransactionRow[],
-  maps: Pick<PayableAttributionMaps, 'locationByInboundId' | 'storeByPoId'>
-): Pick<PayableAttributionMaps, 'accrualStoreByVendorDate' | 'accrualStoreByVendorAmount'> {
-  const accrualStoreByVendorDate = new Map<string, string>()
-  const accrualStoreByVendorAmount = new Map<string, string>()
-  for (const r of rows || []) {
-    let store: string | null = null
-    if (r.ref_type === 'PO' && r.ref_id != null) {
-      store = maps.storeByPoId.get(Number(r.ref_id)) || null
-    } else if (r.ref_type === 'Inbound' && r.ref_id != null) {
-      store = maps.locationByInboundId.get(Number(r.ref_id)) || null
-    }
-    if (!store) continue
-    const vc = String(r.vendor_code || '').trim().toLowerCase()
-    const dt = String(r.trans_date || '').trim().slice(0, 10)
-    const amountAbs = Math.abs(Number(r.amount ?? 0))
-    if (!vc || dt.length !== 10) continue
-    accrualStoreByVendorDate.set(`${vc}|${dt}`, store)
-    if (amountAbs > 0) {
-      accrualStoreByVendorAmount.set(vendorAmountStoreKey(vc, amountAbs), store)
-    }
-  }
-  return { accrualStoreByVendorDate, accrualStoreByVendorAmount }
-}
-
-/** @deprecated use buildPayableAccrualStoreIndexes */
-export function buildAccrualStoreByVendorDate(
-  rows: PayableTransactionRow[],
-  maps: Pick<PayableAttributionMaps, 'locationByInboundId' | 'storeByPoId'>
-): Map<string, string> {
-  return buildPayableAccrualStoreIndexes(rows, maps).accrualStoreByVendorDate
-}
-
 function isPayableOfficeLocation(store: string): boolean {
-  const t = String(store || '').trim()
-  if (!t) return false
-  return t === INBOUND_HQ_LOCATION || isOfficeStore(t) || isHeadOfficeLikeStoreName(t)
+  return isOfficeStoreVariant(store)
 }
 
 export function matchesPayableStoreNorm(
@@ -246,31 +184,12 @@ export function matchesPayableStoreNorm(
   return storesMatchForGradeLookup(r, f)
 }
 
-function paymentLinkedStores(
-  r: PayableTransactionRow,
-  maps: PayableAttributionMaps
-): Set<string> | null {
-  const bankId = r.bank_transaction_id != null ? Number(r.bank_transaction_id) : 0
-  if (!bankId) return null
-  const linked = maps.storesByBankInboundLink.get(bankId)
-  return linked && linked.size > 0 ? linked : null
-}
-
 function rowMatchesPayableStoreFilter(
   r: PayableTransactionRow,
   storeFilter: string,
   maps: PayableAttributionMaps,
   index?: ErpStoreMatchIndex
 ): boolean {
-  if (isPurchasePaymentRow(r)) {
-    const linked = paymentLinkedStores(r, maps)
-    if (linked) {
-      for (const store of linked) {
-        if (matchesPayableStoreNorm(store, storeFilter, index)) return true
-      }
-      return false
-    }
-  }
   const attributed = resolvePayableAttributedStore(r, maps)
   return matchesPayableStoreNorm(attributed, storeFilter, index)
 }
@@ -292,6 +211,12 @@ function poAttributedStore(po: { location_name?: string; cart_json?: string }): 
   return loc || null
 }
 
+/**
+ * 매장 귀속 — 확정 소스만 (거래처·날짜·금액·입고짝짓기 추측 금지).
+ * - 입고/PO: 해당 문서 로케이션
+ * - Payment: 통장 매장만 (있으면). 없으면 지급예정/시재의 매장
+ * - 그 외: 지급예정·시재·통장 순
+ */
 export function resolvePayableAttributedStore(
   r: PayableTransactionRow,
   maps: PayableAttributionMaps
@@ -301,30 +226,23 @@ export function resolvePayableAttributedStore(
     store = maps.locationByInboundId.get(Number(r.ref_id)) || null
   } else if (r.ref_type === 'PO' && r.ref_id != null) {
     store = maps.storeByPoId.get(Number(r.ref_id)) || null
+  } else if (isPurchasePaymentRow(r)) {
+    const bankId = r.bank_transaction_id != null ? Number(r.bank_transaction_id) : 0
+    if (bankId > 0) store = maps.storeByBankId.get(bankId) || null
+    if (!store && r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) {
+      store = maps.storeByAccrualId.get(Number(r.expense_accrual_id)) || null
+    }
+    if (!store && r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0) {
+      store = maps.storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
+    }
   } else if (r.expense_accrual_id != null && Number(r.expense_accrual_id) > 0) {
     store = maps.storeByAccrualId.get(Number(r.expense_accrual_id)) || null
   } else if (r.petty_cash_transaction_id != null && Number(r.petty_cash_transaction_id) > 0) {
     store = maps.storeByPettyId.get(Number(r.petty_cash_transaction_id)) || null
-  } else if (isPurchasePaymentRow(r)) {
-    const bankId = r.bank_transaction_id != null ? Number(r.bank_transaction_id) : 0
-    if (bankId > 0) {
-      store = maps.storeByBankInboundLink.get(bankId) || null
-    }
-    if (!store) {
-      const vc = String(r.vendor_code || '').trim().toLowerCase()
-      const dt = String(r.trans_date || '').trim().slice(0, 10)
-      const amountAbs = Math.abs(Number(r.amount ?? 0))
-      store = maps.accrualStoreByVendorDate.get(vendorDateStoreKey(vc, dt)) || null
-      if (!store && amountAbs > 0) {
-        store = maps.accrualStoreByVendorAmount.get(vendorAmountStoreKey(vc, amountAbs)) || null
-      }
-    }
-  }
-  if (!store && r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
+  } else if (r.bank_transaction_id != null && Number(r.bank_transaction_id) > 0) {
     store = maps.storeByBankId.get(Number(r.bank_transaction_id)) || null
   }
   if (!store) return null
-  if (store === INBOUND_HQ_LOCATION) return store
   return canonicalOfficeStore(store)
 }
 
@@ -407,59 +325,42 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
     ),
   ]
   const storeByBankId = new Map<number, string>()
-  const storeByBankInboundLink = new Map<number, string>()
-  const storesByBankInboundLink = new Map<number, Set<string>>()
   if (bankIdsAll.length > 0) {
     const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIdsAll.join(',')})`, {
-      select: 'id,store',
+      select: 'id,store,account_id',
       limit: 5000,
-    })) as { id?: number; store?: string | null }[] | null
+    })) as { id?: number; store?: string | null; account_id?: number | null }[] | null
+    const missingAccountIds: number[] = []
     for (const bt of banks || []) {
       if (bt.id == null) continue
       const st = String(bt.store || '').trim()
-      if (st) storeByBankId.set(Number(bt.id), st)
-    }
-
-    const inboundLinks = (await supabaseSelectFilter(
-      'bank_transaction_inbound_links',
-      `bank_transaction_id=in.(${bankIdsAll.join(',')})`,
-      {
-        select: 'bank_transaction_id,inbound_batch_id,amount',
-        limit: 10000,
+      if (st) {
+        storeByBankId.set(Number(bt.id), st)
+        continue
       }
-    )) as { bank_transaction_id?: number; inbound_batch_id?: number; amount?: number }[] | null
-
-    const linkWeightByBank = new Map<number, Map<string, number>>()
-    for (const link of inboundLinks || []) {
-      const bankId = Number(link.bank_transaction_id || 0)
-      const batchId = Number(link.inbound_batch_id || 0)
-      if (!bankId || !batchId) continue
-      const store = locationByInboundId.get(batchId)
-      if (!store) continue
-      if (!storesByBankInboundLink.has(bankId)) storesByBankInboundLink.set(bankId, new Set())
-      storesByBankInboundLink.get(bankId)!.add(store)
-      const weight = Math.abs(Number(link.amount ?? 0)) || 1
-      if (!linkWeightByBank.has(bankId)) linkWeightByBank.set(bankId, new Map())
-      const weights = linkWeightByBank.get(bankId)!
-      weights.set(store, (weights.get(store) || 0) + weight)
+      const accountId = Number(bt.account_id || 0)
+      if (accountId > 0) missingAccountIds.push(accountId)
     }
-    for (const [bankId, weights] of linkWeightByBank) {
-      let bestStore = ''
-      let bestWeight = -1
-      for (const [store, weight] of weights) {
-        if (weight > bestWeight) {
-          bestWeight = weight
-          bestStore = store
-        }
+    if (missingAccountIds.length > 0) {
+      const uniqueAccountIds = [...new Set(missingAccountIds)]
+      const accounts = (await supabaseSelectFilter('bank_accounts', `id=in.(${uniqueAccountIds.join(',')})`, {
+        select: 'id,store',
+        limit: 5000,
+      })) as { id?: number; store?: string | null }[] | null
+      const storeByAccountId = new Map<number, string>()
+      for (const a of accounts || []) {
+        if (a.id == null) continue
+        const st = String(a.store || '').trim()
+        if (st) storeByAccountId.set(Number(a.id), st)
       }
-      if (bestStore) storeByBankInboundLink.set(bankId, bestStore)
+      for (const bt of banks || []) {
+        if (bt.id == null || storeByBankId.has(Number(bt.id))) continue
+        const accountId = Number(bt.account_id || 0)
+        const st = accountId > 0 ? storeByAccountId.get(accountId) : undefined
+        if (st) storeByBankId.set(Number(bt.id), st)
+      }
     }
   }
-
-  const { accrualStoreByVendorDate, accrualStoreByVendorAmount } = buildPayableAccrualStoreIndexes(rows, {
-    locationByInboundId,
-    storeByPoId,
-  })
 
   return {
     locationByInboundId,
@@ -467,10 +368,6 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
     storeByAccrualId,
     storeByPettyId,
     storeByBankId,
-    accrualStoreByVendorDate,
-    accrualStoreByVendorAmount,
-    storeByBankInboundLink,
-    storesByBankInboundLink,
   }
 }
 
@@ -536,23 +433,12 @@ export function dedupePayablePaymentLedgerRows(rows: PayableTransactionRow[]): P
   return [...rest, ...keptPayments]
 }
 
-/** 조회 시 DB에 남은 통장 Payment 중복을 정리 (표시 dedupe와 별도 — 물리 행 삭제) */
-async function reconcileDuplicatePayablePaymentsInRows(rows: PayableTransactionRow[]): Promise<void> {
-  const counts = new Map<number, number>()
-  for (const row of rows) {
-    if (String(row.ref_type || '') !== 'Payment') continue
-    const bankId = Number(row.bank_transaction_id || 0)
-    if (!bankId) continue
-    counts.set(bankId, (counts.get(bankId) || 0) + 1)
-  }
-  const duplicateBankIds = [...counts.entries()].filter(([, n]) => n >= 2).map(([id]) => id)
-  if (!duplicateBankIds.length) return
-  const limit = 24
-  await Promise.all(
-    duplicateBankIds.slice(0, limit).map((bankId) => dedupePayablePaymentsForBankTransaction(bankId))
-  )
-}
-
+/**
+ * 미지급 원장 로드.
+ * 조회 경로에서는 DB를 절대 수정하지 않는다.
+ * (과거: 조회마다 Payment 중복을 최대 24건씩 DELETE → 목록+요약 병렬 호출 시 잔액이 매번 달라짐)
+ * DB 물리 정리는 scripts/apply-payable-payment-bank-dedupe.mjs 등 일회성 경로만 사용.
+ */
 export async function loadPayableTransactionsToEnd(params: {
   vendorFilter?: string
   endStr: string
@@ -561,12 +447,13 @@ export async function loadPayableTransactionsToEnd(params: {
   if (params.vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(params.vendorFilter)}`)
   if (params.endStr) parts.push(`trans_date=lte.${params.endStr}`)
   const filter = parts.length ? parts.join('&') : 'id=gt.0'
+  // order 필수: 없으면 PostgREST Range 페이지가 비결정적이라 조회마다 행이 빠지거나 겹침
   const rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
     select: PAYABLE_LEDGER_SELECT,
+    order: 'id.asc',
     pageSize: 8000,
     maxRows: 2_000_000,
   })) as PayableTransactionRow[]
-  await reconcileDuplicatePayablePaymentsInRows(rows)
   return dedupePayablePaymentLedgerRows(dedupeInboundPayableLedgerRows(rows))
 }
 

@@ -1,16 +1,10 @@
 /**
- * 입고 배치 ↔ 미지급(Inbound) 금액·일자 — 입고 화면(공급가+VAT 합계)과 동일 기준
+ * 입고 배치 ↔ 미지급(Inbound) 금액·일자 — 입고 내역 조회(공급가+줄별 VAT 합)과 동일 기준
  */
 import { getBangkokStartOfDayUtcIso, getBangkokTodayDateString } from './bangkok-time'
 import { roundErp3 } from './utils'
-import {
-  accumulateNetByItemTax,
-  emptyNetVatBuckets,
-  grossFromNetVatBuckets,
-  netTotalFromBuckets,
-  normalizeItemTaxType,
-  type ItemTaxType,
-} from './income-statement-item-vat'
+import { isItemVatExempt, normalizeItemTaxType, type ItemTaxType } from './income-statement-item-vat'
+import { roundMoney2 } from './invoice-vat-total'
 
 export type InboundPayableLine = {
   code: string
@@ -50,11 +44,17 @@ export function buildItemTaxMapFromRows(
   return map
 }
 
+/**
+ * 입고 화면(getInboundHistory)과 동일:
+ * 줄 공급가 = roundErp3(qty×단가), 줄 VAT = round2(공급가×7%), 배치 합 = 줄 합.
+ * 배치 과세총액에 한 번만 7%를 적용하면 입고 화면 합계와 1~수 삿(฿) 어긋날 수 있음.
+ */
 export function computeInboundBatchAmounts(
   lines: InboundPayableLine[],
   taxByCode: ReadonlyMap<string, ItemTaxType>
 ): { netTotal: number; grossTotal: number; vatTotal: number; batchDateYmd: string } {
-  const buckets = emptyNetVatBuckets()
+  let netTotal = 0
+  let vatTotal = 0
   let batchDateYmd = ''
   for (const line of lines) {
     const code = String(line.code || '').trim()
@@ -62,13 +62,15 @@ export function computeInboundBatchAmounts(
     const unit = Math.max(0, Number(line.unitCost) || 0)
     if (!code || qty <= 0) continue
     const net = roundErp3(qty * unit)
-    accumulateNetByItemTax(buckets, code, net, taxByCode)
+    const taxType = taxByCode.get(code) ?? 'taxable'
+    const rate = isItemVatExempt(taxType) ? 0 : 0.07
+    const vat = roundMoney2(net * rate)
+    netTotal = roundMoney2(netTotal + net)
+    vatTotal = roundMoney2(vatTotal + vat)
     const ymd = line.dateYmd ? parseInboundDateBangkokYmd(line.dateYmd) : ''
     if (ymd && (!batchDateYmd || ymd > batchDateYmd)) batchDateYmd = ymd
   }
   if (!batchDateYmd) batchDateYmd = getBangkokTodayDateString()
-  const netTotal = netTotalFromBuckets(buckets)
-  const grossTotal = grossFromNetVatBuckets(buckets)
-  const vatTotal = Math.round((grossTotal - netTotal) * 100) / 100
+  const grossTotal = roundMoney2(netTotal + vatTotal)
   return { netTotal, grossTotal, vatTotal, batchDateYmd }
 }

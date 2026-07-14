@@ -59,13 +59,11 @@ export function getStockLocationPatterns(store: string): string[] {
 
   add(raw)
 
-  if (isOffice) {
+  if (isOffice || isInboundHq) {
     add(INBOUND_HQ_LOCATION)
     OFFICE_LOCATIONS.forEach(add)
     // 화면에서는 본사 매장을 "CM Office"로 묶지만, stock_logs에는 본사/오피스/입고등록 등 여러 location 문자열이 섞임.
     OFFICE_STORES.forEach(add)
-  } else if (isInboundHq) {
-    add(INBOUND_HQ_LOCATION)
   } else {
     getLocationVariants(storeNorm).forEach(add)
   }

@@ -92,9 +92,20 @@ export function PosCookingRulesContent() {
     loadData()
   }, [loadData])
 
+  const copyTargetStores = React.useMemo(
+    () => stores.filter((s) => s && s !== String(effectiveStore || "").trim()),
+    [stores, effectiveStore]
+  )
+
   React.useEffect(() => {
-    if (!copyTargetStore && stores.length > 0) setCopyTargetStore(stores[0])
-  }, [stores, copyTargetStore])
+    if (!copyTargetStores.length) {
+      if (copyTargetStore) setCopyTargetStore("")
+      return
+    }
+    if (!copyTargetStore || !copyTargetStores.includes(copyTargetStore)) {
+      setCopyTargetStore(copyTargetStores[0])
+    }
+  }, [copyTargetStores, copyTargetStore])
 
   const handleSave = async () => {
     if (!effectiveStore) return
@@ -203,8 +214,7 @@ export function PosCookingRulesContent() {
 
   const tr = (key: string, fallback: string) => t(key) || fallback
   const code = String(effectiveStore || "").trim()
-  const showCopy =
-    Boolean(code) && stores.filter((s) => s && s !== code).length > 0
+  const showCopy = Boolean(code) && copyTargetStores.length > 0
 
   return (
     <div className="space-y-4">
@@ -309,32 +319,39 @@ export function PosCookingRulesContent() {
           </div>
         </div>
 
-        <div className="rounded-lg border p-3 space-y-2">
-          <div className="text-sm font-semibold flex items-center gap-1.5">
-            <Copy className="h-4 w-4" />
-            {t("posCookingCopyTitle") || "매장 간 설정 복사"}
-          </div>
-          <div className="space-y-1 max-w-md">
-            <label className="text-sm font-medium">{t("posCookingCopySaveToStore") || "현재 설정 다른 매장에 복사"}</label>
-            <div className="flex gap-2">
-              <Select value={copyTargetStore} onValueChange={setCopyTargetStore}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={t("posCookingStorePlaceholder") || "매장 선택"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {stores.map((s) => (
-                    <SelectItem key={`dst-${s}`} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" className="h-9" onClick={handleCopyToStore} disabled={copying || !copyTargetStore}>
-                {t("posCookingCopySaveButton") || "복사 저장"}
-              </Button>
+        {showCopy ? (
+          <div className="rounded-lg border p-3 space-y-2">
+            <div className="text-sm font-semibold flex items-center gap-1.5">
+              <Copy className="h-4 w-4" />
+              {t("posCookingCopyTitle") || "매장 간 설정 복사"}
+            </div>
+            <div className="space-y-1 max-w-md">
+              <label className="text-sm font-medium">{t("posCookingCopySaveToStore") || "현재 설정 다른 매장에 복사"}</label>
+              <div className="flex gap-2">
+                <Select value={copyTargetStore} onValueChange={setCopyTargetStore}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={t("posCookingStorePlaceholder") || "매장 선택"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {copyTargetStores.map((s) => (
+                      <SelectItem key={`dst-${s}`} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  className="h-9"
+                  onClick={handleCopyToStore}
+                  disabled={copying || !copyTargetStore || copyTargetStore === effectiveStore}
+                >
+                  {t("posCookingCopySaveButton") || "복사 저장"}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
           {t("posCookingGuide") || "메뉴별 기준시간은 POS 메뉴의 `조리시간(분)` 값을 사용합니다. 미설정 메뉴는 경과시간 기준으로 판단됩니다."}

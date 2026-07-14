@@ -198,12 +198,29 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
   }, [])
 
   const summary = result?.summary
-  const warningMessage = React.useMemo(() => {
-    if (!result?.warnings?.length) return null
-    if (result.warnings.includes("STORE_NOT_SELECTED")) return t("posCostActualSelectStore")
-    if (result.warnings.includes("OFFICE_SCOPE_NO_POS")) return t("posCostActualOfficeNoPos")
-    if (result.warnings.includes("POS_TRUNCATED")) return t("posCostActualTruncated")
-    return null
+  const warningMessages = React.useMemo(() => {
+    if (!result?.warnings?.length) return [] as string[]
+    const msgs: string[] = []
+    if (result.warnings.includes("STORE_NOT_SELECTED")) msgs.push(t("posCostActualSelectStore"))
+    if (result.warnings.includes("OFFICE_SCOPE_NO_POS")) msgs.push(t("posCostActualOfficeNoPos"))
+    if (result.warnings.includes("POS_TRUNCATED")) msgs.push(t("posCostActualTruncated"))
+    if (result.warnings.includes("CAT_BOM_UNMATCHED_EXCLUDED")) {
+      const meta = result.categoryMeta
+      msgs.push(
+        t("posCostActualBomExcludedWarn")
+          .replace("{sales}", formatBaht(meta?.excludedUnmatchedSales ?? 0))
+          .replace("{qty}", String(Math.round(meta?.excludedUnmatchedQty ?? 0)))
+      )
+    }
+    if (result.warnings.includes("CAT_ORDER_DISCOUNT_APPLIED")) {
+      const meta = result.categoryMeta
+      msgs.push(
+        t("posCostActualOrderDiscWarn")
+          .replace("{payment}", formatBaht(meta?.paymentDiscountAllocated ?? 0))
+          .replace("{service}", formatBaht(meta?.serviceAmtAllocated ?? 0))
+      )
+    }
+    return msgs
   }, [result, t])
 
   const channelTableTotals = React.useMemo(() => {
@@ -314,9 +331,11 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
         </div>
       ) : null}
 
-      {warningMessage ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-          {warningMessage}
+      {warningMessages.length > 0 ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 space-y-1.5">
+          {warningMessages.map((msg) => (
+            <p key={msg}>{msg}</p>
+          ))}
         </div>
       ) : null}
 
@@ -461,8 +480,21 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
           ) : null}
 
           {result && result.bomUnmatchedLines.length > 0 ? (
-            <div className="rounded-xl border bg-card p-5 space-y-3 overflow-x-auto">
-              <h3 className="text-sm font-semibold">{t("posCostActualUnmatchedTitle")}</h3>
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5 space-y-3 overflow-x-auto">
+              <div>
+                <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  {t("posCostActualUnmatchedTitle")}
+                </h3>
+                {result.categoryMeta &&
+                (result.categoryMeta.excludedUnmatchedSales > 0 ||
+                  result.categoryMeta.excludedUnmatchedQty > 0) ? (
+                  <p className="text-xs text-amber-800/90 dark:text-amber-200/90 mt-1">
+                    {t("posCostActualBomExcludedWarn")
+                      .replace("{sales}", formatBaht(result.categoryMeta.excludedUnmatchedSales))
+                      .replace("{qty}", String(Math.round(result.categoryMeta.excludedUnmatchedQty)))}
+                  </p>
+                ) : null}
+              </div>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b bg-muted/40">

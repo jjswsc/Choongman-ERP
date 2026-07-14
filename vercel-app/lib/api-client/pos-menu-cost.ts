@@ -284,6 +284,12 @@ export type PosCostSalesWeightedResult = {
     matchedQty: number
     unmatchedQty: number
   }[]
+  categoryMeta?: {
+    excludedUnmatchedSales: number
+    excludedUnmatchedQty: number
+    paymentDiscountAllocated: number
+    serviceAmtAllocated: number
+  }
   bomUnmatchedLines: {
     menuId: string
     optionId: string

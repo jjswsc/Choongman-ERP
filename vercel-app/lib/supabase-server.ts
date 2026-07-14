@@ -494,7 +494,10 @@ export async function supabaseSelectFilterRange(
 
 /**
  * 필터에 맞는 행을 Range 페이지로 반복 조회해 전부 수집 (상한 도달·빈 페이지에서 중단)
- * schedules 등 행 수가 계속 늘어나도 한 번의 고정 limit에 잘리지 않게 할 때 사용
+ * schedules 등 행 수가 계속 늘어나도 한 번의 고정 limit에 잘리지 않게 할 때 사용.
+ *
+ * **order 권장(거의 필수):** Range 오프셋 페이지네이션은 ORDER BY 없이 비결정적이라
+ * 조회마다 행이 누락·중복될 수 있다. PK(`id.asc`) 등 안정 정렬을 넘길 것.
  */
 export async function supabaseSelectFilterAllPages(
   table: string,
@@ -510,6 +513,7 @@ export async function supabaseSelectFilterAllPages(
     Math.max(pageSize, Number(options.maxRows) || 2_000_000),
     SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_ROWS_CEILING
   )
+  const order = String(options.order || '').trim() || 'id.asc'
   const all: unknown[] = []
   let start = 0
   let guard = 0
@@ -517,7 +521,7 @@ export async function supabaseSelectFilterAllPages(
   while (all.length < maxRows && guard++ < maxPages) {
     const end = start + pageSize - 1
     const batch = (await supabaseSelectFilterRange(table, filter, {
-      order: options.order,
+      order,
       select: options.select,
       rangeStart: start,
       rangeEnd: end,
