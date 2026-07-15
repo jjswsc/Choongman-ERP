@@ -16,6 +16,7 @@ import {
   issueMemberCoupon,
   type PosCoupon,
 } from "@/lib/api-client"
+import { apiFetch } from "@/lib/api/fetch"
 import { couponsForMemberIssue, formatCouponBenefit, redemptionModeLabel } from "@/lib/crm-coupon-admin"
 
 export function CrmCouponIssuePanel() {
@@ -41,8 +42,33 @@ export function CrmCouponIssuePanel() {
   React.useEffect(() => {
     const memberId = Number(searchParams.get("memberId") || 0)
     if (!memberId) return
-    getMembers({ q: String(memberId), limit: 5 })
-      .then((rows) => {
+    // id 검색이 빠져 있으면 이름·전화 ilike로 엉뚱한 회원이 잡힐 수 있음 → 단건 API 우선
+    void (async () => {
+      try {
+        const res = await apiFetch(`/api/members/${memberId}`, { cache: "no-store" })
+        const data = (await res.json()) as {
+          success?: boolean
+          member?: { id: number; memberNo?: string; name?: string; fullName?: string; phone?: string }
+        }
+        const m = data.success ? data.member : null
+        if (m?.id) {
+          setSelectedMemberId(m.id)
+          setMemberQuery(m.memberNo || m.phone || m.name || String(m.id))
+          setMemberResults([
+            {
+              id: m.id,
+              memberNo: m.memberNo || "",
+              name: m.name || m.fullName || "",
+              phone: m.phone || "",
+            },
+          ])
+          return
+        }
+      } catch {
+        /* fallback below */
+      }
+      try {
+        const rows = await getMembers({ q: String(memberId), limit: 5 })
         const m = rows.find((x) => x.id === memberId) || rows[0]
         if (!m) return
         setSelectedMemberId(m.id)
@@ -50,8 +76,10 @@ export function CrmCouponIssuePanel() {
         setMemberResults([
           { id: m.id, memberNo: m.memberNo, name: m.name || m.fullName || "", phone: m.phone || "" },
         ])
-      })
-      .catch(() => {})
+      } catch {
+        /* ignore */
+      }
+    })()
   }, [searchParams])
 
   const searchMembers = React.useCallback(async () => {
@@ -77,13 +105,6 @@ export function CrmCouponIssuePanel() {
       setSearching(false)
     }
   }, [memberQuery])
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      searchMembers().catch(() => {})
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchMembers])
 
   const selectedMember = memberResults.find((m) => m.id === selectedMemberId) ?? null
   const selectedCoupon = coupons.find((c) => c.code === couponCode) ?? null
@@ -123,7 +144,13 @@ export function CrmCouponIssuePanel() {
           <UserRound className="h-4 w-4 text-indigo-500" />
           {t("crmCouponIssueMemberSearch") || "회원 검색"}
         </h3>
-        <div className="flex gap-2">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void searchMembers()
+          }}
+        >
           <Input
             placeholder={t("memberCouponsSearchPh") || "회원번호 · 이름 · 전화"}
             value={memberQuery}
@@ -132,10 +159,11 @@ export function CrmCouponIssuePanel() {
               setSelectedMemberId(null)
             }}
           />
-          <Button variant="outline" onClick={() => searchMembers()} disabled={searching}>
+          <Button type="submit" variant="outline" disabled={searching}>
             <Search className="h-4 w-4" />
+            <span className="sr-only">{t("btn_query") || "검색"}</span>
           </Button>
-        </div>
+        </form>
         <div className="mt-3 space-y-1">
           {memberResults.map((m) => (
             <button

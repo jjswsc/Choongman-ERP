@@ -137,6 +137,12 @@ export function buildMemberSearchPostgrestOrFilter(q: string): string {
     `tier_code.ilike.${escaped}`,
   ]
 
+  // 순수 숫자이면서 전화번호처럼 보이지 않을 때 id 직접 조회 (딥링크 memberId)
+  // 0으로 시작하거나 9자 이상 → 전화로 보고 id 검색 생략
+  if (/^\d{1,8}$/.test(trimmed) && !trimmed.startsWith('0')) {
+    clauses.push(`id.eq.${trimmed}`)
+  }
+
   if (normalizedDigits && normalizedDigits !== trimmed) {
     clauses.push(`phone.ilike.${normalizedDigitsEscaped}`)
   }

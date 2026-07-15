@@ -24,6 +24,7 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [queryDraft, setQueryDraft] = React.useState("")
   const [query, setQuery] = React.useState("")
   const [showInactive, setShowInactive] = React.useState(false)
 
@@ -154,17 +155,23 @@ export function CrmCouponMenuScopePicker({ value, onChange, t = (k) => k }: CrmC
 
       <div>
         <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("crmCouponScopeMenus") || "메뉴 선택"}</p>
-        <div className="flex gap-2">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setQuery(queryDraft.trim())
+          }}
+        >
           <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
             placeholder={t("crmCouponScopeSearchPh") || "메뉴명 · 코드 · 카테고리"}
             className="h-9"
           />
-          <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0">
+          <Button type="submit" variant="outline" size="icon" className="h-9 w-9 shrink-0" title={t("btn_query") || "검색"}>
             <Search className="h-4 w-4" />
           </Button>
-        </div>
+        </form>
         <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           {t("crmCouponScopeShowInactive") || "비활성 메뉴 포함"}

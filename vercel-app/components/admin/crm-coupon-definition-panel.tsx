@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Plus, RotateCw, Save, Tag, Trash2 } from "lucide-react"
+import { Plus, RotateCw, Save, Search, Tag, Trash2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -171,6 +171,7 @@ export function CrmCouponDefinitionPanel() {
   const [form, setForm] = React.useState<CouponForm>(EMPTY_FORM)
   const [itemScope, setItemScope] = React.useState<CouponItemScope>(emptyCouponItemScope())
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [searchDraft, setSearchDraft] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [portalImageUploading, setPortalImageUploading] = React.useState(false)
   const [portalImageError, setPortalImageError] = React.useState("")
@@ -337,22 +338,32 @@ export function CrmCouponDefinitionPanel() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          setSearch(searchDraft.trim())
+        }}
+      >
         <Input
           placeholder={t("crmCouponSearchPh") || "코드·이름 검색"}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
           className="max-w-xs"
         />
-        <Button variant="outline" size="sm" onClick={() => loadData()} disabled={loading}>
+        <Button type="submit" size="sm">
+          <Search className="mr-1 h-4 w-4" />
+          {t("btn_query") || "검색"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => loadData()} disabled={loading}>
           <RotateCw className={cn("mr-1 h-4 w-4", loading && "animate-spin")} />
           {t("posRefresh") || "새로고침"}
         </Button>
-        <Button size="sm" onClick={openNew}>
+        <Button type="button" size="sm" onClick={openNew}>
           <Plus className="mr-1 h-4 w-4" />
           {t("crmCouponNew") || "새 쿠폰"}
         </Button>
-      </div>
+      </form>
 
       <div className="overflow-hidden rounded-xl border bg-card">
         <div className="overflow-auto">

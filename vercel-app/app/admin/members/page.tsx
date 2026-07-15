@@ -2,6 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Users, UserPlus, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -15,12 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createMember, getMembers, updateMember, type Member } from "@/lib/api-client"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmPageHero } from "@/components/crm/crm-shared-ui"
 import { CrmMember360Panel } from "@/components/crm/crm-member-360-panel"
 import { MemberListPanel, type MemberListPanelHandle } from "@/components/admin/member-list-panel"
 import { MemberMergePanel } from "@/components/admin/member-merge-panel"
+import { MemberPointsOpsPanel } from "@/components/admin/member-points-ops-panel"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -255,6 +258,13 @@ export default function MembersPage() {
   const [saving, setSaving] = React.useState(false)
   const [form, setForm] = React.useState<MemberForm>({ ...emptyForm })
   const [selectedMember, setSelectedMember] = React.useState<Member | null>(null)
+  const [detailTab, setDetailTab] = React.useState<"profile" | "points">(
+    searchParams.get("tab") === "points" ? "points" : "profile"
+  )
+
+  React.useEffect(() => {
+    if (searchParams.get("tab") === "points") setDetailTab("points")
+  }, [searchParams])
 
   React.useEffect(() => {
     const id = Number(searchParams.get("memberId") || 0)
@@ -287,6 +297,12 @@ export default function MembersPage() {
   const handleMerged = React.useCallback((m: Member) => {
     setForm(memberToForm(m))
     setSelectedMember(m)
+    listRef.current?.reload()
+  }, [])
+
+  const handlePointsMemberUpdate = React.useCallback((m: Member) => {
+    setSelectedMember(m)
+    setForm(memberToForm(m))
     listRef.current?.reload()
   }, [])
 
@@ -384,17 +400,42 @@ export default function MembersPage() {
         />
         <CrmSubnav />
 
-        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-          <div className="lg:sticky lg:top-0 lg:self-start space-y-4">
-            <MemberFormPanel
-              form={form}
-              onFormChange={handleFormChange}
-              onSave={onSave}
-              onClear={handleClearForm}
-              saving={saving}
-              t={t}
-            />
-            <MemberMergePanel targetMember={selectedMember} onMerged={handleMerged} t={t} />
+        <div className="grid gap-6 lg:grid-cols-[min(440px,100%)_1fr]">
+          <div className="lg:sticky lg:top-0 lg:self-start space-y-4 min-w-0">
+            <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v === "points" ? "points" : "profile")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="profile">{t("memberProfileTab")}</TabsTrigger>
+                <TabsTrigger value="points">{t("memberPointsTab")}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="profile" className="mt-4 space-y-4">
+                <MemberFormPanel
+                  form={form}
+                  onFormChange={handleFormChange}
+                  onSave={onSave}
+                  onClear={handleClearForm}
+                  saving={saving}
+                  t={t}
+                />
+                <MemberMergePanel targetMember={selectedMember} onMerged={handleMerged} t={t} />
+              </TabsContent>
+              <TabsContent value="points" className="mt-4 space-y-4">
+                {selectedMember ? (
+                  <MemberPointsOpsPanel member={selectedMember} onMemberPointsChange={handlePointsMemberUpdate} />
+                ) : (
+                  <Card>
+                    <CardContent className="py-8 text-sm text-muted-foreground">
+                      {t("memberPointsSelectHint")}
+                    </CardContent>
+                  </Card>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {t("memberPointsPolicyLinkHint")}{" "}
+                  <Link href="/admin/members/tiers" className="underline underline-offset-2">
+                    {t("memberTiers")}
+                  </Link>
+                </p>
+              </TabsContent>
+            </Tabs>
           </div>
 
           <div className="space-y-4">

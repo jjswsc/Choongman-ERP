@@ -24,6 +24,12 @@ describe('buildMemberSearchPostgrestOrFilter', () => {
     const filter = buildMemberSearchPostgrestOrFilter('0988583544')
     expect(filter).toContain('phone.eq.0988583544')
     expect(filter).toContain('phone.eq.66988583544')
+    expect(filter).not.toContain('id.eq.0988583544')
+  })
+
+  it('adds id.eq for short numeric member id queries', () => {
+    const filter = buildMemberSearchPostgrestOrFilter('42891')
+    expect(filter).toContain('id.eq.42891')
   })
 })
 

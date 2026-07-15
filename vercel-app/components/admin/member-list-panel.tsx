@@ -54,6 +54,7 @@ const MemberSearchPanel = React.memo(function MemberSearchPanel({
   resetLabel,
   andHint,
   activeFieldLabel,
+  keywordPh,
   t,
   onSearch,
   onReset,
@@ -64,11 +65,14 @@ const MemberSearchPanel = React.memo(function MemberSearchPanel({
   resetLabel: string
   andHint: string
   activeFieldLabel: string
+  keywordPh: string
   t: ReturnType<typeof useT>
-  onSearch: (fields: MemberSearchFieldDraft) => void
+  onSearch: (params: { q: string; fields: MemberSearchFieldDraft }) => void
   onReset: () => void
 }) {
+  const [keyword, setKeyword] = React.useState("")
   const [draft, setDraft] = React.useState<MemberSearchFieldDraft>({ ...emptyMemberSearchFieldDraft })
+  const [showAdvanced, setShowAdvanced] = React.useState(false)
   const filledKeys = listFilledMemberSearchFields(draft)
   const filledCount = filledKeys.length
 
@@ -80,10 +84,16 @@ const MemberSearchPanel = React.memo(function MemberSearchPanel({
     setDraft((prev) => ({ ...prev, [key]: "" }))
   }
 
-  const submit = () => onSearch(draft)
+  const submit = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    onSearch({ q: keyword, fields: draft })
+  }
 
   return (
-    <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-slate-50/50 p-3 sm:p-4 space-y-3">
+    <form
+      className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-slate-50/50 p-3 sm:p-4 space-y-3"
+      onSubmit={submit}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-blue-800/80">{t("memberSearchSectionTitle")}</p>
         {filledCount > 1 ? (
@@ -91,112 +101,118 @@ const MemberSearchPanel = React.memo(function MemberSearchPanel({
         ) : null}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">{t("name")}</Label>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{t("search")}</Label>
           <Input
-            placeholder={t("memberSearchNamePh")}
-            value={draft.name}
-            onChange={(e) => patch("name", e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit()
-            }}
+            placeholder={keywordPh}
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
             className="bg-background"
+            autoComplete="off"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">{t("memberPhone")}</Label>
-          <Input
-            placeholder={t("memberSearchPhonePh")}
-            value={draft.phone}
-            onChange={(e) => patch("phone", e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit()
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" disabled={searching} className="min-w-[96px]">
+            <Search className="size-4" />
+            {searching ? loadingLabel : searchLabel}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setKeyword("")
+              setDraft({ ...emptyMemberSearchFieldDraft })
+              onReset()
             }}
-            className="bg-background"
-            inputMode="tel"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">{t("memberNo")}</Label>
-          <Input
-            placeholder={t("memberSearchMemberNoPh")}
-            value={draft.memberNo}
-            onChange={(e) => patch("memberNo", e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit()
-            }}
-            className="bg-background"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">{t("email")}</Label>
-          <Input
-            placeholder={t("memberSearchEmailPh")}
-            value={draft.email}
-            onChange={(e) => patch("email", e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit()
-            }}
-            className="bg-background"
-            type="email"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">{t("birthDate")}</Label>
-          <Input
-            placeholder={t("memberSearchBirthPh")}
-            value={draft.birthDate}
-            onChange={(e) => patch("birthDate", e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit()
-            }}
-            className="bg-background"
-            type="date"
-          />
+            disabled={searching}
+          >
+            <RotateCcw className="size-4" />
+            {resetLabel}
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowAdvanced((v) => !v)}>
+            {showAdvanced ? t("memberSearchHideAdvanced") : t("memberSearchShowAdvanced")}
+          </Button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" onClick={submit} disabled={searching} className="min-w-[96px]">
-          <Search className="size-4" />
-          {searching ? loadingLabel : searchLabel}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setDraft({ ...emptyMemberSearchFieldDraft })
-            onReset()
-          }}
-          disabled={searching}
-        >
-          <RotateCcw className="size-4" />
-          {resetLabel}
-        </Button>
-        {filledCount > 0 ? (
+      {showAdvanced ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("name")}</Label>
+            <Input
+              placeholder={t("memberSearchNamePh")}
+              value={draft.name}
+              onChange={(e) => patch("name", e.target.value)}
+              className="bg-background"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("memberPhone")}</Label>
+            <Input
+              placeholder={t("memberSearchPhonePh")}
+              value={draft.phone}
+              onChange={(e) => patch("phone", e.target.value)}
+              className="bg-background"
+              inputMode="tel"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("memberNo")}</Label>
+            <Input
+              placeholder={t("memberSearchMemberNoPh")}
+              value={draft.memberNo}
+              onChange={(e) => patch("memberNo", e.target.value)}
+              className="bg-background"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("email")}</Label>
+            <Input
+              placeholder={t("memberSearchEmailPh")}
+              value={draft.email}
+              onChange={(e) => patch("email", e.target.value)}
+              className="bg-background"
+              type="email"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("birthDate")}</Label>
+            <Input
+              placeholder={t("memberSearchBirthPh")}
+              value={draft.birthDate}
+              onChange={(e) => patch("birthDate", e.target.value)}
+              className="bg-background"
+              type="date"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {filledCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs text-muted-foreground">{activeFieldLabel}:</span>
-        ) : null}
-        {filledKeys.map((key) => (
-          <span
-            key={key}
-            className="inline-flex max-w-[220px] items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs text-primary"
-          >
-            <span className="truncate">
-              {t(SEARCH_FIELD_LABEL_KEYS[key])}: {draft[key]}
-            </span>
-            <button
-              type="button"
-              className="shrink-0 rounded p-0.5 hover:bg-primary/10"
-              aria-label={resetLabel}
-              onClick={() => clearField(key)}
+          {filledKeys.map((key) => (
+            <span
+              key={key}
+              className="inline-flex max-w-[220px] items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs text-primary"
             >
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-      </div>
-    </div>
+              <span className="truncate">
+                {t(SEARCH_FIELD_LABEL_KEYS[key])}: {draft[key]}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 hover:bg-primary/10"
+                aria-label={resetLabel}
+                onClick={() => clearField(key)}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </form>
   )
 })
 
@@ -255,6 +271,8 @@ const MemberListTable = React.memo(function MemberListTable({
             <th className="p-2 text-left">{t("memberNo")}</th>
             <th className="p-2 text-left">{t("memberJoinStore")}</th>
             <th className="p-2 text-left">{t("memberTier")}</th>
+            <th className="p-2 text-right">{t("memberPointsBalance")}</th>
+            <th className="p-2 text-right">{t("memberPointsTierCumulative")}</th>
             <th className="p-2 text-left">{t("status")}</th>
           </tr>
         </thead>
@@ -278,6 +296,8 @@ const MemberListTable = React.memo(function MemberListTable({
                   : joinStoreLabels.__unset__ || "—"}
               </td>
               <td className="p-2">{m.tierCode || "-"}</td>
+              <td className="p-2 text-right tabular-nums">{Number(m.pointBalance || 0).toLocaleString()}</td>
+              <td className="p-2 text-right tabular-nums">{Number(m.tierPoints || 0).toLocaleString()}</td>
               <td className="p-2">{m.status}</td>
             </tr>
           ))}
@@ -314,13 +334,14 @@ export const MemberListPanel = React.memo(
     const [appliedFields, setAppliedFields] = React.useState<MemberSearchFieldDraft>({
       ...emptyMemberSearchFieldDraft,
     })
+    const [appliedQ, setAppliedQ] = React.useState("")
     const [pageCursors, setPageCursors] = React.useState<(number | undefined)[]>([undefined])
     const [pageIndex, setPageIndex] = React.useState(0)
     const [hasMore, setHasMore] = React.useState(false)
     const [actionMessage, setActionMessage] = React.useState("")
     const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
     const [filterTier, setFilterTier] = React.useState("all")
-    const [filterStatus, setFilterStatus] = React.useState("all")
+    const [filterStatus, setFilterStatus] = React.useState("active")
     const importFileRef = React.useRef<HTMLInputElement | null>(null)
     const [joinStoreLabels, setJoinStoreLabels] = React.useState<Record<string, string>>({
       office: t("mpAdmin_signupStoreStatsOffice"),
@@ -346,14 +367,19 @@ export const MemberListPanel = React.memo(
     }, [lang, t])
 
     const appliedFieldsRef = React.useRef(appliedFields)
+    const appliedQRef = React.useRef(appliedQ)
     const pageCursorsRef = React.useRef(pageCursors)
     const pageIndexRef = React.useRef(pageIndex)
+    const filterStatusRef = React.useRef(filterStatus)
     appliedFieldsRef.current = appliedFields
+    appliedQRef.current = appliedQ
     pageCursorsRef.current = pageCursors
     pageIndexRef.current = pageIndex
+    filterStatusRef.current = filterStatus
 
     const loadPage = React.useCallback(
       async (opts?: {
+        q?: string
         fields?: MemberSearchFieldDraft
         afterId?: number | undefined
         pageIdx?: number
@@ -361,6 +387,7 @@ export const MemberListPanel = React.memo(
         isSearch?: boolean
       }) => {
         const fields = opts?.fields ?? appliedFieldsRef.current
+        const q = opts?.q !== undefined ? opts.q : appliedQRef.current
         const cursors = opts?.cursors ?? pageCursorsRef.current
         const pageIdx = opts?.pageIdx ?? pageIndexRef.current
         const afterId = opts?.afterId !== undefined ? opts.afterId : cursors[pageIdx]
@@ -369,6 +396,7 @@ export const MemberListPanel = React.memo(
         setLoading(true)
         try {
           const res = await getMembersCursor({
+            q,
             name: fields.name,
             phone: fields.phone,
             memberNo: fields.memberNo,
@@ -376,6 +404,7 @@ export const MemberListPanel = React.memo(
             birthDate: fields.birthDate,
             afterId,
             limit: MEMBER_PAGE_SIZE,
+            status: filterStatusRef.current || "active",
           })
           if (!res.success) {
             startTransition(() => {
@@ -412,39 +441,80 @@ export const MemberListPanel = React.memo(
       void loadPageRef.current()
     }, [])
 
+    const statusFilterBootRef = React.useRef(true)
+    React.useEffect(() => {
+      if (statusFilterBootRef.current) {
+        statusFilterBootRef.current = false
+        return
+      }
+      setPageCursors([undefined])
+      setPageIndex(0)
+      void loadPageRef.current({
+        afterId: undefined,
+        pageIdx: 0,
+        cursors: [undefined],
+        isSearch: true,
+      })
+    }, [filterStatus])
+
     React.useImperativeHandle(
       ref,
       () => ({
         reload: () => {
-          void loadPage({ fields: appliedFieldsRef.current, isSearch: true })
+          void loadPage({
+            q: appliedQRef.current,
+            fields: appliedFieldsRef.current,
+            isSearch: true,
+          })
         },
       }),
       [loadPage]
     )
 
     const runSearch = React.useCallback(
-      (fields: MemberSearchFieldDraft) => {
-        const next = {
-          name: fields.name.trim(),
-          phone: fields.phone.trim(),
-          memberNo: fields.memberNo.trim(),
-          email: fields.email.trim(),
-          birthDate: fields.birthDate.trim(),
+      async (params: { q: string; fields: MemberSearchFieldDraft }) => {
+        const nextFields = {
+          name: params.fields.name.trim(),
+          phone: params.fields.phone.trim(),
+          memberNo: params.fields.memberNo.trim(),
+          email: params.fields.email.trim(),
+          birthDate: params.fields.birthDate.trim(),
         }
-        setAppliedFields(next)
+        const nextQ = params.q.trim()
+        if (!nextQ && !hasMemberSearchFields(nextFields)) {
+          await appAlert(t("memberSearchNeedsCriteria"))
+          return
+        }
+        setAppliedQ(nextQ)
+        setAppliedFields(nextFields)
         setPageCursors([undefined])
         setPageIndex(0)
-        void loadPage({ fields: next, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
+        void loadPage({
+          q: nextQ,
+          fields: nextFields,
+          afterId: undefined,
+          pageIdx: 0,
+          cursors: [undefined],
+          isSearch: true,
+        })
       },
-      [loadPage]
+      [loadPage, t]
     )
 
     const resetSearch = React.useCallback(() => {
       const empty = { ...emptyMemberSearchFieldDraft }
+      setAppliedQ("")
       setAppliedFields(empty)
       setPageCursors([undefined])
       setPageIndex(0)
-      void loadPage({ fields: empty, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
+      void loadPage({
+        q: "",
+        fields: empty,
+        afterId: undefined,
+        pageIdx: 0,
+        cursors: [undefined],
+        isSearch: true,
+      })
     }, [loadPage])
 
     const goNextPage = React.useCallback(() => {
@@ -478,12 +548,22 @@ export const MemberListPanel = React.memo(
     const exportMembersCsv = () => {
       downloadCsv(
         "members.csv",
-        [t("name"), t("memberPhone"), t("memberNo"), t("memberTier"), t("status")],
+        [
+          t("name"),
+          t("memberPhone"),
+          t("memberNo"),
+          t("memberTier"),
+          t("memberPointsBalance"),
+          t("memberPointsTierCumulative"),
+          t("status"),
+        ],
         filteredMembers.map((m) => [
           m.name || "",
           m.phone || "",
           m.memberNo || "",
           m.tierCode || "",
+          String(Number(m.pointBalance || 0)),
+          String(Number(m.tierPoints || 0)),
           m.status || "",
         ])
       )
@@ -503,6 +583,7 @@ export const MemberListPanel = React.memo(
             resetLabel={t("memberSearchReset")}
             andHint={t("memberSearchPriorityHint")}
             activeFieldLabel={t("memberSearchActiveField")}
+            keywordPh={t("memberSearchPh")}
             t={t}
             onSearch={runSearch}
             onReset={resetSearch}
@@ -651,6 +732,7 @@ export const MemberListPanel = React.memo(
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
                 {t("memberSearchResult")}: {tr(t, "memberListPageShowing", { count: String(filteredMembers.length) })}
+                {appliedQ ? ` · ${t("search")}: ${appliedQ}` : ""}
                 {hasMemberSearchFields(appliedFields)
                   ? ` · ${formatMemberSearchFieldsSummary(appliedFields, {
                       name: t("name"),

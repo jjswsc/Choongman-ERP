@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiFetch } from "@/lib/api/fetch"
 import { getPosCoupons } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 
@@ -36,12 +37,17 @@ type CampaignRunRow = {
   executedAt: string
 }
 
-const AUDIENCE_SEGMENT_MAP: Record<string, { audienceType: string; recentDays?: string; dormantDays?: string }> = {
+const AUDIENCE_SEGMENT_MAP: Record<
+  string,
+  { audienceType: string; recentDays?: string; dormantDays?: string; birthMonth?: string }
+> = {
   recent30: { audienceType: "recent", recentDays: "30" },
   dormant90: { audienceType: "dormant", dormantDays: "90" },
   new30: { audienceType: "new_joined", recentDays: "30" },
   vip: { audienceType: "tier" },
   atRisk: { audienceType: "dormant", dormantDays: "60" },
+  // 생일±7일 → 캠페인 UI의 생일 월 조건으로 안내(정확한 ±7일은 세그먼트 CSV 사용)
+  birthday7: { audienceType: "birthday_month" },
 }
 
 function toText(v: unknown): string {
@@ -79,12 +85,14 @@ export function CrmCouponCampaignPanel() {
     const aud = searchParams.get("audience")
     if (!aud || !AUDIENCE_SEGMENT_MAP[aud]) return
     const mapped = AUDIENCE_SEGMENT_MAP[aud]
+    const bangkokMonth = getBangkokTodayDateString().slice(5, 7).replace(/^0/, "") || "1"
     setForm((p) => ({
       ...p,
       audienceType: mapped.audienceType,
       tierCode: aud === "vip" ? "VIP" : p.tierCode,
       recentDays: mapped.recentDays || p.recentDays,
       dormantDays: mapped.dormantDays || p.dormantDays,
+      birthMonth: mapped.audienceType === "birthday_month" ? bangkokMonth : p.birthMonth,
     }))
   }, [searchParams])
 

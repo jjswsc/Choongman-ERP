@@ -1,10 +1,12 @@
 /** 고객 세그먼트(/admin/crm/segments) — ko · en · th */
 export const I18N_CRM_SEGMENTS_KO: Record<string, string> = {
-  crmSeg_recent30: '최근 30일 방문 고객',
-  crmSeg_dormant90: '휴면 고객(90일)',
-  crmSeg_new30: '신규 고객(30일)',
-  crmSeg_vip: 'VIP 고객',
-  crmSeg_atRisk: '이탈 위험 고객',
+  crmSeg_recent30: '최근 방문',
+  crmSeg_dormant90: '휴면',
+  crmSeg_new30: '신규',
+  crmSeg_vip: 'VIP',
+  crmSeg_atRisk: '이탈 위험',
+  crmSeg_birthday7: '생일 ±7일',
+  crmSeg_pointsIdle: '미사용 포인트',
   crmSeg_querying: '조회 중...',
   crmSeg_resultsTitle: '세그먼트 결과',
   crmSeg_targetCount: '대상 {count}명',
@@ -14,14 +16,17 @@ export const I18N_CRM_SEGMENTS_KO: Record<string, string> = {
   crmSeg_colPoints: '포인트',
   crmSeg_colLifetime: '누적매출',
   crmSeg_extractBtn: '세그먼트 추출',
+  crmSeg_pageSub: '대상 목록·필터·CSV·쿠폰/캠페인 실행 화면입니다. 우선순위는 CRM 대시보드에서 봅니다.',
 }
 
 export const I18N_CRM_SEGMENTS_EN: Record<string, string> = {
-  crmSeg_recent30: 'Visited in last 30 days',
-  crmSeg_dormant90: 'Dormant (90 days)',
-  crmSeg_new30: 'New members (30 days)',
-  crmSeg_vip: 'VIP members',
-  crmSeg_atRisk: 'At-risk members',
+  crmSeg_recent30: 'Recent visitors',
+  crmSeg_dormant90: 'Dormant',
+  crmSeg_new30: 'New members',
+  crmSeg_vip: 'VIP',
+  crmSeg_atRisk: 'At risk',
+  crmSeg_birthday7: 'Birthday ±7d',
+  crmSeg_pointsIdle: 'Idle points',
   crmSeg_querying: 'Loading...',
   crmSeg_resultsTitle: 'Segment results',
   crmSeg_targetCount: '{count} members',
@@ -31,14 +36,17 @@ export const I18N_CRM_SEGMENTS_EN: Record<string, string> = {
   crmSeg_colPoints: 'Points',
   crmSeg_colLifetime: 'Lifetime spend',
   crmSeg_extractBtn: 'Extract segment',
+  crmSeg_pageSub: 'Full lists, filters, CSV, and coupon/campaign actions. Use the CRM dashboard for priorities.',
 }
 
 export const I18N_CRM_SEGMENTS_TH: Record<string, string> = {
-  crmSeg_recent30: 'ลูกค้าที่มาเยือน 30 วันล่าสุด',
-  crmSeg_dormant90: 'ลูกค้าไม่เคลื่อนไหว (90 วัน)',
-  crmSeg_new30: 'สมาชิกใหม่ (30 วัน)',
-  crmSeg_vip: 'สมาชิก VIP',
-  crmSeg_atRisk: 'ลูกค้าเสี่ยงหลุด',
+  crmSeg_recent30: 'มาล่าสุด',
+  crmSeg_dormant90: 'ไม่เคลื่อนไหว',
+  crmSeg_new30: 'สมาชิกใหม่',
+  crmSeg_vip: 'VIP',
+  crmSeg_atRisk: 'เสี่ยงหลุด',
+  crmSeg_birthday7: 'วันเกิด ±7 วัน',
+  crmSeg_pointsIdle: 'แต้มค้าง',
   crmSeg_querying: 'กำลังโหลด...',
   crmSeg_resultsTitle: 'ผลลัพธ์กลุ่มลูกค้า',
   crmSeg_targetCount: 'จำนวน {count} คน',
@@ -48,6 +56,7 @@ export const I18N_CRM_SEGMENTS_TH: Record<string, string> = {
   crmSeg_colPoints: 'แต้ม',
   crmSeg_colLifetime: 'ยอดใช้จ่ายสะสม',
   crmSeg_extractBtn: 'ดึงกลุ่มลูกค้า',
+  crmSeg_pageSub: 'รายชื่อ กรอง CSV และคูปอง/แคมเปญ — ลำดับความสำคัญอยู่ที่แดชบอร์ด CRM',
 }
 
 export const CRM_SEGMENT_LABEL_KEYS: Record<string, string> = {
@@ -56,4 +65,6 @@ export const CRM_SEGMENT_LABEL_KEYS: Record<string, string> = {
   new30: 'crmSeg_new30',
   vip: 'crmSeg_vip',
   atRisk: 'crmSeg_atRisk',
+  birthday7: 'crmSeg_birthday7',
+  pointsIdle: 'crmSeg_pointsIdle',
 }

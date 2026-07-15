@@ -22,11 +22,13 @@ export async function GET(req: NextRequest) {
     const fields = readSearchFields(searchParams)
     const afterId = Number(searchParams.get('afterId') || 0)
     const limit = Number(searchParams.get('limit') || 100)
+    const status = searchParams.get('status') || 'active'
     const rows = await listMembersCursor({
       q,
       fields,
       afterId: afterId || undefined,
       limit,
+      status,
     })
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].id : null
     return NextResponse.json({ success: true, rows, nextCursor })

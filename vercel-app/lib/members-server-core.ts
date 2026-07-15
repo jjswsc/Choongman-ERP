@@ -246,6 +246,16 @@ function deriveLastUpdateReason(params: { source: string; lastLineEventType: str
   return 'erp_manual'
 }
 
+/** 회원 목록·커서 조회 공통 select (status 누락 시 inactive가 active로 보이는 버그 방지) */
+const MEMBER_LIST_SELECT =
+  'id,member_no,name,full_name,phone,email,birth_date,gender,nationality,tier_code,status,point_balance,tier_points,line_tier_points,lifetime_amount,join_channel,join_store_code,source,line_display_name,created_at,updated_at'
+
+function memberListStatusFilter(status?: string): string | null {
+  const s = toText(status) || 'active'
+  if (s === 'all') return null
+  return `status=eq.${encodeURIComponent(s)}`
+}
+
 function toMemberSummary(
   member: MemberRow,
   lineIdentity?: MemberIdentityRow,
@@ -352,28 +362,41 @@ export async function listMembers(params?: {
   q?: string
   fields?: MemberSearchFieldDraft
   limit?: number
+  /** 기본 active. 'all'이면 상태 필터 없음 */
+  status?: string
 }): Promise<MemberSummary[]> {
   const q = toText(params?.q)
   const fields = normalizeMemberSearchFields(params?.fields)
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 5000))
+  const statusFilter = memberListStatusFilter(params?.status)
 
   let rows: MemberRow[] = []
   if (hasMemberSearchFields(fields)) {
+    const filterParts: string[] = []
     const andFilter = buildMemberSearchPostgrestAndFilter(fields)
-    rows = andFilter
-      ? ((await supabaseSelectFilter('members', andFilter, {
+    if (andFilter) filterParts.push(andFilter)
+    if (statusFilter) filterParts.push(statusFilter)
+    rows = filterParts.length
+      ? ((await supabaseSelectFilter('members', filterParts.join('&'), {
           order: 'id.desc',
           limit,
+          select: MEMBER_LIST_SELECT,
         })) as MemberRow[])
       : []
   } else if (!q) {
-    rows = (await supabaseSelect('members', { order: 'id.desc', limit })) as MemberRow[]
-  } else {
-    const memberFilter = buildMemberSearchPostgrestOrFilter(q)
-    const escaped = encodeURIComponent(`*${q}*`)
-    const membersByMemberFields = (await supabaseSelectFilter('members', memberFilter, {
+    rows = (await supabaseSelectFilter('members', statusFilter || 'id=gt.0', {
       order: 'id.desc',
       limit,
+      select: MEMBER_LIST_SELECT,
+    })) as MemberRow[]
+  } else {
+    const memberFilterParts = [buildMemberSearchPostgrestOrFilter(q)]
+    if (statusFilter) memberFilterParts.push(statusFilter)
+    const escaped = encodeURIComponent(`*${q}*`)
+    const membersByMemberFields = (await supabaseSelectFilter('members', memberFilterParts.join('&'), {
+      order: 'id.desc',
+      limit,
+      select: MEMBER_LIST_SELECT,
     })) as MemberRow[]
 
     const identityFilter = `provider=eq.line&or=(provider_user_id.ilike.${escaped},display_name.ilike.${escaped})`
@@ -391,10 +414,15 @@ export async function listMembers(params?: {
 
     const membersByIdentity =
       identityMemberIds.length > 0
-        ? ((await supabaseSelectFilter('members', `id=in.(${identityMemberIds.join(',')})`, {
-            order: 'id.desc',
-            limit: 5000,
-          })) as MemberRow[])
+        ? ((await supabaseSelectFilter(
+            'members',
+            [`id=in.(${identityMemberIds.join(',')})`, statusFilter].filter(Boolean).join('&'),
+            {
+              order: 'id.desc',
+              limit: 5000,
+              select: MEMBER_LIST_SELECT,
+            }
+          )) as MemberRow[])
         : []
 
     const memberMap = new Map<number, MemberRow>()
@@ -445,11 +473,15 @@ export async function listMembersCursor(params?: {
   fields?: MemberSearchFieldDraft
   afterId?: number
   limit?: number
+  /** 기본 active. 'all'이면 상태 필터 없음 */
+  status?: string
 }): Promise<MemberSummary[]> {
   const q = toText(params?.q)
   const fields = normalizeMemberSearchFields(params?.fields)
   const afterId = Number(params?.afterId || 0) || null
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
+  const statusRaw = toText(params?.status) || 'active'
+  const statusFilter = memberListStatusFilter(statusRaw)
 
   // 필드 AND 검색은 RPC(p_q 단일)과 맞지 않아 PostgREST AND 경로 사용
   if (hasMemberSearchFields(fields)) {
@@ -457,24 +489,41 @@ export async function listMembersCursor(params?: {
     if (afterId) filterParts.push(`id.lt.${afterId}`)
     const andFilter = buildMemberSearchPostgrestAndFilter(fields)
     if (andFilter) filterParts.push(andFilter)
+    if (statusFilter) filterParts.push(statusFilter)
     if (!filterParts.length) return []
     const rows = (await supabaseSelectFilter('members', filterParts.join('&'), {
       order: 'id.desc',
       limit,
+      select: MEMBER_LIST_SELECT,
     })) as MemberRow[]
     return mapMemberRowsToSummaries(rows)
   }
 
+  // RPC가 status를 반환하지 않으면 inactive가 전부 active로 보이는 버그가 남는다.
+  // status를 포함하는 PostgREST를 우선 사용하고, RPC는 status 컬럼이 있을 때만 사용.
   try {
     const rows = (await supabaseRpc<MemberRow[]>('get_member_list_cursor', {
       p_after_id: afterId,
       p_limit: limit,
       p_q: q || null,
+      p_status: statusRaw === 'all' ? '' : statusRaw,
     })) as MemberRow[]
+    if (Array.isArray(rows) && rows.length > 0 && rows[0] && !('status' in rows[0])) {
+      throw new Error('get_member_list_cursor missing status column')
+    }
     return mapMemberRowsToSummaries(rows)
   } catch {
+    if (!q) {
+      const filterParts = [afterId ? `id.lt.${afterId}` : null, statusFilter].filter(Boolean) as string[]
+      const rows = (await supabaseSelectFilter('members', filterParts.join('&') || 'id=gt.0', {
+        order: 'id.desc',
+        limit,
+        select: MEMBER_LIST_SELECT,
+      })) as MemberRow[]
+      return mapMemberRowsToSummaries(rows)
+    }
     const batchLimit = Math.max(limit, afterId ? limit + 500 : limit)
-    const rows = await listMembers({ q, limit: batchLimit })
+    const rows = await listMembers({ q, limit: batchLimit, status: statusRaw })
     // cursor는 id 내림차순이므로 afterId보다 작은 id만
     const filtered = afterId ? rows.filter((m) => m.id < afterId) : rows
     return filtered.slice(0, limit)

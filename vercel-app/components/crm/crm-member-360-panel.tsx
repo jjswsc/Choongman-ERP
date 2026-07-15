@@ -203,7 +203,7 @@ export function CrmMember360Panel({ member }: { member: Member | null }) {
           <TabsContent value="links" className={adminTabsContentEmbeddedCn}>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
-                <Link href={`/admin/members/points?memberId=${member.id}`}>
+                <Link href={`/admin/members?tab=points&memberId=${member.id}`}>
                   <Wallet className="mr-1.5 h-3.5 w-3.5" />
                   {t("crmMember360OpenPoints")}
                 </Link>

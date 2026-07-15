@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { History, RotateCw } from "lucide-react"
+import { History, RotateCw, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -61,20 +61,24 @@ export function CrmCouponHistoryPanel() {
   const [loading, setLoading] = React.useState(true)
   const [cancellingId, setCancellingId] = React.useState<number | null>(null)
   const [cancellingDupKey, setCancellingDupKey] = React.useState<string | null>(null)
+  const [qDraft, setQDraft] = React.useState("")
   const [q, setQ] = React.useState("")
   const [status, setStatus] = React.useState("all")
   const [couponCode, setCouponCode] = React.useState("all")
   const [couponCodes, setCouponCodes] = React.useState<string[]>([])
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (opts?: { q?: string; status?: string; couponCode?: string }) => {
+    const nextQ = opts?.q !== undefined ? opts.q : q
+    const nextStatus = opts?.status !== undefined ? opts.status : status
+    const nextCoupon = opts?.couponCode !== undefined ? opts.couponCode : couponCode
     setLoading(true)
     try {
       const [issues, masters] = await Promise.all([
         getMemberCoupons({
           limit: 500,
-          status: status !== "all" ? status : undefined,
-          couponCode: couponCode !== "all" ? couponCode : undefined,
-          q: q.trim() || undefined,
+          status: nextStatus !== "all" ? nextStatus : undefined,
+          couponCode: nextCoupon !== "all" ? nextCoupon : undefined,
+          q: nextQ.trim() || undefined,
         }),
         getPosCoupons(),
       ])
@@ -90,11 +94,17 @@ export function CrmCouponHistoryPanel() {
   }, [status, couponCode, q])
 
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      load().catch(() => {})
-    }, 250)
-    return () => clearTimeout(timer)
-  }, [load])
+    void load({ q: "", status: "all", couponCode: "all" })
+    // 최초 로드만 — 이후는 검색 버튼
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const runSearch = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const nextQ = qDraft.trim()
+    setQ(nextQ)
+    void load({ q: nextQ, status, couponCode })
+  }
 
   const displayRows = React.useMemo(
     () => filterMemberCouponIssues(rows, { q, status, couponCode: couponCode === "all" ? "" : couponCode }),
@@ -157,12 +167,12 @@ export function CrmCouponHistoryPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
+      <form className="flex flex-wrap items-end gap-2" onSubmit={runSearch}>
         <div className="min-w-[180px] flex-1">
           <label className="text-xs text-muted-foreground">{t("crmCouponHistorySearch") || "검색"}</label>
           <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={qDraft}
+            onChange={(e) => setQDraft(e.target.value)}
             placeholder={t("crmCouponHistorySearchPh") || "회원 · 쿠폰 · 캠페인"}
             className="mt-1"
           />
@@ -198,11 +208,15 @@ export function CrmCouponHistoryPanel() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" onClick={() => load()} disabled={loading}>
+        <Button type="submit" size="sm" disabled={loading}>
+          <Search className="mr-1 h-4 w-4" />
+          {loading ? t("loading") : t("btn_query") || "검색"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => load()} disabled={loading}>
           <RotateCw className={cn("mr-1 h-4 w-4", loading && "animate-spin")} />
           {t("posRefresh") || "새로고침"}
         </Button>
-      </div>
+      </form>
 
       {duplicateGroups.length > 0 ? (
         <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3">

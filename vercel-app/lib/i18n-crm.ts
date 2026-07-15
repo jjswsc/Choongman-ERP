@@ -1,7 +1,7 @@
 /** 고객 CRM 공통 UI — ko · en · th */
 export const I18N_CRM_KO: Record<string, string> = {
   crmDashTitle: 'CRM 대시보드',
-  crmDashSub: '회원·세그먼트·캠페인 운영 기준 지표',
+  crmDashSub: '우선순위 지휘 화면입니다. 세부 대상 추출·CSV·캠페인은「고객 세그먼트」에서 실행합니다.',
   crmDashRecentDays: '최근활동 기준(일)',
   crmDashDormantDays: '휴면 기준(일)',
   crmDashKpiTotal: '총 회원',
@@ -13,6 +13,32 @@ export const I18N_CRM_KO: Record<string, string> = {
   crmDashSegmentPreview: '세그먼트 미리보기',
   crmDashLastUpdated: '마지막 갱신',
   crmDashDormantRate: '휴면 비율',
+  crmDashTodayActions: '오늘 할 일',
+  crmDashTodayActionsHint: '휴면·이탈위험·신규 상위 회원을 먼저 챙깁니다. 전체를 보려면 세그먼트로 이동하세요.',
+  crmDashViewAllSegment: '세그먼트 전체 보기',
+  crmDashStoreCompare: '매장 비교',
+  crmDashStoreCompareHint: '가입 매장(join store) 기준 활성·신규·휴면 회원 수입니다.',
+  crmDashStoreCode: '매장',
+  crmDashStoreActive: '활성 회원',
+  crmDashStoreNew: '신규',
+  crmDashStoreDormant: '휴면',
+  crmDashStoreFilter: '매장 필터',
+  crmDashStoreAll: '전체 매장',
+  crmDashOpenMember: '회원',
+  crmDashIssueCoupon: '쿠폰',
+  crmDashNoActionRows: '표시할 대상이 없습니다.',
+  crmSegStoreFilter: '가입 매장',
+  crmSegColLastVisit: '최근 방문',
+  crmSegColJoinStore: '가입 매장',
+  crmSegColCreated: '가입일',
+  crmSegColMemberNo: '회원번호',
+  crmSegDescRecent30: '최근 N일 POS 주문이 있는 회원 (대시보드 일수 연동)',
+  crmSegDescDormant90: '휴면 기준일 이상 방문 없음',
+  crmSegDescNew30: '최근 N일 가입',
+  crmSegDescVip: 'VIP 등급 회원',
+  crmSegDescAtRisk: '휴면 기준~최근활동 사이 미방문(이탈 위험)',
+  crmSegDescBirthday7: '생일 ±7일 (방콕일 기준)',
+  crmSegDescPointsIdle: '사용 가능 포인트 100 이상 (미사용 포인트)',
   crmMember360Title: '회원 360',
   crmMember360Summary: '요약',
   crmMember360Notes: '메모',
@@ -72,11 +98,6 @@ export const I18N_CRM_KO: Record<string, string> = {
   crmSegCreateCampaign: '캠페인 만들기',
   crmSegIssueCoupon: '쿠폰 지급',
   crmSegOpenMember: '회원 상세',
-  crmSegDescRecent30: '최근 30일 POS 주문이 있는 회원',
-  crmSegDescDormant90: '90일 이상 방문 없음',
-  crmSegDescNew30: '최근 30일 가입',
-  crmSegDescVip: 'VIP 등급 회원',
-  crmSegDescAtRisk: '30~90일 미방문(이탈 위험)',
   crmCampaignTitle: 'CRM 쿠폰 캠페인',
   crmCampaignSub: '타겟 조건으로 쿠폰을 자동 발급하고 실행 결과를 확인합니다.',
   crmCampaignFormTitle: '캠페인 설정',
@@ -132,7 +153,7 @@ export const I18N_CRM_KO: Record<string, string> = {
 
 export const I18N_CRM_EN: Record<string, string> = {
   crmDashTitle: 'CRM Dashboard',
-  crmDashSub: 'Member, segment, and campaign KPIs',
+  crmDashSub: 'Priority command center. Extract lists, CSV, and campaigns in Customer Segments.',
   crmDashRecentDays: 'Recent activity (days)',
   crmDashDormantDays: 'Dormant threshold (days)',
   crmDashKpiTotal: 'Total members',
@@ -144,6 +165,32 @@ export const I18N_CRM_EN: Record<string, string> = {
   crmDashSegmentPreview: 'Segment preview',
   crmDashLastUpdated: 'Last updated',
   crmDashDormantRate: 'Dormant rate',
+  crmDashTodayActions: "Today's actions",
+  crmDashTodayActionsHint: 'Start with top dormant, at-risk, and new members. Open Segments for the full list.',
+  crmDashViewAllSegment: 'View full segment',
+  crmDashStoreCompare: 'Store comparison',
+  crmDashStoreCompareHint: 'Active / new / dormant members by join store.',
+  crmDashStoreCode: 'Store',
+  crmDashStoreActive: 'Active',
+  crmDashStoreNew: 'New',
+  crmDashStoreDormant: 'Dormant',
+  crmDashStoreFilter: 'Store filter',
+  crmDashStoreAll: 'All stores',
+  crmDashOpenMember: 'Member',
+  crmDashIssueCoupon: 'Coupon',
+  crmDashNoActionRows: 'No targets to show.',
+  crmSegStoreFilter: 'Join store',
+  crmSegColLastVisit: 'Last visit',
+  crmSegColJoinStore: 'Join store',
+  crmSegColCreated: 'Joined',
+  crmSegColMemberNo: 'Member no.',
+  crmSegDescRecent30: 'Members with POS orders in last N days (synced with dashboard)',
+  crmSegDescDormant90: 'No visit beyond dormant threshold',
+  crmSegDescNew30: 'Joined in last N days',
+  crmSegDescVip: 'VIP tier members',
+  crmSegDescAtRisk: 'Last visit between dormant and recent thresholds',
+  crmSegDescBirthday7: 'Birthday ±7 days (Bangkok calendar)',
+  crmSegDescPointsIdle: 'Available points ≥ 100 (idle points)',
   crmMember360Title: 'Member 360',
   crmMember360Summary: 'Summary',
   crmMember360Notes: 'Notes',
@@ -203,11 +250,6 @@ export const I18N_CRM_EN: Record<string, string> = {
   crmSegCreateCampaign: 'Create campaign',
   crmSegIssueCoupon: 'Issue coupon',
   crmSegOpenMember: 'Member detail',
-  crmSegDescRecent30: 'Members with POS orders in last 30 days',
-  crmSegDescDormant90: 'No visit for 90+ days',
-  crmSegDescNew30: 'Joined in last 30 days',
-  crmSegDescVip: 'VIP tier members',
-  crmSegDescAtRisk: '30–90 days since last visit',
   crmCampaignTitle: 'CRM coupon campaigns',
   crmCampaignSub: 'Issue coupons by audience rules and review run results.',
   crmCampaignFormTitle: 'Campaign settings',
@@ -262,8 +304,8 @@ export const I18N_CRM_EN: Record<string, string> = {
 
 export const I18N_CRM_TH: Record<string, string> = {
   crmDashTitle: 'แดชบอร์ด CRM',
-  crmDashSub: 'ตัวชี้วัดสมาชิก กลุ่มลูกค้า และแคมเปญ',
-  crmDashRecentDays: ' активностьล่าสุด (วัน)',
+  crmDashSub: 'หน้าบัญชาการลำดับความสำคัญ — รายชื่อ CSV และแคมเปญทำที่กลุ่มลูกค้า',
+  crmDashRecentDays: 'กิจกรรมล่าสุด (วัน)',
   crmDashDormantDays: 'เกณฑ์ไม่เคลื่อนไหว (วัน)',
   crmDashKpiTotal: 'สมาชิกทั้งหมด',
   crmDashKpiRecent: 'ใช้งานล่าสุด',
@@ -274,6 +316,32 @@ export const I18N_CRM_TH: Record<string, string> = {
   crmDashSegmentPreview: 'ตัวอย่างกลุ่ม',
   crmDashLastUpdated: 'อัปเดตล่าสุด',
   crmDashDormantRate: 'อัตราไม่เคลื่อนไหว',
+  crmDashTodayActions: 'งานวันนี้',
+  crmDashTodayActionsHint: 'เริ่มจากลูกค้าไม่เคลื่อนไหว ความเสี่ยง และสมาชิกใหม่ — ดูทั้งหมดที่กลุ่มลูกค้า',
+  crmDashViewAllSegment: 'ดูกลุ่มทั้งหมด',
+  crmDashStoreCompare: 'เปรียบเทียบร้าน',
+  crmDashStoreCompareHint: 'สมาชิกใช้งาน / ใหม่ / ไม่เคลื่อนไหว ตามร้านสมัคร',
+  crmDashStoreCode: 'ร้าน',
+  crmDashStoreActive: 'ใช้งาน',
+  crmDashStoreNew: 'ใหม่',
+  crmDashStoreDormant: 'ไม่เคลื่อนไหว',
+  crmDashStoreFilter: 'กรองร้าน',
+  crmDashStoreAll: 'ทุกร้าน',
+  crmDashOpenMember: 'สมาชิก',
+  crmDashIssueCoupon: 'คูปอง',
+  crmDashNoActionRows: 'ไม่มีรายการ',
+  crmSegStoreFilter: 'ร้านสมัคร',
+  crmSegColLastVisit: 'มาล่าสุด',
+  crmSegColJoinStore: 'ร้านสมัคร',
+  crmSegColCreated: 'วันสมัคร',
+  crmSegColMemberNo: 'เลขสมาชิก',
+  crmSegDescRecent30: 'มีออเดอร์ POS ใน N วันล่าสุด',
+  crmSegDescDormant90: 'ไม่มาเกินเกณฑ์ไม่เคลื่อนไหว',
+  crmSegDescNew30: 'สมัครใน N วันล่าสุด',
+  crmSegDescVip: 'สมาชิก VIP',
+  crmSegDescAtRisk: 'มาครั้งล่าสุดระหว่างเกณฑ์ไม่เคลื่อนไหวถึงกิจกรรมล่าสุด',
+  crmSegDescBirthday7: 'วันเกิด ±7 วัน (ปฏิทินกรุงเทพฯ)',
+  crmSegDescPointsIdle: 'แต้มใช้ได้ ≥ 100',
   crmMember360Title: 'Member 360',
   crmMember360Summary: 'สรุป',
   crmMember360Notes: 'บันทึก',
@@ -333,11 +401,6 @@ export const I18N_CRM_TH: Record<string, string> = {
   crmSegCreateCampaign: 'สร้างแคมเปญ',
   crmSegIssueCoupon: 'ออกคูปอง',
   crmSegOpenMember: 'รายละเอียด',
-  crmSegDescRecent30: 'มีออเดอร์ POS 30 วันล่าสุด',
-  crmSegDescDormant90: 'ไม่มา 90+ วัน',
-  crmSegDescNew30: 'สมัคร 30 วันล่าสุด',
-  crmSegDescVip: 'สมาชิก VIP',
-  crmSegDescAtRisk: 'ไม่มา 30–90 วัน',
   crmCampaignTitle: 'แคมเปญคูปอง CRM',
   crmCampaignSub: 'ออกคูปองตามเงื่อนไขและดูผลการรัน',
   crmCampaignFormTitle: 'ตั้งค่าแคมเปญ',
@@ -390,7 +453,15 @@ export const I18N_CRM_TH: Record<string, string> = {
   helpHow_admin_crm_campaigns: 'ตั้งค่าและรันแคมเปญที่คูปอง → แคมเปญ',
 }
 
-export const CRM_SEGMENT_KEYS = ['recent30', 'dormant90', 'new30', 'vip', 'atRisk'] as const
+export const CRM_SEGMENT_KEYS = [
+  'recent30',
+  'dormant90',
+  'new30',
+  'vip',
+  'atRisk',
+  'birthday7',
+  'pointsIdle',
+] as const
 export type CrmSegmentKey = (typeof CRM_SEGMENT_KEYS)[number]
 
 export const CRM_SEGMENT_DESC_KEYS: Record<CrmSegmentKey, string> = {
@@ -399,4 +470,20 @@ export const CRM_SEGMENT_DESC_KEYS: Record<CrmSegmentKey, string> = {
   new30: 'crmSegDescNew30',
   vip: 'crmSegDescVip',
   atRisk: 'crmSegDescAtRisk',
+  birthday7: 'crmSegDescBirthday7',
+  pointsIdle: 'crmSegDescPointsIdle',
+}
+
+export function buildCrmSegmentHref(params: {
+  segment: CrmSegmentKey
+  storeCode?: string
+  recentDays?: number
+  dormantDays?: number
+}): string {
+  const q = new URLSearchParams({ segment: params.segment })
+  const store = String(params.storeCode || '').trim()
+  if (store && store !== 'All' && store !== '__all__') q.set('store', store)
+  if (params.recentDays != null) q.set('days', String(params.recentDays))
+  if (params.dormantDays != null) q.set('dormantDays', String(params.dormantDays))
+  return `/admin/crm/segments?${q}`
 }

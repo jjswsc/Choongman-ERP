@@ -279,7 +279,13 @@ export default function MemberVisitsPage() {
         <Card className="mb-4">
           <CardHeader><CardTitle>{t("memberVisitsSearchTitle")}</CardTitle></CardHeader>
           <CardContent>
-            <div className="flex flex-wrap items-end gap-2">
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void load()
+              }}
+            >
               <div>
                 <label className="text-xs font-semibold block mb-1">{t("visit_start_date")}</label>
                 <Input
@@ -320,11 +326,11 @@ export default function MemberVisitsPage() {
                 onChange={(e) => setMemberId(e.target.value)}
                 className="h-9 w-[120px] text-xs"
               />
-              <Button className="h-9 font-medium" onClick={() => load()} disabled={loading}>
+              <Button type="submit" className="h-9 font-medium" disabled={loading}>
                 <Search className="mr-1.5 h-3.5 w-3.5" />
                 {loading ? t("loading") : t("btn_query")}
               </Button>
-            </div>
+            </form>
           </CardContent>
         </Card>
 

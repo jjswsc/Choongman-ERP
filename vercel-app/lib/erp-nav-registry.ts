@@ -74,7 +74,6 @@ export const ERP_NAV_MENU_SECTIONS: ErpNavMenuSection[] = [
     items: [
       { titleKey: "adminCrmDashboard", icon: LayoutDashboard, href: "/admin/crm" },
       { titleKey: "memberList", icon: Users, href: "/admin/members" },
-      { titleKey: "memberPoints", icon: Wallet, href: "/admin/members/points" },
       { titleKey: "memberCoupons", icon: Tag, href: "/admin/crm/coupons" },
       { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
       { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/tiers" },
