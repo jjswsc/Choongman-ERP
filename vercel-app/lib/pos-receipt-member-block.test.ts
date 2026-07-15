@@ -12,9 +12,10 @@ describe('pos-receipt-member-block', () => {
     expect(maskMemberPhoneForReceipt('5951')).toBe('5951')
   })
 
-  it('formats empty tier as BRONZE', () => {
-    expect(formatMemberTierForReceipt('')).toBe('BRONZE')
+  it('formats empty tier as dash', () => {
+    expect(formatMemberTierForReceipt('')).toBe('-')
     expect(formatMemberTierForReceipt('GOLD')).toBe('GOLD')
+    expect(formatMemberTierForReceipt('member')).toBe('BRONZE')
   })
 
   it('picks API loyalty fields for receipt', () => {

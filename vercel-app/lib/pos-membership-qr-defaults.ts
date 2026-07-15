@@ -10,6 +10,17 @@ export const POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH = '/pos/membership-point
 
 export const POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT = 'เช็คสิทธิพิเศษที่นี่'
 
+/** 예전 O2O 수동적립 호스트 — DNS 없음. 링크 필드가 남아 있으면 이미지도 무시되고 실패함 */
+const DEAD_O2O_MEMBERSHIP_QR_HOST_RE = /point\.o2o\.co\.th/i
+
+/** 죽은 O2O 링크·빈 값 정리 후 저장/인쇄용 링크 후보 */
+export function coerceMembershipQrLinkUrl(raw: string | null | undefined): string {
+  const u = String(raw ?? '').trim()
+  if (!u) return ''
+  if (DEAD_O2O_MEMBERSHIP_QR_HOST_RE.test(u)) return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+  return u
+}
+
 /** 상대 경로·data URL을 인쇄 HTML에서 쓸 수 있게 origin 붙여 절대 URL로 */
 export function resolveReceiptAssetUrl(url: string, origin: string): string {
   const u = String(url || '').trim()
@@ -22,9 +33,26 @@ export function resolveReceiptAssetUrl(url: string, origin: string): string {
   return u
 }
 
-/** QR에 넣을 가입 링크 — `/m` 등은 현재 origin 기준 절대 URL */
+/** QR에 넣을 가입 링크 — 죽은 O2O는 /m, 절대·상대 `/m`은 현재 origin으로 재해석 */
 export function resolveMembershipQrLinkUrl(link: string, origin: string): string {
-  return resolveReceiptAssetUrl(String(link || '').trim(), origin)
+  const coerced = coerceMembershipQrLinkUrl(link)
+  if (!coerced) return ''
+  const base = String(origin || '').replace(/\/$/, '')
+  const isPortalPath = (pathname: string) => pathname === '/m' || pathname === '/m/'
+  if (coerced === '/m' || coerced === '/m/') {
+    return base ? `${base}/m` : ''
+  }
+  if (/^https?:\/\//i.test(coerced)) {
+    try {
+      const parsed = new URL(coerced)
+      if (isPortalPath(parsed.pathname)) {
+        return base ? `${base}/m` : ''
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return resolveReceiptAssetUrl(coerced, origin)
 }
 
 /** 미리보기용 — DB 저장값으로 쓰지 말 것 */
@@ -54,10 +82,10 @@ export function normalizeMembershipQrImageUrlForStorage(raw: string | null | und
   return POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH
 }
 
-/** 가입 링크 저장 정규화 — /m 또는 동일 경로의 vercel 절대 URL은 상대 `/m`으로 */
+/** 가입 링크 저장 정규화 — /m 또는 동일 경로의 vercel 절대 URL은 상대 `/m`으로. 죽은 O2O도 /m */
 export function normalizeMembershipQrLinkUrlForStorage(raw: string | null | undefined): string {
-  const u = String(raw ?? '').trim()
-  if (!u) return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+  const coerced = coerceMembershipQrLinkUrl(raw)
+  const u = coerced || POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
   if (u === '/m' || u === '/m/') return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
   if (/^https?:\/\//i.test(u)) {
     try {

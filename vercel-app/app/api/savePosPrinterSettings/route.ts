@@ -13,6 +13,10 @@ import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, canSavePosCustomerDisplayFields, hasOfficeStaffScope } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
 import { normalizeFeeStackMode, normalizeFeeStackOrder } from '@/lib/pos-pricing'
+import {
+  normalizeMembershipQrImageUrlForStorage,
+  normalizeMembershipQrLinkUrlForStorage,
+} from '@/lib/pos-membership-qr-defaults'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -257,8 +261,14 @@ export async function POST(req: NextRequest) {
     const receiptStampImageUrl = String(body?.receiptStampImageUrl ?? '').trim()
     const receiptShowStamp = body?.receiptShowStamp !== false
     const receiptStampOnlyTaxInvoice = body?.receiptStampOnlyTaxInvoice !== false
-    const receiptMembershipQrImageUrl = String(body?.receiptMembershipQrImageUrl ?? '').trim()
-    const receiptMembershipQrLinkUrl = String(body?.receiptMembershipQrLinkUrl ?? '').trim()
+    const receiptMembershipQrImageUrlRaw = String(body?.receiptMembershipQrImageUrl ?? '').trim()
+    const receiptMembershipQrImageUrl = receiptMembershipQrImageUrlRaw
+      ? normalizeMembershipQrImageUrlForStorage(receiptMembershipQrImageUrlRaw)
+      : ''
+    const receiptMembershipQrLinkUrlRaw = String(body?.receiptMembershipQrLinkUrl ?? '').trim()
+    const receiptMembershipQrLinkUrl = receiptMembershipQrLinkUrlRaw
+      ? normalizeMembershipQrLinkUrlForStorage(receiptMembershipQrLinkUrlRaw)
+      : ''
     const receiptMembershipQrText = String(body?.receiptMembershipQrText ?? '').trim()
     const receiptShowMembershipQr = Boolean(body?.receiptShowMembershipQr)
     const kitchenSlipScaleRaw = String(body?.kitchenSlipFontScale || 'md').toLowerCase()

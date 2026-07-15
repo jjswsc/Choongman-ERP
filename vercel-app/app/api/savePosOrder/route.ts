@@ -789,7 +789,7 @@ export async function POST(req: NextRequest) {
     const receiptTier =
       String(memberReceipt?.memberTierCode || loyaltyReceipt?.tierCode || '').trim() || undefined
     const receiptBalance =
-      memberReceipt?.memberPointBalance ?? loyaltyReceipt?.pointBalanceExcludingEarn ?? undefined
+      loyaltyReceipt?.pointBalanceExcludingEarn ?? memberReceipt?.memberPointBalance ?? undefined
 
     return NextResponse.json(
       {

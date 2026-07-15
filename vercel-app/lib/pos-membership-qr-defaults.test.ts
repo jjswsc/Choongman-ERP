@@ -22,6 +22,10 @@ describe('pos-membership-qr-defaults', () => {
     expect(resolveMembershipQrLinkUrl('/m', 'https://omni.example.com')).toBe(
       'https://omni.example.com/m'
     )
+    expect(
+      resolveMembershipQrLinkUrl('https://choongman-erp.vercel.app/m', 'https://omni.example.com')
+    ).toBe('https://omni.example.com/m')
+    expect(resolveMembershipQrLinkUrl('/m', '')).toBe('')
   })
 
   it('stores relative path instead of vercel/localhost absolute urls', () => {
@@ -41,8 +45,17 @@ describe('pos-membership-qr-defaults', () => {
   it('normalizes absolute /m links to relative /m for storage', () => {
     expect(normalizeMembershipQrLinkUrlForStorage('https://choongman-erp.vercel.app/m')).toBe('/m')
     expect(normalizeMembershipQrLinkUrlForStorage('/m')).toBe('/m')
-    expect(normalizeMembershipQrLinkUrlForStorage('https://point.o2o.co.th/backend/points/manual/1')).toBe(
-      'https://point.o2o.co.th/backend/points/manual/1'
-    )
+  })
+
+  it('remaps dead O2O membership links to /m on resolve and storage', () => {
+    expect(
+      resolveMembershipQrLinkUrl(
+        'https://point.o2o.co.th/backend/points/manual/1',
+        'https://choongman-erp.vercel.app'
+      )
+    ).toBe('https://choongman-erp.vercel.app/m')
+    expect(
+      normalizeMembershipQrLinkUrlForStorage('https://point.o2o.co.th/backend/points/manual/1')
+    ).toBe('/m')
   })
 })

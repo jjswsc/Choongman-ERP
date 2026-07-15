@@ -35,7 +35,7 @@ export function maskMemberPhoneForReceipt(phone: string | null | undefined): str
 
 export function formatMemberTierForReceipt(tierCode: string | null | undefined): string {
   const raw = String(tierCode ?? '').trim()
-  if (!raw) return 'BRONZE'
+  if (!raw) return '-'
   if (/^member$/i.test(raw)) return 'BRONZE'
   return raw.toUpperCase()
 }
@@ -134,7 +134,11 @@ export function buildPaymentReceiptMemberFooterHtml(params: {
     tr('posReceiptMembershipQrCta', 'เช็คสิทธิพิเศษที่นี่')
   const memberNoDisplay = String(params.receiptData.memberNo ?? '').trim()
   const tierLabel = formatMemberTierForReceipt(params.receiptData.memberTierCode)
-  const pointBalance = formatMemberPointsDisplay(params.receiptData.memberPointBalance ?? 0)
+  const balanceRaw = params.receiptData.memberPointBalance
+  const pointBalance =
+    balanceRaw == null || (typeof balanceRaw === 'number' && !Number.isFinite(balanceRaw))
+      ? '-'
+      : formatMemberPointsDisplay(balanceRaw)
   const pointEarned = roundMemberPointsEarn(params.receiptData.memberPointEarned)
   const pointEarnedLabel = pointEarned > 0 ? `+${formatMemberPointsDisplay(pointEarned)}` : '0'
 

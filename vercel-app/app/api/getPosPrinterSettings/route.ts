@@ -8,6 +8,7 @@ import { normalizeFeeStackMode, normalizeFeeStackOrder } from '@/lib/pos-pricing
 import { requireAuth } from '@/lib/verify-auth'
 import { canPickPosTerminalStore } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
+import { coerceMembershipQrLinkUrl } from '@/lib/pos-membership-qr-defaults'
 
 type VendorBizInfo = {
   name?: string
@@ -442,7 +443,7 @@ export async function GET(request: NextRequest) {
       receiptShowStamp: raw?.receipt_show_stamp !== false,
       receiptStampOnlyTaxInvoice: raw?.receipt_stamp_only_tax_invoice !== false,
       receiptMembershipQrImageUrl: String(raw?.receipt_membership_qr_image_url ?? '').trim(),
-      receiptMembershipQrLinkUrl: String(raw?.receipt_membership_qr_link_url ?? '').trim(),
+      receiptMembershipQrLinkUrl: coerceMembershipQrLinkUrl(raw?.receipt_membership_qr_link_url),
       receiptMembershipQrText: String(raw?.receipt_membership_qr_text ?? '').trim(),
       receiptShowMembershipQr: Boolean(raw?.receipt_show_membership_qr),
       kitchenSlipFontScale:

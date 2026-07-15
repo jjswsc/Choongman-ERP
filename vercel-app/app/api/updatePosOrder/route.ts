@@ -594,6 +594,10 @@ export async function POST(req: NextRequest) {
         console.error('updatePosOrder ensure loyalty:', loyaltyErr)
       }
     }
+    // 이미 적립된 주문은 body pointEarned가 0이어도 DB 적립분을 스냅샷 차감에 사용
+    if (previousEarned > 0) {
+      pointEarned = previousEarned
+    }
     if (memberId > 0 && paymentComplete) {
       try {
         const { notifyMemberPointLineForPaidOrder } = await import('@/lib/member-point-line-notify')
@@ -769,7 +773,7 @@ export async function POST(req: NextRequest) {
     const receiptTier =
       String(memberReceipt?.memberTierCode || loyaltyReceipt?.tierCode || '').trim() || undefined
     const receiptBalance =
-      memberReceipt?.memberPointBalance ?? loyaltyReceipt?.pointBalanceExcludingEarn ?? undefined
+      loyaltyReceipt?.pointBalanceExcludingEarn ?? memberReceipt?.memberPointBalance ?? undefined
 
     return NextResponse.json(
       {
