@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
 
 type TenantOpt = { id: string; companyName: string }
 
@@ -31,6 +32,7 @@ type StoreRow = {
 
 export default function SaasStoresPage() {
   const t = useT(useLang().lang)
+  const scope = useSaasScope()
   const [tenantFilter, setTenantFilter] = useState<string>("")
   const [createTenantId, setCreateTenantId] = useState<string>("")
   const [createStoreName, setCreateStoreName] = useState("")
@@ -261,7 +263,15 @@ export default function SaasStoresPage() {
     <main className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">{t("saasAdminStore_pageTitle")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t("saasAdminStore_pageIntro")}</p>
+        {scope.isPartner ? (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+            {tr(t, "saasAdminStore_partnerScopeHint", {
+              name: scope.partnerName || scope.partnerId || "—",
+            })}
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">{t("saasAdminStore_pageIntro")}</p>
+        )}
         <p className="mt-2 text-sm">
           <Link href="/saas-admin/onboarding" className="text-primary underline underline-offset-4">
             {t("saasAdminNavOnboarding")}

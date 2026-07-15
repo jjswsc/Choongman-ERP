@@ -38,16 +38,16 @@ function loginDataSuccessHeaders(): Headers {
 }
 
 async function getLoginDataHandler(): Promise<LoginDataPayload> {
-  const empList = await fetchEmployeesForLoginList()
-
-  /** 매장 마스터·거래처는 직원 목록과 독립 → 병렬로 왕복 1회 절감 (직원 조회는 반드시 선행) */
-  const [masters, vendorRows] = await Promise.all([
+  /** 직원·매장 마스터·거래처·SaaS 매장은 서로 독립 → 전부 병렬 */
+  const [empList, masters, vendorRows, saasStores] = await Promise.all([
+    fetchEmployeesForLoginList(),
     fetchErpStoresMaster(),
     supabaseSelect('vendors', {
       select: 'name,gps_name,type',
       order: 'id.asc',
       limit: 10000,
     }) as Promise<{ name?: string; gps_name?: string; type?: string }[] | null>,
+    loadSaasLoginStoreEntries(),
   ])
 
   const built = enrichStoreListWithGrabMap(
@@ -89,7 +89,6 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
   }
 
   const storeLabels: Record<string, string> = { ...built.storeLabels }
-  const saasStores = await loadSaasLoginStoreEntries()
   for (const entry of saasStores) {
     if (!entry.storeName || isLoginExcludedStoreKey(entry.storeName)) continue
     if (!users[entry.storeName]) users[entry.storeName] = []

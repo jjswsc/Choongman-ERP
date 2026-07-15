@@ -240,7 +240,15 @@ export function yearlyExpenseSubjectAmount(
 export function yearlyExpenseBreakdownField(
   rows: { ym: string; data: IncomeStatementData }[],
   year: string,
-  field: "pettyCash" | "bankWithdraw" | "deliveryAppFees" | "cardFees" | "fixedExpenses"
+  field:
+    | "pettyCash"
+    | "bankWithdraw"
+    | "deliveryAppFees"
+    | "cardFees"
+    | "fixedExpenses"
+    | "stockInboundExpense"
+    | "payrollExpense"
+    | "depreciationExpense"
 ): number {
   let s = 0
   for (const { ym, data } of rows) {

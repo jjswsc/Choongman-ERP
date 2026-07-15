@@ -20,7 +20,8 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   const { lang, setLang } = useLang()
   const isLoginPage = isSaasAdminLoginPath(pathname)
   const roleAllowed = Boolean(auth && canAccessSaasAdmin(auth.role || ""))
-  const [saasScope, setSaasScope] = useState<SaasScopeClientMeta | null>(roleAllowed ? PLATFORM_SCOPE_CLIENT_META : null)
+  /** 서버 resolveSaasScope와 맞춤 — HQ 역할이어도 대리점 연결이면 partner */
+  const [saasScope, setSaasScope] = useState<SaasScopeClientMeta | null>(null)
 
   useEffect(() => {
     const n = normalizeAdminUiLang(lang)
@@ -33,10 +34,6 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
       router.replace("/saas-admin/login")
       return
     }
-    if (roleAllowed) {
-      setSaasScope(PLATFORM_SCOPE_CLIENT_META)
-      return
-    }
     let cancelled = false
     setSaasScope(null)
     void apiFetch("/api/getSaasTenantSettings")
@@ -47,11 +44,20 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
           setSaasScope(json.scope)
           return
         }
+        if (roleAllowed && res.ok) {
+          setSaasScope(PLATFORM_SCOPE_CLIENT_META)
+          return
+        }
         if (res.ok) return
         router.replace("/saas-admin/login?msg=no_admin")
       })
       .catch(() => {
-        if (!cancelled) router.replace("/saas-admin/login?msg=no_admin")
+        if (cancelled) return
+        if (roleAllowed) {
+          setSaasScope(PLATFORM_SCOPE_CLIENT_META)
+          return
+        }
+        router.replace("/saas-admin/login?msg=no_admin")
       })
     return () => {
       cancelled = true
@@ -79,3 +85,4 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
     </SaasScopeProvider>
   )
 }
+

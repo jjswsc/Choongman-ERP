@@ -56,6 +56,8 @@ export async function loginCheck(params: {
     allowedStores?: string[]
     canManageOfficePayroll?: boolean
     saasPartnerLogin?: boolean
+    /** 로그인 직후 /api/saas/enabled-modules 왕복 생략용 */
+    enabledModules?: Partial<Record<string, boolean>>
     code?: string
   }
   return data

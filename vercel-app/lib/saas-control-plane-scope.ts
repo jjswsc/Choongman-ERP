@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { JwtPayload } from "./jwt-auth"
 import { canAccessSaasAdmin } from "./permissions"
-import { resolveSaasPartnerLoginStore } from "./saas-partner-login-defaults"
+import { isSaasPartnerLoginStore } from "./saas-partner-login-defaults"
 import { supabaseSelectFilter } from "./supabase-server"
 import { requireAuth } from "./verify-auth"
 import type { SaasScopeClientMeta } from "./saas-control-plane-scope-client"
@@ -23,9 +23,7 @@ export type SaasScope =
 type PartnerRow = { id?: string; name?: string; default_margin_pct?: number | null }
 
 function isPartnerStoreKey(store: string): boolean {
-  const s = String(store || "").trim().toLowerCase()
-  const partnerStore = resolveSaasPartnerLoginStore().trim().toLowerCase()
-  return Boolean(s && partnerStore && s === partnerStore)
+  return isSaasPartnerLoginStore(store)
 }
 
 /** JWT에 employeeId가 없을 때(구 토큰·세션) company/store/name으로 employees.id 복구 */

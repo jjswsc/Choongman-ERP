@@ -9,6 +9,7 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
+  supabaseSelectFilterRange,
   supabaseSelectPageCap,
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
@@ -57,6 +58,14 @@ function normalizeStoreCode(raw: string, tenantId: string, storeName: string): s
     .replace(/^_+|_+$/g, "")
   const fallback = `${baseTenant || "tenant"}_${baseStore || "store"}`
   return fallback.slice(0, 64)
+}
+
+function partnerTenantIdInFilter(allowed: Set<string>): string | null {
+  const ids = [...allowed].map((id) => String(id || "").trim()).filter(Boolean)
+  if (ids.length === 0) return null
+  // PostgREST: string list needs double quotes (hyphenated tenant ids)
+  const quoted = ids.map((id) => `"${id.replace(/"/g, "")}"`).join(",")
+  return `tenant_id=in.(${quoted})`
 }
 
 async function loadTenantOptions(scope: SaasScope): Promise<TenantOpt[]> {
@@ -135,6 +144,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const partnerAllowed =
+      cp.scope.kind === "partner" ? await loadPartnerTenantIdSet(cp.scope.partnerId) : null
+    const partnerInFilter = partnerAllowed ? partnerTenantIdInFilter(partnerAllowed) : null
+
     const tenantOptions = await loadTenantOptions(cp.scope)
     const companyByTenant = new Map(tenantOptions.map((t) => [t.id, t.companyName]))
 
@@ -143,10 +156,25 @@ export async function GET(req: NextRequest) {
 
     const tenantFilter = tenantId ? `tenant_id=eq.${encodeURIComponent(tenantId)}` : ""
     const allRowsFilter = "id=gte.0"
+    const scopedAllFilter = partnerInFilter || allRowsFilter
+
+    // 대리점에 담당 고객사가 없으면 매장도 없음
+    if (cp.scope.kind === "partner" && (!partnerAllowed || partnerAllowed.size === 0)) {
+      return NextResponse.json(
+        {
+          success: true,
+          tenantOptions,
+          rows: [],
+          pagination: { offset, limit: cap, hasMore: false },
+          scope: { kind: "partner", partnerId: cp.scope.partnerId, partnerName: cp.scope.partnerName },
+        },
+        { headers }
+      )
+    }
 
     if (q) {
       try {
-        const f = tenantId ? tenantFilter : allRowsFilter
+        const f = tenantId ? tenantFilter : scopedAllFilter
         raw = (await supabaseSelectFilterAllPages("erp_stores", f, {
           order: "id.desc",
           select: "*",
@@ -158,12 +186,16 @@ export async function GET(req: NextRequest) {
         if (/column|42703|tenant_id/i.test(msg) && tenantId) {
           raw = []
         } else if (/column|42703|tenant_id/i.test(msg)) {
-          raw = (await supabaseSelectFilterAllPages("erp_stores", allRowsFilter, {
-            order: "id.desc",
-            select: "*",
-            maxRows: 5000,
-            pageSize: 800,
-          })) as Record<string, unknown>[]
+          // tenant_id 컬럼 없는 레거시: 본사만 전체 조회, 대리점은 비공개
+          raw =
+            cp.scope.kind === "partner"
+              ? []
+              : ((await supabaseSelectFilterAllPages("erp_stores", allRowsFilter, {
+                  order: "id.desc",
+                  select: "*",
+                  maxRows: 5000,
+                  pageSize: 800,
+                })) as Record<string, unknown>[])
         } else {
           throw e
         }
@@ -176,6 +208,13 @@ export async function GET(req: NextRequest) {
         offset,
         limit: cap,
       })
+    } else if (partnerInFilter) {
+      raw = (await supabaseSelectFilterRange("erp_stores", partnerInFilter, {
+        order: "id.desc",
+        select: "*",
+        rangeStart: offset,
+        rangeEnd: offset + cap - 1,
+      })) as Record<string, unknown>[]
     } else {
       raw = (await supabaseSelect("erp_stores", {
         order: "id.desc",
@@ -188,8 +227,11 @@ export async function GET(req: NextRequest) {
     const mapped = (Array.isArray(raw) ? raw : []).map((r) => normalizeStoreRow(r, companyByTenant))
     const hasMore = q ? false : mapped.length >= cap
     let rows = mapped
+    if (partnerAllowed) {
+      rows = rows.filter((row) => Boolean(row.tenantId && partnerAllowed.has(row.tenantId)))
+    }
     if (q) {
-      rows = mapped.filter((row) => {
+      rows = rows.filter((row) => {
         const b = `${row.companyName} ${row.label} ${row.storeCode} ${row.tenantId || ""}`.toLowerCase()
         return b.includes(q)
       })
@@ -201,6 +243,10 @@ export async function GET(req: NextRequest) {
         tenantOptions,
         rows,
         pagination: { offset, limit: cap, hasMore },
+        scope:
+          cp.scope.kind === "partner"
+            ? { kind: "partner" as const, partnerId: cp.scope.partnerId, partnerName: cp.scope.partnerName }
+            : { kind: "platform" as const },
       },
       { headers }
     )

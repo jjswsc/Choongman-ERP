@@ -2,9 +2,11 @@
 
 import * as React from "react"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { Download, RotateCcw, Search, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -19,8 +21,17 @@ import {
   type Member,
 } from "@/lib/api-client"
 import { downloadCsv } from "@/lib/crm-export"
+import {
+  emptyMemberSearchFieldDraft,
+  formatMemberSearchFieldsSummary,
+  hasMemberSearchFields,
+  listFilledMemberSearchFields,
+  type MemberSearchFieldDraft,
+  type MemberSearchFieldKey,
+} from "@/lib/member-search-filter"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 
 const MEMBER_PAGE_SIZE = 100
 
@@ -28,35 +39,164 @@ const MemberCrmHint = React.memo(function MemberCrmHint({ text }: { text: string
   return <p className="text-[11px] text-muted-foreground">{text}</p>
 })
 
-const MemberSearchBar = React.memo(function MemberSearchBar({
+const SEARCH_FIELD_LABEL_KEYS: Record<MemberSearchFieldKey, string> = {
+  name: "name",
+  phone: "memberPhone",
+  memberNo: "memberNo",
+  email: "email",
+  birthDate: "birthDate",
+}
+
+const MemberSearchPanel = React.memo(function MemberSearchPanel({
   searching,
   searchLabel,
   loadingLabel,
-  searchPh,
+  resetLabel,
+  andHint,
+  activeFieldLabel,
+  t,
   onSearch,
+  onReset,
 }: {
   searching: boolean
   searchLabel: string
   loadingLabel: string
-  searchPh: string
-  onSearch: (q: string) => void
+  resetLabel: string
+  andHint: string
+  activeFieldLabel: string
+  t: ReturnType<typeof useT>
+  onSearch: (fields: MemberSearchFieldDraft) => void
+  onReset: () => void
 }) {
-  const [draft, setDraft] = React.useState("")
+  const [draft, setDraft] = React.useState<MemberSearchFieldDraft>({ ...emptyMemberSearchFieldDraft })
+  const filledKeys = listFilledMemberSearchFields(draft)
+  const filledCount = filledKeys.length
+
+  const patch = (key: MemberSearchFieldKey, value: string) => {
+    setDraft((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const clearField = (key: MemberSearchFieldKey) => {
+    setDraft((prev) => ({ ...prev, [key]: "" }))
+  }
+
+  const submit = () => onSearch(draft)
 
   return (
-    <>
-      <Input
-        placeholder={searchPh}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSearch(draft)
-        }}
-      />
-      <Button variant="outline" onClick={() => onSearch(draft)} disabled={searching}>
-        {searching ? loadingLabel : searchLabel}
-      </Button>
-    </>
+    <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-slate-50/50 p-3 sm:p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-800/80">{t("memberSearchSectionTitle")}</p>
+        {filledCount > 1 ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">{andHint}</span>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{t("name")}</Label>
+          <Input
+            placeholder={t("memberSearchNamePh")}
+            value={draft.name}
+            onChange={(e) => patch("name", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit()
+            }}
+            className="bg-background"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{t("memberPhone")}</Label>
+          <Input
+            placeholder={t("memberSearchPhonePh")}
+            value={draft.phone}
+            onChange={(e) => patch("phone", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit()
+            }}
+            className="bg-background"
+            inputMode="tel"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{t("memberNo")}</Label>
+          <Input
+            placeholder={t("memberSearchMemberNoPh")}
+            value={draft.memberNo}
+            onChange={(e) => patch("memberNo", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit()
+            }}
+            className="bg-background"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{t("email")}</Label>
+          <Input
+            placeholder={t("memberSearchEmailPh")}
+            value={draft.email}
+            onChange={(e) => patch("email", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit()
+            }}
+            className="bg-background"
+            type="email"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">{t("birthDate")}</Label>
+          <Input
+            placeholder={t("memberSearchBirthPh")}
+            value={draft.birthDate}
+            onChange={(e) => patch("birthDate", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit()
+            }}
+            className="bg-background"
+            type="date"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" onClick={submit} disabled={searching} className="min-w-[96px]">
+          <Search className="size-4" />
+          {searching ? loadingLabel : searchLabel}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setDraft({ ...emptyMemberSearchFieldDraft })
+            onReset()
+          }}
+          disabled={searching}
+        >
+          <RotateCcw className="size-4" />
+          {resetLabel}
+        </Button>
+        {filledCount > 0 ? (
+          <span className="text-xs text-muted-foreground">{activeFieldLabel}:</span>
+        ) : null}
+        {filledKeys.map((key) => (
+          <span
+            key={key}
+            className="inline-flex max-w-[220px] items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-xs text-primary"
+          >
+            <span className="truncate">
+              {t(SEARCH_FIELD_LABEL_KEYS[key])}: {draft[key]}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 hover:bg-primary/10"
+              aria-label={resetLabel}
+              onClick={() => clearField(key)}
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
   )
 })
 
@@ -91,6 +231,14 @@ const MemberListTable = React.memo(function MemberListTable({
 }) {
   if (loading) {
     return <p className="text-sm text-muted-foreground">{loadingLabel}</p>
+  }
+
+  if (!members.length) {
+    return (
+      <div className="rounded-md border border-dashed bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
+        {t("memberSearchResult")}: 0
+      </div>
+    )
   }
 
   return (
@@ -163,7 +311,9 @@ export const MemberListPanel = React.memo(
     const [importing, setImporting] = React.useState(false)
     const [resettingLine, setResettingLine] = React.useState(false)
     const [errorMessage, setErrorMessage] = React.useState("")
-    const [appliedQuery, setAppliedQuery] = React.useState("")
+    const [appliedFields, setAppliedFields] = React.useState<MemberSearchFieldDraft>({
+      ...emptyMemberSearchFieldDraft,
+    })
     const [pageCursors, setPageCursors] = React.useState<(number | undefined)[]>([undefined])
     const [pageIndex, setPageIndex] = React.useState(0)
     const [hasMore, setHasMore] = React.useState(false)
@@ -195,22 +345,22 @@ export const MemberListPanel = React.memo(
         .catch(() => {})
     }, [lang, t])
 
-    const appliedQueryRef = React.useRef(appliedQuery)
+    const appliedFieldsRef = React.useRef(appliedFields)
     const pageCursorsRef = React.useRef(pageCursors)
     const pageIndexRef = React.useRef(pageIndex)
-    appliedQueryRef.current = appliedQuery
+    appliedFieldsRef.current = appliedFields
     pageCursorsRef.current = pageCursors
     pageIndexRef.current = pageIndex
 
     const loadPage = React.useCallback(
       async (opts?: {
-        q?: string
+        fields?: MemberSearchFieldDraft
         afterId?: number | undefined
         pageIdx?: number
         cursors?: (number | undefined)[]
         isSearch?: boolean
       }) => {
-        const q = opts?.q ?? appliedQueryRef.current
+        const fields = opts?.fields ?? appliedFieldsRef.current
         const cursors = opts?.cursors ?? pageCursorsRef.current
         const pageIdx = opts?.pageIdx ?? pageIndexRef.current
         const afterId = opts?.afterId !== undefined ? opts.afterId : cursors[pageIdx]
@@ -218,7 +368,15 @@ export const MemberListPanel = React.memo(
         setErrorMessage("")
         setLoading(true)
         try {
-          const res = await getMembersCursor({ q, afterId, limit: MEMBER_PAGE_SIZE })
+          const res = await getMembersCursor({
+            name: fields.name,
+            phone: fields.phone,
+            memberNo: fields.memberNo,
+            email: fields.email,
+            birthDate: fields.birthDate,
+            afterId,
+            limit: MEMBER_PAGE_SIZE,
+          })
           if (!res.success) {
             startTransition(() => {
               setMembers([])
@@ -250,26 +408,44 @@ export const MemberListPanel = React.memo(
     const loadPageRef = React.useRef(loadPage)
     loadPageRef.current = loadPage
 
+    React.useEffect(() => {
+      void loadPageRef.current()
+    }, [])
+
     React.useImperativeHandle(
       ref,
       () => ({
         reload: () => {
-          void loadPage({ q: appliedQueryRef.current, isSearch: true })
+          void loadPage({ fields: appliedFieldsRef.current, isSearch: true })
         },
       }),
       [loadPage]
     )
 
     const runSearch = React.useCallback(
-      (q: string) => {
-        const trimmed = q.trim()
-        setAppliedQuery(trimmed)
+      (fields: MemberSearchFieldDraft) => {
+        const next = {
+          name: fields.name.trim(),
+          phone: fields.phone.trim(),
+          memberNo: fields.memberNo.trim(),
+          email: fields.email.trim(),
+          birthDate: fields.birthDate.trim(),
+        }
+        setAppliedFields(next)
         setPageCursors([undefined])
         setPageIndex(0)
-        void loadPage({ q: trimmed, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
+        void loadPage({ fields: next, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
       },
       [loadPage]
     )
+
+    const resetSearch = React.useCallback(() => {
+      const empty = { ...emptyMemberSearchFieldDraft }
+      setAppliedFields(empty)
+      setPageCursors([undefined])
+      setPageIndex(0)
+      void loadPage({ fields: empty, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
+    }, [loadPage])
 
     const goNextPage = React.useCallback(() => {
       if (!hasMore || members.length === 0) return
@@ -313,20 +489,29 @@ export const MemberListPanel = React.memo(
       )
     }
 
+    const hasImportFile = Boolean(selectedImportFileName)
+
     return (
       <Card>
-        <CardHeader className="space-y-3">
+        <CardHeader className="space-y-4">
           <CardTitle className="text-base">{t("memberListMasterTitle")}</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <MemberSearchBar
-              searching={searching}
-              searchLabel={t("search")}
-              loadingLabel={t("loading")}
-              searchPh={t("memberSearchPh")}
-              onSearch={runSearch}
-            />
+
+          <MemberSearchPanel
+            searching={searching}
+            searchLabel={t("search")}
+            loadingLabel={t("loading")}
+            resetLabel={t("memberSearchReset")}
+            andHint={t("memberSearchPriorityHint")}
+            activeFieldLabel={t("memberSearchActiveField")}
+            t={t}
+            onSearch={runSearch}
+            onReset={resetSearch}
+          />
+
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+            <span className="text-xs font-medium text-muted-foreground">{t("crmMemberFilterTier")}</span>
             <Select value={filterTier} onValueChange={setFilterTier}>
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="h-8 w-[120px] bg-background">
                 <SelectValue placeholder={t("crmMemberFilterTier")} />
               </SelectTrigger>
               <SelectContent>
@@ -340,8 +525,9 @@ export const MemberListPanel = React.memo(
                 )}
               </SelectContent>
             </Select>
+            <span className="text-xs font-medium text-muted-foreground">{t("crmMemberFilterStatus")}</span>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[110px]">
+              <SelectTrigger className="h-8 w-[110px] bg-background">
                 <SelectValue placeholder={t("crmMemberFilterStatus")} />
               </SelectTrigger>
               <SelectContent>
@@ -350,57 +536,83 @@ export const MemberListPanel = React.memo(
                 <SelectItem value="inactive">{t("crmMemberStatusInactive")}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={exportMembersCsv} disabled={!filteredMembers.length}>
-              {t("crmMemberExportCsv")}
-            </Button>
-            <input
-              ref={importFileRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                setSelectedImportFileName(file ? file.name : "")
-              }}
-            />
-            <Button variant="outline" disabled={importing} onClick={() => importFileRef.current?.click()}>
-              {t("memberFileSelect")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={importing}
-              onClick={async () => {
-                const file = importFileRef.current?.files?.[0]
-                if (!file) {
-                  await appAlert(t("memberCrmFileSelectFirst"))
-                  return
-                }
-                setImporting(true)
-                try {
-                  const res = await importLineCrmFile({ file })
-                  if (!res.success) {
-                    await appAlert(res.message || t("memberCrmImportFail"))
+          </div>
+
+          <div className="rounded-xl border bg-card p-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground">{t("memberDataToolsTitle")}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={exportMembersCsv} disabled={!filteredMembers.length}>
+                <Download className="size-4" />
+                {t("crmMemberExportCsv")}
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  setSelectedImportFileName(file ? file.name : "")
+                }}
+              />
+              <Button variant="outline" size="sm" disabled={importing} onClick={() => importFileRef.current?.click()}>
+                <Upload className="size-4" />
+                {t("memberFileSelect")}
+              </Button>
+              {hasImportFile ? (
+                <span className="max-w-[200px] truncate rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  {selectedImportFileName}
+                </span>
+              ) : null}
+              <Button
+                size="sm"
+                variant={hasImportFile ? "default" : "outline"}
+                disabled={importing || !hasImportFile}
+                onClick={async () => {
+                  const file = importFileRef.current?.files?.[0]
+                  if (!file) {
+                    await appAlert(t("memberCrmFileSelectFirst"))
                     return
                   }
-                  setActionMessage(
-                    `${t("memberCrmImportDone")}: ${t("memberTotal")} ${Number(res.rowCount || 0).toLocaleString()}${t("posCount")} / ${t("memberSuccess")} ${Number(
-                      res.successCount || 0
-                    ).toLocaleString()}${t("posCount")} / ${t("memberFail")} ${Number(res.failedCount || 0).toLocaleString()}${t("posCount")}`
-                  )
-                  if (importFileRef.current) importFileRef.current.value = ""
-                  setSelectedImportFileName("")
-                  setPageCursors([undefined])
-                  setPageIndex(0)
-                  await loadPage({ q: appliedQueryRef.current, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
-                } finally {
-                  setImporting(false)
-                }
-              }}
-            >
-              {importing ? t("memberImporting") : t("memberCrmImportBtn")}
-            </Button>
+                  setImporting(true)
+                  try {
+                    const res = await importLineCrmFile({ file })
+                    if (!res.success) {
+                      await appAlert(res.message || t("memberCrmImportFail"))
+                      return
+                    }
+                    setActionMessage(
+                      `${t("memberCrmImportDone")}: ${t("memberTotal")} ${Number(res.rowCount || 0).toLocaleString()}${t("posCount")} / ${t("memberSuccess")} ${Number(
+                        res.successCount || 0
+                      ).toLocaleString()}${t("posCount")} / ${t("memberFail")} ${Number(res.failedCount || 0).toLocaleString()}${t("posCount")}`
+                    )
+                    if (importFileRef.current) importFileRef.current.value = ""
+                    setSelectedImportFileName("")
+                    setPageCursors([undefined])
+                    setPageIndex(0)
+                    await loadPage({
+                      fields: appliedFieldsRef.current,
+                      afterId: undefined,
+                      pageIdx: 0,
+                      cursors: [undefined],
+                      isSearch: true,
+                    })
+                  } finally {
+                    setImporting(false)
+                  }
+                }}
+              >
+                {importing ? t("memberImporting") : t("memberCrmImportBtn")}
+              </Button>
+            </div>
+            <MemberCrmHint text={crmHintText} />
+          </div>
+
+          <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5">
+            <p className="mb-2 text-[11px] text-destructive/80">{t("memberLineResetSectionHint")}</p>
             <Button
-              variant="outline"
+              variant="destructive"
+              size="sm"
               disabled={resettingLine}
               onClick={async () => {
                 const ok = await appConfirm(t("memberLineResetConfirm"))
@@ -417,7 +629,13 @@ export const MemberListPanel = React.memo(
                   )
                   setPageCursors([undefined])
                   setPageIndex(0)
-                  await loadPage({ q: appliedQueryRef.current, afterId: undefined, pageIdx: 0, cursors: [undefined], isSearch: true })
+                  await loadPage({
+                    fields: appliedFieldsRef.current,
+                    afterId: undefined,
+                    pageIdx: 0,
+                    cursors: [undefined],
+                    isSearch: true,
+                  })
                 } finally {
                   setResettingLine(false)
                 }
@@ -426,20 +644,24 @@ export const MemberListPanel = React.memo(
               {resettingLine ? t("loading") : t("memberLineResetBtn")}
             </Button>
           </div>
+
           {errorMessage ? (
             <p className="text-xs text-destructive">{errorMessage}</p>
           ) : (
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">
                 {t("memberSearchResult")}: {tr(t, "memberListPageShowing", { count: String(filteredMembers.length) })}
+                {hasMemberSearchFields(appliedFields)
+                  ? ` · ${formatMemberSearchFieldsSummary(appliedFields, {
+                      name: t("name"),
+                      phone: t("memberPhone"),
+                      memberNo: t("memberNo"),
+                      email: t("email"),
+                      birthDate: t("birthDate"),
+                    })}`
+                  : ""}
                 {pageIndex > 0 ? ` · ${pageIndex + 1}` : ""}
               </p>
-              {!!selectedImportFileName && (
-                <p className="text-xs text-muted-foreground">
-                  {t("memberSelectedFile")}: {selectedImportFileName}
-                </p>
-              )}
-              <MemberCrmHint text={crmHintText} />
               {!!actionMessage && <p className="text-xs text-emerald-700">{actionMessage}</p>}
             </div>
           )}
@@ -459,6 +681,9 @@ export const MemberListPanel = React.memo(
               <Button type="button" variant="outline" size="sm" disabled={pageIndex <= 0} onClick={goPrevPage}>
                 {t("memberListPagePrev")}
               </Button>
+              <span className={cn("text-xs tabular-nums text-muted-foreground", pageIndex <= 0 && !hasMore && "hidden")}>
+                {pageIndex + 1}
+              </span>
               <Button type="button" variant="outline" size="sm" disabled={!hasMore} onClick={goNextPage}>
                 {t("memberListPageNext")}
               </Button>

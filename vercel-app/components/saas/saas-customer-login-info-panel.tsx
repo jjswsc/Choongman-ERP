@@ -42,8 +42,8 @@ export function SaasCustomerLoginInfoPanel({ tenantId, companyName, isPlatformIn
   const internal = isPlatformInternal ?? isSaasPlatformInternalTenant({ id: tenantId, isPlatformInternal })
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="border-sky-200/60 shadow-sm dark:border-sky-900/40">
+      <CardHeader className="rounded-t-xl border-b bg-gradient-to-r from-sky-50/80 to-transparent pb-3 dark:from-sky-950/30">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <CardTitle className="text-base">{t("saasAdminCust_loginInfoTitle")}</CardTitle>
@@ -54,9 +54,9 @@ export function SaasCustomerLoginInfoPanel({ tenantId, companyName, isPlatformIn
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {internal ? (
-          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/95">
+          <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100/95">
             {t("saasAdminCust_platformInternalHint")}
           </p>
         ) : null}
@@ -83,7 +83,7 @@ export function SaasCustomerLoginInfoPanel({ tenantId, companyName, isPlatformIn
               return (
                 <div
                   key={row.id || `${row.store}-${row.name}`}
-                  className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2"
+                  className="space-y-2 rounded-lg border border-slate-200/80 bg-gradient-to-br from-muted/40 to-background p-3 text-sm shadow-sm dark:border-slate-800"
                 >
                   <div className="grid gap-1 sm:grid-cols-2">
                     <p>
@@ -100,7 +100,7 @@ export function SaasCustomerLoginInfoPanel({ tenantId, companyName, isPlatformIn
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="secondary" asChild>
+                    <Button type="button" size="sm" className="bg-sky-600 text-white hover:bg-sky-700" asChild>
                       <Link href={href}>{t("saasAdminCust_loginLink")}</Link>
                     </Button>
                     <Button type="button" size="sm" variant="outline" asChild>
@@ -111,7 +111,7 @@ export function SaasCustomerLoginInfoPanel({ tenantId, companyName, isPlatformIn
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => void copyLine(row.company || companyName, row.store, row.name)}
                     >
                       {t("saasAdminCust_loginCopyLineBtn")}
@@ -128,7 +128,7 @@ export function SaasCustomerLoginInfoPanel({ tenantId, companyName, isPlatformIn
             {t("saasAdminCust_loginInfoRefresh")}
           </Button>
           {primary ? (
-            <Button type="button" size="sm" asChild>
+            <Button type="button" size="sm" className="shadow-sm shadow-primary/20" asChild>
               <Link href={loginHref} target="_blank" rel="noopener noreferrer">
                 {t("saasAdminCust_loginOpenPrimary")}
               </Link>

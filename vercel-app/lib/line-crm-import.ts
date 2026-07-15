@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { createMember } from '@/lib/members-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { normalizeMemberPoints } from '@/lib/member-points-math'
+import { memberPhoneLookupVariants, canonicalMemberPhoneForStorage } from '@/lib/member-phone-lookup'
 import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 type ReportType = 'customer' | 'point' | 'coupon'
@@ -81,7 +82,7 @@ function normalizeHeader(v: unknown): string {
 }
 
 function normalizePhone(v: string): string {
-  return String(v || '').replace(/[^\d+]/g, '').trim()
+  return canonicalMemberPhoneForStorage(v)
 }
 
 function normalizeDate(v: unknown): string {
@@ -425,29 +426,20 @@ function parseSheetRows(data: unknown[][]): {
 async function findMemberIdByPhone(phone: string): Promise<number> {
   const normalized = normalizePhone(phone)
   if (!normalized) return 0
-  const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(normalized)}`, {
-    limit: 1,
-    select: 'id',
-  })) as Array<{ id?: number }>
-  const exact = Number(rows?.[0]?.id || 0)
-  if (exact > 0) return exact
-  // Backward compatibility: previously some phones were saved without leading zero.
-  if (normalized.startsWith('0') && normalized.length >= 9) {
-    const rowsWithoutZero = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(normalized.slice(1))}`, {
-      limit: 1,
+  const seen = new Set<number>()
+  for (const candidate of memberPhoneLookupVariants(normalized)) {
+    const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(candidate)}&status=eq.active`, {
+      limit: 3,
       select: 'id',
+      order: 'id.desc',
     })) as Array<{ id?: number }>
-    const idWithoutZero = Number(rowsWithoutZero?.[0]?.id || 0)
-    if (idWithoutZero > 0) return idWithoutZero
-  } else if (!normalized.startsWith('0') && normalized.length >= 8) {
-    const rowsWithZero = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(`0${normalized}`)}`, {
-      limit: 1,
-      select: 'id',
-    })) as Array<{ id?: number }>
-    const idWithZero = Number(rowsWithZero?.[0]?.id || 0)
-    if (idWithZero > 0) return idWithZero
+    for (const row of rows || []) {
+      const id = Number(row?.id || 0)
+      if (id > 0) seen.add(id)
+    }
   }
-  return 0
+  if (seen.size === 0) return 0
+  return Math.max(...seen)
 }
 
 async function findMemberIdByLineDisplayName(lineDisplayName: string): Promise<number> {
@@ -553,7 +545,7 @@ export async function processLineCrmImport(params: {
         line_first_name: row.firstName || null,
         line_last_name: row.lastName || null,
         line_display_name: row.lineDisplayName || null,
-        phone: row.phone || null,
+        phone: normalizePhone(row.phone) || null,
         email: row.email || null,
         birth_date: row.birthDate || null,
         gender: row.gender || null,
@@ -584,7 +576,7 @@ export async function processLineCrmImport(params: {
           name: row.fullName || row.lineDisplayName || 'LINE 고객',
           full_name: row.fullName || null,
           line_display_name: row.lineDisplayName || null,
-          phone: row.phone || null,
+          phone: normalizePhone(row.phone) || null,
           email: row.email || null,
           birth_date: row.birthDate || null,
           updated_at: now,
@@ -617,7 +609,7 @@ export async function processLineCrmImport(params: {
           row_no: row.rowNo,
           report_type: parsed.reportType,
           line_display_name: row.lineDisplayName || null,
-          phone: row.phone || null,
+          phone: normalizePhone(row.phone) || null,
           full_name: row.fullName || null,
           transaction_id: row.transactionId || null,
           message: row.pointStatus ? `status:${row.pointStatus}` : null,
@@ -662,7 +654,7 @@ export async function processLineCrmImport(params: {
           row_no: row.rowNo,
           report_type: parsed.reportType,
           line_display_name: row.lineDisplayName || null,
-          phone: row.phone || null,
+          phone: normalizePhone(row.phone) || null,
           full_name: row.fullName || null,
           transaction_id: row.transactionId || null,
           message: row.pointStatus ? `status:${row.pointStatus}` : (e instanceof Error ? e.message : 'unknown error'),

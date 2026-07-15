@@ -12,3 +12,10 @@ export function resolveSaasPartnerLoginCompany(): string {
 export function resolveSaasPartnerLoginStore(): string {
   return String(process.env.SAAS_PLATFORM_PARTNER_STORE || "").trim() || "Partner"
 }
+
+/** SaaS 대리점 로그인 매장 키인지 (일반 ERP/POS 로그인과 구분) */
+export function isSaasPartnerLoginStore(store: string): boolean {
+  const s = String(store || "").trim().toLowerCase()
+  const partnerStore = resolveSaasPartnerLoginStore().trim().toLowerCase()
+  return Boolean(s && partnerStore && s === partnerStore)
+}

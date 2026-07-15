@@ -16,6 +16,10 @@ import {
   MANAGEMENT_MARGIN_MISE_RATE,
   type TheoreticalCostUnmatchedLine,
 } from '@/lib/management-margin-theoretical-cost'
+import {
+  resolvePosOrderSalesExclVat,
+  toPosCostSalesExclVat,
+} from '@/lib/pos-cost-vat'
 
 export type ManagementMarginChannelKey = 'dine_in' | 'takeout' | 'delivery' | 'other'
 
@@ -80,8 +84,13 @@ type OrderRow = {
   order_type?: string
   items_json?: string
   total?: number
+  vat?: number
   discount_amt?: number
   coupon_discount_amt?: number
+}
+
+function sumOrdersSalesExclVat(rows: OrderRow[]): number {
+  return round2(rows.reduce((s, o) => s + resolvePosOrderSalesExclVat(o), 0))
 }
 
 export function buildManagementMarginPosSlice(params: {
@@ -107,8 +116,9 @@ export function buildManagementMarginPosSlice(params: {
     paymentByKind: payment.byKind,
   })
 
-  const netSales = round2(bundle.totals.periodGrossSales)
-  const totalDiscount = combined.totals.totalDiscount
+  /** 순매출·할인 분모는 부가세 제외(원가·계산기와 동일). 할인 집계 원천 periodGrossSales는 VAT 포함. */
+  const netSales = sumOrdersSalesExclVat(params.orderRows)
+  const totalDiscount = toPosCostSalesExclVat(combined.totals.totalDiscount)
   const grossBefore = round2(netSales + totalDiscount)
 
   const resolveContext = buildTheoreticalCostResolveContext({
@@ -140,9 +150,9 @@ export function buildManagementMarginPosSlice(params: {
     const rows = byChannelOrders.get(channel) || []
     const chBundle = aggregatePosSalesPromoBundleDiscount({ orderRows: rows, catalog: params.catalog })
     const chPayment = aggregatePosSalesPaymentDiscount({ orderRows: rows })
-    const chNet = round2(chBundle.totals.periodGrossSales)
-    const chBundleDisc = round2(chBundle.totals.bundleDiscount)
-    const chPayDisc = round2(chPayment.totals.discountAmount)
+    const chNet = sumOrdersSalesExclVat(rows)
+    const chBundleDisc = toPosCostSalesExclVat(chBundle.totals.bundleDiscount)
+    const chPayDisc = toPosCostSalesExclVat(chPayment.totals.discountAmount)
     const chTotalDisc = round2(chBundleDisc + chPayDisc)
     const chTheory = aggregateTheoreticalCostFromOrders({
       orderRows: rows,
@@ -169,8 +179,8 @@ export function buildManagementMarginPosSlice(params: {
   return {
     grossSalesBeforeDiscount: grossBefore,
     netSales,
-    bundleDiscount: combined.totals.bundleDiscount,
-    paymentDiscount: combined.totals.paymentDiscount,
+    bundleDiscount: toPosCostSalesExclVat(combined.totals.bundleDiscount),
+    paymentDiscount: toPosCostSalesExclVat(combined.totals.paymentDiscount),
     totalDiscount,
     periodOrderCount: combined.totals.periodOrderCount,
     combined,

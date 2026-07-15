@@ -14,6 +14,7 @@ import {
   type RegularPriceChannel,
 } from '@/lib/pos-order-promo-regular-price'
 import type { PosMenuCatalogRow } from '@/lib/pos-sales-menu-hierarchy-aggregate'
+import { resolvePosOrderVatExclFactor } from '@/lib/pos-cost-vat'
 
 const EMPTY_MAIN = '(대분류 없음)'
 
@@ -47,6 +48,7 @@ type CategoryOrderRow = {
   order_type?: string
   items_json?: string
   total?: number
+  vat?: number
   discount_amt?: number
   coupon_discount_amt?: number
   service_amt?: number
@@ -179,6 +181,7 @@ function mergeBucket(target: Bucket, src: Bucket, salesFactor: number) {
 
 /**
  * 대분류별 판매 가중 실적 원가율.
+ * - 매출·할인은 부가세 제외(품목 원가·원가 계산기와 동일 기준)
  * - 세트/프로모: 구성품 카탈로그 정가 비중으로 매출 배분(없으면 수량 비중)
  * - 결제·쿠폰(라인 할인 잔여분) + 서비스(컴프)를 주문 단위로 분모에 반영
  * - BOM 미매칭 라인의 매출·원가는 대분류 합계에서 제외
@@ -218,6 +221,7 @@ export function aggregatePosCostWeightedByCategory(params: {
   for (const order of params.orderRows) {
     const isDelivery = isDeliveryChannelOrderType(order.order_type)
     const channel = orderTypeToPromoRegularPriceChannel(order.order_type)
+    const vatExclFactor = resolvePosOrderVatExclFactor(order)
     const orderBuckets = new Map<string, Bucket>()
     let lineDiscountSum = 0
 
@@ -226,8 +230,8 @@ export function aggregatePosCostWeightedByCategory(params: {
       const parentQty = Math.max(0, resolveItemsJsonLineQty(row))
       if (parentQty <= 0) continue
 
-      lineDiscountSum = round2(lineDiscountSum + resolveLineDiscountAmt(row))
-      const parentSales = resolveLineSales(row, parentQty)
+      lineDiscountSum = round2(lineDiscountSum + resolveLineDiscountAmt(row) * vatExclFactor)
+      const parentSales = round2(resolveLineSales(row, parentQty) * vatExclFactor)
       const costLines = expandOrderLineToCostLines(row, resolveContext)
       if (costLines.length === 0) continue
 
@@ -309,12 +313,14 @@ export function aggregatePosCostWeightedByCategory(params: {
     const provisionalSales = round2(
       Array.from(orderBuckets.values()).reduce((s, b) => s + b.netSales, 0)
     )
-    const headerDisc = resolvePosSalesDiscountAmount(
-      Number(order.discount_amt) || 0,
-      Number(order.coupon_discount_amt) || 0
+    const headerDisc = round2(
+      resolvePosSalesDiscountAmount(
+        Number(order.discount_amt) || 0,
+        Number(order.coupon_discount_amt) || 0
+      ) * vatExclFactor
     )
     const residualPaymentDisc = Math.max(0, round2(headerDisc - lineDiscountSum))
-    const serviceAmt = Math.max(0, Number(order.service_amt) || 0)
+    const serviceAmt = round2(Math.max(0, Number(order.service_amt) || 0) * vatExclFactor)
     const reduction = Math.min(provisionalSales, round2(residualPaymentDisc + serviceAmt))
 
     let salesFactor = 1

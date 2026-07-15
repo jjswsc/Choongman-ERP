@@ -28,6 +28,9 @@ export interface IncomeStatementData {
     deliveryAppFees: number
     cardFees: number
     fixedExpenses: number
+    stockInboundExpense?: number
+    payrollExpense?: number
+    depreciationExpense?: number
     total: number
   }
   diagnostics?: {
@@ -393,7 +396,17 @@ export type IncomeStatementExpenseDrillDown = {
     endYearMonth: string | null
     memo: string | null
   }[]
-  truncated: { petty: boolean; bank: boolean; fixed: boolean }
+  payroll?: {
+    kind: 'payroll'
+    id: number
+    name: string
+    store: string
+    amount: number
+    netPay: number
+    sso: number
+    tax: number
+  }[]
+  truncated: { petty: boolean; bank: boolean; fixed: boolean; payroll?: boolean }
   error?: string
 }
 

@@ -1,8 +1,21 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import {
+  AlertTriangle,
+  Ban,
+  Building2,
+  CheckCircle2,
+  Clock3,
+  Download,
+  Plus,
+  Search,
+  ShieldAlert,
+  ShoppingCart,
+  Users,
+} from "lucide-react"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +27,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 import {
   applySalesStageFeatures,
   DEFAULT_POLICY,
@@ -63,6 +77,51 @@ const STATUS_VARIANT = {
   grace: "outline",
   suspended: "destructive",
 } as const
+
+const DETAIL_TAB_TRIGGER_CN =
+  "rounded-md border border-transparent px-3 py-2 text-xs sm:text-sm data-[state=active]:border-primary/30 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+
+function StatCard(props: {
+  label: string
+  value: ReactNode
+  icon: ComponentType<{ className?: string }>
+  tone: "slate" | "emerald" | "amber" | "rose" | "orange" | "sky"
+}) {
+  const Icon = props.icon
+  const tone = {
+    slate: "border-slate-200/80 bg-gradient-to-br from-slate-50 to-white text-slate-700 dark:from-slate-900/40 dark:to-card",
+    emerald:
+      "border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white text-emerald-800 dark:from-emerald-950/30 dark:to-card dark:text-emerald-200",
+    amber:
+      "border-amber-200/70 bg-gradient-to-br from-amber-50 to-white text-amber-900 dark:from-amber-950/30 dark:to-card dark:text-amber-100",
+    rose: "border-rose-200/70 bg-gradient-to-br from-rose-50 to-white text-rose-800 dark:from-rose-950/30 dark:to-card dark:text-rose-200",
+    orange:
+      "border-orange-200/70 bg-gradient-to-br from-orange-50 to-white text-orange-900 dark:from-orange-950/30 dark:to-card dark:text-orange-100",
+    sky: "border-sky-200/70 bg-gradient-to-br from-sky-50 to-white text-sky-900 dark:from-sky-950/30 dark:to-card dark:text-sky-100",
+  }[props.tone]
+  const iconTone = {
+    slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    emerald: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
+    amber: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
+    rose: "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300",
+    orange: "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300",
+    sky: "bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300",
+  }[props.tone]
+
+  return (
+    <Card className={cn("overflow-hidden border shadow-sm", tone)}>
+      <CardContent className="flex items-start justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground">{props.label}</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{props.value}</p>
+        </div>
+        <span className={cn("inline-flex size-9 shrink-0 items-center justify-center rounded-lg", iconTone)}>
+          <Icon className="size-4" />
+        </span>
+      </CardContent>
+    </Card>
+  )
+}
 
 const CUSTOMER_DETAIL_TABS = [
   "plan",
@@ -150,6 +209,7 @@ function diffDaysFromTodayBangkok(ymd: string): number | null {
 }
 
 type AuditPeriodFilter = "all" | "today" | "7d" | "30d"
+type JoinPeriodFilter = "all" | "today" | "7d" | "30d" | "90d" | "this_month" | "this_year" | "custom"
 
 function matchesAuditPeriod(changedAt: string, period: AuditPeriodFilter): boolean {
   if (period === "all") return true
@@ -164,6 +224,52 @@ function matchesAuditPeriod(changedAt: string, period: AuditPeriodFilter): boole
   if (period === "today") return days === 0
   if (period === "7d") return days < 7
   return days < 30
+}
+
+function createdAtYmdBangkok(createdAt: string | null | undefined): string | null {
+  const raw = String(createdAt || "").trim()
+  if (!raw) return null
+  const dt = new Date(raw)
+  if (Number.isNaN(dt.getTime())) return null
+  return dt.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+}
+
+function matchesJoinPeriod(
+  createdAt: string | null | undefined,
+  period: JoinPeriodFilter,
+  range?: { fromYmd?: string; toYmd?: string }
+): boolean {
+  if (period === "all") return true
+  const eventYmd = createdAtYmdBangkok(createdAt)
+  if (!eventYmd) return false
+  const eventDate = parseYmd(eventYmd)
+  const today = parseYmd(bangkokYmd())
+  if (!eventDate || !today) return false
+
+  if (period === "custom") {
+    let from = String(range?.fromYmd || "").trim()
+    let to = String(range?.toYmd || "").trim()
+    if (!from && !to) return true
+    if (from && to && from > to) {
+      const tmp = from
+      from = to
+      to = tmp
+    }
+    if (from && eventYmd < from) return false
+    if (to && eventYmd > to) return false
+    return true
+  }
+
+  const days = Math.floor((today.getTime() - eventDate.getTime()) / 86_400_000)
+  if (days < 0) return false
+  if (period === "today") return days === 0
+  if (period === "7d") return days < 7
+  if (period === "30d") return days < 30
+  if (period === "90d") return days < 90
+  if (period === "this_month") {
+    return eventYmd.slice(0, 7) === bangkokYmd().slice(0, 7)
+  }
+  return eventYmd.slice(0, 4) === bangkokYmd().slice(0, 4)
 }
 
 function normalizeTenantRows(rows: TenantItem[]): TenantItem[] {
@@ -285,6 +391,9 @@ export default function SaasCustomersPage() {
   const [newPhone, setNewPhone] = useState("")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expiryOnly, setExpiryOnly] = useState(false)
+  const [joinPeriod, setJoinPeriod] = useState<JoinPeriodFilter>("all")
+  const [joinFromYmd, setJoinFromYmd] = useState("")
+  const [joinToYmd, setJoinToYmd] = useState("")
   const [partnerFilter, setPartnerFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<"default" | "risk_desc" | "expiry_soon">("default")
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
@@ -318,6 +427,7 @@ export default function SaasCustomersPage() {
       if (!scope.isPlatform && isSaasPlatformInternalTenant(tenant)) return false
       if (scope.isPlatform && !showPlatformInternal && isSaasPlatformInternalTenant(tenant)) return false
       if (statusFilter !== "all" && tenant.status !== statusFilter) return false
+      if (!matchesJoinPeriod(tenant.createdAt, joinPeriod, { fromYmd: joinFromYmd, toYmd: joinToYmd })) return false
       if (scope.isPlatform && partnerFilter !== "all") {
         if (partnerFilter === "__direct__" && tenant.partnerId) return false
         if (partnerFilter !== "__direct__" && tenant.partnerId !== partnerFilter) return false
@@ -341,7 +451,20 @@ export default function SaasCustomersPage() {
       })
     }
     return withExpiry
-  }, [expiryOnly, partnerFilter, scope.isPlatform, searchApplied, showPlatformInternal, sortBy, statusFilter, t, tenants])
+  }, [
+    expiryOnly,
+    joinFromYmd,
+    joinPeriod,
+    joinToYmd,
+    partnerFilter,
+    scope.isPlatform,
+    searchApplied,
+    showPlatformInternal,
+    sortBy,
+    statusFilter,
+    t,
+    tenants,
+  ])
 
   const applySearch = () => {
     setSearchApplied(searchInput.trim())
@@ -790,60 +913,73 @@ export default function SaasCustomersPage() {
   }
 
   return (
-    <main className="space-y-4 p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <main className="space-y-5 p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border bg-gradient-to-br from-slate-50 via-white to-sky-50/60 p-5 shadow-sm dark:from-slate-950/40 dark:via-card dark:to-sky-950/20">
         <div>
-          <h1 className="text-2xl font-semibold">{t("saasAdminCust_pageTitle")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("saasAdminCust_pageIntro")}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700/80 dark:text-sky-300/80">
+            SaaS Control
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t("saasAdminCust_pageTitle")}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t("saasAdminCust_pageIntro")}</p>
           {loadNotice ? <p className="mt-2 text-xs text-amber-600">{loadNotice}</p> : null}
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => setOpenCreate(true)} disabled={loading}>
-            {t("saasAdminCust_addTenant")}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          className="shadow-sm shadow-primary/20"
+          onClick={() => setOpenCreate(true)}
+          disabled={loading}
+        >
+          <Plus className="size-4" />
+          {t("saasAdminCust_addTenant")}
+        </Button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statTotal")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : stats.totalCustomers}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statActiveTrial")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : stats.active + stats.trial}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statGrace")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : stats.grace}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statSuspended")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : stats.suspended}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statHighRisk")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : stats.highRisk}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">{t("saasAdminCust_statMonthlyOrders")}</p>
-            <p className="text-2xl font-semibold">{loading ? "…" : stats.totalOrders.toLocaleString()}</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label={t("saasAdminCust_statTotal")}
+          value={loading ? "…" : stats.totalCustomers}
+          icon={Users}
+          tone="slate"
+        />
+        <StatCard
+          label={t("saasAdminCust_statActiveTrial")}
+          value={loading ? "…" : stats.active + stats.trial}
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <StatCard
+          label={t("saasAdminCust_statGrace")}
+          value={loading ? "…" : stats.grace}
+          icon={Clock3}
+          tone="amber"
+        />
+        <StatCard
+          label={t("saasAdminCust_statSuspended")}
+          value={loading ? "…" : stats.suspended}
+          icon={Ban}
+          tone="rose"
+        />
+        <StatCard
+          label={t("saasAdminCust_statHighRisk")}
+          value={loading ? "…" : stats.highRisk}
+          icon={ShieldAlert}
+          tone="orange"
+        />
+        <StatCard
+          label={t("saasAdminCust_statMonthlyOrders")}
+          value={loading ? "…" : stats.totalOrders.toLocaleString()}
+          icon={ShoppingCart}
+          tone="sky"
+        />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <Card className="border-slate-200/80 shadow-sm dark:border-slate-800">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("saasAdminCust_searchLabel")}</CardTitle>
+          <CardDescription>{t("saasAdminCust_searchPh")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <div className="space-y-2">
           <Label>{t("saasAdminCust_searchLabel")}</Label>
           <div className="flex gap-2">
@@ -854,9 +990,15 @@ export default function SaasCustomersPage() {
                 if (event.key === "Enter") applySearch()
               }}
               placeholder={t("saasAdminCust_searchPh")}
-              className="min-w-0 flex-1"
+              className="min-w-0 flex-1 bg-background"
             />
-            <Button type="button" variant="secondary" onClick={applySearch} disabled={loading}>
+            <Button
+              type="button"
+              onClick={applySearch}
+              disabled={loading}
+              className="shrink-0 bg-sky-600 text-white shadow-sm shadow-sky-600/25 hover:bg-sky-700"
+            >
+              <Search className="size-4" />
               {t("search")}
             </Button>
           </div>
@@ -876,6 +1018,57 @@ export default function SaasCustomersPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-2">
+          <Label>{t("saasAdminCust_joinPeriodFilter")}</Label>
+          <Select
+            value={joinPeriod}
+            onValueChange={(value) => {
+              const next = value as JoinPeriodFilter
+              setJoinPeriod(next)
+              if (next !== "custom") {
+                setJoinFromYmd("")
+                setJoinToYmd("")
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("all")}</SelectItem>
+              <SelectItem value="today">{t("saasAdminCust_joinPeriodToday")}</SelectItem>
+              <SelectItem value="7d">{t("saasAdminCust_joinPeriod7d")}</SelectItem>
+              <SelectItem value="30d">{t("saasAdminCust_joinPeriod30d")}</SelectItem>
+              <SelectItem value="90d">{t("saasAdminCust_joinPeriod90d")}</SelectItem>
+              <SelectItem value="this_month">{t("saasAdminCust_joinPeriodThisMonth")}</SelectItem>
+              <SelectItem value="this_year">{t("saasAdminCust_joinPeriodThisYear")}</SelectItem>
+              <SelectItem value="custom">{t("saasAdminCust_joinPeriodCustom")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {joinPeriod === "custom" ? (
+          <div className="space-y-2 md:col-span-2 xl:col-span-2">
+            <Label>{t("saasAdminCust_joinPeriodCustomRange")}</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="date"
+                value={joinFromYmd}
+                onChange={(event) => setJoinFromYmd(event.target.value)}
+                className="min-w-[9.5rem] flex-1"
+                aria-label={t("saasAdminCust_joinPeriodFrom")}
+              />
+              <span className="text-sm text-muted-foreground shrink-0">~</span>
+              <Input
+                type="date"
+                value={joinToYmd}
+                onChange={(event) => setJoinToYmd(event.target.value)}
+                className="min-w-[9.5rem] flex-1"
+                aria-label={t("saasAdminCust_joinPeriodTo")}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{t("saasAdminCust_joinPeriodCustomHint")}</p>
+          </div>
+        ) : null}
         <div className="space-y-2">
           <Label>{t("saasAdminCust_sortLabel")}</Label>
           <Select value={sortBy} onValueChange={(value) => setSortBy(value as "default" | "risk_desc" | "expiry_soon")}>
@@ -916,7 +1109,7 @@ export default function SaasCustomersPage() {
           </div>
         ) : null}
         {scope.isPlatform ? (
-          <div className="flex items-center gap-2 md:col-span-2 xl:col-span-1">
+          <div className="flex items-center gap-2 md:col-span-2 xl:col-span-6">
             <Checkbox
               id="show-platform-internal"
               checked={showPlatformInternal}
@@ -929,20 +1122,47 @@ export default function SaasCustomersPage() {
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="outline" onClick={() => requestBulkUpdateStatus("active")} disabled={loading}>
+      <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+        <Button
+          type="button"
+          size="sm"
+          className="border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-900/50"
+          variant="outline"
+          onClick={() => requestBulkUpdateStatus("active")}
+          disabled={loading}
+        >
+          <CheckCircle2 className="size-3.5" />
           {t("saasAdminCust_bulkActivate")}
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => requestBulkUpdateStatus("grace")} disabled={loading}>
+        <Button
+          type="button"
+          size="sm"
+          className="border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/50"
+          variant="outline"
+          onClick={() => requestBulkUpdateStatus("grace")}
+          disabled={loading}
+        >
+          <Clock3 className="size-3.5" />
           {t("saasAdminCust_bulkGrace")}
         </Button>
         <Button type="button" size="sm" variant="destructive" onClick={() => requestBulkUpdateStatus("suspended")} disabled={loading}>
+          <Ban className="size-3.5" />
           {t("saasAdminCust_bulkSuspend")}
         </Button>
-        <Button type="button" size="sm" onClick={exportCsv} disabled={filteredTenants.length === 0}>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="ml-auto shadow-sm"
+          onClick={exportCsv}
+          disabled={filteredTenants.length === 0}
+        >
+          <Download className="size-3.5" />
           {t("saasAdminCust_exportCsv")}
         </Button>
       </div>
+        </CardContent>
+      </Card>
 
       {loading && tenants.length === 0 ? (
         <Card>
@@ -960,20 +1180,23 @@ export default function SaasCustomersPage() {
         </Card>
       ) : null}
 
-      {tenants.length > 0 && selectedTenant ? <div className="grid gap-4 lg:grid-cols-[minmax(420px,1.1fr)_minmax(0,1.8fr)]">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">{t("saasAdminCust_listTitle")}</CardTitle>
+      {tenants.length > 0 && selectedTenant ? <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="overflow-hidden border-slate-200/80 shadow-sm dark:border-slate-800">
+          <CardHeader className="border-b bg-muted/30 pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Building2 className="size-4 text-sky-600" />
+              {t("saasAdminCust_listTitle")}
+            </CardTitle>
             <CardDescription>
               {tr(t, "saasAdminCust_listDesc", { n: String(filteredTenants.length) })}
               {searchApplied ? t("saasAdminCust_searchMode") : ""}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="w-10 pl-4">
                     <Checkbox
                       checked={filteredTenants.length > 0 && selectedIds.length === filteredTenants.length}
                       onCheckedChange={(checked) => toggleSelectAllFiltered(Boolean(checked))}
@@ -984,7 +1207,7 @@ export default function SaasCustomersPage() {
                   <TableHead>{t("saasAdminCust_colSalesStage")}</TableHead>
                   <TableHead>{t("status")}</TableHead>
                   <TableHead>{t("saasAdminCust_colExpiry")}</TableHead>
-                  <TableHead>{t("saasAdminCust_colRisk")}</TableHead>
+                  <TableHead className="pr-4">{t("saasAdminCust_colRisk")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -995,10 +1218,15 @@ export default function SaasCustomersPage() {
                   return (
                     <TableRow
                       key={tenant.id}
-                      className={active ? "bg-muted/60" : ""}
+                      className={cn(
+                        "cursor-pointer transition-colors",
+                        active
+                          ? "bg-sky-50/90 hover:bg-sky-50 dark:bg-sky-950/30 dark:hover:bg-sky-950/40"
+                          : "hover:bg-muted/50"
+                      )}
                       onClick={() => setSelectedTenantId(tenant.id)}
                     >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedIds.includes(tenant.id)}
                           onCheckedChange={(checked) => toggleTenantSelection(tenant.id, Boolean(checked))}
@@ -1006,7 +1234,9 @@ export default function SaasCustomersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">{tenant.companyName}</span>
+                          <span className={cn("font-medium", active && "text-sky-900 dark:text-sky-100")}>
+                            {tenant.companyName}
+                          </span>
                           {isSaasPlatformInternalTenant(tenant) ? (
                             <Badge variant="secondary">{t("saasAdminCust_platformInternalBadge")}</Badge>
                           ) : null}
@@ -1029,14 +1259,32 @@ export default function SaasCustomersPage() {
                         <Badge variant="outline">{saasAdminStageLabel(tenant.policy.salesStage, t)}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_VARIANT[tenant.status]}>{saasAdminStatusLabel(tenant.status, t)}</Badge>
+                        <Badge
+                          variant={STATUS_VARIANT[tenant.status]}
+                          className={cn(
+                            tenant.status === "active" && "bg-emerald-600 hover:bg-emerald-600",
+                            tenant.status === "grace" &&
+                              "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                          )}
+                        >
+                          {saasAdminStatusLabel(tenant.status, t)}
+                        </Badge>
                       </TableCell>
-                      <TableCell>{expiry ? <Badge variant={expiry.variant}>{expiry.text}</Badge> : <span className="text-xs text-muted-foreground">-</span>}</TableCell>
                       <TableCell>
+                        {expiry ? <Badge variant={expiry.variant}>{expiry.text}</Badge> : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="pr-4">
                         {risks > 0 ? (
-                          <Badge variant="destructive">{tr(t, "saasAdminCust_riskCount", { n: String(risks) })}</Badge>
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertTriangle className="size-3" />
+                            {tr(t, "saasAdminCust_riskCount", { n: String(risks) })}
+                          </Badge>
                         ) : (
-                          <Badge variant="outline">{t("saasAdminCust_riskOk")}</Badge>
+                          <Badge variant="outline" className="text-emerald-700 dark:text-emerald-300">
+                            {t("saasAdminCust_riskOk")}
+                          </Badge>
                         )}
                       </TableCell>
                     </TableRow>
@@ -1054,8 +1302,8 @@ export default function SaasCustomersPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="overflow-hidden border-slate-200/80 shadow-sm dark:border-slate-800">
+          <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-sky-50/40 pb-3 dark:from-slate-950/40 dark:to-sky-950/20">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1063,20 +1311,30 @@ export default function SaasCustomersPage() {
                   {isSaasPlatformInternalTenant(selectedTenant) ? (
                     <Badge variant="secondary">{t("saasAdminCust_platformInternalBadge")}</Badge>
                   ) : null}
+                  <Badge
+                    variant={STATUS_VARIANT[selectedTenant.status]}
+                    className={cn(
+                      selectedTenant.status === "active" && "bg-emerald-600 hover:bg-emerald-600",
+                      selectedTenant.status === "grace" &&
+                        "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                    )}
+                  >
+                    {saasAdminStatusLabel(selectedTenant.status, t)}
+                  </Badge>
                 </div>
                 <CardDescription>{tr(t, "saasAdminCust_tenantIdLine", { id: selectedTenant.id })}</CardDescription>
               </div>
               <Button
                 type="button"
-                className="shrink-0"
+                className="shrink-0 shadow-sm shadow-primary/20"
                 onClick={() => void saveTenantSettings()}
                 disabled={loading || saving}
               >
                 {saving ? t("saasAdminCust_saving") : t("save")}
               </Button>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-1">
-              <Button asChild size="sm" variant="secondary">
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <Button asChild size="sm" className="bg-sky-600 text-white hover:bg-sky-700">
                 <Link href={selectedTenantLoginHref}>{t("saasAdminCust_loginLink")}</Link>
               </Button>
               <Button asChild size="sm" variant="outline">
@@ -1084,10 +1342,20 @@ export default function SaasCustomersPage() {
                   {t("saasAdminCust_loginNewTab")}
                 </Link>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setTenantStatus("active")}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                onClick={() => setTenantStatus("active")}
+              >
                 {saasAdminStatusLabel("active", t)}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setTenantStatus("grace")}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                onClick={() => setTenantStatus("grace")}
+              >
                 {saasAdminStatusLabel("grace", t)}
               </Button>
               <Button size="sm" variant="destructive" onClick={() => setTenantStatus("suspended")}>
@@ -1098,20 +1366,35 @@ export default function SaasCustomersPage() {
           <CardContent>
             <Tabs value={detailTab} onValueChange={onDetailTabChange} className="w-full">
               <div className="sticky top-0 z-10 -mx-1 space-y-2 bg-card pb-2">
-                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-                  <TabsTrigger value="plan">{t("saasAdminCust_tabPlan")}</TabsTrigger>
-                  <TabsTrigger value="company">{t("saasAdminCust_tabCompany")}</TabsTrigger>
-                  <TabsTrigger value="login">{t("saasAdminCust_tabBootstrap")}</TabsTrigger>
-                  <TabsTrigger value="limits">{t("saasAdminCust_tabLimits")}</TabsTrigger>
-                  <TabsTrigger value="usage">{t("saasAdminCust_tabUsage")}</TabsTrigger>
-                  <TabsTrigger value="billing">{t("saasAdminCust_tabBilling")}</TabsTrigger>
-                  <TabsTrigger value="audit">{t("saasAdminCust_tabAudit")}</TabsTrigger>
+                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/60 p-1.5">
+                  <TabsTrigger value="plan" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabPlan")}
+                  </TabsTrigger>
+                  <TabsTrigger value="company" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabCompany")}
+                  </TabsTrigger>
+                  <TabsTrigger value="login" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabBootstrap")}
+                  </TabsTrigger>
+                  <TabsTrigger value="limits" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabLimits")}
+                  </TabsTrigger>
+                  <TabsTrigger value="usage" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabUsage")}
+                  </TabsTrigger>
+                  <TabsTrigger value="billing" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabBilling")}
+                  </TabsTrigger>
+                  <TabsTrigger value="audit" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabAudit")}
+                  </TabsTrigger>
                 </TabsList>
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-200/70 bg-sky-50/80 px-3 py-2 dark:border-sky-900/50 dark:bg-sky-950/30">
                   <p className="text-sm text-muted-foreground">{t("saasAdminCust_savePanelHint")}</p>
                   <Button
                     type="button"
                     size="sm"
+                    className="shadow-sm shadow-primary/20"
                     onClick={() => void saveTenantSettings()}
                     disabled={loading || saving}
                   >
@@ -1223,38 +1506,34 @@ export default function SaasCustomersPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 rounded-md border p-3">
-                  <h3 className="text-sm font-semibold">{t("saasAdminCust_featureFlags")}</h3>
-                  {SAAS_ADMIN_FEATURE_KEYS.map((featureKey) => (
-                    <label key={featureKey} className="flex items-start gap-3 rounded-md border p-3">
-                      <Checkbox
-                        checked={selectedTenant.features[featureKey]}
-                        onCheckedChange={(checked) =>
-                          updateTenant((tenant) => {
-                            const features = { ...tenant.features, [featureKey]: Boolean(checked) }
-                            const pricingMode = tenant.policy.pricingMode ?? tenant.pricing.pricingMode ?? "stage"
-                            if (pricingMode !== "module") {
+                {selectedTenant.policy.pricingMode === "module" ||
+                selectedTenant.pricing.pricingMode === "module" ? (
+                  <div className="rounded-md border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+                    {t("saasAdminCust_featureFlagsFollowModules")}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 rounded-md border p-3">
+                    <h3 className="text-sm font-semibold">{t("saasAdminCust_featureFlags")}</h3>
+                    <p className="text-xs text-muted-foreground">{t("saasAdminCust_featureFlagsStageHint")}</p>
+                    {SAAS_ADMIN_FEATURE_KEYS.map((featureKey) => (
+                      <label key={featureKey} className="flex items-start gap-3 rounded-md border p-3">
+                        <Checkbox
+                          checked={selectedTenant.features[featureKey]}
+                          onCheckedChange={(checked) =>
+                            updateTenant((tenant) => {
+                              const features = { ...tenant.features, [featureKey]: Boolean(checked) }
                               return { ...tenant, features }
-                            }
-                            const modulePrices = syncModuleEnabledFromFeatures(
-                              normalizeModulePrices(tenant.pricing.modulePrices),
-                              features
-                            )
-                            return {
-                              ...tenant,
-                              features,
-                              pricing: recalcTenantPricing(tenant, { modulePrices }),
-                            }
-                          })
-                        }
-                      />
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium">{t(`saasAdminFeature_${featureKey}`)}</p>
-                        <p className="text-xs text-muted-foreground">{t(`saasAdminFeature_${featureKey}_desc`)}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                            })
+                          }
+                        />
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">{t(`saasAdminFeature_${featureKey}`)}</p>
+                          <p className="text-xs text-muted-foreground">{t(`saasAdminFeature_${featureKey}_desc`)}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
 
                 <div className="space-y-4 rounded-md border p-3">
                   <div>

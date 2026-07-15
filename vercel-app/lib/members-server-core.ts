@@ -12,7 +12,17 @@ import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { normalizeMemberPoints } from '@/lib/member-points-math'
 import { type MemberTierUpgradeBasis } from '@/lib/member-tier-policy'
-import { buildMemberSearchPostgrestOrFilter } from '@/lib/member-search-filter'
+import {
+  buildMemberSearchPostgrestAndFilter,
+  buildMemberSearchPostgrestOrFilter,
+  emptyMemberSearchFieldDraft,
+  hasMemberSearchFields,
+  type MemberSearchFieldDraft,
+} from '@/lib/member-search-filter'
+import {
+  canonicalMemberPhoneForStorage,
+  memberPhoneLookupVariants,
+} from '@/lib/member-phone-lookup'
 
 export type MemberSummary = {
   id: number
@@ -172,7 +182,25 @@ export function toText(v: unknown): string {
 }
 
 function normalizePhone(v: string): string {
-  return toText(v).replace(/[^\d+]/g, '')
+  return canonicalMemberPhoneForStorage(v)
+}
+
+async function findActiveMemberIdByPhoneLookup(phone: string): Promise<number | null> {
+  const canonical = canonicalMemberPhoneForStorage(phone)
+  if (!canonical) return null
+  const seen = new Set<number>()
+  for (const candidate of memberPhoneLookupVariants(canonical)) {
+    const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(candidate)}&status=eq.active`, {
+      limit: 5,
+      select: 'id',
+    })) as Array<{ id?: number }>
+    for (const row of rows || []) {
+      const id = Number(row.id || 0)
+      if (id > 0 && !seen.has(id)) seen.add(id)
+    }
+  }
+  if (seen.size === 0) return null
+  return Math.max(...seen)
 }
 
 export type MemberSaveErrorCode = 'DUPLICATE_PHONE'
@@ -306,12 +334,36 @@ async function getLatestMemberEvents(memberIds: number[]): Promise<Map<number, {
   return map
 }
 
-export async function listMembers(params?: { q?: string; limit?: number }): Promise<MemberSummary[]> {
+function normalizeMemberSearchFields(fields?: MemberSearchFieldDraft | null): MemberSearchFieldDraft {
+  if (!fields) return { ...emptyMemberSearchFieldDraft }
+  return {
+    name: toText(fields.name),
+    phone: toText(fields.phone),
+    memberNo: toText(fields.memberNo),
+    email: toText(fields.email),
+    birthDate: toText(fields.birthDate),
+  }
+}
+
+export async function listMembers(params?: {
+  q?: string
+  fields?: MemberSearchFieldDraft
+  limit?: number
+}): Promise<MemberSummary[]> {
   const q = toText(params?.q)
+  const fields = normalizeMemberSearchFields(params?.fields)
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 5000))
 
   let rows: MemberRow[] = []
-  if (!q) {
+  if (hasMemberSearchFields(fields)) {
+    const andFilter = buildMemberSearchPostgrestAndFilter(fields)
+    rows = andFilter
+      ? ((await supabaseSelectFilter('members', andFilter, {
+          order: 'id.desc',
+          limit,
+        })) as MemberRow[])
+      : []
+  } else if (!q) {
     rows = (await supabaseSelect('members', { order: 'id.desc', limit })) as MemberRow[]
   } else {
     const memberFilter = buildMemberSearchPostgrestOrFilter(q)
@@ -371,31 +423,57 @@ export async function listMembers(params?: { q?: string; limit?: number }): Prom
   })
 }
 
-export async function listMembersCursor(params?: { q?: string; afterId?: number; limit?: number }): Promise<MemberSummary[]> {
+async function mapMemberRowsToSummaries(rows: MemberRow[]): Promise<MemberSummary[]> {
+  const memberIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
+  const lineIdentityMap = await getLineIdentities(memberIds)
+  const lineEventMap = await getLatestMemberEvents(memberIds)
+  return (rows || []).map((row) => {
+    const id = Number(row.id || 0)
+    const evt = lineEventMap.get(id)
+    return toMemberSummary(row, lineIdentityMap.get(id), {
+      lastLineEventType: evt?.eventType,
+      lastLineEventAt: evt?.processedAt,
+    })
+  })
+}
+
+export async function listMembersCursor(params?: {
+  q?: string
+  fields?: MemberSearchFieldDraft
+  afterId?: number
+  limit?: number
+}): Promise<MemberSummary[]> {
   const q = toText(params?.q)
+  const fields = normalizeMemberSearchFields(params?.fields)
   const afterId = Number(params?.afterId || 0) || null
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
+
+  // 필드 AND 검색은 RPC(p_q 단일)과 맞지 않아 PostgREST AND 경로 사용
+  if (hasMemberSearchFields(fields)) {
+    const filterParts: string[] = []
+    if (afterId) filterParts.push(`id.lt.${afterId}`)
+    const andFilter = buildMemberSearchPostgrestAndFilter(fields)
+    if (andFilter) filterParts.push(andFilter)
+    if (!filterParts.length) return []
+    const rows = (await supabaseSelectFilter('members', filterParts.join('&'), {
+      order: 'id.desc',
+      limit,
+    })) as MemberRow[]
+    return mapMemberRowsToSummaries(rows)
+  }
+
   try {
     const rows = (await supabaseRpc<MemberRow[]>('get_member_list_cursor', {
       p_after_id: afterId,
       p_limit: limit,
       p_q: q || null,
     })) as MemberRow[]
-    const memberIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
-    const lineIdentityMap = await getLineIdentities(memberIds)
-    const lineEventMap = await getLatestMemberEvents(memberIds)
-    return (rows || []).map((row) => {
-      const id = Number(row.id || 0)
-      const evt = lineEventMap.get(id)
-      return toMemberSummary(row, lineIdentityMap.get(id), {
-        lastLineEventType: evt?.eventType,
-        lastLineEventAt: evt?.processedAt,
-      })
-    })
+    return mapMemberRowsToSummaries(rows)
   } catch {
     const batchLimit = Math.max(limit, afterId ? limit + 500 : limit)
     const rows = await listMembers({ q, limit: batchLimit })
-    const filtered = afterId ? rows.filter((m) => m.id > afterId) : rows
+    // cursor는 id 내림차순이므로 afterId보다 작은 id만
+    const filtered = afterId ? rows.filter((m) => m.id < afterId) : rows
     return filtered.slice(0, limit)
   }
 }
@@ -514,11 +592,21 @@ async function insertMemberBase(input: CreateMemberInput): Promise<MemberRow> {
   const now = getBangkokDateTimeString()
   const referralCode = toText(input.referralCode).toUpperCase() || null
   const referredByMemberId = Number(input.referredByMemberId || 0) || null
+  const phone = normalizePhone(input.phone || '') || null
+  if (phone) {
+    const existingId = await findActiveMemberIdByPhoneLookup(phone)
+    if (existingId) {
+      throw new MemberSaveError(
+        'DUPLICATE_PHONE',
+        '이 전화번호는 이미 다른 회원에게 등록되어 있습니다.'
+      )
+    }
+  }
   let inserted: MemberRow[]
   try {
     inserted = (await supabaseInsert('members', {
       name: toText(input.name),
-      phone: normalizePhone(input.phone || '') || null,
+      phone,
       email: normalizeEmail(input.email || '') || null,
       birth_date: toText(input.birthDate) || null,
       gender: toText(input.gender) || null,
@@ -697,7 +785,19 @@ export async function updateMember(input: UpdateMemberInput): Promise<MemberSumm
   }
   if (input.referralCode != null) patch.referral_code = toText(input.referralCode).toUpperCase() || null
   if (input.referredByMemberId != null) patch.referred_by_member_id = Number(input.referredByMemberId || 0) || null
-  if (input.phone != null) patch.phone = normalizePhone(input.phone) || null
+  if (input.phone != null) {
+    const phone = normalizePhone(input.phone) || null
+    if (phone) {
+      const existingId = await findActiveMemberIdByPhoneLookup(phone)
+      if (existingId && existingId !== id) {
+        throw new MemberSaveError(
+          'DUPLICATE_PHONE',
+          '이 전화번호는 이미 다른 회원에게 등록되어 있습니다.'
+        )
+      }
+    }
+    patch.phone = phone
+  }
   if (input.email != null) patch.email = normalizeEmail(input.email) || null
   if (input.consentMarketing != null) patch.consent_marketing = Boolean(input.consentMarketing)
   if (input.consentPrivacy != null) patch.consent_privacy = Boolean(input.consentPrivacy)

@@ -169,7 +169,9 @@ export async function resolvePurchaseLocationPatterns(
 ): Promise<string[]> {
   if (locationFilter) return getStockLocationPatterns(locationFilter)
   if (!excludeHqLocations) return []
-  return resolveDistinctNonOfficeLocationPatterns()
+  const patterns = await resolveDistinctNonOfficeLocationPatterns()
+  // 빈 패턴이면 RPC가 전 location을 반환 → 본사 재고까지 매입에 섞임
+  return patterns.length > 0 ? patterns : ['__pl_no_store_locations__']
 }
 
 export function resolvePurchaseVendorPatterns(storeFilter: string | null): string[] | null {

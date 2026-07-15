@@ -21,12 +21,12 @@ export default function MemberTiersPage() {
             t("memberTiersPageSub") ||
             "회원 등급 기준·혜택·승급 조건과 POS 매출 연동 적립 규칙을 관리합니다."
           }
-          gradient="from-amber-50 to-orange-50"
-          border="border-amber-200/60"
-          iconClass="bg-amber-500/10 text-amber-600"
+          gradient="from-amber-50 via-orange-50 to-yellow-50/80"
+          border="border-amber-200/70"
+          iconClass="bg-amber-500/15 text-amber-700"
         />
         <CrmSubnav />
-        <div className="mt-4">
+        <div className="mt-5">
           <MemberPointsPolicyTab />
         </div>
       </div>

@@ -14,8 +14,9 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import type { LangCode } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tr, useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { useSaasScope } from "@/components/saas/saas-scope-context"
 
 export function SaasHeader() {
   const router = useRouter()
@@ -23,11 +24,16 @@ export function SaasHeader() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const brand = useAppBrandConfig()
+  const scope = useSaasScope()
 
   const handleLogout = () => {
     logout()
     router.replace("/saas-admin/login")
   }
+
+  const accountLabel = scope.isPartner
+    ? tr(t, "saasAdminHeader_partnerScope", { name: scope.partnerName || scope.partnerId || "—" })
+    : `${auth?.company || t("saasAdminGlobalLabel")} / ${auth?.store || "—"}`
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center border-b bg-card px-4 print:hidden">
@@ -58,8 +64,15 @@ export function SaasHeader() {
             ))}
           </SelectContent>
         </Select>
-        <span className="text-xs text-muted-foreground">
-          {auth?.company || t("saasAdminGlobalLabel")} / {auth?.store || "—"}
+        <span
+          className={
+            scope.isPartner
+              ? "rounded-md bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-200"
+              : "text-xs text-muted-foreground"
+          }
+          title={scope.isPartner ? `${auth?.company || ""} / ${auth?.store || ""}` : undefined}
+        >
+          {accountLabel}
         </span>
         <Button type="button" size="sm" variant="outline" onClick={handleLogout}>
           {t("logout")}
@@ -68,3 +81,4 @@ export function SaasHeader() {
     </header>
   )
 }
+

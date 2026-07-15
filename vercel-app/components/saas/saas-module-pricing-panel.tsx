@@ -140,16 +140,6 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
     })
   }
 
-  const syncFromFeatures = () => {
-    const modules = syncModuleEnabledFromFeatures(modulePrices, tenant.features)
-    applyModules(modules)
-  }
-
-  const syncToFeatures = () => {
-    const features = syncFeaturesFromModules(tenant.features, modulePrices)
-    onChange((prev) => ({ ...prev, features }))
-  }
-
   const loadGlobalCatalog = async () => {
     setLoadingCatalog(true)
     try {
@@ -251,12 +241,6 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={syncFromFeatures}>
-          {t("saasAdminCust_moduleSyncFromFeatures")}
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={syncToFeatures}>
-          {t("saasAdminCust_moduleSyncToFeatures")}
-        </Button>
         <Button type="button" variant="outline" size="sm" disabled={loadingCatalog} onClick={() => void loadGlobalCatalog()}>
           {t("saasAdminCust_moduleLoadCatalog")}
         </Button>

@@ -25,6 +25,18 @@ function defaultMatrixYear(): number {
   return Number(getBangkokTodayDateString().slice(0, 4))
 }
 
+function defaultMatrixMonth(): string {
+  return String(Number(getBangkokTodayDateString().slice(5, 7)))
+}
+
+function mergeStoresWithKnown(
+  fromApi: string[],
+  knownStores: string[]
+): string[] {
+  const known = knownStores.map((s) => String(s || "").trim()).filter(Boolean)
+  return [...new Set([...known, ...fromApi])].sort((a, b) => a.localeCompare(b))
+}
+
 function formatAmount(n: number, lang: string): string {
   return `${n.toLocaleString()}${lang === "th" ? " THB" : ""}`
 }
@@ -108,36 +120,41 @@ export function OutboundStoreMonthMatrixPanel({
   const { lang } = useLang()
   const t = useT(lang)
   const [year, setYear] = React.useState(defaultMatrixYear)
-  const [monthFilter, setMonthFilter] = React.useState<string>("__all__")
+  /** 기본: 방콕 당월 — 연간 전체는 조회 부하가 커서 검색 실패하기 쉬움 */
+  const [monthFilter, setMonthFilter] = React.useState<string>(defaultMatrixMonth)
   const [storeFilter, setStoreFilter] = React.useState("")
   const [loading, setLoading] = React.useState(false)
+  const [hasQueried, setHasQueried] = React.useState(false)
   const [data, setData] = React.useState<OutboundStoreMonthMatrixResult | null>(null)
   const [error, setError] = React.useState("")
+  const reqSeqRef = React.useRef(0)
 
   const monthParam = monthFilter === "__all__" ? null : Number(monthFilter)
 
   const fetchMatrix = React.useCallback(async () => {
+    const seq = ++reqSeqRef.current
     setLoading(true)
     setError("")
+    setHasQueried(true)
     try {
       const res = await getOutboundStoreMonthMatrix({
         year,
         month: monthParam,
         storeFilter: storeFilter || undefined,
-        knownStores: storeTargets,
       })
-      setData(res)
+      if (seq !== reqSeqRef.current) return
+      setData({
+        ...res,
+        stores: mergeStoresWithKnown(res.stores, storeFilter ? [] : storeTargets),
+      })
     } catch (e) {
+      if (seq !== reqSeqRef.current) return
       setData(null)
       setError(String(e))
     } finally {
-      setLoading(false)
+      if (seq === reqSeqRef.current) setLoading(false)
     }
   }, [year, monthParam, storeFilter, storeTargets])
-
-  React.useEffect(() => {
-    void fetchMatrix()
-  }, [fetchMatrix])
 
   const monthLabel = React.useCallback(
     (ym: string) => {
@@ -335,6 +352,10 @@ export function OutboundStoreMonthMatrixPanel({
       <div className="rounded-xl border bg-card overflow-hidden">
         {loading && !data ? (
           <div className="py-16 text-center text-sm text-muted-foreground">{t("loading")}</div>
+        ) : !hasQueried ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">
+            {t("outStoreMonthClickSearch") || "연도·월을 선택한 뒤 검색을 누르세요."}
+          </div>
         ) : !data || data.stores.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">{t("outNoData")}</div>
         ) : singleMonthMode ? (

@@ -352,9 +352,8 @@ export async function mergeMembers(params: {
   if (!toText(target.line_display_name) && toText(source.line_display_name)) {
     targetPatch.line_display_name = source.line_display_name
   }
-  if (!toText(target.referral_code) && toText(source.referral_code)) {
-    targetPatch.referral_code = source.referral_code
-  }
+  const sourceReferralToKeep =
+    !toText(target.referral_code) && toText(source.referral_code) ? toText(source.referral_code) : ''
   if (!target.consent_marketing && source.consent_marketing) targetPatch.consent_marketing = true
   if (!target.consent_privacy && source.consent_privacy) targetPatch.consent_privacy = true
   if (!toText(target.consent_at) && toText(source.consent_at)) targetPatch.consent_at = source.consent_at
@@ -372,9 +371,7 @@ export async function mergeMembers(params: {
     }
   }
 
-  await supabaseUpdateByFilter('members', `id=eq.${targetMemberId}`, targetPatch)
-
-  // source 비활성 — 전화번호·이메일 해제(유니크 제약 회피)
+  // source 먼저 unique 컬럼 해제 — referral_code를 target에 옮기기 전 필수
   await supabaseUpdateByFilter('members', `id=eq.${sourceMemberId}`, {
     status: 'inactive',
     phone: null,
@@ -386,6 +383,9 @@ export async function mergeMembers(params: {
     lifetime_amount: 0,
     updated_at: now,
   })
+
+  if (sourceReferralToKeep) targetPatch.referral_code = sourceReferralToKeep
+  await supabaseUpdateByFilter('members', `id=eq.${targetMemberId}`, targetPatch)
 
   const mergeNote = `회원 병합: ${sourceMemberNo || sourceMemberId} → ${targetMemberNo || targetMemberId} (쿠폰 ${transferred.coupons}건, 주문 ${transferred.orders}건, 포인트원장 ${transferred.pointLedgerRows}건)`
   try {

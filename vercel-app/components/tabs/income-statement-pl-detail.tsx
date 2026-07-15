@@ -503,6 +503,39 @@ export function IncomePlDetailTableContent({
                   {view.pct(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
               </tr>
+              <tr className={accountingPlSubRowCn}>
+                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                  - {t("pL_expenseSourceStockInbound") || "Inbound expense items"}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                  {formatBath(data.expenseBreakdown?.stockInboundExpense ?? 0)}
+                </td>
+                <td className={`${accountingPlTdPctCn}`}>
+                  {view.pct(data.expenseBreakdown?.stockInboundExpense ?? 0)}
+                </td>
+              </tr>
+              <tr className={accountingPlSubRowCn}>
+                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                  - {t("pL_expenseSourcePayroll") || "Payroll"}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                  {formatBath(data.expenseBreakdown?.payrollExpense ?? 0)}
+                </td>
+                <td className={`${accountingPlTdPctCn}`}>
+                  {view.pct(data.expenseBreakdown?.payrollExpense ?? 0)}
+                </td>
+              </tr>
+              <tr className={accountingPlSubRowCn}>
+                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                  - {t("pL_expenseSourceDepreciation") || "Depreciation"}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                  {formatBath(data.expenseBreakdown?.depreciationExpense ?? 0)}
+                </td>
+                <td className={`${accountingPlTdPctCn}`}>
+                  {view.pct(data.expenseBreakdown?.depreciationExpense ?? 0)}
+                </td>
+              </tr>
             </>
           )}
           <tr className={accountingPlNetProfitRowCn}>

@@ -52,6 +52,15 @@ describe("pos-cost-analysis-shared", () => {
     expect(m.issues).not.toContain("no_bom")
   })
 
+  it("원가율 분모는 VAT 제외 매출(계산기와 동일)이다", () => {
+    const m = computePosCostRowMetrics({ ...baseRow, costHall: 30, costDelivery: 30 }, 0)
+    // 판매가 107(In VAT) → 공급가 100, 원가 30 → 30%
+    expect(m.netSalesH).toBe(100)
+    expect(m.costRatioH).toBeCloseTo(30, 5)
+    // VAT 포함 분모면 ~28%로 과소 — 회귀 방지
+    expect(m.costRatioH).toBeGreaterThan(28.5)
+  })
+
   it("품목 사용 메뉴 수를 센다", () => {
     const { count } = countMenusUsingItemCode([baseRow], "ITEM1")
     expect(count).toBe(1)

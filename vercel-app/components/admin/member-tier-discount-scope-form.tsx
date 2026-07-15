@@ -108,24 +108,26 @@ export function MemberTierDiscountScopeForm({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">{t("memberTierDiscountScopeHint")}</p>
+      <p className="rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2 text-xs leading-relaxed text-orange-950/80">
+        {t("memberTierDiscountScopeHint")}
+      </p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex items-center gap-2 text-sm">
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <label className="flex items-center gap-2 rounded-lg border border-orange-100/80 bg-background px-3 py-2.5 text-sm shadow-sm">
           <Checkbox
             checked={policy.excludePromoAndSets}
             onCheckedChange={(x) => set({ excludePromoAndSets: x === true })}
           />
           {t("memberTierDiscountExcludePromoSets")}
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 rounded-lg border border-orange-100/80 bg-background px-3 py-2.5 text-sm shadow-sm">
           <Checkbox
             checked={policy.stackWithCollab}
             onCheckedChange={(x) => set({ stackWithCollab: x === true })}
           />
           {t("memberTierDiscountStackCollab")}
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 rounded-lg border border-orange-100/80 bg-background px-3 py-2.5 text-sm shadow-sm">
           <Checkbox
             checked={policy.stackWithCoupons}
             onCheckedChange={(x) => set({ stackWithCoupons: x === true })}
@@ -140,8 +142,10 @@ export function MemberTierDiscountScopeForm({
           {t("loading")}
         </div>
       ) : (
-        <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-3">
-          <p className="text-xs font-semibold">{t("marketingCollabScopeMainTitle")}</p>
+        <div className="space-y-4 rounded-xl border border-orange-200/60 bg-gradient-to-br from-orange-50/40 to-amber-50/20 p-3.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-orange-900/80">
+            {t("marketingCollabScopeMainTitle")}
+          </p>
           <div className="grid gap-2 sm:grid-cols-3">
             {mainCategories.map((main) =>
               scopeCheckbox(`tier-main-${main}`, main, selectedMainSet.has(main), (checked) => {
@@ -154,8 +158,10 @@ export function MemberTierDiscountScopeForm({
             )}
           </div>
 
-          <div className="space-y-2 border-t border-border/50 pt-3">
-            <p className="text-xs font-semibold">{t("marketingCollabScopeCategoryTitle")}</p>
+          <div className="space-y-2 border-t border-orange-200/50 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-900/80">
+              {t("marketingCollabScopeCategoryTitle")}
+            </p>
             {policy.scopeMainCategories.length <= 0 ? (
               <p className="text-[11px] text-muted-foreground">{t("marketingCollabScopePickMainFirst")}</p>
             ) : (
@@ -164,7 +170,7 @@ export function MemberTierDiscountScopeForm({
                   const subs = subsForCollabScopeMain(main, categoriesByMain, menus)
                   if (subs.length <= 0) return null
                   return (
-                    <div key={main} className="rounded-md bg-background/70 p-2">
+                    <div key={main} className="rounded-lg border border-orange-100/70 bg-white/80 p-2.5 shadow-sm">
                       <p className="mb-2 text-[11px] font-medium text-muted-foreground">{main}</p>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {subs.map((cat) => {
@@ -187,17 +193,19 @@ export function MemberTierDiscountScopeForm({
             )}
           </div>
 
-          <div className="space-y-2 border-t border-border/50 pt-3">
+          <div className="space-y-2 border-t border-orange-200/50 pt-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-semibold">{t("marketingCollabScopeMenuTitle")}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-orange-900/80">
+                {t("marketingCollabScopeMenuTitle")}
+              </p>
               <Input
                 value={menuSearch}
                 onChange={(e) => setMenuSearch(e.target.value)}
                 placeholder={t("marketingCollabScopeMenuSearch")}
-                className="h-8 sm:w-64"
+                className="h-8 bg-background sm:w-64"
               />
             </div>
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2">
+            <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-orange-100/70 bg-white/80 p-2 shadow-sm">
               {visibleMenuRows.length <= 0 ? (
                 <p className="py-4 text-center text-xs text-muted-foreground">
                   {t("marketingCollabScopeMenuEmpty")}

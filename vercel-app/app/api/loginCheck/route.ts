@@ -17,7 +17,9 @@ import {
 } from '@/lib/erp-store-master'
 import { loginCheckFailureFromError } from '@/lib/login-check-error'
 import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
-import { resolveSaasScope } from '@/lib/saas-control-plane-scope'
+import { resolveSaasScope, type SaasScope } from '@/lib/saas-control-plane-scope'
+import { isSaasPartnerLoginStore } from '@/lib/saas-partner-login-defaults'
+import { loadSaasEnabledModulesForAuth } from '@/lib/saas/tenant-module-gate'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -45,8 +47,11 @@ export async function POST(req: NextRequest) {
       extra_stores?: unknown
       can_manage_office_payroll?: boolean | null
     }
-    const byName = (await supabaseSelectFilterEmployeesByNameForLogin(name)) as EmpLoginRow[]
-    const masters = await fetchErpStoresMaster()
+    /** 직원·매장 마스터는 서로 독립 → 병렬로 왕복 1회 절감 */
+    const [byName, masters] = await Promise.all([
+      supabaseSelectFilterEmployeesByNameForLogin(name) as Promise<EmpLoginRow[]>,
+      fetchErpStoresMaster(),
+    ])
     const byCompany = companyInput
       ? (byName || []).filter((r) => normalizeCompanyName(r.company) === companyInput)
       : byName || []
@@ -100,31 +105,63 @@ export async function POST(req: NextRequest) {
     const userName = String(row.name || '').trim()
     const companyName = normalizeCompanyName(row.company) || companyInput
     const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
-    const partnerScope = await resolveSaasScope({
+    /**
+     * 일반 ERP/POS 매장 로그인은 SaaS 파트너 스코프 DB를 건너뜀.
+     * Partner 매장(SaaS 콘솔)일 때만 resolveSaasScope 호출.
+     */
+    const scopeAuth = {
       store: storeName,
       name: userName,
       role: finalRole,
       ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
       ...(companyName ? { company: companyName } : {}),
-    })
+    }
+    const [partnerScope, multiSettings] = await Promise.all([
+      isSaasPartnerLoginStore(storeName)
+        ? resolveSaasScope(scopeAuth)
+        : Promise.resolve({
+            kind: 'platform' as const,
+            employeeId: empIdRaw,
+            employeeName: userName,
+          } satisfies SaasScope),
+      getFranchiseeMultiStoreSettings(),
+    ])
     const saasPartnerLogin = partnerScope.kind === 'partner'
     const tenantId = saasPartnerLogin ? undefined : deriveTenantIdFromCompany(companyName)
-    const multiSettings = await getFranchiseeMultiStoreSettings()
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
     let canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(row.can_manage_office_payroll)
-    if (!canManageOfficePayroll && empIdRaw > 0) {
-      try {
-        const flagRows = (await supabaseSelectFilter('employees', `id=eq.${empIdRaw}`, {
-          limit: 1,
-          select: 'can_manage_office_payroll',
-        })) as { can_manage_office_payroll?: unknown }[]
-        canManageOfficePayroll = isEmployeeOfficePayrollManagerFlag(flagRows?.[0]?.can_manage_office_payroll)
-      } catch {
-        /* 컬럼 미배포 DB */
-      }
-    }
+
+    const payrollFlagPromise =
+      !canManageOfficePayroll && empIdRaw > 0
+        ? (async () => {
+            try {
+              const flagRows = (await supabaseSelectFilter('employees', `id=eq.${empIdRaw}`, {
+                limit: 1,
+                select: 'can_manage_office_payroll',
+              })) as { can_manage_office_payroll?: unknown }[]
+              return isEmployeeOfficePayrollManagerFlag(flagRows?.[0]?.can_manage_office_payroll)
+            } catch {
+              return false
+            }
+          })()
+        : Promise.resolve(canManageOfficePayroll)
+
+    /** 로그인 직후 enabled-modules 왕복을 없애기 위해 응답에 모듈 맵을 함께 반환 */
+    const [payrollFlag, enabledModules] = await Promise.all([
+      payrollFlagPromise,
+      loadSaasEnabledModulesForAuth({
+        store: storeName,
+        name: userName,
+        role: finalRole,
+        ...(tenantId ? { tenantId } : {}),
+        ...(companyName ? { company: companyName } : {}),
+        ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
+      }),
+    ])
+    canManageOfficePayroll = payrollFlag
+
     const tokenPayload: Parameters<typeof signToken>[0] = { store: storeName, name: userName, role: finalRole }
     if (empIdRaw > 0) tokenPayload.employeeId = empIdRaw
     if (empCodeRaw) tokenPayload.employeeCode = empCodeRaw
@@ -148,6 +185,7 @@ export async function POST(req: NextRequest) {
         userName,
         role: finalRole,
         token,
+        enabledModules,
         ...(companyName ? { companyName } : {}),
         ...(tenantId ? { tenantId } : {}),
         ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),

@@ -8,6 +8,24 @@ export function normalizeMemberPhone(phone: string): string {
   return toText(phone).replace(/[^\d+]/g, '')
 }
 
+/** DB 저장·중복 판정용 — 태국 휴대폰은 선행 0 포함 10자리로 통일 */
+export function canonicalMemberPhoneForStorage(phone: string): string {
+  const raw = normalizeMemberPhone(phone)
+  if (!raw) return ''
+  let digits = raw.startsWith('+') ? raw.slice(1) : raw
+  if (digits.startsWith('66') && digits.length >= 11) {
+    digits = `0${digits.slice(2)}`
+  } else if (/^\d{9}$/.test(digits)) {
+    digits = `0${digits}`
+  }
+  return digits
+}
+
+/** 동일인 중복 그룹 키 — 선행 0·66 국가코드 차이 무시 */
+export function canonicalPhoneDedupeKey(phone: string): string {
+  return canonicalMemberPhoneForStorage(phone)
+}
+
 /** DB에 0 / 66 / 선행 0 없음 등 여러 형식으로 저장된 번호를 찾기 위한 후보 */
 export function memberPhoneLookupVariants(phone: string): string[] {
   const raw = normalizeMemberPhone(phone)

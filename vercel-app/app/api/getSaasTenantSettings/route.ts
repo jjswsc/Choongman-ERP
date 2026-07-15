@@ -43,7 +43,7 @@ import { isSaasPlatformInternalTenantId } from "@/lib/saas-platform-internal-ten
 import { supabaseSelectFilterStrippingUnknownColumns } from "@/lib/supabase-pgrst204-retry"
 
 const TENANT_SELECT =
-  "id,company_name,is_active,owner_name,phone,legal_name,tax_id,billing_address,billing_email"
+  "id,company_name,is_active,owner_name,phone,legal_name,tax_id,billing_address,billing_email,created_at"
 
 type TenantRow = {
   id: string
@@ -55,6 +55,7 @@ type TenantRow = {
   tax_id?: string | null
   billing_address?: string | null
   billing_email?: string | null
+  created_at?: string | null
 }
 
 type SubRow = {
@@ -527,6 +528,7 @@ export async function GET(req: NextRequest) {
         partnerId: partnerAssignmentMap.get(tenant.id)?.partnerId ?? null,
         partnerName: partnerAssignmentMap.get(tenant.id)?.partnerName ?? null,
         isPlatformInternal: isSaasPlatformInternalTenantId(tenant.id),
+        createdAt: tenant.created_at ? String(tenant.created_at) : null,
       })
     }
 

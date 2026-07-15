@@ -3,7 +3,7 @@ import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { Users } from "lucide-react"
+import { Users, UserPlus, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -234,10 +234,11 @@ const MemberFormPanel = React.memo(function MemberFormPanel({
           </Select>
         </div>
         <div className="flex gap-2 pt-1">
-          <Button onClick={onSave} disabled={saving}>
+          <Button onClick={onSave} disabled={saving} className="flex-1 sm:flex-none">
+            {form.id ? <Save className="size-4" /> : <UserPlus className="size-4" />}
             {saving ? t("saving") : form.id ? t("commonSave") : t("memberRegisterMaster")}
           </Button>
-          <Button variant="outline" onClick={onClear}>
+          <Button variant="outline" onClick={onClear} disabled={saving}>
             {t("memberClearSelection")}
           </Button>
         </div>

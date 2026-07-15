@@ -60,7 +60,8 @@ export function IncomeExpenseDrillDialog({
           <div className="space-y-4 text-sm">
             {(expenseDrillData.truncated.petty ||
               expenseDrillData.truncated.bank ||
-              expenseDrillData.truncated.fixed) && (
+              expenseDrillData.truncated.fixed ||
+              expenseDrillData.truncated.payroll) && (
               <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-md px-2 py-1.5">
                 {t("pL_expenseDrillTruncated")}
               </p>
@@ -87,6 +88,13 @@ export function IncomeExpenseDrillDialog({
               >
                 <ExternalLink className="h-3 w-3" />
                 {t("pL_expenseDrillLinkPetty")}
+              </Link>
+              <Link
+                href="/admin/payroll"
+                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("pL_expenseDrillPayroll")}
               </Link>
             </div>
 
@@ -183,10 +191,42 @@ export function IncomeExpenseDrillDialog({
               </div>
             )}
 
+            {(expenseDrillData.payroll?.length || 0) > 0 && (
+              <div>
+                <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillPayroll")}</p>
+                <p className="text-xs text-muted-foreground mb-2">{t("pL_expenseDrillPayrollNote")}</p>
+                <div className="overflow-x-auto rounded border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-2">{t("pL_expenseDrillColName")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
+                        <th className="text-right p-2">{t("amount")}</th>
+                        <th className="text-right p-2">{t("pL_expenseDrillPayrollColNet")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenseDrillData.payroll!.map((r) => (
+                        <tr key={r.id} className="border-b border-border/60">
+                          <td className="p-2">{r.name}</td>
+                          <td className="p-2">{r.store}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.amount)}</td>
+                          <td className="p-2 text-right font-mono text-muted-foreground">
+                            {formatBath(r.netPay)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {!(
               expenseDrillData.petty.length > 0 ||
               expenseDrillData.bankWithdrawals.length > 0 ||
-              expenseDrillData.fixedExpenses.length > 0
+              expenseDrillData.fixedExpenses.length > 0 ||
+              (expenseDrillData.payroll?.length || 0) > 0
             ) && (
               <p className="text-sm text-muted-foreground py-4">{t("pL_purchaseDrillEmpty")}</p>
             )}

@@ -75,6 +75,10 @@ import {
   type NetVatBuckets,
 } from '@/lib/income-statement-item-vat'
 import { loadItemTaxTypeMap } from '@/lib/income-statement-item-vat-server'
+import {
+  isSalaryLikePlExpenseRow,
+  loadPayrollAggregateForIncomeStatement,
+} from '@/lib/accounting-payroll-pl'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purchase-drill-nav'
 
@@ -159,6 +163,12 @@ export type IncomeStatementReport = {
     deliveryAppFees: number
     cardFees: number
     fixedExpenses: number
+    /** 입고 품목이 비용 계정으로 라우팅된 금액(패티·통장·고정비 외) */
+    stockInboundExpense: number
+    /** 확정 급여(payroll_records) 인건비 — net+sso+tax */
+    payrollExpense: number
+    /** 감가상각(depreciation_entries) — 당기순이익 비용에 포함 */
+    depreciationExpense: number
     total: number
   }
   /** 계정과목(세부)별 비용 — 현금시재·통장출금·고정비 합산 (표시명은 클라이언트에서 lang 반영) */
@@ -183,7 +193,10 @@ export type IncomeStatementReport = {
   diagnostics?: {
     warnings: string[]
     limits: Record<string, { fetched: number; limit: number; total?: number }>
-    /** 직접 입고·통장 매입지급에 동시에 잡힌 거래처 키 — 이중 집계 가능성 안내 */
+    /**
+     * 직접 입고와 통장 매입지급이 같은 달에 동시에 잡힌 거래처 키.
+     * 합계에서는 해당 키의 통장 매입지급을 이미 제외함(안내 목적).
+     */
     purchaseInboundBankOverlapVendorKeys?: string[]
     /** 매장만: 본사 창고 출고 금액 vs 승인 발주 합계(참고) — 직납 등으로 차이 날 수 있음 */
     purchaseHqOutboundBasis?: {
@@ -386,17 +399,62 @@ async function loadInboundLinkedAmountByBankId(bankIds: number[]): Promise<Map<n
   try {
     for (let i = 0; i < unique.length; i += CHUNK) {
       const chunk = unique.slice(i, i + CHUNK)
-      const rows = (await supabaseSelectFilter(
+      const rows = (await supabaseSelectFilterAllPages(
         'bank_transaction_inbound_links',
         `bank_transaction_id=in.(${chunk.join(',')})`,
-        { select: 'bank_transaction_id,amount', limit: 5000 }
-      )) as { bank_transaction_id?: number; amount?: number }[] | null
+        {
+          select: 'bank_transaction_id,amount',
+          order: 'id.asc',
+          pageSize: 8000,
+          maxRows: ACCOUNTING_ROWS_MAX,
+        }
+      )) as { bank_transaction_id?: number; amount?: number }[]
       if (rows?.length) allLinks.push(...rows)
     }
   } catch {
     return new Map()
   }
   return sumInboundLinkAmountsByBankTransactionId(allLinks)
+}
+
+/** 통장 출금 — 지급일(trans_date) 또는 비용인식일(expense_date)이 기간 내인 행 */
+export function buildBankWithdrawPlPeriodOrFilter(startStr: string, endStr: string): string {
+  return (
+    `or=(and(trans_date.gte.${startStr},trans_date.lte.${endStr}),` +
+    `and(expense_date.gte.${startStr},expense_date.lte.${endStr}))`
+  )
+}
+
+type BankWithdrawPlRow = {
+  id?: number
+  amount?: number
+  category?: string
+  trans_date?: string
+  expense_date?: string | null
+  account_subject_id?: number | null
+  vendor_code?: string | null
+  memo?: string | null
+  store?: string | null
+}
+
+async function fetchBankWithdrawRowsForPl(
+  accountIds: number[],
+  startStr: string,
+  endStr: string
+): Promise<{ rows: BankWithdrawPlRow[]; fetched: number; truncated: boolean }> {
+  if (accountIds.length === 0) return { rows: [], fetched: 0, truncated: false }
+  const idList = accountIds.join(',')
+  const filter =
+    `account_id=in.(${idList})&trans_type=eq.withdraw&` +
+    buildBankWithdrawPlPeriodOrFilter(startStr, endStr)
+  const rows = (await supabaseSelectFilterAllPages('bank_transactions', filter, {
+    select: 'id,amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo,store',
+    order: 'id.asc',
+    pageSize: 8000,
+    maxRows: ACCOUNTING_ROWS_MAX,
+  })) as BankWithdrawPlRow[]
+  const fetched = rows.length
+  return { rows, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
 }
 
 /**
@@ -408,7 +466,7 @@ async function fetchBankPurchasePaymentsByVendor(params: {
   storeFilter: string
   startStr: string
   endStr: string
-}): Promise<Record<string, number>> {
+}): Promise<{ byVendor: Record<string, number>; fetched: number; truncated: boolean }> {
   const { isHQ, storeFilter, startStr, endStr } = params
   let accountIds: number[] = []
   try {
@@ -432,25 +490,30 @@ async function fetchBankPurchasePaymentsByVendor(params: {
       accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
     }
   } catch {
-    return {}
+    return { byVendor: {}, fetched: 0, truncated: false }
   }
-  if (accountIds.length === 0) return {}
+  if (accountIds.length === 0) return { byVendor: {}, fetched: 0, truncated: false }
   const idList = accountIds.join(',')
-  let btRows: { id?: number; amount?: number; vendor_code?: string; store?: string | null }[] | null
+  let btRows: { id?: number; amount?: number; vendor_code?: string; store?: string | null }[] = []
   try {
-    btRows = (await supabaseSelectFilter(
+    btRows = (await supabaseSelectFilterAllPages(
       'bank_transactions',
       `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
-      { select: 'id,amount,vendor_code,store', limit: BASE_LIMIT }
-    )) as { id?: number; amount?: number; vendor_code?: string; store?: string | null }[] | null
+      {
+        select: 'id,amount,vendor_code,store',
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_ROWS_MAX,
+      }
+    )) as { id?: number; amount?: number; vendor_code?: string; store?: string | null }[]
   } catch {
-    return {}
+    return { byVendor: {}, fetched: 0, truncated: false }
   }
   const linkedByBankId = await loadInboundLinkedAmountByBankId(
-    (btRows || []).map((r) => Number(r.id)).filter((id) => id > 0)
+    btRows.map((r) => Number(r.id)).filter((id) => id > 0)
   )
   const out: Record<string, number> = {}
-  for (const r of btRows || []) {
+  for (const r of btRows) {
     if (storeFilter !== 'All') {
       const bts = String(r.store || '').trim()
       if (isHQ) {
@@ -468,7 +531,8 @@ async function fetchBankPurchasePaymentsByVendor(params: {
     const v = String(r.vendor_code || '').trim() || '__pl_vendor_unknown__'
     out[v] = (out[v] || 0) + netAmt
   }
-  return out
+  const fetched = btRows.length
+  return { byVendor: out, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
 }
 
 export function normalizeIncomeScope(input: IncomeScopeInput): {
@@ -690,8 +754,9 @@ function isExpenseRoutedItem(
 }
 
 /**
- * 패티캐시·통장 지출의 손익 반영 구간 — expense 계정과목 중 매출원가(cost)는 매입.
- * 계정 미지정은 기존과 같이 비용.
+ * 패티캐시·통장 지출의 손익「비용」반영 — expense 계정 중 매출원가(cost)는 제외(매입).
+ * 계정 미지정·메타 없는 id는 기존과 같이 비용(시인성).
+ * 자산·부채·이체(1110) 등 type≠expense 는 비용이 아님(이체/BS — 매입으로도 넣지 않음).
  */
 export function isPlExpenseAccountSubject(
   subjectId: number | null | undefined,
@@ -700,8 +765,21 @@ export function isPlExpenseAccountSubject(
   const sid = subjectId != null && !isNaN(Number(subjectId)) ? Number(subjectId) : null
   if (!sid || sid <= 0) return true
   const meta = accountSubjectMeta.get(sid)
-  if (!meta || meta.type !== 'expense') return true
+  if (!meta) return true
+  if (meta.type !== 'expense') return false
   return meta.pAndLSection !== 'cost'
+}
+
+/** expense + p_and_l_section=cost → 손익「매입」 */
+export function isPlCogsPurchaseAccountSubject(
+  subjectId: number | null | undefined,
+  accountSubjectMeta: Map<number, AccountSubjectMetaRow>
+): boolean {
+  const sid = subjectId != null && !isNaN(Number(subjectId)) ? Number(subjectId) : null
+  if (!sid || sid <= 0) return false
+  const meta = accountSubjectMeta.get(sid)
+  if (!meta || meta.type !== 'expense') return false
+  return meta.pAndLSection === 'cost'
 }
 
 function addPettyCashRowToPl(params: {
@@ -716,6 +794,7 @@ function addPettyCashRowToPl(params: {
   expenseBySubjectMap: Map<number | null, number>
   onExpense: (amt: number) => void
   onPurchase: (amt: number) => void
+  onSkippedNonPl?: (amt: number) => void
 }) {
   if ((params.row.trans_type || '').toLowerCase() !== 'expense') return
   const amt = Math.abs(Number(params.row.amount) || 0)
@@ -725,9 +804,13 @@ function addPettyCashRowToPl(params: {
     addToSubjectMap(params.expenseBySubjectMap, params.row.account_subject_id, amt)
     return
   }
-  params.onPurchase(amt)
-  const vKey = String(params.row.vendor_code || '').trim() || PL_PETTY_CASH_PURCHASE_VENDOR_KEY
-  params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+  if (isPlCogsPurchaseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
+    params.onPurchase(amt)
+    const vKey = String(params.row.vendor_code || '').trim() || PL_PETTY_CASH_PURCHASE_VENDOR_KEY
+    params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+    return
+  }
+  params.onSkippedNonPl?.(amt)
 }
 
 function addBankExpenseWithdrawToPl(params: {
@@ -744,6 +827,7 @@ function addBankExpenseWithdrawToPl(params: {
   onPurchase: (amt: number) => void
   onDeliveryFee?: (amt: number) => void
   onCardFee?: (amt: number) => void
+  onSkippedNonPl?: (amt: number) => void
 }) {
   const amt = Math.abs(Number(params.row.amount) || 0)
   if (!amt) return
@@ -754,9 +838,13 @@ function addBankExpenseWithdrawToPl(params: {
     addToSubjectMap(params.expenseBySubjectMap, params.row.account_subject_id, amt)
     return
   }
-  params.onPurchase(amt)
-  const vKey = String(params.row.vendor_code || '').trim() || '__pl_vendor_unknown__'
-  params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+  if (isPlCogsPurchaseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
+    params.onPurchase(amt)
+    const vKey = String(params.row.vendor_code || '').trim() || '__pl_vendor_unknown__'
+    params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+    return
+  }
+  params.onSkippedNonPl?.(amt)
 }
 
 function mergeExpenseSubjectMaps(
@@ -824,11 +912,13 @@ async function resolveInventoryLocationPatterns(
     const rows = (await supabaseRpc<{ location: string }[]>('get_distinct_stock_locations', {})) as
       | { location?: string }[]
       | null
-    return (rows || [])
+    const patterns = (rows || [])
       .map((r) => String(r.location || '').trim())
       .filter((loc) => loc && !isExcludedHqStockLocation(loc))
+    // 빈 패턴이면 RPC/fallback이 전 location을 읽어버리는 것을 방지
+    return patterns.length > 0 ? patterns : ['__pl_no_store_locations__']
   } catch {
-    return []
+    return ['__pl_no_store_locations__']
   }
 }
 
@@ -837,6 +927,7 @@ async function fetchStoreStockQtyByItem(
   locationPatterns: string[],
   asOfUtcIso: string
 ): Promise<Record<string, number>> {
+  if (locationPatterns.length === 0) return {}
   try {
     const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>('get_store_stock', {
       p_location_patterns: locationPatterns,
@@ -1015,27 +1106,38 @@ async function getDirectInboundPurchaseVatBuckets(
 async function sumDepreciationForIncomeStatement(
   yearMonth: string,
   storeFilter: string,
-  isHQ: boolean
-): Promise<number> {
+  isHQ: boolean,
+  subjectMeta: Map<number, AccountSubjectMetaRow>
+): Promise<{ total: number; byAccountSubjectId: Map<number | null, number> }> {
+  const byAccountSubjectId = new Map<number | null, number>()
+  const empty = { total: 0, byAccountSubjectId }
   try {
     const entries = (await supabaseSelectFilter(
       'depreciation_entries',
       `year_month=eq.${encodeURIComponent(yearMonth)}`,
       { select: 'amount,fixed_asset_id', limit: 5000 }
     )) as { amount?: number; fixed_asset_id?: number }[] | null
-    if (!entries?.length) return 0
+    if (!entries?.length) return empty
     const assetIds = [
       ...new Set(entries.map((e) => e.fixed_asset_id).filter((id): id is number => id != null)),
     ]
-    if (assetIds.length === 0) return 0
+    if (assetIds.length === 0) return empty
     const assets = (await supabaseSelectFilter(
       'fixed_assets',
       `id=in.(${assetIds.join(',')})`,
-      { select: 'id,store_name', limit: 5000 }
-    )) as { id?: number; store_name?: string }[] | null
+      { select: 'id,store_name,depreciation_expense_account_code', limit: 5000 }
+    )) as { id?: number; store_name?: string; depreciation_expense_account_code?: string | null }[] | null
     const storeByAsset = new Map<number, string>()
+    const expenseCodeByAsset = new Map<number, string>()
     for (const a of assets || []) {
-      if (a.id != null) storeByAsset.set(a.id, String(a.store_name || '').trim())
+      if (a.id == null) continue
+      storeByAsset.set(a.id, String(a.store_name || '').trim())
+      expenseCodeByAsset.set(a.id, String(a.depreciation_expense_account_code || '5500').trim() || '5500')
+    }
+    const codeToSubjectId = new Map<string, number>()
+    for (const [id, meta] of subjectMeta) {
+      const code = String(meta.code || '').trim()
+      if (code) codeToSubjectId.set(code, id)
     }
     let sum = 0
     for (const e of entries) {
@@ -1047,11 +1149,16 @@ async function sumDepreciationForIncomeStatement(
       } else if (storeFilter !== 'All') {
         if (st && !storeMatchesIncomeFilter(st, storeFilter)) continue
       }
-      sum += Math.abs(Number(e.amount) || 0)
+      const amt = Math.abs(Number(e.amount) || 0)
+      if (!amt) continue
+      sum += amt
+      const code = expenseCodeByAsset.get(aid) || '5500'
+      const sid = codeToSubjectId.get(code) ?? null
+      byAccountSubjectId.set(sid, (byAccountSubjectId.get(sid) || 0) + amt)
     }
-    return round2(sum)
+    return { total: round2(sum), byAccountSubjectId }
   } catch {
-    return 0
+    return empty
   }
 }
 
@@ -1113,9 +1220,46 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let deliveryAppFeeExpense = 0
   let cardFeeExpense = 0
   let fixedExpenses = 0
+  let stockInboundExpense = 0
+  let payrollExpense = 0
+  let payrollCashDeduped = 0
+  let skippedNonPlExpense = 0
+  let bankCategoryFixedExpense = 0
   let beginningInventory = 0
   let endingInventory = 0
   const expenseBySubjectMap = new Map<number | null, number>()
+
+  const payrollAgg = await loadPayrollAggregateForIncomeStatement({
+    yearMonth,
+    storeFilter,
+    isHQ,
+    subjectMeta,
+  })
+  if (payrollAgg.total > 0) {
+    payrollExpense = payrollAgg.total
+    addToSubjectMap(expenseBySubjectMap, payrollAgg.preferredSubjectId, payrollAgg.total)
+  }
+
+  const shouldSkipSalaryCashBecausePayroll = (row: {
+    account_subject_id?: number | null
+    memo?: string | null
+    amount?: number
+  }): boolean => {
+    if (payrollExpense <= 0) return false
+    if (
+      !isSalaryLikePlExpenseRow({
+        accountSubjectId: row.account_subject_id,
+        memo: row.memo,
+        subjectMeta,
+        salarySubjectIds: payrollAgg.salarySubjectIds,
+      })
+    ) {
+      return false
+    }
+    payrollCashDeduped += Math.abs(Number(row.amount) || 0)
+    return true
+  }
+
   let ordersPurchaseSubtotal = 0
   let purchaseByVendor: IncomeStatementLineDetail[] = []
   let salesByCustomer: IncomeStatementLineDetail[] = []
@@ -1162,13 +1306,22 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       loadVendorPurchaseKeyIndex(),
     ])
     const inboundByVendorHq = normalizeVendorAmountMap(inboundHq.byVendor, vendorPurchaseKeyIndex)
-    const bankPayByVendorHqRaw = await fetchBankPurchasePaymentsByVendor({
+    const bankPayHqFetch = await fetchBankPurchasePaymentsByVendor({
       isHQ: true,
       storeFilter,
       startStr,
       endStr,
     })
-    const bankPayByVendorHqNorm = normalizeVendorAmountMap(bankPayByVendorHqRaw, vendorPurchaseKeyIndex)
+    limits.bank_purchase_payment = {
+      fetched: bankPayHqFetch.fetched,
+      limit: ACCOUNTING_ROWS_MAX,
+    }
+    if (bankPayHqFetch.truncated) {
+      warnings.push(
+        `통장 매입지급 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 매입이 과소할 수 있습니다.`
+      )
+    }
+    const bankPayByVendorHqNorm = normalizeVendorAmountMap(bankPayHqFetch.byVendor, vendorPurchaseKeyIndex)
     purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
       inboundByVendorHq,
       bankPayByVendorHqNorm
@@ -1187,21 +1340,29 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     purchasesBankGross += bankHqTotal
     purchases += inboundHqTotal + bankHqTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundHq.expenseBySubject)
+    stockInboundExpense += sumExpenseSubjectAmounts(inboundHq.expenseBySubject)
 
-    const pettyAll = (await supabaseSelectFilter(
+    const pettyAll = (await supabaseSelectFilterAllPages(
       'petty_cash_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`,
-      { select: 'store,amount,trans_type,account_subject_id,vendor_code', limit: BASE_LIMIT }
+      {
+        select: 'store,amount,trans_type,account_subject_id,vendor_code,memo',
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_ROWS_MAX,
+      }
     )) as {
       store?: string
       amount?: number
       trans_type?: string
       account_subject_id?: number | null
       vendor_code?: string | null
-    }[] | null
+      memo?: string | null
+    }[]
     for (const r of pettyAll || []) {
       const st = String(r.store || '').trim()
       if (!isHqAccountingStoreRow(st)) continue
+      if (shouldSkipSalaryCashBecausePayroll(r)) continue
       addPettyCashRowToPl({
         row: r,
         subjectMeta,
@@ -1214,9 +1375,15 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           purchasesBankGross += amt
           purchases += amt
         },
+        onSkippedNonPl: (amt) => {
+          skippedNonPlExpense += amt
+        },
       })
     }
-    limits.petty_cash = { fetched: pettyAll?.length || 0, limit: BASE_LIMIT }
+    limits.petty_cash = { fetched: pettyAll?.length || 0, limit: ACCOUNTING_ROWS_MAX }
+    if ((pettyAll?.length || 0) >= ACCOUNTING_ROWS_MAX) {
+      warnings.push(`패티캐시 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 비용이 과소할 수 있습니다.`)
+    }
 
     try {
       const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 2000 })) as { id?: number; store?: string }[] | null
@@ -1225,49 +1392,46 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         .map((a) => a.id)
         .filter((id): id is number => id != null)
       if (hqAccountIds.length > 0) {
-        const idList = hqAccountIds.join(',')
-        const btRows = (await supabaseSelectFilter(
-          'bank_transactions',
-          `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-          { select: 'amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo', limit: BASE_LIMIT }
-        )) as {
-          amount?: number
-          category?: string
-          trans_date?: string
-          expense_date?: string
-          account_subject_id?: number | null
-          vendor_code?: string | null
-          memo?: string | null
-        }[] | null
-        for (const r of btRows || []) {
+        const { rows: btRows, fetched, truncated } = await fetchBankWithdrawRowsForPl(
+          hqAccountIds,
+          startStr,
+          endStr
+        )
+        for (const r of btRows) {
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
-          const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
-          const transDate = String(r.trans_date || '').slice(0, 10)
-          const inRange = (d: string) => d >= startStr && d <= endStr
-          if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
-            addBankExpenseWithdrawToPl({
-              row: r,
-              subjectMeta,
-              purchaseVendorMap: purchaseVendorMapHq,
-              expenseBySubjectMap,
-              onExpense: (amt) => {
-                bankWithdrawExpense += amt
-              },
-              onPurchase: (amt) => {
-                purchasesBankGross += amt
-                purchases += amt
-              },
-              onDeliveryFee: (amt) => {
-                deliveryAppFeeExpense += amt
-              },
-              onCardFee: (amt) => {
-                cardFeeExpense += amt
-              },
-            })
-          }
+          if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+          if (cat === 'fixed') bankCategoryFixedExpense += Math.abs(Number(r.amount) || 0)
+          if (shouldSkipSalaryCashBecausePayroll(r)) continue
+          addBankExpenseWithdrawToPl({
+            row: r,
+            subjectMeta,
+            purchaseVendorMap: purchaseVendorMapHq,
+            expenseBySubjectMap,
+            onExpense: (amt) => {
+              bankWithdrawExpense += amt
+            },
+            onPurchase: (amt) => {
+              purchasesBankGross += amt
+              purchases += amt
+            },
+            onDeliveryFee: (amt) => {
+              deliveryAppFeeExpense += amt
+            },
+            onCardFee: (amt) => {
+              cardFeeExpense += amt
+            },
+            onSkippedNonPl: (amt) => {
+              skippedNonPlExpense += amt
+            },
+          })
         }
-        limits.bank_withdraw = { fetched: btRows?.length || 0, limit: BASE_LIMIT }
+        limits.bank_withdraw = { fetched, limit: ACCOUNTING_ROWS_MAX }
+        if (truncated) {
+          warnings.push(
+            `통장 출금 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 비용이 과소할 수 있습니다.`
+          )
+        }
       }
     } catch {
       warnings.push('bank_transactions 조회 실패로 일부 지출이 누락될 수 있습니다.')
@@ -1343,7 +1507,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     }
     let ordersApprovedSubtotal = 0
     for (const o of orders) ordersApprovedSubtotal += Number(o.total) || 0
-    limits.orders_purchase = { fetched: orders.length, limit: BASE_LIMIT }
+    limits.orders_purchase = { fetched: orders.length, limit: ACCOUNTING_ROWS_MAX }
     if (orders.length >= ACCOUNTING_ROWS_MAX) {
       warnings.push('orders(승인 발주) 조회 상한에 도달해 참고 합계가 과소할 수 있습니다.')
     }
@@ -1404,14 +1568,23 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       hqVendorIndex
     )
     for (const row of inboundHqExcluded) excludedHqVendorDupRaw.push(row)
-    const bankPayByVendorRaw = await fetchBankPurchasePaymentsByVendor({
+    const bankPayStoreFetch = await fetchBankPurchasePaymentsByVendor({
       isHQ: false,
       storeFilter,
       startStr,
       endStr,
     })
+    limits.bank_purchase_payment = {
+      fetched: bankPayStoreFetch.fetched,
+      limit: ACCOUNTING_ROWS_MAX,
+    }
+    if (bankPayStoreFetch.truncated) {
+      warnings.push(
+        `통장 매입지급 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 매입이 과소할 수 있습니다.`
+      )
+    }
     const bankPayByVendorStorePreHq: Record<string, number> = {}
-    for (const [k, v] of Object.entries(bankPayByVendorRaw)) {
+    for (const [k, v] of Object.entries(bankPayStoreFetch.byVendor)) {
       const amt = Number(v) || 0
       if (amt <= 0) continue
       if (isHqVendorPurchaseKey(k, hqVendorIndex)) {
@@ -1443,21 +1616,26 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     purchasesBankGross += bankStoreTotal
     purchases += ordersPurchaseSubtotal + inboundStoreTotal + bankStoreTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundStore.expenseBySubject)
+    stockInboundExpense += sumExpenseSubjectAmounts(inboundStore.expenseBySubject)
 
     let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
     if (storeFilter !== 'All') {
       pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
     }
-    const pettyRows = (await supabaseSelectFilter('petty_cash_transactions', pettyFilter, {
-      select: 'amount,trans_type,account_subject_id,vendor_code',
-      limit: BASE_LIMIT,
+    const pettyRows = (await supabaseSelectFilterAllPages('petty_cash_transactions', pettyFilter, {
+      select: 'amount,trans_type,account_subject_id,vendor_code,memo',
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: ACCOUNTING_ROWS_MAX,
     })) as {
       amount?: number
       trans_type?: string
       account_subject_id?: number | null
       vendor_code?: string | null
-    }[] | null
+      memo?: string | null
+    }[]
     for (const r of pettyRows || []) {
+      if (shouldSkipSalaryCashBecausePayroll(r)) continue
       addPettyCashRowToPl({
         row: r,
         subjectMeta,
@@ -1470,9 +1648,15 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           purchasesBankGross += amt
           purchases += amt
         },
+        onSkippedNonPl: (amt) => {
+          skippedNonPlExpense += amt
+        },
       })
     }
-    limits.petty_cash = { fetched: pettyRows?.length || 0, limit: BASE_LIMIT }
+    limits.petty_cash = { fetched: pettyRows?.length || 0, limit: ACCOUNTING_ROWS_MAX }
+    if ((pettyRows?.length || 0) >= ACCOUNTING_ROWS_MAX) {
+      warnings.push(`패티캐시 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 비용이 과소할 수 있습니다.`)
+    }
 
     try {
       const bankAccRows = storeFilter !== 'All'
@@ -1484,49 +1668,46 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         : ((await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as { id?: number }[] | null)
       const accountIds = (bankAccRows || []).map((a) => a.id).filter((id): id is number => id != null)
       if (accountIds.length > 0) {
-        const idList = accountIds.join(',')
-        const btRows = (await supabaseSelectFilter(
-          'bank_transactions',
-          `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-          { select: 'amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo', limit: BASE_LIMIT }
-        )) as {
-          amount?: number
-          category?: string
-          trans_date?: string
-          expense_date?: string
-          account_subject_id?: number | null
-          vendor_code?: string | null
-          memo?: string | null
-        }[] | null
-        for (const r of btRows || []) {
+        const { rows: btRows, fetched, truncated } = await fetchBankWithdrawRowsForPl(
+          accountIds,
+          startStr,
+          endStr
+        )
+        for (const r of btRows) {
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
-          const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
-          const transDate = String(r.trans_date || '').slice(0, 10)
-          const inRange = (d: string) => d >= startStr && d <= endStr
-          if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
-            addBankExpenseWithdrawToPl({
-              row: r,
-              subjectMeta,
-              purchaseVendorMap: purchaseVendorMapStore,
-              expenseBySubjectMap,
-              onExpense: (amt) => {
-                bankWithdrawExpense += amt
-              },
-              onPurchase: (amt) => {
-                purchasesBankGross += amt
-                purchases += amt
-              },
-              onDeliveryFee: (amt) => {
-                deliveryAppFeeExpense += amt
-              },
-              onCardFee: (amt) => {
-                cardFeeExpense += amt
-              },
-            })
-          }
+          if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+          if (cat === 'fixed') bankCategoryFixedExpense += Math.abs(Number(r.amount) || 0)
+          if (shouldSkipSalaryCashBecausePayroll(r)) continue
+          addBankExpenseWithdrawToPl({
+            row: r,
+            subjectMeta,
+            purchaseVendorMap: purchaseVendorMapStore,
+            expenseBySubjectMap,
+            onExpense: (amt) => {
+              bankWithdrawExpense += amt
+            },
+            onPurchase: (amt) => {
+              purchasesBankGross += amt
+              purchases += amt
+            },
+            onDeliveryFee: (amt) => {
+              deliveryAppFeeExpense += amt
+            },
+            onCardFee: (amt) => {
+              cardFeeExpense += amt
+            },
+            onSkippedNonPl: (amt) => {
+              skippedNonPlExpense += amt
+            },
+          })
         }
-        limits.bank_withdraw = { fetched: btRows?.length || 0, limit: BASE_LIMIT }
+        limits.bank_withdraw = { fetched, limit: ACCOUNTING_ROWS_MAX }
+        if (truncated) {
+          warnings.push(
+            `통장 출금 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 비용이 과소할 수 있습니다.`
+          )
+        }
       }
     } catch {
       warnings.push('bank_transactions 조회 실패로 일부 지출이 누락될 수 있습니다.')
@@ -1563,17 +1744,36 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           ? `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
           : `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
       const pettyTotalCount = await supabaseCountFilter('petty_cash_transactions', countFilter)
-      if (pettyTotalCount > BASE_LIMIT) {
-        warnings.push(`petty_cash_transactions 조회 건수가 limit(${BASE_LIMIT})를 초과합니다.`)
-      }
       if (limits.petty_cash) limits.petty_cash.total = pettyTotalCount
     } catch {
       // ignore diagnostics errors
     }
   }
 
+  if (payrollCashDeduped > 0) {
+    warnings.push(
+      `확정 급여가 손익에 반영되어, 통장·패티 급여성 출금 약 ฿${Math.round(payrollCashDeduped).toLocaleString('en-US')}은 이중 방지를 위해 제외했습니다.`
+    )
+  }
+  if (skippedNonPlExpense > 0) {
+    warnings.push(
+      `손익 제외(이체·자산·부채 등 비비용 계정) 출금 약 ฿${Math.round(skippedNonPlExpense).toLocaleString('en-US')} — 통장 용도·계정을 확인하세요.`
+    )
+  }
+  if (bankCategoryFixedExpense > 0 && fixedExpenses > 0) {
+    warnings.push(
+      `통장 용도「고정비」출금(약 ฿${Math.round(bankCategoryFixedExpense).toLocaleString('en-US')})과 고정비 월정액(฿${Math.round(fixedExpenses).toLocaleString('en-US')})이 함께 반영되어 이중일 수 있습니다.`
+    )
+  }
+
+  const depAgg = await sumDepreciationForIncomeStatement(yearMonth, storeFilter, isHQ, subjectMeta)
+  const depreciationExpense = depAgg.total
+  if (depreciationExpense > 0) {
+    mergeExpenseSubjectMaps(expenseBySubjectMap, depAgg.byAccountSubjectId)
+  }
+
   const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
-  /** petty·통장·고정비 외 입고(비용 계정 품목)·본사 출고(매장) 등도 expenseBySubjectMap에 포함 */
+  /** petty·통장·고정비·급여·감가상각·입고(비용 계정 품목) 등 */
   const expenses = sumExpenseSubjectAmounts(expenseBySubjectMap)
   const cogs = beginningInventory + purchases - endingInventory
   const grossProfit = sales - cogs
@@ -1667,7 +1867,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     purchasesStockVatBuckets,
   }
 
-  const depreciation = await sumDepreciationForIncomeStatement(yearMonth, storeFilter, isHQ)
+  const depreciation = depreciationExpense
   const ebitdaAdds = sumEbitdaAddBacksFromExpenseSubjects(expenseByAccountSubject)
   const ebitdaBridge: IncomeStatementEbitdaBridge = {
     depreciation,
@@ -1708,6 +1908,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       deliveryAppFees: deliveryAppFeeExpense,
       cardFees: cardFeeExpense,
       fixedExpenses,
+      stockInboundExpense: round2(stockInboundExpense),
+      payrollExpense: round2(payrollExpense),
+      depreciationExpense: round2(depreciationExpense),
       total: expenses,
     },
     expenseByAccountSubject,
@@ -1725,7 +1928,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       (purchaseExcludedHqBankPayments?.length ?? 0) > 0
         ? {
             warnings,
-            limits: input.includeDebug ? limits : {},
+            limits,
             ...(purchaseInboundBankOverlapVendorKeys.length > 0
               ? { purchaseInboundBankOverlapVendorKeys }
               : {}),
@@ -1833,21 +2036,6 @@ function drillVendorMatchesBankRow(
   return purchaseVendorKeyMatchesRaw(vendorKey, vendorCode, vendorPurchaseKeyIndex)
 }
 
-async function loadItemCostMapForDrill(): Promise<Record<string, number>> {
-  const itemRows = (await supabaseSelectAllPages('items', {
-    order: 'id.asc',
-    pageSize: 8000,
-    maxRows: ACCOUNTING_ROWS_MAX,
-    select: 'code,cost',
-  })) as { code?: string; cost?: number }[] | null
-  const itemCostMap: Record<string, number> = {}
-  for (const r of itemRows || []) {
-    const code = String(r.code || '').trim()
-    if (code) itemCostMap[code] = Number(r.cost) || 0
-  }
-  return itemCostMap
-}
-
 async function listPettyCashPurchaseDrillRows(params: {
   startStr: string
   endStr: string
@@ -1885,7 +2073,7 @@ async function listPettyCashPurchaseDrillRows(params: {
     if (params.isHQ) {
       if (!isHqAccountingStoreRow(st)) continue
     }
-    if (isPlExpenseAccountSubject(r.account_subject_id, params.subjectMeta)) continue
+    if (!isPlCogsPurchaseAccountSubject(r.account_subject_id, params.subjectMeta)) continue
     const vendorCode = String(r.vendor_code || '').trim()
     if (vk === PL_PETTY_CASH_PURCHASE_VENDOR_KEY) {
       if (vendorCode) continue
@@ -2011,21 +2199,27 @@ export async function computeIncomeStatementPurchaseDrillDown(
     }
   }
 
-  const [itemCostMap, vendorPurchaseKeyIndexDrill] = await Promise.all([
-    loadItemCostMapForDrill(),
+  const [itemAccountSubjectMapDrill, subjectMetaForInbound, vendorPurchaseKeyIndexDrill] = await Promise.all([
+    loadItemAccountSubjectMap(),
+    loadAccountSubjectMeta(),
     loadVendorPurchaseKeyIndex(),
   ])
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
+  const locationPatterns = await resolvePurchaseLocationPatterns(
+    isHQ ? '입고등록' : storeFilter !== 'All' ? storeFilter : null,
+    !isHQ && storeFilter === 'All'
+  )
   let inboundFilter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
-  if (isHQ) {
-    inboundFilter += `&${buildStoreFieldOrIlikeFragment('location', '입고등록')}`
-  } else if (storeFilter !== 'All') {
-    inboundFilter += `&${buildStoreFieldOrIlikeFragment('location', storeFilter)}`
+  if (locationPatterns.length === 1) {
+    inboundFilter += `&location=ilike.${encodeURIComponent(locationPatterns[0])}`
+  } else if (locationPatterns.length > 1) {
+    inboundFilter += `&or=(${locationPatterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
   }
-  const inboundRaw = (await supabaseSelectFilter('stock_logs', inboundFilter, {
-    select: 'id,log_date,location,item_code,qty,unit_cost,vendor_target,reference_no',
-    limit: BASE_LIMIT,
-    order: 'log_date.desc',
+  const inboundRaw = (await supabaseSelectFilterAllPages('stock_logs', inboundFilter, {
+    select: 'id,log_date,location,item_code,qty,unit_cost,invoice_unit_price,vendor_target,reference_no',
+    order: 'id.desc',
+    pageSize: 8000,
+    maxRows: ACCOUNTING_ROWS_MAX,
   })) as {
     id?: number
     log_date?: string
@@ -2033,12 +2227,15 @@ export async function computeIncomeStatementPurchaseDrillDown(
     item_code?: string
     qty?: number
     unit_cost?: number | null
+    invoice_unit_price?: number | null
     vendor_target?: string
     reference_no?: string | null
-  }[] | null
+  }[]
 
   const excludeFromHqInboundDrill = !isHQ
-  const hqVendorIndexDrill = excludeFromHqInboundDrill ? await loadHqVendorMatchIndex() : { codes: new Set<string>(), names: new Set<string>() }
+  const hqVendorIndexDrill = excludeFromHqInboundDrill
+    ? await loadHqVendorMatchIndex()
+    : { codes: new Set<string>(), names: new Set<string>() }
   const inboundAcc: IncomeStatementPurchaseDrillInboundRow[] = []
   for (const r of inboundRaw || []) {
     const vendorTarget = String(r.vendor_target || '').trim()
@@ -2054,9 +2251,15 @@ export async function computeIncomeStatementPurchaseDrillDown(
     if (!drillVendorMatchesInboundRow(vendorKey, vendorTarget, vendorPurchaseKeyIndexDrill)) continue
     const code = String(r.item_code || '').trim()
     if (!code) continue
+    const routed = isExpenseRoutedItem(code, itemAccountSubjectMapDrill, subjectMetaForInbound)
+    if (routed.isExpense) continue
     const qty = Number(r.qty) || 0
     const unitCost =
-      r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : (itemCostMap[code] ?? 0)
+      r.invoice_unit_price != null && !isNaN(Number(r.invoice_unit_price))
+        ? Number(r.invoice_unit_price)
+        : r.unit_cost != null && !isNaN(Number(r.unit_cost))
+          ? Number(r.unit_cost)
+          : 0
     const lineAmount = qty * unitCost
     if (!lineAmount) continue
     inboundAcc.push({
@@ -2071,7 +2274,8 @@ export async function computeIncomeStatementPurchaseDrillDown(
       vendorTarget: vendorTarget || null,
     })
   }
-  const inboundTruncated = inboundAcc.length > PURCHASE_DRILL_LIMIT
+  const inboundFetchTruncated = (inboundRaw?.length || 0) >= ACCOUNTING_ROWS_MAX
+  const inboundTruncated = inboundFetchTruncated || inboundAcc.length > PURCHASE_DRILL_LIMIT
   const inbound = inboundTruncated ? inboundAcc.slice(0, PURCHASE_DRILL_LIMIT) : inboundAcc
 
   let accountIds: number[] = []
@@ -2100,6 +2304,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
   }
 
   const bankAcc: IncomeStatementPurchaseDrillBankRow[] = []
+  /** 집계와 동일: 해당 거래처 직접입고가 있으면 통장 매입지급은 드릴에서 숨김 */
   const includeBankPaymentsInDrill = inboundAcc.length === 0
   if (includeBankPaymentsInDrill && accountIds.length > 0) {
     const idList = accountIds.join(',')
@@ -2113,20 +2318,25 @@ export async function computeIncomeStatementPurchaseDrillDown(
       store?: string | null
       ref_type?: string | null
       ref_id?: number | null
-    }[] | null
+    }[] = []
     try {
-      btRows = (await supabaseSelectFilter(
+      btRows = (await supabaseSelectFilterAllPages(
         'bank_transactions',
         `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
-        { select: 'id,trans_date,amount,vendor_code,memo,note,store,ref_type,ref_id', limit: BASE_LIMIT, order: 'trans_date.desc' }
+        {
+          select: 'id,trans_date,amount,vendor_code,memo,note,store,ref_type,ref_id',
+          order: 'trans_date.desc',
+          pageSize: 8000,
+          maxRows: ACCOUNTING_ROWS_MAX,
+        }
       )) as typeof btRows
     } catch {
-      btRows = null
+      btRows = []
     }
     const linkedByBankIdDrill = await loadInboundLinkedAmountByBankId(
-      (btRows || []).map((r) => Number(r.id)).filter((id) => id > 0)
+      btRows.map((r) => Number(r.id)).filter((id) => id > 0)
     )
-    for (const r of btRows || []) {
+    for (const r of btRows) {
       if (storeFilter !== 'All') {
         const bts = String(r.store || '').trim()
         if (isHQ) {
@@ -2161,7 +2371,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
   const bankTruncated = bankAcc.length > PURCHASE_DRILL_LIMIT
   const bankPayments = bankTruncated ? bankAcc.slice(0, PURCHASE_DRILL_LIMIT) : bankAcc
 
-  const subjectMetaDrill = await loadAccountSubjectMeta()
+  const subjectMetaDrill = subjectMetaForInbound
   const { rows: pettyCash, truncated: pettyTruncated } = await listPettyCashPurchaseDrillRows({
     startStr,
     endStr,
@@ -2184,7 +2394,12 @@ export async function computeIncomeStatementPurchaseDrillDown(
     inbound,
     bankPayments,
     pettyCash,
-    truncated: { inbound: inboundTruncated, bank: bankTruncated, orders: false, petty: pettyTruncated },
+    truncated: {
+      inbound: inboundTruncated,
+      bank: bankTruncated,
+      orders: false,
+      petty: pettyTruncated,
+    },
   }
 }
 
@@ -2480,6 +2695,17 @@ export type IncomeStatementExpenseDrillFixedRow = {
   memo: string | null
 }
 
+export type IncomeStatementExpenseDrillPayrollRow = {
+  kind: 'payroll'
+  id: number
+  name: string
+  store: string
+  amount: number
+  netPay: number
+  sso: number
+  tax: number
+}
+
 export type IncomeStatementExpenseDrillDownResult = {
   accountSubjectKey: string
   accountSubjectId: number | null
@@ -2490,7 +2716,8 @@ export type IncomeStatementExpenseDrillDownResult = {
   petty: IncomeStatementExpenseDrillPettyRow[]
   bankWithdrawals: IncomeStatementExpenseDrillBankRow[]
   fixedExpenses: IncomeStatementExpenseDrillFixedRow[]
-  truncated: { petty: boolean; bank: boolean; fixed: boolean }
+  payroll: IncomeStatementExpenseDrillPayrollRow[]
+  truncated: { petty: boolean; bank: boolean; fixed: boolean; payroll: boolean }
 }
 
 /** 손익 비용 계정 행 클릭 — 패티 지출·통장 출금(손익 반영분)·고정비 */
@@ -2514,11 +2741,24 @@ export async function computeIncomeStatementExpenseDrillDown(
     petty: [],
     bankWithdrawals: [],
     fixedExpenses: [],
-    truncated: { petty: false, bank: false, fixed: false },
+    payroll: [],
+    truncated: { petty: false, bank: false, fixed: false, payroll: false },
   }
   if (wantSubjectId != null && isNaN(wantSubjectId)) return empty
 
   const subjectMeta = await loadAccountSubjectMeta()
+  const payrollAgg = await loadPayrollAggregateForIncomeStatement({
+    yearMonth,
+    storeFilter,
+    isHQ,
+    subjectMeta,
+  })
+  const payrollMatchesSubject =
+    payrollAgg.total > 0 &&
+    (wantSubjectId == null
+      ? payrollAgg.preferredSubjectId == null
+      : payrollAgg.preferredSubjectId === wantSubjectId ||
+        payrollAgg.salarySubjectIds.has(wantSubjectId))
 
   let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
   if (!isHQ && storeFilter !== 'All') {
@@ -2546,6 +2786,17 @@ export async function computeIncomeStatementExpenseDrillDown(
     }
     if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
     if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
+    if (
+      payrollAgg.total > 0 &&
+      isSalaryLikePlExpenseRow({
+        accountSubjectId: r.account_subject_id,
+        memo: r.memo,
+        subjectMeta,
+        salarySubjectIds: payrollAgg.salarySubjectIds,
+      })
+    ) {
+      continue
+    }
     const pid = Number(r.id)
     if (!pid) continue
     petty.push({
@@ -2565,31 +2816,24 @@ export async function computeIncomeStatementExpenseDrillDown(
   const bankAcc: IncomeStatementExpenseDrillBankRow[] = []
   let bankFetchTruncated = false
   if (accountIds.length > 0) {
-    const idList = accountIds.join(',')
-    const btRows = (await supabaseSelectFilter(
-      'bank_transactions',
-      `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-      {
-        select: 'id,amount,category,trans_date,expense_date,account_subject_id,memo,store',
-        limit: BASE_LIMIT,
-        order: 'trans_date.desc',
-      }
-    )) as {
-      id?: number
-      amount?: number
-      category?: string
-      trans_date?: string
-      expense_date?: string | null
-      account_subject_id?: number | null
-      memo?: string | null
-      store?: string | null
-    }[] | null
-    bankFetchTruncated = (btRows?.length || 0) >= BASE_LIMIT
-    for (const r of btRows || []) {
+    const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(accountIds, startStr, endStr)
+    bankFetchTruncated = truncated
+    for (const r of btRows) {
       if (!bankWithdrawCountsTowardPlExpense(r.category)) continue
       if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
       if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
       if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
+      if (
+        payrollAgg.total > 0 &&
+        isSalaryLikePlExpenseRow({
+          accountSubjectId: r.account_subject_id,
+          memo: r.memo,
+          subjectMeta,
+          salarySubjectIds: payrollAgg.salarySubjectIds,
+        })
+      ) {
+        continue
+      }
       const bid = Number(r.id)
       if (!bid) continue
       bankAcc.push({
@@ -2653,15 +2897,35 @@ export async function computeIncomeStatementExpenseDrillDown(
   const fixedTruncated = fixedRows.length > EXPENSE_DRILL_LIMIT
   const fixedSlice = fixedTruncated ? fixedRows.slice(0, EXPENSE_DRILL_LIMIT) : fixedRows
 
+  const payrollRows: IncomeStatementExpenseDrillPayrollRow[] = []
+  if (payrollMatchesSubject) {
+    for (const r of payrollAgg.records) {
+      payrollRows.push({
+        kind: 'payroll',
+        id: r.id,
+        name: r.name,
+        store: r.store,
+        amount: r.amount,
+        netPay: r.netPay,
+        sso: r.sso,
+        tax: r.tax,
+      })
+    }
+  }
+  const payrollTruncated = payrollRows.length > EXPENSE_DRILL_LIMIT
+  const payrollSlice = payrollTruncated ? payrollRows.slice(0, EXPENSE_DRILL_LIMIT) : payrollRows
+
   return {
     ...empty,
     petty: pettySlice,
     bankWithdrawals: bankSlice,
     fixedExpenses: fixedSlice,
+    payroll: payrollSlice,
     truncated: {
       petty: pettyTruncated,
       bank: bankTruncated,
       fixed: fixedTruncated,
+      payroll: payrollTruncated,
     },
   }
 }

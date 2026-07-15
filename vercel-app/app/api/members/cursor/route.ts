@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listMembersCursor } from '@/lib/members-server'
+import type { MemberSearchFieldDraft } from '@/lib/member-search-filter'
 import { requireAuth } from '@/lib/verify-auth'
+
+function readSearchFields(searchParams: URLSearchParams): MemberSearchFieldDraft {
+  return {
+    name: searchParams.get('name') || '',
+    phone: searchParams.get('phone') || '',
+    memberNo: searchParams.get('memberNo') || '',
+    email: searchParams.get('email') || '',
+    birthDate: searchParams.get('birthDate') || '',
+  }
+}
 
 export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, 'manager')
@@ -8,9 +19,15 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const q = searchParams.get('q') || ''
+    const fields = readSearchFields(searchParams)
     const afterId = Number(searchParams.get('afterId') || 0)
     const limit = Number(searchParams.get('limit') || 100)
-    const rows = await listMembersCursor({ q, afterId: afterId || undefined, limit })
+    const rows = await listMembersCursor({
+      q,
+      fields,
+      afterId: afterId || undefined,
+      limit,
+    })
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].id : null
     return NextResponse.json({ success: true, rows, nextCursor })
   } catch (e) {
@@ -20,4 +37,3 @@ export async function GET(req: NextRequest) {
     )
   }
 }
-

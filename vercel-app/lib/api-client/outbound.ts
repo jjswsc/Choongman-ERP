@@ -194,14 +194,12 @@ export async function getOutboundStoreMonthMatrix(params: {
   /** 1–12, 생략 또는 null = 연간 전체 */
   month?: number | null
   storeFilter?: string
-  knownStores?: string[]
 }) {
   const q = new URLSearchParams({ year: String(params.year) })
   if (params.month != null && params.month >= 1 && params.month <= 12) {
     q.set('month', String(params.month))
   }
   if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
-  if (params.knownStores?.length) q.set('knownStores', params.knownStores.join(','))
   const res = await apiFetchWithOffline(`/api/getOutboundStoreMonthMatrix?${q}`)
   if (!res.ok) {
     const text = await res.text()

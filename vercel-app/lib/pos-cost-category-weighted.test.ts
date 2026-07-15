@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { aggregatePosCostWeightedByCategory } from '@/lib/pos-cost-category-weighted'
+import { toPosCostSalesExclVat } from '@/lib/pos-cost-vat'
 
 describe('aggregatePosCostWeightedByCategory', () => {
-  it('weights cost and sales by category from order lines', () => {
+  it('weights cost and sales by category from order lines (VAT 제외 매출)', () => {
     const costIndex = new Map([
       [
         '10|',
@@ -36,12 +37,12 @@ describe('aggregatePosCostWeightedByCategory', () => {
 
     const chicken = rows.find((r) => r.categoryMain === '치킨')
     const drink = rows.find((r) => r.categoryMain === '음료')
-    expect(chicken?.netSales).toBe(200)
+    expect(chicken?.netSales).toBe(toPosCostSalesExclVat(200))
     expect(chicken?.totalCost).toBe(60)
-    expect(chicken?.costPctOfNet).toBe(30)
-    expect(drink?.netSales).toBe(50)
+    expect(chicken?.costPctOfNet).toBe(32.1)
+    expect(drink?.netSales).toBe(toPosCostSalesExclVat(50))
     expect(drink?.totalCost).toBe(48)
-    expect(drink?.costPctOfNet).toBe(96)
+    expect(drink?.costPctOfNet).toBe(102.72)
   })
 
   it('allocates set sales by catalog regular-price weight', () => {
@@ -95,13 +96,13 @@ describe('aggregatePosCostWeightedByCategory', () => {
 
     const chicken = rows.find((r) => r.categoryMain === 'Chicken')
     const side = rows.find((r) => r.categoryMain === 'Side')
-    // 200 판매가 → 정가 비중 200:50 = 4:1 → 160 / 40
-    expect(chicken?.netSales).toBe(160)
-    expect(side?.netSales).toBe(40)
+    // 200(In VAT)→186.92 공급가, 정가 비중 4:1 → 149.54 / 37.38
+    expect(chicken?.netSales).toBe(149.54)
+    expect(side?.netSales).toBe(37.38)
     expect(chicken?.totalCost).toBe(70)
     expect(side?.totalCost).toBe(10)
-    expect(chicken?.costPctOfNet).toBe(43.75)
-    expect(side?.costPctOfNet).toBe(25)
+    expect(chicken?.costPctOfNet).toBe(46.81)
+    expect(side?.costPctOfNet).toBe(26.75)
   })
 
   it('excludes unmatched BOM lines from category sales/cost totals', () => {
@@ -129,11 +130,11 @@ describe('aggregatePosCostWeightedByCategory', () => {
       miseRatePercent: 0,
     })
 
-    expect(meta.excludedUnmatchedSales).toBe(50)
+    expect(meta.excludedUnmatchedSales).toBe(toPosCostSalesExclVat(50))
     expect(meta.excludedUnmatchedQty).toBe(1)
     const chicken = rows.find((r) => r.categoryMain === 'Chicken')
     const side = rows.find((r) => r.categoryMain === 'Side')
-    expect(chicken?.netSales).toBe(100)
+    expect(chicken?.netSales).toBe(toPosCostSalesExclVat(100))
     expect(chicken?.totalCost).toBe(30)
     expect(side).toBeUndefined()
   })
@@ -159,11 +160,11 @@ describe('aggregatePosCostWeightedByCategory', () => {
       miseRatePercent: 0,
     })
 
-    expect(meta.paymentDiscountAllocated).toBe(20)
-    expect(meta.serviceAmtAllocated).toBe(10)
-    expect(rows[0]?.netSales).toBe(70)
+    expect(meta.paymentDiscountAllocated).toBe(toPosCostSalesExclVat(20))
+    expect(meta.serviceAmtAllocated).toBe(toPosCostSalesExclVat(10))
+    expect(rows[0]?.netSales).toBe(toPosCostSalesExclVat(70))
     expect(rows[0]?.totalCost).toBe(40)
-    expect(rows[0]?.costPctOfNet).toBe(57.14)
+    expect(rows[0]?.costPctOfNet).toBe(61.14)
   })
 
   it('does not double-count lineDiscountAmt already in line net sales', () => {
@@ -187,7 +188,7 @@ describe('aggregatePosCostWeightedByCategory', () => {
     })
 
     expect(meta.paymentDiscountAllocated).toBe(0)
-    expect(rows[0]?.netSales).toBe(70)
-    expect(rows[0]?.costPctOfNet).toBe(57.14)
+    expect(rows[0]?.netSales).toBe(toPosCostSalesExclVat(70))
+    expect(rows[0]?.costPctOfNet).toBe(61.14)
   })
 })

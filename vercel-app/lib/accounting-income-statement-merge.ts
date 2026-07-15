@@ -75,6 +75,9 @@ export function mergeIncomeStatementReports(
         deliveryAppFees: 0,
         cardFees: 0,
         fixedExpenses: 0,
+        stockInboundExpense: 0,
+        payrollExpense: 0,
+        depreciationExpense: 0,
         total: 0,
       },
     }
@@ -123,6 +126,9 @@ export function mergeIncomeStatementReports(
     deliveryAppFees: sum((r) => r.expenseBreakdown.deliveryAppFees),
     cardFees: sum((r) => r.expenseBreakdown.cardFees),
     fixedExpenses: sum((r) => r.expenseBreakdown.fixedExpenses),
+    stockInboundExpense: sum((r) => r.expenseBreakdown.stockInboundExpense ?? 0),
+    payrollExpense: sum((r) => r.expenseBreakdown.payrollExpense ?? 0),
+    depreciationExpense: sum((r) => r.expenseBreakdown.depreciationExpense ?? 0),
     total: sum((r) => r.expenseBreakdown.total),
   }
 

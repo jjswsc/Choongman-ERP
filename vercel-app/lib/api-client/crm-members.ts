@@ -397,9 +397,23 @@ export async function cancelMemberCouponIssueDuplicates(params: {
   }>
 }
 
-export async function getMembersCursor(params?: { q?: string; afterId?: number; limit?: number }) {
+export async function getMembersCursor(params?: {
+  q?: string
+  name?: string
+  phone?: string
+  memberNo?: string
+  email?: string
+  birthDate?: string
+  afterId?: number
+  limit?: number
+}) {
   const q = new URLSearchParams()
   if (params?.q) q.set('q', params.q)
+  if (params?.name?.trim()) q.set('name', params.name.trim())
+  if (params?.phone?.trim()) q.set('phone', params.phone.trim())
+  if (params?.memberNo?.trim()) q.set('memberNo', params.memberNo.trim())
+  if (params?.email?.trim()) q.set('email', params.email.trim())
+  if (params?.birthDate?.trim()) q.set('birthDate', params.birthDate.trim())
   if (params?.afterId != null) q.set('afterId', String(params.afterId))
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()

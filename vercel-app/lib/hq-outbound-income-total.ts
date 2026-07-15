@@ -196,21 +196,26 @@ async function loadItemPriceByCode(): Promise<Record<string, number>> {
 async function loadOrderCartsById(orderIds: number[]): Promise<Record<string, OrderCartLine[]>> {
   const out: Record<string, OrderCartLine[]> = {}
   if (orderIds.length === 0) return out
-  const idsFilter = `id=in.(${orderIds.join(',')})`
-  const cartRows = (await supabaseSelectFilter('orders', idsFilter, {
-    select: 'id,cart_json',
-    limit: orderIds.length + 50,
-  })) as { id?: number; cart_json?: string }[] | null
-  for (const cr of cartRows || []) {
-    const oid = cr.id
-    if (oid == null) continue
-    let cart: OrderCartLine[] = []
-    try {
-      if (cr.cart_json) cart = JSON.parse(cr.cart_json) || []
-    } catch {
-      cart = []
+  // PostgREST URL 길이 제한 — id=in.(...) 를 한 번에 넣으면 대량 기간 조회 시 실패함
+  const chunkSize = 80
+  for (let i = 0; i < orderIds.length; i += chunkSize) {
+    const chunk = orderIds.slice(i, i + chunkSize)
+    const idsFilter = `id=in.(${chunk.join(',')})`
+    const cartRows = (await supabaseSelectFilter('orders', idsFilter, {
+      select: 'id,cart_json',
+      limit: chunk.length + 50,
+    })) as { id?: number; cart_json?: string }[] | null
+    for (const cr of cartRows || []) {
+      const oid = cr.id
+      if (oid == null) continue
+      let cart: OrderCartLine[] = []
+      try {
+        if (cr.cart_json) cart = JSON.parse(cr.cart_json) || []
+      } catch {
+        cart = []
+      }
+      out[String(oid)] = cart
     }
-    out[String(oid)] = cart
   }
   return out
 }

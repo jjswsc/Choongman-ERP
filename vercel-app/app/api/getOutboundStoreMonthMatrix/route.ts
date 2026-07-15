@@ -6,6 +6,8 @@ import {
 } from '@/lib/outbound-store-month-matrix'
 
 export const dynamic = 'force-dynamic'
+/** 연간·다매장 stock_logs + 매출 RPC — 기본 한도보다 길 수 있음 */
+export const maxDuration = 120
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()

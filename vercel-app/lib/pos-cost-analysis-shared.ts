@@ -1,5 +1,6 @@
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { MISE_DEFAULT, resolveDeliveryAppFeePercent } from "@/lib/cost-data"
+import { toPosCostSalesExclVat } from "@/lib/pos-cost-vat"
 
 /** 목록·KPI 공통 — 원가율 구간 (%) */
 export const COST_RATIO_GOOD_MAX = 35
@@ -62,6 +63,9 @@ export function costRatioTierBgClass(tier: CostRatioTier): string {
 export type PosCostRowMetrics = {
   priceH: number
   priceD: number
+  /** VAT 제외(배달은 앱 수수료 차감 후) — 원가율·마진 분모 */
+  netSalesH: number
+  netSalesD: number
   costHMise: number
   costDMise: number
   costRatioH: number
@@ -89,8 +93,9 @@ export function computePosCostRowMetrics(
   const vatIncluded = r.vatIncluded !== false
   const feePct = resolveDeliveryAppFeePercent(r.deliveryAppFeePercent)
 
-  const netHall = vatIncluded ? priceH / 1.07 : priceH
-  const netDelGross = vatIncluded ? priceD / 1.07 : priceD
+  const netHall = toPosCostSalesExclVat(priceH, vatIncluded)
+  const netDelGross = toPosCostSalesExclVat(priceD, vatIncluded)
+  /** 앱 수수료는 VAT 포함 판매가 기준 %(계산기와 동일) */
   const netDel = netDelGross - priceD * (feePct / 100)
 
   const marginH = netHall - costHMise
@@ -98,8 +103,9 @@ export function computePosCostRowMetrics(
   const marginPctH = netHall > 0 ? (marginH / netHall) * 100 : 0
   const marginPctD = netDel > 0 ? (marginD / netDel) * 100 : 0
 
-  const costRatioH = priceH > 0 ? (costHMise / priceH) * 100 : 0
-  const costRatioD = priceD > 0 ? (costDMise / priceD) * 100 : 0
+  /** 원가율 = 원가(공급가) ÷ 매출(부가세 제외) — 원가 계산기와 동일 */
+  const costRatioH = netHall > 0 ? (costHMise / netHall) * 100 : 0
+  const costRatioD = netDel > 0 ? (costDMise / netDel) * 100 : 0
 
   const issues: PosCostIssueKind[] = []
   const hasBom = (r.breakdown ?? []).length > 0
@@ -112,6 +118,8 @@ export function computePosCostRowMetrics(
   return {
     priceH,
     priceD,
+    netSalesH: netHall,
+    netSalesD: netDel,
     costHMise,
     costDMise,
     costRatioH,
@@ -163,6 +171,8 @@ export function summarizePosCostRows(
 
   let sumPriceH = 0
   let sumPriceD = 0
+  let sumNetH = 0
+  let sumNetD = 0
   let sumCostH = 0
   let sumCostD = 0
   let sumMarginH = 0
@@ -171,11 +181,13 @@ export function summarizePosCostRows(
     const m = metrics[i]!
     if (m.costRatioH > 0) {
       sumPriceH += m.priceH
+      sumNetH += m.netSalesH
       sumCostH += m.costHMise
       sumMarginH += m.marginH
     }
     if (m.costRatioD > 0) {
       sumPriceD += m.priceD
+      sumNetD += m.netSalesD
       sumCostD += m.costDMise
       sumMarginD += m.marginD
     }
@@ -185,8 +197,10 @@ export function summarizePosCostRows(
   const avgCostH = nH > 0 ? sumCostH / nH : 0
   const avgPriceD = nD > 0 ? sumPriceD / nD : 0
   const avgCostD = nD > 0 ? sumCostD / nD : 0
-  const avgRatioH = avgPriceH > 0 ? (avgCostH / avgPriceH) * 100 : 0
-  const avgRatioD = avgPriceD > 0 ? (avgCostD / avgPriceD) * 100 : 0
+  const avgNetH = nH > 0 ? sumNetH / nH : 0
+  const avgNetD = nD > 0 ? sumNetD / nD : 0
+  const avgRatioH = avgNetH > 0 ? (avgCostH / avgNetH) * 100 : 0
+  const avgRatioD = avgNetD > 0 ? (avgCostD / avgNetD) * 100 : 0
   const avgMarginH = nH > 0 ? sumMarginH / nH : 0
   const avgMarginD = nD > 0 ? sumMarginD / nD : 0
 

@@ -128,6 +128,8 @@ export type TenantItem = {
   partnerName?: string | null
   /** 플랫폼 운영(시드·본사) 테넌트 — 판매 고객과 구분 */
   isPlatformInternal?: boolean
+  /** 가입(테넌트 생성) 시각 ISO — 없으면 기간 필터에서 제외하지 않고 통과 */
+  createdAt?: string | null
 }
 
 export const FEATURE_KEYS = [

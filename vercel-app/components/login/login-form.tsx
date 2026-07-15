@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
+import { seedSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { isLoginExcludedStoreKey } from "@/lib/pos-sales-test-office"
 import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
 import { useAuth, loadOfflineResumeAuth, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
@@ -674,9 +675,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           store: res.storeName,
           user: res.userName,
         })
+        const nextTenantId =
+          res.tenantId && !res.saasPartnerLogin ? String(res.tenantId).trim() : ""
+        /** 로그인 직후 enabled-modules API 왕복 제거 */
+        if (res.enabledModules) {
+          seedSaasEnabledModules(res.enabledModules, nextTenantId || null)
+        } else {
+          seedSaasEnabledModules(null, nextTenantId || null)
+        }
         setAuth({
           ...(res.companyName ? { company: res.companyName } : {}),
-          ...(res.tenantId && !res.saasPartnerLogin ? { tenantId: res.tenantId } : {}),
+          ...(nextTenantId ? { tenantId: nextTenantId } : {}),
           store: res.storeName,
           user: res.userName,
           role: res.role || "",
