@@ -169,6 +169,15 @@ export function addBangkokCalendarDays(ymd: string, deltaDays: number): string {
   return new Date(ms).toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })
 }
 
+/** 방콕 달력 `ymd`에서 `deltaYears`년 후의 YYYY-MM-DD (음수 가능). 2/29 → 비윤년은 2/28로 클램프. */
+export function addBangkokCalendarYears(ymd: string, deltaYears: number): string {
+  const { y, m, d } = parseYmd(ymd)
+  const targetY = y + deltaYears
+  const lastDay = new Date(Date.UTC(targetY, m, 0)).getUTCDate()
+  const day = Math.min(d, lastDay)
+  return `${targetY}-${pad2(m)}-${pad2(day)}`
+}
+
 /** 방콕 자정 기준 UTC ISO */
 export function getBangkokStartOfDayUtcIso(ymd: string): string {
   const { y, m, d } = parseYmd(ymd)

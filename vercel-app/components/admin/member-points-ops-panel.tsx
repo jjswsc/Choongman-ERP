@@ -2,6 +2,8 @@
 
 import { appAlert } from "@/lib/app-message"
 import * as React from "react"
+import Link from "next/link"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,6 +15,7 @@ import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import { formatMemberPointsDisplay, roundMemberPointsEarn } from "@/lib/member-points-math"
 import { formatTierRatePercentInput } from "@/lib/member-tier-rate-percent"
+import { cn } from "@/lib/utils"
 
 type LedgerRow = {
   id: number
@@ -29,11 +32,20 @@ type TierRateRow = {
   point_rate: number
 }
 
+const QUICK_DELTAS = [10, 50, 100, -10, -50] as const
+
 function formatPointKind(kind: string, t: ReturnType<typeof useT>): string {
   if (kind === "earn") return t("memberPointsKindEarn")
   if (kind === "use") return t("memberPointsKindUse")
   if (kind === "adjust") return t("memberPointsKindAdjust")
   return kind
+}
+
+function kindBadgeVariant(kind: string): "default" | "secondary" | "outline" | "destructive" {
+  if (kind === "earn") return "default"
+  if (kind === "use") return "destructive"
+  if (kind === "adjust") return "secondary"
+  return "outline"
 }
 
 function resolveTierPointRate(tiers: TierRateRow[], tierCode?: string | null): number {
@@ -151,39 +163,36 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
     onMemberPointsChange?.(next)
   }
 
+  const bumpDelta = (n: number) => {
+    const cur = Number(deltaPoints || 0)
+    setDeltaPoints(String((Number.isFinite(cur) ? cur : 0) + n))
+  }
+
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{t("memberPointsBalanceTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
-          <div>
-            <p className="text-xs text-muted-foreground">{t("name")}</p>
-            <p className="font-medium">{selectedMember.name || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">{t("memberNo")}</p>
-            <p className="font-medium">{selectedMember.memberNo || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">{t("memberTier")}</p>
-            <p className="font-medium">{selectedMember.tierCode || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">{t("memberPointsBalance")}</p>
-            <p className="text-lg font-semibold tabular-nums">
-              {Number(selectedMember.pointBalance || 0).toLocaleString()}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">{t("memberPointsTierCumulative")}</p>
-            <p className="text-lg font-semibold tabular-nums">
-              {Number(selectedMember.tierPoints || 0).toLocaleString()}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-xl border bg-card p-3 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground">{t("memberPointsBalance")}</p>
+          <p className="mt-1 text-xl font-extrabold tabular-nums text-emerald-600">
+            {Number(selectedMember.pointBalance || 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-3 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground">{t("memberPointsTierCumulative")}</p>
+          <p className="mt-1 text-xl font-extrabold tabular-nums">
+            {Number(selectedMember.tierPoints || 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-3 shadow-sm">
+          <p className="text-[11px] font-medium text-muted-foreground">{t("memberPointsRateLabel")}</p>
+          <p className="mt-1 text-sm font-semibold">
+            <Badge variant="outline" className="mr-1">
+              {selectedMember.tierCode || "—"}
+            </Badge>
+            {formatTierRatePercentInput(tierPointRate)}%
+          </p>
+        </div>
+      </div>
 
       <Card>
         <CardHeader className="pb-2">
@@ -221,6 +230,24 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
                   })
                 : t("memberPointsCalcPreviewIdle")}
             </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">{t("memberPointsQuickAdjust")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_DELTAS.map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn("h-8 tabular-nums", n < 0 && "text-rose-600")}
+                  onClick={() => bumpDelta(n)}
+                >
+                  {n > 0 ? `+${n}` : String(n)}
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -334,8 +361,10 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id} className="border-t">
-                      <td className="p-2 whitespace-nowrap">{r.createdAt}</td>
-                      <td className="p-2">{formatPointKind(r.kind, t)}</td>
+                      <td className="p-2 whitespace-nowrap text-xs">{r.createdAt}</td>
+                      <td className="p-2">
+                        <Badge variant={kindBadgeVariant(r.kind)}>{formatPointKind(r.kind, t)}</Badge>
+                      </td>
                       <td
                         className={`p-2 text-right tabular-nums ${r.points >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}
                       >
@@ -343,7 +372,7 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
                         {r.points.toLocaleString()}
                       </td>
                       <td className="p-2 text-right tabular-nums">{Number(r.amount || 0).toLocaleString()}</td>
-                      <td className="p-2">{r.note || "—"}</td>
+                      <td className="p-2 text-xs">{r.note || "—"}</td>
                     </tr>
                   ))}
                   {!rows.length && (
@@ -379,6 +408,10 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+        <Link href="/admin/members/tiers">{t("memberTiers")}</Link>
+      </Button>
     </div>
   )
 }

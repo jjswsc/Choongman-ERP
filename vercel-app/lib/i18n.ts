@@ -5582,9 +5582,21 @@ export const i18n = {
     windowsInstallerCopyFail: '클립보드 복사에 실패했습니다. 아래 주소를 직접 복사해 주세요:\n\n',
     memberList: '회원 리스트',
     memberManagementTitle: '회원 관리',
-    memberManagementSub: '회원 마스터는 ERP·자사 앱 기준으로 관리합니다. 목록에서 회원을 선택하면 프로필·포인트(잔액·원장·수기 조정)를 같은 화면에서 다룹니다. LINE OA는 선택 연동·동기화 채널입니다.',
+    memberManagementSub: '목록에서 회원을 고르면 좌측 프로필·포인트·메모에서 작업합니다. LINE OA는 선택 연동 채널입니다.',
     memberProfileTab: '프로필',
     memberPointsTab: '포인트',
+    memberNotesSelectHint: '회원을 선택하면 운영 메모를 작성할 수 있습니다.',
+    memberNewRegister: '신규 등록',
+    memberSectionBasic: '기본 정보',
+    memberSectionContact: '연락 · 동의',
+    memberSectionJoin: '가입 · 추천',
+    memberSectionStatus: '상태',
+    memberAdvancedMerge: '고급 · 중복 회원 병합',
+    memberTierFilterHint: '등급 필터는 현재 로드된 목록 기준',
+    memberDangerTools: '고급 · 위험 작업',
+    memberEmptyListHint: '표시할 회원이 없습니다. 검색 조건을 바꾸거나 초기화해 보세요.',
+    memberPointsQuickAdjust: '빠른 조정',
+    memberPointsRateLabel: '등급 적립률',
     memberPointsPolicyLinkHint: '적립율·보너스 규칙은',
     memberLoadFailed: '회원 목록을 불러오지 못했습니다. 다시 시도해 주세요.',
     memberLineSyncSkippedNoToken:
@@ -6959,9 +6971,9 @@ export const i18n = {
     helpHow_admin_employees:
       '① 직원 목록: 화면 진입 시 재직 중 목록이 자동으로 불러와집니다. 매장·직무·등급·재직·검색어로 좁힌 뒤「조회」로 다시 적용할 수 있습니다. 표에서 행을 클릭하거나 연필을 누르면 우측 패널에 그 직원이 열리고,「신규」로 빈 등록 패널을 열 수 있습니다. 저장 전 필수(※)와 날짜·숫자 형식을 확인합니다.\n② 권한: 매장 매니저·가맹점주는 보통 자기 매장 위주이며 Officer/Director 역할 부여 등은 본사(디렉터) 정책에 따릅니다. 가맹 복수 매장이 켜져 있으면 본사에서 허용한 경우에만「추가 매장」을 편집할 수 있습니다.\n③ 직원 입력 이력: 기간·작업·담당자로 직원 등록·수정·퇴사 처리 기록을 조회합니다. 행을 클릭하면 항목별 변경 전·후를 확인할 수 있습니다(비밀번호는 기록하지 않음).\n④ 인원 이동·적정 인원: 기간·매장 기준으로 이동·편성·목표 인원을 봅니다.\n⑤ 직원 평가: 상단「직원 평가」탭 안에서 하위 탭(평가 입력·직원평가분석·평가 목록·경고서·평가 항목 설정)을 고릅니다. 분석·목록·경고서에서 직원 행을 열면「평가 입력」하위 탭으로 이동합니다. 항목 설정은 본사 위주입니다.\n⑥ 급여·근태 등 다른 메뉴에서 직원 링크로 들어온 경우에도 목록을 조회한 뒤 같은 패널로 수정합니다.\n⑦ 자세한 단계는「도움말」본문을 보고, 끝나면「화면으로 돌아가기」로 목록으로 돌아갑니다.',
     helpSum_admin_members:
-      '회원 마스터 조회·등록·수정과 포인트 잔액·원장·수기 조정을 한 화면에서 관리합니다. LINE·앱 가입 정보를 ERP 기준으로 맞춥니다.',
+      '목록에서 회원을 선택해 좌측 프로필·포인트·메모로 실행하는 회원 운영 화면입니다.',
     helpHow_admin_members:
-      '① 오른쪽 목록에서 회원을 검색·선택합니다. 보유·등급 누적 포인트 열을 함께 확인할 수 있습니다.\n② 좌측 「프로필」탭에서 이름·전화·동의 등을 등록·수정합니다.\n③ 좌측 「포인트」탭에서 잔액·원장을 보고, 금액 계산 또는 +/- 포인트로 수기 조정합니다. 적립율·보너스는 「등급 관리」메뉴에서 설정합니다.\n④ 같은 사람의 중복 계정은 「중복 회원 병합」에서 유지 회원을 고른 뒤 합칩니다.\n⑤ 상단 CRM 탭에서 쿠폰·방문·등급 등으로 이동합니다.',
+      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색·등급/상태 필터·CSV/Import. LINE 리셋은 위험 작업으로 접혀 있습니다.',
     helpSum_admin_members_points:
       '(메뉴 통합) 포인트 조회·조정은 「회원 리스트」화면의 포인트 탭으로 이동했습니다. 적립 규칙은 등급 관리에서 설정합니다.',
     helpHow_admin_members_points:
@@ -6969,11 +6981,11 @@ export const i18n = {
     helpSum_admin_members_coupons:
       '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다. (→ /admin/crm/coupons 로 통합)',
     helpHow_admin_members_coupons:
-      '① 「쿠폰 정의」에서 POS·회원앱에 쓸 쿠폰 마스터를 만듭니다.\n② 「회원 지급」에서 회원을 검색해 쿠폰을 발급합니다.\n③ 「발급·이력」에서 사용·만료 상태를 확인합니다.\n④ 자동 대량 발급은 CRM 캠페인 메뉴를 사용합니다.',
+      '① 「쿠폰 정의」에서 POS·회원앱에 쓸 쿠폰 마스터를 만듭니다.\n② 「회원 지급」에서 단건 검색 또는 성별·나이·가입일·매장·등급 조건으로 일괄 지급합니다.\n③ 「발급·이력」에서 사용·만료 상태를 확인합니다.\n④ 휴면·최근방문 등 자동 대량 발급은 「쿠폰 캠페인」 탭을 사용합니다.',
     helpSum_admin_crm_coupons:
-      '쿠폰 정의·회원 지급·발급 이력을 한 화면에서 관리하고 POS·회원앱과 연동합니다.',
+      '쿠폰 정의·단건/조건 일괄 지급·캠페인·스탬프를 한 화면에서 관리하고 POS·회원앱과 연동합니다.',
     helpHow_admin_crm_coupons:
-      '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다.\n② 「회원 지급」: 회원 검색 후 쿠폰을 즉시 지급합니다(회원앱 혜택 탭에 표시).\n③ 「발급·이력」: 발급·사용·주문 번호를 조회하고, 사용 가능(issued) 건은 「발급 취소」로 회원앱에서 제거할 수 있습니다.\n④ POS 결제 시 회원을 연결하면 발급 쿠폰이 자동 검증됩니다.',
+      '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다.\n② 「회원 지급」: 단건 검색 또는 성별·나이·가입일·매장·등급 조건으로 일괄 지급합니다(회원앱 혜택 탭에 표시).\n③ 「발급·이력」: 발급·사용·주문 번호를 조회하고, 사용 가능(issued) 건은 「발급 취소」로 회원앱에서 제거할 수 있습니다.\n④ 「쿠폰 캠페인」: 전체·휴면·최근방문·생일월·조건검색 등 대량 발급을 저장·재실행합니다.\n⑤ POS 결제 시 회원을 연결하면 발급 쿠폰이 자동 검증됩니다.',
     helpSum_admin_members_visits:
       '회원 방문·주문 이력과 방문 분석 KPI를 보는 화면입니다.',
     helpHow_admin_members_visits:
@@ -12968,9 +12980,21 @@ orderItemQty: 'Qty',
     windowsInstallerCopyFail: 'Could not copy to the clipboard. Please copy this URL manually:\n\n',
     memberList: 'Member List',
     memberManagementTitle: 'Member management',
-    memberManagementSub: 'Manage member master data in ERP/app. Select a member to edit profile and points (balance, ledger, manual adjust) on the same screen. LINE OA is an optional sync channel.',
+    memberManagementSub: 'Select a member, then work in Profile, Points, and notes on the left. LINE OA is optional sync.',
     memberProfileTab: 'Profile',
     memberPointsTab: 'Points',
+    memberNotesSelectHint: 'Select a member to write operational notes.',
+    memberNewRegister: 'New member',
+    memberSectionBasic: 'Basic info',
+    memberSectionContact: 'Contact · consent',
+    memberSectionJoin: 'Join · referral',
+    memberSectionStatus: 'Status',
+    memberAdvancedMerge: 'Advanced · merge duplicates',
+    memberTierFilterHint: 'Tier filter applies to the loaded page',
+    memberDangerTools: 'Advanced · dangerous actions',
+    memberEmptyListHint: 'No members to show. Change search or reset filters.',
+    memberPointsQuickAdjust: 'Quick adjust',
+    memberPointsRateLabel: 'Tier earn rate',
     memberPointsPolicyLinkHint: 'Earn rates and bonuses are in',
     memberLoadFailed: 'Failed to load member list. Please try again.',
     memberLineSyncSkippedNoToken:
@@ -14348,9 +14372,9 @@ orderItemQty: 'Qty',
     helpHow_admin_employees:
       '① Employee list: active staff load automatically on entry. Narrow with store, job, grade, employment status, and search, then press Query to re-apply filters. Click a row or the pencil icon to open the right panel; use New for a blank profile. Check required fields (※) and date/number formats before Save.\n② Roles: store managers and franchisees usually work within their store scope; assigning Officer/Director follows head-office policy. If multi-store franchise is enabled, edit Extra stores only when head office allows it.\n③ Input history: review who changed employee records and when (passwords are not logged).\n④ Movement & headcount: review transfers and staffing targets by period and store.\n⑤ Employee Eval: open the top tab, then pick sub-tabs (entry, analytics, history, warning letters, item setup). Rows in analytics/history/warnings open Evaluation entry.\n⑥ Deep links from Payroll or Attendance still load the list first—then edit in the same panel.\n⑦ Open Help for the long guide, then Back to screen when you are done.',
     helpSum_admin_members:
-      'Manage member master (register/edit) and points (balance, ledger, manual adjust) on one screen. Keep app and LINE-linked profiles aligned in ERP.',
+      'Pick a member from the list and run Profile, Points, and notes on the left.',
     helpHow_admin_members:
-      '① Search and select a member in the right-hand list. Available and tier cumulative points columns are shown together.\n② On the Profile tab, register or edit name, phone, consents, and other fields.\n③ On the Points tab, review balance/ledger and adjust with spend-based calculation or +/- points. Earn rates and bonuses are configured under Tier management.\n④ Merge duplicates with Merge duplicate members: keep one member, then enter the duplicate member number.\n⑤ Use CRM nav for coupons, visits, tiers, and related tools.',
+      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search, tier/status filters, CSV/Import. LINE reset is folded under dangerous actions.',
     helpSum_admin_members_points:
       '(Merged) Point lookup and adjustment moved to the Points tab on Member list. Earn rules stay under Tier management.',
     helpHow_admin_members_points:
@@ -14358,11 +14382,11 @@ orderItemQty: 'Qty',
     helpSum_admin_members_coupons:
       'Issue member coupons and review history (redirects to /admin/crm/coupons).',
     helpHow_admin_members_coupons:
-      '① Define coupon masters under Definitions.\n② Grant coupons to members under Grant.\n③ Review issue and redemption under History.\n④ Use CRM campaigns for automated bulk issuance.',
+      '① Define coupon masters under Definitions.\n② Grant: single member search or bulk by gender/age/join date/store/tier.\n③ Review issue and redemption under History.\n④ Use Campaigns for dormant/recent-visit style bulk runs.',
     helpSum_admin_crm_coupons:
-      'Define coupons, grant to members, and track POS and member-app usage in one hub.',
+      'Define coupons, single/bulk grant, campaigns, and stamp cards with POS and member-app sync.',
     helpHow_admin_crm_coupons:
-      '① Definitions: set benefit, validity, and redemption mode (member issue recommended).\n② Grant: search members and issue instantly (shows in member app Benefits).\n③ History: view issue/use/order details; cancel ready-to-use (issued) rows to remove them from the member app.\n④ At POS, link the member so issued coupons validate automatically.',
+      '① Definitions: set benefit, validity, and redemption mode (member issue recommended).\n② Grant: single search or bulk by gender/age/join date/store/tier (shows in member app Benefits).\n③ History: view issue/use/order details; cancel ready-to-use (issued) rows to remove them from the member app.\n④ Campaigns: all, dormant, birthday, profile filters — save and re-run.\n⑤ At POS, link the member so issued coupons validate automatically.',
     helpSum_admin_members_visits:
       'Review member visit and order history plus visit analytics KPIs.',
     helpHow_admin_members_visits:

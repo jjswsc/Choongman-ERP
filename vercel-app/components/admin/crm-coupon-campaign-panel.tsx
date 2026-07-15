@@ -79,6 +79,12 @@ export function CrmCouponCampaignPanel() {
     recentDays: "30",
     dormantDays: "90",
     birthMonth: "",
+    gender: "",
+    ageMin: "",
+    ageMax: "",
+    joinFrom: "",
+    joinTo: "",
+    joinStoreCode: "",
   })
 
   React.useEffect(() => {
@@ -136,6 +142,15 @@ export function CrmCouponCampaignPanel() {
     if (form.audienceType === "dormant") audiencePayload.days = Math.max(1, Number(form.dormantDays || 90))
     if (form.audienceType === "birthday_month") audiencePayload.month = Math.max(1, Number(form.birthMonth || 1))
     if (form.audienceType === "new_joined") audiencePayload.days = Math.max(1, Number(form.recentDays || 30))
+    if (form.audienceType === "filter") {
+      if (form.gender === "M" || form.gender === "F") audiencePayload.gender = form.gender
+      if (form.ageMin.trim()) audiencePayload.ageMin = Math.max(0, Number(form.ageMin))
+      if (form.ageMax.trim()) audiencePayload.ageMax = Math.max(0, Number(form.ageMax))
+      if (form.joinFrom.trim()) audiencePayload.joinFrom = form.joinFrom.trim()
+      if (form.joinTo.trim()) audiencePayload.joinTo = form.joinTo.trim()
+      if (form.joinStoreCode.trim()) audiencePayload.joinStoreCode = form.joinStoreCode.trim()
+      if (form.tierCode.trim()) audiencePayload.tierCode = form.tierCode.trim().toUpperCase()
+    }
     return audiencePayload
   }
 
@@ -233,6 +248,7 @@ export function CrmCouponCampaignPanel() {
   const pickCampaign = (row: CampaignRow) => {
     setSelectedId(row.id)
     setPreviewCount(null)
+    const p = row.audiencePayload || {}
     setForm((prev) => ({
       ...prev,
       name: row.name,
@@ -242,10 +258,16 @@ export function CrmCouponCampaignPanel() {
       couponCode: row.couponCode,
       issueLimit: String(row.issueLimit || 200),
       description: "",
-      tierCode: toText(row.audiencePayload?.tierCode),
-      recentDays: String(Number(row.audiencePayload?.days || 30)),
-      dormantDays: String(Number(row.audiencePayload?.days || 90)),
-      birthMonth: toText(row.audiencePayload?.month),
+      tierCode: toText(p.tierCode),
+      recentDays: String(Number(p.days || 30)),
+      dormantDays: String(Number(p.days || 90)),
+      birthMonth: toText(p.month),
+      gender: toText(p.gender),
+      ageMin: p.ageMin != null && toText(p.ageMin) !== "" ? String(p.ageMin) : "",
+      ageMax: p.ageMax != null && toText(p.ageMax) !== "" ? String(p.ageMax) : "",
+      joinFrom: toText(p.joinFrom),
+      joinTo: toText(p.joinTo),
+      joinStoreCode: toText(p.joinStoreCode),
     }))
     void loadRuns(row.id)
   }
@@ -263,6 +285,7 @@ export function CrmCouponCampaignPanel() {
   const audienceLabel = (v: string) => {
     const map: Record<string, string> = {
       all: t("crmCampaignAudienceAll"),
+      filter: t("crmCampaignAudienceFilter"),
       tier: t("crmCampaignAudienceTier"),
       recent: t("crmCampaignAudienceRecent"),
       dormant: t("crmCampaignAudienceDormant"),
@@ -271,6 +294,26 @@ export function CrmCouponCampaignPanel() {
     }
     return map[v] || v
   }
+
+  const emptyForm = () => ({
+    name: "",
+    status: "draft",
+    triggerType: "manual",
+    audienceType: "all",
+    couponCode: "",
+    issueLimit: "200",
+    description: "",
+    tierCode: "",
+    recentDays: "30",
+    dormantDays: "90",
+    birthMonth: "",
+    gender: "",
+    ageMin: "",
+    ageMax: "",
+    joinFrom: "",
+    joinTo: "",
+    joinStoreCode: "",
+  })
 
   return (
     <div className="space-y-4">
@@ -324,6 +367,7 @@ export function CrmCouponCampaignPanel() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("crmCampaignAudienceAll")}</SelectItem>
+              <SelectItem value="filter">{t("crmCampaignAudienceFilter")}</SelectItem>
               <SelectItem value="tier">{t("crmCampaignAudienceTier")}</SelectItem>
               <SelectItem value="recent">{t("crmCampaignAudienceRecent")}</SelectItem>
               <SelectItem value="dormant">{t("crmCampaignAudienceDormant")}</SelectItem>
@@ -370,6 +414,61 @@ export function CrmCouponCampaignPanel() {
               onChange={(e) => setForm((p) => ({ ...p, birthMonth: e.target.value }))}
             />
           ) : null}
+          {form.audienceType === "filter" ? (
+            <>
+              <Select value={form.gender || "_"} onValueChange={(v) => setForm((p) => ({ ...p, gender: v === "_" ? "" : v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("crmCampaignFilterGender")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_">{t("crmCampaignFilterGenderAll")}</SelectItem>
+                  <SelectItem value="M">{t("crmCampaignFilterGenderM")}</SelectItem>
+                  <SelectItem value="F">{t("crmCampaignFilterGenderF")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
+                min={0}
+                max={120}
+                placeholder={t("crmCampaignFilterAgeMin")}
+                value={form.ageMin}
+                onChange={(e) => setForm((p) => ({ ...p, ageMin: e.target.value }))}
+              />
+              <Input
+                type="number"
+                min={0}
+                max={120}
+                placeholder={t("crmCampaignFilterAgeMax")}
+                value={form.ageMax}
+                onChange={(e) => setForm((p) => ({ ...p, ageMax: e.target.value }))}
+              />
+              <Input
+                type="date"
+                placeholder={t("crmCampaignFilterJoinFrom")}
+                value={form.joinFrom}
+                onChange={(e) => setForm((p) => ({ ...p, joinFrom: e.target.value }))}
+                aria-label={t("crmCampaignFilterJoinFrom")}
+              />
+              <Input
+                type="date"
+                placeholder={t("crmCampaignFilterJoinTo")}
+                value={form.joinTo}
+                onChange={(e) => setForm((p) => ({ ...p, joinTo: e.target.value }))}
+                aria-label={t("crmCampaignFilterJoinTo")}
+              />
+              <Input
+                placeholder={t("crmCampaignFilterJoinStore")}
+                value={form.joinStoreCode}
+                onChange={(e) => setForm((p) => ({ ...p, joinStoreCode: e.target.value }))}
+              />
+              <Input
+                placeholder={t("crmCampaignTierPh")}
+                value={form.tierCode}
+                onChange={(e) => setForm((p) => ({ ...p, tierCode: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground sm:col-span-2">{t("crmCampaignFilterHint")}</p>
+            </>
+          ) : null}
           <Input
             className="sm:col-span-2"
             placeholder={t("crmCampaignDescPh")}
@@ -398,19 +497,7 @@ export function CrmCouponCampaignPanel() {
                 setSelectedId(null)
                 setRuns([])
                 setPreviewCount(null)
-                setForm({
-                  name: "",
-                  status: "draft",
-                  triggerType: "manual",
-                  audienceType: "all",
-                  couponCode: "",
-                  issueLimit: "200",
-                  description: "",
-                  tierCode: "",
-                  recentDays: "30",
-                  dormantDays: "90",
-                  birthMonth: "",
-                })
+                setForm(emptyForm())
               }}
             >
               {t("crmCampaignNew")}

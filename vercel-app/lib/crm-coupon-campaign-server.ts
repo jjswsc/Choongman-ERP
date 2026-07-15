@@ -3,6 +3,7 @@ import {
   getBangkokDateTimeString,
   getBangkokTodayDateString,
 } from '@/lib/bangkok-time'
+import { buildMemberProfileFilterQuery } from '@/lib/crm-coupon-audience-filter'
 import {
   supabaseInsert,
   supabaseSelectFilterAllPages,
@@ -201,6 +202,14 @@ async function resolveTargetMembers(campaign: ReturnType<typeof mapCampaign>): P
   const limit = Math.max(1, Math.min(campaign.issueLimit || 200, 2000))
   const audience = toText(campaign.audienceType)
   const payload = campaign.audiencePayload || {}
+  if (audience === 'filter') {
+    const rows = (await supabaseSelectFilter('members', buildMemberProfileFilterQuery(payload), {
+      order: 'id.asc',
+      limit,
+      select: 'id',
+    })) as MemberRow[]
+    return rows.map((r) => Number(r.id || 0)).filter((x) => x > 0)
+  }
   if (audience === 'tier') {
     const tierCode = toUpper(payload.tierCode)
     if (!tierCode) return []
