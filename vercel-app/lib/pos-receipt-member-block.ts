@@ -35,29 +35,43 @@ export function maskMemberPhoneForReceipt(phone: string | null | undefined): str
 
 export function formatMemberTierForReceipt(tierCode: string | null | undefined): string {
   const raw = String(tierCode ?? '').trim()
-  if (!raw) return 'Member'
-  if (/^member$/i.test(raw)) return 'Member'
-  return raw
+  if (!raw) return 'BRONZE'
+  if (/^member$/i.test(raw)) return 'BRONZE'
+  return raw.toUpperCase()
 }
 
 export function pickMemberReceiptFieldsFromApi(
   res: PosOrderLoyaltyReceiptApiFields | null | undefined,
-  fallback?: { memberId?: number; memberNo?: string }
+  fallback?: {
+    memberId?: number
+    memberNo?: string
+    memberPhone?: string
+    memberTierCode?: string
+    memberPointBalance?: number
+  }
 ): PosReceiptMemberSnapshot | null {
-  if (!res) return null
-  const memberId = Math.max(0, Math.trunc(Number(res.memberId ?? fallback?.memberId ?? 0) || 0))
-  const memberNo = String(res.memberNo ?? fallback?.memberNo ?? '').trim()
-  const memberPhone = String(res.memberPhone ?? '').trim()
-  const memberTierCode = String(res.memberTierCode ?? '').trim()
-  const memberPointEarned = roundMemberPointsEarn(res.pointEarned)
-  const memberPointBalance = normalizeMemberPoints(res.memberPointBalance)
+  if (!res && !fallback) return null
+  const memberId = Math.max(
+    0,
+    Math.trunc(Number(res?.memberId ?? fallback?.memberId ?? 0) || 0)
+  )
+  const memberNo = String(res?.memberNo ?? fallback?.memberNo ?? '').trim()
+  const memberPhone = String(res?.memberPhone ?? fallback?.memberPhone ?? '').trim()
+  const memberTierCode = String(res?.memberTierCode ?? fallback?.memberTierCode ?? '').trim()
+  const memberPointEarned = roundMemberPointsEarn(res?.pointEarned)
+  const memberPointBalance =
+    res?.memberPointBalance != null
+      ? normalizeMemberPoints(res.memberPointBalance)
+      : fallback?.memberPointBalance != null
+        ? normalizeMemberPoints(fallback.memberPointBalance)
+        : undefined
   const hasMember =
     memberId > 0 ||
     Boolean(memberNo) ||
     Boolean(memberPhone) ||
     Boolean(memberTierCode) ||
     memberPointEarned > 0 ||
-    memberPointBalance > 0
+    (memberPointBalance != null && memberPointBalance > 0)
   if (!hasMember) return null
   return {
     ...(memberId > 0 ? { memberId } : {}),
@@ -65,7 +79,7 @@ export function pickMemberReceiptFieldsFromApi(
     ...(memberPhone ? { memberPhone } : {}),
     ...(memberTierCode ? { memberTierCode } : {}),
     memberPointEarned,
-    memberPointBalance,
+    ...(memberPointBalance != null ? { memberPointBalance } : {}),
   }
 }
 
@@ -118,7 +132,7 @@ export function buildPaymentReceiptMemberFooterHtml(params: {
   const ctaRaw =
     String(params.membershipQrText || '').trim() ||
     tr('posReceiptMembershipQrCta', 'เช็คสิทธิพิเศษที่นี่')
-  const phoneMasked = maskMemberPhoneForReceipt(params.receiptData.memberPhone)
+  const memberNoDisplay = String(params.receiptData.memberNo ?? '').trim()
   const tierLabel = formatMemberTierForReceipt(params.receiptData.memberTierCode)
   const pointBalance = formatMemberPointsDisplay(params.receiptData.memberPointBalance ?? 0)
   const pointEarned = roundMemberPointsEarn(params.receiptData.memberPointEarned)
@@ -134,7 +148,7 @@ export function buildPaymentReceiptMemberFooterHtml(params: {
   const infoCol = showMember
     ? `<div class="receipt-member-info">
         <div class="receipt-member-info-title">${esc(tr('posReceiptMemberInfoTitle', 'ข้อมูลสมาชิก'))}</div>
-        <div class="receipt-member-info-line">${esc(tr('posReceiptMemberPhone', 'เบอร์โทรศัพท์'))}: ${esc(phoneMasked || '-')}</div>
+        <div class="receipt-member-info-line">${esc(tr('posReceiptMemberNo', 'รหัสสมาชิก'))}: ${esc(memberNoDisplay || '-')}</div>
         <div class="receipt-member-info-line">${esc(tr('posReceiptMemberTier', 'ระดับสมาชิก'))}: ${esc(tierLabel)}</div>
         <div class="receipt-member-info-line">${esc(tr('posReceiptMemberPointsBalance', 'คะแนนคงเหลือ'))}: ${esc(pointBalance)}</div>
         <div class="receipt-member-info-line">${esc(tr('posReceiptMemberPointsEarn', 'คะแนนที่จะได้รับ'))}: ${esc(pointEarnedLabel)}</div>

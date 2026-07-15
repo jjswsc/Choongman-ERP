@@ -550,6 +550,12 @@ export async function POST(req: NextRequest) {
       paidAtStamp,
     })
     let pointEarned = pointEarnedReq
+    let loyaltyReceipt: {
+      memberNo?: string
+      phone?: string
+      tierCode?: string
+      pointBalanceExcludingEarn?: number
+    } | null = null
     const previousEarned = Number(current?.point_earned || 0)
     if (memberId > 0 && paymentComplete && previousEarned <= 0) {
       try {
@@ -566,6 +572,14 @@ export async function POST(req: NextRequest) {
           createdBy: String(current?.created_by ?? body?.createdBy ?? body?.created_by ?? ''),
         })
         pointEarned = loyalty.pointEarned
+        loyaltyReceipt = {
+          ...(loyalty.memberNo ? { memberNo: loyalty.memberNo } : {}),
+          ...(loyalty.phone ? { phone: loyalty.phone } : {}),
+          ...(loyalty.tierCode ? { tierCode: loyalty.tierCode } : {}),
+          ...(loyalty.pointBalanceExcludingEarn != null
+            ? { pointBalanceExcludingEarn: loyalty.pointBalanceExcludingEarn }
+            : {}),
+        }
         await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
           point_earned: pointEarned,
         })
@@ -748,17 +762,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const receiptMemberNo =
+      String(memberReceipt?.memberNo || loyaltyReceipt?.memberNo || memberNo || '').trim() || undefined
+    const receiptPhone =
+      String(memberReceipt?.memberPhone || loyaltyReceipt?.phone || '').trim() || undefined
+    const receiptTier =
+      String(memberReceipt?.memberTierCode || loyaltyReceipt?.tierCode || '').trim() || undefined
+    const receiptBalance =
+      memberReceipt?.memberPointBalance ?? loyaltyReceipt?.pointBalanceExcludingEarn ?? undefined
+
     return NextResponse.json(
       {
         success: true,
         pointEarned,
-        ...(memberReceipt?.memberPhone ? { memberPhone: memberReceipt.memberPhone } : {}),
-        ...(memberReceipt?.memberTierCode ? { memberTierCode: memberReceipt.memberTierCode } : {}),
-        ...(memberReceipt?.memberNo ? { memberNo: memberReceipt.memberNo } : {}),
-        ...(memberReceipt?.memberId ? { memberId: memberReceipt.memberId } : {}),
-        ...(memberReceipt?.memberPointBalance != null
-          ? { memberPointBalance: memberReceipt.memberPointBalance }
-          : {}),
+        ...(memberId > 0 ? { memberId } : {}),
+        ...(receiptMemberNo ? { memberNo: receiptMemberNo } : {}),
+        ...(receiptPhone ? { memberPhone: receiptPhone } : {}),
+        ...(receiptTier ? { memberTierCode: receiptTier } : {}),
+        ...(receiptBalance != null ? { memberPointBalance: receiptBalance } : {}),
       },
       { headers }
     )

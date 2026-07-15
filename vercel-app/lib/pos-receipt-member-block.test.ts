@@ -12,8 +12,8 @@ describe('pos-receipt-member-block', () => {
     expect(maskMemberPhoneForReceipt('5951')).toBe('5951')
   })
 
-  it('formats empty tier as Member', () => {
-    expect(formatMemberTierForReceipt('')).toBe('Member')
+  it('formats empty tier as BRONZE', () => {
+    expect(formatMemberTierForReceipt('')).toBe('BRONZE')
     expect(formatMemberTierForReceipt('GOLD')).toBe('GOLD')
   })
 
@@ -47,8 +47,8 @@ describe('pos-receipt-member-block', () => {
         subtotal: 100,
         discountAmt: 0,
         total: 100,
-        memberPhone: '0812345951',
-        memberTierCode: 'Member',
+        memberNo: 'M5951',
+        memberTierCode: 'GOLD',
         memberPointBalance: 127,
         memberPointEarned: 4,
       },
@@ -58,9 +58,11 @@ describe('pos-receipt-member-block', () => {
       tr: (_k, fb) => fb,
     })
     expect(html).toContain('receipt-member-block--split')
-    expect(html).toContain('XXXXXX5951')
+    expect(html).toContain('M5951')
+    expect(html).toContain('GOLD')
     expect(html).toContain('+4')
     expect(html).toContain('ข้อมูลสมาชิก')
+    expect(html).toContain('รหัสสมาชิก')
     expect(html).toContain('เช็คสิทธิพิเศษที่นี่')
   })
 })

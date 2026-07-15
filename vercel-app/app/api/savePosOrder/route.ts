@@ -622,6 +622,12 @@ export async function POST(req: NextRequest) {
     })
     let pointEarned = pointEarnedReq
     let stampResult: import('@/lib/member-stamp-card').MemberStampRecordResult | null = null
+    let loyaltyReceipt: {
+      memberNo?: string
+      phone?: string
+      tierCode?: string
+      pointBalanceExcludingEarn?: number
+    } | null = null
     if (memberId > 0 && paymentComplete && created?.id) {
       try {
         const loyalty = await applyLoyaltyOnOrder({
@@ -638,6 +644,14 @@ export async function POST(req: NextRequest) {
         })
         pointEarned = loyalty.pointEarned
         stampResult = loyalty.stamp ?? null
+        loyaltyReceipt = {
+          ...(loyalty.memberNo ? { memberNo: loyalty.memberNo } : {}),
+          ...(loyalty.phone ? { phone: loyalty.phone } : {}),
+          ...(loyalty.tierCode ? { tierCode: loyalty.tierCode } : {}),
+          ...(loyalty.pointBalanceExcludingEarn != null
+            ? { pointBalanceExcludingEarn: loyalty.pointBalanceExcludingEarn }
+            : {}),
+        }
         await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
           point_earned: pointEarned,
         })
@@ -768,6 +782,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const receiptMemberNo =
+      String(memberReceipt?.memberNo || loyaltyReceipt?.memberNo || memberNo || '').trim() || undefined
+    const receiptPhone =
+      String(memberReceipt?.memberPhone || loyaltyReceipt?.phone || '').trim() || undefined
+    const receiptTier =
+      String(memberReceipt?.memberTierCode || loyaltyReceipt?.tierCode || '').trim() || undefined
+    const receiptBalance =
+      memberReceipt?.memberPointBalance ?? loyaltyReceipt?.pointBalanceExcludingEarn ?? undefined
+
     return NextResponse.json(
       {
         success: true,
@@ -775,13 +798,11 @@ export async function POST(req: NextRequest) {
         orderNo,
         pointEarned,
         stamp: stampResult,
-        ...(memberReceipt?.memberPhone ? { memberPhone: memberReceipt.memberPhone } : {}),
-        ...(memberReceipt?.memberTierCode ? { memberTierCode: memberReceipt.memberTierCode } : {}),
-        ...(memberReceipt?.memberNo ? { memberNo: memberReceipt.memberNo } : {}),
-        ...(memberReceipt?.memberId ? { memberId: memberReceipt.memberId } : {}),
-        ...(memberReceipt?.memberPointBalance != null
-          ? { memberPointBalance: memberReceipt.memberPointBalance }
-          : {}),
+        ...(memberId > 0 ? { memberId } : {}),
+        ...(receiptMemberNo ? { memberNo: receiptMemberNo } : {}),
+        ...(receiptPhone ? { memberPhone: receiptPhone } : {}),
+        ...(receiptTier ? { memberTierCode: receiptTier } : {}),
+        ...(receiptBalance != null ? { memberPointBalance: receiptBalance } : {}),
         perf: {
           elapsedMs: totalElapsedMs,
           allocateOrderNoMs,

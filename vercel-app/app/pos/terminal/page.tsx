@@ -676,7 +676,13 @@ export default function PosTerminalPage() {
   const capturePaymentReceiptMember = useCallback(
     (
       res: Parameters<typeof pickMemberReceiptFieldsFromApi>[0],
-      fallback?: { memberId?: number; memberNo?: string }
+      fallback?: {
+        memberId?: number
+        memberNo?: string
+        memberPhone?: string
+        memberTierCode?: string
+        memberPointBalance?: number
+      }
     ) => {
       pendingPaymentReceiptMemberRef.current = pickMemberReceiptFieldsFromApi(res, fallback)
     },
@@ -3920,8 +3926,10 @@ export default function PosTerminalPage() {
           deliveryAppCode: dataForPrint.deliveryAppCode,
         }),
       }
+      const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
+      const enrichedWithMember = await enrichReceiptModalDataWithMember(enriched)
       const receiptHtml = buildPosPaymentReceiptDocumentHtml({
-        receiptData: enriched,
+        receiptData: enrichedWithMember,
         menus,
         optionNameByCode,
         orderTypeLabels: {
@@ -3989,6 +3997,8 @@ export default function PosTerminalPage() {
 
     const data = receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts)
     const storeCode = String(currentStoreId || order.storeCode || '').trim()
+    const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
+    const dataWithMember = await enrichReceiptModalDataWithMember(data, order)
 
     if (isMainPosDevice) {
       let receiptOnPayment = autoPrintReceiptOnPayment
@@ -3999,12 +4009,12 @@ export default function PosTerminalPage() {
         /* state fallback */
       }
       if (receiptOnPayment) {
-        await printOnePaymentReceiptFromModalData(data)
+        await printOnePaymentReceiptFromModalData(dataWithMember)
         return
       }
     }
 
-    setReceiptData(data)
+    setReceiptData(dataWithMember)
   }
 
   /** 결제 직후 영수증: 주문 접수와 동일하게 printPosHtmlDocument 직접 호출(모달 180ms 지연·중복 방지 ref 선등록 회피) */
@@ -8259,6 +8269,7 @@ export default function PosTerminalPage() {
                   capturePaymentReceiptMember(updateRes, {
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
+                    memberTierCode: payload.memberTierCode,
                   })
                   if (!kbankQrPending) {
                     const completedOk = await applyOrderStatusWithRetry({
@@ -8436,6 +8447,7 @@ export default function PosTerminalPage() {
                   capturePaymentReceiptMember(updateRes, {
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
+                    memberTierCode: payload.memberTierCode,
                   })
                   if (!kbankQrPending) {
                     const completedOk = await applyOrderStatusWithRetry({
@@ -9403,6 +9415,7 @@ export default function PosTerminalPage() {
                   capturePaymentReceiptMember(updateRes, {
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
+                    memberTierCode: payload.memberTierCode,
                   })
                   orderIdToComplete = existingOrderId
                   orderNo = pendingReceiptOrderNo ?? ''
@@ -9447,10 +9460,12 @@ export default function PosTerminalPage() {
                       {
                         memberId: payload.memberId,
                         memberNo: payload.memberNo,
+                        memberTierCode: payload.memberTierCode,
                       },
                       {
                         memberId: payload.memberId,
                         memberNo: payload.memberNo,
+                        memberTierCode: payload.memberTierCode,
                       }
                     )
                   } else {
@@ -9489,6 +9504,7 @@ export default function PosTerminalPage() {
                     capturePaymentReceiptMember(res, {
                       memberId: payload.memberId,
                       memberNo: payload.memberNo,
+                      memberTierCode: payload.memberTierCode,
                     })
                   }
                 }
@@ -9912,6 +9928,7 @@ export default function PosTerminalPage() {
                   capturePaymentReceiptMember(res, {
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
+                    memberTierCode: payload.memberTierCode,
                   })
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''

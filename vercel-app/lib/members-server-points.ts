@@ -526,7 +526,14 @@ export async function applyLoyaltyOnOrder(params: {
   )
 
   if (!shouldInsertUse && !shouldInsertEarn) {
-    return { pointEarned: 0, tierCode: currentTierCode, stamp }
+    return {
+      pointEarned: 0,
+      tierCode: currentTierCode,
+      stamp,
+      memberNo: toText(member.member_no) || undefined,
+      phone: toText(member.phone) || undefined,
+      pointBalanceExcludingEarn: balanceBefore,
+    }
   }
 
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
@@ -537,5 +544,13 @@ export async function applyLoyaltyOnOrder(params: {
     updated_at: getBangkokDateTimeString(),
   })
   const recalc = await recalculateMemberTier(memberId)
-  return { pointEarned: appliedEarn, tierCode: recalc.tierCode, stamp }
+  return {
+    pointEarned: appliedEarn,
+    tierCode: recalc.tierCode,
+    stamp,
+    memberNo: toText(member.member_no) || undefined,
+    phone: toText(member.phone) || undefined,
+    /** 이 빌 적립분 제외(사용 반영 후) */
+    pointBalanceExcludingEarn: roundMemberPointsEarn(balanceBefore - appliedUse),
+  }
 }

@@ -1553,8 +1553,8 @@ export default function PosPrintersPage() {
               subtotal: previewData.subtotal,
               discountAmt: previewData.discount,
               total: previewData.total,
-              memberPhone: "0812345951",
-              memberTierCode: "Member",
+              memberNo: "M001234",
+              memberTierCode: "BRONZE",
               memberPointBalance: 127,
               memberPointEarned: 4,
             },
@@ -2830,10 +2830,10 @@ export default function PosPrintersPage() {
                           {tr("posReceiptMemberInfoTitle", "ข้อมูลสมาชิก")}
                         </div>
                         <div>
-                          {tr("posReceiptMemberPhone", "เบอร์โทรศัพท์")}: XXXXXX5951
+                          {tr("posReceiptMemberNo", "รหัสสมาชิก")}: M001234
                         </div>
                         <div>
-                          {tr("posReceiptMemberTier", "ระดับสมาชิก")}: Member
+                          {tr("posReceiptMemberTier", "ระดับสมาชิก")}: BRONZE
                         </div>
                         <div>
                           {tr("posReceiptMemberPointsBalance", "คะแนนคงเหลือ")}: 127
