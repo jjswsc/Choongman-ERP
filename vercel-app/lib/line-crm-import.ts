@@ -85,6 +85,18 @@ function normalizePhone(v: string): string {
   return canonicalMemberPhoneForStorage(v)
 }
 
+function isValidThaiMobilePhone(v: string): boolean {
+  const phone = normalizePhone(v)
+  return /^0[689]\d{8}$/.test(phone)
+}
+
+function isUsableImportName(v: string): boolean {
+  const name = String(v || '').trim()
+  if (!name) return false
+  if (name === '-' || name === '.' || name === '—') return false
+  return true
+}
+
 function normalizeDate(v: unknown): string {
   const raw = v
   if (typeof raw === 'number' && Number.isFinite(raw)) {
@@ -511,11 +523,18 @@ export async function processLineCrmImport(params: {
 
   for (const row of parsed.rows) {
     try {
-      let memberId = await findMemberIdByPhone(row.phone)
+      const importName = row.fullName || row.lineDisplayName || ''
+      if (!isUsableImportName(importName) && !isValidThaiMobilePhone(row.phone)) {
+        throw new Error('skip: invalid name/phone (junk row)')
+      }
+      let memberId = isValidThaiMobilePhone(row.phone) ? await findMemberIdByPhone(row.phone) : 0
       if (!memberId) memberId = await findMemberIdByLineDisplayName(row.lineDisplayName)
       if (!memberId) {
+        if (!isUsableImportName(importName) || !isValidThaiMobilePhone(row.phone)) {
+          throw new Error('skip: refuse create without valid name+phone')
+        }
         const created = await createMember({
-          name: row.fullName || row.lineDisplayName || 'LINE 고객',
+          name: importName,
           phone: row.phone,
           email: row.email,
           birthDate: row.birthDate || undefined,
@@ -538,14 +557,16 @@ export async function processLineCrmImport(params: {
         totalPoints: row.totalPoints,
         tierPoints: row.tierPoints,
       })
-      const memberPatch = {
-        name: row.fullName || row.lineDisplayName || 'LINE 고객',
-        full_name: row.fullName || null,
+      const memberPatchRaw: Record<string, unknown> = {
+        name: isUsableImportName(row.fullName || row.lineDisplayName)
+          ? row.fullName || row.lineDisplayName
+          : undefined,
+        full_name: isUsableImportName(row.fullName) ? row.fullName : null,
         line_member_type: row.memberType || null,
         line_first_name: row.firstName || null,
         line_last_name: row.lastName || null,
-        line_display_name: row.lineDisplayName || null,
-        phone: normalizePhone(row.phone) || null,
+        line_display_name: isUsableImportName(row.lineDisplayName) ? row.lineDisplayName : null,
+        phone: isValidThaiMobilePhone(row.phone) ? normalizePhone(row.phone) : undefined,
         email: row.email || null,
         birth_date: row.birthDate || null,
         gender: row.gender || null,
@@ -567,20 +588,26 @@ export async function processLineCrmImport(params: {
         ...pointPatch,
         updated_at: now,
       }
+      const memberPatch = Object.fromEntries(
+        Object.entries(memberPatchRaw).filter(([, v]) => v !== undefined)
+      )
       try {
         await supabaseUpdateByFilter('members', `id=eq.${memberId}`, memberPatch)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e || '')
         if (!/column/i.test(msg)) throw e
-        await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
-          name: row.fullName || row.lineDisplayName || 'LINE 고객',
-          full_name: row.fullName || null,
-          line_display_name: row.lineDisplayName || null,
-          phone: normalizePhone(row.phone) || null,
-          email: row.email || null,
-          birth_date: row.birthDate || null,
+        const fallback: Record<string, unknown> = {
           updated_at: now,
-        })
+        }
+        if (isUsableImportName(row.fullName || row.lineDisplayName)) {
+          fallback.name = row.fullName || row.lineDisplayName
+        }
+        if (isUsableImportName(row.fullName)) fallback.full_name = row.fullName
+        if (isUsableImportName(row.lineDisplayName)) fallback.line_display_name = row.lineDisplayName
+        if (isValidThaiMobilePhone(row.phone)) fallback.phone = normalizePhone(row.phone)
+        if (row.email) fallback.email = row.email
+        if (row.birthDate) fallback.birth_date = row.birthDate
+        await supabaseUpdateByFilter('members', `id=eq.${memberId}`, fallback)
       }
 
       if (parsed.reportType === 'point' && row.points !== 0) {
@@ -648,6 +675,8 @@ export async function processLineCrmImport(params: {
       }
       successCount += 1
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e || 'unknown error')
+      const skipped = /^skip:/i.test(errMsg)
       if (canWriteImportLog) {
         rowLogs.push({
           job_id: jobId,
@@ -657,7 +686,7 @@ export async function processLineCrmImport(params: {
           phone: normalizePhone(row.phone) || null,
           full_name: row.fullName || null,
           transaction_id: row.transactionId || null,
-          message: row.pointStatus ? `status:${row.pointStatus}` : (e instanceof Error ? e.message : 'unknown error'),
+          message: skipped ? errMsg : (row.pointStatus ? `status:${row.pointStatus}` : errMsg),
           coupon_code: row.couponCode || null,
           points: Math.trunc(row.points || 0),
           raw_payload: {
@@ -688,10 +717,10 @@ export async function processLineCrmImport(params: {
             periodStart: parsed.meta.periodStart || null,
             periodEnd: parsed.meta.periodEnd || null,
           },
-          status: 'failed',
+          status: skipped ? 'skipped' : 'failed',
         })
       }
-      failedCount += 1
+      if (!skipped) failedCount += 1
     }
   }
 

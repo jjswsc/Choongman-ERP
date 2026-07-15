@@ -302,9 +302,9 @@ export function PosTerminalMenuScreen({
     const [r0, r1, r2, r3] = await Promise.allSettled([
       fromParent
         ? Promise.resolve(fromParent.menus)
-        : getPosMenus({ fresh: true, storeCode: storeCode || undefined }),
+        : getPosMenus({ storeCode: storeCode || undefined }),
       getPosMenuCategories(),
-      fromParent ? Promise.resolve(fromParent.options) : getPosMenuOptions({ fresh: true, forCodeMap: true }),
+      fromParent ? Promise.resolve(fromParent.options) : getPosMenuOptions({ forCodeMap: true }),
       fromParent ? Promise.resolve(fromParent.promos) : getPosPromosWithItems(),
     ])
     const list = r0.status === 'fulfilled' ? r0.value || [] : []

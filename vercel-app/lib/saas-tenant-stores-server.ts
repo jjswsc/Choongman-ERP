@@ -175,14 +175,16 @@ export async function countErpStoresForTenant(tenantId: string, companyName = ""
   if (!tid) return 0
 
   try {
+    /** count=0도 신뢰 — 예전엔 0일 때 loadAllErpStoreRows(최대 5000)로 떨어져 고객사 1건에도 수 초~수십 초 지연됨 */
     const n = await supabaseCountFilter("erp_stores", `tenant_id=eq.${encodeURIComponent(tid)}`)
-    if (n > 0) return n
+    return Math.max(0, n)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (!isTenantColumnError(msg)) throw e
   }
 
-  const rows = await loadErpStoreRowsForTenant({ tenantId: tid, companyName, offset: 0, limit: 5000 })
+  /** tenant_id 컬럼이 없는 레거시 DB에서만 풀스캔 fallback */
+  const rows = await loadErpStoreRowsForTenant({ tenantId: tid, companyName, offset: 0, limit: 500 })
   return rows.length
 }
 

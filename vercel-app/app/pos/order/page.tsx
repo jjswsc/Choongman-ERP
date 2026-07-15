@@ -528,9 +528,9 @@ export default function PosOrderPage() {
     setLoading(true)
     const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
     Promise.allSettled([
-      getPosMenus({ fresh: true, storeCode: storeCode || undefined }),
+      getPosMenus({ storeCode: storeCode || undefined }),
       getPosMenuCategories(),
-      getPosMenuOptions({ fresh: true }),
+      getPosMenuOptions({}),
       getPosPromosWithItems(),
     ])
       .then(([r0, r1, r2, r3]) => {

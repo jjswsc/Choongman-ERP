@@ -798,7 +798,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {
-    if (storeListLoading) {
+    if (storeListLoading && effectiveStoreCodes.length === 0) {
       setLoading(true)
       return
     }

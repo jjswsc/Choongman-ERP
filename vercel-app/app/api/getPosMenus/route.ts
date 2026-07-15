@@ -27,10 +27,23 @@ const POS_MENUS_SELECT_WITH_ALL =
   ',kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,sell_hall,sell_delivery,sell_packaging,sell_member'
 const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
+/** 성공한 select 컬럼 캐시 — 매 요청 6회 폴백 왕복 방지 */
+let cachedPosMenusSelect: string | null = null
+const POS_MENUS_SELECT_CANDIDATES = [
+  POS_MENUS_SELECT_WITH_ALL_PROMO,
+  POS_MENUS_SELECT_WITH_ALL,
+  POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG,
+  POS_MENUS_SELECT_WITH_GROUPS,
+  POS_MENUS_SELECT,
+  POS_MENUS_SELECT_BASE,
+] as const
+
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
 export async function GET(request: Request) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  /** 짧은 CDN/브라우저 캐시 — 매장 POS 반복 진입 체감 개선 (저장 후 fresh=true로 우회) */
+  headers.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60')
 
   try {
     const { searchParams } = new URL(request.url)
@@ -38,11 +51,10 @@ export async function GET(request: Request) {
     const strictStoreScope =
       searchParams.get('strictStoreScope') === '1' || searchParams.get('memberPortal') === '1'
     const menuScopeCompatibilityMode = String(process.env.POS_MENU_SCOPE_COMPATIBILITY_MODE ?? '1') !== '0'
-    try {
-      await runDuePriceSchedules(new Date())
-    } catch (scheduleErr) {
+    /** 가격 스케줄은 메뉴 GET을 막지 않음 — 백그라운드 적용 */
+    void runDuePriceSchedules(new Date()).catch((scheduleErr) => {
       console.error('getPosMenus runDuePriceSchedules:', scheduleErr)
-    }
+    })
 
     let groupsById = new Map<number, PosOptionGroupRow>()
     let linksByMenuId = new Map<number, PosMenuOptionGroupLinkRow[]>()
@@ -107,22 +119,20 @@ export async function GET(request: Request) {
     }
 
     let rows: unknown[] | null = null
-    for (const cols of [
-      POS_MENUS_SELECT_WITH_ALL_PROMO,
-      POS_MENUS_SELECT_WITH_ALL,
-      POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG,
-      POS_MENUS_SELECT_WITH_GROUPS,
-      POS_MENUS_SELECT,
-      POS_MENUS_SELECT_BASE,
-    ]) {
+    const selectOrder = cachedPosMenusSelect
+      ? [cachedPosMenusSelect, ...POS_MENUS_SELECT_CANDIDATES.filter((c) => c !== cachedPosMenusSelect)]
+      : [...POS_MENUS_SELECT_CANDIDATES]
+    for (const cols of selectOrder) {
       try {
         rows = (await supabaseSelect('pos_menus', {
           order: 'sort_order.asc,name.asc',
           limit: 10000,
           select: cols,
         })) as unknown[] | null
+        cachedPosMenusSelect = cols
         break
       } catch (colErr: unknown) {
+        if (cols === cachedPosMenusSelect) cachedPosMenusSelect = null
         if (cols === POS_MENUS_SELECT_BASE) throw colErr
       }
     }

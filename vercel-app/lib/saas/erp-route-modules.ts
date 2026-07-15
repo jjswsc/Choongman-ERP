@@ -559,6 +559,7 @@ export const SAAS_API_GATE_EXEMPT_PREFIXES = [
   "/api/online-probe",
   "/api/notificationSettings",
   "/api/getSaasTenantSettings",
+  "/api/saasAdminScope",
   "/api/saasBootstrap",
   "/api/line/webhook",
   "/api/lineOa/",

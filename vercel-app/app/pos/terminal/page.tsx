@@ -1689,8 +1689,8 @@ export default function PosTerminalPage() {
       })
     setCatalogLoading(true)
     void Promise.allSettled([
-      getPosMenus({ fresh: true, storeCode: requestStoreCode || undefined }),
-      getPosMenuOptions({ fresh: true, forCodeMap: true }),
+      getPosMenus({ storeCode: requestStoreCode || undefined }),
+      getPosMenuOptions({ forCodeMap: true }),
       getPosPromosWithItems({ includeInactive: true }),
     ])
       .then(([rMenus, rOpts, rPromos]) => {

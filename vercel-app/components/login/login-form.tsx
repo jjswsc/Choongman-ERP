@@ -23,7 +23,7 @@ import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { seedSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { isLoginExcludedStoreKey } from "@/lib/pos-sales-test-office"
 import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
-import { useAuth, loadOfflineResumeAuth, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
+import { useAuth, loadOfflineResumeAuth, clearOfflineLoginSnapshot, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
 import {
   isLangCode,
   useLang,
@@ -51,6 +51,7 @@ import { useAppBrandConfig } from "@/components/app-brand-provider"
 import {
   isSaasPlatformDefaultLoginCompany,
   isSaasAdminLoginPath,
+  isSaasPartnerLoginStoreClient,
   SAAS_PARTNER_LOGIN_STORE_DEFAULT,
 } from "@/lib/saas-partner-login-defaults-client"
 
@@ -265,6 +266,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     () => String(searchParams?.get("user") || "").trim(),
     [searchParams]
   )
+  /** 고객사 로그인 링크(회사 바로가기) — 기존 세션 강제 해제 */
+  const forceAccountSwitch = useMemo(
+    () => String(searchParams?.get("switch") || "").trim() === "1",
+    [searchParams]
+  )
 
   const [loginApp, setLoginApp] = useState<LoginApp>(() =>
     deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo)
@@ -404,8 +410,23 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    */
   const [offlineResume, setOfflineResume] = useState<AuthState | null>(null)
   useLayoutEffect(() => {
+    /**
+     * 회사 로그인 바로가기(switch=1 / company·store·user 프리필):
+     * 새 탭은 sessionStorage가 비지만 localStorage에 대리점(Partner/admin) 스냅샷이 남아
+     * 「오프라인 모드로 들어가기」가 뜨는 문제 → 스냅샷 제거 후 고객사 로그인 폼만 표시.
+     */
+    const switchingAccount =
+      forceAccountSwitch ||
+      Boolean(queryCompany) ||
+      Boolean(queryStore) ||
+      Boolean(queryUser)
+    if (switchingAccount) {
+      clearOfflineLoginSnapshot()
+      setOfflineResume(null)
+      return
+    }
     setOfflineResume(loadOfflineResumeAuth())
-  }, [])
+  }, [forceAccountSwitch, queryCompany, queryStore, queryUser])
 
   useEffect(() => {
     persistOfflinePilotFromQuery(searchParams)
@@ -551,6 +572,36 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   useEffect(() => {
     if (auth) {
+      const authCompany = String(auth.company || "").trim().toLowerCase()
+      const authStore = String(auth.store || "").trim().toLowerCase()
+      const authUser = String(auth.user || "").trim().toLowerCase()
+      const qCompany = queryCompany.toLowerCase()
+      const qStore = queryStore.toLowerCase()
+      const qUser = queryUser.toLowerCase()
+      const prefillsMismatch =
+        (Boolean(qCompany) && authCompany !== qCompany) ||
+        (Boolean(qStore) && authStore !== qStore) ||
+        (Boolean(qUser) && authUser !== qUser)
+      /**
+       * 회사 로그인 바로가기(switch=1) 또는 다른 회사·매장·이름 프리필이 있으면
+       * 기존 대리점(Partner)/다른 계정 세션을 끊고 로그인 폼을 보여 준다.
+       * 주의: logout()은 /admin/login으로 리다이렉트하며 query(company=JSW)를 날리므로 쓰면 안 됨.
+       */
+      const mustSwitchAccount =
+        forceAccountSwitch ||
+        prefillsMismatch ||
+        (isSaasPartnerLoginStoreClient(auth.store || "") &&
+          (Boolean(queryCompany) || Boolean(queryStore) || Boolean(queryUser)))
+      if (mustSwitchAccount) {
+        clearOfflineLoginSnapshot()
+        setOfflineResume(null)
+        setAuth(null)
+        void fetch(`${window.location.origin}/api/logout`, {
+          method: "POST",
+          credentials: "same-origin",
+        }).catch(() => {})
+        return
+      }
       replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       return
     }
@@ -565,7 +616,19 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return () => {
       window.clearTimeout(timer)
     }
-  }, [auth, effectiveRedirectTo, router, fetchLoginData, resolveSaasAdminLogin, skipLoginDataFetch])
+  }, [
+    auth,
+    effectiveRedirectTo,
+    router,
+    fetchLoginData,
+    resolveSaasAdminLogin,
+    skipLoginDataFetch,
+    forceAccountSwitch,
+    queryCompany,
+    queryStore,
+    queryUser,
+    setAuth,
+  ])
 
   useEffect(() => {
     if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
@@ -593,7 +656,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         } else {
           setStore(queryStore || "")
         }
-        setUser("")
+        setUser(queryUser || "")
       }
       companyPrefillAppliedRef.current = true
       return
@@ -605,12 +668,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (found) {
       setCompany(found)
       if (queryCompany) {
-        setStore("")
-        setUser("")
+        setStore(queryStore || "")
+        setUser(queryUser || "")
       }
     }
     companyPrefillAppliedRef.current = true
-  }, [companies, queryCompany, queryStore, useManualCompanyField, isSaasAdminLogin])
+  }, [companies, queryCompany, queryStore, queryUser, useManualCompanyField, isSaasAdminLogin])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -874,6 +937,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    * 스냅샷 없어도 POS·하이브리드는 캐시 목록에서 고른 매장·이름으로 오프라인 진입 허용.
    */
   const effectiveOfflineResume = useMemo((): AuthState | null => {
+    /** 고객사 로그인 전환 중에는 대리점 오프라인 CTA 숨김 */
+    if (
+      forceAccountSwitch ||
+      Boolean(queryCompany) ||
+      Boolean(queryStore) ||
+      Boolean(queryUser)
+    ) {
+      return null
+    }
     if (offlineResume) return enrichOfflinePosAuth(offlineResume)
     if (loginApp !== "pos" && !hybridPosShell) return null
     const s = store.trim()
@@ -894,6 +966,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       token,
     })
   }, [
+    forceAccountSwitch,
+    queryCompany,
+    queryStore,
+    queryUser,
     offlineResume,
     loginApp,
     hybridPosShell,

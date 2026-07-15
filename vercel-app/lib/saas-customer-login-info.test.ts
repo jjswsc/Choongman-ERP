@@ -28,5 +28,6 @@ describe("saas-customer-login-info", () => {
     expect(href).toContain("company=Acme")
     expect(href).toContain("store=Bangkok")
     expect(href).toContain("user=Admin")
+    expect(href).toContain("switch=1")
   })
 })

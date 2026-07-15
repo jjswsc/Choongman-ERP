@@ -16,6 +16,7 @@ import {
 } from "@/lib/permissions"
 import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
 import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
+import { isSaasPartnerLoginStoreClient } from "@/lib/saas-partner-login-defaults-client"
 
 const AdminShell = dynamic(
   () => import("@/components/erp/admin-shell").then((m) => m.AdminShell),
@@ -76,7 +77,7 @@ export default function AdminLayout({
     if (n !== lang) setLang(n)
   }, [pathname, lang, setLang])
 
-  // 미로그인: 로그인 URL이 아니면 즉시 이동 (pathname null 대비로 window 경로도 함께 판별)
+  // 미로그인: 로그인 URL이 아니면 즉시 이동 (pathname null 대비로 location 경로도 함께 판별)
   useLayoutEffect(() => {
     if (typeof window === "undefined") return
     if (!initialized) return
@@ -84,11 +85,20 @@ export default function AdminLayout({
     if (onLogin) return
     if (!auth) {
       window.location.replace("/admin/login")
+      return
+    }
+    /** 대리점(Partner) 세션은 고객사 ERP(/admin)가 아니라 SaaS 콘솔로 */
+    if (isSaasPartnerLoginStoreClient(auth.store || "")) {
+      window.location.replace("/saas-admin")
     }
   }, [initialized, auth])
 
   useEffect(() => {
     if (!initialized) return
+    if (auth && !isLoginPage && isSaasPartnerLoginStoreClient(auth.store || "")) {
+      router.replace("/saas-admin")
+      return
+    }
     if (auth && !isLoginPage && !canAccessAdmin(auth.role || "")) {
       setAuth(null)
       window.location.replace("/admin/login?msg=no_admin")
@@ -127,6 +137,11 @@ export default function AdminLayout({
 
   // 인증 대기
   if (!initialized || !auth) {
+    return <AdminLayoutLoading />
+  }
+
+  /** Partner 세션이 ERP 셸을 잠깐이라도 그리지 않도록 */
+  if (isSaasPartnerLoginStoreClient(auth.store || "")) {
     return <AdminLayoutLoading />
   }
 

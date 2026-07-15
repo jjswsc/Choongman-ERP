@@ -14,6 +14,7 @@ import {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=60')
   const { searchParams } = new URL(request.url)
   const menuId = searchParams.get('menuId')?.trim()
   const forCodeMap =

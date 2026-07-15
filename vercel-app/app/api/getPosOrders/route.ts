@@ -406,7 +406,7 @@ export async function GET(request: NextRequest) {
 
       rows = idRows || []
     } else {
-      const buildListFilter = (storeForFilter: string) => {
+      const buildListFilter = (storeForFilter: string | string[]) => {
         const parts: string[] = []
         if (startDate && endDate) {
           const { startISO, endISOExclusive } =
@@ -414,8 +414,17 @@ export async function GET(request: NextRequest) {
           parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
           parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
         }
-        if (storeForFilter && storeForFilter !== 'All') {
-          parts.push(`store_code=ilike.${encodeURIComponent(storeForFilter)}`)
+        const stores = Array.isArray(storeForFilter)
+          ? storeForFilter.map((s) => String(s || '').trim()).filter((s) => s && s !== 'All')
+          : storeForFilter && storeForFilter !== 'All'
+            ? [String(storeForFilter).trim()]
+            : []
+        if (stores.length === 1) {
+          parts.push(`store_code=ilike.${encodeURIComponent(stores[0]!)}`)
+        } else if (stores.length > 1) {
+          /** pollMinimal 등 — 후보 매장코드를 한 번에 OR (순차 N회 조회 제거) */
+          const or = stores.map((s) => `store_code.ilike.${encodeURIComponent(s)}`).join(',')
+          parts.push(`or=(${or})`)
         }
         if (statusPaidLike) {
           parts.push('or=(status.eq.paid,status.eq.completed)')
@@ -428,7 +437,11 @@ export async function GET(request: NextRequest) {
         return parts.join('&')
       }
 
-      const filterStr = buildListFilter(primaryStoreFilter)
+      const listStoreArg =
+        pollMinimal && !strictStore && storeFilterCandidates.length > 1
+          ? storeFilterCandidates
+          : primaryStoreFilter
+      const filterStr = buildListFilter(listStoreArg)
 
       if (filterStr) {
         rows = (await selectPosOrders(filterStr, {
@@ -437,7 +450,12 @@ export async function GET(request: NextRequest) {
           select: rowSelect,
         }, 'getPosOrders/list')) as typeof rows
 
-        if (!strictStore && storeFilterCandidates.length > 1) {
+        if (
+          !pollMinimal &&
+          !strictStore &&
+          storeFilterCandidates.length > 1 &&
+          !(Array.isArray(listStoreArg) && listStoreArg.length > 1)
+        ) {
           const variants = storeFilterCandidates.slice(1)
           if (variants.length > 0) {
             const mergedById = new Map<number, (typeof rows)[number]>()
@@ -460,7 +478,8 @@ export async function GET(request: NextRequest) {
             rows = Array.from(mergedById.values())
           }
         }
-        if (!strictStore && !rows?.length && primaryStoreFilter) {
+        /** pollMinimal(테이블 점유 폴링)에서는 store 없는 당일 전체 스캔 fallback 금지 — Omni 멀티매장에서 치명적 */
+        if (!pollMinimal && !strictStore && !rows?.length && primaryStoreFilter) {
           const fallbackFilterNoStore = buildListFilter('')
           const fallbackRows = (await selectPosOrders(fallbackFilterNoStore, {
             order: listOrder,

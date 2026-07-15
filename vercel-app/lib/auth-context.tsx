@@ -118,6 +118,17 @@ function loadAuth(): AuthState | null {
 }
 
 /**
+ * 고객사 로그인 전환(회사 바로가기 새 탭 등) — localStorage 마지막 로그인 스냅샷만 제거.
+ * (대리점 Partner/admin 오프라인 CTA가 고객사 로그인 폼을 가리지 않게)
+ */
+export function clearOfflineLoginSnapshot(): void {
+  try {
+    if (typeof window === 'undefined') return
+    localStorage.removeItem(LAST_LOGIN_SNAPSHOT_KEY)
+  } catch {}
+}
+
+/**
  * 오프라인 진입용: 탭 단위 sessionStorage가 비어도, 이전에 이 브라우저에서 로그인한 적이 있으면
  * localStorage 스냅샷으로 매장·이름·역할 복구 (토큰은 session에 있을 때만 첨부)
  */

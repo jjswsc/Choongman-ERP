@@ -17,6 +17,7 @@ import { PosStoreProvider } from "@/lib/pos-store-provider"
 import { appAlert } from "@/lib/app-message"
 import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
 import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
+import { isSaasPartnerLoginStoreClient } from "@/lib/saas-partner-login-defaults-client"
 import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
 import { sendPosHealthAlert } from "@/lib/pos-health-alert-client"
 
@@ -322,6 +323,11 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     if (isPosLoginPage) return
     if (!auth) {
       replacePosOfflineAware("/pos/login", (p) => router.replace(p))
+      return
+    }
+    /** 대리점(Partner) 세션으로 POS 운영 금지 — SaaS 콘솔로 */
+    if (isSaasPartnerLoginStoreClient(auth.store || "")) {
+      replacePosOfflineAware("/saas-admin", (p) => router.replace(p))
       return
     }
     if (!canAccessPosOrder(auth.role || "")) {

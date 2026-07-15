@@ -217,7 +217,10 @@ export class MemberSaveError extends Error {
 
 function isDuplicatePhoneDbError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e || '')
-  return /23505/.test(msg) && /uq_members_phone_digits|phone_digits/i.test(msg)
+  return (
+    /23505/.test(msg) &&
+    /uq_members_phone_digits|uq_members_phone_canonical|phone_digits|phone_canonical/i.test(msg)
+  )
 }
 
 function rethrowMemberSaveError(e: unknown): never {
@@ -862,13 +865,49 @@ export async function registerLineMember(input: {
   }
 
   const displayName = toText(input.displayName)
+
+  // 이미 전화번호로 가입된 회원이면 LINE만 연결 (중복 신규 방지)
+  const phoneForLookup = normalizePhone(input.phone || '')
+  if (phoneForLookup) {
+    const byPhoneId = await findActiveMemberIdByPhoneLookup(phoneForLookup)
+    if (byPhoneId) {
+      const now = getBangkokDateTimeString()
+      await ensureLineIdentity({
+        memberId: byPhoneId,
+        lineUserId,
+        lineDisplayName: displayName,
+        linePictureUrl: toText(input.pictureUrl),
+      })
+      const patch: Record<string, unknown> = {
+        join_channel: 'line',
+        updated_at: now,
+      }
+      if (displayName) patch.line_display_name = displayName
+      await supabaseUpdateByFilter('members', `id=eq.${byPhoneId}`, patch)
+      const rows = (await supabaseSelectFilter('members', `id=eq.${byPhoneId}`, { limit: 1 })) as MemberRow[]
+      const lineMap = await getLineIdentities([byPhoneId])
+      return toMemberSummary(rows[0], lineMap.get(byPhoneId))
+    }
+  }
+
   if (displayName) {
-    const crmMatches = (await supabaseSelectFilter(
+    // LINE display name 우선, 그다음 name. 동명이인/흔한 이름 오연결 방지: 미연결 후보가 1명일 때만.
+    const byLineDisplay = (await supabaseSelectFilter(
       'members',
-      `line_display_name=eq.${encodeURIComponent(displayName)}`,
+      `line_display_name=eq.${encodeURIComponent(displayName)}&status=eq.active`,
       { order: 'id.asc', limit: 5 }
     )) as MemberRow[]
-    for (const row of crmMatches || []) {
+    const byName =
+      byLineDisplay.length > 0
+        ? []
+        : ((await supabaseSelectFilter(
+            'members',
+            `name=eq.${encodeURIComponent(displayName)}&status=eq.active`,
+            { order: 'id.asc', limit: 5 }
+          )) as MemberRow[])
+    const crmMatches = [...(byLineDisplay || []), ...(byName || [])]
+    const unlinked: MemberRow[] = []
+    for (const row of crmMatches) {
       const memberId = Number(row.id || 0)
       if (!memberId) continue
       const linked = (await supabaseSelectFilter(
@@ -877,6 +916,10 @@ export async function registerLineMember(input: {
         { limit: 1 }
       )) as MemberIdentityRow[]
       if (linked?.length) continue
+      unlinked.push(row)
+    }
+    if (unlinked.length === 1) {
+      const memberId = Number(unlinked[0]!.id || 0)
       const now = getBangkokDateTimeString()
       await ensureLineIdentity({
         memberId,
@@ -886,6 +929,7 @@ export async function registerLineMember(input: {
       })
       await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
         join_channel: 'line',
+        line_display_name: displayName,
         updated_at: now,
       })
       const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]

@@ -59,6 +59,8 @@ export function buildCustomerAdminLoginHref(params: {
 }): string {
   const p = new URLSearchParams()
   p.set("redirect", "/admin")
+  /** 기존 대리점/다른 회사 세션을 유지한 채 ERP로 들어가는 것 방지 */
+  p.set("switch", "1")
   const company = String(params.company || "").trim()
   const store = String(params.store || "").trim()
   const name = String(params.name || "").trim()

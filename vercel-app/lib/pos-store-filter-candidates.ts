@@ -16,6 +16,31 @@ type GrabIntegrationRow = {
   integration_status?: string
 }
 
+const GRAB_INTEGRATIONS_CACHE_MS = 60_000
+let grabIntegrationsCache: { at: number; rows: GrabIntegrationRow[] } | null = null
+
+async function loadGrabIntegrationRowsCached(): Promise<GrabIntegrationRow[]> {
+  const hit = grabIntegrationsCache
+  if (hit && Date.now() - hit.at < GRAB_INTEGRATIONS_CACHE_MS) return hit.rows
+  try {
+    const { isServerSaasBrand } = await import('@/lib/app-brand-server')
+    if (!(await isServerSaasBrand())) {
+      grabIntegrationsCache = { at: Date.now(), rows: [] }
+      return []
+    }
+    const rows = (await supabaseSelect('pos_grab_store_integrations', {
+      order: 'updated_at.desc',
+      limit: 500,
+      select: 'grab_merchant_id,partner_merchant_id,integration_status',
+    })) as GrabIntegrationRow[]
+    grabIntegrationsCache = { at: Date.now(), rows: rows || [] }
+    return grabIntegrationsCache.rows
+  } catch {
+    grabIntegrationsCache = { at: Date.now(), rows: [] }
+    return []
+  }
+}
+
 function addMasterRowVariants(
   set: Set<string>,
   row: { store_code?: string; display_name?: string; aliases?: string[] | null }
@@ -94,14 +119,7 @@ export async function resolvePosStoreFilterCandidates(rawStore: string): Promise
 
   let integrationRows: GrabIntegrationRow[] = []
   try {
-    const { isServerSaasBrand } = await import('@/lib/app-brand-server')
-    if (await isServerSaasBrand()) {
-      integrationRows = (await supabaseSelect('pos_grab_store_integrations', {
-        order: 'updated_at.desc',
-        limit: 500,
-        select: 'grab_merchant_id,partner_merchant_id,integration_status',
-      })) as GrabIntegrationRow[]
-    }
+    integrationRows = await loadGrabIntegrationRowsCached()
   } catch {
     integrationRows = []
   }

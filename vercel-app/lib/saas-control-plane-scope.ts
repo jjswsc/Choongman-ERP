@@ -203,7 +203,9 @@ export async function requireSaasControlPlane(req: NextRequest): Promise<
   if (authResult.errorResponse) {
     return { scope: null, auth: null, errorResponse: authResult.errorResponse }
   }
-  if (!(await canAccessSaasControlPlane(authResult.auth))) {
+  /** resolveSaasScope 1회만 — canAccess + scope 재조회 이중 왕복 제거 */
+  const scope = await resolveSaasScope(authResult.auth)
+  if (!(canAccessSaasAdmin(authResult.auth.role || "") || scope.kind === "partner")) {
     return {
       scope: null,
       auth: null,
@@ -213,7 +215,6 @@ export async function requireSaasControlPlane(req: NextRequest): Promise<
       ),
     }
   }
-  const scope = await resolveSaasScope(authResult.auth)
   return { scope, auth: authResult.auth, errorResponse: null }
 }
 

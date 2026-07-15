@@ -294,13 +294,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, tenants: [], scope: scopeMeta }, { headers })
     }
 
-    const partnerAssignmentMap = await loadAllPartnerAssignments()
+    let partnerAssignmentMap = new Map<string, { partnerId: string; partnerName: string }>()
     if (scope.kind === "partner") {
       const allowed = await loadPartnerTenantIdSet(scope.partnerId)
       tenants = tenants.filter((t) => allowed.has(t.id))
       if (tenants.length === 0) {
         return NextResponse.json({ success: true, tenants: [], scope: scopeMeta }, { headers })
       }
+      partnerAssignmentMap = await loadAllPartnerAssignments()
+    } else {
+      partnerAssignmentMap = await loadAllPartnerAssignments()
     }
 
     const tenantIds = tenants.map((t) => t.id)
@@ -337,7 +340,7 @@ export async function GET(req: NextRequest) {
       ),
       loadTenantAuditRecentBatch(tenantIds),
       loadTenantBillingRecentBatch(tenantIds),
-      loadLicensedPosByTenant(),
+      loadLicensedPosByTenant(tenantIds),
     ])) as [
       SubRow[],
       PlanRow[],

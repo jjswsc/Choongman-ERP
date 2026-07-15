@@ -36,7 +36,7 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
     }
     let cancelled = false
     setSaasScope(null)
-    void apiFetch("/api/getSaasTenantSettings")
+    void apiFetch("/api/saasAdminScope")
       .then(async (res) => {
         if (cancelled) return
         const json = (await res.json()) as { scope?: SaasScopeClientMeta; success?: boolean }

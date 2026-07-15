@@ -14,11 +14,30 @@ type PrinterRow = {
   main_device_role_locked?: unknown
 }
 
-export async function loadLicensedPosByTenant(): Promise<Map<string, number>> {
+export async function loadLicensedPosByTenant(tenantIds?: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   if (isLegacyChoongmanErpSupabase()) return out
+  const scopeIds = (tenantIds || []).map((id) => String(id || "").trim()).filter(Boolean)
   try {
-    const stores = (await supabaseSelect("erp_stores", { limit: 5000, select: "tenant_id,store_code" })) as StoreRow[]
+    let stores: StoreRow[]
+    if (scopeIds.length === 1) {
+      stores = (await supabaseSelectFilter(
+        "erp_stores",
+        `tenant_id=eq.${encodeURIComponent(scopeIds[0]!)}`,
+        { limit: 500, select: "tenant_id,store_code" }
+      )) as StoreRow[]
+    } else if (scopeIds.length > 1) {
+      const filter = `tenant_id=in.(${scopeIds.map((id) => encodeURIComponent(id)).join(",")})`
+      stores = (await supabaseSelectFilter("erp_stores", filter, {
+        limit: Math.min(5000, scopeIds.length * 50),
+        select: "tenant_id,store_code",
+      })) as StoreRow[]
+    } else {
+      stores = (await supabaseSelect("erp_stores", {
+        limit: 5000,
+        select: "tenant_id,store_code",
+      })) as StoreRow[]
+    }
     if (!Array.isArray(stores) || stores.length === 0) return out
 
     const byTenant = new Map<string, string[]>()
@@ -26,16 +45,33 @@ export async function loadLicensedPosByTenant(): Promise<Map<string, number>> {
       const tenantId = String(row.tenant_id || "").trim()
       const storeCode = String(row.store_code || "").trim()
       if (!tenantId || !storeCode) continue
+      if (scopeIds.length > 0 && !scopeIds.includes(tenantId)) continue
       const list = byTenant.get(tenantId) || []
       list.push(storeCode)
       byTenant.set(tenantId, list)
     }
     if (byTenant.size === 0) return out
 
-    const printerRows = (await supabaseSelect("pos_printer_settings", {
-      limit: 10000,
-      select: "store_code,main_device_max_count,order_device_max_count,main_device_role_locked",
-    })) as PrinterRow[]
+    const allCodes = [...new Set([...byTenant.values()].flat())]
+    let printerRows: PrinterRow[] = []
+    if (allCodes.length === 1) {
+      printerRows = (await supabaseSelectFilter(
+        "pos_printer_settings",
+        `store_code=eq.${encodeURIComponent(allCodes[0]!)}`,
+        { limit: 20, select: "store_code,main_device_max_count,order_device_max_count,main_device_role_locked" }
+      )) as PrinterRow[]
+    } else if (allCodes.length > 0 && allCodes.length <= 80) {
+      const filter = `store_code=in.(${allCodes.map((c) => `"${c.replace(/"/g, "")}"`).join(",")})`
+      printerRows = (await supabaseSelectFilter("pos_printer_settings", filter, {
+        limit: Math.min(10000, allCodes.length * 5),
+        select: "store_code,main_device_max_count,order_device_max_count,main_device_role_locked",
+      })) as PrinterRow[]
+    } else {
+      printerRows = (await supabaseSelect("pos_printer_settings", {
+        limit: 10000,
+        select: "store_code,main_device_max_count,order_device_max_count,main_device_role_locked",
+      })) as PrinterRow[]
+    }
     const settingsByStore = new Map<string, PrinterRow>()
     for (const row of printerRows || []) {
       const code = String(row.store_code || "").trim()

@@ -137,18 +137,8 @@ export async function loadTenantUsageBatch(
     rpcOk = false
   }
 
-  if (rpcOk) {
-    const needsLegacyStoreCheck = tenants.filter((t) => (map.get(t.id)?.stores ?? 0) === 0)
-    if (needsLegacyStoreCheck.length > 0) {
-      await runPool(needsLegacyStoreCheck, USAGE_FALLBACK_CONCURRENCY, async (t) => {
-        const legacyStores = await countErpStoresForTenant(t.id, t.companyName || "")
-        if (legacyStores <= 0) return
-        const prev = map.get(t.id) || emptyUsage()
-        map.set(t.id, { ...prev, stores: legacyStores })
-      })
-    }
-    return map
-  }
+  /** RPC stores=0은 “매장 없음”으로 신뢰 — 레거시 풀스캔 보정은 countErpStoresForTenant(컬럼 부재)에서만 */
+  if (rpcOk) return map
 
   await runPool(tenants, USAGE_FALLBACK_CONCURRENCY, async (t) => {
     map.set(t.id, await buildUsageFallback(t.id, t.companyName || ""))
