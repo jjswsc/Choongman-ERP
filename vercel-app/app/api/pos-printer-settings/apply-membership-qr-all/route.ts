@@ -6,6 +6,7 @@ import {
   POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK,
   POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT,
   normalizeMembershipQrImageUrlForStorage,
+  normalizeMembershipQrLinkUrlForStorage,
 } from '@/lib/pos-membership-qr-defaults'
 
 /**
@@ -30,7 +31,9 @@ export async function POST(req: NextRequest) {
       imageUrl?: string
     }
 
-    const linkUrl = String(body.linkUrl ?? POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK).trim()
+    const linkUrl = normalizeMembershipQrLinkUrlForStorage(
+      body.linkUrl ?? POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+    )
     const text = String(body.text ?? POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT).trim()
     const show = body.show !== false
     const imageUrl = normalizeMembershipQrImageUrlForStorage(body.imageUrl)

@@ -73,7 +73,7 @@ import {
   buildPaymentReceiptMemberFooterHtml,
   PAYMENT_RECEIPT_MEMBER_BLOCK_CSS,
 } from '@/lib/pos-receipt-member-block'
-import { resolveReceiptAssetUrl } from '@/lib/pos-membership-qr-defaults'
+import { resolveMembershipQrLinkUrl, resolveReceiptAssetUrl } from '@/lib/pos-membership-qr-defaults'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -591,8 +591,12 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     String(d.receiptFooterSecondaryText || '').trim() ||
     (d.receiptShowCustomerCopy ? tr('posReceiptCustomerCopy', '고객용') : '')
   const showStamp = Boolean(d.receiptShowStamp && d.receiptStampImageUrl && (!d.receiptStampOnlyTaxInvoice || taxInvoice))
-  const membershipQrSrc = String(d.receiptMembershipQrLinkUrl || '').trim()
-    ? `https://quickchart.io/qr?text=${encodeURIComponent(String(d.receiptMembershipQrLinkUrl || '').trim())}&size=180&margin=1&format=png`
+  const membershipQrLinkResolved = resolveMembershipQrLinkUrl(
+    String(d.receiptMembershipQrLinkUrl || '').trim(),
+    origin
+  )
+  const membershipQrSrc = membershipQrLinkResolved
+    ? `https://quickchart.io/qr?text=${encodeURIComponent(membershipQrLinkResolved)}&size=180&margin=1&format=png`
     : resolveReceiptAssetUrl(String(d.receiptMembershipQrImageUrl || ''), origin)
   const showMembershipQr = Boolean(d.receiptShowMembershipQr && membershipQrSrc)
   const membershipQrText = String(d.receiptMembershipQrText || '').trim()

@@ -1,9 +1,9 @@
 /**
- * 전 매장 손님 영수증 멤버십/포인트 QR 기본값 (O2O 수동 적립 링크).
- * 링크 URL이 있으면 인쇄 시 quickchart로 QR 생성 (업로드 이미지보다 우선).
+ * 전 매장 손님 영수증 멤버십 QR 기본값 — 회원 포털 가입/로그인(`/m`).
+ * DB에는 상대 경로 `/m`을 저장하고, 인쇄·미리보기 시 배포 origin을 붙여 절대 URL QR을 만든다.
+ * (choongman / Omni / 커스텀 도메인 공통)
  */
-export const POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK =
-  'https://point.o2o.co.th/backend/points/manual/1'
+export const POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK = '/m'
 
 /** DB·설정에 저장할 상대 경로 (배포 origin에 묶이지 않음) */
 export const POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH = '/pos/membership-points-manual-qr.png'
@@ -20,6 +20,11 @@ export function resolveReceiptAssetUrl(url: string, origin: string): string {
     return base ? `${base}${u}` : u
   }
   return u
+}
+
+/** QR에 넣을 가입 링크 — `/m` 등은 현재 origin 기준 절대 URL */
+export function resolveMembershipQrLinkUrl(link: string, origin: string): string {
+  return resolveReceiptAssetUrl(String(link || '').trim(), origin)
 }
 
 /** 미리보기용 — DB 저장값으로 쓰지 말 것 */
@@ -47,4 +52,24 @@ export function normalizeMembershipQrImageUrlForStorage(raw: string | null | und
     }
   }
   return POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH
+}
+
+/** 가입 링크 저장 정규화 — /m 또는 동일 경로의 vercel 절대 URL은 상대 `/m`으로 */
+export function normalizeMembershipQrLinkUrlForStorage(raw: string | null | undefined): string {
+  const u = String(raw ?? '').trim()
+  if (!u) return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+  if (u === '/m' || u === '/m/') return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+  if (/^https?:\/\//i.test(u)) {
+    try {
+      const parsed = new URL(u)
+      if (parsed.pathname === '/m' || parsed.pathname === '/m/') {
+        return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+      }
+      return u
+    } catch {
+      return POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK
+    }
+  }
+  if (u.startsWith('/')) return u
+  return u
 }

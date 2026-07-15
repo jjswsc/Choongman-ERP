@@ -537,13 +537,13 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptMembershipQrCta: '특별 혜택 확인',
     posReceiptMembershipQrTitle: '멤버십 QR (신규 가입)',
     posReceiptMembershipQrUploadHint:
-      '손님 영수증 하단에 표시됩니다. 신규 가입용 QR 이미지를 업로드하거나, 가입 페이지 URL을 넣으면 QR이 자동 생성됩니다. 회원으로 결제하면 옆에 전화·등급·포인트가 함께 인쇄됩니다.',
+      '손님 영수증 하단에 표시됩니다. 신규 가입용 QR 이미지를 업로드하거나, 가입 페이지 URL(/m)을 넣으면 QR이 자동 생성됩니다. 회원으로 결제하면 옆에 회원번호·등급·포인트가 함께 인쇄됩니다.',
     posReceiptMembershipQrTextPh: '예: เช็คสิทธิพิเศษที่นี่',
     posReceiptShowMembershipQr: '멤버십 QR 표시',
-    posReceiptMembershipQrLoadDefault: '기본 포인트 QR 불러오기',
+    posReceiptMembershipQrLoadDefault: '기본 회원 가입 QR 불러오기',
     posReceiptMembershipQrApplyAll: '전 매장 일괄 적용',
     posReceiptMembershipQrApplyAllConfirm:
-      '{{n}}개 매장 영수증에 포인트 수동 적립 QR을 켜고 일괄 적용할까요?',
+      '{{n}}개 매장 영수증에 회원 가입 QR(/m)을 켜고 일괄 적용할까요?',
     posReceiptMembershipQrApplyAllDone: '{{n}}개 매장에 멤버십 QR을 적용했습니다. POS를 새로고침하면 영수증에 반영됩니다.',
     posReceiptMembershipQrApplyAllFail: '전 매장 QR 일괄 적용에 실패했습니다.',
     posReceiptMembershipQrApplyAllOfficeOnly: '본사 권한에서만 전 매장 일괄 적용할 수 있습니다.',
@@ -3770,13 +3770,13 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptMembershipQrCta: 'Check privileges here',
     posReceiptMembershipQrTitle: 'Membership QR (sign-up)',
     posReceiptMembershipQrUploadHint:
-      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL to auto-generate QR. For member checkouts, phone, tier, and points print beside it.',
+      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL (/m) to auto-generate QR. For member checkouts, member no., tier, and points print beside it.',
     posReceiptMembershipQrTextPh: 'e.g. Check privileges here',
     posReceiptShowMembershipQr: 'Show membership QR',
-    posReceiptMembershipQrLoadDefault: 'Load default points QR',
+    posReceiptMembershipQrLoadDefault: 'Load default sign-up QR',
     posReceiptMembershipQrApplyAll: 'Apply to all stores',
     posReceiptMembershipQrApplyAllConfirm:
-      'Turn on the manual points QR on customer receipts for {{n}} stores?',
+      'Turn on the member sign-up QR (/m) on customer receipts for {{n}} stores?',
     posReceiptMembershipQrApplyAllDone:
       'Applied membership QR to {{n}} stores. Refresh POS to print on receipts.',
     posReceiptMembershipQrApplyAllFail: 'Failed to apply membership QR to all stores.',
@@ -7948,13 +7948,13 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptMembershipQrCta: 'เช็คสิทธิพิเศษที่นี่',
     posReceiptMembershipQrTitle: 'QR สมัครสมาชิกใหม่',
     posReceiptMembershipQrUploadHint:
-      'แสดงท้ายใบเสร็จลูกค้า อัปโหลดรูป QR สมัครสมาชิก หรือใส่ URL เพื่อสร้าง QR อัตโนมัติ หากชำระด้วยสมาชิก จะพิมพ์เบอร์ ระดับ และคะแนนข้าง QR ครับ',
+      'แสดงท้ายใบเสร็จลูกค้า อัปโหลดรูป QR สมัครสมาชิก หรือใส่ URL (/m) เพื่อสร้าง QR อัตโนมัติ หากชำระด้วยสมาชิก จะพิมพ์รหัสสมาชิก ระดับ และคะแนนข้าง QR ครับ',
     posReceiptMembershipQrTextPh: 'เช่น เช็คสิทธิพิเศษที่นี่',
     posReceiptShowMembershipQr: 'แสดง QR สมาชิก',
-    posReceiptMembershipQrLoadDefault: 'โหลด QR พอยท์มาตรฐาน',
+    posReceiptMembershipQrLoadDefault: 'โหลด QR สมัครสมาชิกมาตรฐาน',
     posReceiptMembershipQrApplyAll: 'ใช้กับทุกสาขา',
     posReceiptMembershipQrApplyAllConfirm:
-      'เปิด QR เติมคะแนนด้วยมือบนใบเสร็จลูกค้าให้ {{n}} สาขาพร้อมกันหรือไม่ครับ?',
+      'เปิด QR สมัครสมาชิก (/m) บนใบเสร็จลูกค้าให้ {{n}} สาขาพร้อมกันหรือไม่ครับ?',
     posReceiptMembershipQrApplyAllDone:
       'ใช้ QR สมาชิกกับ {{n}} สาขาแล้ว รีเฟรช POS เพื่อพิมพ์บนใบเสร็จครับ',
     posReceiptMembershipQrApplyAllFail: 'ใช้ QR กับทุกสาขาไม่สำเร็จครับ',
@@ -10663,7 +10663,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posReceiptMembershipQrCta: 'Check privileges here',
     posReceiptMembershipQrTitle: 'Membership QR (sign-up)',
     posReceiptMembershipQrUploadHint:
-      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL to auto-generate QR. For member checkouts, phone, tier, and points print beside it.',
+      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL (/m) to auto-generate QR. For member checkouts, member no., tier, and points print beside it.',
     posReceiptMembershipQrTextPh: 'e.g. Check privileges here',
     posReceiptShowMembershipQr: 'Show membership QR',
     posTaxIdLabel: 'TIN',
@@ -13430,7 +13430,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posReceiptMembershipQrCta: 'Check privileges here',
     posReceiptMembershipQrTitle: 'Membership QR (sign-up)',
     posReceiptMembershipQrUploadHint:
-      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL to auto-generate QR. For member checkouts, phone, tier, and points print beside it.',
+      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL (/m) to auto-generate QR. For member checkouts, member no., tier, and points print beside it.',
     posReceiptMembershipQrTextPh: 'e.g. Check privileges here',
     posReceiptShowMembershipQr: 'Show membership QR',
     posTaxIdLabel: 'TIN',
@@ -16292,7 +16292,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posReceiptMembershipQrCta: 'Check privileges here',
     posReceiptMembershipQrTitle: 'Membership QR (sign-up)',
     posReceiptMembershipQrUploadHint:
-      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL to auto-generate QR. For member checkouts, phone, tier, and points print beside it.',
+      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL (/m) to auto-generate QR. For member checkouts, member no., tier, and points print beside it.',
     posReceiptMembershipQrTextPh: 'e.g. Check privileges here',
     posReceiptShowMembershipQr: 'Show membership QR',
     posTaxIdLabel: 'TIN',
@@ -19139,7 +19139,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posReceiptMembershipQrCta: 'Check privileges here',
     posReceiptMembershipQrTitle: 'Membership QR (sign-up)',
     posReceiptMembershipQrUploadHint:
-      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL to auto-generate QR. For member checkouts, phone, tier, and points print beside it.',
+      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL (/m) to auto-generate QR. For member checkouts, member no., tier, and points print beside it.',
     posReceiptMembershipQrTextPh: 'e.g. Check privileges here',
     posReceiptShowMembershipQr: 'Show membership QR',
     posTaxIdLabel: 'TIN',
@@ -21940,7 +21940,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posReceiptMembershipQrCta: 'Check privileges here',
     posReceiptMembershipQrTitle: 'Membership QR (sign-up)',
     posReceiptMembershipQrUploadHint:
-      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL to auto-generate QR. For member checkouts, phone, tier, and points print beside it.',
+      'Shown at the bottom of the customer receipt. Upload a sign-up QR image or enter a URL (/m) to auto-generate QR. For member checkouts, member no., tier, and points print beside it.',
     posReceiptMembershipQrTextPh: 'e.g. Check privileges here',
     posReceiptShowMembershipQr: 'Show membership QR',
     posTaxIdLabel: 'TIN',

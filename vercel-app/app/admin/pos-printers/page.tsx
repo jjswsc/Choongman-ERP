@@ -52,6 +52,7 @@ import {
   POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK,
   POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT,
   POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH,
+  resolveMembershipQrLinkUrl,
   resolveReceiptAssetUrl,
 } from "@/lib/pos-membership-qr-defaults"
 import { escapeHtmlReceiptEmphasizeChannelTokenAfterHash } from "@/lib/pos-delivery-platform"
@@ -155,6 +156,15 @@ const buildCode128BarcodeUrl = (raw: string) => {
   const text = String(raw || "").trim()
   if (!text) return ""
   return `https://quickchart.io/barcode?type=code128&text=${encodeURIComponent(text)}&scale=2&height=38&includetext=true`
+}
+
+const buildMembershipQrPreviewSrc = (linkUrl: string, imageUrl: string) => {
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  const link = resolveMembershipQrLinkUrl(linkUrl.trim(), origin)
+  if (link) {
+    return `https://quickchart.io/qr?text=${encodeURIComponent(link)}&size=180&margin=1&format=png`
+  }
+  return resolveReceiptAssetUrl(imageUrl.trim(), origin)
 }
 
 const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
@@ -500,7 +510,7 @@ export default function PosPrintersPage() {
     }
     const n = Math.max(stores.length, 1)
     const ok = await appConfirm(
-      (tr("posReceiptMembershipQrApplyAllConfirm", "{{n}}개 매장 영수증에 포인트 수동 적립 QR을 켜고 일괄 적용할까요?") || "").replace(
+      (tr("posReceiptMembershipQrApplyAllConfirm", "{{n}}개 매장 영수증에 회원 가입 QR(/m)을 켜고 일괄 적용할까요?") || "").replace(
         "{{n}}",
         String(n)
       )
@@ -1440,10 +1450,7 @@ export default function PosPrintersPage() {
       receiptFooterSecondaryText.trim() ||
       (receiptShowCustomerCopy ? tr("posReceiptCustomerCopy", "고객용") : "")
     const qrCaption = receiptMembershipQrText.trim()
-    const previewOrigin = typeof window !== "undefined" ? window.location.origin : ""
-    const qrSrc = receiptMembershipQrLinkUrl.trim()
-      ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
-      : resolveReceiptAssetUrl(receiptMembershipQrImageUrl, previewOrigin)
+    const qrSrc = buildMembershipQrPreviewSrc(receiptMembershipQrLinkUrl, receiptMembershipQrImageUrl)
     const receiptBarcodeUrl = receiptBarcode ? buildCode128BarcodeUrl(previewData.orderNo) : ""
     const lines = previewData.items
       .map((it, idx) => {
@@ -2354,7 +2361,7 @@ export default function PosPrintersPage() {
                       {tr("reset", "초기화")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={loadDefaultMembershipQr}>
-                      {tr("posReceiptMembershipQrLoadDefault", "기본 포인트 QR 불러오기")}
+                      {tr("posReceiptMembershipQrLoadDefault", "기본 회원 가입 QR 불러오기")}
                     </Button>
                     {canApplyMembershipQrAll ? (
                       <Button
@@ -2394,11 +2401,7 @@ export default function PosPrintersPage() {
                   />
                   {(receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) ? (
                     <img
-                      src={
-                        receiptMembershipQrLinkUrl.trim()
-                          ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
-                          : receiptMembershipQrImageUrl
-                      }
+                      src={buildMembershipQrPreviewSrc(receiptMembershipQrLinkUrl, receiptMembershipQrImageUrl)}
                       alt="Membership QR"
                       className="h-20 w-20 object-contain rounded border bg-white p-1"
                     />
@@ -2811,11 +2814,10 @@ export default function PosPrintersPage() {
                       (receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) ? (
                         <div className="w-[38%] shrink-0 text-center">
                           <img
-                            src={
-                              receiptMembershipQrLinkUrl.trim()
-                                ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
-                                : receiptMembershipQrImageUrl
-                            }
+                            src={buildMembershipQrPreviewSrc(
+                              receiptMembershipQrLinkUrl,
+                              receiptMembershipQrImageUrl
+                            )}
                             alt="Membership QR"
                             className="mx-auto h-[72px] w-[72px] object-contain"
                           />
