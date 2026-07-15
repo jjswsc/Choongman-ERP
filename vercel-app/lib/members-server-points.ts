@@ -211,11 +211,14 @@ export async function adjustMemberPoints(params: {
   memberId: number
   points: number
   note?: string
+  /** 소급 적립 등 — 원장 amount에 기록할 사용(결제) 금액 */
+  amount?: number
 }) {
   const memberId = Number(params.memberId || 0)
   const points = normalizeMemberPoints(params.points)
   if (!memberId) throw new Error('유효한 memberId가 필요합니다.')
   if (!points) throw new Error('포인트 변경값이 필요합니다.')
+  const amount = Math.max(0, Number(params.amount || 0))
   const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
   if (!rows?.length) throw new Error('회원을 찾을 수 없습니다.')
   const member = rows[0]
@@ -225,7 +228,7 @@ export async function adjustMemberPoints(params: {
     member_id: memberId,
     kind: 'adjust',
     points,
-    amount: 0,
+    amount,
     note: toText(params.note) || 'manual_adjust',
     created_at: getBangkokDateTimeString(),
   })

@@ -208,6 +208,11 @@ import {
 } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import {
+  mergeMemberReceiptFields,
+  pickMemberReceiptFieldsFromApi,
+  type PosReceiptMemberSnapshot,
+} from '@/lib/pos-receipt-member-block'
+import {
   posOrderToCheckoutDiscountSnapshot,
   type PosExistingOrderCheckoutDiscount,
 } from '@/lib/pos-existing-order-checkout-discount'
@@ -666,6 +671,20 @@ export default function PosTerminalPage() {
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
   const receiptQueueRef = useRef<ReceiptModalData[]>([])
+  /** 결제 update/save 직후 회원·포인트 스냅샷 — dispatchCheckoutPaymentReceipt 에서 병합 */
+  const pendingPaymentReceiptMemberRef = useRef<PosReceiptMemberSnapshot | null>(null)
+  const capturePaymentReceiptMember = useCallback(
+    (
+      res: Parameters<typeof pickMemberReceiptFieldsFromApi>[0],
+      fallback?: { memberId?: number; memberNo?: string }
+    ) => {
+      pendingPaymentReceiptMemberRef.current = pickMemberReceiptFieldsFromApi(res, fallback)
+    },
+    []
+  )
+  const clearPaymentReceiptMember = useCallback(() => {
+    pendingPaymentReceiptMemberRef.current = null
+  }, [])
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
@@ -3997,16 +4016,22 @@ export default function PosTerminalPage() {
     }) => {
       const { receiptPayload, splitBatch, orderId } = params
       const serverOrderId = orderId != null && orderId > 0 ? orderId : undefined
+      const memberSnap = pendingPaymentReceiptMemberRef.current
+      pendingPaymentReceiptMemberRef.current = null
+      const withMember = (row: ReceiptModalData): ReceiptModalData =>
+        mergeMemberReceiptFields(row, memberSnap)
       const withOrderId = (row: ReceiptModalData): ReceiptModalData =>
         serverOrderId != null ? { ...row, serverOrderId: row.serverOrderId ?? serverOrderId } : row
-      const batch = (splitBatch.length > 0 ? splitBatch : [receiptPayload]).map(withOrderId)
+      const enrichedPayload = withMember(withOrderId(receiptPayload))
+      const enrichedSplit = splitBatch.map((row) => withMember(withOrderId(row)))
+      const batch = (enrichedSplit.length > 0 ? enrichedSplit : [enrichedPayload])
 
       if (!isMainPosDevice) {
-        if (splitBatch.length > 0) {
-          startReceiptBatch(splitBatch)
+        if (enrichedSplit.length > 0) {
+          startReceiptBatch(enrichedSplit)
         } else {
           setReceiptData({
-            ...receiptPayload,
+            ...enrichedPayload,
             receiptAutoPrintContext: 'payment',
             suppressReceiptModalAutoPrint: true,
           })
@@ -4024,11 +4049,11 @@ export default function PosTerminalPage() {
         return
       }
 
-      if (splitBatch.length > 0) {
-        startReceiptBatch(splitBatch)
+      if (enrichedSplit.length > 0) {
+        startReceiptBatch(enrichedSplit)
       } else {
         setReceiptData({
-          ...receiptPayload,
+          ...enrichedPayload,
           receiptAutoPrintContext: 'payment',
           suppressReceiptModalAutoPrint: false,
         })
@@ -8231,12 +8256,19 @@ export default function PosTerminalPage() {
                     )
                     return false
                   }
+                  capturePaymentReceiptMember(updateRes, {
+                    memberId: payload.memberId,
+                    memberNo: payload.memberNo,
+                  })
                   if (!kbankQrPending) {
                     const completedOk = await applyOrderStatusWithRetry({
                       id: existingOrderId,
                       status: 'paid',
                     })
-                    if (!completedOk) return false
+                    if (!completedOk) {
+                      clearPaymentReceiptMember()
+                      return false
+                    }
                   }
                 }
                 const finalizeDeliveryPaid = async (): Promise<boolean> => {
@@ -8401,12 +8433,19 @@ export default function PosTerminalPage() {
                     )
                     return false
                   }
+                  capturePaymentReceiptMember(updateRes, {
+                    memberId: payload.memberId,
+                    memberNo: payload.memberNo,
+                  })
                   if (!kbankQrPending) {
                     const completedOk = await applyOrderStatusWithRetry({
                       id: existingOrderId,
                       status: 'paid',
                     })
-                    if (!completedOk) return false
+                    if (!completedOk) {
+                      clearPaymentReceiptMember()
+                      return false
+                    }
                   }
                 }
                 const finalizeTakeoutPaid = async (): Promise<boolean> => {
@@ -9361,6 +9400,10 @@ export default function PosTerminalPage() {
                     )
                     return false
                   }
+                  capturePaymentReceiptMember(updateRes, {
+                    memberId: payload.memberId,
+                    memberNo: payload.memberNo,
+                  })
                   orderIdToComplete = existingOrderId
                   orderNo = pendingReceiptOrderNo ?? ''
                 } else if (pay != null) {
@@ -9400,6 +9443,16 @@ export default function PosTerminalPage() {
                     orderNo = localNoCandidate ?? ''
                     orderIdToComplete = null
                     await notifyQueuedSave(orderNo, true)
+                    capturePaymentReceiptMember(
+                      {
+                        memberId: payload.memberId,
+                        memberNo: payload.memberNo,
+                      },
+                      {
+                        memberId: payload.memberId,
+                        memberNo: payload.memberNo,
+                      }
+                    )
                   } else {
                     const res = await savePosOrderWithOffline({
                       storeCode: currentStoreId,
@@ -9433,6 +9486,10 @@ export default function PosTerminalPage() {
                     orderIdToComplete = (res as { orderId?: number }).orderId ?? null
                     orderNo = (res as { orderNo?: string }).orderNo ?? ''
                     await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
+                    capturePaymentReceiptMember(res, {
+                      memberId: payload.memberId,
+                      memberNo: payload.memberNo,
+                    })
                   }
                 }
                 const finalizeDineInPaid = async (): Promise<boolean> => {
@@ -9850,6 +9907,12 @@ export default function PosTerminalPage() {
                   )
                   await appAlert(msg)
                   return false
+                }
+                if (hasPayment || kbankQrPending) {
+                  capturePaymentReceiptMember(res, {
+                    memberId: payload.memberId,
+                    memberNo: payload.memberNo,
+                  })
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const newOrderId = (res as { orderId?: number }).orderId ?? null

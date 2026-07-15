@@ -69,6 +69,11 @@ import {
   shouldUseLegacyAlignedPaymentReceiptForStore,
 } from '@/lib/pos-receipt-store-flags'
 import { resolveCashTenderReceiptLines } from '@/lib/pos-receipt-cash-tender'
+import {
+  buildPaymentReceiptMemberFooterHtml,
+  PAYMENT_RECEIPT_MEMBER_BLOCK_CSS,
+} from '@/lib/pos-receipt-member-block'
+import { resolveReceiptAssetUrl } from '@/lib/pos-membership-qr-defaults'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -588,9 +593,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const showStamp = Boolean(d.receiptShowStamp && d.receiptStampImageUrl && (!d.receiptStampOnlyTaxInvoice || taxInvoice))
   const membershipQrSrc = String(d.receiptMembershipQrLinkUrl || '').trim()
     ? `https://quickchart.io/qr?text=${encodeURIComponent(String(d.receiptMembershipQrLinkUrl || '').trim())}&size=180&margin=1&format=png`
-    : d.receiptMembershipQrImageUrl
+    : resolveReceiptAssetUrl(String(d.receiptMembershipQrImageUrl || ''), origin)
   const showMembershipQr = Boolean(d.receiptShowMembershipQr && membershipQrSrc)
   const membershipQrText = String(d.receiptMembershipQrText || '').trim()
+  const memberFooterHtml =
+    isPaymentReceipt && !voidMode
+      ? buildPaymentReceiptMemberFooterHtml({
+          receiptData,
+          showMembershipQr,
+          membershipQrSrc: String(membershipQrSrc || ''),
+          membershipQrText,
+          tr,
+          esc,
+        })
+      : ''
   const receiptOrderNoRaw = resolvePosReceiptOrderNoRaw({
     posOrderNo: receiptData.orderNo,
     tableName: receiptData.tableName,
@@ -833,6 +849,14 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 )}</div>`
               : ''
         }
+        ${memberFooterHtml}
+        ${
+          footerPrimaryText || footerSecondaryText
+            ? `<div class="simple-divider"></div><div class="simple-line" style="text-align:center">${
+                footerPrimaryText ? `<div style="font-weight:800">${esc(footerPrimaryText)}</div>` : ''
+              }${footerSecondaryText ? `<div>${esc(footerSecondaryText)}</div>` : ''}</div>`
+            : ''
+        }
       </div>
     `
     return buildReceiptDocumentHtml({
@@ -842,6 +866,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       printLayout: receiptPrintLayout,
       extraStyles: `
         .receipt-payment-simple { color: #000; font-weight: 700; }
+        ${PAYMENT_RECEIPT_MEMBER_BLOCK_CSS}
         .simple-title { text-align: center; font-size: 13px; font-weight: 800; margin-bottom: 2px; color: #000; }
         .simple-tax-subtitle { text-align: center; font-size: 11px; font-weight: 800; margin: 0 0 4px 0; color: #000; }
         .simple-split-badge {
@@ -1108,7 +1133,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}
         ${d.receiptShowPaidStamp && !voidMode ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
-        ${showMembershipQr ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(membershipQrSrc)}" alt="Membership QR" style="width:84px;height:84px;object-fit:contain;" />${membershipQrText ? `<div class="text-xs receipt-muted" style="margin-top:2px;">${esc(membershipQrText)}</div>` : ''}</div>` : ''}
+        ${memberFooterHtml}
         ${showStamp ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(d.receiptStampImageUrl)}" alt="Company stamp" style="width:72px;height:72px;object-fit:contain;" /></div>` : ''}
         ${footerPrimaryText || footerSecondaryText ? '<div class="text-center text-xs receipt-muted">' : ''}
         ${footerPrimaryText ? `<div style="font-weight:600;color:#000">${esc(footerPrimaryText)}</div>` : ''}
@@ -1122,6 +1147,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     bodyContent: printContent,
     printLayout: receiptPrintLayout,
     extraStyles: `
+        ${PAYMENT_RECEIPT_MEMBER_BLOCK_CSS}
         .receipt-brand-wrap { text-align: center; }
         .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.35); }
         .receipt-brand-logo.sm { width: 84px; }

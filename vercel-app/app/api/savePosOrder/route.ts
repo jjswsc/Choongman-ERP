@@ -751,6 +751,23 @@ export async function POST(req: NextRequest) {
     const totalElapsedMs = Date.now() - startedAtMs
     headers.set('X-Pos-Save-Elapsed-Ms', String(totalElapsedMs))
     headers.set('X-Pos-Save-Allocate-OrderNo-Ms', String(allocateOrderNoMs))
+    let memberReceipt: Awaited<
+      ReturnType<typeof import('@/lib/pos-receipt-member-snapshot-server').loadPosOrderMemberReceiptSnapshot>
+    > = null
+    if (memberId > 0) {
+      try {
+        const { loadPosOrderMemberReceiptSnapshot } = await import(
+          '@/lib/pos-receipt-member-snapshot-server'
+        )
+        memberReceipt = await loadPosOrderMemberReceiptSnapshot({
+          memberId,
+          pointEarned,
+        })
+      } catch (snapErr) {
+        console.error('savePosOrder member receipt snapshot:', snapErr)
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -758,6 +775,13 @@ export async function POST(req: NextRequest) {
         orderNo,
         pointEarned,
         stamp: stampResult,
+        ...(memberReceipt?.memberPhone ? { memberPhone: memberReceipt.memberPhone } : {}),
+        ...(memberReceipt?.memberTierCode ? { memberTierCode: memberReceipt.memberTierCode } : {}),
+        ...(memberReceipt?.memberNo ? { memberNo: memberReceipt.memberNo } : {}),
+        ...(memberReceipt?.memberId ? { memberId: memberReceipt.memberId } : {}),
+        ...(memberReceipt?.memberPointBalance != null
+          ? { memberPointBalance: memberReceipt.memberPointBalance }
+          : {}),
         perf: {
           elapsedMs: totalElapsedMs,
           allocateOrderNoMs,

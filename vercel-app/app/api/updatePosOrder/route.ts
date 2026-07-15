@@ -731,7 +731,37 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, pointEarned }, { headers })
+    let memberReceipt: Awaited<
+      ReturnType<typeof import('@/lib/pos-receipt-member-snapshot-server').loadPosOrderMemberReceiptSnapshot>
+    > = null
+    if (memberId > 0) {
+      try {
+        const { loadPosOrderMemberReceiptSnapshot } = await import(
+          '@/lib/pos-receipt-member-snapshot-server'
+        )
+        memberReceipt = await loadPosOrderMemberReceiptSnapshot({
+          memberId,
+          pointEarned,
+        })
+      } catch (snapErr) {
+        console.error('updatePosOrder member receipt snapshot:', snapErr)
+      }
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        pointEarned,
+        ...(memberReceipt?.memberPhone ? { memberPhone: memberReceipt.memberPhone } : {}),
+        ...(memberReceipt?.memberTierCode ? { memberTierCode: memberReceipt.memberTierCode } : {}),
+        ...(memberReceipt?.memberNo ? { memberNo: memberReceipt.memberNo } : {}),
+        ...(memberReceipt?.memberId ? { memberId: memberReceipt.memberId } : {}),
+        ...(memberReceipt?.memberPointBalance != null
+          ? { memberPointBalance: memberReceipt.memberPointBalance }
+          : {}),
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('updatePosOrder:', e)
     const msg = e instanceof Error ? e.message : String(e)

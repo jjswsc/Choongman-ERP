@@ -181,7 +181,12 @@ export async function getMemberPoints(params?: { memberId?: number; limit?: numb
   }>>
 }
 
-export async function adjustMemberPoints(params: { memberId: number; points: number; note?: string }) {
+export async function adjustMemberPoints(params: {
+  memberId: number
+  points: number
+  note?: string
+  amount?: number
+}) {
   const res = await apiFetchWithOffline('/api/member-points/adjust', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

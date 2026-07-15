@@ -644,8 +644,10 @@ export async function printPaymentReceiptForOrder(
         deliveryAppCode: dataForPrint.deliveryAppCode,
       }),
     }
+    const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
+    const enrichedWithMember = await enrichReceiptModalDataWithMember(enriched, order)
     const receiptHtml = buildPosPaymentReceiptDocumentHtml({
-      receiptData: enriched,
+      receiptData: enrichedWithMember,
       menus: ctx.menus,
       optionNameByCode: ctx.optionNameByCode,
       orderTypeLabels: {

@@ -7,11 +7,17 @@ export async function POST(req: NextRequest) {
   const authRes = await requireAuth(req, 'manager')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
-    const body = (await req.json()) as { memberId?: number; points?: number; note?: string }
+    const body = (await req.json()) as {
+      memberId?: number
+      points?: number
+      note?: string
+      amount?: number
+    }
     await adjustMemberPoints({
       memberId: Number(body.memberId || 0),
       points: Number(body.points || 0),
       note: String(body.note || '').trim(),
+      amount: Number(body.amount || 0),
     })
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

@@ -397,7 +397,16 @@ export async function updatePosOrder(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    pointEarned?: number
+    memberId?: number
+    memberNo?: string
+    memberPhone?: string
+    memberTierCode?: string
+    memberPointBalance?: number
+  }>
 }
 
 /** 영수증 관리: 당일(방콕) 결제 반영 주문의 결제 수단 분해 정정(필요 시 total·과세 스냅샷 비율 조정). 오프라인 시 큐 동기화 필요 */
@@ -697,5 +706,16 @@ export async function savePosOrder(params: {
     },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; orderId?: number; orderNo?: string; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    orderId?: number
+    orderNo?: string
+    message?: string
+    pointEarned?: number
+    memberId?: number
+    memberNo?: string
+    memberPhone?: string
+    memberTierCode?: string
+    memberPointBalance?: number
+  }>
 }

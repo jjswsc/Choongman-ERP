@@ -12,6 +12,12 @@ export type SavePosOrderResult = {
   orderNo?: string
   message?: string
   queued?: boolean
+  pointEarned?: number
+  memberId?: number
+  memberNo?: string
+  memberPhone?: string
+  memberTierCode?: string
+  memberPointBalance?: number
 }
 
 function logPosOrderPipeline(event: string, detail: Record<string, unknown>) {

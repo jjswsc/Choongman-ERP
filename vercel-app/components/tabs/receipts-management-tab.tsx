@@ -795,8 +795,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const lineOpts: PosOrderReceiptLineOptions = { promoCatalogById, menus }
       const splitBatch = buildSplitPaymentReceiptBatchFromOrder(o, lineOpts)
       const receiptRows = splitBatch ?? [receiptModalDataFromPosOrderReprint(o, lineOpts)]
+      const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
       for (let idx = 0; idx < receiptRows.length; idx += 1) {
-        const receiptData = receiptRows[idx]
+        const receiptData = await enrichReceiptModalDataWithMember(receiptRows[idx], o)
         const fullHtml = buildPosPaymentReceiptDocumentHtml({
           receiptData,
           menus,

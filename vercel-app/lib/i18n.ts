@@ -5739,6 +5739,14 @@ export const i18n = {
     memberTierListTitle: '등급 목록',
     memberPointsAdjustTitle: '포인트 수기 조정',
     memberPointsDeltaPh: '+/- 포인트',
+    memberPointsSpendAmount: '사용 금액 (THB)',
+    memberPointsSpendAmountPh: '결제·사용 금액',
+    memberPointsCalcFromSpend: '금액으로 계산',
+    memberPointsCalcPreview: '{tier} 적립율 {rate}% → {points}P',
+    memberPointsCalcPreviewIdle: '금액을 입력하면 등급 적립율로 예상 포인트가 표시됩니다.',
+    memberPointsCalcHint:
+      '사용 금액을 넣으면 현재 등급의 기본 적립율로 포인트를 채울 수 있습니다. POS 채널·생일·기간 보너스는 포함하지 않으니, 필요하면 포인트 칸을 수정하세요.',
+    memberPointsRetroNote: '소급 적립: 사용금액 {amount} THB · {tier} {rate}% → {points}P',
     memberPointsAdjustFail: '조정 실패',
     memberPointsBalanceTitle: '회원 포인트 잔액',
     memberPointsBalance: '사용 가능 포인트',
@@ -6931,7 +6939,7 @@ export const i18n = {
     helpSum_admin_members_points:
       '회원 포인트 잔액·원장 조회, 수기 조정, 등급별 적립율과 채널·생일·기간 보너스 규칙을 관리하는 화면입니다.',
     helpHow_admin_members_points:
-      '① 「조회·조정」탭: 회원을 검색·선택해 잔액과 원장을 확인하고 +/- 포인트로 수기 조정합니다.\n② 「매출 적립 규칙」탭: 승급 기준(누적 포인트/누적금액)과 등급별 min_points·min_amount·적립율을 설정합니다.\n③ 「적립 보너스」: 홀·포장·회원앱·생일(전후 7일)·기간 이벤트 배율을 설정합니다. 보너스는 중첩되지 않고 가장 큰 배율 하나만 적용됩니다.\n④ 「회원 앱 · 등급별 혜택」: 등급 목록에서 행을 선택한 뒤 언어별 혜택 문구를 입력·저장하면 회원 앱 「내 혜택」에 표시됩니다.\n⑤ 등급 재계산으로 선택한 기준에 맞게 등급을 일괄 반영합니다.',
+      '① 「조회·조정」: 회원을 검색·선택해 잔액과 원장을 확인합니다. 사용 금액을 입력한 뒤 「금액으로 계산」하면 현재 등급 기본 적립율로 포인트가 채워지며, +/- 포인트로 직접 수기 조정도 가능합니다.\n② 「매출 적립 규칙」(등급 화면): 승급 기준(누적 포인트/누적금액)과 등급별 min_points·min_amount·적립율을 설정합니다.\n③ 「적립 보너스」: 홀·포장·회원앱·생일(전후 7일)·기간 이벤트 배율을 설정합니다. 보너스는 중첩되지 않고 가장 큰 배율 하나만 적용됩니다.\n④ 「회원 앱 · 등급별 혜택」: 등급 목록에서 행을 선택한 뒤 언어별 혜택 문구를 입력·저장하면 회원 앱 「내 혜택」에 표시됩니다.\n⑤ 등급 재계산으로 선택한 기준에 맞게 등급을 일괄 반영합니다.',
     helpSum_admin_members_coupons:
       '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다. (→ /admin/crm/coupons 로 통합)',
     helpHow_admin_members_coupons:
@@ -13091,6 +13099,14 @@ orderItemQty: 'Qty',
     memberTierListTitle: 'Tier list',
     memberPointsAdjustTitle: 'Manual points adjustment',
     memberPointsDeltaPh: '+/- points',
+    memberPointsSpendAmount: 'Spend amount (THB)',
+    memberPointsSpendAmountPh: 'Payment / spend amount',
+    memberPointsCalcFromSpend: 'Calculate from spend',
+    memberPointsCalcPreview: '{tier} earn rate {rate}% → {points}P',
+    memberPointsCalcPreviewIdle: 'Enter an amount to preview points from the tier earn rate.',
+    memberPointsCalcHint:
+      'Enter spend amount and calculate to fill points from the current tier earn rate. Channel, birthday, and period bonuses are not included — edit the points field if needed.',
+    memberPointsRetroNote: 'Retro earn: spend {amount} THB · {tier} {rate}% → {points}P',
     memberPointsAdjustFail: 'Adjustment failed',
     memberPointsBalanceTitle: 'Member points balance',
     memberPointsBalance: 'Available points',
@@ -14286,7 +14302,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members_points:
       'View member point balances and ledger, manual adjustments, tier earn rates, and channel/birthday/period bonus rules.',
     helpHow_admin_members_points:
-      '① Lookup & adjust tab: search and select a member, review balance and ledger, adjust with +/- points.\n② Sales earn rules tab: choose upgrade criterion (points vs spend), then set min_points, min_amount, and earn rate.\n③ Earn bonuses: set multipliers for dine-in, takeout, member app, birthday (±7 days), and optional period promos. Bonuses do not stack — only the highest applies.\n④ Member app · benefits by tier: select a tier row, enter benefit copy per language, and save — shown on the member app My privilege tab.\n⑤ Run tier recalculation to apply the selected criterion to all members.',
+      '① Lookup & adjust: search and select a member, review balance and ledger. Enter spend amount and Calculate from spend to fill points from the current tier earn rate, or adjust with +/- points manually.\n② Sales earn rules (tier screen): choose upgrade criterion (points vs spend), then set min_points, min_amount, and earn rate.\n③ Earn bonuses: set multipliers for dine-in, takeout, member app, birthday (±7 days), and optional period promos. Bonuses do not stack — only the highest applies.\n④ Member app · benefits by tier: select a tier row, enter benefit copy per language, and save — shown on the member app My privilege tab.\n⑤ Run tier recalculation to apply the selected criterion to all members.',
     helpSum_admin_members_coupons:
       'Issue member coupons and review history (redirects to /admin/crm/coupons).',
     helpHow_admin_members_coupons:
@@ -20038,6 +20054,17 @@ orderItemQty: 'จำนวน',
     memberPoints: 'คะแนน',
     memberCoupons: 'คูปอง',
     memberNo: 'เลขสมาชิก',
+    memberPointsAdjustTitle: 'ปรับคะแนนด้วยมือ',
+    memberPointsDeltaPh: '+/- คะแนน',
+    memberPointsSpendAmount: 'ยอดใช้จ่าย (THB)',
+    memberPointsSpendAmountPh: 'ยอดชำระ / ยอดใช้จ่าย',
+    memberPointsCalcFromSpend: 'คำนวณจากยอด',
+    memberPointsCalcPreview: '{tier} อัตรา {rate}% → {points}P',
+    memberPointsCalcPreviewIdle: 'ใส่ยอดใช้จ่ายเพื่อดูคะแนนตามอัตราเกรด',
+    memberPointsCalcHint:
+      'ใส่ยอดใช้จ่ายแล้วกดคำนวณ จะเติมคะแนนตามอัตราเกรดปัจจุบัน ไม่วมโบนัสช่องทาง·วันเกิด·ช่วงเวลา — แก้ช่องคะแนนได้ถ้าต้องการ',
+    memberPointsRetroNote: 'เติมย้อนหลัง: ยอด {amount} THB · {tier} {rate}% → {points}P',
+    memberPointsAdjustFail: 'ปรับคะแนนไม่สำเร็จ',
     memberPointsEarnHint:
       'เมื่อชำระ POS/แอปสมาชิกเสร็จ ใช้อัตรา tier (ยอด×อัตรา ปัดเศษลง) แล้วใช้ตัวคูณโบนัสช่องทาง·วันเกิด·ช่วงเวลา ที่มากที่สุดเพียงหนึ่งเดียว (ไม่ซ้อน)',
     memberPointEarnBonusTitle: 'โบนัสสะสม (ช่องทาง · วันเกิด · ช่วงเวลา)',

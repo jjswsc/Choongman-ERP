@@ -116,6 +116,14 @@ export type ReceiptModalData = {
   receiptPrintedAt?: string
   /** DB pos_orders.id — 결제 영수증 자동 인쇄 dedupe */
   serverOrderId?: number
+  /** 회원 결제 영수증 하단 블록 */
+  memberId?: number
+  memberNo?: string
+  memberPhone?: string
+  memberTierCode?: string
+  memberPointEarned?: number
+  /** 이 빌 적립 제외 잔여 포인트 */
+  memberPointBalance?: number
 }
 
 interface PosReceiptModalProps {

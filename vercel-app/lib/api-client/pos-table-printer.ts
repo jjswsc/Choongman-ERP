@@ -401,3 +401,27 @@ export async function savePosPrinterSettings(params: {
     queued: false,
   }
 }
+
+/** 본사: 멤버십/포인트 QR을 전 매장 영수증 설정에 일괄 반영 */
+export async function applyMembershipQrToAllStores(params?: {
+  storeCodes?: string[]
+  linkUrl?: string
+  text?: string
+  show?: boolean
+  imageUrl?: string
+}) {
+  const res = await apiFetch('/api/pos-printer-settings/apply-membership-qr-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params || {}),
+  })
+  return (await res.json().catch(() => ({}))) as {
+    success?: boolean
+    message?: string
+    upsertedStores?: number
+    linkUrl?: string
+    imageUrl?: string
+    text?: string
+    show?: boolean
+  }
+}

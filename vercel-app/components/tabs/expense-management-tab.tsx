@@ -1438,7 +1438,7 @@ export function ExpenseManagementTab() {
                 </SheetTitle>
               </SheetHeader>
               {planDetailRow ? (
-                <div className="mt-4 space-y-3 text-sm">
+                <div className="mt-4 space-y-3 px-4 pb-4 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-muted-foreground">{tt("expensePlanStatusCol", "Status")}</span>
                     <ExpensePlanStatusBadge status={planDetailRow.status} />

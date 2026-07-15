@@ -1,7 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -35,6 +35,7 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
 import {
+  applyMembershipQrToAllStores,
   getPosPrinterSettings,
   getPosOptionGroups,
   getPosMenuCategories,
@@ -46,7 +47,13 @@ import {
   type PosPrinterSettings,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { canPickPosTerminalStore, canAccessPosPrinters } from "@/lib/permissions"
+import { canPickPosTerminalStore, canAccessPosPrinters, hasOfficeStaffScope } from "@/lib/permissions"
+import {
+  POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK,
+  POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT,
+  POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH,
+  resolveReceiptAssetUrl,
+} from "@/lib/pos-membership-qr-defaults"
 import { escapeHtmlReceiptEmphasizeChannelTokenAfterHash } from "@/lib/pos-delivery-platform"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
@@ -98,6 +105,10 @@ import {
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import {
+  buildPaymentReceiptMemberFooterHtml,
+  PAYMENT_RECEIPT_MEMBER_BLOCK_CSS,
+} from "@/lib/pos-receipt-member-block"
 
 type PreviewKind = "receipt" | "hall_order" | "kitchen"
 
@@ -457,6 +468,7 @@ export default function PosPrintersPage() {
   const [receiptMembershipQrImageUrl, setReceiptMembershipQrImageUrl] = React.useState("")
   const [receiptMembershipQrLinkUrl, setReceiptMembershipQrLinkUrl] = React.useState("")
   const [receiptMembershipQrText, setReceiptMembershipQrText] = React.useState("")
+  const [membershipQrApplyingAll, setMembershipQrApplyingAll] = React.useState(false)
   const [receiptShowMembershipQr, setReceiptShowMembershipQr] = React.useState(false)
   const [receiptPrintLang, setReceiptPrintLang] = React.useState<string>("")
   const [kitchenSlipPrintLang, setKitchenSlipPrintLang] = React.useState<string>("")
@@ -471,7 +483,55 @@ export default function PosPrintersPage() {
   const [optionGroups, setOptionGroups] = React.useState<PosOptionGroup[]>([])
 
   const canSearchAll = canPickPosTerminalStore(auth?.role || "", auth?.store || "")
+  const canApplyMembershipQrAll = hasOfficeStaffScope(auth?.role || "", auth?.store || "")
   const effectiveStore = String(canSearchAll && storeCode ? storeCode : auth?.store || "").trim()
+
+  const loadDefaultMembershipQr = React.useCallback(() => {
+    setReceiptMembershipQrLinkUrl(POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK)
+    setReceiptMembershipQrImageUrl(POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH)
+    setReceiptMembershipQrText((prev) => prev.trim() || POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT)
+    setReceiptShowMembershipQr(true)
+  }, [])
+
+  const handleApplyMembershipQrToAllStores = React.useCallback(async () => {
+    if (!canApplyMembershipQrAll) {
+      await appAlert(tr("posReceiptMembershipQrApplyAllOfficeOnly", "본사 권한에서만 전 매장 일괄 적용할 수 있습니다."))
+      return
+    }
+    const n = Math.max(stores.length, 1)
+    const ok = await appConfirm(
+      (tr("posReceiptMembershipQrApplyAllConfirm", "{{n}}개 매장 영수증에 포인트 수동 적립 QR을 켜고 일괄 적용할까요?") || "").replace(
+        "{{n}}",
+        String(n)
+      )
+    )
+    if (!ok) return
+    setMembershipQrApplyingAll(true)
+    try {
+      loadDefaultMembershipQr()
+      const res = await applyMembershipQrToAllStores({
+        storeCodes: stores,
+        linkUrl: POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK,
+        imageUrl: POS_MEMBERSHIP_POINTS_MANUAL_QR_IMAGE_PATH,
+        text: receiptMembershipQrText.trim() || POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT,
+        show: true,
+      })
+      if (!res?.success) {
+        await appAlert(res?.message || tr("posReceiptMembershipQrApplyAllFail", "전 매장 QR 일괄 적용에 실패했습니다."))
+        return
+      }
+      await appAlert(
+        (tr("posReceiptMembershipQrApplyAllDone", "{{n}}개 매장에 멤버십 QR을 적용했습니다. POS를 새로고침하면 영수증에 반영됩니다.") || "").replace(
+          "{{n}}",
+          String(Math.max(n, Number(res.upsertedStores || 0)))
+        )
+      )
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : tr("posReceiptMembershipQrApplyAllFail", "전 매장 QR 일괄 적용에 실패했습니다."))
+    } finally {
+      setMembershipQrApplyingAll(false)
+    }
+  }, [canApplyMembershipQrAll, stores, tr, loadDefaultMembershipQr, receiptMembershipQrText])
 
   const printLayoutSettingsInput = React.useMemo(
     () => ({
@@ -1380,9 +1440,10 @@ export default function PosPrintersPage() {
       receiptFooterSecondaryText.trim() ||
       (receiptShowCustomerCopy ? tr("posReceiptCustomerCopy", "고객용") : "")
     const qrCaption = receiptMembershipQrText.trim()
+    const previewOrigin = typeof window !== "undefined" ? window.location.origin : ""
     const qrSrc = receiptMembershipQrLinkUrl.trim()
       ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
-      : receiptMembershipQrImageUrl
+      : resolveReceiptAssetUrl(receiptMembershipQrImageUrl, previewOrigin)
     const receiptBarcodeUrl = receiptBarcode ? buildCode128BarcodeUrl(previewData.orderNo) : ""
     const lines = previewData.items
       .map((it, idx) => {
@@ -1433,6 +1494,7 @@ export default function PosPrintersPage() {
             .receipt-muted { color: #000; }
             .paid-stamp-wrap { text-align: center; margin: 10px 0; }
             .paid-stamp { display: inline-block; border: 1px solid #111; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
+            ${PAYMENT_RECEIPT_MEMBER_BLOCK_CSS}
             .footer-strong { color: #111; font-weight: 600; }
             .biz-line { margin: 2px 0; font-size: 11px; }
             .biz-strong { color: #111; font-weight: 600; }
@@ -1482,7 +1544,26 @@ export default function PosPrintersPage() {
           ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptBarcodeUrl)}" alt="Receipt barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>` : ""}
           ${signatureLine && previewIsTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;">${escapeHtml(tr("posSignature", "서명"))}: ____________________</div>` : ""}
           ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${escapeHtml(tr("posReceiptPaid", "결제완료"))}</span></div>` : ""}
-          ${receiptShowMembershipQr && qrSrc ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(qrSrc)}" alt="Membership QR" style="width:84px;height:84px;object-fit:contain;" />${qrCaption ? `<div class="text-xs receipt-muted" style="margin-top:2px;">${escapeHtml(qrCaption)}</div>` : ""}</div>` : ""}
+          ${buildPaymentReceiptMemberFooterHtml({
+            receiptData: {
+              orderNo: previewData.orderNo,
+              storeCode: "PREVIEW",
+              orderType: "dine_in",
+              items: [],
+              subtotal: previewData.subtotal,
+              discountAmt: previewData.discount,
+              total: previewData.total,
+              memberPhone: "0812345951",
+              memberTierCode: "Member",
+              memberPointBalance: 127,
+              memberPointEarned: 4,
+            },
+            showMembershipQr: Boolean(receiptShowMembershipQr && qrSrc),
+            membershipQrSrc: String(qrSrc || ""),
+            membershipQrText: qrCaption,
+            tr,
+            esc: escapeHtml,
+          })}
           ${receiptShowStamp && receiptStampImageUrl && !receiptStampOnlyTaxInvoice ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptStampImageUrl)}" alt="Company stamp" style="width:72px;height:72px;object-fit:contain;" /></div>` : ""}
           ${(footerPrimary || footerSecondary) ? '<div class="text-center text-xs receipt-muted">' : ""}
           ${footerPrimary ? `<div class="footer-strong">${escapeHtml(footerPrimary)}</div>` : ""}
@@ -2255,13 +2336,13 @@ export default function PosPrintersPage() {
                   ) : null}
                 </div>
                 <div className="rounded-md border p-3 space-y-2">
-                  <p className="text-xs font-medium">{tr("posReceiptMembershipQrTitle", "멤버십 QR")}</p>
-                  <Input
-                    value={receiptMembershipQrLinkUrl}
-                    onChange={(e) => setReceiptMembershipQrLinkUrl(e.target.value)}
-                    className="h-9"
-                    placeholder={tr("posReceiptMembershipQrUrlPh", "https://... (URL만 입력하면 QR 자동 생성)")}
-                  />
+                  <p className="text-xs font-medium">{tr("posReceiptMembershipQrTitle", "멤버십 QR (신규 가입)")}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {tr(
+                      "posReceiptMembershipQrUploadHint",
+                      "손님 영수증 하단에 표시됩니다. 신규 가입용 QR 이미지를 업로드하거나, 가입 페이지 URL을 넣으면 QR이 자동 생성됩니다. 회원으로 결제하면 옆에 전화·등급·포인트가 함께 인쇄됩니다."
+                    )}
+                  </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Input
                       type="file"
@@ -2272,7 +2353,28 @@ export default function PosPrintersPage() {
                     <Button type="button" variant="outline" size="sm" onClick={() => { setReceiptMembershipQrImageUrl(""); setReceiptMembershipQrLinkUrl("") }}>
                       {tr("reset", "초기화")}
                     </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={loadDefaultMembershipQr}>
+                      {tr("posReceiptMembershipQrLoadDefault", "기본 포인트 QR 불러오기")}
+                    </Button>
+                    {canApplyMembershipQrAll ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={membershipQrApplyingAll}
+                        onClick={() => void handleApplyMembershipQrToAllStores()}
+                      >
+                        {membershipQrApplyingAll
+                          ? t("loading")
+                          : tr("posReceiptMembershipQrApplyAll", "전 매장 일괄 적용")}
+                      </Button>
+                    ) : null}
                   </div>
+                  <Input
+                    value={receiptMembershipQrLinkUrl}
+                    onChange={(e) => setReceiptMembershipQrLinkUrl(e.target.value)}
+                    className="h-9"
+                    placeholder={tr("posReceiptMembershipQrUrlPh", "https://... (URL만 입력하면 QR 자동 생성)")}
+                  />
                   {receiptMembershipQrLinkUrl.trim() ? (
                     <p className="text-[11px] text-muted-foreground">
                       {tr("posReceiptMembershipQrUrlHint", "URL이 있으면 업로드 이미지 대신 자동 생성 QR이 우선 사용됩니다.")}
@@ -2288,7 +2390,7 @@ export default function PosPrintersPage() {
                     value={receiptMembershipQrText}
                     onChange={(e) => setReceiptMembershipQrText(e.target.value)}
                     className="h-9"
-                    placeholder={tr("posReceiptMembershipQrTextPh", "예: 가입하고 포인트 적립 받기")}
+                    placeholder={tr("posReceiptMembershipQrTextPh", "예: เช็คสิทธิพิเศษที่นี่")}
                   />
                   {(receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) ? (
                     <img
@@ -2703,22 +2805,51 @@ export default function PosPrintersPage() {
                       <span className="inline-block border border-black px-3 py-0.5 text-xs font-semibold tracking-widest">{tr("posReceiptPaid", "결제완료")}</span>
                     </div>
                   )}
-                  {receiptShowMembershipQr && (receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) && (
-                    <div className="my-2 text-center">
-                      <img
-                        src={
-                          receiptMembershipQrLinkUrl.trim()
-                            ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
-                            : receiptMembershipQrImageUrl
-                        }
-                        alt="Membership QR"
-                        className="mx-auto h-20 w-20 object-contain"
-                      />
-                      {receiptMembershipQrText.trim() ? (
-                        <div className="mt-1 text-[11px] text-black">{receiptMembershipQrText.trim()}</div>
+                  <div className="my-2 border-t border-dashed border-black pt-2">
+                    <div className="flex gap-2 text-[10px] font-bold text-black">
+                      {receiptShowMembershipQr &&
+                      (receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) ? (
+                        <div className="w-[38%] shrink-0 text-center">
+                          <img
+                            src={
+                              receiptMembershipQrLinkUrl.trim()
+                                ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
+                                : receiptMembershipQrImageUrl
+                            }
+                            alt="Membership QR"
+                            className="mx-auto h-[72px] w-[72px] object-contain"
+                          />
+                          <div className="mx-auto mt-1 max-w-[78px] rounded-sm bg-black px-1 py-0.5 text-[8px] font-extrabold leading-tight text-white">
+                            {receiptMembershipQrText.trim() ||
+                              tr("posReceiptMembershipQrCta", "เช็คสิทธิพิเศษที่นี่")}
+                          </div>
+                        </div>
                       ) : null}
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-0.5 text-[11px] font-extrabold">
+                          {tr("posReceiptMemberInfoTitle", "ข้อมูลสมาชิก")}
+                        </div>
+                        <div>
+                          {tr("posReceiptMemberPhone", "เบอร์โทรศัพท์")}: XXXXXX5951
+                        </div>
+                        <div>
+                          {tr("posReceiptMemberTier", "ระดับสมาชิก")}: Member
+                        </div>
+                        <div>
+                          {tr("posReceiptMemberPointsBalance", "คะแนนคงเหลือ")}: 127
+                        </div>
+                        <div>
+                          {tr("posReceiptMemberPointsEarn", "คะแนนที่จะได้รับ")}: +4
+                        </div>
+                        <div className="mt-1 text-[8px] leading-tight">
+                          {tr(
+                            "posReceiptMemberPointsNote",
+                            "* คะแนนคงเหลือไม่รวมคะแนนที่จะได้รับในบิลนี้"
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
+                  </div>
                   {receiptShowStamp && receiptStampImageUrl && !receiptStampOnlyTaxInvoice && (
                     <div className="my-2 text-center">
                       <img src={receiptStampImageUrl} alt="Company stamp" className="mx-auto h-16 w-16 object-contain" />

@@ -7,13 +7,17 @@ import { Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { CrmSubnav } from "@/components/erp/crm-subnav"
 import { CrmPageHero } from "@/components/crm/crm-shared-ui"
 import { MemberPointsSearchPanel } from "@/components/admin/member-points-search-panel"
-import { adjustMemberPoints, type Member } from "@/lib/api-client"
+import { adjustMemberPoints, getMemberTiers, type Member } from "@/lib/api-client"
 import { apiFetch } from "@/lib/api/fetch"
+import { formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tr, useT } from "@/lib/i18n"
+import { formatMemberPointsDisplay, roundMemberPointsEarn } from "@/lib/member-points-math"
+import { formatTierRatePercentInput } from "@/lib/member-tier-rate-percent"
 
 type LedgerRow = {
   id: number
@@ -25,11 +29,24 @@ type LedgerRow = {
   createdAt: string
 }
 
+type TierRateRow = {
+  code: string
+  point_rate: number
+}
+
 function formatPointKind(kind: string, t: ReturnType<typeof useT>): string {
   if (kind === "earn") return t("memberPointsKindEarn")
   if (kind === "use") return t("memberPointsKindUse")
   if (kind === "adjust") return t("memberPointsKindAdjust")
   return kind
+}
+
+function resolveTierPointRate(tiers: TierRateRow[], tierCode?: string | null): number {
+  if (!tiers.length) return 0
+  const code = String(tierCode || "BRONZE").trim().toUpperCase()
+  const row = tiers.find((x) => String(x.code || "").trim().toUpperCase() === code)
+  const rate = Number(row?.point_rate)
+  return Number.isFinite(rate) && rate >= 0 ? rate : 0
 }
 
 export default function MemberPointsPage() {
@@ -39,7 +56,9 @@ export default function MemberPointsPage() {
   const searchParams = useSearchParams()
   const [selectedMember, setSelectedMember] = React.useState<Member | null>(null)
   const [deltaPoints, setDeltaPoints] = React.useState("0")
+  const [spendAmount, setSpendAmount] = React.useState("")
   const [note, setNote] = React.useState("")
+  const [tiers, setTiers] = React.useState<TierRateRow[]>([])
   const [rows, setRows] = React.useState<LedgerRow[]>([])
   const [ledgerLoading, setLedgerLoading] = React.useState(false)
   const [adjusting, setAdjusting] = React.useState(false)
@@ -78,14 +97,59 @@ export default function MemberPointsPage() {
     }
   }, [router, searchParams])
 
+  React.useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await getMemberTiers()
+        if (cancelled) return
+        setTiers(
+          (list || []).map((row) => ({
+            code: String(row.code || ""),
+            point_rate: Number(row.point_rate || 0),
+          }))
+        )
+      } catch {
+        if (!cancelled) setTiers([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const tierPointRate = React.useMemo(
+    () => resolveTierPointRate(tiers, selectedMember?.tierCode),
+    [tiers, selectedMember?.tierCode]
+  )
+
+  const spendParsed = parseBahtAmount(spendAmount)
+  const previewPoints = spendParsed > 0 ? roundMemberPointsEarn(spendParsed * tierPointRate) : 0
+
   const handleSelectMember = React.useCallback((member: Member) => {
     setSelectedMember(member)
     setDeltaPoints("0")
+    setSpendAmount("")
     setNote("")
     setRows([])
     setLedgerLoaded(false)
     setLedgerOffset(0)
   }, [])
+
+  const applySpendCalc = React.useCallback(() => {
+    if (previewPoints <= 0) return
+    setDeltaPoints(String(previewPoints))
+    if (!note.trim()) {
+      setNote(
+        tr(t, "memberPointsRetroNote", {
+          amount: spendParsed.toLocaleString("en-US"),
+          tier: selectedMember?.tierCode || "BRONZE",
+          rate: formatTierRatePercentInput(tierPointRate),
+          points: formatMemberPointsDisplay(previewPoints),
+        })
+      )
+    }
+  }, [previewPoints, note, t, spendParsed, selectedMember?.tierCode, tierPointRate])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -146,57 +210,105 @@ export default function MemberPointsPage() {
                     </Card>
 
                     <Card>
-                      <CardHeader>
+                      <CardHeader className="pb-2">
                         <CardTitle className="text-base">{t("memberPointsAdjustTitle")}</CardTitle>
+                        <p className="text-xs text-muted-foreground">{t("memberPointsCalcHint")}</p>
                       </CardHeader>
-                      <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <div className="grid flex-1 gap-2 sm:grid-cols-2">
-                          <Input
-                            placeholder={t("memberPointsDeltaPh")}
-                            value={deltaPoints}
-                            onChange={(e) => setDeltaPoints(e.target.value)}
-                          />
-                          <Input placeholder={t("reason")} value={note} onChange={(e) => setNote(e.target.value)} />
+                      <CardContent className="space-y-3">
+                        <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                            <div className="grid flex-1 gap-1">
+                              <Label className="text-xs">{t("memberPointsSpendAmount")}</Label>
+                              <Input
+                                inputMode="decimal"
+                                placeholder={t("memberPointsSpendAmountPh")}
+                                value={spendAmount}
+                                onChange={(e) => setSpendAmount(formatBahtInputDisplay(e.target.value))}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="shrink-0"
+                              disabled={previewPoints <= 0}
+                              onClick={applySpendCalc}
+                            >
+                              {t("memberPointsCalcFromSpend")}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {spendParsed > 0
+                              ? tr(t, "memberPointsCalcPreview", {
+                                  tier: selectedMember.tierCode || "BRONZE",
+                                  rate: formatTierRatePercentInput(tierPointRate),
+                                  points: formatMemberPointsDisplay(previewPoints),
+                                })
+                              : t("memberPointsCalcPreviewIdle")}
+                          </p>
                         </div>
-                        <Button
-                          className="shrink-0 sm:min-w-[5.5rem]"
-                          disabled={adjusting}
-                          onClick={async () => {
-                            const p = Number(deltaPoints || 0)
-                            if (!selectedMember.id || !p) return
-                            setAdjusting(true)
-                            try {
-                              const res = await adjustMemberPoints({
-                                memberId: selectedMember.id,
-                                points: p,
-                                note,
-                              })
-                              if (!res.success) {
-                                await appAlert(res.message || t("memberPointsAdjustFail"))
-                                return
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                          <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                            <div className="grid gap-1">
+                              <Label className="text-xs">{t("points")}</Label>
+                              <Input
+                                placeholder={t("memberPointsDeltaPh")}
+                                value={deltaPoints}
+                                onChange={(e) => setDeltaPoints(e.target.value)}
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label className="text-xs">{t("reason")}</Label>
+                              <Input
+                                placeholder={t("reason")}
+                                value={note}
+                                onChange={(e) => setNote(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            className="shrink-0 sm:min-w-[5.5rem]"
+                            disabled={adjusting}
+                            onClick={async () => {
+                              const p = Number(deltaPoints || 0)
+                              if (!selectedMember.id || !p) return
+                              const amountForLedger = spendParsed > 0 && p > 0 ? spendParsed : 0
+                              setAdjusting(true)
+                              try {
+                                const res = await adjustMemberPoints({
+                                  memberId: selectedMember.id,
+                                  points: p,
+                                  note,
+                                  amount: amountForLedger || undefined,
+                                })
+                                if (!res.success) {
+                                  await appAlert(res.message || t("memberPointsAdjustFail"))
+                                  return
+                                }
+                                setDeltaPoints("0")
+                                setSpendAmount("")
+                                setNote("")
+                                setSelectedMember((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        pointBalance: Number(prev.pointBalance || 0) + p,
+                                        tierPoints:
+                                          p > 0
+                                            ? Number(prev.tierPoints || 0) + p
+                                            : Number(prev.tierPoints || 0),
+                                      }
+                                    : prev
+                                )
+                                await loadLedger(selectedMember.id, ledgerOffset)
+                              } finally {
+                                setAdjusting(false)
                               }
-                              setDeltaPoints("0")
-                              setNote("")
-                              setSelectedMember((prev) =>
-                                prev
-                                  ? {
-                                      ...prev,
-                                      pointBalance: Number(prev.pointBalance || 0) + p,
-                                      tierPoints:
-                                        p > 0
-                                          ? Number(prev.tierPoints || 0) + p
-                                          : Number(prev.tierPoints || 0),
-                                    }
-                                  : prev
-                              )
-                              await loadLedger(selectedMember.id, ledgerOffset)
-                            } finally {
-                              setAdjusting(false)
-                            }
-                          }}
-                        >
-                          {adjusting ? t("loading") : t("apply")}
-                        </Button>
+                            }}
+                          >
+                            {adjusting ? t("loading") : t("apply")}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
 

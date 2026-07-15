@@ -758,6 +758,23 @@ export function receiptModalDataFromPosOrderReprint(
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: true,
     receiptPrintedAt: resolvePosOrderPaidAt(order),
+    ...memberReceiptFieldsFromPosOrder(order),
+  }
+}
+
+function memberReceiptFieldsFromPosOrder(order: {
+  memberId?: number | null
+  memberNo?: string | null
+  pointEarned?: number | null
+}): Partial<ReceiptModalData> {
+  const memberId = Math.max(0, Math.trunc(Number(order.memberId || 0) || 0))
+  const memberNo = String(order.memberNo ?? '').trim()
+  const memberPointEarned = Math.max(0, Number(order.pointEarned ?? 0) || 0)
+  if (!memberId && !memberNo && memberPointEarned <= 0) return {}
+  return {
+    ...(memberId > 0 ? { memberId } : {}),
+    ...(memberNo ? { memberNo } : {}),
+    ...(memberPointEarned > 0 ? { memberPointEarned } : {}),
   }
 }
 
@@ -825,6 +842,7 @@ export function receiptModalDataFromPosOrderForPayment(
     suppressReceiptModalAutoPrint: false,
     receiptPrintedAt: resolvePosOrderPaidAt(order),
     ...(Number(order.id) > 0 ? { serverOrderId: Number(order.id) } : {}),
+    ...memberReceiptFieldsFromPosOrder(order),
   }
 }
 
