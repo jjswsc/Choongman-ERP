@@ -20,6 +20,7 @@ import {
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 import { notifyMemberPointLineForPaidOrder } from '@/lib/member-point-line-notify'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -477,6 +478,7 @@ export async function applyLoyaltyOnOrder(params: {
 }) {
   const memberId = Number(params.memberId || 0)
   if (!memberId) return { pointEarned: 0, tierCode: 'BRONZE' }
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId })
   const orderId = Number(params.orderId || 0)
   let stamp: import('@/lib/member-stamp-card').MemberStampRecordResult | null = null
   if (orderId > 0) {
@@ -536,26 +538,38 @@ export async function applyLoyaltyOnOrder(params: {
     Number(member.lifetime_amount || 0) + (shouldApplyLifetime ? Math.max(0, Number(params.totalAmount || 0)) : 0)
 
   if (shouldInsertUse && appliedUse > 0) {
-    await supabaseInsert('member_points_ledger', {
-      member_id: memberId,
-      order_id: orderId,
-      kind: 'use',
-      points: -appliedUse,
-      amount: Number(params.totalAmount || 0),
-      note: toText(params.orderNo) || 'order_use',
-      created_at: getBangkokDateTimeString(),
-    })
+    await supabaseInsert(
+      'member_points_ledger',
+      stampMembersTenantId(
+        {
+          member_id: memberId,
+          order_id: orderId,
+          kind: 'use',
+          points: -appliedUse,
+          amount: Number(params.totalAmount || 0),
+          note: toText(params.orderNo) || 'order_use',
+          created_at: getBangkokDateTimeString(),
+        },
+        tenantScope
+      )
+    )
   }
   if (shouldInsertEarn) {
-    await supabaseInsert('member_points_ledger', {
-      member_id: memberId,
-      order_id: orderId,
-      kind: 'earn',
-      points: pointEarned,
-      amount: Number(params.totalAmount || 0),
-      note: earnNote,
-      created_at: getBangkokDateTimeString(),
-    })
+    await supabaseInsert(
+      'member_points_ledger',
+      stampMembersTenantId(
+        {
+          member_id: memberId,
+          order_id: orderId,
+          kind: 'earn',
+          points: pointEarned,
+          amount: Number(params.totalAmount || 0),
+          note: earnNote,
+          created_at: getBangkokDateTimeString(),
+        },
+        tenantScope
+      )
+    )
   }
   // 쿠폰 사용(issued→used) 처리는 redemption 기록을 남기는
   // persistPosOrderCouponRedemptions 한 곳에서만 수행한다. 여기서 중복 처리하면

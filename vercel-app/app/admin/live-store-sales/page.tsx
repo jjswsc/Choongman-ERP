@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Radio, RefreshCw } from "lucide-react"
+import { Radio } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
@@ -33,7 +33,6 @@ import {
   adminTabsRootCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
@@ -193,13 +192,7 @@ export default function AdminLiveStoreSalesPage() {
 
   const headerActions = (
     <div className="flex flex-col items-end gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="outline" className="gap-2" onClick={runRefresh}>
-          <RefreshCw className="h-4 w-4" />
-          {t("adminOpsCenterReload")}
-        </Button>
-        <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
-      </div>
+      <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
       <div className="flex items-center gap-2">
         <Checkbox
           id="live-auto-refresh"

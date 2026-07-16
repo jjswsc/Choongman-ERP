@@ -5,6 +5,8 @@ import {
 } from '@/lib/complaint-log-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { listMemberSignupStoreOptions } from '@/lib/member-signup-store'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizeTenantId } from '@/lib/tenant-context'
 import {
   COMPLAINT_SOURCE_PUBLIC_WEB,
   parsePublicComplaintBody,
@@ -29,14 +31,17 @@ async function resolvePublicComplaintStoreDisplayName(
   if (!target) return null
   const stores = await listMemberSignupStoreOptions(lang)
   const hit = stores.find((s) => s.displayName === target || s.storeCode === target)
-  return hit?.displayName || null
+  return hit?.storeCode || null
 }
 
-async function countPublicComplaintsToday(contactDigits: string): Promise<number> {
+async function countPublicComplaintsToday(contactDigits: string, tenantId?: string): Promise<number> {
   const today = getBangkokTodayDateString()
+  const tenantFilter = tenantId ? `&tenant_id=eq.${encodeURIComponent(tenantId)}` : ''
   return supabaseCountFilter(
     'complaint_logs',
-    `log_date=eq.${today}&source_channel=eq.${COMPLAINT_SOURCE_PUBLIC_WEB}&contact=eq.${encodeURIComponent(contactDigits)}`
+    `log_date=eq.${today}&source_channel=eq.${COMPLAINT_SOURCE_PUBLIC_WEB}&contact=eq.${encodeURIComponent(
+      contactDigits
+    )}${tenantFilter}`
   )
 }
 
@@ -50,7 +55,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, code: parsed.code }, { status: 400 })
     }
 
-    const todayCount = await countPublicComplaintsToday(parsed.data.contact)
+    const tenantIdResolved = await resolveTenantIdForStoreCode(parsed.data.store).catch(() => undefined)
+    const tenantId = tenantIdResolved ? normalizeTenantId(tenantIdResolved) : ''
+    const todayCount = await countPublicComplaintsToday(parsed.data.contact, tenantId || undefined)
     if (todayCount >= PUBLIC_COMPLAINT_DAILY_LIMIT) {
       return NextResponse.json({ success: false, code: 'rate_limit' }, { status: 429 })
     }

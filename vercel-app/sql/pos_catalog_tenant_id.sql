@@ -170,5 +170,27 @@ begin
     where trim(coalesce(group_key, '')) <> '';
 end $$;
 
+-- 3b) pos_menu_ingredients (BOM) — 메뉴 tenant 상속
+do $$
+begin
+  if to_regclass('public.pos_menu_ingredients') is null
+     or to_regclass('public.pos_menus') is null then
+    return;
+  end if;
+
+  alter table public.pos_menu_ingredients
+    add column if not exists tenant_id text;
+
+  create index if not exists idx_pos_menu_ingredients_tenant_id
+    on public.pos_menu_ingredients (tenant_id);
+
+  update public.pos_menu_ingredients ing
+  set tenant_id = m.tenant_id
+  from public.pos_menus m
+  where ing.menu_id = m.id
+    and coalesce(trim(ing.tenant_id), '') = ''
+    and nullif(trim(m.tenant_id), '') is not null;
+end $$;
+
 -- 4) 감사 (선택 실행):
 -- select id, code, name from public.pos_menus where coalesce(trim(tenant_id), '') = '' order by id;

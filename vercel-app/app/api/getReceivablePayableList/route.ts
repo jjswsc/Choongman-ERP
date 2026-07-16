@@ -207,8 +207,10 @@ export async function GET(request: NextRequest) {
     const receivableScoped = await scopeReceivableLedger({
       endStr,
       startStr,
-      storeFilter: isReceivableStoreFilterActive(storeFilter) ? storeFilter : undefined,
-      filterByVendorLink: canSelectStores,
+      storeFilter:
+        !isManager && isReceivableStoreFilterActive(storeFilter) ? storeFilter : undefined,
+      storeManagerScope: isManager && userStore ? userStore : undefined,
+      filterByVendorLink: canSelectStores && !isManager,
       tenantScope,
     })
 

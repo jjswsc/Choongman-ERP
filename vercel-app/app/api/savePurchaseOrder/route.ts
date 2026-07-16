@@ -18,6 +18,7 @@ import {
 } from '@/lib/po-billing-upsert'
 import { bangkokDateToUtcRange } from '@/lib/attendance-utils'
 import { syncTaxWithholdingLedgerForPurchaseOrder } from '@/lib/tax-ledger-auto-sync'
+import { resolvePoIssuerStoreFromAuth } from '@/lib/po-issuer-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
           .filter(Boolean)
       )
     )
+    const authIssuerStore = resolvePoIssuerStoreFromAuth({ role: userRole, store: userStore })
     const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
     if (isScopedRole && allowedStores.length === 0) {
       return NextResponse.json({ success: false, message: '접근 가능한 매장 정보가 없습니다.' }, { status: 403, headers })
@@ -59,6 +61,7 @@ export async function POST(request: NextRequest) {
           vendorCode: body.vendorCode ?? null,
           locationCode: body.locationCode ?? null,
           relatedStore: body.relatedStore ?? body.related_store ?? null,
+          issuerStore: body.issuerStore ?? body.issuer_store ?? null,
           billingMonthYm: body.billingMonthYm ?? body.billing_month_ym ?? null,
         },
       })
@@ -81,13 +84,26 @@ export async function POST(request: NextRequest) {
     const withholdingTaxRate = body.withholdingTaxRate ?? body.withholding_tax_rate
 
     const relatedStore = String(body.relatedStore ?? body.related_store ?? '').trim()
-    if (
-      isScopedRole &&
-      relatedStore &&
-      !allowedStores.some((s) => storesMatchForGradeLookup(s, relatedStore))
-    ) {
-      return NextResponse.json({ success: false, message: '허용되지 않은 관련 매장입니다.' }, { status: 403, headers })
+    let issuerStore = String(body.issuerStore ?? body.issuer_store ?? '').trim()
+
+    if (authIssuerStore) {
+      issuerStore = authIssuerStore
+      if (
+        relatedStore &&
+        storesMatchForGradeLookup(relatedStore, authIssuerStore)
+      ) {
+        return NextResponse.json(
+          { success: false, message: '청구 대상은 자기 매장과 같을 수 없습니다.' },
+          { status: 400, headers }
+        )
+      }
+    } else if (isScopedRole && issuerStore) {
+      return NextResponse.json(
+        { success: false, message: '매장 발행 권한이 없습니다.' },
+        { status: 403, headers }
+      )
     }
+
     const storeVendorCode = String(body.storeVendorCode ?? body.store_vendor_code ?? '').trim()
     const storeVendorName = String(body.storeVendorName ?? body.store_vendor_name ?? '').trim()
     const poFormatLabel = String(body.poFormatLabel ?? body.po_format_label ?? '').trim()
@@ -114,6 +130,7 @@ export async function POST(request: NextRequest) {
 
     const meta: PoCartMeta | undefined =
       relatedStore ||
+      issuerStore ||
       storeVendorCode ||
       storeVendorName ||
       poFormatLabel ||
@@ -122,6 +139,7 @@ export async function POST(request: NextRequest) {
       referenceNoNorm ||
       Boolean(quotationIn)
         ? {
+            issuerStore: issuerStore || undefined,
             relatedStore: relatedStore || undefined,
             storeVendorCode: storeVendorCode || undefined,
             storeVendorName: storeVendorName || undefined,
@@ -154,6 +172,7 @@ export async function POST(request: NextRequest) {
         relatedStore,
         billingMonthYm,
         billingKind: billingKindParsed!,
+        issuerStore: issuerStore || undefined,
       })
       if (existing) {
         const prevMeta = parsePurchaseOrderCart(existing.cart_json).meta

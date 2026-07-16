@@ -1,4 +1,8 @@
 import { supabaseDeleteByFilter, supabaseTryInsertOnConflict } from '@/lib/supabase-server'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+import { normalizeTenantId } from '@/lib/tenant-context'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizePartnerMerchantIdForIntegration } from '@/lib/grab-store-integration'
 
 type ReserveGrabWebhookEventInput = {
   eventKind: string
@@ -33,6 +37,11 @@ export async function reserveGrabWebhookEvent(
   if (!eventKind || !uniqueKey) return false
 
   try {
+    const partnerStore = normalizePartnerMerchantIdForIntegration(String(input.partnerMerchantId || ''))
+    const tenantId =
+      !isLegacyChoongmanErpSupabase() && partnerStore
+        ? normalizeTenantId((await resolveTenantIdForStoreCode(partnerStore)) || '') || ''
+        : ''
     const inserted = await supabaseTryInsertOnConflict(
       'pos_grab_webhook_events',
       {
@@ -44,6 +53,7 @@ export async function reserveGrabWebhookEvent(
         merchant_id: truncate(input.merchantId || '', 120) || null,
         partner_merchant_id: truncate(input.partnerMerchantId || '', 120) || null,
         payload_json: input.payload ?? null,
+        ...(tenantId ? { tenant_id: tenantId } : {}),
       },
       'event_kind,unique_key'
     )

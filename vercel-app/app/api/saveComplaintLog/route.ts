@@ -1,17 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { insertComplaintLog } from '@/lib/complaint-log-server'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizeTenantId } from '@/lib/tenant-context'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** 컴플레인 일지 신규 저장 */
 export async function POST(request: NextRequest) {
   try {
+    const authRes = await requireAuth(request, 'manager')
+    if (authRes.errorResponse) return authRes.errorResponse
+
     const body = await request.json()
     const data = body.dataStr ? JSON.parse(body.dataStr) : (body.data || body)
     const dateStr = String(data.date || '').trim().slice(0, 10)
 
+    const storeCode = String(data.store || '').trim()
+    const authTenantId = String(authRes.auth?.tenantId || '').trim()
+    const tenantFromStore = await resolveTenantIdForStoreCode(storeCode).catch(() => undefined)
+    const resolvedTenantId = tenantFromStore ? normalizeTenantId(tenantFromStore) : ''
+    if (authTenantId && resolvedTenantId && authTenantId !== resolvedTenantId) {
+      return NextResponse.json({ success: false, message: 'tenant_mismatch' }, { status: 403 })
+    }
+
     await insertComplaintLog({
       date: dateStr,
       time: String(data.time || '').trim(),
-      store: String(data.store || '').trim(),
+      store: storeCode,
       writer: String(data.writer || '').trim(),
       customer: String(data.customer || '').trim(),
       contact: String(data.contact || '').trim(),

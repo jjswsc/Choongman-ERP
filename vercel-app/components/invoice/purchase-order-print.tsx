@@ -43,8 +43,12 @@ export interface PoPrintData {
   withholdingTaxRate?: number | null
   userName: string
   status?: string
-  /** 회계 PO: 연결 매장 */
+  /** 회계 PO: 청구 대상 매장 — 매장 발행 시 타 매장, 본사 발행 시 청구받는 가맹 매장 */
   relatedStore?: string
+  /** 회계 PO: 발행 매장 (없으면 본사) */
+  issuerStore?: string
+  /** 인쇄 FROM — 매장 발행 시 발행 매장 법인 */
+  issuerCompany?: PoPrintCompany
   /** 회계 PO: 매장별 거래처 표시명 */
   storeVendorName?: string
   /** 외부/타사 PO 양식 참고 문구 */
@@ -106,10 +110,6 @@ export function PurchaseOrderPrint({
 }: {
   data: PoPrintData
   company: PoPrintCompany
-  stampImageUrl?: string
-  onApprove?: () => void
-  approveBusy?: boolean
-  approveLabel?: string
   labels?: {
     poTitle?: string
     poNo?: string
@@ -145,6 +145,10 @@ export function PurchaseOrderPrint({
     poWht3LineLabel?: string
     poNetAfterWht?: string
   }
+  stampImageUrl?: string
+  onApprove?: () => void
+  approveBusy?: boolean
+  approveLabel?: string
 }) {
   const t = (key: keyof NonNullable<typeof labels>) => labels?.[key] ?? key
   const approved = isPoApprovedStatus(data.status)
@@ -154,6 +158,10 @@ export function PurchaseOrderPrint({
     Boolean(data.accountingBillToStyle) &&
     Boolean(String(data.relatedStore ?? "").trim()) &&
     Boolean(String(data.vendorName ?? "").trim())
+  const fromCompany =
+    billToFranchiseLayout && data.issuerCompany?.companyName
+      ? data.issuerCompany
+      : company
 
   const externalFormat = Boolean(data.poFormatLabel && String(data.poFormatLabel).trim())
   const headerBadgeText = externalFormat
@@ -205,19 +213,19 @@ export function PurchaseOrderPrint({
             <span>{t("from") || "FROM"}</span>
           </div>
           <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-2 print:border-slate-300">
-            <h3 className="font-bold text-lg">{company.companyName}</h3>
+            <h3 className="font-bold text-lg">{fromCompany.companyName}</h3>
             <div className="text-sm text-muted-foreground space-y-1">
               <div className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{company.address}</span>
+                <span>{fromCompany.address}</span>
               </div>
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 shrink-0" />
-                <span>Tax ID: {company.taxId}</span>
+                <span>Tax ID: {fromCompany.taxId}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Phone:</span>
-                <span>{company.phone}</span>
+                <span>{fromCompany.phone}</span>
               </div>
             </div>
           </div>
@@ -522,7 +530,7 @@ export function PurchaseOrderPrint({
             </div>
             <div className="flex items-center justify-end gap-4 min-h-[160px]">
               <div className="flex flex-col justify-between items-end text-right min-h-[160px] py-0">
-                <h4 className="font-semibold">{company.companyName}</h4>
+                <h4 className="font-semibold">{fromCompany.companyName}</h4>
                 <span className="text-xs text-muted-foreground">
                   {t("authorizedSignatureStamp") ||
                     "Authorized Signature & Company Stamp"}

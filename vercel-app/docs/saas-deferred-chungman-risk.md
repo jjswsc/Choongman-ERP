@@ -42,8 +42,15 @@
 
 ### ✅ 진행 중 (CRM 포인트·스탬프)
 
-- [`sql/members_crm_tenant_id.sql`](../sql/members_crm_tenant_id.sql) — `member_points_ledger` 등 tenant_id.
+- [`sql/members_crm_tenant_id.sql`](../sql/members_crm_tenant_id.sql) — `members.tenant_id` 선행 추가·백필 포함, `member_points_ledger` 등 tenant_id.
 - `/api/member-points`, `/api/member-points/adjust`, `/api/member-stamps/summary` — 회원 소유 검증 + tenant 필터.
+- CRM 포털 쿠폰 클레임·발급, `public-config` tenant 설정 키, 스탬프 ledger insert `tenant_id` stamp.
+- **BOM CUD** (`savePosMenuIngredient` / `replacePosMenuIngredients` / `deletePosMenuIngredients`) — 메뉴 tenant 소유 검증 + `tenant_id` stamp.
+- **회원앱 admin 설정** (design, contact, delivery, home-privileges, stamp-food-image, signup-benefits, prepay) — `system_settings` 키 `{key}:{tenantId}`.
+### ✅ 진행 중 (원가·Grab)
+
+- `getPosMenuCostAnalysis` / `getMenuCost` — JWT tenant 기준 메뉴·품목만 로드 (전 테이블 스캔 차단).
+- Grab 연동 upsert·webhook·조회 API — `tenant_id` stamp·필터.
 
 ## 🔴 인증·과금 (충만 로그인·단말)
 

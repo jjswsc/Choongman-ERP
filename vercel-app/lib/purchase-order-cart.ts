@@ -45,6 +45,8 @@ export function computePurchaseOrderMoneyTotals(items: PoCartLine[]): {
 export type PoBillingKind = "royalty" | "delivery_gp" | "grab_gp" | "all"
 
 export type PoCartMeta = {
+  /** 청구 발행 매장 — 없으면 본사 발행(레거시) */
+  issuerStore?: string
   relatedStore?: string
   storeVendorCode?: string
   storeVendorName?: string
@@ -145,7 +147,15 @@ export function isAccountingPurchaseOrderByCartJson(cartJson: unknown): boolean 
   const bk = String(meta.billingKind ?? "").trim()
   if (ym.length === 7 && bk) return true
   if (String(meta.relatedStore ?? "").trim()) return true
+  if (String(meta.issuerStore ?? "").trim()) return true
   return false
+}
+
+/** 회계 PO 청구 발행 주체 — 없으면 본사 */
+export function resolveAccountingPoIssuerStore(po: { cart_json?: unknown }): string | null {
+  const { meta } = parsePurchaseOrderCart(po.cart_json)
+  const issuer = String(meta?.issuerStore ?? "").trim()
+  return issuer || null
 }
 
 /** 목록·보내기용: meta.orderDate 우선, 없으면 created_at — 표시는 Asia/Bangkok */

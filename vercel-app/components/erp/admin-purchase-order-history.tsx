@@ -61,7 +61,10 @@ import {
   isAccountingPurchaseOrderByCartJson,
   parsePurchaseOrderCart,
   poQuotationFromMeta,
+  resolveAccountingPoIssuerStore,
 } from "@/lib/purchase-order-cart"
+import { resolvePoIssuerCompany } from "@/lib/po-issuer-company"
+import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import { whtCertificateFromPurchaseOrder } from "@/lib/wht-certificate-data"
@@ -485,23 +488,41 @@ ${allRows.map((row, ri) => {
     const vendor = vendors.find(
       (v) => v.code === po.vendor_code || v.name === po.vendor_name
     )
-    const stripCm = (x: string) => x.replace(/^cm\s+/i, "").trim().toLowerCase()
     const relStore = String(meta?.relatedStore || "").trim()
     const vendorByOutlet =
       relStore && relStore !== "_none"
-        ? vendors.find((v) => {
-            const out = String(v.salesOutlet || "").trim()
-            const gps = String(v.gpsName || "").trim()
-            if (out && (out === relStore || out.toLowerCase() === relStore.toLowerCase())) return true
-            if (gps && (gps === relStore || gps.toLowerCase() === relStore.toLowerCase())) return true
-            if (out && stripCm(out) === stripCm(relStore)) return true
-            if (gps && stripCm(gps) === stripCm(relStore)) return true
-            return false
-          })
+        ? vendorForSalesOutletStore(vendors, relStore)
         : undefined
     const vendorResolved = vendor || vendorByOutlet
 
     const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
+    const issuerStore = resolveAccountingPoIssuerStore(po)
+    let issuerCompany: { companyName: string; address: string; taxId: string; phone: string } | undefined
+    if (issuerStore) {
+      const ho = await getHeadOfficeInfo().catch(() => ({
+        companyName: "",
+        taxId: "",
+        address: "",
+        phone: "",
+        bankInfo: "",
+      }))
+      const resolved = resolvePoIssuerCompany({
+        issuerStore,
+        vendors,
+        headOffice: {
+          companyName: ho.companyName || "",
+          address: ho.address || "",
+          taxId: ho.taxId || "",
+          phone: ho.phone || "",
+        },
+      })
+      issuerCompany = {
+        companyName: resolved.companyName,
+        address: resolved.address,
+        taxId: resolved.taxId,
+        phone: resolved.phone,
+      }
+    }
     const poPrintData = {
       poId: po.id,
       poNo,
@@ -534,6 +555,8 @@ ${allRows.map((row, ri) => {
       userName: po.user_name || "-",
       status: po.status,
       relatedStore: meta?.relatedStore,
+      issuerStore: meta?.issuerStore,
+      issuerCompany,
       storeVendorName: meta?.storeVendorName,
       poFormatLabel: meta?.poFormatLabel,
       accountingBillToStyle: isAcctPo,

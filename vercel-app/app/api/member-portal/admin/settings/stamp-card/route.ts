@@ -8,6 +8,7 @@ import {
   type MemberStampMilestoneInput,
   type MemberStampPolicy,
 } from '@/lib/member-stamp-card'
+import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 function normalizeMilestoneInput(raw: unknown, idx: number): MemberStampMilestoneInput | null {
@@ -40,8 +41,12 @@ function normalizeMilestoneInput(raw: unknown, idx: number): MemberStampMileston
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMembersTenantScope({ auth: authResult.auth })
   try {
-    const [policy, milestones] = await Promise.all([loadMemberStampPolicy(), listMemberStampMilestones(true)])
+    const [policy, milestones] = await Promise.all([
+      loadMemberStampPolicy({ tenantScope }),
+      listMemberStampMilestones(true),
+    ])
     return NextResponse.json({ success: true, policy, milestones, needsSetup: false })
   } catch (e) {
     const msg = e instanceof Error ? e.message : '설정을 불러오지 못했습니다.'
@@ -60,12 +65,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMembersTenantScope({ auth: authResult.auth })
   try {
     const body = (await req.json()) as {
       policy?: Partial<MemberStampPolicy>
       milestones?: unknown[]
     }
-    const policy = await saveMemberStampPolicy(normalizeMemberStampPolicy(body.policy || {}))
+    const policy = await saveMemberStampPolicy(normalizeMemberStampPolicy(body.policy || {}), { tenantScope })
     const milestoneInputs = (Array.isArray(body.milestones) ? body.milestones : [])
       .map((row, idx) => normalizeMilestoneInput(row, idx))
       .filter((row): row is MemberStampMilestoneInput => Boolean(row))

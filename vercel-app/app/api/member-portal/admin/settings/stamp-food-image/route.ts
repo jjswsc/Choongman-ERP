@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
   MEMBER_PORTAL_STAMP_FOOD_IMAGE_KEY,
   normalizeMemberPortalStampFoodImageUrl,
 } from '@/lib/member-portal-stamp-food-image'
 import { loadMemberPortalStampFoodImageUrl } from '@/lib/member-portal-stamp-food-image-server'
-import { supabaseUpsert } from '@/lib/supabase-server'
+import {
+  membersTenantToSettingsScope,
+  resolveMemberPortalAdminTenantScope,
+} from '@/lib/member-portal-admin-tenant-scope'
+import { upsertTenantScopedSystemSettings } from '@/lib/tenant-system-settings-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 export const dynamic = 'force-dynamic'
@@ -14,8 +17,10 @@ export const revalidate = 0
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
-    const imageUrl = await loadMemberPortalStampFoodImageUrl()
+    const imageUrl = await loadMemberPortalStampFoodImageUrl(settingsScope)
     return NextResponse.json({ success: true, imageUrl })
   } catch (e) {
     return NextResponse.json(
@@ -28,19 +33,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
     const body = (await req.json()) as { imageUrl?: unknown }
     const imageUrl = normalizeMemberPortalStampFoodImageUrl(body.imageUrl)
-    await supabaseUpsert(
-      'system_settings',
-      [
-        {
-          key: MEMBER_PORTAL_STAMP_FOOD_IMAGE_KEY,
-          value_json: imageUrl,
-          updated_at: getBangkokDateTimeString(),
-        },
-      ],
-      'key'
+    await upsertTenantScopedSystemSettings(
+      [{ baseKey: MEMBER_PORTAL_STAMP_FOOD_IMAGE_KEY, value_json: imageUrl }],
+      settingsScope
     )
     return NextResponse.json({ success: true, imageUrl })
   } catch (e) {

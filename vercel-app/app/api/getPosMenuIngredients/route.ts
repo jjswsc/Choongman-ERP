@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolvePosMenuBomTenantScope, loadPosMenuForBom } from '@/lib/pos-menu-bom-tenant'
+import { isPosCatalogTenantQueryBlocked } from '@/lib/pos-catalog-tenant-scope'
 import {
   ingredientRowMatchesScope,
   isBaseMenuIngredientOptionId,
   posMenuIngredientScopeFilter,
 } from '@/lib/pos-menu-ingredient-scope'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** POS 메뉴 재료(BOM) 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authRes = await requireAuth(request, 'manager')
+  if (authRes.errorResponse) return authRes.errorResponse
+
+  const catalogScope = await resolvePosMenuBomTenantScope(authRes.auth)
+  if (isPosCatalogTenantQueryBlocked(catalogScope)) {
+    return NextResponse.json([], { headers })
+  }
+
   const { searchParams } = new URL(request.url)
   const menuId = searchParams.get('menuId')?.trim()
 
@@ -17,11 +28,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([], { headers })
   }
 
+  const midNum = Number(menuId)
+  if (catalogScope.enforce && Number.isFinite(midNum) && midNum > 0) {
+    const menu = await loadPosMenuForBom(midNum, catalogScope)
+    if (!menu?.id) {
+      return NextResponse.json([], { headers })
+    }
+  }
+
   try {
     const optionIdRaw = searchParams.get('optionId')?.trim()
     const wantBase = !optionIdRaw || optionIdRaw === 'null'
     const optionIdNum = wantBase ? null : Number(optionIdRaw)
-    const midNum = Number(menuId)
     const scopeMenuId = Number.isFinite(midNum) && midNum > 0 ? Math.floor(midNum) : null
 
     type IngredientRow = {

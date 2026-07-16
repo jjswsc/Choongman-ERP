@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import {
   normalizeMenuIngredientOptionKeySeg,
   resolveIngredientMenuIdFromCode,
 } from '@/lib/pos-menu-ingredient-scope'
 import { bomStoredToDisplay, normalizeQuantityUnitKey } from '@/lib/pos-menu-ingredient-quantity-unit'
+import { resolveInventoryTenantScope } from '@/lib/inventory-tenant-scope'
+import { resolvePosMenuBomTenantScope } from '@/lib/pos-menu-bom-tenant'
+import {
+  loadCostAnalysisIngredients,
+  loadCostAnalysisItems,
+  loadCostAnalysisMenus,
+  loadCostAnalysisOptions,
+  loadCostAnalysisSauceIngredients,
+  loadCostAnalysisSauces,
+  type CostAnalysisIngRow,
+  type CostAnalysisItemRow,
+  type CostAnalysisMenuRow,
+  type CostAnalysisOptRow,
+} from '@/lib/pos-menu-cost-analysis-load'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
 export const maxDuration = 120
@@ -25,61 +40,16 @@ function isChickenDefaultOption(name: string | undefined): boolean {
   )
 }
 
-type MenuRow = {
-  id?: number
-  code?: string
-  name?: string
-  category?: string
-  category_main?: string
-  promo_id?: number | null
-  is_active?: boolean | null
-  price?: number
-  price_delivery?: number | null
-  vat_included?: boolean
-  cooking_time_min?: number | null
-  delivery_app_fee_percent?: number | null
-}
-type IngRow = {
-  id?: number
-  menu_id?: number
-  /** 코드 중심 매핑용 스냅샷(컬럼 없으면 undefined) */
-  menu_code?: string | null
-  option_id?: number | null
-  item_code?: string
-  quantity?: number
-  loss_rate?: number
-  ingredient_type?: string
-  quantity_unit_key?: string | null
-}
-type OptRow = {
-  id?: number
-  menu_id?: number
-  name?: string
-  option_code?: string | null
-  option_type?: string
-  item_code?: string | null
-  additive_source_menu_id?: number | null
-  quantity?: number
-  sort_order?: number
-  price_modifier?: number
-  price_modifier_delivery?: number | null
-}
+type MenuRow = CostAnalysisMenuRow
+type IngRow = CostAnalysisIngRow
+type OptRow = CostAnalysisOptRow
+type ItemRow = CostAnalysisItemRow
+
 type PromoItemRow = {
   promo_id?: number
   menu_id?: number
   option_id?: number | null
   quantity?: number
-}
-type ItemRow = {
-  id?: number
-  code?: string
-  name?: string
-  cost?: number
-  price?: number
-  total_quantity?: number
-  unit?: string
-  purchase_source?: string
-  category?: string
 }
 
 /** 품목 관리 getItems와 동일: code 없으면 매장 전용 등만 `_local_${id}` 키로 노출 */
@@ -159,54 +129,6 @@ function bomBreakdownDisplay(
   }
 }
 
-async function loadPosMenusPaged(): Promise<MenuRow[]> {
-  try {
-    return (await supabaseSelectAllPages('pos_menus', {
-      order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
-      select: 'id,code,name,category,category_main,promo_id,is_active,price,price_delivery,vat_included,cooking_time_min,delivery_app_fee_percent',
-    })) as MenuRow[]
-  } catch {
-    return (await supabaseSelectAllPages('pos_menus', {
-      order: 'category.asc,sort_order.asc,name.asc',
-      select: 'id,code,name,category,promo_id,price,price_delivery,vat_included',
-    })) as MenuRow[]
-  }
-}
-
-async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
-  const order = 'menu_id.asc,sort_order.asc,name.asc'
-  const selects = [
-    'id,menu_id,name,option_code,option_type,item_code,additive_source_menu_id,quantity,sort_order,price_modifier,price_modifier_delivery',
-    'id,menu_id,name,option_code,option_type,item_code,quantity,sort_order,price_modifier,price_modifier_delivery',
-    'id,menu_id,name,option_type,item_code,quantity,sort_order',
-  ]
-  for (const select of selects) {
-    try {
-      return (await supabaseSelectAllPages('pos_menu_options', { order, select })) as OptRow[]
-    } catch {
-      /* 다음 select 조합 시도 */
-    }
-  }
-  return []
-}
-
-async function loadPosMenuIngredientsPaged(): Promise<IngRow[]> {
-  const order = 'id.asc'
-  const selects = [
-    'id,menu_id,menu_code,option_id,item_code,quantity,loss_rate,ingredient_type,quantity_unit_key',
-    'id,menu_id,menu_code,option_id,item_code,quantity,loss_rate,ingredient_type',
-    'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
-  ]
-  for (const select of selects) {
-    try {
-      return (await supabaseSelectAllPages('pos_menu_ingredients', { order, select })) as IngRow[]
-    } catch {
-      /* 다음 select 조합 시도 */
-    }
-  }
-  return []
-}
-
 /** POS 메뉴 원가 분석 - 전체 메뉴 + 옵션별 원가/재료 breakdown (본사/매장 구분) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -216,31 +138,30 @@ export async function GET(request: NextRequest) {
     'X-CM-Pos-Cost-Analysis-Rows, X-CM-Pos-Cost-Analysis-Error, X-CM-Pos-Cost-Analysis-Active-Menus, X-CM-Pos-Cost-Analysis-Inactive-Menus'
   )
 
+  const authRes = await requireAuth(request, 'office')
+  if (authRes.errorResponse) {
+    authRes.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authRes.errorResponse
+  }
+  const catalogScope = await resolvePosMenuBomTenantScope(authRes.auth)
+  const inventoryScope = await resolveInventoryTenantScope({ auth: authRes.auth })
+
   const summaryOnly =
     request.nextUrl.searchParams.get('summary') === '1' ||
     request.nextUrl.searchParams.get('summary') === 'true'
 
   try {
-    const [menuData, sauceData, sauceIngData] = await Promise.all([
-      Promise.all([
-        loadPosMenusPaged(),
-        loadPosMenuIngredientsPaged(),
-        loadPosMenuOptionsPaged(),
-        supabaseSelectAllPages('items', {
-          order: 'code.asc',
-          select: 'id,code,name,cost,price,total_quantity,unit,purchase_source,category',
-        }),
-      ]),
-      supabaseSelectAllPages('sauces', {
-        order: 'id.asc',
-        select: 'id,code,name,cost_per_unit,unit,overhead_percent',
-      }).catch(() => []),
-      supabaseSelectAllPages('sauce_ingredients', {
-        order: 'sauce_id.asc',
-        select: 'sauce_id,item_code,quantity,loss_rate',
-      }).catch(() => []),
+    const menuRows = await loadCostAnalysisMenus(catalogScope)
+    const menuIds = new Set(
+      (menuRows || []).map((m) => Number(m.id || 0)).filter((id) => id > 0)
+    )
+    const [ingRows, optRows, itemRows, sauceRows, sauceIngRows] = await Promise.all([
+      loadCostAnalysisIngredients(catalogScope, menuIds),
+      loadCostAnalysisOptions(menuIds),
+      loadCostAnalysisItems(inventoryScope),
+      loadCostAnalysisSauces(inventoryScope),
+      loadCostAnalysisSauceIngredients(inventoryScope),
     ])
-    const [menuRows, ingRows, optRows, itemRows] = menuData as [MenuRow[], IngRow[], OptRow[], ItemRow[]]
     const activeMenuRows = (menuRows || []).filter((m) => m?.is_active !== false)
     headers.set('X-CM-Pos-Cost-Analysis-Active-Menus', String(activeMenuRows.length))
     headers.set(
@@ -270,7 +191,9 @@ export async function GET(request: NextRequest) {
         ).catch(() => [])) as PromoItemRow[]
         for (const r of rows || []) {
           const pid = Number(r.promo_id ?? 0)
+          const mid = Number(r.menu_id ?? 0)
           if (!Number.isFinite(pid) || pid <= 0) continue
+          if (menuIds.size > 0 && !menuIds.has(mid)) continue
           if (!promoItemsByPromoId[pid]) promoItemsByPromoId[pid] = []
           promoItemsByPromoId[pid].push(r)
         }
@@ -281,9 +204,6 @@ export async function GET(request: NextRequest) {
         'getPosMenuCostAnalysis: pos_menu_ingredients 0행·메뉴는 있음. RLS에 SELECT 정책 없음 또는 anon 키만 쓰는 경우입니다. supabase_pos_orders_table_layouts_rls_policies.sql 의 pos_menu_ingredients 정책 적용 또는 SUPABASE_SERVICE_ROLE_KEY 사용.'
       )
     }
-    const sauceRows = sauceData as { id?: number; code?: string; name?: string; cost_per_unit?: number; unit?: string; overhead_percent?: number }[] | null
-    const sauceIngRows = sauceIngData as { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[] | null
-
     const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
     const itemMap: Record<string, ItemMapEntry> = {}
     for (const r of itemRows || []) {

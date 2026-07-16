@@ -3,6 +3,16 @@ import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { adjustMemberPoints, issueMemberCoupon } from '@/lib/members-server'
 import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import { resolvePointEarnChannel } from '@/lib/member-point-earn-policy'
+import {
+  LEGACY_MEMBERS_TENANT_SCOPE,
+  stampMembersTenantId,
+  type MembersTenantScope,
+} from '@/lib/members-tenant-scope'
+import {
+  tenantScopedSettingsKey,
+  tenantScopedSettingsKeys,
+  type TenantSettingsScope,
+} from '@/lib/tenant-system-settings'
 import { notifyMemberStampLineMessage } from '@/lib/member-stamp-notify'
 import {
   supabaseDeleteByFilter,
@@ -231,34 +241,65 @@ export function displayMemberStampCount(
   return mod === 0 ? slots : mod
 }
 
-export async function loadMemberStampPolicy(): Promise<MemberStampPolicy> {
+function toTenantSettingsScope(scope: MembersTenantScope): TenantSettingsScope {
+  return { enforce: scope.enforce, tenantId: scope.tenantId }
+}
+
+async function resolveStampTenantScope(memberId: number): Promise<MembersTenantScope> {
+  return resolveMemberPortalTenantScope({ memberId })
+}
+
+function stampStampRow<T extends Record<string, unknown>>(
+  row: T,
+  scope: MembersTenantScope
+): T {
+  return stampMembersTenantId(row, scope)
+}
+
+export async function loadMemberStampPolicy(opts?: {
+  tenantScope?: MembersTenantScope
+  memberId?: number
+}): Promise<MemberStampPolicy> {
+  let scope = opts?.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
+  if (opts?.memberId && !opts?.tenantScope) {
+    scope = await resolveStampTenantScope(opts.memberId)
+  }
+  const keys = tenantScopedSettingsKeys(MEMBER_STAMP_POLICY_KEY, toTenantSettingsScope(scope))
   try {
-    const rows = (await supabaseSelectFilter('system_settings', `key=eq.${MEMBER_STAMP_POLICY_KEY}`, {
-      limit: 1,
-      select: 'value_json',
-    })) as { value_json?: unknown }[]
-    const raw = rows?.[0]?.value_json
-    if (raw == null || raw === '') return { ...DEFAULT_MEMBER_STAMP_POLICY }
-    if (typeof raw === 'string') {
-      try {
-        return normalizeMemberStampPolicy(JSON.parse(raw))
-      } catch {
-        return { ...DEFAULT_MEMBER_STAMP_POLICY }
+    for (const key of keys) {
+      const rows = (await supabaseSelectFilter('system_settings', `key=eq.${encodeURIComponent(key)}`, {
+        limit: 1,
+        select: 'value_json',
+      })) as { value_json?: unknown }[]
+      const raw = rows?.[0]?.value_json
+      if (raw == null || raw === '') continue
+      if (typeof raw === 'string') {
+        try {
+          return normalizeMemberStampPolicy(JSON.parse(raw))
+        } catch {
+          continue
+        }
       }
+      return normalizeMemberStampPolicy(raw)
     }
-    return normalizeMemberStampPolicy(raw)
+    return { ...DEFAULT_MEMBER_STAMP_POLICY }
   } catch {
     return { ...DEFAULT_MEMBER_STAMP_POLICY }
   }
 }
 
-export async function saveMemberStampPolicy(policy: MemberStampPolicy): Promise<MemberStampPolicy> {
+export async function saveMemberStampPolicy(
+  policy: MemberStampPolicy,
+  opts?: { tenantScope?: MembersTenantScope }
+): Promise<MemberStampPolicy> {
+  const scope = opts?.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
   const normalized = normalizeMemberStampPolicy(policy)
+  const key = tenantScopedSettingsKey(MEMBER_STAMP_POLICY_KEY, toTenantSettingsScope(scope))
   await supabaseUpsert(
     'system_settings',
     [
       {
-        key: MEMBER_STAMP_POLICY_KEY,
+        key,
         value_json: normalized,
         updated_at: getBangkokDateTimeString(),
       },
@@ -563,6 +604,7 @@ function computeCardExpiresAt(startedAt: string | null, expiryDays: number): str
 async function expireMemberStampCardIfNeeded(params: {
   memberId: number
   policy: MemberStampPolicyBase
+  tenantScope: MembersTenantScope
 }): Promise<boolean> {
   const days = Math.trunc(Number(params.policy.cardExpiryDays || 0))
   if (days <= 0) return false
@@ -572,17 +614,23 @@ async function expireMemberStampCardIfNeeded(params: {
   if (!expiresYmd) return false
   if (getBangkokTodayDateString() <= expiresYmd) return false
 
-  await supabaseInsert('member_stamp_ledger', {
-    member_id: params.memberId,
-    order_id: null,
-    store_code: null,
-    stamp_ymd: getBangkokTodayDateString(),
-    card_sequence: cardSequence + 1,
-    kind: 'reset',
-    balance_after: 0,
-    note: `card_expired_${days}d`,
-    created_at: getBangkokDateTimeString(),
-  })
+  await supabaseInsert(
+    'member_stamp_ledger',
+    stampStampRow(
+      {
+        member_id: params.memberId,
+        order_id: null,
+        store_code: null,
+        stamp_ymd: getBangkokTodayDateString(),
+        card_sequence: cardSequence + 1,
+        kind: 'reset',
+        balance_after: 0,
+        note: `card_expired_${days}d`,
+        created_at: getBangkokDateTimeString(),
+      },
+      params.tenantScope
+    )
+  )
   await supabaseUpdateByFilter('members', `id=eq.${params.memberId}`, {
     stamp_card_balance: 0,
     stamp_card_sequence: cardSequence + 1,
@@ -644,7 +692,13 @@ export async function recordMemberStampOnVisit(params: {
   const orderId = Number(params.orderId || 0)
   if (!memberId || !orderId) return { ...baseEmpty(), skippedReason: 'no_member_or_order' }
 
-  const globalPolicy = await loadMemberStampPolicy()
+  const tenantScope = await resolveStampTenantScope(memberId)
+  if (tenantScope.enforce) {
+    const owned = await getMemberSummaryById(memberId, tenantScope)
+    if (!owned) return { ...baseEmpty(), skippedReason: 'tenant_mismatch' }
+  }
+
+  const globalPolicy = await loadMemberStampPolicy({ tenantScope })
   if (!globalPolicy.enabled) return { ...baseEmpty(), skippedReason: 'disabled' }
   const policy = resolveEffectiveStampPolicy(globalPolicy, params.storeCode)
   const empty = (): MemberStampRecordResult => ({ ...baseEmpty(), cardSlots: policy.cardSlots })
@@ -663,7 +717,7 @@ export async function recordMemberStampOnVisit(params: {
   const stampYmd = toText(params.orderAtYmd).slice(0, 10) || getBangkokTodayDateString()
 
   try {
-    await expireMemberStampCardIfNeeded({ memberId, policy })
+    await expireMemberStampCardIfNeeded({ memberId, policy, tenantScope })
 
     const dupOrder = (await supabaseSelectFilter(
       'member_stamp_ledger',
@@ -716,17 +770,23 @@ export async function recordMemberStampOnVisit(params: {
     const milestonesReached: MemberStampRecordResult['milestonesReached'] = []
     let pointsAwarded = 0
 
-    const inserted = (await supabaseInsert('member_stamp_ledger', {
-      member_id: memberId,
-      order_id: orderId,
-      store_code: storeCode || null,
-      stamp_ymd: stampYmd,
-      card_sequence: cardSequence,
-      kind: 'earn',
-      balance_after: newBalance,
-      note: null,
-      created_at: getBangkokDateTimeString(),
-    })) as Array<{ id?: number }> | { id?: number }
+    const inserted = (await supabaseInsert(
+      'member_stamp_ledger',
+      stampStampRow(
+        {
+          member_id: memberId,
+          order_id: orderId,
+          store_code: storeCode || null,
+          stamp_ymd: stampYmd,
+          card_sequence: cardSequence,
+          kind: 'earn',
+          balance_after: newBalance,
+          note: null,
+          created_at: getBangkokDateTimeString(),
+        },
+        tenantScope
+      )
+    )) as Array<{ id?: number }> | { id?: number }
     const ledgerId = Array.isArray(inserted)
       ? Number(inserted?.[0]?.id || 0)
       : Number((inserted as { id?: number })?.id || 0)
@@ -773,17 +833,23 @@ export async function recordMemberStampOnVisit(params: {
 
       finalBalance = 0
       finalSequence = cardSequence + 1
-      await supabaseInsert('member_stamp_ledger', {
-        member_id: memberId,
-        order_id: orderId,
-        store_code: storeCode || null,
-        stamp_ymd: stampYmd,
-        card_sequence: finalSequence,
-        kind: 'reset',
-        balance_after: 0,
-        note: `card_complete_${policy.cardSlots}`,
-        created_at: getBangkokDateTimeString(),
-      })
+      await supabaseInsert(
+        'member_stamp_ledger',
+        stampStampRow(
+          {
+            member_id: memberId,
+            order_id: orderId,
+            store_code: storeCode || null,
+            stamp_ymd: stampYmd,
+            card_sequence: finalSequence,
+            kind: 'reset',
+            balance_after: 0,
+            note: `card_complete_${policy.cardSlots}`,
+            created_at: getBangkokDateTimeString(),
+          },
+          tenantScope
+        )
+      )
       await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
         stamp_card_balance: 0,
         stamp_card_sequence: finalSequence,
@@ -819,6 +885,7 @@ export async function revokeMemberStampForOrder(params: {
   const memberId = Number(params.memberId || 0)
   const orderId = Number(params.orderId || 0)
   if (!memberId || !orderId) return false
+  const tenantScope = await resolveStampTenantScope(memberId)
   try {
     const rows = (await supabaseSelectFilter(
       'member_stamp_ledger',
@@ -831,17 +898,23 @@ export async function revokeMemberStampForOrder(params: {
 
     const { balance, cardSequence } = await loadMemberStampBalance(memberId)
     const nextBalance = Math.max(0, balance - 1)
-    await supabaseInsert('member_stamp_ledger', {
-      member_id: memberId,
-      order_id: orderId,
-      store_code: null,
-      stamp_ymd: getBangkokTodayDateString(),
-      card_sequence: cardSequence,
-      kind: 'revoke',
-      balance_after: nextBalance,
-      note: `order_revoke_${orderId}`,
-      created_at: getBangkokDateTimeString(),
-    })
+    await supabaseInsert(
+      'member_stamp_ledger',
+      stampStampRow(
+        {
+          member_id: memberId,
+          order_id: orderId,
+          store_code: null,
+          stamp_ymd: getBangkokTodayDateString(),
+          card_sequence: cardSequence,
+          kind: 'revoke',
+          balance_after: nextBalance,
+          note: `order_revoke_${orderId}`,
+          created_at: getBangkokDateTimeString(),
+        },
+        tenantScope
+      )
+    )
     await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
       stamp_card_balance: nextBalance,
       updated_at: getBangkokDateTimeString(),
@@ -866,18 +939,25 @@ export async function adjustMemberStampBalance(params: {
   if (!note) throw new Error('조정 사유가 필요합니다.')
 
   const { balance, cardSequence, cardStartedAt } = await loadMemberStampBalance(memberId)
+  const tenantScope = await resolveStampTenantScope(memberId)
   const nextBalance = Math.max(0, balance + delta)
-  await supabaseInsert('member_stamp_ledger', {
-    member_id: memberId,
-    order_id: null,
-    store_code: null,
-    stamp_ymd: getBangkokTodayDateString(),
-    card_sequence: cardSequence,
-    kind: 'adjust',
-    balance_after: nextBalance,
-    note: `[${toText(params.actor) || 'admin'}] ${note}`.slice(0, 240),
-    created_at: getBangkokDateTimeString(),
-  })
+  await supabaseInsert(
+    'member_stamp_ledger',
+    stampStampRow(
+      {
+        member_id: memberId,
+        order_id: null,
+        store_code: null,
+        stamp_ymd: getBangkokTodayDateString(),
+        card_sequence: cardSequence,
+        kind: 'adjust',
+        balance_after: nextBalance,
+        note: `[${toText(params.actor) || 'admin'}] ${note}`.slice(0, 240),
+        created_at: getBangkokDateTimeString(),
+      },
+      tenantScope
+    )
+  )
   const patch: Record<string, unknown> = {
     stamp_card_balance: nextBalance,
     updated_at: getBangkokDateTimeString(),
@@ -943,12 +1023,12 @@ export async function getMemberStampCardStatus(
   const owned = await getMemberSummaryById(id, tenantScope)
   if (!owned) return tenantScope.enforce ? buildMemberStampPreparingStatus() : null
 
-  const globalPolicy = await loadMemberStampPolicy()
+  const globalPolicy = await loadMemberStampPolicy({ tenantScope })
   if (!globalPolicy.enabled) return buildMemberStampPreparingStatus()
 
   try {
     const policy = globalPolicy
-    await expireMemberStampCardIfNeeded({ memberId, policy })
+    await expireMemberStampCardIfNeeded({ memberId: id, policy, tenantScope })
     const [{ balance, cardSequence, cardStartedAt }, milestones, totalEarned] = await Promise.all([
       loadMemberStampBalance(memberId),
       listMemberStampMilestones(false),

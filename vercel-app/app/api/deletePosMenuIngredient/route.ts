@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import {
+  assertPosMenuBomWritable,
+  loadPosMenuForBom,
+  loadPosMenuIngredientForBom,
+  resolvePosMenuBomTenantScope,
+  stampPosMenuIngredientRow,
+} from '@/lib/pos-menu-bom-tenant'
 
 /** POS 메뉴 재료(BOM) 삭제 */
 export async function POST(req: NextRequest) {
@@ -15,12 +22,22 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const catalogScope = await resolvePosMenuBomTenantScope(auth)
+    const writableErr = assertPosMenuBomWritable(catalogScope)
+    if (writableErr) {
+      return NextResponse.json({ success: false, message: writableErr }, { headers })
+    }
 
     const body = await req.json()
     const id = body?.id
 
     if (!id) {
       return NextResponse.json({ success: false, message: 'id required' }, { headers })
+    }
+
+    const owned = await loadPosMenuIngredientForBom(id, catalogScope)
+    if (!owned?.id) {
+      return NextResponse.json({ success: false, message: '재료를 찾을 수 없거나 다른 회사 데이터입니다.' }, { headers })
     }
 
     const beforeRows = (await supabaseSelectFilter(
@@ -43,24 +60,30 @@ export async function POST(req: NextRequest) {
         : null
 
     try {
-      await supabaseInsert('pos_menu_ingredients_audit', {
-        action_type: 'delete',
-        changed_at: nowBkk,
-        actor_name: actorName,
-        actor_role: actorRole,
-        actor_store: actorStore,
-        actor_employee_code: actorEmployeeCode,
-        actor_employee_id: actorEmployeeId,
-        menu_id: Number(beforeRow?.menu_id ?? 0) || null,
-        menu_code: String(beforeRow?.menu_code ?? '').trim() || null,
-        option_id:
-          beforeRow?.option_id != null && String(beforeRow.option_id).trim() !== ''
-            ? Number(beforeRow.option_id)
-            : null,
-        ingredient_id: String(id),
-        before_row: beforeRow,
-        after_row: null,
-      })
+      await supabaseInsert(
+        'pos_menu_ingredients_audit',
+        stampPosMenuIngredientRow(
+          {
+            action_type: 'delete',
+            changed_at: nowBkk,
+            actor_name: actorName,
+            actor_role: actorRole,
+            actor_store: actorStore,
+            actor_employee_code: actorEmployeeCode,
+            actor_employee_id: actorEmployeeId,
+            menu_id: Number(beforeRow?.menu_id ?? 0) || null,
+            menu_code: String(beforeRow?.menu_code ?? '').trim() || null,
+            option_id:
+              beforeRow?.option_id != null && String(beforeRow.option_id).trim() !== ''
+                ? Number(beforeRow.option_id)
+                : null,
+            ingredient_id: String(id),
+            before_row: beforeRow,
+            after_row: null,
+          },
+          catalogScope
+        )
+      )
     } catch (auditErr) {
       console.warn('deletePosMenuIngredient audit insert failed:', auditErr)
     }

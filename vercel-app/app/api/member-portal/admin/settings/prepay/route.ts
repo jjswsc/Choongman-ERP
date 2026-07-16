@@ -3,6 +3,10 @@ import {
   loadMemberPortalPrepaySettingsForAdmin,
   saveMemberPortalPrepaySettings,
 } from '@/lib/member-portal-prepay-config'
+import {
+  membersTenantToSettingsScope,
+  resolveMemberPortalAdminTenantScope,
+} from '@/lib/member-portal-admin-tenant-scope'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 function parseStoreCodesInput(raw: unknown): string[] {
@@ -20,8 +24,10 @@ function parseStoreCodesInput(raw: unknown): string[] {
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
-    const settings = await loadMemberPortalPrepaySettingsForAdmin()
+    const settings = await loadMemberPortalPrepaySettingsForAdmin(settingsScope)
     return NextResponse.json({ success: true, ...settings })
   } catch (e) {
     return NextResponse.json(
@@ -34,6 +40,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
     const body = (await req.json()) as {
       enabled?: boolean
@@ -42,12 +50,15 @@ export async function POST(req: NextRequest) {
       allPublicStores?: boolean
     }
     const storeCodes = body.storeCodes != null ? parseStoreCodesInput(body.storeCodes) : parseStoreCodesInput(body.storeCodesText)
-    await saveMemberPortalPrepaySettings({
-      enabled: body.enabled !== false,
-      storeCodes,
-      allPublicStores: Boolean(body.allPublicStores),
-    })
-    const settings = await loadMemberPortalPrepaySettingsForAdmin()
+    await saveMemberPortalPrepaySettings(
+      {
+        enabled: body.enabled !== false,
+        storeCodes,
+        allPublicStores: Boolean(body.allPublicStores),
+      },
+      settingsScope
+    )
+    const settings = await loadMemberPortalPrepaySettingsForAdmin(settingsScope)
     return NextResponse.json({ success: true, ...settings })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'save_failed'

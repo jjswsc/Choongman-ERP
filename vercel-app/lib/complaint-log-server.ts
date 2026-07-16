@@ -2,6 +2,8 @@ import 'server-only'
 
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 export const COMPLAINT_VISIT_PATHS = ['홀', '배달', '포장'] as const
 export const COMPLAINT_PLATFORMS = ['Grab', 'Lineman', 'Shopee', 'Robinhood', '기타'] as const
@@ -101,12 +103,17 @@ export function bangkokComplaintDateTimeParts(base: Date = new Date()): { date: 
   return { date: date || '', time: (timePart || '').slice(0, 5) }
 }
 
-export async function nextComplaintNumber(dateStr: string): Promise<string> {
+export async function nextComplaintNumber(dateStr: string, tenantId?: string): Promise<string> {
   const base = (dateStr || '').replace(/-/g, '')
   if (base.length !== 8) return `${base}-001`
-  const list = (await supabaseSelectFilter('complaint_logs', `log_date=eq.${dateStr}`, {
-    limit: 500,
-  })) as { number?: string }[]
+  const tenantFilter = tenantId ? `&tenant_id=eq.${encodeURIComponent(tenantId)}` : ''
+  const list = (await supabaseSelectFilter(
+    'complaint_logs',
+    `log_date=eq.${dateStr}${tenantFilter}`,
+    {
+      limit: 500,
+    }
+  )) as { number?: string }[]
   let max = 0
   for (const row of list || []) {
     const numCell = String(row.number || '')
@@ -150,13 +157,16 @@ export function mapComplaintLogRowToDto(d: ComplaintLogDbRow): ComplaintLogDto {
 
 export async function insertComplaintLog(input: InsertComplaintLogInput): Promise<{ number: string }> {
   const dateStr = String(input.date || '').trim().slice(0, 10)
-  const num = await nextComplaintNumber(dateStr)
+  const storeCode = String(input.store || '').trim()
+  const tenantIdResolved = await resolveTenantIdForStoreCode(storeCode).catch(() => undefined)
+  const tenantId = tenantIdResolved ? normalizeTenantId(tenantIdResolved) : ''
+  const num = await nextComplaintNumber(dateStr, tenantId || undefined)
 
   const row: Record<string, unknown> = {
     number: num,
     log_date: dateStr && dateStr.length >= 10 ? dateStr : null,
     log_time: String(input.time || '').trim(),
-    store_name: String(input.store || '').trim(),
+    store_name: storeCode,
     writer: String(input.writer || '').trim(),
     customer: String(input.customer || '').trim(),
     contact: String(input.contact || '').trim(),
@@ -173,6 +183,8 @@ export async function insertComplaintLog(input: InsertComplaintLogInput): Promis
     done_date: (input.doneDate || '').toString().trim().slice(0, 10) || null,
     photo_url: String(input.photoUrl || '').trim(),
     remark: String(input.remark || '').trim(),
+    store_code: storeCode,
+    ...(tenantId ? { tenant_id: tenantId } : {}),
   }
 
   const memberId = input.memberId != null ? Number(input.memberId) : NaN
@@ -184,7 +196,20 @@ export async function insertComplaintLog(input: InsertComplaintLogInput): Promis
     row.source_channel = sourceChannel
   }
 
-  await supabaseInsert('complaint_logs', row)
+  try {
+    await supabaseInsert('complaint_logs', row)
+  } catch (e) {
+    // tenant_id/store_code 컬럼이 아직 없는 환경이면 기존 컬럼으로 폴백
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/tenant_id|store_code|42703/i.test(msg)) {
+      const legacyRow = { ...row } as Record<string, unknown>
+      delete legacyRow.tenant_id
+      delete legacyRow.store_code
+      await supabaseInsert('complaint_logs', legacyRow)
+      return { number: num }
+    }
+    throw e
+  }
 
   return { number: num }
 }

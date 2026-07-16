@@ -4,15 +4,16 @@ import {
   parseMemberPortalHomePrivileges,
   type MemberPortalHomePrivilegeItem,
 } from '@/lib/member-portal-home-privileges-config'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { loadTenantScopedSystemSettingJson } from '@/lib/tenant-system-settings-server'
+import type { TenantSettingsScope } from '@/lib/tenant-system-settings'
 
-export async function loadMemberPortalHomePrivilegesConfig(): Promise<MemberPortalHomePrivilegeItem[]> {
+const LEGACY_SCOPE: TenantSettingsScope = { enforce: false, tenantId: '' }
+
+export async function loadMemberPortalHomePrivilegesConfig(
+  scope: TenantSettingsScope = LEGACY_SCOPE
+): Promise<MemberPortalHomePrivilegeItem[]> {
   try {
-    const rows = (await supabaseSelectFilter('system_settings', `key=eq.${MEMBER_PORTAL_HOME_PRIVILEGES_KEY}`, {
-      limit: 1,
-      select: 'value_json',
-    })) as { value_json?: unknown }[]
-    const raw = rows?.[0]?.value_json
+    const raw = await loadTenantScopedSystemSettingJson(MEMBER_PORTAL_HOME_PRIVILEGES_KEY, scope)
     if (!raw) return DEFAULT_MEMBER_PORTAL_HOME_PRIVILEGES
     if (typeof raw === 'string') {
       try {

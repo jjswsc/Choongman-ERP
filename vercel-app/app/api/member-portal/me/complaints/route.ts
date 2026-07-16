@@ -12,7 +12,7 @@ import {
   type ComplaintLogDbRow,
 } from '@/lib/complaint-log-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { requireMemberSession } from '@/lib/member-portal-session'
+import { requireMemberSessionWithTenant } from '@/lib/member-portal-session'
 import { memberPortalStoresForSession } from '@/lib/member-portal-stores-server'
 import { supabaseCountFilter, supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -64,22 +64,24 @@ async function resolveAllowedStoreName(storeInput: string): Promise<string | nul
   if (!target) return null
   const stores = await memberPortalStoresForSession()
   const hit = stores.find((s) => s.displayName === target || s.storeCode === target)
-  return hit?.displayName || null
+  return hit?.storeCode || null
 }
 
-async function countMemberComplaintsToday(memberId: number): Promise<number> {
+async function countMemberComplaintsToday(memberId: number, tenantId?: string): Promise<number> {
   const today = getBangkokTodayDateString()
+  const tenantFilter = tenantId ? `&tenant_id=eq.${encodeURIComponent(tenantId)}` : ''
   return supabaseCountFilter(
     'complaint_logs',
-    `member_id=eq.${memberId}&log_date=eq.${today}&source_channel=eq.${COMPLAINT_SOURCE_MEMBER_PORTAL}`
+    `member_id=eq.${memberId}&log_date=eq.${today}&source_channel=eq.${COMPLAINT_SOURCE_MEMBER_PORTAL}${tenantFilter}`
   )
 }
 
 export async function GET(req: NextRequest) {
-  const session = await requireMemberSession(req)
+  const session = await requireMemberSessionWithTenant(req)
   if (session.error) return session.error
 
   const memberId = Number(session.member?.id || 0)
+  const tenantId = session.tenantScope?.tenantId || ''
   if (!memberId) {
     return NextResponse.json({ success: false, message: 'member_not_found' }, { status: 404 })
   }
@@ -87,7 +89,9 @@ export async function GET(req: NextRequest) {
   try {
     const list = (await supabaseSelectFilter(
       'complaint_logs',
-      `member_id=eq.${memberId}&source_channel=eq.${COMPLAINT_SOURCE_MEMBER_PORTAL}`,
+      `member_id=eq.${memberId}&source_channel=eq.${COMPLAINT_SOURCE_MEMBER_PORTAL}${
+        session.tenantScope?.enforce && tenantId ? `&tenant_id=eq.${encodeURIComponent(tenantId)}` : ''
+      }`,
       {
         order: 'log_date.desc,id.desc',
         limit: LIST_LIMIT,
@@ -106,7 +110,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await requireMemberSession(req)
+  const session = await requireMemberSessionWithTenant(req)
   if (session.error) return session.error
 
   const member = session.member
@@ -159,7 +163,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, code: 'invalid_photo' }, { status: 400 })
     }
 
-    const todayCount = await countMemberComplaintsToday(memberId)
+    const todayCount = await countMemberComplaintsToday(
+      memberId,
+      session.tenantScope?.enforce ? session.tenantScope.tenantId : undefined
+    )
     if (todayCount >= MEMBER_COMPLAINT_DAILY_LIMIT) {
       return NextResponse.json({ success: false, code: 'rate_limit' }, { status: 429 })
     }

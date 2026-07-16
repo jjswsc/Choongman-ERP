@@ -32,6 +32,7 @@ export function buildPettyLinkedPayablePaymentMemo(detail?: string | null): stri
 import {
   isAccountingPurchaseOrderByCartJson,
   purchaseOrderMetaOrderDate,
+  resolveAccountingPoIssuerStore,
   resolveAccountingPoReceivableStoreName,
 } from './purchase-order-cart'
 
@@ -169,6 +170,7 @@ export async function syncReceivableFromApprovedAccountingPo(poId: number): Prom
   const transDate = overrideTransDate || fallbackTransDate
 
   const storeName = resolveAccountingPoReceivableStoreName(po)
+  const issuerStore = resolveAccountingPoIssuerStore(po)
 
   if (!storeName || net <= 0) {
     await deleteReceivableFromAccountingPo(poId)
@@ -178,7 +180,9 @@ export async function syncReceivableFromApprovedAccountingPo(poId: number): Prom
   const datePart = String(transDate).replace(/\D/g, '').slice(0, 8)
   const invNo = `APO${datePart}-${poId}`
   const memoBase = String(po.po_no || '').trim() || `PO #${poId}`
-  const memo = `회계발주 ${memoBase}`
+  const memo = issuerStore
+    ? `매장청구 ${issuerStore}→${storeName} ${memoBase}`
+    : `회계발주 ${memoBase}`
 
   const existing = (await supabaseSelectFilter(
     'receivable_transactions',
@@ -187,6 +191,7 @@ export async function syncReceivableFromApprovedAccountingPo(poId: number): Prom
   )) as { id?: number }[]
   const row = {
     store_name: storeName,
+    creditor_store: issuerStore || null,
     amount: net,
     ref_type: 'AccountingPO',
     ref_id: poId,
@@ -197,6 +202,7 @@ export async function syncReceivableFromApprovedAccountingPo(poId: number): Prom
   if (existing?.length) {
     await supabaseUpdate('receivable_transactions', existing[0].id!, {
       store_name: storeName,
+      creditor_store: issuerStore || null,
       amount: net,
       trans_date: row.trans_date,
       memo,

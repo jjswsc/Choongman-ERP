@@ -12,6 +12,9 @@ import {
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
 import { resolveCanonicalErpStoreCode } from '@/lib/erp-store-identity'
+import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizeTenantId } from '@/lib/tenant-context'
 import { resolvePlatformDiscountReasonForSave } from '@/lib/pos-platform-discount-reason'
 import { parseGrabStoreMap, resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
 import { normStoreKey } from '@/lib/store-list-keys'
@@ -1284,7 +1287,10 @@ export async function persistGrabOrderToPos(
     delivery_app_code: 'grab',
   }
 
-  const inserted = (await supabaseInsertWithPgrst204Fallback('pos_orders', row, 'grabOrderToPos')) as { id?: number }[]
+  const tenantId = normalizeTenantId((await resolveTenantIdForStoreCode(storeCode)) || '') || ''
+  const enrichedRow = enrichPosOrderRowForSaaS(row, { tenantId })
+
+  const inserted = (await supabaseInsertWithPgrst204Fallback('pos_orders', enrichedRow, 'grabOrderToPos')) as { id?: number }[]
   const created = Array.isArray(inserted) ? inserted[0] : inserted
   if (!created?.id) return { ok: false, message: 'insert failed' }
 

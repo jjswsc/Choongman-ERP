@@ -1,8 +1,13 @@
 /**
  * POS 메뉴 원가 API 공통 — 품목·배합 코드 lookup (getPosMenuCostAnalysis / getMenuCost 동일 규칙)
  */
-import { supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
+import {
+  buildInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  type InventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
 
 export type PosCostItemRow = {
   id?: number
@@ -91,21 +96,35 @@ type SauceIngRow = {
 }
 
 /** items + sauces(배합) → BOM item_code 해석용 lookup */
-export async function loadPosCostItemLookup(): Promise<Record<string, PosCostItemMapEntry>> {
-  const [itemRows, sauceRows, sauceIngRows] = await Promise.all([
-    supabaseSelectAllPages('items', {
-      order: 'code.asc',
-      select: 'id,code,name,cost,price,total_quantity,unit,purchase_source,category',
-    }) as Promise<PosCostItemRow[]>,
-    supabaseSelectAllPages('sauces', {
-      order: 'id.asc',
-      select: 'id,code,name,cost_per_unit,unit,overhead_percent',
-    }).catch(() => []) as Promise<SauceRow[]>,
-    supabaseSelectAllPages('sauce_ingredients', {
-      order: 'sauce_id.asc',
-      select: 'sauce_id,item_code,quantity,loss_rate',
-    }).catch(() => []) as Promise<SauceIngRow[]>,
-  ])
+export async function loadPosCostItemLookup(
+  scope: InventoryTenantScope = { enforce: false, tenantId: '' }
+): Promise<Record<string, PosCostItemMapEntry>> {
+  const itemFilter = buildInventoryTenantFilter(scope)
+  const itemRows = isInventoryTenantQueryBlocked(scope)
+    ? []
+    : ((itemFilter
+        ? await supabaseSelectFilterAllPages('items', itemFilter, {
+            order: 'code.asc',
+            select: 'id,code,name,cost,price,total_quantity,unit,purchase_source,category',
+          })
+        : await supabaseSelectAllPages('items', {
+            order: 'code.asc',
+            select: 'id,code,name,cost,price,total_quantity,unit,purchase_source,category',
+          })) as PosCostItemRow[])
+
+  const sauceRows = scope.enforce
+    ? []
+    : (((await supabaseSelectAllPages('sauces', {
+        order: 'id.asc',
+        select: 'id,code,name,cost_per_unit,unit,overhead_percent',
+      }).catch(() => [])) as SauceRow[]) || [])
+
+  const sauceIngRows = scope.enforce
+    ? []
+    : (((await supabaseSelectAllPages('sauce_ingredients', {
+        order: 'sauce_id.asc',
+        select: 'sauce_id,item_code,quantity,loss_rate',
+      }).catch(() => [])) as SauceIngRow[]) || [])
 
   const itemMap: Record<string, PosCostItemMapEntry> = {}
   for (const r of itemRows || []) {

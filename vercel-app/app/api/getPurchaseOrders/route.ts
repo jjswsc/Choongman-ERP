@@ -1,10 +1,26 @@
 import { NextRequest } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+import { canAccessAccountingPoForAuth } from '@/lib/po-issuer-scope'
 
-/** 본사 발주 내역 조회 (기간, 거래처 필터 지원). 기간은 방콕 달력 기준. */
+/** 본사·매장 발주 내역 조회 (기간, 거래처 필터 지원). 기간은 방콕 달력 기준. */
 export async function GET(request: NextRequest) {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
+    const userRole = String(auth.role || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+
     const { searchParams } = new URL(request.url)
     const vendorCode = String(searchParams.get('vendorCode') || '').trim()
     const poId = Number(searchParams.get('poId') || searchParams.get('id') || 0)
@@ -54,12 +70,25 @@ export async function GET(request: NextRequest) {
       status?: string
       created_at?: string
     }[]
-    return Response.json(rows || [])
+
+    const filtered = isScopedRole
+      ? (rows || []).filter((po) => {
+          const { meta } = parsePurchaseOrderCart(po.cart_json)
+          return canAccessAccountingPoForAuth({
+            role: userRole,
+            store: userStore,
+            issuerStore: meta?.issuerStore,
+            relatedStore: meta?.relatedStore,
+          })
+        })
+      : rows || []
+
+    return Response.json(filtered, { headers })
   } catch (e) {
     console.error('getPurchaseOrders:', e)
     return Response.json(
       { error: e instanceof Error ? e.message : 'Failed' },
-      { status: 500 }
+      { status: 500, headers }
     )
   }
 }

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { mapComplaintLogRowToDto, type ComplaintLogDbRow } from '@/lib/complaint-log-server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 
 /** 컴플레인 일지 목록 조회 */
 export async function GET(request: NextRequest) {
+  const authRes = await requireAuth(request, 'manager')
+  if (authRes.errorResponse) return authRes.errorResponse
+
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
@@ -14,6 +19,11 @@ export async function GET(request: NextRequest) {
   const sourceChannel = searchParams.get('sourceChannel')?.trim() || ''
 
   const filters: string[] = []
+  const tenantId = String(authRes.auth?.tenantId || '').trim()
+  if (!isLegacyChoongmanErpSupabase()) {
+    if (!tenantId) return NextResponse.json([], { status: 403 })
+    filters.push(`tenant_id=eq.${encodeURIComponent(tenantId)}`)
+  }
   if (startStr) filters.push(`log_date=gte.${startStr}`)
   if (endStr) filters.push(`log_date=lte.${endStr}`)
   if (storeFilter && storeFilter !== 'All') filters.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)

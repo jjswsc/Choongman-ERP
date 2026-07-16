@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+import { appendTenantFilter, supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveInventoryTenantScope } from '@/lib/inventory-tenant-scope'
+import { requireAuth } from '@/lib/verify-auth'
 
 type Row = {
   id?: number
@@ -18,6 +21,14 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
+  const authRes = await requireAuth(req, 'manager')
+  if (authRes.errorResponse) return authRes.errorResponse
+
+  const tenantScope = await resolveInventoryTenantScope({ auth: authRes.auth })
+  if (tenantScope.enforce && !tenantScope.tenantId) {
+    return NextResponse.json([], { headers })
+  }
+
   const { searchParams } = new URL(req.url)
   const grabMerchantID = String(searchParams.get('grabMerchantID') ?? '').trim()
   const partnerMerchantID = String(searchParams.get('partnerMerchantID') ?? '').trim()
@@ -29,7 +40,10 @@ export async function GET(req: NextRequest) {
   if (grabMerchantID) filters.push(`grab_merchant_id=eq.${encodeURIComponent(grabMerchantID)}`)
   if (partnerMerchantID) filters.push(`partner_merchant_id=eq.${encodeURIComponent(partnerMerchantID)}`)
   if (status) filters.push(`integration_status=eq.${encodeURIComponent(status)}`)
-  const filter = filters.length > 0 ? filters.join('&') : 'id=gt.0'
+  let filter = filters.length > 0 ? filters.join('&') : 'id=gt.0'
+  if (tenantScope.enforce && tenantScope.tenantId && !isLegacyChoongmanErpSupabase()) {
+    filter = appendTenantFilter(filter, { tenantId: tenantScope.tenantId })
+  }
 
   try {
     const rows = (await supabaseSelectFilter('pos_grab_store_integrations', filter, {

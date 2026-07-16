@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bomStoredToDisplay, normalizeQuantityUnitKey } from '@/lib/pos-menu-ingredient-quantity-unit'
+import { resolveInventoryTenantScope } from '@/lib/inventory-tenant-scope'
+import { loadPosMenuForBom, resolvePosMenuBomTenantScope } from '@/lib/pos-menu-bom-tenant'
 import {
   loadPosCostItemLookup,
   posCostLineCostPerUnit,
   resolvePosCostItemInfo,
 } from '@/lib/pos-menu-cost-item-lookup-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** POS 메뉴 원가 계산 (로스율 적용, 소수점 첫째자리) - 대체형/추가형 옵션 지원 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authRes = await requireAuth(request, 'manager')
+  if (authRes.errorResponse) return authRes.errorResponse
+
+  const catalogScope = await resolvePosMenuBomTenantScope(authRes.auth)
+  const inventoryScope = await resolveInventoryTenantScope({ auth: authRes.auth })
+
   const { searchParams } = new URL(request.url)
   const menuId = searchParams.get('menuId')?.trim()
   const optionId = searchParams.get('optionId')?.trim()
@@ -19,8 +28,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }, { headers })
   }
 
+  const midNum = Number(menuId)
+  if (catalogScope.enforce && Number.isFinite(midNum) && midNum > 0) {
+    const menu = await loadPosMenuForBom(midNum, catalogScope)
+    if (!menu?.id) {
+      return NextResponse.json({ cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }, { headers })
+    }
+  }
+
   try {
-    const itemLookup = await loadPosCostItemLookup()
+    const itemLookup = await loadPosCostItemLookup(inventoryScope)
 
     type BreakdownRow = {
       itemCode: string
@@ -45,15 +62,19 @@ export async function GET(request: NextRequest) {
       try {
         const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
           limit: 1,
-          select: 'option_type,item_code,additive_source_menu_id,quantity',
+          select: 'option_type,item_code,additive_source_menu_id,quantity,menu_id',
         })) as {
           option_type?: string
           item_code?: string | null
           additive_source_menu_id?: number | null
           quantity?: number
+          menu_id?: number
         }[] | null
         const opt = optRows?.[0]
         if (opt) {
+          if (catalogScope.enforce && Number(opt.menu_id || 0) !== Math.floor(midNum)) {
+            return NextResponse.json({ cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }, { headers })
+          }
           optionType = (opt.option_type || 'substitution') as string
           optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
           const aid = opt.additive_source_menu_id
@@ -65,10 +86,13 @@ export async function GET(request: NextRequest) {
         try {
           const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
             limit: 1,
-            select: 'option_type,item_code,quantity',
-          })) as { option_type?: string; item_code?: string | null; quantity?: number }[] | null
+            select: 'option_type,item_code,quantity,menu_id',
+          })) as { option_type?: string; item_code?: string | null; quantity?: number; menu_id?: number }[] | null
           const opt = optRows?.[0]
           if (opt) {
+            if (catalogScope.enforce && Number(opt.menu_id || 0) !== Math.floor(midNum)) {
+              return NextResponse.json({ cost: 0, costHall: 0, costDelivery: 0, breakdown: [] }, { headers })
+            }
             optionType = (opt.option_type || 'substitution') as string
             optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
             optionQty = Number(opt.quantity) ?? 1
@@ -76,6 +100,13 @@ export async function GET(request: NextRequest) {
         } catch {
           /* ignore */
         }
+      }
+    }
+
+    if (additiveSourceMenuId && catalogScope.enforce) {
+      const srcMenu = await loadPosMenuForBom(additiveSourceMenuId, catalogScope)
+      if (!srcMenu?.id) {
+        additiveSourceMenuId = null
       }
     }
 

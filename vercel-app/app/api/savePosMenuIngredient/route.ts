@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import {
+  assertPosMenuBomWritable,
+  loadPosMenuForBom,
+  loadPosMenuIngredientForBom,
+  resolvePosMenuBomTenantScope,
+  stampPosMenuIngredientRow,
+} from '@/lib/pos-menu-bom-tenant'
 
 /** POS 메뉴 재료(BOM) 저장 */
 export async function POST(req: NextRequest) {
@@ -15,6 +22,11 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const catalogScope = await resolvePosMenuBomTenantScope(auth)
+    const writableErr = assertPosMenuBomWritable(catalogScope)
+    if (writableErr) {
+      return NextResponse.json({ success: false, message: writableErr }, { headers })
+    }
 
     const body = await req.json()
     const id = body?.id
@@ -31,16 +43,12 @@ export async function POST(req: NextRequest) {
     if (!menuId || !itemCode) {
       return NextResponse.json({ success: false, message: 'menuId and itemCode required' }, { headers })
     }
-    const menuCode = String(
-      (
-        (
-          (await supabaseSelectFilter('pos_menus', `id=eq.${menuId}`, {
-            limit: 1,
-            select: 'code',
-          }).catch(() => [])) as { code?: string }[]
-        )?.[0]?.code ?? ''
-      )
-    ).trim()
+
+    const menu = await loadPosMenuForBom(menuId, catalogScope)
+    if (!menu?.id) {
+      return NextResponse.json({ success: false, message: '메뉴를 찾을 수 없거나 다른 회사 메뉴입니다.' }, { headers })
+    }
+    const menuCode = String(menu.code ?? '').trim()
 
     const ingredientRow = {
       item_code: itemCode,
@@ -64,6 +72,10 @@ export async function POST(req: NextRequest) {
     let insertedId = ''
 
     if (id) {
+      const owned = await loadPosMenuIngredientForBom(id, catalogScope)
+      if (!owned?.id) {
+        return NextResponse.json({ success: false, message: '재료를 찾을 수 없거나 다른 회사 데이터입니다.' }, { headers })
+      }
       const beforeRows = (await supabaseSelectFilter(
         'pos_menu_ingredients',
         `id=eq.${encodeURIComponent(String(id))}`,
@@ -71,21 +83,23 @@ export async function POST(req: NextRequest) {
       ).catch(() => [])) as Record<string, unknown>[]
       beforeRow = beforeRows[0] ?? null
       try {
-        await supabaseUpdateByFilter('pos_menu_ingredients', `id=eq.${id}`, ingredientRow)
+        await supabaseUpdateByFilter(
+          'pos_menu_ingredients',
+          `id=eq.${id}`,
+          stampPosMenuIngredientRow(ingredientRow, catalogScope)
+        )
       } catch {
-        // 구 스키마(= menu_code 컬럼 없음) 호환
         const { menu_code: _ignored, ...legacyRow } = ingredientRow as typeof ingredientRow & { menu_code?: string }
         await supabaseUpdateByFilter('pos_menu_ingredients', `id=eq.${id}`, legacyRow)
       }
     } else {
       try {
-        const inserted = (await supabaseInsert('pos_menu_ingredients', {
-          menu_id: menuId,
-          ...ingredientRow,
-        })) as { id?: number | string }[] | null
+        const inserted = (await supabaseInsert(
+          'pos_menu_ingredients',
+          stampPosMenuIngredientRow({ menu_id: menuId, ...ingredientRow }, catalogScope)
+        )) as { id?: number | string }[] | null
         insertedId = String(inserted?.[0]?.id ?? '').trim()
       } catch {
-        // 구 스키마(= menu_code 컬럼 없음) 호환
         const { menu_code: _ignored, ...legacyRow } = ingredientRow as typeof ingredientRow & { menu_code?: string }
         const inserted = (await supabaseInsert('pos_menu_ingredients', {
           menu_id: menuId,
@@ -106,21 +120,27 @@ export async function POST(req: NextRequest) {
     const afterRow = afterRows[0] ?? null
 
     try {
-      await supabaseInsert('pos_menu_ingredients_audit', {
-        action_type: id ? 'update' : 'insert',
-        changed_at: nowBkk,
-        actor_name: actorName,
-        actor_role: actorRole,
-        actor_store: actorStore,
-        actor_employee_code: actorEmployeeCode,
-        actor_employee_id: actorEmployeeId,
-        menu_id: menuId,
-        menu_code: menuCode || null,
-        option_id: optionId,
-        ingredient_id: resolvedId || null,
-        before_row: beforeRow,
-        after_row: afterRow,
-      })
+      await supabaseInsert(
+        'pos_menu_ingredients_audit',
+        stampPosMenuIngredientRow(
+          {
+            action_type: id ? 'update' : 'insert',
+            changed_at: nowBkk,
+            actor_name: actorName,
+            actor_role: actorRole,
+            actor_store: actorStore,
+            actor_employee_code: actorEmployeeCode,
+            actor_employee_id: actorEmployeeId,
+            menu_id: menuId,
+            menu_code: menuCode || null,
+            option_id: optionId,
+            ingredient_id: resolvedId || null,
+            before_row: beforeRow,
+            after_row: afterRow,
+          },
+          catalogScope
+        )
+      )
     } catch (auditErr) {
       console.warn('savePosMenuIngredient audit insert failed:', auditErr)
     }

@@ -1,4 +1,8 @@
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+import { normalizeTenantId } from '@/lib/tenant-context'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { appendTenantFilter } from '@/lib/supabase-server'
 import {
   supabaseDeleteByFilter,
   supabaseInsert,
@@ -19,6 +23,16 @@ function normalizeStatus(value: string): string {
   const s = String(value || '').trim().toUpperCase()
   if (!s) return 'UNKNOWN'
   return s
+}
+
+async function resolveGrabIntegrationTenantId(partnerMerchantID: string): Promise<string> {
+  if (isLegacyChoongmanErpSupabase()) return ''
+  return normalizeTenantId((await resolveTenantIdForStoreCode(partnerMerchantID)) || '') || ''
+}
+
+function appendGrabTenantFilter(baseFilter: string, tenantId: string): string {
+  if (!tenantId || isLegacyChoongmanErpSupabase()) return baseFilter
+  return appendTenantFilter(baseFilter, { tenantId })
 }
 
 /**
@@ -47,6 +61,7 @@ export async function upsertGrabStoreIntegration(
     throw new Error('missing_grab_or_partner_merchant_id')
   }
   const integrationStatus = normalizeStatus(input.integrationStatus)
+  const tenantId = await resolveGrabIntegrationTenantId(partnerMerchantID)
   const now = new Date().toISOString()
   const row = {
     grab_merchant_id: grabMerchantID,
@@ -56,13 +71,17 @@ export async function upsertGrabStoreIntegration(
     last_message: String(input.message || '').trim() || null,
     payload_json: input.payload ?? null,
     updated_at: now,
+    ...(tenantId ? { tenant_id: tenantId } : {}),
   }
 
-  const samePair = (await supabaseSelectFilter(
-    'pos_grab_store_integrations',
+  const pairFilter = appendGrabTenantFilter(
     `grab_merchant_id=eq.${encodeURIComponent(grabMerchantID)}&partner_merchant_id=eq.${encodeURIComponent(partnerMerchantID)}`,
-    { limit: 1, select: 'id' }
-  )) as { id?: number }[] | null
+    tenantId
+  )
+  const samePair = (await supabaseSelectFilter('pos_grab_store_integrations', pairFilter, {
+    limit: 1,
+    select: 'id',
+  })) as { id?: number }[] | null
 
   const pairId = Number(samePair?.[0]?.id ?? 0)
   if (pairId > 0) {
@@ -70,11 +89,15 @@ export async function upsertGrabStoreIntegration(
     return { created: false, status: integrationStatus }
   }
 
-  const byGrab = (await supabaseSelectFilter(
-    'pos_grab_store_integrations',
+  const byGrabFilter = appendGrabTenantFilter(
     `grab_merchant_id=eq.${encodeURIComponent(grabMerchantID)}`,
-    { limit: 20, select: 'id,partner_merchant_id', order: 'updated_at.desc' }
-  )) as { id?: number; partner_merchant_id?: string }[] | null
+    tenantId
+  )
+  const byGrab = (await supabaseSelectFilter('pos_grab_store_integrations', byGrabFilter, {
+    limit: 20,
+    select: 'id,partner_merchant_id',
+    order: 'updated_at.desc',
+  })) as { id?: number; partner_merchant_id?: string }[] | null
 
   const list = Array.isArray(byGrab) ? byGrab : []
   if (list.length > 0) {

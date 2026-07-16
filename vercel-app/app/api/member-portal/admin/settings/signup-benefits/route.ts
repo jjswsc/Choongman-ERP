@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { MEMBER_PORTAL_SIGNUP_WELCOME_COUPON_KEY } from '@/lib/member-portal-signup-welcome-coupon'
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import {
+  membersTenantToSettingsScope,
+  resolveMemberPortalAdminTenantScope,
+} from '@/lib/member-portal-admin-tenant-scope'
+import {
+  loadTenantScopedSystemSettingJson,
+  upsertTenantScopedSystemSettings,
+} from '@/lib/tenant-system-settings-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 function normalizeCouponCode(raw: unknown): string {
@@ -14,14 +20,13 @@ function normalizeCouponCode(raw: unknown): string {
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
-    const rows = (await supabaseSelectFilter('system_settings', `key=eq.${MEMBER_PORTAL_SIGNUP_WELCOME_COUPON_KEY}`, {
-      limit: 1,
-      select: 'value_json',
-    })) as { value_json?: unknown }[]
+    const raw = await loadTenantScopedSystemSettingJson(MEMBER_PORTAL_SIGNUP_WELCOME_COUPON_KEY, settingsScope)
     return NextResponse.json({
       success: true,
-      welcomeCouponCode: String(rows?.[0]?.value_json || '').trim(),
+      welcomeCouponCode: String(raw || '').trim(),
     })
   } catch (e) {
     return NextResponse.json(
@@ -34,19 +39,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
     const body = (await req.json()) as { welcomeCouponCode?: string }
     const welcomeCouponCode = normalizeCouponCode(body.welcomeCouponCode)
-    await supabaseUpsert(
-      'system_settings',
-      [
-        {
-          key: MEMBER_PORTAL_SIGNUP_WELCOME_COUPON_KEY,
-          value_json: welcomeCouponCode,
-          updated_at: getBangkokDateTimeString(),
-        },
-      ],
-      'key'
+    await upsertTenantScopedSystemSettings(
+      [{ baseKey: MEMBER_PORTAL_SIGNUP_WELCOME_COUPON_KEY, value_json: welcomeCouponCode }],
+      settingsScope
     )
     return NextResponse.json({ success: true, welcomeCouponCode })
   } catch (e) {

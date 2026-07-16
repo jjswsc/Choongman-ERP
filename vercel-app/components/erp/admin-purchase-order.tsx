@@ -42,6 +42,9 @@ import { useStoreList } from "@/lib/use-store-list"
 import { useOrderCreate } from "@/lib/order-create-context"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import { computePurchaseOrderMoneyTotals, poLineIsVatExempt } from "@/lib/purchase-order-cart"
+import { resolvePoIssuerStoreFromAuth } from "@/lib/po-issuer-scope"
+import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
+import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip } from "lucide-react"
 
 function bangkokYearMonth(): string {
@@ -85,27 +88,6 @@ function formatMoneyComma(n: number): string {
 function parsePositiveIntQty(s: string): number {
   const n = parseInt(String(s).replace(/\D/g, ""), 10)
   return Number.isFinite(n) && n >= 1 ? n : 1
-}
-
-/** 회계 PO: 매장명과 vendors.sales_outlet / gps_name 이 같은 거래처 = 해당 매장 법인 */
-function vendorForSalesOutletStore(
-  vendors: VendorForPurchase[],
-  storeName: string
-): VendorForPurchase | null {
-  const s = String(storeName || "").trim()
-  if (!s || s === "_none") return null
-  const lower = s.toLowerCase()
-  const stripCm = (x: string) => x.replace(/^cm\s+/i, "").trim().toLowerCase()
-  const sStripped = stripCm(s)
-  for (const v of vendors) {
-    const out = String(v.salesOutlet ?? "").trim()
-    const gps = String(v.gpsName ?? "").trim()
-    if (out && (out === s || out.toLowerCase() === lower)) return v
-    if (gps && (gps === s || gps.toLowerCase() === lower)) return v
-    if (out && stripCm(out) === sStripped) return v
-    if (gps && stripCm(gps) === sStripped) return v
-  }
-  return null
 }
 
 interface CartItem {
@@ -214,6 +196,25 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   >(null)
   const { stores: storeList } = useStoreList()
 
+  const poIssuerStore = React.useMemo(
+    () =>
+      allowManualLines && auth
+        ? resolvePoIssuerStoreFromAuth({ role: auth.role, store: auth.store })
+        : null,
+    [allowManualLines, auth]
+  )
+  const isStoreIssuerMode = Boolean(poIssuerStore)
+
+  const issuerOutletVendor = React.useMemo(
+    () => (poIssuerStore ? vendorForSalesOutletStore(vendors, poIssuerStore) : null),
+    [poIssuerStore, vendors]
+  )
+
+  const billToStoreOptions = React.useMemo(() => {
+    if (!isStoreIssuerMode || !poIssuerStore) return storeList
+    return storeList.filter((s) => !storesMatchForGradeLookup(s, poIssuerStore))
+  }, [isStoreIssuerMode, poIssuerStore, storeList])
+
   const filteredVendors = React.useMemo(() => {
     let list = vendors
     if (allowManualLines && relatedStore !== "_none") {
@@ -317,8 +318,23 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             String(l.location_code || "").toLowerCase() !== "본사" &&
             !String(l.name || "").toLowerCase().includes("본사")
         )
-        setLocations([hq, ...rest])
-        setLocationSelect(hq)
+        const authIssuer =
+          auth?.role && auth?.store
+            ? resolvePoIssuerStoreFromAuth({ role: auth.role, store: auth.store })
+            : null
+        if (authIssuer) {
+          const issuerVendor = vendorForSalesOutletStore(mergedVendors, authIssuer)
+          const issuerLoc: PurchaseLocation = {
+            name: authIssuer,
+            address: String(issuerVendor?.address || "").trim(),
+            location_code: authIssuer,
+          }
+          setLocations([issuerLoc, ...rest])
+          setLocationSelect(issuerLoc)
+        } else {
+          setLocations([hq, ...rest])
+          setLocationSelect(hq)
+        }
       } else {
         setLocations(loc || [])
         setLocationSelect((prev) => (prev == null && (loc || []).length > 0 ? loc![0]! : prev))
@@ -327,7 +343,16 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     return () => {
       cancelled = true
     }
-  }, [allowManualLines])
+  }, [allowManualLines, auth?.role, auth?.store])
+
+  React.useEffect(() => {
+    if (!isStoreIssuerMode || !poIssuerStore || !issuerOutletVendor) return
+    setLocationSelect({
+      name: poIssuerStore,
+      address: String(issuerOutletVendor.address || "").trim(),
+      location_code: poIssuerStore,
+    })
+  }, [isStoreIssuerMode, poIssuerStore, issuerOutletVendor])
 
   React.useEffect(() => {
     if (!transferToPo || transferToPo.cart.length === 0) return
@@ -510,15 +535,18 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   }
 
   const appendBillingFromPos = async (mode: "all" | "royalty" | "delivery_gp" | "grab_gp") => {
-    if (relatedStore === "_none") {
-      await appAlert(t("poBillingSelectStoreFirst"))
+    const salesStore = isStoreIssuerMode && poIssuerStore ? poIssuerStore : relatedStore
+    if (!salesStore || salesStore === "_none") {
+      await appAlert(
+        isStoreIssuerMode ? t("poBillingIssuerStoreMissing") : t("poBillingSelectStoreFirst")
+      )
       return
     }
     if (!billingStart || !billingEnd) return
     setBillingLoad(true)
     try {
       const res = await getPoBillingDraft({
-        store: relatedStore,
+        store: salesStore,
         startStr: billingStart,
         endStr: billingEnd,
         mode,
@@ -689,6 +717,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       await appAlert(t("noCartItems"))
       return
     }
+    if (isStoreIssuerMode && (!relatedStore || relatedStore === "_none")) {
+      await appAlert(t("poBillToStoreHint"))
+      return
+    }
     setSubmitting(true)
     try {
       const passBillingUpsert =
@@ -705,6 +737,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         locationCode: locationSelect.location_code,
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store, taxType: c.taxType })),
         userName: auth.user,
+        issuerStore: isStoreIssuerMode && poIssuerStore ? poIssuerStore : undefined,
         relatedStore:
           allowManualLines && relatedStore && relatedStore !== "_none" ? relatedStore : undefined,
         billingMonthYm: passBillingUpsert ? billingMonthYm : undefined,
@@ -746,9 +779,24 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       <div className={`grid gap-4 ${allowManualLines ? "lg:grid-cols-3" : "sm:grid-cols-2"}`}>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">{t("purchaseOrderLocation")}</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              {isStoreIssuerMode ? t("poIssuerStoreTitle") : t("purchaseOrderLocation")}
+            </CardTitle>
+            {isStoreIssuerMode ? (
+              <p className="mt-1 text-xs font-normal text-muted-foreground">{t("poIssuerStoreHint")}</p>
+            ) : null}
           </CardHeader>
           <CardContent>
+            {isStoreIssuerMode && poIssuerStore ? (
+              <div className="space-y-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+                <p className="font-semibold">{poIssuerStore}</p>
+                {issuerOutletVendor ? (
+                  <p className="text-xs text-muted-foreground">{issuerOutletVendor.name}</p>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-500">{t("poStoreNoVendorMatch")}</p>
+                )}
+              </div>
+            ) : (
             <Select
               value={locationSelect?.location_code ?? ""}
               onValueChange={(v) => {
@@ -767,19 +815,26 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 ))}
               </SelectContent>
             </Select>
+            )}
           </CardContent>
         </Card>
 
         {allowManualLines ? (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">{t("poRelatedStore")}</CardTitle>
+              <CardTitle className="text-sm font-semibold">
+                {isStoreIssuerMode ? t("poBillToStoreTitle") : t("poRelatedStore")}
+              </CardTitle>
               <p className="mt-1 text-xs font-normal text-muted-foreground">
-                {t("poAccountingRelatedStoreFirstHint")}
+                {isStoreIssuerMode
+                  ? t("poBillToStoreHint")
+                  : t("poAccountingRelatedStoreFirstHint")}
               </p>
+              {!isStoreIssuerMode ? (
               <p className="mt-1 text-xs font-normal text-muted-foreground">
                 {t("poVendorOrStoreHintAccounting")}
               </p>
+              ) : null}
             </CardHeader>
             <CardContent className="space-y-2">
               <label className="text-xs text-muted-foreground">{t("expenseStoreSelect")}</label>
@@ -789,7 +844,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">{t("poRelatedStoreNone")}</SelectItem>
-                  {storeList.map((s) => (
+                  {(isStoreIssuerMode ? billToStoreOptions : storeList).map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
                     </SelectItem>
@@ -990,7 +1045,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         </div>
       ) : null}
 
-      {allowManualLines ? (
+      {allowManualLines && !isStoreIssuerMode ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">{t("poBillingBulkCreateTitle")}</CardTitle>
@@ -1172,7 +1227,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   variant="secondary"
                   size="sm"
                   className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
-                  disabled={billingLoad || relatedStore === "_none"}
+                  disabled={billingLoad || (!isStoreIssuerMode && relatedStore === "_none")}
                   onClick={() => void appendBillingFromPos("royalty")}
                 >
                   <Calculator className="h-3.5 w-3.5 shrink-0" />
@@ -1183,7 +1238,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   variant="secondary"
                   size="sm"
                   className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
-                  disabled={billingLoad || relatedStore === "_none"}
+                  disabled={billingLoad || (!isStoreIssuerMode && relatedStore === "_none")}
                   onClick={() => void appendBillingFromPos("delivery_gp")}
                 >
                   <Calculator className="h-3.5 w-3.5 shrink-0" />
@@ -1194,7 +1249,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   variant="secondary"
                   size="sm"
                   className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
-                  disabled={billingLoad || relatedStore === "_none"}
+                  disabled={billingLoad || (!isStoreIssuerMode && relatedStore === "_none")}
                   onClick={() => void appendBillingFromPos("grab_gp")}
                 >
                   <Calculator className="h-3.5 w-3.5 shrink-0" />
@@ -1205,7 +1260,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   variant="outline"
                   size="sm"
                   className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
-                  disabled={billingLoad || relatedStore === "_none"}
+                  disabled={billingLoad || (!isStoreIssuerMode && relatedStore === "_none")}
                   onClick={() => void appendBillingFromPos("all")}
                 >
                   {billingLoad ? t("loading") : t("poBillingLoadDraft")}

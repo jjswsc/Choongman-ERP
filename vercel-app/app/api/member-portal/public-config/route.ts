@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server'
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getSignupWelcomeCouponCode } from '@/lib/member-portal-signup-welcome-coupon'
 import { memberPortalSettingsJsonResponse } from '@/lib/member-portal-settings-route'
@@ -7,7 +8,6 @@ import {
   KEY_THEME_TEXT_SECONDARY,
   parseMemberPortalUiThemeFromMap,
 } from '@/lib/member-portal-theme'
-import { readSystemSettingString } from '@/lib/system-settings-value'
 import { loadMemberPortalHomePrivilegesConfig } from '@/lib/member-portal-home-privileges-config-server'
 import { loadMemberPortalStampFoodImageUrl } from '@/lib/member-portal-stamp-food-image-server'
 import {
@@ -15,7 +15,8 @@ import {
   MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
 } from '@/lib/member-portal-prepay-config'
 import { resolveMemberPortalPickupMinLeadMinutes } from '@/lib/member-portal-pickup-settings'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
+import { loadTenantScopedSystemSettingsMap } from '@/lib/tenant-system-settings-server'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -37,27 +38,17 @@ const CONFIG_KEYS = [
   KEY_THEME_FONT_SCALE,
 ] as const
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const brand = await getServerAppBrandConfig()
+  const tenantScope = await resolveMemberPortalTenantScope({ request: req })
+  const settingsScope = { enforce: tenantScope.enforce, tenantId: tenantScope.tenantId }
   try {
-    const filter = `or=(${CONFIG_KEYS.map((k) => `key.eq.${k}`).join(',')})`
-    const rows = (await supabaseSelectFilter('system_settings', filter, {
-      limit: 12,
-      select: 'key,value_json',
-    })) as { key?: string; value_json?: unknown }[]
-
-    const map = new Map<string, string>()
-    for (const row of rows || []) {
-      const key = String(row.key || '').trim()
-      if (!key) continue
-      map.set(key, readSystemSettingString(row.value_json))
-    }
-
-    const prepayConfig = await loadMemberPortalPrepayConfig()
+    const map = await loadTenantScopedSystemSettingsMap(CONFIG_KEYS, settingsScope)
+    const prepayConfig = await loadMemberPortalPrepayConfig(settingsScope)
     const pickupMinLeadMinutes = await resolveMemberPortalPickupMinLeadMinutes()
     const theme = parseMemberPortalUiThemeFromMap(map)
-    const homePrivileges = await loadMemberPortalHomePrivilegesConfig()
-    const stampFoodImageUrl = await loadMemberPortalStampFoodImageUrl()
+    const homePrivileges = await loadMemberPortalHomePrivilegesConfig(settingsScope)
+    const stampFoodImageUrl = await loadMemberPortalStampFoodImageUrl(settingsScope)
 
     return memberPortalSettingsJsonResponse({
       success: true,
@@ -70,7 +61,7 @@ export async function GET() {
       textPrimaryColor: theme.textPrimaryColor,
       textSecondaryColor: theme.textSecondaryColor,
       fontScalePct: theme.fontScalePct,
-      signupWelcomeCouponEnabled: Boolean(await getSignupWelcomeCouponCode()),
+      signupWelcomeCouponEnabled: Boolean(await getSignupWelcomeCouponCode(settingsScope)),
       prepayEnabled: prepayConfig.enabled,
       prepayQrExpiryMs: MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
       pickupMinLeadMinutes,
@@ -79,8 +70,8 @@ export async function GET() {
     })
   } catch {
     const theme = parseMemberPortalUiThemeFromMap(new Map())
-    const homePrivileges = await loadMemberPortalHomePrivilegesConfig()
-    const stampFoodImageUrl = await loadMemberPortalStampFoodImageUrl()
+    const homePrivileges = await loadMemberPortalHomePrivilegesConfig(settingsScope)
+    const stampFoodImageUrl = await loadMemberPortalStampFoodImageUrl(settingsScope)
     return memberPortalSettingsJsonResponse({
       success: true,
       facebookUrl: brand.memberContactFacebookUrl,

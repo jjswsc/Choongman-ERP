@@ -4,15 +4,16 @@ import {
   normalizeMemberPortalStampFoodImageUrl,
 } from '@/lib/member-portal-stamp-food-image'
 import { readSystemSettingString } from '@/lib/system-settings-value'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { loadTenantScopedSystemSettingJson } from '@/lib/tenant-system-settings-server'
+import type { TenantSettingsScope } from '@/lib/tenant-system-settings'
 
-export async function loadMemberPortalStampFoodImageUrl(): Promise<string> {
+const LEGACY_SCOPE: TenantSettingsScope = { enforce: false, tenantId: '' }
+
+export async function loadMemberPortalStampFoodImageUrl(
+  scope: TenantSettingsScope = LEGACY_SCOPE
+): Promise<string> {
   try {
-    const rows = (await supabaseSelectFilter('system_settings', `key=eq.${MEMBER_PORTAL_STAMP_FOOD_IMAGE_KEY}`, {
-      limit: 1,
-      select: 'value_json',
-    })) as { value_json?: unknown }[]
-    const raw = rows?.[0]?.value_json
+    const raw = await loadTenantScopedSystemSettingJson(MEMBER_PORTAL_STAMP_FOOD_IMAGE_KEY, scope)
     if (raw == null || raw === '') return DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL
     return normalizeMemberPortalStampFoodImageUrl(readSystemSettingString(raw))
   } catch {

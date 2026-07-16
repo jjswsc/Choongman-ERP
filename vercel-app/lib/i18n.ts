@@ -7,6 +7,7 @@ import { isLangCode } from "./lang-context"
 import { I18N_HELP_LONG_EN, I18N_HELP_LONG_KO } from "./i18n-admin-help-long"
 import { I18N_MP_ADMIN_EN, I18N_MP_ADMIN_KO, I18N_MP_ADMIN_TH } from "./i18n-member-portal-admin"
 import { I18N_CRM_EN, I18N_CRM_KO, I18N_CRM_TH } from "./i18n-crm"
+import { I18N_MEMBERS_ADMIN_TH } from "./i18n-members-admin"
 import { I18N_CRM_SEGMENTS_EN, I18N_CRM_SEGMENTS_KO, I18N_CRM_SEGMENTS_TH } from "./i18n-crm-segments"
 import { I18N_SAAS_ADMIN_EN, I18N_SAAS_ADMIN_KO, I18N_SAAS_ADMIN_TH } from "./i18n-saas-admin"
 import {
@@ -2512,6 +2513,13 @@ export const i18n = {
     poNetAfterWht: '차감 후 지급액(참고)',
     poAccountingRelatedStoreFirstHint:
       '로열티·GP 청구 PO: 먼저 매장(지점)을 선택하면 연결된 법인이 아래에 맞춰집니다.',
+    poIssuerStoreTitle: '발행 매장',
+    poIssuerStoreHint: '로그인 매장이 청구서 발행 주체입니다. 인쇄 FROM에 표시됩니다.',
+    poBillToStoreTitle: '청구 대상 매장',
+    poBillToStoreHint: '청구받을 매장을 선택하면 연결된 법인이 오른쪽에 맞춰집니다.',
+    poBillingIssuerStoreMissing: '발행 매장 정보를 확인할 수 없습니다. 다시 로그인해 주세요.',
+    adminAccountingPurchaseOrderSubStore:
+      '매장 청구서 발행: 로그인 매장이 발행 주체이며, 다른 매장(법인)에 청구할 수 있습니다. [청구 비율 설정]에서 자기 매장 비율을 저장한 뒤 POS 매출 연동으로 줄을 넣을 수 있습니다.',
     poVendorOrStoreHintAccounting:
       '매장을 먼저 선택하거나, 가맹 법인을 직접 검색하세요. 매장만 골라도 sales_outlet이 같은 거래처로 저장됩니다.',
     poPrintBillTo: '청구처 (가맹)',
@@ -5431,6 +5439,7 @@ export const i18n = {
     adminOrderCreateSelectStore: '매장을 선택해 주세요.',
     orderTabStore: '매장 발주',
     orderTabHq: '본사 발주',
+    orderTabStoreBilling: '매장 청구 발행',
     purchaseOrderLocation: '출고지',
     purchaseOrderVendor: '거래처',
     purchaseOrderSelectLocation: '출고지를 선택해 주세요.',
@@ -9788,6 +9797,8 @@ Only matters the employee must handle personally on a working day:
     adminAccountingPurchaseOrderTitle: 'PO management',
     adminAccountingPurchaseOrderSub:
       'Bill stores for royalty, delivery GP, Grab GP, etc. as POs. Set rates under [Billing rates], then add lines from POS sales on the HQ PO tab.',
+    adminAccountingPurchaseOrderSubStore:
+      'Store billing: your logged-in store issues invoices to other stores. Set your rates under [Billing rates], then load POS sales lines.',
     poBillingTabSettings: 'Billing rates',
     poBillingSettingsTitle: 'Per-store billing rates (%)',
     poBillingSettingsHint:
@@ -9911,6 +9922,11 @@ Only matters the employee must handle personally on a working day:
     poNetAfterWht: 'Net payable (after WHT, reference)',
     poAccountingRelatedStoreFirstHint:
       'For royalty / billing POs: pick the store first—the linked legal entity is set below.',
+    poIssuerStoreTitle: 'Issuing store',
+    poIssuerStoreHint: 'Your logged-in store is the invoice issuer (FROM on print).',
+    poBillToStoreTitle: 'Bill-to store',
+    poBillToStoreHint: 'Select the store to bill—the linked legal entity is set on the right.',
+    poBillingIssuerStoreMissing: 'Cannot resolve issuing store. Please sign in again.',
     poVendorOrStoreHintAccounting:
       'Select a store first, or search the franchise legal entity. Store-only selection uses the vendor whose sales_outlet matches.',
     poPrintBillTo: 'Bill to (franchise)',
@@ -12836,6 +12852,7 @@ Only matters the employee must handle personally on a working day:
     adminOrderCreateSelectStore: 'Select a store.',
     orderTabStore: 'Store Order',
     orderTabHq: 'HQ Purchase Order',
+    orderTabStoreBilling: 'Store billing',
     purchaseOrderLocation: 'Delivery To',
     purchaseOrderVendor: 'Vendor',
     purchaseOrderSelectLocation: 'Select outbound location.',
@@ -18955,6 +18972,7 @@ orderItemQty: 'จำนวน',
     ...I18N_POS_TH,
     ...I18N_CRM_TH,
     ...I18N_CRM_SEGMENTS_TH,
+    ...I18N_MEMBERS_ADMIN_TH,
     memberAppContent: 'หน้าสมาชิก',
     ...I18N_MP_ADMIN_TH,
     ...I18N_SAAS_ADMIN_TH,
@@ -30660,6 +30678,11 @@ orderItemQty: 'ຈຳນວນ',
     poNetAfterWht: 'Net payable (after WHT, reference)',
     poAccountingRelatedStoreFirstHint:
       'For royalty / billing POs: pick the store first—the linked legal entity is set below.',
+    poIssuerStoreTitle: 'Issuing store',
+    poIssuerStoreHint: 'Your logged-in store is the invoice issuer (FROM on print).',
+    poBillToStoreTitle: 'Bill-to store',
+    poBillToStoreHint: 'Select the store to bill—the linked legal entity is set on the right.',
+    poBillingIssuerStoreMissing: 'Cannot resolve issuing store. Please sign in again.',
     poVendorOrStoreHintAccounting:
       'Select a store first, or search the franchise legal entity. Store-only selection uses the vendor whose sales_outlet matches.',
     poPrintBillTo: 'Bill to (franchise)',

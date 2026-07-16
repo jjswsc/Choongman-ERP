@@ -944,8 +944,9 @@ export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
 
     const { items, meta } = parsePurchaseOrderCart(po.cart_json)
     const relatedStore = String(meta?.relatedStore || '').trim()
+    const issuerStore = String(meta?.issuerStore || '').trim()
     const itemStore = items.map((it) => String(it.store || '').trim()).find(Boolean) || ''
-    const taxStoreName = relatedStore || itemStore || String(po.location_name || '').trim() || null
+    const taxStoreName = issuerStore || relatedStore || itemStore || String(po.location_name || '').trim() || null
     if (storeFilter && !storesMatchForGradeLookup(String(taxStoreName || ''), storeFilter)) continue
 
     const docDate = purchaseOrderMetaOrderDate(po.cart_json)

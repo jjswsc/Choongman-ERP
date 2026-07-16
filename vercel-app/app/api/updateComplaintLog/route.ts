@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { normalizeTenantId } from '@/lib/tenant-context'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 
 /** 컴플레인 일지 수정 */
 export async function POST(request: NextRequest) {
@@ -8,14 +11,28 @@ export async function POST(request: NextRequest) {
     const rowOrId = String(body.rowOrId ?? body.id ?? '').trim()
     const data = body.dataStr ? JSON.parse(body.dataStr) : (body.data || body)
 
+    const authRes = await requireAuth(request, 'manager')
+    if (authRes.errorResponse) return authRes.errorResponse
+    const authTenantId = String(authRes.auth?.tenantId || '').trim()
+
+    const storeCode = String(data.store || '').trim()
+    const tenantFromStore = await resolveTenantIdForStoreCode(storeCode).catch(() => undefined)
+    const resolvedTenantId = tenantFromStore ? normalizeTenantId(tenantFromStore) : ''
+    if (authTenantId && resolvedTenantId && authTenantId !== resolvedTenantId) {
+      return NextResponse.json({ success: false, message: 'tenant_mismatch' }, { status: 403 })
+    }
+
     if (!rowOrId) {
       return NextResponse.json({ success: false, message: '잘못된 행입니다.' }, { status: 400 })
     }
 
-    await supabaseUpdateByFilter('complaint_logs', `id=eq.${encodeURIComponent(rowOrId)}`, {
+    const tenantFilter = authTenantId ? `&tenant_id=eq.${encodeURIComponent(authTenantId)}` : ''
+    await supabaseUpdateByFilter('complaint_logs', `id=eq.${encodeURIComponent(rowOrId)}${tenantFilter}`, {
       log_date: (data.date || '').toString().trim().slice(0, 10) || null,
       log_time: String(data.time || '').trim(),
-      store_name: String(data.store || '').trim(),
+      store_name: storeCode,
+      store_code: storeCode,
+      tenant_id: authTenantId || null,
       writer: String(data.writer || '').trim(),
       customer: String(data.customer || '').trim(),
       contact: String(data.contact || '').trim(),

@@ -115,6 +115,7 @@ export async function savePurchaseOrder(params: {
   userName: string
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
+  issuerStore?: string
   relatedStore?: string
   storeVendorCode?: string
   storeVendorName?: string

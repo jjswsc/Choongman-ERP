@@ -1,4 +1,5 @@
 import { parsePurchaseOrderCart } from "@/lib/purchase-order-cart"
+import { vendorForSalesOutletStore, type PoVendorStoreRow } from "@/lib/po-vendor-store-match"
 
 export type PoInvoiceBillToVendor = {
   vendorName: string
@@ -8,29 +9,7 @@ export type PoInvoiceBillToVendor = {
   relatedStore?: string
 }
 
-export type PoInvoiceBillToVendorRow = {
-  code?: string
-  name?: string
-  address?: string
-  taxId?: string
-  phone?: string
-  salesOutlet?: string | null
-  gpsName?: string | null
-}
-
-function stripCmPrefix(x: string): string {
-  return x.replace(/^cm\s+/i, "").trim().toLowerCase()
-}
-
-function vendorMatchesRelatedStore(v: PoInvoiceBillToVendorRow, relStore: string): boolean {
-  const out = String(v.salesOutlet || "").trim()
-  const gps = String(v.gpsName || "").trim()
-  if (out && (out === relStore || out.toLowerCase() === relStore.toLowerCase())) return true
-  if (gps && (gps === relStore || gps.toLowerCase() === relStore.toLowerCase())) return true
-  if (out && stripCmPrefix(out) === stripCmPrefix(relStore)) return true
-  if (gps && stripCmPrefix(gps) === stripCmPrefix(relStore)) return true
-  return false
-}
+export type PoInvoiceBillToVendorRow = PoVendorStoreRow
 
 /**
  * 회계 PO·미수금 Tax Invoice BILL TO — 발주 인쇄(admin-purchase-order-history.printPo)와 동일 규칙.
@@ -52,7 +31,7 @@ export function resolvePoInvoiceBillToVendor(
       return (vendorCode && code === vendorCode) || (vendorNameOnPo && name === vendorNameOnPo)
     }) ??
     (relStore && relStore !== "_none"
-      ? vendors.find((v) => vendorMatchesRelatedStore(v, relStore))
+      ? vendorForSalesOutletStore(vendors, relStore)
       : undefined)
 
   return {

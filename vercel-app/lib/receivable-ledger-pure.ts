@@ -4,11 +4,13 @@
 import { normalizeReceivableStoreKey, pickReceivableDisplayStoreName, receivableStoreGroupKey } from '@/lib/receivable-store-key'
 
 export const RECEIVABLE_LEDGER_SELECT =
-  'id,store_name,amount,ref_type,ref_id,trans_date,memo,invoice_no,created_at,receive_checked,bank_transaction_id'
+  'id,store_name,creditor_store,amount,ref_type,ref_id,trans_date,memo,invoice_no,created_at,receive_checked,bank_transaction_id'
 
 export type ReceivableTransactionRow = {
   id?: number
   store_name?: string
+  /** 회계 PO 매장 발행 시 청구 주체 매장 — null이면 본사 */
+  creditor_store?: string | null
   amount?: number
   ref_type?: string
   ref_id?: number
@@ -60,6 +62,22 @@ export function matchesReceivableStoreNorm(storeName: string | null | undefined,
   return storeNorm === filterNorm
 }
 
+/**
+ * 매장 매니저 미수금 조회: 본사→자기매장 청구(채무) + 자기매장→타매장 청구(채권) 모두 포함.
+ */
+export function receivableRowVisibleToStoreManager(
+  r: ReceivableTransactionRow,
+  userStore: string
+): boolean {
+  const scope = String(userStore || '').trim()
+  if (!scope) return false
+  const creditor = String(r.creditor_store ?? '').trim()
+  const debtor = String(r.store_name ?? '').trim()
+  if (creditor && matchesReceivableStoreNorm(creditor, scope)) return true
+  if (!creditor && matchesReceivableStoreNorm(debtor, scope)) return true
+  return false
+}
+
 /** 매출처(거래처 code) 필터 — vendors.sales_outlet/gps_name 등에 연결된 store_name만 */
 export function matchesReceivableStoreByVendorLink(
   storeName: string | null | undefined,
@@ -79,12 +97,16 @@ export function filterReceivableRows(
   rows: ReceivableTransactionRow[],
   params: {
     storeFilter?: string
+    storeManagerScope?: string
     vendorMaps: ReceivableVendorMaps
     attributionMaps: ReceivableAttributionMaps
     filterByVendorLink: boolean
   }
 ): ReceivableTransactionRow[] {
-  const { storeFilter, vendorMaps, attributionMaps, filterByVendorLink } = params
+  const { storeFilter, storeManagerScope, vendorMaps, attributionMaps, filterByVendorLink } = params
+  if (storeManagerScope?.trim()) {
+    return rows.filter((r) => receivableRowVisibleToStoreManager(r, storeManagerScope))
+  }
   if (!storeFilter?.trim() || isAllFilterToken(storeFilter)) return rows
   return rows.filter((r) => {
     const resolvedStore = resolveReceivableAttributedStore(r, attributionMaps)

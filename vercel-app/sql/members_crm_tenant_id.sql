@@ -1,6 +1,59 @@
 -- Omni SaaS: CRM 부가 테이블 tenant_id (회원 tenant 상속)
--- members.tenant_id 선행 필요.
+-- members.tenant_id 가 없으면 여기서 추가·백필 후 자식 테이블을 채웁니다.
+-- (전화 unique 등은 sql/members_tenant_id.sql 을 별도 실행 권장)
 
+-- 0) members.tenant_id 선행 (없으면 백필 UPDATE 가 42703 으로 실패함)
+do $$
+begin
+  if to_regclass('public.members') is null then
+    raise exception 'public.members 가 없습니다. sql/members_tenant_id.sql 을 먼저 확인하세요.';
+  end if;
+
+  alter table public.members
+    add column if not exists tenant_id text;
+
+  create index if not exists idx_members_tenant_id
+    on public.members (tenant_id);
+end $$;
+
+-- 0b) members.tenant_id 백필 (join_store_code → erp_stores)
+do $$
+begin
+  if to_regclass('public.erp_stores') is null then
+    return;
+  end if;
+
+  update public.members m
+  set tenant_id = es.tenant_id
+  from public.erp_stores es
+  where coalesce(trim(m.tenant_id), '') = ''
+    and nullif(trim(es.tenant_id), '') is not null
+    and lower(trim(coalesce(m.join_store_code, '')))
+      = lower(trim(coalesce(es.store_code, '')));
+end $$;
+
+-- 0c) 활성 tenant 가 하나뿐이면 orphan 회원 일괄
+do $$
+declare
+  tenant_cnt int;
+  only_tenant text;
+begin
+  if to_regclass('public.tenants') is null then
+    return;
+  end if;
+
+  select count(distinct nullif(trim(id), '')) into tenant_cnt from public.tenants;
+  if tenant_cnt = 1 then
+    select nullif(trim(id), '') into only_tenant from public.tenants limit 1;
+    if only_tenant is not null then
+      update public.members
+      set tenant_id = only_tenant
+      where coalesce(trim(tenant_id), '') = '';
+    end if;
+  end if;
+end $$;
+
+-- 1) CRM 부가 테이블 tenant_id 컬럼
 do $$
 declare
   target_table text;
@@ -10,7 +63,9 @@ begin
     'member_tier_histories',
     'member_coupon_issues',
     'member_stamp_cards',
-    'member_stamp_ledger'
+    'member_stamp_ledger',
+    'member_stamp_reward_issues',
+    'member_stamp_issue_logs'
   ]
   loop
     if to_regclass(format('public.%I', target_table)) is not null then
@@ -24,12 +79,25 @@ begin
   end loop;
 end $$;
 
--- member_id → members.tenant_id 백필
+-- 2) member_id → members.tenant_id 백필 (members.tenant_id 컬럼 있을 때만)
 do $$
 declare
   target_table text;
+  members_has_tenant boolean;
 begin
   if to_regclass('public.members') is null then
+    return;
+  end if;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'members'
+      and column_name = 'tenant_id'
+  ) into members_has_tenant;
+
+  if not members_has_tenant then
+    raise notice 'members.tenant_id 없음 — 자식 테이블 백필을 건너뜁니다.';
     return;
   end if;
 
@@ -38,7 +106,9 @@ begin
     'member_tier_histories',
     'member_coupon_issues',
     'member_stamp_cards',
-    'member_stamp_ledger'
+    'member_stamp_ledger',
+    'member_stamp_reward_issues',
+    'member_stamp_issue_logs'
   ]
   loop
     if to_regclass(format('public.%I', target_table)) is not null

@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { memberPortalSettingsJsonResponse } from '@/lib/member-portal-settings-route'
 import {
   DEFAULT_MEMBER_PORTAL_UI_THEME,
@@ -11,8 +10,15 @@ import {
   parseMemberPortalUiThemeFromMap,
   type MemberPortalUiTheme,
 } from '@/lib/member-portal-theme'
-import { readSystemSettingString, writeSystemSettingString } from '@/lib/system-settings-value'
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { writeSystemSettingString } from '@/lib/system-settings-value'
+import {
+  membersTenantToSettingsScope,
+  resolveMemberPortalAdminTenantScope,
+} from '@/lib/member-portal-admin-tenant-scope'
+import {
+  loadTenantScopedSystemSettingsMap,
+  upsertTenantScopedSystemSettings,
+} from '@/lib/tenant-system-settings-server'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 export const dynamic = 'force-dynamic'
@@ -53,19 +59,10 @@ function asHttpUrl(raw: unknown): string {
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
-    const filter = `or=(${DESIGN_KEYS.map((k) => `key.eq.${k}`).join(',')})`
-    const rows = (await supabaseSelectFilter('system_settings', filter, {
-      limit: 10,
-      select: 'key,value_json',
-    })) as { key?: string; value_json?: unknown }[]
-
-    const map = new Map<string, string>()
-    for (const row of rows || []) {
-      const key = String(row.key || '').trim()
-      if (!key) continue
-      map.set(key, readSystemSettingString(row.value_json))
-    }
+    const map = await loadTenantScopedSystemSettingsMap(DESIGN_KEYS, settingsScope)
     const theme = parseMemberPortalUiThemeFromMap(map)
 
     return memberPortalSettingsJsonResponse({
@@ -87,6 +84,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth!)
+  const settingsScope = membersTenantToSettingsScope(tenantScope)
   try {
     const body = (await req.json()) as {
       loginBackgroundUrl?: string
@@ -98,36 +97,15 @@ export async function POST(req: NextRequest) {
     const loginBackgroundUrl = writeSystemSettingString(asHttpUrl(body.loginBackgroundUrl))
     const appBackgroundUrl = writeSystemSettingString(asHttpUrl(body.appBackgroundUrl))
     const theme = themeFromBody(body)
-    await supabaseUpsert(
-      'system_settings',
+    await upsertTenantScopedSystemSettings(
       [
-        {
-          key: KEY_LOGIN_BG,
-          value_json: loginBackgroundUrl,
-          updated_at: getBangkokDateTimeString(),
-        },
-        {
-          key: KEY_APP_BG,
-          value_json: appBackgroundUrl,
-          updated_at: getBangkokDateTimeString(),
-        },
-        {
-          key: KEY_THEME_TEXT_PRIMARY,
-          value_json: theme.textPrimaryColor,
-          updated_at: getBangkokDateTimeString(),
-        },
-        {
-          key: KEY_THEME_TEXT_SECONDARY,
-          value_json: theme.textSecondaryColor,
-          updated_at: getBangkokDateTimeString(),
-        },
-        {
-          key: KEY_THEME_FONT_SCALE,
-          value_json: String(theme.fontScalePct),
-          updated_at: getBangkokDateTimeString(),
-        },
+        { baseKey: KEY_LOGIN_BG, value_json: loginBackgroundUrl },
+        { baseKey: KEY_APP_BG, value_json: appBackgroundUrl },
+        { baseKey: KEY_THEME_TEXT_PRIMARY, value_json: theme.textPrimaryColor },
+        { baseKey: KEY_THEME_TEXT_SECONDARY, value_json: theme.textSecondaryColor },
+        { baseKey: KEY_THEME_FONT_SCALE, value_json: String(theme.fontScalePct) },
       ],
-      'key'
+      settingsScope
     )
     return memberPortalSettingsJsonResponse({
       success: true,
@@ -144,4 +122,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

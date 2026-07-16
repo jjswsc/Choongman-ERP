@@ -207,6 +207,7 @@ export async function scopeReceivableLedger(params: {
   endStr: string
   startStr?: string
   storeFilter?: string
+  storeManagerScope?: string
   filterByVendorLink: boolean
   tenantScope?: SaasTenantScope
 }): Promise<{
@@ -221,6 +222,7 @@ export async function scopeReceivableLedger(params: {
   const attributionMaps = buildReceivableAccrualStoreIndex(ledgerRows)
   const scopedRows = filterReceivableRows(ledgerRows, {
     storeFilter: params.storeFilter,
+    storeManagerScope: params.storeManagerScope,
     vendorMaps,
     attributionMaps,
     filterByVendorLink: params.filterByVendorLink,
