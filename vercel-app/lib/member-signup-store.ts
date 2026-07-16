@@ -13,6 +13,10 @@ import {
 } from '@/lib/member-portal-stores-shared'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import {
+  isMissingMembersTenantIdColumnError,
+  type MembersTenantScope,
+} from '@/lib/members-tenant-scope'
+import {
   supabaseRpc,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
@@ -100,12 +104,18 @@ export async function filterSignupStoreCodeForScope(
 
 export async function listMemberSignupStoreOptions(
   lang = 'ko',
-  opts?: { request?: import('next/server').NextRequest; joinStoreCode?: string | null }
+  opts?: {
+    request?: import('next/server').NextRequest
+    joinStoreCode?: string | null
+    tenantScope?: MembersTenantScope
+  }
 ): Promise<MemberSignupStoreOption[]> {
-  const tenantScope = await resolveMemberPortalTenantScope({
-    request: opts?.request,
-    joinStoreCode: opts?.joinStoreCode,
-  })
+  const tenantScope =
+    opts?.tenantScope ||
+    (await resolveMemberPortalTenantScope({
+      request: opts?.request,
+      joinStoreCode: opts?.joinStoreCode,
+    }))
   const rows =
     tenantScope.enforce && tenantScope.tenantId
       ? await fetchErpStoresMasterForTenant(tenantScope.tenantId)
@@ -122,8 +132,11 @@ export async function listMemberSignupStoreOptions(
   }))
 }
 
-export async function buildMemberSignupStoreLabelMap(lang = 'ko'): Promise<Map<string, string>> {
-  const options = await listMemberSignupStoreOptions(lang)
+export async function buildMemberSignupStoreLabelMap(
+  lang = 'ko',
+  opts?: { tenantScope?: MembersTenantScope }
+): Promise<Map<string, string>> {
+  const options = await listMemberSignupStoreOptions(lang, opts)
   const map = new Map<string, string>()
   map.set(MEMBER_SIGNUP_OFFICE_STORE_CODE, resolveOfficeSignupStoreLabel(lang))
   map.set(MEMBER_SIGNUP_UNSET_STORE_CODE, resolveUnsetSignupStoreLabel(lang))
@@ -147,11 +160,14 @@ export function resolveUnsetSignupStoreLabel(lang = 'ko'): string {
   return '(미지정)'
 }
 
-export async function isAllowedMemberSignupStoreCode(storeCode: string): Promise<boolean> {
+export async function isAllowedMemberSignupStoreCode(
+  storeCode: string,
+  opts?: { tenantScope?: MembersTenantScope }
+): Promise<boolean> {
   const code = String(storeCode || '').trim()
   if (!code) return false
   if (code === MEMBER_SIGNUP_OFFICE_STORE_CODE) return true
-  const options = await listMemberSignupStoreOptions()
+  const options = await listMemberSignupStoreOptions('ko', opts)
   return options.some((s) => s.storeCode === code)
 }
 
@@ -162,11 +178,19 @@ function monthYmdFromEndDate(endYmd: string): string {
 
 async function loadSignupStoreStatsFallback(
   gteIso: string,
-  lteIso: string
+  lteIso: string,
+  tenantScope?: MembersTenantScope
 ): Promise<Array<{ join_store_code: string; signup_count: number }>> {
+  if (tenantScope?.enforce && !tenantScope.tenantId) return []
+  const tenantFilter =
+    tenantScope?.enforce && tenantScope.tenantId
+      ? `&tenant_id=eq.${encodeURIComponent(tenantScope.tenantId)}`
+      : ''
   const rows = (await supabaseSelectFilter(
     'members',
-    `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}&or=(source.eq.app,source.eq.line)`,
+    `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(
+      lteIso
+    )}&or=(source.eq.app,source.eq.line)${tenantFilter}`,
     {
       limit: 50000,
       select: 'join_store_code,source',
@@ -185,14 +209,22 @@ async function loadSignupStoreStatsFallback(
     .sort((a, b) => b.signup_count - a.signup_count || a.join_store_code.localeCompare(b.join_store_code, 'ko'))
 }
 
-async function loadSignupStoreGoals(monthYmd: string): Promise<Map<string, number>> {
+async function loadSignupStoreGoals(
+  monthYmd: string,
+  tenantScope?: MembersTenantScope
+): Promise<Map<string, number>> {
   const month = String(monthYmd || '').trim()
   const map = new Map<string, number>()
   if (!month) return map
+  if (tenantScope?.enforce && !tenantScope.tenantId) return map
+  const tenantFilter =
+    tenantScope?.enforce && tenantScope.tenantId
+      ? `&tenant_id=eq.${encodeURIComponent(tenantScope.tenantId)}`
+      : ''
   try {
     const rows = (await supabaseSelectFilter(
       'member_signup_store_goals',
-      `month_ymd=eq.${encodeURIComponent(month)}`,
+      `month_ymd=eq.${encodeURIComponent(month)}${tenantFilter}`,
       { limit: 500, select: 'store_code,target_count' }
     )) as Array<{ store_code?: string | null; target_count?: number | null }>
     for (const row of rows || []) {
@@ -200,7 +232,10 @@ async function loadSignupStoreGoals(monthYmd: string): Promise<Map<string, numbe
       if (!code) continue
       map.set(code, Math.max(0, Math.trunc(Number(row.target_count || 0))))
     }
-  } catch {
+  } catch (e) {
+    if (tenantScope?.enforce && isMissingMembersTenantIdColumnError(e)) {
+      return map
+    }
     /* table may not exist yet */
   }
   return map
@@ -209,22 +244,37 @@ async function loadSignupStoreGoals(monthYmd: string): Promise<Map<string, numbe
 export async function saveMemberSignupStoreGoals(params: {
   monthYmd: string
   goals: Array<{ storeCode: string; targetCount: number }>
+  tenantScope?: MembersTenantScope
 }): Promise<void> {
   const monthYmd = String(params.monthYmd || '').trim()
   if (!/^\d{4}-\d{2}$/.test(monthYmd)) throw new Error('invalid_month')
+  const tenantScope = params.tenantScope
+  if (tenantScope?.enforce && !tenantScope.tenantId) throw new Error('tenant_scope_required')
   const now = getBangkokDateTimeString()
   for (const goal of params.goals || []) {
     const storeCode = String(goal.storeCode || '').trim()
     if (!storeCode) continue
-    if (!(await isAllowedMemberSignupStoreCode(storeCode))) continue
+    if (!(await isAllowedMemberSignupStoreCode(storeCode, { tenantScope }))) continue
     const targetCount = Math.max(0, Math.trunc(Number(goal.targetCount || 0)))
-    await supabaseUpsertMerge('member_signup_store_goals', 'store_code,month_ymd', {
-      store_code: storeCode,
-      month_ymd: monthYmd,
-      target_count: targetCount,
-      updated_at: now,
-      created_at: now,
-    })
+    try {
+      await supabaseUpsertMerge(
+        'member_signup_store_goals',
+        tenantScope?.enforce ? 'tenant_id,store_code,month_ymd' : 'store_code,month_ymd',
+        {
+          store_code: storeCode,
+          month_ymd: monthYmd,
+          target_count: targetCount,
+          ...(tenantScope?.enforce && tenantScope.tenantId ? { tenant_id: tenantScope.tenantId } : {}),
+          updated_at: now,
+          created_at: now,
+        }
+      )
+    } catch (e) {
+      if (tenantScope?.enforce && isMissingMembersTenantIdColumnError(e)) {
+        throw new Error('member_signup_store_goals_tenant_schema_missing')
+      }
+      throw e
+    }
   }
 }
 
@@ -232,13 +282,14 @@ export async function loadMemberSignupStoreGoals(params: {
   monthYmd: string
   lang?: string
   scope?: MemberSignupStoreScope
+  tenantScope?: MembersTenantScope
 }): Promise<MemberSignupStoreGoalRow[]> {
   const monthYmd = String(params.monthYmd || '').trim()
   const lang = String(params.lang || 'ko')
   const scope = params.scope || { allStores: true, storeCode: null, canEditGoals: true }
-  const labelMap = await buildMemberSignupStoreLabelMap(lang)
-  const goalMap = await loadSignupStoreGoals(monthYmd)
-  const storeOptions = await listMemberSignupStoreOptions(lang)
+  const labelMap = await buildMemberSignupStoreLabelMap(lang, { tenantScope: params.tenantScope })
+  const goalMap = await loadSignupStoreGoals(monthYmd, params.tenantScope)
+  const storeOptions = await listMemberSignupStoreOptions(lang, { tenantScope: params.tenantScope })
   const rows: MemberSignupStoreGoalRow[] = [
     {
       storeCode: MEMBER_SIGNUP_OFFICE_STORE_CODE,
@@ -281,25 +332,45 @@ export async function loadMemberSignupStoreStats(params?: {
   endYmd?: string
   lang?: string
   scope?: MemberSignupStoreScope
+  tenantScope?: MembersTenantScope
 }): Promise<MemberSignupStoreStats> {
   const lang = String(params?.lang || 'ko')
   const scope = params?.scope || { allStores: true, storeCode: null, canEditGoals: true }
+  const tenantScope = params?.tenantScope
   const { startYmd, endYmd, days } = resolveStatsPeriod(params)
   const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(startYmd, endYmd)
   const monthYmd = monthYmdFromEndDate(endYmd)
+
+  if (tenantScope?.enforce && !tenantScope.tenantId) {
+    return { days, startYmd, endYmd, monthYmd, totalSignups: 0, scopedStoreCode: null, rows: [] }
+  }
 
   let rawRows: Array<{ join_store_code?: string | null; signup_count?: number | null }> = []
   try {
     rawRows = (await supabaseRpc<Array<{ join_store_code?: string | null; signup_count?: number | null }>>(
       'get_member_signup_store_stats',
-      { p_from: gteIso, p_to: lteIso }
+      {
+        p_from: gteIso,
+        p_to: lteIso,
+        ...(tenantScope?.enforce && tenantScope.tenantId ? { p_tenant_id: tenantScope.tenantId } : {}),
+      }
     )) as Array<{ join_store_code?: string | null; signup_count?: number | null }>
-  } catch {
-    rawRows = await loadSignupStoreStatsFallback(gteIso, lteIso)
+  } catch (e) {
+    if (tenantScope?.enforce && isMissingMembersTenantIdColumnError(e)) {
+      rawRows = []
+    } else {
+      rawRows = await loadSignupStoreStatsFallback(gteIso, lteIso, tenantScope)
+    }
   }
 
-  const labelMap = await buildMemberSignupStoreLabelMap(lang)
-  const goalMap = await loadSignupStoreGoals(monthYmd)
+  const labelMap = await buildMemberSignupStoreLabelMap(lang, { tenantScope })
+  const goalMap = await loadSignupStoreGoals(monthYmd, tenantScope)
+  const storeOptions = await listMemberSignupStoreOptions(lang, { tenantScope })
+  const allowedCodes = new Set<string>([
+    MEMBER_SIGNUP_OFFICE_STORE_CODE,
+    MEMBER_SIGNUP_UNSET_STORE_CODE,
+    ...storeOptions.map((s) => s.storeCode),
+  ])
   let rows: MemberSignupStoreStatRow[] = (rawRows || []).map((row) => {
     const storeCode = String(row.join_store_code || '').trim() || MEMBER_SIGNUP_UNSET_STORE_CODE
     const signupCount = Math.max(0, Number(row.signup_count || 0))
@@ -315,6 +386,10 @@ export async function loadMemberSignupStoreStats(params?: {
       achievementPct,
     }
   })
+
+  if (tenantScope?.enforce) {
+    rows = rows.filter((row) => allowedCodes.has(row.storeCode))
+  }
 
   if (!scope.allStores) {
     const filtered: MemberSignupStoreStatRow[] = []

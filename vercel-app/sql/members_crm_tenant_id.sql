@@ -16,6 +16,34 @@ begin
     on public.members (tenant_id);
 end $$;
 
+-- 3) signup store 목표 tenant_id (store_code → erp_stores.tenant_id)
+do $$
+begin
+  if to_regclass('public.member_signup_store_goals') is null then
+    return;
+  end if;
+
+  alter table public.member_signup_store_goals
+    add column if not exists tenant_id text;
+  create index if not exists idx_member_signup_store_goals_tenant_id
+    on public.member_signup_store_goals (tenant_id);
+
+  -- 기존 unique(store_code, month_ymd) 환경을 tenant 분리 키로 교체
+  alter table public.member_signup_store_goals
+    drop constraint if exists member_signup_store_goals_store_code_month_ymd_key;
+  create unique index if not exists uq_member_signup_store_goals_tenant_store_month
+    on public.member_signup_store_goals (tenant_id, store_code, month_ymd);
+
+  if to_regclass('public.erp_stores') is not null then
+    update public.member_signup_store_goals g
+    set tenant_id = es.tenant_id
+    from public.erp_stores es
+    where coalesce(trim(g.tenant_id), '') = ''
+      and nullif(trim(es.tenant_id), '') is not null
+      and lower(trim(coalesce(g.store_code, ''))) = lower(trim(coalesce(es.store_code, '')));
+  end if;
+end $$;
+
 -- 0b) members.tenant_id 백필 (join_store_code → erp_stores)
 do $$
 begin

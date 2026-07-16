@@ -4,12 +4,14 @@ import {
   memberSignupStoreStatsToCsv,
   resolveMemberSignupStoreScope,
 } from '@/lib/member-signup-store'
+import { resolveMemberPortalAdminTenantScope } from '@/lib/member-portal-admin-tenant-scope'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
+    const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth)
     const daysRaw = req.nextUrl.searchParams.get('days')
     const startYmd = String(req.nextUrl.searchParams.get('startYmd') || '').trim() || undefined
     const endYmd = String(req.nextUrl.searchParams.get('endYmd') || '').trim() || undefined
@@ -21,6 +23,7 @@ export async function GET(req: NextRequest) {
       endYmd,
       lang,
       scope,
+      tenantScope,
     })
     const csv = memberSignupStoreStatsToCsv(stats)
     const filename = `member-signup-stores_${stats.startYmd}_${stats.endYmd}.csv`

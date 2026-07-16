@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadMemberSignupStoreStats, resolveMemberSignupStoreScope } from '@/lib/member-signup-store'
+import { resolveMemberPortalAdminTenantScope } from '@/lib/member-portal-admin-tenant-scope'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 function parseStatsParams(req: NextRequest) {
@@ -19,9 +20,10 @@ export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
+    const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth)
     const params = parseStatsParams(req)
     const scope = resolveMemberSignupStoreScope(authResult.auth!.role || '', authResult.auth!.store)
-    const stats = await loadMemberSignupStoreStats({ ...params, scope })
+    const stats = await loadMemberSignupStoreStats({ ...params, scope, tenantScope })
     return NextResponse.json({ success: true, stats, scope })
   } catch (e) {
     return NextResponse.json(

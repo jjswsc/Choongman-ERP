@@ -4,16 +4,18 @@ import {
   resolveMemberSignupStoreScope,
   saveMemberSignupStoreGoals,
 } from '@/lib/member-signup-store'
+import { resolveMemberPortalAdminTenantScope } from '@/lib/member-portal-admin-tenant-scope'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
 
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
+    const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth)
     const monthYmd = String(req.nextUrl.searchParams.get('month') || '').trim()
     const lang = String(req.nextUrl.searchParams.get('lang') || 'ko').trim()
     const scope = resolveMemberSignupStoreScope(authResult.auth!.role || '', authResult.auth!.store)
-    const goals = await loadMemberSignupStoreGoals({ monthYmd, lang, scope })
+    const goals = await loadMemberSignupStoreGoals({ monthYmd, lang, scope, tenantScope })
     return NextResponse.json({ success: true, monthYmd, goals, scope })
   } catch (e) {
     return NextResponse.json(
@@ -31,6 +33,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, message: 'forbidden' }, { status: 403 })
   }
   try {
+    const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth)
     const body = (await req.json()) as {
       monthYmd?: string
       goals?: Array<{ storeCode?: string; targetCount?: number }>
@@ -40,8 +43,8 @@ export async function POST(req: NextRequest) {
       storeCode: String(g.storeCode || '').trim(),
       targetCount: Math.max(0, Math.trunc(Number(g.targetCount || 0))),
     }))
-    await saveMemberSignupStoreGoals({ monthYmd, goals })
-    const saved = await loadMemberSignupStoreGoals({ monthYmd, scope })
+    await saveMemberSignupStoreGoals({ monthYmd, goals, tenantScope })
+    const saved = await loadMemberSignupStoreGoals({ monthYmd, scope, tenantScope })
     return NextResponse.json({ success: true, monthYmd, goals: saved })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'goals_save_failed'

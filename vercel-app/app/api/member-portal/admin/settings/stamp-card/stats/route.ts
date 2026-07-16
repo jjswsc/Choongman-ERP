@@ -6,11 +6,13 @@ import {
   type MemberStampMilestoneInput,
 } from '@/lib/member-stamp-card'
 import { requireMemberPortalAdminAuth } from '@/lib/verify-auth'
+import { resolveMemberPortalAdminTenantScope } from '@/lib/member-portal-admin-tenant-scope'
 
 export async function GET(req: NextRequest) {
   const authResult = await requireMemberPortalAdminAuth(req)
   if (authResult.errorResponse) return authResult.errorResponse
   try {
+    const tenantScope = await resolveMemberPortalAdminTenantScope(authResult.auth)
     const q = req.nextUrl.searchParams
     const daysRaw = q.get('days')
     const days = daysRaw ? Number(daysRaw) : 30
@@ -18,8 +20,9 @@ export async function GET(req: NextRequest) {
       days: Number.isFinite(days) ? days : 30,
       startYmd: String(q.get('startYmd') || ''),
       endYmd: String(q.get('endYmd') || ''),
+      tenantScope,
     })
-    const failures = await listRecentStampIssueFailures(15)
+    const failures = await listRecentStampIssueFailures(15, tenantScope)
     return NextResponse.json({ success: true, stats, failures })
   } catch (e) {
     return NextResponse.json(

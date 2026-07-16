@@ -1,4 +1,11 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import type { TenantSettingsScope } from '@/lib/tenant-system-settings'
+import {
+  loadTenantScopedSystemSettingsMap,
+  upsertTenantScopedSystemSettings,
+} from '@/lib/tenant-system-settings-server'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 const KEY_GLOBAL_MIN = 'member_portal_pickup_min_lead_minutes'
 const KEY_STORE_MIN = 'member_portal_pickup_min_lead_by_store'
@@ -63,7 +70,15 @@ export async function loadMemberPortalPickupSettingsForAdmin(): Promise<{
 }
 
 export async function isMemberPortalPickupLineNotifyEnabled(): Promise<boolean> {
-  const settings = await loadMemberPortalPickupSettingsForAdmin()
+  return isMemberPortalPickupLineNotifyEnabledForStoreCode()
+}
+
+export async function isMemberPortalPickupLineNotifyEnabledForStoreCode(storeCode?: string): Promise<boolean> {
+  const code = String(storeCode || '').trim()
+  const tenantIdResolved = code ? await resolveTenantIdForStoreCode(code).catch(() => undefined) : undefined
+  const tenantId = tenantIdResolved ? normalizeTenantId(tenantIdResolved) : ''
+  const settingsScope: TenantSettingsScope = { enforce: Boolean(tenantIdResolved), tenantId }
+  const settings = await loadMemberPortalPickupSettingsForAdminScoped(settingsScope)
   return settings.lineNotifyEnabled
 }
 
@@ -102,10 +117,61 @@ export async function saveMemberPortalPickupSettings(params: {
 }
 
 export async function resolveMemberPortalPickupMinLeadMinutes(storeCode?: string): Promise<number> {
-  const settings = await loadMemberPortalPickupSettingsForAdmin()
   const code = String(storeCode || '').trim()
+  const tenantIdResolved = code ? await resolveTenantIdForStoreCode(code).catch(() => undefined) : undefined
+  const tenantId = tenantIdResolved ? normalizeTenantId(tenantIdResolved) : ''
+  const settingsScope: TenantSettingsScope = { enforce: Boolean(tenantIdResolved), tenantId }
+  const settings = await loadMemberPortalPickupSettingsForAdminScoped(settingsScope)
   if (code && settings.storeMinLeadMinutes[code] != null) {
     return settings.storeMinLeadMinutes[code]
   }
   return settings.globalMinLeadMinutes
+}
+
+export async function loadMemberPortalPickupSettingsForAdminScoped(
+  settingsScope: TenantSettingsScope
+): Promise<{
+  globalMinLeadMinutes: number
+  storeMinLeadMinutes: Record<string, number>
+  lineNotifyEnabled: boolean
+}> {
+  try {
+    const map = await loadTenantScopedSystemSettingsMap(
+      [KEY_GLOBAL_MIN, KEY_STORE_MIN, KEY_LINE_NOTIFY],
+      settingsScope
+    )
+    const globalRaw = Math.trunc(Number(map.get(KEY_GLOBAL_MIN) || DEFAULT_MIN_LEAD))
+    const globalMinLeadMinutes =
+      globalRaw >= 5 && globalRaw <= 240 ? globalRaw : DEFAULT_MIN_LEAD
+    return {
+      globalMinLeadMinutes,
+      storeMinLeadMinutes: parseStoreMinMap(map.get(KEY_STORE_MIN) || ''),
+      lineNotifyEnabled: parseBoolSetting(map.get(KEY_LINE_NOTIFY), true),
+    }
+  } catch {
+    return { globalMinLeadMinutes: DEFAULT_MIN_LEAD, storeMinLeadMinutes: {}, lineNotifyEnabled: true }
+  }
+}
+
+export async function saveMemberPortalPickupSettingsScoped(params: {
+  globalMinLeadMinutes: number
+  storeMinLeadMinutes?: Record<string, number>
+  lineNotifyEnabled?: boolean
+  settingsScope: TenantSettingsScope
+}): Promise<void> {
+  const globalMinLeadMinutes = Math.min(
+    240,
+    Math.max(5, Math.trunc(Number(params.globalMinLeadMinutes || DEFAULT_MIN_LEAD)))
+  )
+  const storeMap = params.storeMinLeadMinutes || {}
+  const lineNotifyEnabled = params.lineNotifyEnabled !== false
+
+  await upsertTenantScopedSystemSettings(
+    [
+      { baseKey: KEY_GLOBAL_MIN, value_json: String(globalMinLeadMinutes) },
+      { baseKey: KEY_STORE_MIN, value_json: JSON.stringify(storeMap) },
+      { baseKey: KEY_LINE_NOTIFY, value_json: lineNotifyEnabled ? 'true' : 'false' },
+    ],
+    params.settingsScope
+  )
 }

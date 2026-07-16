@@ -938,8 +938,13 @@ export async function adjustMemberStampBalance(params: {
   const note = toText(params.note)
   if (!note) throw new Error('조정 사유가 필요합니다.')
 
-  const { balance, cardSequence, cardStartedAt } = await loadMemberStampBalance(memberId)
   const tenantScope = await resolveStampTenantScope(memberId)
+  if (tenantScope.enforce) {
+    const owned = await getMemberSummaryById(memberId, tenantScope)
+    if (!owned) throw new Error('tenant_mismatch')
+  }
+
+  const { balance, cardSequence, cardStartedAt } = await loadMemberStampBalance(memberId)
   const nextBalance = Math.max(0, balance + delta)
   await supabaseInsert(
     'member_stamp_ledger',
@@ -1136,6 +1141,7 @@ export async function getMemberStampAdminStats(params?: {
   days?: number
   startYmd?: string
   endYmd?: string
+  tenantScope?: MembersTenantScope
 }): Promise<MemberStampAdminStats> {
   const days = params?.days != null ? Math.max(1, Math.min(365, Math.trunc(params.days))) : null
   let startYmd = toText(params?.startYmd).slice(0, 10)
@@ -1148,21 +1154,37 @@ export async function getMemberStampAdminStats(params?: {
     startYmd = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
   }
   const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(startYmd, endYmd)
+  const tenantFilter =
+    params?.tenantScope?.enforce && params?.tenantScope?.tenantId
+      ? `&tenant_id=eq.${encodeURIComponent(params.tenantScope.tenantId)}`
+      : ''
 
   try {
     const [ledgerRows, failureRows, rewardRows] = await Promise.all([
-      supabaseSelectFilter('member_stamp_ledger', `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}`, {
+      supabaseSelectFilter(
+        'member_stamp_ledger',
+        `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}${tenantFilter}`,
+        {
         limit: 10000,
         select: 'id,member_id,store_code,kind,created_at',
-      }) as Promise<Array<{ member_id?: number; store_code?: string; kind?: string }>>,
-      supabaseSelectFilter('member_stamp_issue_logs', `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}`, {
+        }
+      ) as Promise<Array<{ member_id?: number; store_code?: string; kind?: string }>>,
+      supabaseSelectFilter(
+        'member_stamp_issue_logs',
+        `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}${tenantFilter}`,
+        {
         limit: 5000,
         select: 'id',
-      }) as Promise<Array<{ id?: number }>>,
-      supabaseSelectFilter('member_stamp_reward_issues', `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}`, {
+        }
+      ) as Promise<Array<{ id?: number }>>,
+      supabaseSelectFilter(
+        'member_stamp_reward_issues',
+        `created_at=gte.${encodeURIComponent(gteIso)}&created_at=lte.${encodeURIComponent(lteIso)}${tenantFilter}`,
+        {
         limit: 5000,
         select: 'id',
-      }) as Promise<Array<{ id?: number }>>,
+        }
+      ) as Promise<Array<{ id?: number }>>,
     ])
 
     const earns = (ledgerRows || []).filter((r) => toText(r.kind) === 'earn')
@@ -1203,7 +1225,10 @@ export async function getMemberStampAdminStats(params?: {
   }
 }
 
-export async function listRecentStampIssueFailures(limit = 20): Promise<
+export async function listRecentStampIssueFailures(
+  limit = 20,
+  tenantScope?: MembersTenantScope
+): Promise<
   Array<{
     id: number
     memberId: number
@@ -1213,7 +1238,11 @@ export async function listRecentStampIssueFailures(limit = 20): Promise<
   }>
 > {
   try {
-    const rows = (await supabaseSelect('member_stamp_issue_logs', {
+    const tenantFilter =
+      tenantScope?.enforce && tenantScope?.tenantId
+        ? `tenant_id=eq.${encodeURIComponent(tenantScope.tenantId)}`
+        : 'id=gt.0'
+    const rows = (await supabaseSelectFilter('member_stamp_issue_logs', tenantFilter, {
       order: 'created_at.desc',
       limit: Math.max(1, Math.min(limit, 100)),
       select: 'id,member_id,coupon_code,error_message,created_at',

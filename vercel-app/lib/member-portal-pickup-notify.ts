@@ -1,5 +1,5 @@
 import { pushLineTextMessage } from '@/lib/line-messaging-server'
-import { isMemberPortalPickupLineNotifyEnabled } from '@/lib/member-portal-pickup-settings'
+import { isMemberPortalPickupLineNotifyEnabledForStoreCode } from '@/lib/member-portal-pickup-settings'
 import { resolveMemberPortalTakeoutMeta } from '@/lib/pos-member-portal-takeout-label'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -19,9 +19,6 @@ type PosOrderNotifyRow = {
 export async function notifyMemberPortalPickupReady(orderId: number): Promise<void> {
   const id = Math.trunc(Number(orderId || 0))
   if (!id) return
-
-  const enabled = await isMemberPortalPickupLineNotifyEnabled()
-  if (!enabled) return
 
   const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
     limit: 1,
@@ -55,6 +52,8 @@ export async function notifyMemberPortalPickupReady(orderId: number): Promise<vo
 
   const orderNo = String(order.order_no || `POS-${id}`).trim()
   const storeCode = String(order.store_code || '').trim()
+  const enabled = await isMemberPortalPickupLineNotifyEnabledForStoreCode(storeCode)
+  if (!enabled) return
   const memberName = meta.memberName || meta.memberNo || ''
   const pickupHint = meta.pickupAtRaw ? ` · ${meta.pickupAtRaw}` : ''
   const text = [
