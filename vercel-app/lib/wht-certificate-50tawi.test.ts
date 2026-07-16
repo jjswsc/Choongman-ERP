@@ -62,7 +62,7 @@ describe('resolveWht50Tawi', () => {
 
   it('places title header first, then payer, payee, income table', () => {
     const html = buildWht50TawiCertificateHtml(base, 1)
-    const titleIdx = html.indexOf('wht-header-title')
+    const titleIdx = html.indexOf('wht-ttl')
     const agentIdx = html.indexOf('ผู้มีหน้าที่หักภาษี ณ ที่จ่าย : -')
     const recipientIdx = html.indexOf('ผู้ถูกหักภาษี ณ ที่จ่าย : -')
     const tableIdx = html.indexOf('ประเภทเงินได้พึงประเมินที่จ่าย')
@@ -72,19 +72,31 @@ describe('resolveWht50Tawi', () => {
     expect(tableIdx).toBeGreaterThan(recipientIdx)
   })
 
-  it('marks active copy number in header badge', () => {
+  it('marks active copy number in header legend', () => {
     const copy1 = buildWht50TawiCertificateHtml(base, 1)
     const copy2 = buildWht50TawiCertificateHtml(base, 2)
-    expect(copy1).toContain('wht-copy-badge">ฉบับที่ 1')
-    expect(copy2).toContain('wht-copy-badge">ฉบับที่ 2')
-    expect(copy1).toContain('wht-copy-active">ฉบับที่ 1')
-    expect(copy2).toContain('wht-copy-active">ฉบับที่ 2')
+    expect(copy1).toContain('data-copy="1"')
+    expect(copy2).toContain('data-copy="2"')
+    expect(copy1).toContain('wht-copy wht-on">ฉบับที่ 1')
+    expect(copy2).toContain('wht-copy wht-on">ฉบับที่ 2')
   })
 
-  it('prints both copies per certificate for vendor', () => {
+  it('includes full official dividend sub-rows (2.1)–(2.5)', () => {
+    const html = buildWht50TawiCertificateHtml(base, 1)
+    expect(html).toContain('(2.1) กำไรสุทธิของกิจการที่ได้รับยกเว้นภาษีเงินได้นิติบุคคล')
+    expect(html).toContain('(2.4) กำไรที่รับรู้ทางบัญชีโดยวิธีส่วนได้เสีย (equity method)')
+    expect(html).toContain('(2.5) อื่น ๆ (ระบุ)')
+    expect(html).toContain('ประทับตรา')
+    expect(html).toContain('คำเตือน')
+  })
+
+  it('prints each copy as its own A4 page (like original PDF)', () => {
     const both = buildWht50TawiCertificateHtmlBothCopies(base)
-    expect((both.match(/wht-copy-badge/g) || []).length).toBe(2)
+    expect((both.match(/class="wht50-sheet"/g) || []).length).toBe(2)
+    expect(both).not.toContain('wht50-page')
+    expect(both).toContain('data-copy="1"')
+    expect(both).toContain('data-copy="2"')
     const doc = buildWhtCertificateDocumentHtml([base])
-    expect((doc.match(/class="wht50-sheet/g) || []).length).toBe(2)
+    expect((doc.match(/class="wht50-sheet"/g) || []).length).toBe(2)
   })
 })

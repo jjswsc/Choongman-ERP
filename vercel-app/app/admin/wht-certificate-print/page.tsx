@@ -13,6 +13,7 @@ export default function WhtCertificatePrintPage() {
   const t = useT(lang)
   const [html, setHtml] = React.useState<string>("")
   const [count, setCount] = React.useState(0)
+  const frameRef = React.useRef<HTMLIFrameElement | null>(null)
 
   React.useEffect(() => {
     try {
@@ -29,6 +30,31 @@ export default function WhtCertificatePrintPage() {
     }
   }, [lang])
 
+  const resizeFrame = React.useCallback(() => {
+    const frame = frameRef.current
+    if (!frame) return
+    try {
+      const doc = frame.contentDocument
+      if (!doc?.body) return
+      const h = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight, 800)
+      frame.style.height = `${h + 24}px`
+    } catch {
+      /* ignore cross-origin */
+    }
+  }, [])
+
+  const handlePrint = React.useCallback(() => {
+    const frame = frameRef.current
+    const win = frame?.contentWindow
+    if (win) {
+      // iframe 내부에서 인쇄해야 양식 전체가 나옴 (부모 window.print는 iframe이 잘림)
+      win.focus()
+      win.print()
+      return
+    }
+    window.print()
+  }, [])
+
   if (!html) {
     return (
       <div className="p-8 text-center text-sm text-muted-foreground">
@@ -43,19 +69,21 @@ export default function WhtCertificatePrintPage() {
         <span className="text-sm text-muted-foreground">
           {count > 0 ? t("whtCertPrintCount").replace("{n}", String(count)) : ""}
         </span>
-        <Button type="button" onClick={() => window.print()}>
+        <Button type="button" onClick={handlePrint}>
           {t("purchaseOrderPrint")}
         </Button>
       </div>
       <iframe
+        ref={frameRef}
         title="wht-certificate"
         srcDoc={html}
-        className="w-full border-0"
-        style={{ minHeight: "calc(100vh - 52px)" }}
+        className="w-full border-0 bg-white"
+        style={{ minHeight: "calc(100vh - 52px)", display: "block" }}
+        onLoad={resizeFrame}
       />
       <style
         dangerouslySetInnerHTML={{
-          __html: `@media print{.no-print{display:none!important}body{background:#fff!important}iframe{position:absolute;left:0;top:0;width:100%;height:100%;min-height:100vh}}`,
+          __html: `@media print{.no-print{display:none!important}}`,
         }}
       />
     </div>
