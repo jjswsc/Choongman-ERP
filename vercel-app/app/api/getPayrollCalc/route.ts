@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
@@ -47,6 +46,11 @@ import { employeeMeetsMinEvalLetterGrade, hazAllowEligibleWithEvalGrade } from '
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
 import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter } from '@/lib/evaluation-postgrest-filters'
 import { isKitchenJobForPayroll } from '@/lib/employee-job-rules'
+import {
+  appendSaasTenantFilter,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
@@ -710,6 +714,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
+    return NextResponse.json({ success: true, list: [] }, { headers })
+  }
 
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim()
@@ -835,7 +843,7 @@ export async function GET(request: NextRequest) {
     let empLoadErr: unknown = null
     for (const sel of empPayrollSelectCandidates) {
       try {
-        empRows = (await supabaseSelect('employees', {
+        empRows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
           order: 'id.asc',
           select: sel,
         })) as EmpRowPayroll[] | null

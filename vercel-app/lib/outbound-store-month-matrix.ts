@@ -141,6 +141,9 @@ export async function buildOutboundStoreMonthMatrix(params: {
   storeFilter?: string | null
   /** 행 순서·0원 매장 표시용 (출고 관리 storeTargets) */
   knownStores?: string[]
+  /** Omni JWT tenantId */
+  tenantId?: string
+  tenantScope?: import('@/lib/saas-tenant-scope').SaasTenantScope
 }): Promise<OutboundStoreMonthMatrixResult> {
   const year = params.year
   const month = params.month ?? null
@@ -151,6 +154,15 @@ export async function buildOutboundStoreMonthMatrix(params: {
       : expandBangkokYearMonthsInclusive(`${year}-01`, `${year}-12`)
   const storeFilter =
     params.storeFilter && params.storeFilter !== 'All' ? String(params.storeFilter).trim() : null
+
+  let tenantScope = params.tenantScope
+  if (!tenantScope && params.tenantId) {
+    const { resolveSaasTenantScope } = await import('@/lib/saas-tenant-scope')
+    tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: params.tenantId },
+      storeCode: storeFilter,
+    })
+  }
 
   const [{ lines, hitRowCap }, salesRows] = await Promise.all([
     loadHqOutboundProcessedLines({
@@ -164,6 +176,7 @@ export async function buildOutboundStoreMonthMatrix(params: {
       storeCodes: storeFilter ? [storeFilter] : undefined,
       aggMode: 'period_by_store',
       periodGroup: 'month',
+      tenantScope,
     }),
   ])
   const salesLoaded = salesRows != null

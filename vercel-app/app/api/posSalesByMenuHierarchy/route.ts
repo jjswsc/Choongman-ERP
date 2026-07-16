@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { rows: rawRows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      request,
       startStr,
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,

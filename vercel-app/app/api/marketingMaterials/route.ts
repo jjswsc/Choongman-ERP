@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdateByFilter,
@@ -15,6 +14,13 @@ import { requireAuth } from '@/lib/verify-auth'
 import { resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 import { getBangkokDateStr } from '@/lib/pos-business-day'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -89,6 +95,8 @@ export async function GET(req: NextRequest) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
   }
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'marketing_materials')) return NextResponse.json([], { headers })
   try {
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
@@ -97,10 +105,10 @@ export async function GET(req: NextRequest) {
     const rows = campaignId
       ? ((await supabaseSelectFilter(
           'marketing_materials',
-          `campaign_id=eq.${encodeURIComponent(campaignId)}`,
+          appendSaasTenantFilter(`campaign_id=eq.${encodeURIComponent(campaignId)}`, tenantScope, 'marketing_materials'),
           { order: 'id.asc', limit: listLimit }
         )) as Record<string, unknown>[])
-      : ((await supabaseSelect('marketing_materials', {
+      : ((await supabaseSelectFilter('marketing_materials', appendSaasTenantFilter('id=gt.0', tenantScope, 'marketing_materials'), {
           order: 'id.desc',
           limit: listLimit,
         })) as Record<string, unknown>[])
@@ -153,6 +161,9 @@ export async function POST(req: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'marketing_materials', label: '마케팅 판촉물' })
+  if (tenantError) return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
   try {
     const body = (await req.json()) as {
       id?: string
@@ -218,7 +229,7 @@ export async function POST(req: NextRequest) {
       try {
         const prev = (await supabaseSelectFilter(
           'marketing_materials',
-          `id=eq.${encodeURIComponent(editingId)}`,
+          appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_materials'),
           { limit: 1, select: 'id,expense_accrual_id' }
         )) as { expense_accrual_id?: number | null }[] | null
         const pid = prev?.[0]?.expense_accrual_id
@@ -228,7 +239,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const row: Record<string, unknown> = {
+    const row: Record<string, unknown> = stampSaasTenantId({
       campaign_id: Number(campaignId),
       type: String(body.type ?? 'tentcard').trim(),
       name,
@@ -245,7 +256,7 @@ export async function POST(req: NextRequest) {
       status: String(body.status ?? 'planning').trim(),
       note: String(body.note ?? '').trim(),
       updated_at: new Date().toISOString(),
-    }
+    }, tenantScope, 'marketing_materials')
 
     const canEditProduction =
       !scopedStore && (isOfficeRole(userRole) || isAccountingRole(userRole))
@@ -264,7 +275,7 @@ export async function POST(req: NextRequest) {
     if (editingId) {
       const existing = (await supabaseSelectFilter(
         'marketing_materials',
-        `id=eq.${encodeURIComponent(editingId)}`,
+        appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_materials'),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (!existing?.length) {
@@ -274,7 +285,7 @@ export async function POST(req: NextRequest) {
 
     const persistMaterialRow = async (payload: Record<string, unknown>) => {
       if (editingId) {
-        await supabaseUpdateByFilter('marketing_materials', `id=eq.${editingId}`, payload)
+        await supabaseUpdateByFilter('marketing_materials', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_materials'), payload)
         return editingId
       }
       const inserted = (await supabaseInsert('marketing_materials', payload)) as { id?: number }[]
@@ -332,7 +343,7 @@ export async function POST(req: NextRequest) {
     expenseSyncMessage = sync.message
     if (sync.linkExpenseAccrualId !== undefined) {
       try {
-        await supabaseUpdateByFilter('marketing_materials', `id=eq.${recordId}`, {
+        await supabaseUpdateByFilter('marketing_materials', appendSaasTenantFilter(`id=eq.${recordId}`, tenantScope, 'marketing_materials'), {
           expense_accrual_id: sync.linkExpenseAccrualId,
         })
       } catch (e) {

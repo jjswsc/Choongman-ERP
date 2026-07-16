@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
         userRole: auth.role,
         userStore: auth.store,
         allowedStores: auth.allowedStores,
+        tenantId: auth.tenantId,
       },
     })
     return NextResponse.json(data, { headers })

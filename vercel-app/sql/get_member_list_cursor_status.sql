@@ -1,16 +1,21 @@
--- 회원 목록 커서 RPC: status 반환 + 기본 active만 조회
--- (status 미반환 시 앱이 inactive를 active로 표시하던 문제 방지)
+-- 회원 목록 커서 RPC: status + tier_code + tenant_id 서버 필터
+-- (등급 필터가 로드된 페이지에만 적용되던 UX 문제 해결 + Omni 회사 격리)
 --
 -- Supabase SQL Editor에 붙여넣어 실행
+-- 전체 마이그레이션은 members_tenant_id.sql 사용 권장
 
 drop function if exists public.get_member_list_cursor(bigint, integer, text);
 drop function if exists public.get_member_list_cursor(bigint, integer, text, text);
+drop function if exists public.get_member_list_cursor(bigint, integer, text, text, text);
+drop function if exists public.get_member_list_cursor(bigint, integer, text, text, text, text);
 
 create function public.get_member_list_cursor(
   p_after_id bigint default null,
   p_limit integer default 100,
   p_q text default null,
-  p_status text default 'active'
+  p_status text default 'active',
+  p_tier_code text default null,
+  p_tenant_id text default null
 )
 returns table (
   id bigint,
@@ -62,9 +67,17 @@ as $$
   where
     (p_after_id is null or m.id < p_after_id)
     and (
+      coalesce(trim(p_tenant_id), '') = ''
+      or coalesce(trim(m.tenant_id), '') = trim(p_tenant_id)
+    )
+    and (
       coalesce(trim(p_status), '') = ''
       or lower(trim(p_status)) = 'all'
       or coalesce(m.status, 'active') = trim(p_status)
+    )
+    and (
+      coalesce(trim(p_tier_code), '') = ''
+      or upper(coalesce(nullif(trim(m.tier_code), ''), 'BRONZE')) = upper(trim(p_tier_code))
     )
     and (
       coalesce(trim(p_q), '') = ''

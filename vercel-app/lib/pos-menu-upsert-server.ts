@@ -24,6 +24,14 @@ import {
   normalizePromotionCategoryMain,
   normalizePromotionSubcategory,
 } from '@/lib/pos-promo-constants'
+import {
+  appendPosCatalogTenantFilter,
+  assertPosCatalogTenantWritable,
+  isMissingTenantIdColumnError,
+  markPosMenusTenantIdColumnMissing,
+  stampPosCatalogTenantId,
+  type PosCatalogTenantScope,
+} from '@/lib/pos-catalog-tenant-scope'
 
 export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
@@ -250,7 +258,7 @@ export function buildPosMenuUpsertRow(
  */
 export async function upsertPosMenuFromBody(
   body: PosMenuUpsertApiBody,
-  opts?: { upsertByCode?: boolean }
+  opts?: { upsertByCode?: boolean; catalogScope?: PosCatalogTenantScope }
 ): Promise<{
   success: boolean
   message: string
@@ -261,6 +269,12 @@ export async function upsertPosMenuFromBody(
     partnerMerchantID?: string | null
   }
 }> {
+  const catalogScope: PosCatalogTenantScope = opts?.catalogScope ?? { enforce: false, tenantId: '' }
+  const tenantWriteBlock = assertPosCatalogTenantWritable(catalogScope)
+  if (tenantWriteBlock) {
+    return { success: false, message: tenantWriteBlock }
+  }
+  const menuIdFilter = (id: string) => appendPosCatalogTenantFilter(`id=eq.${encodeURIComponent(id)}`, catalogScope)
   const normalizeMenuCode = (raw: unknown): string => String(raw ?? '').trim().toLowerCase()
   const code = String(body.code ?? '').trim()
   const name = String(body.name ?? '').trim()
@@ -272,11 +286,18 @@ export async function upsertPosMenuFromBody(
     try {
       const rows = (await supabaseSelectFilter(
         'pos_menus',
-        `id=eq.${encodeURIComponent(editingId)}`,
+        menuIdFilter(editingId),
         { limit: 1, select: 'code' }
       )) as { code?: string }[] | null
       effectiveCode = String(rows?.[0]?.code ?? '').trim()
-    } catch {
+    } catch (err) {
+      if (isMissingTenantIdColumnError(err)) {
+        markPosMenusTenantIdColumnMissing()
+        return {
+          success: false,
+          message: '메뉴 tenant_id 스키마가 없습니다. Omni DB에 sql/pos_catalog_tenant_id.sql 을 실행해 주세요.',
+        }
+      }
       /* ignore */
     }
   }
@@ -293,7 +314,7 @@ export async function upsertPosMenuFromBody(
   if (isEdit && !isPartialMenuEdit && 'code' in body) {
     const row = (await supabaseSelectFilter(
       'pos_menus',
-      `id=eq.${encodeURIComponent(String(editingId || ''))}`,
+      menuIdFilter(String(editingId || '')),
       { limit: 1, select: 'code' }
     )) as { code?: string | null }[] | null
     const currentCode = String(row?.[0]?.code ?? '').trim()
@@ -310,9 +331,13 @@ export async function upsertPosMenuFromBody(
   }
 
   if (!editingId && opts?.upsertByCode) {
+    const byCodeFilter = appendPosCatalogTenantFilter(
+      `code=eq.${encodeURIComponent(code)}`,
+      catalogScope
+    )
     const byCode = (await supabaseSelectFilter(
       'pos_menus',
-      `code=eq.${encodeURIComponent(code)}`,
+      byCodeFilter,
       { limit: 1, select: 'id' }
     )) as { id?: number }[] | null
     if (byCode?.[0]?.id != null) {
@@ -524,19 +549,34 @@ export async function upsertPosMenuFromBody(
       try {
         existing = (await supabaseSelectFilter(
           'pos_menus',
-          `id=eq.${editingId}`,
+          menuIdFilter(editingId),
           {
             limit: 1,
             select:
               'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,delivery_app_fee_percent,sell_hall,sell_delivery,sell_packaging',
           }
         )) as ExistingMenuRow[] | null
-      } catch {
+      } catch (err) {
+        if (isMissingTenantIdColumnError(err)) {
+          markPosMenusTenantIdColumnMissing()
+          return {
+            success: false,
+            message: '메뉴 tenant_id 스키마가 없습니다. Omni DB에 sql/pos_catalog_tenant_id.sql 을 실행해 주세요.',
+          }
+        }
         existing = (await supabaseSelectFilter(
           'pos_menus',
-          `id=eq.${editingId}`,
+          menuIdFilter(editingId),
           { limit: 1 }
         )) as ExistingMenuRow[] | null
+      }
+      if (!existing || existing.length === 0) {
+        return {
+          success: false,
+          message: catalogScope.enforce
+            ? '메뉴를 찾을 수 없거나 다른 회사 메뉴입니다.'
+            : '존재하지 않는 메뉴입니다.',
+        }
       }
       if (existing && existing.length > 0) {
         const prev = existing[0]
@@ -560,7 +600,7 @@ export async function upsertPosMenuFromBody(
           const incomingImage = String(body.imageUrl ?? '').trim()
           const prevImage = String(prev.image ?? '').trim()
           const imageRow: Record<string, unknown> = { image: incomingImage }
-          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, imageRow)
+          await supabaseUpdateByFilter('pos_menus', menuIdFilter(editingId), imageRow)
           return {
             success: true,
             message: '수정되었습니다.',
@@ -615,7 +655,7 @@ export async function upsertPosMenuFromBody(
               },
             }
           }
-          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, descRow)
+          await supabaseUpdateByFilter('pos_menus', menuIdFilter(editingId), descRow)
           return {
             success: true,
             message: '수정되었습니다.',
@@ -830,7 +870,7 @@ export async function upsertPosMenuFromBody(
         }
         await supabaseUpdateByFilterWithPgrst204Fallback(
           'pos_menus',
-          `id=eq.${editingId}`,
+          menuIdFilter(editingId),
           row,
           'savePosMenu'
         )
@@ -848,7 +888,7 @@ export async function upsertPosMenuFromBody(
 
     const codeExists = (await supabaseSelectFilter(
       'pos_menus',
-      `code=ilike.${encodeURIComponent(code)}`,
+      appendPosCatalogTenantFilter(`code=ilike.${encodeURIComponent(code)}`, catalogScope),
       { limit: 20, select: 'id,code' }
     )) as { id?: number; code?: string | null }[] | null
     const duplicated = (codeExists || []).some(
@@ -858,7 +898,11 @@ export async function upsertPosMenuFromBody(
       return { success: false, message: '이미 존재하는 메뉴 코드입니다.' }
     }
 
-    const inserted = (await supabaseInsertWithPgrst204Fallback('pos_menus', row, 'savePosMenu')) as
+    const inserted = (await supabaseInsertWithPgrst204Fallback(
+      'pos_menus',
+      stampPosCatalogTenantId(row, catalogScope),
+      'savePosMenu'
+    )) as
       | { id?: number }[]
       | { id?: number }
     const newRow = Array.isArray(inserted) ? inserted[0] : inserted

@@ -6,6 +6,14 @@ import { requireAuth } from '@/lib/verify-auth'
 import { buildExpenseAccrualPlanDateFilters } from '@/lib/expense-accrual-plan-filters'
 import { parseExpenseAttachmentUrls } from '@/lib/expense-attachment-urls'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 function canViewExpensePaymentPlan(role: string): boolean {
   return (
@@ -99,12 +107,13 @@ const ACCRUAL_PLAN_SELECT =
 
 async function fetchExpenseAccrualsForPlanRange(
   startStr: string,
-  endStr: string
+  endStr: string,
+  tenantScope: SaasTenantScope
 ): Promise<ExpenseAccrualRow[]> {
   const filters = buildExpenseAccrualPlanDateFilters(startStr, endStr)
   const batches = await Promise.all(
     filters.map((filter) =>
-      supabaseSelectFilter('expense_accruals', filter, {
+      supabaseSelectFilter('expense_accruals', appendSaasTenantFilter(filter, tenantScope, 'expense_accruals'), {
         select: ACCRUAL_PLAN_SELECT,
         order: 'due_date.asc,expense_date.asc,id.desc',
         limit: 5000,
@@ -132,6 +141,20 @@ export async function GET(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const emptyResponse = {
+      success: true,
+      expensePlans: [],
+      purchasePlans: [],
+      totals: { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 },
+      logisticsPlans: [],
+    }
+    if (
+      isSaasTenantQueryBlocked(tenantScope, 'expense_accruals') ||
+      isSaasTenantQueryBlocked(tenantScope, 'payable_transactions')
+    ) {
+      return NextResponse.json(emptyResponse, { headers })
+    }
     const { searchParams } = new URL(request.url)
     const startStr = String(searchParams.get('startStr') || '').slice(0, 10)
     const endStr = String(searchParams.get('endStr') || '').slice(0, 10)
@@ -146,13 +169,7 @@ export async function GET(request: NextRequest) {
         .concat(callerStore)
     if (!canViewExpensePaymentPlan(userRole)) {
       return NextResponse.json(
-        {
-          success: true,
-          expensePlans: [],
-          purchasePlans: [],
-          totals: { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 },
-          logisticsPlans: [],
-        },
+        emptyResponse,
         { headers }
       )
     }
@@ -160,8 +177,8 @@ export async function GET(request: NextRequest) {
     const scopedAllowedStores = canSeeAllStores ? [] : allowedStores
 
     const [accrualRows, payableRows] = await Promise.all([
-      fetchExpenseAccrualsForPlanRange(startStr, endStr),
-      supabaseSelectFilter('payable_transactions', 'id=gt.0', {
+      fetchExpenseAccrualsForPlanRange(startStr, endStr, tenantScope),
+      supabaseSelectFilter('payable_transactions', appendSaasTenantFilter('id=gt.0', tenantScope, 'payable_transactions'), {
         select: 'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,expense_accrual_id',
         order: 'trans_date.desc',
         limit: 10000,
@@ -261,6 +278,20 @@ export async function GET(request: NextRequest) {
     )
   } catch (e) {
     console.error('getExpensePaymentPlan:', e)
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('expense_accruals')
+      markSaasTenantColumnMissing('payable_transactions')
+      return NextResponse.json(
+        {
+          success: true,
+          expensePlans: [],
+          purchasePlans: [],
+          totals: { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 },
+          logisticsPlans: [],
+        },
+        { headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '조회 실패' },
       { status: 500, headers }

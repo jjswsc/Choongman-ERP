@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   ATTENDANCE_LOG_PAYROLL_COLS,
   ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
@@ -15,6 +15,12 @@ import {
 } from '@/lib/payroll-utils'
 import { hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -237,6 +243,12 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
+    return NextResponse.json({ success: true, list: [] }, { headers })
+  }
   const monthStr = String(searchParams.get('monthStr') || searchParams.get('month') || '').trim().slice(0, 7)
   let storeFilter = String(searchParams.get('store') || '').trim()
   if (storeFilter === 'All' || storeFilter === '전체') storeFilter = ''
@@ -288,11 +300,11 @@ export async function GET(request: NextRequest) {
         if (storeFilter) {
           empRows = (await supabaseSelectFilter(
             'employees',
-            `store=ilike.${encodeURIComponent(storeFilter)}`,
+            appendSaasTenantFilter(`store=ilike.${encodeURIComponent(storeFilter)}`, tenantScope, 'employees'),
             { order: 'id.asc', select: sel }
           )) as EmpRow[]
         } else {
-          empRows = (await supabaseSelect('employees', { order: 'id.asc', select: sel })) as EmpRow[]
+          empRows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), { order: 'id.asc', select: sel })) as EmpRow[]
         }
         empLoadErr = null
         break

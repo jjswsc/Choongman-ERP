@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdateByFilter,
@@ -9,6 +8,14 @@ import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 import { normalizeMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { parsePhasePeriodsFromUnknown } from '@/lib/marketing-campaign-periods'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** 저장 직후 목록 재조회가 이전 응답을 쓰지 않도록 (Vercel/브라우저 캐시 방지) */
 export const dynamic = 'force-dynamic'
@@ -59,14 +66,14 @@ function getBangkokYYMM() {
   return fmt.format(new Date()).replace(/-/g, '').replace(/\//g, '')
 }
 
-async function generateCampaignNo() {
+async function generateCampaignNo(tenantScope: SaasTenantScope) {
   const datePart = getBangkokYYMM()
   for (let i = 0; i < 5; i++) {
     const suffix = String(Math.floor(Math.random() * 100)).padStart(2, '0')
     const candidate = `${datePart}${suffix}`
     const existing = (await supabaseSelectFilter(
       'marketing_campaigns',
-      `campaign_no=eq.${encodeURIComponent(candidate)}`,
+      appendSaasTenantFilter(`campaign_no=eq.${encodeURIComponent(candidate)}`, tenantScope, 'marketing_campaigns'),
       { limit: 1 }
     )) as { id?: number }[] | null
     if (!existing || existing.length === 0) return candidate
@@ -102,6 +109,10 @@ export async function GET(req: NextRequest) {
     noStoreHeaders(authResult.errorResponse.headers)
     return authResult.errorResponse
   }
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'marketing_campaigns')) {
+    return NextResponse.json([], { headers })
+  }
 
   try {
     const { searchParams } = new URL(req.url)
@@ -109,14 +120,14 @@ export async function GET(req: NextRequest) {
     const nextNumber = searchParams.get('nextNumber') === '1'
 
     if (nextNumber) {
-      const campaignNo = await generateCampaignNo()
+      const campaignNo = await generateCampaignNo(tenantScope)
       return NextResponse.json({ campaignNo }, { headers })
     }
 
     if (id) {
       const rows = (await supabaseSelectFilter(
         'marketing_campaigns',
-        `id=eq.${encodeURIComponent(id)}`,
+        appendSaasTenantFilter(`id=eq.${encodeURIComponent(id)}`, tenantScope, 'marketing_campaigns'),
         { limit: 1 }
       )) as Record<string, unknown>[] | null
       const row = rows?.[0]
@@ -162,7 +173,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(campaign, { headers })
     }
 
-    const rows = (await supabaseSelect('marketing_campaigns', {
+    const rows = (await supabaseSelectFilter('marketing_campaigns', appendSaasTenantFilter('id=gt.0', tenantScope, 'marketing_campaigns'), {
       order: 'start_date.desc,id.desc',
       limit: 10000,
     })) as Record<string, unknown>[] | null
@@ -211,6 +222,9 @@ export async function POST(req: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'marketing_campaigns', label: '마케팅 캠페인' })
+  if (tenantError) return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
 
   try {
     const body = (await req.json()) as {
@@ -289,9 +303,9 @@ export async function POST(req: NextRequest) {
 
     const campaignNo =
       String(body.campaignNo ?? '').trim() ||
-      (editingId ? '' : await generateCampaignNo())
+      (editingId ? '' : await generateCampaignNo(tenantScope))
 
-    const row = {
+    const row = stampSaasTenantId({
       topic,
       campaign_no: campaignNo || undefined,
       format: String(body.format ?? '').trim(),
@@ -323,16 +337,16 @@ export async function POST(req: NextRequest) {
       collab_management: body.collabManagement === true,
       phase_periods: phasePeriods,
       updated_at: new Date().toISOString(),
-    }
+    }, tenantScope, 'marketing_campaigns')
 
     if (editingId) {
       const existing = (await supabaseSelectFilter(
         'marketing_campaigns',
-        `id=eq.${encodeURIComponent(editingId)}`,
+        appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_campaigns'),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing && existing.length > 0) {
-        await supabaseUpdateByFilter('marketing_campaigns', `id=eq.${editingId}`, row)
+        await supabaseUpdateByFilter('marketing_campaigns', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_campaigns'), row)
         return NextResponse.json({ success: true, message: '수정되었습니다.', id: editingId }, { headers })
       }
     }

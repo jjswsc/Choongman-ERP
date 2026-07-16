@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  assertInventoryTenantWritable,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
 
 /** 재고 조정 - 오피스 직원 또는 매니저(자기 매장만) */
 export async function POST(request: NextRequest) {
@@ -11,6 +16,11 @@ export async function POST(request: NextRequest) {
     const authResult = await requireAuth(request, 'manager')
     if (authResult.errorResponse) return authResult.errorResponse
     const auth = authResult.auth!
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 400, headers })
+    }
 
     const body = await request.json() as {
       store?: string
@@ -63,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString()
-    await supabaseInsert('stock_logs', {
+    await supabaseInsert('stock_logs', stampInventoryTenantId({
       location: store,
       item_code: itemCode,
       item_name: String(body.itemName || '').trim(),
@@ -72,7 +82,7 @@ export async function POST(request: NextRequest) {
       log_date: now,
       vendor_target: body.memo ? String(body.memo).trim() : '재고조정',
       log_type: 'Adjustment',
-    })
+    }, tenantScope))
 
     return NextResponse.json({ success: true, message: '재고가 조정되었습니다.' }, { headers })
   } catch (e) {

@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** 통장(계좌) 목록 조회 */
 export async function GET(request: NextRequest) {
@@ -14,6 +21,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'bank_accounts')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
   const userStore = String(auth.store || '').trim()
@@ -40,12 +51,17 @@ export async function GET(request: NextRequest) {
   try {
     let rows: { id?: number; name?: string; store?: string; bank_name?: string; opening_balance?: number; opening_balance_date?: string; sort_order?: number }[] = []
     if (effectiveStore && effectiveStore !== 'All') {
-      rows = (await supabaseSelectFilter('bank_accounts', `store=ilike.${encodeURIComponent(effectiveStore)}`, {
+      const filter = appendSaasTenantFilter(
+        `store=ilike.${encodeURIComponent(effectiveStore)}`,
+        tenantScope,
+        'bank_accounts'
+      )
+      rows = (await supabaseSelectFilter('bank_accounts', filter, {
         order: 'sort_order.asc,id.asc',
         limit: 100,
       })) as typeof rows
     } else {
-      rows = (await supabaseSelect('bank_accounts', {
+      rows = (await supabaseSelectFilter('bank_accounts', appendSaasTenantFilter('id=gt.0', tenantScope, 'bank_accounts'), {
         order: 'sort_order.asc,id.asc',
         limit: 100,
       })) as typeof rows
@@ -63,6 +79,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getBankAccounts:', e)
+    if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('bank_accounts')
+    }
     return NextResponse.json([], { headers })
   }
 }

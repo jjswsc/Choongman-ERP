@@ -5,6 +5,15 @@ import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/
 import { computeInboundRegisterTotals, upsertInboundPayableTransaction } from '@/lib/inbound-payable-sync'
 import { roundErp3 } from '@/lib/utils'
 import { inboundPersistLocation } from '@/lib/office-store-canonical'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
@@ -12,6 +21,12 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 400, headers })
+    }
     const body = await request.json()
     const storeName = (typeof body === 'object' && body?.storeName) ? String(body.storeName).trim() : null
     const vendorCode = (typeof body === 'object' && body?.vendorCode) ? String(body.vendorCode).trim() || null : null
@@ -38,7 +53,7 @@ export async function POST(request: NextRequest) {
     const location = inboundPersistLocation(storeName)
     const vendorName = String(list[0]?.vendor || '').trim()
 
-    const itemRows = (await supabaseSelect('items', {
+    const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter('', tenantScope), {
       order: 'id.asc',
       limit: 5000,
       select: 'code,tax',
@@ -65,7 +80,7 @@ export async function POST(request: NextRequest) {
       if (costVal != null && !isNaN(costVal) && costVal >= 0) {
         row.unit_cost = roundErp3(costVal)
       }
-      return row
+      return stampInventoryTenantId(row, tenantScope)
     })
 
     const validRows = rows.filter((r) => r.item_code)
@@ -111,7 +126,10 @@ export async function POST(request: NextRequest) {
     }
     if (poNo) batchRow.po_no = poNo
     if (invoiceNo) batchRow.invoice_no = invoiceNo
-    const batchInserted = (await supabaseInsert('inbound_batches', batchRow)) as { id?: number }[]
+    const batchInserted = (await supabaseInsert(
+      'inbound_batches',
+      stampInventoryTenantId(batchRow, tenantScope)
+    )) as { id?: number }[]
     const batchId = Array.isArray(batchInserted) && batchInserted[0]?.id ? batchInserted[0].id : null
 
     // 2. stock_logs에 inbound_batch_id 포함
@@ -138,6 +156,13 @@ export async function POST(request: NextRequest) {
       { headers }
     )
   } catch (e) {
+    if (isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+      return NextResponse.json(
+        { success: false, message: 'inventory tenant_id 스키마가 없습니다.' },
+        { status: 400, headers }
+      )
+    }
     console.error('registerInboundBatch:', e)
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '입고 저장 실패' },

@@ -111,7 +111,11 @@ import { OptionGroupEditorPanel } from "@/components/erp/option-group-editor-pan
 import { OptionItemRowCard } from "@/components/erp/option-item-row-card"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
-import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+import {
+  POS_MAIN_CATEGORIES,
+  POS_CATEGORIES_BY_MAIN,
+  resolveConfiguredCategoriesForMain,
+} from "@/lib/pos-menu-categories"
 import {
   GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH,
   GRAB_MENU_MODIFIER_NAME_MAX_LENGTH,
@@ -3386,9 +3390,7 @@ export default function PosMenusPage() {
   const categoriesByMain = React.useMemo(() => {
     const main = formData.categoryMain?.trim() || null
     if (!main) return categories.filter((c): c is string => typeof c === "string")
-    const presetFromConfig = categoriesConfig?.categoriesByMain?.[main]
-    const presetFromLib = main in POS_CATEGORIES_BY_MAIN ? POS_CATEGORIES_BY_MAIN[main as keyof typeof POS_CATEGORIES_BY_MAIN] : null
-    const preset = presetFromConfig?.length ? presetFromConfig : (presetFromLib ?? [])
+    const preset = resolveConfiguredCategoriesForMain(main, categoriesConfig?.categoriesByMain)
     const fromMenus = menus
       .filter((m) => (m.categoryMain ?? "") === main)
       .map((m) => m.category)
@@ -3404,9 +3406,7 @@ export default function PosMenusPage() {
   const optionsConfigCategoriesByMain = React.useMemo(() => {
     const main = mainCategoryFilter === "all" ? null : mainCategoryFilter?.trim() || null
     if (!main) return categories.filter((c): c is string => typeof c === "string")
-    const presetFromConfig = categoriesConfig?.categoriesByMain?.[main]
-    const presetFromLib = main in POS_CATEGORIES_BY_MAIN ? POS_CATEGORIES_BY_MAIN[main as keyof typeof POS_CATEGORIES_BY_MAIN] : null
-    const preset = presetFromConfig?.length ? presetFromConfig : (presetFromLib ?? [])
+    const preset = resolveConfiguredCategoriesForMain(main, categoriesConfig?.categoriesByMain)
     const fromMenus = menus
       .filter((m) => (m.categoryMain ?? "") === main)
       .map((m) => m.category)

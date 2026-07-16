@@ -33,6 +33,8 @@ export type AccountingStoreAuthScope = {
   userRole?: string
   userStore?: string
   allowedStores?: string[]
+  /** Omni JWT tenantId */
+  tenantId?: string
 }
 
 /** JWT·직원 매장 목록(중복 제거) */

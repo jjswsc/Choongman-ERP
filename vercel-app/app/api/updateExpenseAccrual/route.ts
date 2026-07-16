@@ -350,6 +350,15 @@ export async function POST(request: NextRequest) {
       console.error('updateExpenseAccrual vat input ledger:', vatLedgerErr)
     }
 
+    if (withholdingTaxAmount > 0) {
+      try {
+        const { syncTaxWithholdingLedgerForExpenseAccrual } = await import('@/lib/tax-ledger-auto-sync')
+        await syncTaxWithholdingLedgerForExpenseAccrual(expenseAccrualId)
+      } catch (whtErr) {
+        console.error('updateExpenseAccrual wht ledger:', whtErr)
+      }
+    }
+
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {
     console.error('updateExpenseAccrual:', e)

@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       userRole,
       allowedStores: auth.allowedStores,
       includeDebug: false,
+      tenantId: auth.tenantId,
     })
 
     const { startStr, endStr } = getBangkokMonthRange(legacy.yearMonth)

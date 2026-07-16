@@ -17,6 +17,7 @@ import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import {
   syncTaxWithholdingLedgersFromBankDeposits,
+  syncTaxWithholdingLedgersFromBankWithdrawals,
   syncTaxWithholdingLedgersFromExpenses,
   syncTaxWithholdingLedgersFromPayroll,
   syncTaxWithholdingLedgersFromPurchaseOrders,
@@ -118,6 +119,10 @@ export async function GET(request: NextRequest) {
         storeFilter,
       })
       await syncTaxWithholdingLedgersFromBankDeposits({
+        months: period.months,
+        storeFilter,
+      })
+      await syncTaxWithholdingLedgersFromBankWithdrawals({
         months: period.months,
         storeFilter,
       })

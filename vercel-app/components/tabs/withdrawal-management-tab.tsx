@@ -41,6 +41,7 @@ import {
   markBankTransactionForCardBill,
   markBankTransactionForPettyCash,
   translateTexts,
+  getHeadOfficeInfo,
   type AccountSubjectItem,
   type BankAccount,
   type CardAccount,
@@ -65,6 +66,12 @@ import {
   resolveExpenseFeeAmounts,
   type ExpenseFeeVatMode,
 } from "@/lib/expense-fee-vat"
+import {
+  EXPENSE_WHT_RATE_OPTIONS,
+  expenseWhtAmountFromRate,
+} from "@/lib/expense-accrual-net"
+import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
+import { whtCertificateFromExpenseRegister } from "@/lib/wht-certificate-data"
 import {
   ExpenseDocumentAttachPanel,
   type ExpenseOcrFieldPayload,
@@ -121,6 +128,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [expenseAttachmentFiles, setExpenseAttachmentFiles] = React.useState<File[]>([])
   const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
   const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
+  /** 선택 시 (총액−VAT)×% 로 WHT 자동 계산. null = 미선택 */
+  const [accrualWhtRate, setAccrualWhtRate] = React.useState<number | null>(null)
+  const [autoCreateWhtCert, setAutoCreateWhtCert] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [deliveryFeeSaving, setDeliveryFeeSaving] = React.useState(false)
   const [deliveryFeeMonth, setDeliveryFeeMonth] = React.useState(() => todayStrBkk().slice(0, 7))
@@ -623,6 +633,59 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     return Math.max(0, g - w)
   }, [categoryMain, amount, accrualWithholdingTax])
 
+  React.useEffect(() => {
+    if (categoryMain !== "purchase" && categoryMain !== "expense") return
+    if (accrualWhtRate == null || accrualWhtRate <= 0) return
+    const g = parseMoneyAmount(amount)
+    const v = Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
+    const wht = expenseWhtAmountFromRate(g, v, accrualWhtRate)
+    setAccrualWithholdingTax(wht > 0 ? moneyInputStringFromAmount(wht) : "")
+  }, [categoryMain, amount, accrualVatAmount, accrualWhtRate])
+
+  const openExpenseWhtCertificateIfNeeded = React.useCallback(
+    async (params: {
+      certificateNo: string
+      payeeName: string
+      payeeTaxId?: string
+      grossInclVat: number
+      vatAmount: number
+      whtAmount: number
+      whtRate: number | null
+      paymentDate: string
+      memo?: string
+      storeName?: string
+    }) => {
+      if (!autoCreateWhtCert || params.whtAmount <= 0) return
+      try {
+        const ho = await getHeadOfficeInfo()
+        const cert = whtCertificateFromExpenseRegister(
+          {
+            certificateNo: params.certificateNo,
+            paymentDate: params.paymentDate,
+            payeeName: params.payeeName,
+            payeeTaxId: params.payeeTaxId,
+            grossInclVat: params.grossInclVat,
+            vatAmount: params.vatAmount,
+            whtRate: params.whtRate,
+            whtAmount: params.whtAmount,
+            memo: params.memo,
+            storeName: params.storeName,
+          },
+          {
+            companyName: ho.companyName || "",
+            taxId: ho.taxId || "",
+            address: ho.address || "",
+            phone: ho.phone,
+          }
+        )
+        if (cert) openWhtCertificatePrintWindow([cert], lang)
+      } catch (e) {
+        console.error("openExpenseWhtCertificateIfNeeded:", e)
+      }
+    },
+    [autoCreateWhtCert, lang]
+  )
+
   const sumInboundLinkAmounts = React.useCallback(() => {
     return Object.values(inboundLinkAmounts).reduce((sum, raw) => {
       const n = Number(String(raw).replace(/,/g, ""))
@@ -832,6 +895,17 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
         }
+        await openExpenseWhtCertificateIfNeeded({
+          certificateNo: `EAW-${editAccrualIdParam}`,
+          payeeName: name || code,
+          grossInclVat: amt,
+          vatAmount: vatV,
+          whtAmount: whtV,
+          whtRate: accrualWhtRate,
+          paymentDate: transDate,
+          memo: memo.trim() || undefined,
+          storeName: storeName || undefined,
+        })
         setAmount("")
         setMemo("")
         setPayeeCode("")
@@ -839,6 +913,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
+        setAccrualWhtRate(null)
+        setAutoCreateWhtCert(false)
         setInvoiceReceived(false)
         setInvoiceNo("")
         setActiveFeeVatMode(null)
@@ -876,6 +952,20 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           return
         }
         const queued = (res as { queued?: boolean }).queued === true
+        const newId = Math.floor(Number(res.id) || 0)
+        if (!queued) {
+          await openExpenseWhtCertificateIfNeeded({
+            certificateNo: newId > 0 ? `EAW-${newId}` : `EAW-${Date.now()}`,
+            payeeName: name || code,
+            grossInclVat: amt,
+            vatAmount: vatV,
+            whtAmount: whtV,
+            whtRate: accrualWhtRate,
+            paymentDate: transDate,
+            memo: memo.trim() || undefined,
+            storeName: storeName || undefined,
+          })
+        }
         setAmount("")
         setMemo("")
         setPayeeCode("")
@@ -884,6 +974,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
+        setAccrualWhtRate(null)
+        setAutoCreateWhtCert(false)
         setInvoiceReceived(false)
         setInvoiceNo("")
         setActiveFeeVatMode(null)
@@ -1193,6 +1285,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           categoryMain === "purchase" || categoryMain === "expense"
             ? submitWht > 0 ? submitWht : undefined
             : undefined,
+        withholdingTaxRate:
+          (categoryMain === "purchase" || categoryMain === "expense") &&
+          accrualWhtRate != null &&
+          accrualWhtRate > 0
+            ? accrualWhtRate
+            : undefined,
         ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
         userName: auth?.user,
         userRole: auth?.role,
@@ -1203,6 +1301,26 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         return
       }
       const newBankTxId = res.bankTransactionId ?? undefined
+      if (
+        (categoryMain === "purchase" || categoryMain === "expense") &&
+        submitWht > 0
+      ) {
+        const payeeLabel =
+          categoryMain === "purchase"
+            ? resolvePurchaseVendorPayee(vendorCode).name || vendorCode
+            : payeeName.trim() || payeeCode.trim() || "—"
+        await openExpenseWhtCertificateIfNeeded({
+          certificateNo: newBankTxId ? `BTW-${newBankTxId}` : `BTW-${Date.now()}`,
+          payeeName: payeeLabel,
+          grossInclVat: submitAmt,
+          vatAmount: submitVat,
+          whtAmount: submitWht,
+          whtRate: accrualWhtRate,
+          paymentDate: transDate,
+          memo: memoText || undefined,
+          storeName: storeName || undefined,
+        })
+      }
       if (categoryMain === "purchase" && newBankTxId && effectivePaymentMethod === "bank") {
         const links = Object.entries(inboundLinkAmounts)
           .map(([batchId, raw]) => ({ batchId, amount: Number(String(raw).replace(/,/g, "")) }))
@@ -1223,6 +1341,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       setMemo("")
       setExpenseAttachmentFiles([])
       setInboundLinkAmounts({})
+      setAccrualVatAmount("")
+      setAccrualWithholdingTax("")
+      setAccrualWhtRate(null)
+      setAutoCreateWhtCert(false)
       setActiveFeeVatMode(null)
       if (res.fixedAssetId) {
         await appAlert(tt("wm_successWithAsset", "Saved. Check auto-linking in the depreciation menu."))
@@ -2510,6 +2632,34 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     className="h-9 mt-1"
                   />
                 </div>
+                <div className="w-[120px]">
+                  <Label className="text-xs text-muted-foreground">
+                    {tt("expenseAccrualWhtRate", "WHT rate")}
+                  </Label>
+                  <Select
+                    value={accrualWhtRate == null ? "__none__" : String(accrualWhtRate)}
+                    onValueChange={(v) => {
+                      if (!v || v === "__none__") {
+                        setAccrualWhtRate(null)
+                        return
+                      }
+                      const n = Number(v)
+                      setAccrualWhtRate(Number.isFinite(n) && n > 0 ? n : null)
+                    }}
+                  >
+                    <SelectTrigger className="h-9 mt-1">
+                      <SelectValue placeholder={tt("expenseAccrualWhtRateNone", "Select")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{tt("expenseAccrualWhtRateNone", "Select")}</SelectItem>
+                      {EXPENSE_WHT_RATE_OPTIONS.map((r) => (
+                        <SelectItem key={r} value={String(r)}>
+                          {r}%
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="w-[110px]">
                   <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "Withholding Tax")}</Label>
                   <Input
@@ -2544,7 +2694,22 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             />
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+              {(categoryMain === "purchase" || categoryMain === "expense") ? (
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none mr-1">
+                  <Checkbox
+                    checked={autoCreateWhtCert}
+                    onCheckedChange={(v) => setAutoCreateWhtCert(v === true)}
+                    disabled={saving}
+                  />
+                  <span className="text-muted-foreground leading-snug max-w-[280px]">
+                    {tt(
+                      "expenseAccrualAutoWhtCert",
+                      "Auto-create withholding tax certificate (50 ทวิ)"
+                    )}
+                  </span>
+                </label>
+              ) : null}
               <Button
                 onClick={handleSubmit}
                 disabled={

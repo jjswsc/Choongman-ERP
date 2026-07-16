@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
+  getMemberTiers,
   getMembersCursor,
   importLineCrmFile,
   resetLineMemberList,
@@ -362,6 +363,7 @@ export const MemberListPanel = React.memo(
     const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
     const [filterTier, setFilterTier] = React.useState("all")
     const [filterStatus, setFilterStatus] = React.useState("active")
+    const [tierOptions, setTierOptions] = React.useState<string[]>([])
     const importFileRef = React.useRef<HTMLInputElement | null>(null)
     const [joinStoreLabels, setJoinStoreLabels] = React.useState<Record<string, string>>({
       office: t("mpAdmin_signupStoreStatsOffice"),
@@ -386,16 +388,32 @@ export const MemberListPanel = React.memo(
         .catch(() => {})
     }, [lang, t])
 
+    React.useEffect(() => {
+      void getMemberTiers()
+        .then((rows) => {
+          const list = Array.isArray(rows) ? rows : []
+          const codes = list
+            .map((row) => String(row.code || "").toUpperCase())
+            .filter(Boolean)
+          setTierOptions(codes.length ? codes : ["BRONZE", "SILVER", "GOLD"])
+        })
+        .catch(() => {
+          setTierOptions(["BRONZE", "SILVER", "GOLD"])
+        })
+    }, [])
+
     const appliedFieldsRef = React.useRef(appliedFields)
     const appliedQRef = React.useRef(appliedQ)
     const pageCursorsRef = React.useRef(pageCursors)
     const pageIndexRef = React.useRef(pageIndex)
     const filterStatusRef = React.useRef(filterStatus)
+    const filterTierRef = React.useRef(filterTier)
     appliedFieldsRef.current = appliedFields
     appliedQRef.current = appliedQ
     pageCursorsRef.current = pageCursors
     pageIndexRef.current = pageIndex
     filterStatusRef.current = filterStatus
+    filterTierRef.current = filterTier
 
     const loadPage = React.useCallback(
       async (opts?: {
@@ -415,6 +433,7 @@ export const MemberListPanel = React.memo(
         setErrorMessage("")
         setLoading(true)
         try {
+          const tier = filterTierRef.current || "all"
           const res = await getMembersCursor({
             q,
             name: fields.name,
@@ -425,6 +444,7 @@ export const MemberListPanel = React.memo(
             afterId,
             limit: MEMBER_PAGE_SIZE,
             status: filterStatusRef.current || "active",
+            tierCode: tier !== "all" ? tier : undefined,
           })
           if (!res.success) {
             startTransition(() => {
@@ -461,10 +481,10 @@ export const MemberListPanel = React.memo(
       void loadPageRef.current()
     }, [])
 
-    const statusFilterBootRef = React.useRef(true)
+    const listFilterBootRef = React.useRef(true)
     React.useEffect(() => {
-      if (statusFilterBootRef.current) {
-        statusFilterBootRef.current = false
+      if (listFilterBootRef.current) {
+        listFilterBootRef.current = false
         return
       }
       setPageCursors([undefined])
@@ -475,7 +495,7 @@ export const MemberListPanel = React.memo(
         cursors: [undefined],
         isSearch: true,
       })
-    }, [filterStatus])
+    }, [filterStatus, filterTier])
 
     React.useImperativeHandle(
       ref,
@@ -557,13 +577,8 @@ export const MemberListPanel = React.memo(
 
     const crmHintText = t("memberCrmColumnHint")
 
-    const filteredMembers = React.useMemo(() => {
-      return members.filter((m) => {
-        if (filterTier !== "all" && String(m.tierCode || "").toUpperCase() !== filterTier.toUpperCase()) return false
-        if (filterStatus !== "all" && String(m.status || "active") !== filterStatus) return false
-        return true
-      })
-    }, [members, filterTier, filterStatus])
+    /** 등급·상태는 서버에서 이미 필터됨 */
+    const filteredMembers = members
 
     const exportMembersCsv = () => {
       downloadCsv(
@@ -618,13 +633,11 @@ export const MemberListPanel = React.memo(
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("crmMemberFilterAll")}</SelectItem>
-                {Array.from(new Set(members.map((m) => String(m.tierCode || "").toUpperCase()).filter(Boolean))).map(
-                  (code) => (
-                    <SelectItem key={code} value={code}>
-                      {code}
-                    </SelectItem>
-                  )
-                )}
+                {tierOptions.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {code}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <span className="text-xs font-medium text-muted-foreground">{t("crmMemberFilterStatus")}</span>

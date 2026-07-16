@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
     userStore,
     userRole,
     allowedStores: auth.allowedStores,
+    tenantId: auth.tenantId,
   }
 
   try {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listMembersCursor } from '@/lib/members-server'
 import type { MemberSearchFieldDraft } from '@/lib/member-search-filter'
+import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
 function readSearchFields(searchParams: URLSearchParams): MemberSearchFieldDraft {
@@ -17,18 +18,22 @@ export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, 'manager')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    const tenantScope = await resolveMembersTenantScope({ auth: authRes.auth })
     const { searchParams } = new URL(req.url)
     const q = searchParams.get('q') || ''
     const fields = readSearchFields(searchParams)
     const afterId = Number(searchParams.get('afterId') || 0)
     const limit = Number(searchParams.get('limit') || 100)
     const status = searchParams.get('status') || 'active'
+    const tierCode = searchParams.get('tierCode') || ''
     const rows = await listMembersCursor({
       q,
       fields,
       afterId: afterId || undefined,
       limit,
       status,
+      tierCode: tierCode || undefined,
+      tenantScope,
     })
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].id : null
     return NextResponse.json({ success: true, rows, nextCursor })

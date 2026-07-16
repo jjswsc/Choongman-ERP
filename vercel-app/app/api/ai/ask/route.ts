@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
         requestedStore: store,
         start,
         end,
+        tenantId: access.scoped.auth.tenantId,
       })
     : null
   const external = await getExternalContextSummary({

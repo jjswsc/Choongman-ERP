@@ -27,6 +27,7 @@ eslint-out.txt
 
 # misc
 .DS_Store
+/scripts/output/
 *.pem
 
 # debug

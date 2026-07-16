@@ -3,6 +3,13 @@ import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { getStockLocationPatterns, isOfficeStockSelection } from '@/lib/stock-location-patterns'
 import { bangkokInclusivePeriod, bangkokYmdRangeToIsoBounds, todayBangkokYmd } from '@/lib/bangkok-date'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
 
 /**
  * stock_logs 기간 소모량 합계 (품목코드별). 재고 발주 도움용.
@@ -17,6 +24,10 @@ export async function GET(request: NextRequest) {
   const auth = await getVerifiedAuth(request)
   if (!auth) {
     return NextResponse.json({ success: false, message: '인증이 필요합니다.', usageByCode: {} }, { status: 401, headers })
+  }
+  const tenantScope = await resolveInventoryTenantScope({ auth })
+  if (isInventoryTenantQueryBlocked(tenantScope)) {
+    return NextResponse.json({ success: true, usageByCode: {} }, { headers })
   }
 
   const { searchParams } = new URL(request.url)
@@ -78,12 +89,12 @@ export async function GET(request: NextRequest) {
   try {
     for (const p of patterns) {
       for (const lt of logTypes) {
-        const filter = [
+        const filter = appendInventoryTenantFilter([
           `log_type=eq.${lt}`,
           `location=ilike.${encodeURIComponent(p)}`,
           `log_date=gte.${encodeURIComponent(gteIso)}`,
           `log_date=lte.${encodeURIComponent(lteIso)}`,
-        ].join('&')
+        ].join('&'), tenantScope)
 
         const rows = (await supabaseSelectFilterAllPages('stock_logs', filter, {
           select: 'id,item_code,qty',
@@ -118,6 +129,13 @@ export async function GET(request: NextRequest) {
       { headers }
     )
   } catch (e) {
+    if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+      return NextResponse.json(
+        { success: true, usageByCode: {}, startYmd, endYmd: endYmd2, days, consumptionBasis },
+        { headers }
+      )
+    }
     console.error('getStockUsageAggregate:', e)
     return NextResponse.json(
       {

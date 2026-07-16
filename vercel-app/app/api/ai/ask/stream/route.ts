@@ -60,7 +60,13 @@ export async function POST(req: NextRequest) {
       ? buildStaffingInsight({ scoped: access.scoped, requestedStore: store })
       : Promise.resolve(null),
     isStoreOpsQuestion(query)
-      ? buildStoreOpsInsight({ scoped: access.scoped, requestedStore: store, start, end })
+      ? buildStoreOpsInsight({
+          scoped: access.scoped,
+          requestedStore: store,
+          start,
+          end,
+          tenantId: access.scoped.auth.tenantId,
+        })
       : Promise.resolve(null),
     getExternalContextSummary({
       scoped: access.scoped,

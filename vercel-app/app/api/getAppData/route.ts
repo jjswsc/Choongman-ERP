@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseRpc } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseRpc } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { isPosAdditiveOptionItemCategory } from '@/lib/pos-additive-item-category'
 import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
 import { getBangkokEndOfDayUtcIso } from '@/lib/bangkok-time'
+import {
+  appendInventoryTenantFilter,
+  type InventoryTenantScope,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
 
 export interface AppItem {
   code: string
@@ -45,7 +53,7 @@ function parseStandardUnits(val: unknown): { unit: string; totalQuantity: number
     .filter((x) => x.unit.length > 0 && x.totalQuantity > 0)
 }
 
-async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
+async function getItems(storeName: string, tenantScope: InventoryTenantScope, scope?: string): Promise<AppItem[]> {
   const isOrderScope = String(scope || '').toLowerCase().trim() === 'order'
   type Row = {
     code?: string
@@ -67,26 +75,33 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   }
   let rows: Row[] | null = null
   let useStockUnits = true
+  const tenantFilter = appendInventoryTenantFilter('', tenantScope)
   try {
     if (isOrderScope) {
       rows = (await supabaseSelectFilter(
         'items',
-        `or=(purchase_source.eq.hq,purchase_source.is.null)`,
+        appendInventoryTenantFilter(`or=(purchase_source.eq.hq,purchase_source.is.null)`, tenantScope),
         { order: 'id.asc', select: ITEMS_SELECT_FULL }
       )) as Row[] | null
     } else {
-      rows = (await supabaseSelect('items', { order: 'id.asc', select: ITEMS_SELECT_FULL })) as Row[] | null
+      rows = (await supabaseSelectFilter('items', tenantFilter, {
+        order: 'id.asc',
+        select: ITEMS_SELECT_FULL,
+      })) as Row[] | null
     }
   } catch {
     useStockUnits = false
     if (isOrderScope) {
       rows = (await supabaseSelectFilter(
         'items',
-        `or=(purchase_source.eq.hq,purchase_source.is.null)`,
+        appendInventoryTenantFilter(`or=(purchase_source.eq.hq,purchase_source.is.null)`, tenantScope),
         { order: 'id.asc', select: ITEMS_SELECT_MINIMAL }
       )) as Row[] | null
     } else {
-      rows = (await supabaseSelect('items', { order: 'id.asc', select: ITEMS_SELECT_MINIMAL })) as Row[] | null
+      rows = (await supabaseSelectFilter('items', tenantFilter, {
+        order: 'id.asc',
+        select: ITEMS_SELECT_MINIMAL,
+      })) as Row[] | null
     }
   }
 
@@ -149,7 +164,11 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   return list
 }
 
-async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
+async function getStoreStock(
+  store: string,
+  tenantScope: InventoryTenantScope,
+  asOfDate?: string
+): Promise<Record<string, number>> {
   try {
     const storeNorm = String(store || '').toLowerCase().trim()
     if (!storeNorm) return {}
@@ -162,12 +181,14 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
       asOfTrim && /^\d{4}-\d{2}-\d{2}$/.test(asOfTrim) ? getBangkokEndOfDayUtcIso(asOfTrim) : null
 
     try {
-      const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>(
-        'get_store_stock',
-        {
+      const rpcParams: Record<string, unknown> = {
           p_location_patterns: patterns,
           p_as_of_date: asOfTimestamp,
-        }
+      }
+      if (tenantScope.enforce && tenantScope.tenantId) rpcParams.p_tenant_id = tenantScope.tenantId
+      const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>(
+        'get_store_stock',
+        rpcParams
       )) as { item_code?: string; total_qty?: number }[] | null
 
       const m: Record<string, number> = {}
@@ -188,7 +209,7 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
         : ''
       const rows = (await supabaseSelectFilterAllPages(
         'stock_logs',
-        `${locFilter}${dateSuffix}`,
+        appendInventoryTenantFilter(`${locFilter}${dateSuffix}`, tenantScope),
         { order: 'id.asc', pageSize: 8000, maxRows: 1_000_000, select: 'item_code,qty' }
       )) as { item_code?: string; qty?: number }[] | null
       const m: Record<string, number> = {}
@@ -199,7 +220,11 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
       }
       return m
     }
-  } catch {
+  } catch (e) {
+    if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+      throw e
+    }
     return {}
   }
 }
@@ -224,6 +249,10 @@ export async function GET(request: NextRequest) {
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
   const asOfDate = String(searchParams.get('asOfDate') || searchParams.get('date') || '').trim()
   const scope = String(searchParams.get('scope') || '').trim()
+  const tenantScope = await resolveInventoryTenantScope({ auth })
+  if (isInventoryTenantQueryBlocked(tenantScope)) {
+    return NextResponse.json({ items: [], stock: {} }, { headers })
+  }
   const userRole = (auth?.role || '').toLowerCase()
   const isManager = userRole.includes('manager') || userRole.includes('franchisee')
   const userStore = (auth?.store || '').trim()
@@ -238,11 +267,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const [items, stock] = await Promise.all([
-      getItems(storeName, scope || undefined),
-      getStoreStock(storeName, asOfDate || undefined),
+      getItems(storeName, tenantScope, scope || undefined),
+      getStoreStock(storeName, tenantScope, asOfDate || undefined),
     ])
     return NextResponse.json({ items, stock }, { headers })
   } catch (e) {
+    if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+    }
     console.error('getAppData:', e)
     return NextResponse.json({ items: [], stock: {} }, { headers })
   }

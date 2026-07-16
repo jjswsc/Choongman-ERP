@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 /** 고정비 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -9,6 +18,20 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
+    }
+    const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+    const tenantError = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'fixed_expenses',
+      label: '고정비',
+    })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 400, headers })
+    }
     const body = await request.json()
     const id = body.id != null ? Number(body.id) : null
     const name = String(body.name || '').trim()
@@ -46,7 +69,11 @@ export async function POST(request: NextRequest) {
         const asid = Number(accountSubjectId)
         patch.account_subject_id = isNaN(asid) ? null : asid
       }
-      await supabaseUpdate('fixed_expenses', id, patch)
+      await supabaseUpdateByFilter(
+        'fixed_expenses',
+        appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'fixed_expenses'),
+        patch
+      )
       return NextResponse.json({ success: true, id, message: '수정되었습니다.' }, { headers })
     }
 
@@ -62,13 +89,23 @@ export async function POST(request: NextRequest) {
       const asid = Number(accountSubjectId)
       if (!isNaN(asid)) insertRow.account_subject_id = asid
     }
-    const inserted = await supabaseInsert('fixed_expenses', insertRow)
+    const inserted = await supabaseInsert(
+      'fixed_expenses',
+      stampSaasTenantId(insertRow, tenantScope, 'fixed_expenses')
+    )
 
     const row = Array.isArray(inserted) ? inserted[0] : inserted
     const newId = (row as { id?: number })?.id
     return NextResponse.json({ success: true, id: newId, message: '등록되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveFixedExpense:', e)
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('fixed_expenses')
+      return NextResponse.json(
+        { success: false, message: '고정비 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
       { status: 500, headers }

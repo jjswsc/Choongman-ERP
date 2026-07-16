@@ -1,6 +1,14 @@
-import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sortVendorsByDisplayName } from '@/lib/vendor-sort'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 function mapVendorType(v: string): 'purchase' | 'sales' | 'both' {
   const lower = String(v || '').toLowerCase().trim()
@@ -9,13 +17,20 @@ function mapVendorType(v: string): 'purchase' | 'sales' | 'both' {
   return 'purchase'
 }
 
-/** 관리자 거래처 관리 - Supabase vendors 테이블 전체 조회 */
-export async function GET() {
+/** 관리자 거래처 관리 - Supabase vendors 테이블 조회 (Omni: tenant 격리) */
+export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('vendors', { order: 'id.asc', limit: 5000 })) as {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const scope = await resolveInventoryTenantScope({ auth })
+    if (isInventoryTenantQueryBlocked(scope)) {
+      return NextResponse.json([], { headers })
+    }
+
+    const tenantFilter = appendInventoryTenantFilter('', scope)
+    let rows: {
       id?: number
       code?: string
       name?: string
@@ -29,6 +44,21 @@ export async function GET() {
       sales_outlet?: string
       direct_settlement?: boolean
     }[] | null
+
+    try {
+      rows = tenantFilter
+        ? ((await supabaseSelectFilter('vendors', tenantFilter, {
+            order: 'id.asc',
+            limit: 5000,
+          })) as typeof rows)
+        : ((await supabaseSelect('vendors', { order: 'id.asc', limit: 5000 })) as typeof rows)
+    } catch (err) {
+      if (tenantFilter && isMissingInventoryTenantIdColumnError(err)) {
+        markInventoryTenantIdColumnMissing()
+        if (scope.enforce) return NextResponse.json([], { headers })
+      }
+      throw err
+    }
 
     const list = (rows || [])
       .filter((row) => row?.code)

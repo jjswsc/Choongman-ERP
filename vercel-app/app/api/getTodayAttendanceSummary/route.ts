@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
   attendanceStoreNamePostgrestVariantsFilter,
   bangkokDateRangeToUtc,
@@ -15,6 +15,12 @@ import {
   type EmpRowForRealtimeJoin,
 } from '@/lib/today-realtime-join'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** 실시간 격자: 출근 요약 name 은 풀네임인데 스케줄 표시는 nick 일 때 조인 보강 */
 function nickFromEmployeeMaster(
@@ -43,6 +49,12 @@ const TZ = 'Asia/Bangkok'
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const store = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
   const dateStr = String(searchParams.get('date') || searchParams.get('dateStr') || '').trim().slice(0, 10)
@@ -64,7 +76,7 @@ export async function GET(request: NextRequest) {
     ] as const
     for (const sel of empSelectCandidates) {
       try {
-        empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 5000, select: sel })) as EmpRowForRealtimeJoin[]
+        empList = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), { order: 'id.asc', limit: 5000, select: sel })) as EmpRowForRealtimeJoin[]
         break
       } catch {
         continue

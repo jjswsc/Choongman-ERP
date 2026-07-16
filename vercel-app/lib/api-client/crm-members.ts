@@ -408,6 +408,8 @@ export async function getMembersCursor(params?: {
   limit?: number
   /** 기본 active. 'all'이면 전체 */
   status?: string
+  /** 등급 코드. 비우면 전체 */
+  tierCode?: string
 }) {
   const q = new URLSearchParams()
   if (params?.q) q.set('q', params.q)
@@ -419,6 +421,9 @@ export async function getMembersCursor(params?: {
   if (params?.afterId != null) q.set('afterId', String(params.afterId))
   if (params?.limit != null) q.set('limit', String(params.limit))
   if (params?.status?.trim()) q.set('status', params.status.trim())
+  if (params?.tierCode?.trim() && params.tierCode.trim().toLowerCase() !== 'all') {
+    q.set('tierCode', params.tierCode.trim())
+  }
   const suffix = q.toString()
   const res = await apiFetchWithOffline('/api/members/cursor' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<{ success: boolean; rows: Member[]; nextCursor: number | null; message?: string }>

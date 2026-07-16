@@ -1386,6 +1386,174 @@ export async function syncTaxWithholdingLedgerForBankTransaction(bankTransaction
     await deleteAutoWhtBySource('bank_transaction', id)
     return
   }
+  const transType = String(bt.trans_type || '').toLowerCase()
+  if (transType === 'withdraw') {
+    await syncTaxWithholdingLedgersFromBankWithdrawals({ months: [month] })
+    return
+  }
   await syncTaxWithholdingLedgersFromBankDeposits({ months: [month] })
+}
+
+/** 지출 발생 저장 직후 — 해당 월 원장 eager sync */
+export async function syncTaxWithholdingLedgerForExpenseAccrual(expenseAccrualId: number): Promise<void> {
+  const id = Math.floor(Number(expenseAccrualId) || 0)
+  if (id <= 0) return
+  const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${id}`, {
+    select: 'id,expense_date,withholding_tax_amount',
+    limit: 1,
+  })) as ExpenseAccrualWhtRow[]
+  const row = rows?.[0]
+  if (!row?.id) return
+  const expenseDate = String(row.expense_date || '').slice(0, 10)
+  const month = /^\d{4}-\d{2}-\d{2}$/.test(expenseDate) ? expenseDate.slice(0, 7) : ''
+  if (!month) return
+  const wht = Math.max(0, Number(row.withholding_tax_amount) || 0)
+  if (wht <= 0) return
+  await syncTaxWithholdingLedgersFromExpenses({ months: [month] })
+}
+
+type BankWithdrawWhtRow = {
+  id?: number
+  trans_type?: string | null
+  trans_date?: string | null
+  amount?: number | null
+  category?: string | null
+  store_name?: string | null
+  store?: string | null
+  memo?: string | null
+  vendor_code?: string | null
+  vat_amount?: number | null
+  withholding_tax_amount?: number | null
+  withholding_tax_rate?: number | null
+}
+
+/** 통장 출금(즉시 지급) 시 당사 원천징수 → outbound 원장 */
+export async function syncTaxWithholdingLedgersFromBankWithdrawals(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ upserted: number; deleted: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
+
+  const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const startYmd = monthStartYmd(validMonths[0])
+  const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
+  const btFilter = [
+    `trans_type=eq.withdraw`,
+    `trans_date=gte.${encodeURIComponent(startYmd)}`,
+    `trans_date=lte.${encodeURIComponent(endYmd)}`,
+    'withholding_tax_amount=gt.0',
+  ]
+  if (storeFilter) btFilter.push(`store=eq.${encodeURIComponent(storeFilter)}`)
+
+  let bankRows: BankWithdrawWhtRow[] = []
+  try {
+    bankRows = (await supabaseSelectFilterAllPages('bank_transactions', btFilter.join('&'), {
+      select:
+        'id,trans_type,trans_date,amount,category,store,memo,vendor_code,vat_amount,withholding_tax_amount,withholding_tax_rate',
+      order: 'id.asc',
+      pageSize: 3000,
+      maxRows: 50000,
+    })) as BankWithdrawWhtRow[]
+  } catch (e) {
+    const msg = String(e || '').toLowerCase()
+    if (!msg.includes('withholding_tax_amount') && !msg.includes('vat_amount')) return { upserted: 0, deleted: 0 }
+    throw e
+  }
+
+  const vendorRows = (await supabaseSelect('vendors', {
+    select: 'code,tax_id',
+    order: 'id.asc',
+    limit: 15000,
+  })) as { code?: string | null; tax_id?: string | null }[] | null
+  const vendorTinByCode = new Map<string, string>()
+  for (const v of vendorRows || []) {
+    const code = String(v.code || '').trim()
+    if (!code) continue
+    const tin = String(v.tax_id || '')
+      .trim()
+      .replace(/\D/g, '')
+    if (tin) vendorTinByCode.set(code, tin)
+  }
+
+  const existingByBankId = await loadAutoWhtLedgerIndex({
+    months: validMonths,
+    memoTagPrefix: 'BANK_WITHDRAW_WHT',
+    storeFilter,
+    appendStoreFilter: appendStoreNameFilter,
+  })
+
+  let upserted = 0
+  const seenBankIds = new Set<number>()
+  for (const bt of bankRows || []) {
+    const bankId = Math.floor(Number(bt.id) || 0)
+    if (bankId <= 0) continue
+
+    const whtAmount = round2(Math.max(0, Math.abs(Number(bt.withholding_tax_amount) || 0)))
+    if (whtAmount <= 0) continue
+
+    const transDate = String(bt.trans_date || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) continue
+    const taxMonth = transDate.slice(0, 7)
+    if (!validMonths.includes(taxMonth)) continue
+
+    const netPaid = round2(Math.max(0, Math.abs(Number(bt.amount) || 0)))
+    const vatAmount = round2(Math.max(0, Math.abs(Number(bt.vat_amount) || 0)))
+    const grossIncl = round2(netPaid + whtAmount)
+    const grossBase = round2(Math.max(0, grossIncl - vatAmount))
+    const rawRate = Number(bt.withholding_tax_rate)
+    const whtRate =
+      Number.isFinite(rawRate) && rawRate > 0
+        ? round2(rawRate)
+        : grossBase > 0
+          ? round2((whtAmount / grossBase) * 100)
+          : null
+
+    const storeName = String(bt.store || bt.store_name || '').trim() || null
+    if (storeFilter && storeName && !storesMatchForGradeLookup(storeName, storeFilter)) continue
+
+    const vendorCode = String(bt.vendor_code || '').trim()
+    const payeeName = vendorCode || String(bt.memo || '').trim() || `출금-${bankId}`
+    const payeeTaxId = vendorCode ? vendorTinByCode.get(vendorCode) || null : null
+    const memoTag = `[AUTO:BANK_WITHDRAW_WHT:${bankId}]`
+    const saveRow: WhtLedgerAutoSaveRow = {
+      payment_date: transDate,
+      tax_month: taxMonth,
+      payee_name: payeeName.slice(0, 500),
+      payee_tax_id: payeeTaxId,
+      income_type: '서비스',
+      gross_amount: grossBase > 0 ? grossBase : grossIncl,
+      wht_rate: whtRate,
+      wht_amount: whtAmount,
+      form_hint: '50 ทวิ',
+      certificate_no: `BTW-${bankId}`.slice(0, 128),
+      memo: `${memoTag} 통장 출금 원천세 자동`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: storeName,
+      updated_at: new Date().toISOString(),
+      direction: 'outbound',
+      source_type: 'bank_transaction',
+      source_id: bankId,
+    }
+
+    const did = await upsertAutoWithholdingTaxLedgerEntry({
+      sourceKey: bankId,
+      existingBySource: existingByBankId,
+      saveRow,
+    })
+    if (did) upserted += 1
+    seenBankIds.add(bankId)
+  }
+
+  const deleted = await deleteAutoWithholdingTaxLedgerEntries({
+    existingBySource: existingByBankId,
+    seenSourceKeys: seenBankIds,
+  })
+
+  return { upserted, deleted }
 }
 

@@ -7,6 +7,13 @@ import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
 import type { ErpStoreMatchIndex } from '@/lib/erp-store-identity'
 import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 import { rowMatchesInvoiceFilter } from '@/lib/receivable-payable-invoice-filter'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const PAYABLE_LEDGER_SELECT =
   'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id'
@@ -442,18 +449,32 @@ export function dedupePayablePaymentLedgerRows(rows: PayableTransactionRow[]): P
 export async function loadPayableTransactionsToEnd(params: {
   vendorFilter?: string
   endStr: string
+  tenantScope?: SaasTenantScope
 }): Promise<PayableTransactionRow[]> {
+  if (params.tenantScope && isSaasTenantQueryBlocked(params.tenantScope, 'payable_transactions')) return []
   const parts: string[] = []
   if (params.vendorFilter) parts.push(`vendor_code=ilike.${encodeURIComponent(params.vendorFilter)}`)
   if (params.endStr) parts.push(`trans_date=lte.${params.endStr}`)
-  const filter = parts.length ? parts.join('&') : 'id=gt.0'
+  const baseFilter = parts.length ? parts.join('&') : 'id=gt.0'
+  const filter = params.tenantScope
+    ? appendSaasTenantFilter(baseFilter, params.tenantScope, 'payable_transactions')
+    : baseFilter
   // order 필수: 없으면 PostgREST Range 페이지가 비결정적이라 조회마다 행이 빠지거나 겹침
-  const rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
-    select: PAYABLE_LEDGER_SELECT,
-    order: 'id.asc',
-    pageSize: 8000,
-    maxRows: 2_000_000,
-  })) as PayableTransactionRow[]
+  let rows: PayableTransactionRow[]
+  try {
+    rows = (await supabaseSelectFilterAllPages('payable_transactions', filter, {
+      select: PAYABLE_LEDGER_SELECT,
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: 2_000_000,
+    })) as PayableTransactionRow[]
+  } catch (e) {
+    if (params.tenantScope?.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('payable_transactions')
+      return []
+    }
+    throw e
+  }
   return dedupePayablePaymentLedgerRows(dedupeInboundPayableLedgerRows(rows))
 }
 

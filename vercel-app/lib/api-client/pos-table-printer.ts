@@ -169,6 +169,11 @@ export interface PosPrinterSettings {
   orderDeviceMaxCount?: number
   /** true면 POS에서 메인/주문 토글 불가 */
   mainDeviceRoleLocked?: boolean
+  /**
+   * 홀(테이블) 주문 시 손님 수 필수. 기본 true(충만 기존).
+   * false면 손님 수 0이어도 주문 가능.
+   */
+  requireGuestCount?: boolean
   dualMonitorEnabled?: boolean
   customerDisplayAutoOpen?: boolean
   customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
@@ -340,6 +345,11 @@ export async function savePosPrinterSettings(params: {
   otherMode?: 'included' | 'separate'
   feeStackMode?: 'parallel' | 'sequential'
   feeStackOrder?: Array<'vat' | 'service' | 'other'>
+  /**
+   * 홀(테이블) 주문 시 손님 수 필수. 기본 true(충만 기존).
+   * false면 손님 수 0이어도 주문 가능.
+   */
+  requireGuestCount?: boolean
   dualMonitorEnabled?: boolean
   customerDisplayAutoOpen?: boolean
   customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'

@@ -12,6 +12,14 @@ import { addBangkokCalendarDays, getBangkokDateRangeUtc } from '@/lib/bangkok-ti
 import { stockLogBangkokDateRangeFilter } from '@/lib/bangkok-date'
 import { isOutboundLogDateInBangkokYmdRange } from '@/lib/hq-outbound-income-total'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +55,14 @@ export async function GET(request: NextRequest) {
       { headers }
     )
   }
+  const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+  const tenantScope = await resolveInventoryTenantScope({ auth })
+  if (isInventoryTenantQueryBlocked(tenantScope)) {
+    return NextResponse.json(
+      { byWarehouse: {}, warehouseOrder: [], period: { start: startStr, end: endStr }, filterBy: filterBy === 'order' ? 'order' : 'delivery' },
+      { headers }
+    )
+  }
 
   const filterByOrder = filterBy !== 'delivery'
   const lo = startStr <= endStr ? startStr : endStr
@@ -54,7 +70,7 @@ export async function GET(request: NextRequest) {
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(lo, hi)
 
   try {
-    const itemRows = (await supabaseSelect('items', {
+    const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter('', tenantScope), {
       select: 'code,name,spec,outbound_location',
       limit: 5000,
     })) as { code?: string; name?: string; spec?: string; outbound_location?: string }[]
@@ -141,7 +157,7 @@ export async function GET(request: NextRequest) {
       logRange.gtePart,
       logRange.ltPart,
     ].join('&')
-    const allLogs = (await supabaseSelectFilter('stock_logs', forceFilter, {
+    const allLogs = (await supabaseSelectFilter('stock_logs', appendInventoryTenantFilter(forceFilter, tenantScope), {
       order: 'log_date.desc',
       limit: 50000,
       select: 'log_date,vendor_target,item_code,item_name,qty,delivery_status',
@@ -192,7 +208,7 @@ export async function GET(request: NextRequest) {
     // warehouse order from warehouse_locations
     const warehouseOrder: string[] = []
     try {
-      const whRows = (await supabaseSelect('warehouse_locations', {
+      const whRows = (await supabaseSelectFilter('warehouse_locations', appendInventoryTenantFilter('', tenantScope), {
         order: 'sort_order.asc',
         limit: 50,
       })) as { name?: string }[]
@@ -200,7 +216,9 @@ export async function GET(request: NextRequest) {
         const wn = String(w.name || '').trim()
         if (wn && byWarehouse[wn]) warehouseOrder.push(wn)
       }
-    } catch {}
+    } catch (e) {
+      if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) throw e
+    }
     for (const k of Object.keys(byWarehouse)) {
       if (!warehouseOrder.includes(k)) warehouseOrder.push(k)
     }
@@ -216,6 +234,9 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(result, { headers })
   } catch (err) {
+    if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(err)) {
+      markInventoryTenantIdColumnMissing()
+    }
     console.error('getOutboundByWarehouse:', err)
     return NextResponse.json(
       { byWarehouse: {}, warehouseOrder: [], period: { start: startStr, end: endStr }, filterBy: filterByOrder ? 'order' : 'delivery' },

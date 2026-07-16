@@ -2,6 +2,13 @@ import {
   supabaseSelectAllPages,
   supabaseSelectFilterAllPages,
 } from "@/lib/supabase-server"
+import {
+  appendPosCatalogTenantFilter,
+  isMissingTenantIdColumnError,
+  isPosCatalogTenantQueryBlocked,
+  markPosMenusTenantIdColumnMissing,
+  type PosCatalogTenantScope,
+} from "@/lib/pos-catalog-tenant-scope"
 
 export type {
   PosMenuOptionGroupLinkRow,
@@ -17,21 +24,41 @@ export {
 
 import type { PosMenuOptionGroupLinkRow, PosOptionGroupItemRow, PosOptionGroupRow } from "@/lib/pos-option-groups-build"
 
-export async function loadPosOptionGroupsWithItems() {
+export async function loadPosOptionGroupsWithItems(scope?: PosCatalogTenantScope) {
+  if (scope && isPosCatalogTenantQueryBlocked(scope)) {
+    return { groups: [] as PosOptionGroupRow[], itemsByGroupId: new Map<number, PosOptionGroupItemRow[]>() }
+  }
+
+  const tenantFilter = scope ? appendPosCatalogTenantFilter("", scope) : ""
   let groups: PosOptionGroupRow[] = []
   for (const cols of [
     "id,group_key,group_code,name,is_active,sort_order",
     "id,group_key,name,is_active,sort_order",
   ]) {
     try {
-      groups = (await supabaseSelectAllPages("pos_option_groups", {
-        order: "sort_order.asc,id.asc",
-        select: cols,
-        pageSize: 3000,
-        maxRows: 100000,
-      })) as PosOptionGroupRow[]
+      if (tenantFilter) {
+        groups = (await supabaseSelectFilterAllPages("pos_option_groups", tenantFilter, {
+          order: "sort_order.asc,id.asc",
+          select: cols,
+          pageSize: 3000,
+          maxRows: 100000,
+        })) as PosOptionGroupRow[]
+      } else {
+        groups = (await supabaseSelectAllPages("pos_option_groups", {
+          order: "sort_order.asc,id.asc",
+          select: cols,
+          pageSize: 3000,
+          maxRows: 100000,
+        })) as PosOptionGroupRow[]
+      }
       break
-    } catch {
+    } catch (err) {
+      if (tenantFilter && isMissingTenantIdColumnError(err)) {
+        markPosMenusTenantIdColumnMissing()
+        if (scope?.enforce) {
+          return { groups: [] as PosOptionGroupRow[], itemsByGroupId: new Map<number, PosOptionGroupItemRow[]>() }
+        }
+      }
       if (cols === "id,group_key,name,is_active,sort_order") throw new Error("pos_option_groups load failed")
     }
   }

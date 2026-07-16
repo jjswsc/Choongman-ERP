@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     const rpcRows = await tryFetchPosSalesAnalyticsAgg({
+      request,
       startStr,
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      request,
       startStr,
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,

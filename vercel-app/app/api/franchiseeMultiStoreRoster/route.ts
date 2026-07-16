@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectPageCap, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectPageCap, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessSettings } from '@/lib/permissions'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
@@ -14,6 +14,13 @@ import {
   saveFranchiseeMultiStoreSettings,
 } from '@/lib/franchisee-multi-store-settings-server'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,7 +61,7 @@ type RosterRow = {
   extraStores: string[]
 }
 
-async function loadFranchiseeEmployeeRows(): Promise<Record<string, unknown>[]> {
+async function loadFranchiseeEmployeeRows(tenantScope: SaasTenantScope): Promise<Record<string, unknown>[]> {
   const selectCandidates = [
     'id,store,name,nick,role,extra_stores,resign_date,employment_status,deleted_at',
     'id,store,name,nick,role,resign_date,employment_status,deleted_at',
@@ -66,7 +73,7 @@ async function loadFranchiseeEmployeeRows(): Promise<Record<string, unknown>[]> 
   for (const sel of selectCandidates) {
     try {
       return (
-        ((await supabaseSelect('employees', { order: 'id.asc', select: sel, limit })) as Record<
+        ((await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), { order: 'id.asc', select: sel, limit })) as Record<
           string,
           unknown
         >[]) || []
@@ -123,9 +130,13 @@ export async function GET(request: NextRequest) {
   if (!auth || !canAccessSettings(auth.role || '')) {
     return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
   }
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
+    return NextResponse.json({ success: true, settings: null, roster: [], stores: [] }, { headers })
+  }
   try {
     const settings = await getFranchiseeMultiStoreSettings()
-    const rows = await loadFranchiseeEmployeeRows()
+    const rows = await loadFranchiseeEmployeeRows(tenantScope)
     const roster = buildRoster(rows)
     const storeSet = new Set<string>()
     for (const r of rows) {
@@ -150,6 +161,11 @@ export async function POST(request: NextRequest) {
   if (errorResponse) return errorResponse
   if (!auth || !canAccessSettings(auth.role || '')) {
     return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
+  }
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'employees', label: '직원' })
+  if (tenantError) {
+    return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
   }
   try {
     const body = (await request.json()) as {
@@ -179,7 +195,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '저장할 항목이 없습니다.' }, { status: 400, headers })
     }
 
-    const rows = await loadFranchiseeEmployeeRows()
+    const rows = await loadFranchiseeEmployeeRows(tenantScope)
     const rosterIds = new Set(buildRoster(rows).map((r) => r.row))
     const byId = new Map<number, { store: string; role: string }>()
     for (const r of rows) {
@@ -218,7 +234,7 @@ export async function POST(request: NextRequest) {
       }
       const extras = normalizeFranchiseeExtraStores(meta.store, a.extraStores, settings.maxStores)
       try {
-        await supabaseUpdateByFilter('employees', `id=eq.${employeeId}`, { extra_stores: extras })
+        await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${employeeId}`, tenantScope, 'employees'), { extra_stores: extras })
         saved++
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
@@ -242,7 +258,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const refreshed = await loadFranchiseeEmployeeRows()
+    const refreshed = await loadFranchiseeEmployeeRows(tenantScope)
     return NextResponse.json({ success: true, saved, roster: buildRoster(refreshed) }, { headers })
   } catch (e) {
     return NextResponse.json(

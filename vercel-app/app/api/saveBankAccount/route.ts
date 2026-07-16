@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { writeBankAccountAudit } from '@/lib/bank-account-audit'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function allowedStoresForAuth(auth: { store?: string; allowedStores?: string[] }): string[] {
   const userStore = String(auth.store || '').trim()
@@ -37,6 +45,14 @@ export async function POST(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, {
+    tableHint: 'bank_accounts',
+    label: '통장 계좌',
+  })
+  if (tenantError) {
+    return NextResponse.json({ success: false, message: tenantError }, { status: 400, headers })
+  }
 
   try {
     const body = await request.json()
@@ -54,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (id) {
-      const existingRows = (await supabaseSelectFilter('bank_accounts', `id=eq.${id}`, {
+      const existingRows = (await supabaseSelectFilter('bank_accounts', appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'bank_accounts'), {
         limit: 1,
         select: 'id,name,store,bank_name,opening_balance,opening_balance_date',
       })) as {
@@ -105,7 +121,7 @@ export async function POST(request: NextRequest) {
         openingBalanceDate,
       }
 
-      await supabaseUpdate('bank_accounts', id, {
+      await supabaseUpdateByFilter('bank_accounts', appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'bank_accounts'), {
         name,
         store: targetStore || null,
         bank_name: bankName || null,
@@ -147,13 +163,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const inserted = (await supabaseInsert('bank_accounts', {
+    const inserted = (await supabaseInsert('bank_accounts', stampSaasTenantId({
       name,
       store: effectiveStore || null,
       bank_name: bankName || null,
       opening_balance: openingBalance,
       opening_balance_date: openingBalanceDate,
-    })) as { id?: number }[]
+    }, tenantScope, 'bank_accounts'))) as { id?: number }[]
     const newId = Array.isArray(inserted) && inserted[0]?.id != null ? inserted[0].id : null
 
     await writeBankAccountAudit({
@@ -173,6 +189,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, id: newId, message: '등록되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveBankAccount:', e)
+    if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('bank_accounts')
+      return NextResponse.json(
+        { success: false, message: '통장 계좌 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
       { status: 500, headers }

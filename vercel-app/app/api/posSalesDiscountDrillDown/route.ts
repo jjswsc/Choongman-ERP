@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
 
     const [{ rows, truncated }, catalog] = await Promise.all([
       fetchPosSalesOrdersForBusinessRange({
+      request,
         startStr,
         endStr,
         storeCodes: stores.length > 0 ? stores : undefined,

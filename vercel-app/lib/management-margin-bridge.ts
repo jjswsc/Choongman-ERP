@@ -256,13 +256,20 @@ async function fetchPosCompletedForBridge(params: {
   startStr: string
   endStr: string
   storeCodes: string[] | undefined
+  tenantId?: string
 }): Promise<{ completed: Awaited<ReturnType<typeof filterCompletedPosSalesRows>>; truncated: boolean }> {
+  const { resolveSaasTenantScope } = await import('@/lib/saas-tenant-scope')
+  const tenantScope = await resolveSaasTenantScope({
+    auth: params.tenantId ? { tenantId: params.tenantId } : null,
+    storeCode: params.storeCodes?.[0] ?? null,
+  })
   const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
     startStr: params.startStr,
     endStr: params.endStr,
     storeCodes: params.storeCodes,
     select: POS_SALES_MENU_ROW_SELECT,
     queryLabel: 'managementMarginBridge',
+    tenantScope,
   })
   return { completed: filterCompletedPosSalesRows(rows, null), truncated }
 }
@@ -305,12 +312,13 @@ export async function computeManagementMarginBridge(
     const [catalog, costIndex, currentFetch, priorFetch] = await Promise.all([
       loadPosSalesPromoPricingCatalog(),
       buildPosMenuCostIndex(),
-      fetchPosCompletedForBridge({ startStr, endStr, storeCodes }),
+      fetchPosCompletedForBridge({ startStr, endStr, storeCodes, tenantId: input.tenantId }),
       priorRange
         ? fetchPosCompletedForBridge({
             startStr: priorRange.startStr,
             endStr: priorRange.endStr,
             storeCodes,
+            tenantId: input.tenantId,
           })
         : Promise.resolve(null),
     ])

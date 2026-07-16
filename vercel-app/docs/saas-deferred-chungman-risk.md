@@ -21,6 +21,30 @@
 | 4 | per-tenant Supabase project | DB 분리 | — |
 | 5 | member-portal stores tenant 필터 | 포털 매장 목록 | — |
 
+### ✅ 완료 (Omni POS 카탈로그)
+
+- `pos_menus` / `pos_option_groups`(있으면) / `pos_promos`(있으면) + `getPosMenus` 등: [`sql/pos_catalog_tenant_id.sql`](../sql/pos_catalog_tenant_id.sql), [`lib/pos-catalog-tenant-scope.ts`](../lib/pos-catalog-tenant-scope.ts)
+- Omni + JWT `tenantId` 있을 때만 필터. 충만 레거시 DB는 스킵.
+- SQL 미실행 시 Omni는 **빈 메뉴**(타사 전량 노출 금지).
+
+### ✅ 완료 (Omni CRM members)
+
+- `members.tenant_id` + 전화 unique 테넌트화 + `get_member_list_cursor(p_tenant_id)`: [`sql/members_tenant_id.sql`](../sql/members_tenant_id.sql), [`lib/members-tenant-scope.ts`](../lib/members-tenant-scope.ts)
+- `/api/members`, cursor, `[id]` 에 JWT tenant 스코프 적용.
+- Omni에 `line_display_name` 없을 때: [`sql/members_tenant_id_cursor_fix.sql`](../sql/members_tenant_id_cursor_fix.sql)
+
+### ✅ 진행 중 (품목·거래처·재고)
+
+- [`sql/inventory_tenant_id.sql`](../sql/inventory_tenant_id.sql) + [`lib/inventory-tenant-scope.ts`](../lib/inventory-tenant-scope.ts)
+- `getVendors` / `saveVendor` / `getItems` / `saveItem` 테넌트 필터·stamp 적용.
+- **재고 완결(앱)**: `getAppData`, `adjustStock`, `getStockStores`, 입고·출고·사용량 API 14곳 + `accounting-reports` 재고 RPC `p_tenant_id`.
+- **재고 RPC SQL**: [`sql/inventory_stock_rpc_tenant.sql`](../sql/inventory_stock_rpc_tenant.sql) — `get_store_stock` / `get_distinct_stock_locations`.
+
+### ✅ 진행 중 (CRM 포인트·스탬프)
+
+- [`sql/members_crm_tenant_id.sql`](../sql/members_crm_tenant_id.sql) — `member_points_ledger` 등 tenant_id.
+- `/api/member-points`, `/api/member-points/adjust`, `/api/member-stamps/summary` — 회원 소유 검증 + tenant 필터.
+
 ## 🔴 인증·과금 (충만 로그인·단말)
 
 | # | 작업 | 위험 | 오피스 검증 |

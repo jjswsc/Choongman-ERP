@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { mapPosCouponDbRow } from '@/lib/pos-coupon-server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** POS 쿠폰 목록 조회 */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(req, 'any')
+  if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'pos_coupons')) return NextResponse.json([], { headers })
   try {
-    const rows = (await supabaseSelect('pos_coupons', {
+    const rows = (await supabaseSelectFilter('pos_coupons', appendSaasTenantFilter('id=gt.0', tenantScope, 'pos_coupons'), {
       order: 'code',
       limit: 500,
     })) as {

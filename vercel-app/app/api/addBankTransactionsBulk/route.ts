@@ -10,6 +10,14 @@ import {
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -83,6 +91,19 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError =
+      assertSaasTenantWritable(tenantScope, {
+        tableHint: 'bank_transactions',
+        label: '통장 거래',
+      }) ||
+      assertSaasTenantWritable(tenantScope, {
+        tableHint: 'bank_accounts',
+        label: '통장 계좌',
+      })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 400, headers })
+    }
     const body = await request.json()
     const accountId = Number(body.accountId || body.account_id)
     const userRole = String(auth.role || '').trim()
@@ -119,6 +140,14 @@ export async function POST(request: NextRequest) {
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
     }
+    const accountRows = (await supabaseSelectFilter(
+      'bank_accounts',
+      appendSaasTenantFilter(`id=eq.${accountId}`, tenantScope, 'bank_accounts'),
+      { select: 'id', limit: 1 }
+    )) as { id?: number }[]
+    if (!accountRows[0]?.id) {
+      return NextResponse.json({ success: false, message: '해당 계좌가 없습니다.' }, { status: 404, headers })
+    }
     if (items.length === 0) {
       return NextResponse.json({ success: false, message: '등록할 거래가 없습니다.' }, { status: 400, headers })
     }
@@ -130,7 +159,11 @@ export async function POST(request: NextRequest) {
     /** 이미 DB에 있는 줄만 소비형으로 매칭: 같은 요청 안에서 동일 적요·메모인 여러 줄은 각각 등록, CSV 재업로드는 DB 건수만큼만 제외 */
     const dbDedupPoolByBucket = new Map<string, DbDedupEntry[]>()
     if (minDate && maxDate) {
-      const filter = `account_id=eq.${accountId}&trans_date=gte.${minDate}&trans_date=lte.${maxDate}`
+      const filter = appendSaasTenantFilter(
+        `account_id=eq.${accountId}&trans_date=gte.${minDate}&trans_date=lte.${maxDate}`,
+        tenantScope,
+        'bank_transactions'
+      )
       const existing = (await supabaseSelectFilter('bank_transactions', filter, {
         select: 'trans_date,trans_type,amount,memo,note',
         limit: EXISTING_FETCH_LIMIT,
@@ -251,7 +284,7 @@ export async function POST(request: NextRequest) {
         transType === 'withdraw' && ['transfer', 'expense'].includes(validCategory)
       const persistAdvance = validCategory === 'advance'
 
-      const row: Record<string, unknown> = {
+      const row = stampSaasTenantId<Record<string, unknown>>({
         account_id: accountId,
         trans_date: transDate,
         trans_type: transType,
@@ -263,7 +296,7 @@ export async function POST(request: NextRequest) {
         user_employee_id: userEmployeeId,
         user_employee_code: userEmployeeCode,
         category: validCategory,
-      }
+      }, tenantScope, 'bank_transactions')
       if ((persistDepositSubject || persistWithdrawSubject || persistAdvance) && accountSubjectId != null) {
         const asid = Number(accountSubjectId)
         if (!isNaN(asid)) {
@@ -368,6 +401,14 @@ export async function POST(request: NextRequest) {
     )
   } catch (e) {
     console.error('addBankTransactionsBulk:', e)
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('bank_transactions')
+      markSaasTenantColumnMissing('bank_accounts')
+      return NextResponse.json(
+        { success: false, message: '통장 거래 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
       { status: 500, headers }

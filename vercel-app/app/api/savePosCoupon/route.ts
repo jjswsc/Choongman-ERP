@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function normalizeRedemptionMode(raw: unknown): string {
   const s = String(raw ?? 'reusable_code').trim()
@@ -87,6 +94,11 @@ async function persistPosCouponRow(
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(req, 'manager')
+  if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'pos_coupons', label: 'POS 쿠폰' })
+  if (tenantError) return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
   try {
     const body = await req.json()
     const id = body.id != null ? Number(body.id) : undefined
@@ -147,7 +159,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '할인 금액은 0 이상이어야 합니다.' }, { headers })
     }
 
-    const row: Record<string, unknown> = {
+    const row: Record<string, unknown> = stampSaasTenantId({
       code,
       name: name || code,
       discount_type: discountType === 'percent' ? 'percent' : 'fixed',
@@ -168,7 +180,7 @@ export async function POST(req: NextRequest) {
       priority,
       combinable_with_manual_discount: allowWithManualDiscount,
       updated_at: new Date().toISOString(),
-    }
+    }, tenantScope, 'pos_coupons')
     if (body.portalImageUrl !== undefined || body.portal_image_url !== undefined) {
       row.portal_image_url = portalImageUrl
     }
@@ -191,24 +203,24 @@ export async function POST(req: NextRequest) {
 
     const persist = async (payload: Record<string, unknown>) => {
       if (id) {
-        await supabaseUpdate('pos_coupons', id, payload)
+        await supabaseUpdateByFilter('pos_coupons', appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'pos_coupons'), payload)
       } else {
         await supabaseInsert('pos_coupons', payload)
       }
     }
 
     if (id) {
-      const existing = (await supabaseSelectFilter('pos_coupons', `id=eq.${id}`, { limit: 1 })) as unknown[]
+      const existing = (await supabaseSelectFilter('pos_coupons', appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'pos_coupons'), { limit: 1 })) as unknown[]
       if (!existing?.length) {
         return NextResponse.json({ success: false, message: '쿠폰을 찾을 수 없습니다.' }, { headers })
       }
-      const byCode = (await supabaseSelectFilter('pos_coupons', `code=eq.${encodeURIComponent(code)}`, { limit: 2 })) as { id?: number }[]
+      const byCode = (await supabaseSelectFilter('pos_coupons', appendSaasTenantFilter(`code=eq.${encodeURIComponent(code)}`, tenantScope, 'pos_coupons'), { limit: 2 })) as { id?: number }[]
       if (byCode?.some((r) => r.id !== id)) {
         return NextResponse.json({ success: false, message: '이미 사용 중인 쿠폰 코드입니다.' }, { headers })
       }
       await persistPosCouponRow(row, persist)
     } else {
-      const byCode = (await supabaseSelectFilter('pos_coupons', `code=eq.${encodeURIComponent(code)}`, { limit: 1 })) as unknown[]
+      const byCode = (await supabaseSelectFilter('pos_coupons', appendSaasTenantFilter(`code=eq.${encodeURIComponent(code)}`, tenantScope, 'pos_coupons'), { limit: 1 })) as unknown[]
       if (byCode?.length) {
         return NextResponse.json({ success: false, message: '이미 사용 중인 쿠폰 코드입니다.' }, { headers })
       }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createMember, listMembers, MemberSaveError } from '@/lib/members-server'
+import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(req: NextRequest) {
@@ -7,11 +8,12 @@ export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, 'any')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    const tenantScope = await resolveMembersTenantScope({ auth: authRes.auth })
     const { searchParams } = new URL(req.url)
     const q = searchParams.get('q') || ''
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? Math.min(5000, Math.max(1, Number(limitParam))) : 500
-    const rows = await listMembers({ q, limit })
+    const rows = await listMembers({ q, limit, tenantScope })
     return NextResponse.json(rows, { headers })
   } catch (e) {
     console.error('GET /api/members:', e)
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest) {
   const authRes = await requireAuth(req, 'any')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    const tenantScope = await resolveMembersTenantScope({ auth: authRes.auth })
     const body = (await req.json()) as {
       name?: string
       phone?: string
@@ -53,6 +56,7 @@ export async function POST(req: NextRequest) {
       lineUserId: String(body.lineUserId || '').trim(),
       lineDisplayName: String(body.lineDisplayName || '').trim(),
       linePictureUrl: String(body.linePictureUrl || '').trim(),
+      tenantScope,
     })
     return NextResponse.json({ success: true, member }, { headers })
   } catch (e) {

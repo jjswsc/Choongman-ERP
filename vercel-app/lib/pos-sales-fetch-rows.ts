@@ -1,11 +1,4 @@
-/**
- * POS 매출 조회·필터 — posSalesByStore / 손익 매출 / posSalesByPeriod 가 동일한
- * 영업일·매장·완료 상태 기준으로 행을 가져오도록 공용화.
- *
- * **표준 매출액(순매출·가맹 손익 POS)**: 완료 주문 `total` 합. 본사·오피스 store_code 는 테스트 POS →
- * `excludeTestOfficePos`(기본 true)로 매출 관리·집계에서 제외. 본사 손익 매출은 물류 출고 별도.
- * 결제수단별·메뉴별·채널별 API는 breakdown 용도이며, 결제 합 ≠ total 일 수 있음.
- */
+import type { NextRequest } from 'next/server'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import {
   supabaseSelectFilterAllPagesStrippingUnknownColumns,
@@ -24,6 +17,7 @@ import {
   expandSalesStoreCodesForFilterAsync,
   rowMatchesAnySalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
+import type { SaasTenantScope } from '@/lib/saas-tenant-scope'
 
 /** posSalesByStore·손익·기간 집계 공통 select */
 export const POS_SALES_ORDER_ROW_SELECT =
@@ -75,6 +69,10 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
    * false: 해당 store_code 주문 포함 — POS 헤더·getPosTodaySales 등.
    */
   excludeTestOfficePos?: boolean
+  /** Omni: JWT tenant 스코프 — 없으면 request 로 resolve */
+  tenantScope?: SaasTenantScope
+  /** tenantScope 미지정 시 Omni JWT 에서 자동 resolve */
+  request?: NextRequest
 }): Promise<PosSalesFetchedRows> {
   const bizCtx = await loadPosBusinessDaySettingsContext()
   const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(
@@ -87,25 +85,65 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
       ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
       : []
 
+  const {
+    appendSaasTenantFilter,
+    isSaasTenantQueryBlocked,
+    isMissingSaasTenantColumnError,
+    markSaasTenantColumnMissing,
+    resolveSaasTenantScope,
+  } = await import('@/lib/saas-tenant-scope')
+
+  let tenantScope = params.tenantScope
+  if (!tenantScope && params.request) {
+    const { getVerifiedAuth } = await import('@/lib/verify-auth')
+    const auth = await getVerifiedAuth(params.request, { skipSaasGate: true })
+    tenantScope = await resolveSaasTenantScope({
+      auth,
+      storeCode: params.storeCodes?.[0] ?? null,
+    })
+  }
+  if (!tenantScope) {
+    // 손익·원가 등 request 없는 서버 경로: 매장코드로 테넌트 추론(Omni)
+    tenantScope = await resolveSaasTenantScope({
+      storeCode: params.storeCodes?.[0] ?? null,
+    })
+  }
+
+  if (tenantScope && isSaasTenantQueryBlocked(tenantScope, 'pos_orders')) {
+    return { rows: [], truncated: false, bizCtx }
+  }
+
   let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
   filter = appendStoreCodeFilterFromExpanded(filter, expanded)
+  if (tenantScope) {
+    filter = appendSaasTenantFilter(filter, tenantScope, 'pos_orders')
+  }
 
   const maxRows =
     params.storeCodes && params.storeCodes.length > 0
       ? POS_SALES_FETCH_MAX_ROWS_STORE
       : POS_SALES_FETCH_MAX_ROWS_ALL
 
-  const rowsRaw = (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
-    'pos_orders',
-    filter,
-    {
-      select: params.select ?? POS_SALES_ORDER_ROW_SELECT,
-      order: 'created_at.asc',
-      pageSize: 8000,
-      maxRows,
-    },
-    params.queryLabel ?? 'posSalesFetchRows'
-  )) as PeriodOrderRow[]
+  let rowsRaw: PeriodOrderRow[]
+  try {
+    rowsRaw = (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
+      'pos_orders',
+      filter,
+      {
+        select: params.select ?? POS_SALES_ORDER_ROW_SELECT,
+        order: 'created_at.asc',
+        pageSize: 8000,
+        maxRows,
+      },
+      params.queryLabel ?? 'posSalesFetchRows'
+    )) as PeriodOrderRow[]
+  } catch (err) {
+    if (tenantScope?.enforce && isMissingSaasTenantColumnError(err)) {
+      markSaasTenantColumnMissing('pos_orders')
+      return { rows: [], truncated: false, bizCtx }
+    }
+    throw err
+  }
 
   const truncated = rowsRaw.length >= maxRows
 

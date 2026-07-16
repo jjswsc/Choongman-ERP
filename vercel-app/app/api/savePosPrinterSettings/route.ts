@@ -76,24 +76,37 @@ function extractMissingColumnName(error: unknown): string | null {
 
 async function upsertWithMissingColumnFallback(storeCode: string, patch: Record<string, unknown>) {
   const workingPatch: Record<string, unknown> = { ...patch }
+  const skipped: string[] = []
+  // PGRST204: 컬럼 1개씩 제거 후 재시도. 상한 = patch 키 수(스키마 갭이 커도 존재하는 컬럼은 저장)
+  const maxRetries = Math.max(40, Object.keys(workingPatch).length + 5)
 
-  // 컬럼 미존재(PGRST204) 시 해당 키를 제거하고 재시도 (store_code PK upsert 한 번에 처리)
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       await supabaseUpsertMerge('pos_printer_settings', 'store_code', {
         store_code: storeCode,
         ...workingPatch,
       })
+      if (skipped.length > 0) {
+        console.warn(
+          `savePosPrinterSettings: skipped ${skipped.length} missing column(s): ${skipped.join(', ')}`
+        )
+      }
       return
     } catch (e) {
       const missingCol = extractMissingColumnName(e)
       if (!missingCol) throw e
       if (!(missingCol in workingPatch)) throw e
       delete workingPatch[missingCol]
+      skipped.push(missingCol)
       console.warn(`savePosPrinterSettings: skip missing column '${missingCol}'`)
     }
   }
-  throw new Error('savePosPrinterSettings: too many missing-column retries')
+  throw new Error(
+    `savePosPrinterSettings: too many missing-column retries (${skipped.length}). ` +
+      `Omni DB에 pos_printer_settings 컬럼이 부족합니다. ` +
+      `sql/omni_pos_printer_settings_full_columns.sql 실행 후 다시 저장하세요. ` +
+      `skipped: ${skipped.slice(0, 12).join(', ')}${skipped.length > 12 ? '…' : ''}`
+  )
 }
 
 /**
@@ -363,6 +376,12 @@ export async function POST(req: NextRequest) {
     )) as Record<string, unknown>[] | null
     const previous = previousRows?.[0] || {}
 
+    /** 본문에 없으면 DB 기존값 유지. 컬럼/행 없으면 true(충만 기본). */
+    const requireGuestCount =
+      body?.requireGuestCount !== undefined
+        ? parseBoolParam(body.requireGuestCount, true)
+        : previous.require_guest_count !== false
+
     if (allowCustomerDisplayOnly && !previousRows?.length) {
       return NextResponse.json(
         {
@@ -480,6 +499,7 @@ export async function POST(req: NextRequest) {
       other_mode: otherMode,
       fee_stack_mode: feeStackMode,
       fee_stack_order: feeStackOrder,
+      require_guest_count: requireGuestCount,
       dual_monitor_enabled: dualMonitorEnabled,
       customer_display_auto_open: customerDisplayAutoOpen,
       customer_display_monitor_preference: customerDisplayMonitorPreference,

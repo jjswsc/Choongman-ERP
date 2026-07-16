@@ -18,6 +18,14 @@ import {
   buildHqWarehouseOutboundStockLogsFilter,
   isOutboundLogDateInBangkokYmdRange,
 } from '@/lib/hq-outbound-income-total'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,9 +79,18 @@ export async function GET(request: NextRequest) {
   if (!startStr || !endStr) {
     return NextResponse.json([], { headers })
   }
+  const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+  const tenantScope = await resolveInventoryTenantScope({ auth })
+  if (isInventoryTenantQueryBlocked(tenantScope)) {
+    return NextResponse.json([], { headers })
+  }
 
   try {
-    const items = (await supabaseSelect('items', { order: 'id.asc', select: 'code,spec,price,outbound_location', limit: 10000 })) as { code?: string; spec?: string; price?: number; outbound_location?: string }[]
+    const items = (await supabaseSelectFilter(
+      'items',
+      appendInventoryTenantFilter('', tenantScope),
+      { order: 'id.asc', select: 'code,spec,price,outbound_location', limit: 10000 }
+    )) as { code?: string; spec?: string; price?: number; outbound_location?: string }[]
     const itemMap: Record<string, { spec: string; price: number; outboundLocation: string }> = {}
     for (const it of items || []) {
       const c = String(it.code || '').trim()
@@ -100,13 +117,13 @@ export async function GET(request: NextRequest) {
     })}`
 
     const [outboundLogs, forceLogs] = await Promise.all([
-      supabaseSelectFilterAllPages('stock_logs', `${outboundBase}${itemPart}`, {
+      supabaseSelectFilterAllPages('stock_logs', appendInventoryTenantFilter(`${outboundBase}${itemPart}`, tenantScope), {
         order: 'log_date.desc',
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
         pageSize: 8000,
         maxRows: 100000,
       }),
-      supabaseSelectFilterAllPages('stock_logs', `${forceBase}${itemPart}`, {
+      supabaseSelectFilterAllPages('stock_logs', appendInventoryTenantFilter(`${forceBase}${itemPart}`, tenantScope), {
         order: 'log_date.desc',
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
         pageSize: 8000,
@@ -586,6 +603,9 @@ export async function GET(request: NextRequest) {
     for (const r of list) delete r.frozenUnitPrice
     return NextResponse.json(list, { headers })
   } catch (e) {
+    if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+    }
     console.error('getCombinedOutboundHistory:', e)
     return NextResponse.json([], { headers })
   }

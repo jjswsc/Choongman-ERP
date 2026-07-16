@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { recordPriceChanges } from '@/lib/price-history'
 import { roundErp3 } from '@/lib/utils'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 function taxTypeToDb(taxType: string): string {
   if (taxType === 'exempt') return '면세'
@@ -99,6 +108,13 @@ export async function POST(request: NextRequest) {
   let code = ''
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { headers })
+    }
+
     const body = (await request.json()) as {
       code?: string
       name?: string
@@ -175,11 +191,28 @@ export async function POST(request: NextRequest) {
     }
 
     const filterCode = editingCode || code
-    const existing = (await supabaseSelectFilter(
-      'items',
+    const itemFilter = appendInventoryTenantFilter(
       `code=eq.${encodeURIComponent(filterCode)}`,
-      { limit: 1 }
-    )) as { id?: number; price?: number; cost?: number; name?: string; category?: string; image?: string }[] | null
+      tenantScope
+    )
+    let existing: { id?: number; price?: number; cost?: number; name?: string; category?: string; image?: string }[] | null
+    try {
+      existing = (await supabaseSelectFilter('items', itemFilter, {
+        limit: 1,
+      })) as { id?: number; price?: number; cost?: number; name?: string; category?: string; image?: string }[] | null
+    } catch (err) {
+      if (isMissingInventoryTenantIdColumnError(err)) {
+        markInventoryTenantIdColumnMissing()
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'items tenant_id 스키마가 없습니다. sql/inventory_tenant_id.sql 을 실행해 주세요.',
+          },
+          { headers }
+        )
+      }
+      throw err
+    }
 
     // 수정 시 폼 리셋/오류로 빈 값이 오면 기존 값 유지 (이미지·분류 누락 방지)
     if (existing && existing.length > 0) {
@@ -217,9 +250,9 @@ export async function POST(request: NextRequest) {
 
     const tryWrite = async (payload: Record<string, unknown>) => {
       if (existing && existing.length > 0) {
-        await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(filterCode)}`, payload)
+        await supabaseUpdateByFilter('items', itemFilter, payload)
       } else {
-        await supabaseInsert('items', payload)
+        await supabaseInsert('items', stampInventoryTenantId(payload, tenantScope))
         const price = Number(row.price) || 0
         const cost = Number(row.cost) || 0
         recordPriceChanges({

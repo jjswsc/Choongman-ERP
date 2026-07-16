@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdateByFilter,
@@ -13,6 +12,13 @@ import {
 import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 import { normalizeVendorCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -56,6 +62,8 @@ export async function GET(req: NextRequest) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
   }
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'marketing_ads')) return NextResponse.json([], { headers })
 
   try {
     const { searchParams } = new URL(req.url)
@@ -67,12 +75,7 @@ export async function GET(req: NextRequest) {
     }
 
     const listLimit = 8000
-    const rows = filter
-      ? ((await supabaseSelectFilter('marketing_ads', filter, {
-          order: 'publish_date.desc,id.desc',
-          limit: listLimit,
-        })) as Record<string, unknown>[])
-      : ((await supabaseSelect('marketing_ads', {
+    const rows = ((await supabaseSelectFilter('marketing_ads', appendSaasTenantFilter(filter || 'id=gt.0', tenantScope, 'marketing_ads'), {
           order: 'publish_date.desc,id.desc',
           limit: listLimit,
         })) as Record<string, unknown>[])
@@ -122,6 +125,9 @@ export async function POST(req: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'marketing_ads', label: '마케팅 광고' })
+  if (tenantError) return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
 
   try {
     const body = (await req.json()) as {
@@ -172,7 +178,7 @@ export async function POST(req: NextRequest) {
       try {
         const prev = (await supabaseSelectFilter(
           'marketing_ads',
-          `id=eq.${encodeURIComponent(editingId)}`,
+          appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_ads'),
           { limit: 1, select: 'id,expense_accrual_id' }
         )) as { expense_accrual_id?: number | null }[] | null
         const pid = prev?.[0]?.expense_accrual_id
@@ -183,7 +189,7 @@ export async function POST(req: NextRequest) {
     }
 
     const contentDetail = String(body.contentDetail ?? body.content_detail ?? '').trim()
-    const rowCore: Record<string, unknown> = {
+    const rowCore: Record<string, unknown> = stampSaasTenantId({
       campaign_id: Number(campaignId),
       content_format: String(body.contentFormat ?? '').trim(),
       content_pillar: String(body.contentPillar ?? '').trim(),
@@ -193,7 +199,7 @@ export async function POST(req: NextRequest) {
       post_link: String(body.postLink ?? '').trim(),
       boost_budget: parseNum(body.boostBudget),
       actual_spent: parseNum(body.actualSpent),
-    }
+    }, tenantScope, 'marketing_ads')
     const periodEndParsed = body.periodEndDate ? parseDate(body.periodEndDate) : null
     const rowWithPeriod: Record<string, unknown> = {
       ...rowCore,
@@ -210,21 +216,21 @@ export async function POST(req: NextRequest) {
     if (editingId) {
       const existing = (await supabaseSelectFilter(
         'marketing_ads',
-        `id=eq.${encodeURIComponent(editingId)}`,
+        appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_ads'),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (!existing?.length) {
         return NextResponse.json({ success: false, message: '수정할 광고를 찾을 수 없습니다.' }, { headers })
       }
       try {
-        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowFull)
+        await supabaseUpdateByFilter('marketing_ads', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_ads'), rowFull)
       } catch (e) {
         if (!isColumnSchemaError(e)) throw e
         try {
-          await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowWithPeriod)
+          await supabaseUpdateByFilter('marketing_ads', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_ads'), rowWithPeriod)
         } catch (e2) {
           if (!isColumnSchemaError(e2)) throw e2
-          await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowCore)
+          await supabaseUpdateByFilter('marketing_ads', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_ads'), rowCore)
         }
       }
       recordId = editingId
@@ -279,7 +285,7 @@ export async function POST(req: NextRequest) {
     expenseSyncMessage = sync.message
     if (sync.linkExpenseAccrualId !== undefined) {
       try {
-        await supabaseUpdateByFilter('marketing_ads', `id=eq.${recordId}`, {
+        await supabaseUpdateByFilter('marketing_ads', appendSaasTenantFilter(`id=eq.${recordId}`, tenantScope, 'marketing_ads'), {
           expense_accrual_id: sync.linkExpenseAccrualId,
         })
       } catch (e) {

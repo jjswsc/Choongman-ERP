@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMemberSummaryById, updateMember, MemberSaveError } from '@/lib/members-server'
+import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(
@@ -10,12 +11,13 @@ export async function GET(
   const authRes = await requireAuth(req, 'any')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    const tenantScope = await resolveMembersTenantScope({ auth: authRes.auth })
     const params = await context.params
     const id = Number(params.id || 0)
     if (!id) {
       return NextResponse.json({ success: false, message: '유효한 회원 ID가 필요합니다.' }, { headers })
     }
-    const member = await getMemberSummaryById(id)
+    const member = await getMemberSummaryById(id, tenantScope)
     if (!member) {
       return NextResponse.json({ success: false, message: '회원을 찾을 수 없습니다.' }, { status: 404, headers })
     }
@@ -40,6 +42,7 @@ export async function PATCH(
   const authRes = await requireAuth(req, 'manager')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    const tenantScope = await resolveMembersTenantScope({ auth: authRes.auth })
     const params = await context.params
     const id = Number(params.id || 0)
     if (!id) {
@@ -79,6 +82,7 @@ export async function PATCH(
       consentPrivacy: body.consentPrivacy,
       consentAt: body.consentAt,
       status: body.status,
+      tenantScope,
     })
     return NextResponse.json({ success: true, member }, { headers })
   } catch (e) {

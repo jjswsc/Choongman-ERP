@@ -3,6 +3,15 @@ import { supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 import { syncReceivableFromForceOutboundStockLogRow } from '@/lib/force-outbound-receivable'
 import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
 
 /** DB에 `stock_logs.reference_no` 마이그레이션 전인 환경: 해당 키만 제거 후 재시도 */
 function stripReferenceNoFromStockLogRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -18,6 +27,12 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 400, headers })
+    }
     const body = await request.json()
     const bodyObj = Array.isArray(body) ? null : body && typeof body === 'object' ? (body as Record<string, unknown>) : null
     const referenceNoBatch = bodyObj
@@ -58,7 +73,7 @@ export async function POST(request: NextRequest) {
     const priceByCode: Record<string, number> = {}
     if (uniqCodes.length > 0) {
       const codeFilter = `code=in.(${uniqCodes.join(',')})`
-      const itemRows = (await supabaseSelectFilter('items', codeFilter, {
+      const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter(codeFilter, tenantScope), {
         select: 'code,price',
         limit: uniqCodes.length + 20,
       })) as { code?: string; price?: number | null }[]
@@ -90,7 +105,7 @@ export async function POST(request: NextRequest) {
             : null
 
       const refPatch = { reference_no: referenceNoBatch }
-      rows.push({
+      rows.push(stampInventoryTenantId({
         location: store,
         item_code: code,
         item_name: String(d.name || '').trim(),
@@ -102,8 +117,8 @@ export async function POST(request: NextRequest) {
         delivery_status: deliveryDate,
         invoice_unit_price: invoiceUnit,
         ...refPatch,
-      })
-      rows.push({
+      }, tenantScope))
+      rows.push(stampInventoryTenantId({
         location: '본사',
         item_code: code,
         item_name: String(d.name || '').trim(),
@@ -115,7 +130,7 @@ export async function POST(request: NextRequest) {
         delivery_status: deliveryDate,
         invoice_unit_price: invoiceUnit,
         ...refPatch,
-      })
+      }, tenantScope))
     }
 
     if (!rows.length) {
@@ -191,6 +206,13 @@ export async function POST(request: NextRequest) {
       { headers }
     )
   } catch (e) {
+    if (isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+      return NextResponse.json(
+        { success: false, message: 'inventory tenant_id 스키마가 없습니다.' },
+        { status: 400, headers }
+      )
+    }
     console.error('forceOutboundBatch:', e)
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '출고 처리 실패' },

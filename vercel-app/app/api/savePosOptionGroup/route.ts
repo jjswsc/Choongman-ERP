@@ -6,6 +6,13 @@ import {
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
 import { resolvePosOptionGroupCode } from "@/lib/pos-option-group-code"
+import { getVerifiedAuth } from "@/lib/verify-auth"
+import {
+  appendPosCatalogTenantFilter,
+  assertPosCatalogTenantWritable,
+  resolvePosCatalogTenantScope,
+  stampPosCatalogTenantId,
+} from "@/lib/pos-catalog-tenant-scope"
 
 type SaveItemInput = {
   id?: string
@@ -21,6 +28,13 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set("Access-Control-Allow-Origin", "*")
   try {
+    const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({ auth })
+    const writeBlock = assertPosCatalogTenantWritable(catalogScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { headers })
+    }
+
     const body = await req.json()
     const idRaw = String(body?.id ?? "").trim()
     const groupKey = String(body?.key ?? "").trim()
@@ -37,7 +51,23 @@ export async function POST(req: NextRequest) {
 
     let groupId = 0
     if (idRaw) {
-      await supabaseUpdateByFilter("pos_option_groups", `id=eq.${idRaw}`, {
+      const groupFilter = appendPosCatalogTenantFilter(`id=eq.${idRaw}`, catalogScope)
+      const existingGroup = (await supabaseSelectFilter("pos_option_groups", groupFilter, {
+        limit: 1,
+        select: "id",
+      })) as { id?: number }[] | null
+      if (!existingGroup?.[0]?.id) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: catalogScope.enforce
+              ? "옵션 그룹을 찾을 수 없거나 다른 회사 데이터입니다."
+              : "옵션 그룹을 찾을 수 없습니다.",
+          },
+          { headers }
+        )
+      }
+      await supabaseUpdateByFilter("pos_option_groups", groupFilter, {
         group_key: groupKey,
         name,
         is_active: isActive,
@@ -45,12 +75,18 @@ export async function POST(req: NextRequest) {
       })
       groupId = Number(idRaw)
     } else {
-      const inserted = (await supabaseInsert("pos_option_groups", {
-        group_key: groupKey,
-        name,
-        is_active: isActive,
-        sort_order: sortOrder,
-      })) as { id?: number }[] | { id?: number }
+      const inserted = (await supabaseInsert(
+        "pos_option_groups",
+        stampPosCatalogTenantId(
+          {
+            group_key: groupKey,
+            name,
+            is_active: isActive,
+            sort_order: sortOrder,
+          },
+          catalogScope
+        )
+      )) as { id?: number }[] | { id?: number }
       const row = Array.isArray(inserted) ? inserted[0] : inserted
       groupId = Number(row?.id ?? 0)
       if (!groupId) throw new Error("group insert failed")

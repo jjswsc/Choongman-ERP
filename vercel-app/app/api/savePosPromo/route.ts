@@ -17,6 +17,12 @@ import {
 import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
 import { parseBangkokHhmm } from '@/lib/bangkok-time'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendPosCatalogTenantFilter,
+  assertPosCatalogTenantWritable,
+  resolvePosCatalogTenantScope,
+  stampPosCatalogTenantId,
+} from '@/lib/pos-catalog-tenant-scope'
 
 function isColumnSchemaError(e: unknown): boolean {
   const s = String(e)
@@ -47,6 +53,11 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const catalogScope = await resolvePosCatalogTenantScope({ auth })
+    const writeBlock = assertPosCatalogTenantWritable(catalogScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { headers })
+    }
     const body = (await req.json()) as {
       id?: string
       code?: string
@@ -207,9 +218,10 @@ export async function POST(req: NextRequest) {
     async function applyPromoRow(targetId: string): Promise<void> {
       const attempts: Record<string, unknown>[] = [fullPatch, rowWithCampaign, rowBase]
       let lastErr: unknown
+      const promoFilter = appendPosCatalogTenantFilter(`id=eq.${targetId}`, catalogScope)
       for (const patch of attempts) {
         try {
-          await supabaseUpdateByFilter('pos_promos', `id=eq.${targetId}`, patch)
+          await supabaseUpdateByFilter('pos_promos', promoFilter, patch)
           return
         } catch (e) {
           lastErr = e
@@ -224,7 +236,10 @@ export async function POST(req: NextRequest) {
       let lastErr: unknown
       for (const row of attempts) {
         try {
-          const inserted = await supabaseInsert('pos_promos', row)
+          const inserted = await supabaseInsert(
+            'pos_promos',
+            stampPosCatalogTenantId(row, catalogScope)
+          )
           const id = readInsertedId(inserted)
           if (id) return id
         } catch (e) {
@@ -241,7 +256,7 @@ export async function POST(req: NextRequest) {
       try {
         const prev = (await supabaseSelectFilter(
           'pos_promos',
-          `id=eq.${editingId}`,
+          appendPosCatalogTenantFilter(`id=eq.${editingId}`, catalogScope),
           { limit: 1, select: 'expense_accrual_id' }
         )) as { expense_accrual_id?: number | null }[] | null
         const pid = prev?.[0]?.expense_accrual_id
@@ -254,7 +269,7 @@ export async function POST(req: NextRequest) {
     if (editingId) {
       const existing = (await supabaseSelectFilter(
         'pos_promos',
-        `id=eq.${editingId}`,
+        appendPosCatalogTenantFilter(`id=eq.${editingId}`, catalogScope),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing && existing.length > 0) {
@@ -268,7 +283,7 @@ export async function POST(req: NextRequest) {
     } else {
       const codeExists = (await supabaseSelectFilter(
         'pos_promos',
-        `code=eq.${encodeURIComponent(code)}`,
+        appendPosCatalogTenantFilter(`code=eq.${encodeURIComponent(code)}`, catalogScope),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (codeExists && codeExists.length > 0) {
@@ -281,7 +296,7 @@ export async function POST(req: NextRequest) {
       if (!promoId) {
         const rows = (await supabaseSelectFilter(
           'pos_promos',
-          `code=eq.${encodeURIComponent(code)}`,
+          appendPosCatalogTenantFilter(`code=eq.${encodeURIComponent(code)}`, catalogScope),
           { limit: 1, select: 'id' }
         )) as { id?: number }[] | null
         const rid = rows?.[0]?.id

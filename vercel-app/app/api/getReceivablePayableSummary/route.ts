@@ -16,6 +16,7 @@ import {
   scopePayableLedgerRows,
 } from '@/lib/payable-attributed-store'
 import { groupReceivableRowsByStore, scopeReceivableLedger } from '@/lib/receivable-ledger-scope'
+import { resolveSaasTenantScope, type SaasTenantScope } from '@/lib/saas-tenant-scope'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
   const s = String(storeFilter || '').trim()
@@ -28,11 +29,13 @@ async function buildReceivableSummaryList(params: {
   endStr: string
   storeFilter?: string
   filterByVendorLink: boolean
+  tenantScope: SaasTenantScope
 }) {
   const scoped = await scopeReceivableLedger({
     endStr: params.endStr,
     storeFilter: params.storeFilter,
     filterByVendorLink: params.filterByVendorLink,
+    tenantScope: params.tenantScope,
   })
   const grouped = groupReceivableRowsByStore(
     scoped.scopedRows,
@@ -58,12 +61,14 @@ async function getPayableSummary(params: {
   vendorFilter: string
   endStr: string
   storeFilter?: string
+  tenantScope: SaasTenantScope
 }): Promise<{ list: { vendorCode: string; balance: number; count: number }[]; totalAmount: number }> {
   const { vendorFilter, endStr, storeFilter } = params
   const ledgerRows = await filterPurchasePayableLedgerRowsAsync(
     await loadPayableTransactionsToEnd({
       vendorFilter: vendorFilter || undefined,
       endStr,
+      tenantScope: params.tenantScope,
     })
   )
   const { scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
@@ -81,6 +86,7 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
   const { searchParams } = new URL(request.url)
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
   const userStore = String(auth.store || '').trim()
@@ -108,6 +114,7 @@ export async function GET(request: NextRequest) {
         vendorFilter,
         endStr,
         storeFilter: payableStoreFilterActive ? requestedStoreFilter : undefined,
+        tenantScope,
       })
       return NextResponse.json({ type: 'payable', list: scoped.list, totalAmount: scoped.totalAmount }, { headers })
     }
@@ -128,6 +135,7 @@ export async function GET(request: NextRequest) {
       endStr,
       storeFilter: isReceivableStoreFilterActive(storeFilterVal) ? storeFilterVal : undefined,
       filterByVendorLink: canSelectStores,
+      tenantScope,
     })
     return NextResponse.json(
       { type: 'receivable', list: receivableSummary.list, totalAmount: receivableSummary.totalAmount },
@@ -140,6 +148,7 @@ export async function GET(request: NextRequest) {
           vendorFilter,
           endStr,
           storeFilter: payableStoreFilterActive ? requestedStoreFilter : undefined,
+          tenantScope,
         })
         return NextResponse.json({ type: 'payable', list: scoped.list, totalAmount: scoped.totalAmount }, { headers })
       }
@@ -155,6 +164,7 @@ export async function GET(request: NextRequest) {
         endStr,
         storeFilter: isReceivableStoreFilterActive(fallbackStoreFilter) ? fallbackStoreFilter : undefined,
         filterByVendorLink: canSelectStores,
+        tenantScope,
       })
       return NextResponse.json(
         { type: 'receivable', list: receivableSummary.list, totalAmount: receivableSummary.totalAmount },

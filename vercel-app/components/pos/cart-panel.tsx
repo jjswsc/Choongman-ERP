@@ -395,6 +395,11 @@ interface CartPanelProps {
   onSplitCashPaymentStep?: (payment: CartPanelPaymentPayload) => void
   /** 터미널 데모: 홀에서 손님 수가 0이면 지정 값으로(투어 주문 버튼) */
   posDineInDemoDefaultGuestCount?: number
+  /**
+   * 홀(테이블) 주문 시 손님 수 필수. 기본 true.
+   * false면 guestCount 0이어도 주문 가능.
+   */
+  requireGuestCount?: boolean
   /** 터미널 투어 등: 홀 손님 수 변경 시 부모 동기 */
   onGuestCountChange?: (guestCount: number) => void
   /**
@@ -442,6 +447,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onPaymentComplete,
   onSplitCashPaymentStep,
   posDineInDemoDefaultGuestCount,
+  requireGuestCount = true,
   onGuestCountChange,
   onPostPaymentCashChange,
 }, ref) {
@@ -5357,7 +5363,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </div>
 
         <div className="px-3 flex flex-col gap-2">
-          {orderType === 'dine-in' && selectedTable && guestCount <= 0 && (
+          {orderType === 'dine-in' && selectedTable && requireGuestCount && guestCount <= 0 && (
             <p className="text-xs text-amber-700">
               {t('posTourTableGuestRequired') || '테이블 주문은 인원을 먼저 선택해야 주문할 수 있습니다.'}
             </p>
@@ -5366,9 +5372,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <Button
               data-tour="pos-tour-cart-order"
               className="w-full h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
-              disabled={cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight}
+              disabled={
+                cartItems.length === 0 ||
+                (requireGuestCount && guestCount <= 0) ||
+                posBackendActionInFlight
+              }
               onClick={() => {
-                if (!selectedTable || cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight) return
+                if (
+                  !selectedTable ||
+                  cartItems.length === 0 ||
+                  (requireGuestCount && guestCount <= 0) ||
+                  posBackendActionInFlight
+                ) {
+                  return
+                }
                 const submitItems = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx))
                 onOrderSubmit?.({
                   items: submitItems,

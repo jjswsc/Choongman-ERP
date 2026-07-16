@@ -21,6 +21,13 @@ import {
 } from '@/lib/receivable-ledger-pure'
 import { normalizeReceivableStoreKey, pickReceivableDisplayStoreName, receivableStoreGroupKey } from '@/lib/receivable-store-key'
 import { rowMatchesInvoiceFilter } from '@/lib/receivable-payable-invoice-filter'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export {
   buildReceivableAccrualStoreIndex,
@@ -47,15 +54,30 @@ export async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
   return buildReceivableVendorMapsFromRows(vendors || [])
 }
 
-export async function loadReceivableTransactionsToEnd(endStr: string): Promise<ReceivableTransactionRow[]> {
-  const filter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
+export async function loadReceivableTransactionsToEnd(
+  endStr: string,
+  tenantScope?: SaasTenantScope
+): Promise<ReceivableTransactionRow[]> {
+  if (tenantScope && isSaasTenantQueryBlocked(tenantScope, 'receivable_transactions')) return []
+  const baseFilter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
+  const filter = tenantScope
+    ? appendSaasTenantFilter(baseFilter, tenantScope, 'receivable_transactions')
+    : baseFilter
   // order 필수: 없으면 PostgREST Range 페이지가 비결정적이라 조회마다 행이 빠지거나 겹침
-  return (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
-    select: RECEIVABLE_LEDGER_SELECT,
-    order: 'id.asc',
-    pageSize: 8000,
-    maxRows: 2_000_000,
-  })) as ReceivableTransactionRow[]
+  try {
+    return (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
+      select: RECEIVABLE_LEDGER_SELECT,
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: 2_000_000,
+    })) as ReceivableTransactionRow[]
+  } catch (e) {
+    if (tenantScope?.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('receivable_transactions')
+      return []
+    }
+    throw e
+  }
 }
 
 function storeDisplayNamesByGroupKey(
@@ -186,6 +208,7 @@ export async function scopeReceivableLedger(params: {
   startStr?: string
   storeFilter?: string
   filterByVendorLink: boolean
+  tenantScope?: SaasTenantScope
 }): Promise<{
   vendorMaps: ReceivableVendorMaps
   attributionMaps: ReceivableAttributionMaps
@@ -193,7 +216,7 @@ export async function scopeReceivableLedger(params: {
   periodRows: ReceivableTransactionRow[]
   cumulativeByStoreGroup: Record<string, number>
 }> {
-  const ledgerRows = await loadReceivableTransactionsToEnd(params.endStr)
+  const ledgerRows = await loadReceivableTransactionsToEnd(params.endStr, params.tenantScope)
   const vendorMaps = await getReceivableVendorMaps()
   const attributionMaps = buildReceivableAccrualStoreIndex(ledgerRows)
   const scopedRows = filterReceivableRows(ledgerRows, {

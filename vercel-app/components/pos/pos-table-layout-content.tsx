@@ -47,6 +47,7 @@ import {
   normalizePosFloorLabels,
   resolvePosFloorDisplayLabel,
 } from "@/lib/pos-table-layout-payload"
+import { computeAutoLayoutSlots } from "@/lib/pos-table-auto-layout"
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 
 const FLOOR_W = 720
@@ -135,6 +136,8 @@ export function PosTableLayoutContent() {
   const [isFallbackLayout, setIsFallbackLayout] = React.useState(false)
   const [copyFromStoreCode, setCopyFromStoreCode] = React.useState("")
   const [copyLoading, setCopyLoading] = React.useState(false)
+  const [bulkCount, setBulkCount] = React.useState(12)
+  const [bulkShape, setBulkShape] = React.useState<TableShape>("rect")
   const dragStartRef = React.useRef<{
     ids: string[]
     starts: Record<string, { x: number; y: number; w: number; h: number }>
@@ -272,6 +275,124 @@ export function PosTableLayoutContent() {
     setSelectedIds([newTable.id])
     setEditingNameId(newTable.id)
   }
+
+  const applySlotsToFloor = React.useCallback(
+    (
+      tables: PosTableItem[],
+      slots: { x: number; y: number; w: number; h: number }[],
+      opts?: { reshape?: { shape: TableShape; seats: number } }
+    ): PosTableItem[] => {
+      return tables.map((tbl, i) => {
+        const slot = slots[i]
+        if (!slot) return tbl
+        const next: PosTableItem = {
+          ...tbl,
+          x: slot.x,
+          y: slot.y,
+          w: slot.w,
+          h: slot.h,
+          rotation: 0,
+          floor: activeFloor,
+        }
+        if (opts?.reshape) {
+          next.shape = opts.reshape.shape
+          next.seats = opts.reshape.seats
+        }
+        return normalizeLayoutItem(next)
+      })
+    },
+    [activeFloor]
+  )
+
+  const autoArrangeCurrentFloor = React.useCallback(async () => {
+    const items = currentFloorLayout
+    if (items.length === 0) {
+      await appAlert(t("posTableAutoArrangeEmpty") || "배치할 테이블이 없습니다. 먼저 테이블을 추가하세요.")
+      return
+    }
+    const sample = items[0]
+    const { slots, capacityExceeded, capacity } = computeAutoLayoutSlots({
+      count: items.length,
+      cellW: sample.w,
+      cellH: sample.h,
+      floorW: FLOOR_W,
+      floorH: FLOOR_H,
+      margin: GRID_SIZE,
+      gridSize: GRID_SIZE,
+      minW: MIN_TABLE_W,
+      minH: MIN_TABLE_H,
+    })
+    if (capacityExceeded || slots.length !== items.length) {
+      await appAlert(
+        (t("posTableBulkCapacityExceeded") || "화면에 맞게 배치할 수 있는 최대 개수는 {n}개입니다.")
+          .replace("{n}", String(capacity))
+      )
+      return
+    }
+    const arranged = applySlotsToFloor(items, slots)
+    const arrangedById = new Map(arranged.map((t) => [t.id, t]))
+    setLayout((prev) => prev.map((t) => arrangedById.get(t.id) ?? t))
+    setSelectedIds(arranged.map((t) => t.id))
+    setSelectedId(arranged[0]?.id ?? null)
+  }, [applySlotsToFloor, currentFloorLayout, t])
+
+  const addTablesBulk = React.useCallback(async () => {
+    const count = Math.max(1, Math.min(60, Math.floor(Number(bulkCount) || 0)))
+    if (!count) {
+      await appAlert(t("posTableBulkCountInvalid") || "생성 개수를 1 이상으로 입력하세요.")
+      return
+    }
+    const preset = SHAPE_PRESETS.find((p) => p.shape === bulkShape) ?? SHAPE_PRESETS[0]
+    const { slots, capacityExceeded, capacity } = computeAutoLayoutSlots({
+      count,
+      cellW: preset.w,
+      cellH: preset.h,
+      floorW: FLOOR_W,
+      floorH: FLOOR_H,
+      margin: GRID_SIZE,
+      gridSize: GRID_SIZE,
+      minW: MIN_TABLE_W,
+      minH: MIN_TABLE_H,
+    })
+    if (capacityExceeded || slots.length !== count) {
+      await appAlert(
+        (t("posTableBulkCapacityExceeded") || "화면에 맞게 배치할 수 있는 최대 개수는 {n}개입니다.")
+          .replace("{n}", String(capacity))
+      )
+      return
+    }
+
+    if (currentFloorLayout.length > 0) {
+      const ok = await appConfirm(
+        (t("posTableBulkReplaceConfirm") || "현재 구역의 테이블 {n}개를 지우고 {m}개를 새로 만들까요?")
+          .replace("{n}", String(currentFloorLayout.length))
+          .replace("{m}", String(count))
+      )
+      if (!ok) return
+    }
+
+    const newTables: PosTableItem[] = slots.map((slot, i) =>
+      normalizeLayoutItem({
+        id: generateId(),
+        name: formatAutoTableName(activeFloor, i + 1),
+        x: slot.x,
+        y: slot.y,
+        w: slot.w,
+        h: slot.h,
+        floor: activeFloor,
+        shape: preset.shape,
+        seats: preset.defaultSeats,
+        rotation: 0,
+      })
+    )
+    setLayout((prev) => [
+      ...prev.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) !== activeFloor),
+      ...newTables,
+    ])
+    setSelectedIds(newTables.map((t) => t.id))
+    setSelectedId(newTables[0]?.id ?? null)
+    setEditingNameId(null)
+  }, [activeFloor, bulkCount, bulkShape, currentFloorLayout.length, formatAutoTableName, t])
 
   const handleRemoveTable = async (id: string) => {
     if (!(await appConfirm(t("posTableDeleteConfirm") || "이 테이블을 삭제하시겠습니까?"))) return
@@ -936,6 +1057,52 @@ export function PosTableLayoutContent() {
             {t(preset.labelKey)}
           </Button>
         ))}
+        <div className="h-6 w-px bg-slate-200" />
+        <span className="text-xs font-medium text-slate-600">{t("posTableBulkCreate") || "일괄 생성"}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="whitespace-nowrap text-[11px] text-slate-500">{t("posTableBulkCount") || "개수"}</span>
+          <Input
+            type="number"
+            min={1}
+            max={60}
+            className="h-8 w-16 text-sm"
+            value={bulkCount}
+            onChange={(e) => setBulkCount(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+            title={t("posTableBulkCreateHint") || ""}
+          />
+        </div>
+        <Select value={bulkShape} onValueChange={(v) => setBulkShape(v as TableShape)}>
+          <SelectTrigger className="h-8 w-[6.5rem]" title={t("posTableBulkCreateHint") || ""}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SHAPE_PRESETS.map((preset) => (
+              <SelectItem key={preset.shape} value={preset.shape}>
+                {t(preset.labelKey)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="default"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={() => void addTablesBulk()}
+          title={t("posTableBulkCreateHint") || ""}
+        >
+          <LayoutGrid className="h-4 w-4" />
+          {t("posTableBulkCreate") || "일괄 생성"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={() => void autoArrangeCurrentFloor()}
+          title={t("posTableAutoArrangeHint") || ""}
+        >
+          <AlignCenter className="h-4 w-4" />
+          {t("posTableAutoArrange") || "자동 배치"}
+        </Button>
         <div className="h-6 w-px bg-slate-200" />
         <Button variant="outline" size="sm" className="h-8 text-red-600 hover:bg-red-50" onClick={handleReset}>
           <RotateCcw className="h-4 w-4" />

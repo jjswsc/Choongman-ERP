@@ -191,6 +191,7 @@ export async function GET(request: NextRequest) {
     const storesWithDeliverySettlement = storesWithSettlementDeliveryBreakdown(settlements)
 
     const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+      request,
       startStr,
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,
@@ -208,6 +209,7 @@ export async function GET(request: NextRequest) {
       deliveryByChannel = bucketToChannelRows(deliveryFromSettlement)
     } else {
       const deliveryRpc = await tryFetchPosSalesAnalyticsAgg({
+        request,
         startStr,
         endStr,
         storeCodes: stores.length > 0 ? stores : undefined,
@@ -299,6 +301,7 @@ export async function GET(request: NextRequest) {
     const creditByChannel = creditPaymentBucketToRows(creditBucket)
 
     const summaryRpc = await tryFetchPosSalesAnalyticsAgg({
+      request,
       startStr,
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,

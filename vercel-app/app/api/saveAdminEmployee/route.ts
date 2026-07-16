@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate, supabaseSelect, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
 import {
   isAccountingRole,
@@ -28,6 +28,13 @@ import {
 } from '@/lib/employee-audit'
 import { isEmployeeOfficePayrollManagerFlag, preserveOfficeEmployeePayrollOnSave } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
@@ -150,10 +157,10 @@ function normalizeEmployeeCodeInput(raw: unknown): string {
     .slice(0, 5)
 }
 
-async function buildNextEmployeeCodeForStore(storeName: string): Promise<string> {
+async function buildNextEmployeeCodeForStore(storeName: string, tenantScope: SaasTenantScope): Promise<string> {
   let rows: { store?: string | null; employee_code?: string | null }[] = []
   try {
-    rows = (await supabaseSelect('employees', {
+    rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
       select: 'store,employee_code',
       limit: 5000,
       order: 'id.asc',
@@ -214,6 +221,14 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'employees',
+      label: '직원',
+    })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
+    }
     const body = await req.json()
     const d = body.d || body
     const userStore = String(auth.store || '').trim()
@@ -269,7 +284,7 @@ export async function POST(req: NextRequest) {
         )
       }
     } else {
-      const prevRows = (await supabaseSelectFilter('employees', `id=eq.${rowIdForRole}`, {
+      const prevRows = (await supabaseSelectFilter('employees', appendSaasTenantFilter(`id=eq.${rowIdForRole}`, tenantScope, 'employees'), {
         limit: 1,
         select: 'role',
       })) as { role?: string | null }[]
@@ -360,7 +375,7 @@ export async function POST(req: NextRequest) {
         officePayrollFlag = !!(d as { canManageOfficePayroll?: unknown }).canManageOfficePayroll
       } else if (rowIdForRole > 0) {
         try {
-          const prevRows = (await supabaseSelectFilter('employees', `id=eq.${rowIdForRole}`, {
+          const prevRows = (await supabaseSelectFilter('employees', appendSaasTenantFilter(`id=eq.${rowIdForRole}`, tenantScope, 'employees'), {
             limit: 1,
             select: 'can_manage_office_payroll',
           })) as { can_manage_office_payroll?: unknown }[]
@@ -385,7 +400,7 @@ export async function POST(req: NextRequest) {
       const manualPrefix = codeRaw.slice(0, 2)
       const targetStoreForCode = String(payload.store || '').trim()
       try {
-        const allRows = (await supabaseSelect('employees', {
+        const allRows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
           select: 'store,employee_code',
           limit: 5000,
           order: 'id.asc',
@@ -413,7 +428,7 @@ export async function POST(req: NextRequest) {
     const inputPhoneNorm = normalizePhoneForMatch(d.phone)
     if (inputPhoneNorm) {
       try {
-        const rows = (await supabaseSelect('employees', {
+        const rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
           select: 'id,phone,deleted_at,employment_status,resign_date',
           limit: 5000,
           order: 'id.asc',
@@ -441,7 +456,7 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/deleted_at|employment_status|42703|column/i.test(em)) throw e
-        const rows = (await supabaseSelect('employees', {
+        const rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
           select: 'id,phone,resign_date',
           limit: 5000,
           order: 'id.asc',
@@ -489,9 +504,9 @@ export async function POST(req: NextRequest) {
       preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, null)
       payload.password = passwordValue || ''
       if (!codeRaw) {
-        payload.employee_code = await buildNextEmployeeCodeForStore(newStore)
+        payload.employee_code = await buildNextEmployeeCodeForStore(newStore, tenantScope)
       }
-      let toInsert: Record<string, unknown> = { ...payload }
+      let toInsert: Record<string, unknown> = stampSaasTenantId({ ...payload }, tenantScope, 'employees')
       let insertedRow: Record<string, unknown> | null = null
       for (;;) {
         try {
@@ -527,7 +542,7 @@ export async function POST(req: NextRequest) {
                 { status: 409, headers }
               )
             }
-            toInsert = { ...toInsert, employee_code: await buildNextEmployeeCodeForStore(newStore) }
+            toInsert = { ...toInsert, employee_code: await buildNextEmployeeCodeForStore(newStore, tenantScope) }
             continue
           }
           throw insErr
@@ -541,7 +556,7 @@ export async function POST(req: NextRequest) {
         try {
           const idRows = (await supabaseSelectFilter(
             'employees',
-            `employee_code=eq.${encodeURIComponent(insertedCode)}&store=eq.${encodeURIComponent(newStore)}`,
+            appendSaasTenantFilter(`employee_code=eq.${encodeURIComponent(insertedCode)}&store=eq.${encodeURIComponent(newStore)}`, tenantScope, 'employees'),
             { limit: 1, select: 'id', order: 'id.desc' }
           ).catch(() => [])) as { id?: number }[]
           resolvedInsertId = Number(idRows?.[0]?.id ?? 0) || null
@@ -586,7 +601,7 @@ export async function POST(req: NextRequest) {
       employment_status?: string | null
     }[] = []
     try {
-      existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
+      existing = (await supabaseSelectFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), {
         limit: 1,
         select:
           'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date,employment_status',
@@ -596,7 +611,7 @@ export async function POST(req: NextRequest) {
       if (!/employment_status|42703|column/i.test(em)) throw e
     }
     if (!existing || existing.length === 0) {
-      existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
+      existing = (await supabaseSelectFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), {
         limit: 1,
         select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date',
       })) as {
@@ -614,6 +629,12 @@ export async function POST(req: NextRequest) {
       }[]
     }
     const old = existing?.[0]
+    if (!old) {
+      return NextResponse.json(
+        { success: false, message: '❌ 해당 직원을 찾을 수 없습니다.' },
+        { status: 404, headers }
+      )
+    }
     preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, old)
     const oldStore = old ? String(old.store || '').trim() : ''
     const oldName = old ? String(old.name || '').trim() : ''
@@ -646,15 +667,15 @@ export async function POST(req: NextRequest) {
 
     if (passwordValue) payload.password = passwordValue
     try {
-      await supabaseUpdate('employees', rowId, payload)
+      await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), stampSaasTenantId(payload, tenantScope, 'employees'))
     } catch (updErr) {
       const em = updErr instanceof Error ? updErr.message : String(updErr)
       if (/attendance_allowance|42703|column/i.test(em)) {
         const { attendance_allowance: _aa, ...withoutAa } = payload
-        await supabaseUpdate('employees', rowId, withoutAa)
+        await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), stampSaasTenantId(withoutAa, tenantScope, 'employees'))
       } else if (/employment_status|42703|column/i.test(em)) {
         const { employment_status: _es, ...withoutStatus } = payload
-        await supabaseUpdate('employees', rowId, withoutStatus)
+        await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), stampSaasTenantId(withoutStatus, tenantScope, 'employees'))
       } else if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
         return NextResponse.json(
           { success: false, code: 'EMPLOYEE_CODE_DUPLICATE', message: '❌ 이미 사용 중인 직원 코드입니다.' },

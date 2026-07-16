@@ -3,6 +3,13 @@ import { supabaseInsertMany } from '@/lib/supabase-server'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  assertInventoryTenantWritable,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -21,6 +28,11 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 400, headers })
+    }
     const body = await request.json()
     const items = Array.isArray(body.items) ? body.items : []
     const requestedStoreName = String(body.storeName || body.store || '').trim()
@@ -81,7 +93,7 @@ export async function POST(request: NextRequest) {
           log_type: 'Usage',
         }
         if (userName) r.user_name = userName
-        return r
+        return stampInventoryTenantId(r, tenantScope)
       })
       .filter((r: { qty: number }) => r.qty !== 0)
 
@@ -95,6 +107,13 @@ export async function POST(request: NextRequest) {
     await supabaseInsertMany('stock_logs', rows)
     return NextResponse.json({ success: true, message: '✅ 사용 확정 완료' }, { headers })
   } catch (e) {
+    if (isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+      return NextResponse.json(
+        { success: false, message: 'inventory tenant_id 스키마가 없습니다.' },
+        { status: 400, headers }
+      )
+    }
     console.error('processUsage:', e)
     return NextResponse.json(
       { success: false, message: '❌ 오류: ' + (e instanceof Error ? e.message : String(e)) },

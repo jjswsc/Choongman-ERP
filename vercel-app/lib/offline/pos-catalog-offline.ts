@@ -14,9 +14,35 @@ import {
 
 /** getPosMenus / fetchPosCatalogCached 와 동일 키 — 백그라운드 갱신 시 UI 동기화에 사용 */
 export const ERP_POS_CATALOG_MENUS_CACHE_KEY = 'erp:posCatalog:menus' as const
+
+function readClientTenantHint(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const fromSession = String(sessionStorage.getItem('cm_tenant_id') || '').trim()
+    if (fromSession) return fromSession.toLowerCase()
+  } catch {
+    /* ignore */
+  }
+  try {
+    const company = String(sessionStorage.getItem('cm_company') || localStorage.getItem('cm_company') || '').trim()
+    if (!company) return ''
+    return company
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+  } catch {
+    return ''
+  }
+}
+
 export function posMenusCatalogCacheKey(storeCode?: string | null): string {
+  const tenant = readClientTenantHint()
   const normalized = String(storeCode || '').trim()
-  return normalized ? `${ERP_POS_CATALOG_MENUS_CACHE_KEY}:${normalized}` : ERP_POS_CATALOG_MENUS_CACHE_KEY
+  const base = tenant
+    ? `${ERP_POS_CATALOG_MENUS_CACHE_KEY}:t:${tenant}`
+    : ERP_POS_CATALOG_MENUS_CACHE_KEY
+  return normalized ? `${base}:${normalized}` : base
 }
 
 /** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦아지므로 상한 둠 */

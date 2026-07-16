@@ -3812,6 +3812,9 @@ export const i18n = {
     expenseAccrualGrossTotal: '총액(세금포함)',
     expenseAccrualVat: '부가세(VAT)',
     expenseAccrualWithholding: '원천징수세',
+    expenseAccrualWhtRate: '원천징수율',
+    expenseAccrualWhtRateNone: '선택',
+    expenseAccrualAutoWhtCert: '원천징수 증명서(50 ทวิ) 자동 생성',
     expenseAccrualNetPayableLabel: '실제 지급액',
     expenseAccrualNetPositiveRequired: '실제 지급액이 0보다 커야 합니다. 총액·원천징수를 확인해 주세요.',
     expenseAccrualPurchaseAmountRequired: '총액(세금포함) 또는 입고 연결 금액을 입력해 주세요.',
@@ -4082,7 +4085,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티)과 통장·미지급과 연결됩니다. 통장과 겹치면 출금 용도를 회계 기준에 맞춥니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다.\n② 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 통장에서 분류만 되므로 「지출관리 연결」로 지급을 완료합니다.\n③ 지출 검색 탭에서 매장·기간으로 지급예정과 통장 등록의 연결 상태를 한눈에 확인합니다.\n④ 고정자산 취득은 발생등록 유형 「고정자산」으로 등록하면 자산 관리 목록에 자동 반영됩니다.',
+      '① 지출 예정 등록·승인 후 지급합니다.\n② 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 통장에서 분류만 되므로 「지출관리 연결」로 지급을 완료합니다.\n③ 지출 검색 탭에서 매장·기간으로 지급예정과 통장 등록의 연결 상태를 한눈에 확인합니다.\n④ 고정자산 취득은 발생등록 유형 「고정자산」으로 등록하면 자산 관리 목록에 자동 반영됩니다.\n⑤ 지출 등록에서 원천징수율(%)을 선택하면 (총액−VAT)×%로 원천세가 채워집니다. 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.',
     helpSum_admin_depreciation:
       '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
     helpHow_admin_depreciation:
@@ -5592,7 +5595,7 @@ export const i18n = {
     memberSectionJoin: '가입 · 추천',
     memberSectionStatus: '상태',
     memberAdvancedMerge: '고급 · 중복 회원 병합',
-    memberTierFilterHint: '등급 필터는 현재 로드된 목록 기준',
+    memberTierFilterHint: '등급·상태 필터는 전체 회원 기준(서버 조회)',
     memberDangerTools: '고급 · 위험 작업',
     memberEmptyListHint: '표시할 회원이 없습니다. 검색 조건을 바꾸거나 초기화해 보세요.',
     memberPointsQuickAdjust: '빠른 조정',
@@ -6954,6 +6957,10 @@ export const i18n = {
       '① 질문/제안 탭에서 매장·기간(방콕)·질문 유형을 정한 뒤 AI 답변을 생성합니다.\n② 답변의 권장 실행 순서에서 후속 태스크·공지 초안으로 이어갈 수 있습니다.\n③ 실행 초안 탭에서 승인 요청을 만들고, 실행대기함에서 매니저 이상이 승인·실행합니다.\n④ AI 초안 탭에서 생성된 공지·태스크를 확인하고 공지 관리·업무일지와 연계하세요.\n⑤ Q&A 탭의 최근 대화에서 이전 질의를 불러올 수 있습니다.\n⑥ 승인 실행 후「이어서 열기」로 공지·업무일지에 내용이 자동 채워집니다.',
     helpHow_admin_ops_center:
       '① 본사(오피스) 계정은 아래 「조회 매장」에서 지점을 고릅니다. KPI·경보는 매장 단위만 집계합니다(「전체 매장」 선택 없음).\n② 기준일(방콕)을 바꾸면 해당 날짜 기준으로 KPI가 다시 집계됩니다.\n③ 새로고침으로 최신 수치를 불러옵니다.\n④ 카드의 주문·결제·인쇄·일마감 건수를 확인하고, 경보 영역에서 우선 대응할 항목을 정합니다.\n⑤ 인쇄 경보가 있으면「실시간 매출」·프린터 설정·주방 라우팅·오프라인 동기를 함께 점검하세요.\n⑥ 일마감 경보는「POS 일정산」에서 검증(Validate)·확정(Finalize)으로 처리합니다. 주문 이벤트 원장·인쇄 잡은 DB에 쌓이며, 이 화면은 요약 지표용입니다.',
+    helpSum_admin_pos_screen_config:
+      '매장별 POS 화면·테이블 배치·결제·배달앱·조리 규칙·주문 동작(손님 수 필수 등)을 설정하는 화면입니다. 테이블 탭에서 일괄 생성·자동 배치로 플로어에 맞게 격자를 만들고, 드래그로 미세 조정한 뒤 저장합니다.',
+    helpHow_admin_pos_screen_config:
+      '① 상단에서 매장을 고른 뒤 탭(테이블·단말·주문 동작·결제 등)을 선택합니다.\n② 테이블: 구역(층)을 고르고, 개수·모양을 지정한 뒤「일괄 생성」으로 N개를 화면에 맞게 배치하거나「자동 배치」로 기존 테이블을 재정렬합니다. 한 개씩 추가·드래그·정렬도 가능합니다.\n③ 주문 동작: 홀(테이블) 주문 시 손님 수 필수 여부를 매장별로 켭니다. 끄면 손님 수 없이도 주문할 수 있습니다.\n④ 변경 후「저장」을 눌러 POS 단말에 반영합니다. 다른 매장 배치는「복사」로 가져올 수 있습니다.\n⑤ 권한에 따라 일부 탭이 보이지 않을 수 있습니다.',
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다.',
     helpHow_admin_pos_menus:
@@ -6973,7 +6980,7 @@ export const i18n = {
     helpSum_admin_members:
       '목록에서 회원을 선택해 좌측 프로필·포인트·메모로 실행하는 회원 운영 화면입니다.',
     helpHow_admin_members:
-      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색·등급/상태 필터·CSV/Import. LINE 리셋은 위험 작업으로 접혀 있습니다.',
+      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색·등급/상태 필터(전체 DB 기준)·CSV/Import. LINE 리셋은 위험 작업으로 접혀 있습니다.',
     helpSum_admin_members_points:
       '(메뉴 통합) 포인트 조회·조정은 「회원 리스트」화면의 포인트 탭으로 이동했습니다. 적립 규칙은 등급 관리에서 설정합니다.',
     helpHow_admin_members_points:
@@ -11209,6 +11216,9 @@ Only matters the employee must handle personally on a working day:
     expenseAccrualGrossTotal: 'Total (incl. tax)',
     expenseAccrualVat: 'VAT',
     expenseAccrualWithholding: 'Withholding tax',
+    expenseAccrualWhtRate: 'WHT rate',
+    expenseAccrualWhtRateNone: 'Select',
+    expenseAccrualAutoWhtCert: 'Auto-create withholding tax certificate (50 ทวิ)',
     expenseAccrualNetPayableLabel: 'Net payment',
     expenseAccrualNetPositiveRequired: 'Net payment must be greater than zero. Check total and withholding.',
     expenseAccrualPurchaseAmountRequired: 'Enter the total (incl. tax) or link amounts for inbound batches.',
@@ -11479,7 +11489,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty) with links to bank and payables. Align bank withdraw categories when both sides touch the same cash.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then execute payment.\n② For bank pay, only unlinked withdrawals are listed. Rows already saved as Expense or Purchase payment can double-post if linked again—see the Bank Transactions banner and help.\n③ Use Expense Search to see plan vs bank link status by store and date range.\n④ Register fixed-asset acquisitions as type Fixed Asset in Expense Register—they appear in Asset Management automatically.',
+      '① Register and approve accruals, then execute payment.\n② For bank pay, only unlinked withdrawals are listed. Rows already saved as Expense or Purchase payment can double-post if linked again—see the Bank Transactions banner and help.\n③ Use Expense Search to see plan vs bank link status by store and date range.\n④ Register fixed-asset acquisitions as type Fixed Asset in Expense Register—they appear in Asset Management automatically.\n⑤ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window right after save.',
     helpSum_admin_depreciation:
       'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
     helpHow_admin_depreciation:
@@ -12990,7 +13000,7 @@ orderItemQty: 'Qty',
     memberSectionJoin: 'Join · referral',
     memberSectionStatus: 'Status',
     memberAdvancedMerge: 'Advanced · merge duplicates',
-    memberTierFilterHint: 'Tier filter applies to the loaded page',
+    memberTierFilterHint: 'Tier and status filters query all members (server-side)',
     memberDangerTools: 'Advanced · dangerous actions',
     memberEmptyListHint: 'No members to show. Change search or reset filters.',
     memberPointsQuickAdjust: 'Quick adjust',
@@ -14355,6 +14365,10 @@ orderItemQty: 'Qty',
       '① On Q&A, set store, Bangkok date range, and intent, then generate an AI answer.\n② From the recommended plan, continue to follow-up task or notice drafts.\n③ On Action drafts, create approval requests; managers approve and execute from Pending/history.\n④ On AI drafts, review notice/task drafts and continue to Notices or Work log.\n⑤ Reload prior questions from Recent conversations on the Q&A tab.\n⑥ After approval, use Open next step to prefill Notices or Work log.',
     helpHow_admin_ops_center:
       '① Head-office users pick a branch under Branch below. KPIs and alerts are per branch only (no All stores on this screen).\n② Change the Bangkok as-of date to re-run KPIs for that calendar day.\n③ Press Refresh to fetch the latest numbers.\n④ Review order/payment/print/day-close tiles, then triage from the Alerts section.\n⑤ For print alerts, also check Live sales, printer settings, kitchen routing, and offline sync.\n⑥ For day-close alerts, use POS settlement Validate/Finalize. Order-event and print-job rows live in the database; this screen shows rollups only.',
+    helpSum_admin_pos_screen_config:
+      'Configure per-store POS screens, table layout, payments, delivery apps, cooking rules, and order behavior (e.g. require guest count). On the Tables tab, bulk-create or auto-arrange a floor grid, fine-tune by drag, then save.',
+    helpHow_admin_pos_screen_config:
+      '① Pick a store at the top, then choose a tab (Tables, Terminal, Order behavior, Payments, etc.).\n② Tables: select a zone (floor), set count and shape, then Bulk create to place N tables to fit the floor, or Auto arrange to re-grid existing ones. You can still add one-by-one, drag, and align.\n③ Order behavior: turn on/off requiring guest count for dine-in table orders per store. When off, orders are allowed without guest count.\n④ Press Save to apply to POS terminals. Copy can import another store’s layout.\n⑤ Some tabs may be hidden depending on your role.',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery).',
     helpHow_admin_pos_menus:
@@ -14374,7 +14388,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members:
       'Pick a member from the list and run Profile, Points, and notes on the left.',
     helpHow_admin_members:
-      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search, tier/status filters, CSV/Import. LINE reset is folded under dangerous actions.',
+      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search, tier/status filters (full DB), CSV/Import. LINE reset is folded under dangerous actions.',
     helpSum_admin_members_points:
       '(Merged) Point lookup and adjustment moved to the Points tab on Member list. Earn rules stay under Tier management.',
     helpHow_admin_members_points:
@@ -17609,6 +17623,14 @@ orderItemQty: 'จำนวน',
     expenseRegisterTabTitle: 'ลงทะเบียนรายจ่าย',
     expenseReportTab: 'รายงานรายวัน',
     expenseRegisterTitle: 'ลงทะเบียนรายจ่าย',
+    expenseAccrualGrossTotal: 'ยอดรวม (รวมภาษี)',
+    expenseAccrualVat: 'ภาษีมูลค่าเพิ่ม (VAT)',
+    expenseAccrualWithholding: 'ภาษีหัก ณ ที่จ่าย',
+    expenseAccrualWhtRate: 'อัตราหัก ณ ที่จ่าย',
+    expenseAccrualWhtRateNone: 'เลือก',
+    expenseAccrualAutoWhtCert: 'สร้างหนังสือรับรองการหัก ณ ที่จ่ายอัตโนมัติ (50 ทวิ)',
+    expenseAccrualNetPayableLabel: 'ยอดจ่ายสุทธิ',
+    expenseAccrualNetPositiveRequired: 'ยอดจ่ายสุทธิต้องมากกว่า 0 กรุณาตรวจสอบยอดรวมและภาษีหัก ณ ที่จ่าย',
     expenseStoreSelect: 'สาขา',
     expensePayeeRequired: 'กรุณาเลือกหรือระบุผู้รับเงิน',
     expensePayeeName: 'ชื่อผู้รับ',

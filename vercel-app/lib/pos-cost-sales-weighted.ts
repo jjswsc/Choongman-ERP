@@ -148,13 +148,21 @@ export async function computePosCostSalesWeighted(params: {
   const [catalog, costIndex, fetchResult, menusRaw] = await Promise.all([
     loadPosSalesPromoPricingCatalog(),
     buildPosMenuCostIndex(),
-    fetchPosSalesOrdersForBusinessRange({
-      startStr,
-      endStr,
-      storeCodes,
-      select: POS_SALES_MENU_ROW_SELECT,
-      queryLabel: 'posCostSalesWeighted',
-    }),
+    (async () => {
+      const { resolveSaasTenantScope } = await import('@/lib/saas-tenant-scope')
+      const tenantScope = await resolveSaasTenantScope({
+        auth: params.auth.tenantId ? { tenantId: params.auth.tenantId } : null,
+        storeCode: storeCodes?.[0] ?? null,
+      })
+      return fetchPosSalesOrdersForBusinessRange({
+        startStr,
+        endStr,
+        storeCodes,
+        select: POS_SALES_MENU_ROW_SELECT,
+        queryLabel: 'posCostSalesWeighted',
+        tenantScope,
+      })
+    })(),
     supabaseSelect('pos_menus', {
       limit: 5000,
       select: 'id,name,category,category_main',

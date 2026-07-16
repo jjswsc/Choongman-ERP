@@ -25,6 +25,14 @@ import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
 import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-pending'
 import { supabaseSelectFilterStrippingUnknownColumns, extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { POS_ORDER_FULL_SELECT, POS_ORDER_POLL_MINIMAL_SELECT } from '@/lib/pos-order-select'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 async function selectPosOrders(
   filter: string,
@@ -249,6 +257,14 @@ export async function GET(request: NextRequest) {
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+  const tenantScope = await resolveSaasTenantScope({
+    auth,
+    storeCode: requestedStore && requestedStore.toLowerCase() !== 'all' ? requestedStore : null,
+  })
+  if (isSaasTenantQueryBlocked(tenantScope, 'pos_orders')) {
+    return NextResponse.json([], { headers })
+  }
   const caller = await resolveBearerCaller(request)
   let effectiveStoreCode = requestedStore
   if (caller && !isOfficeRole(caller.role)) {
@@ -386,7 +402,7 @@ export async function GET(request: NextRequest) {
       if (primaryStoreFilter) {
         idFilters.push(`store_code=ilike.${encodeURIComponent(primaryStoreFilter)}`)
       }
-      let idRows = (await selectPosOrders(idFilters.join('&'), {
+      let idRows = (await selectPosOrders(appendSaasTenantFilter(idFilters.join('&'), tenantScope, 'pos_orders'), {
         order: 'created_at.desc',
         limit: 1,
         select: rowSelect,
@@ -394,7 +410,11 @@ export async function GET(request: NextRequest) {
 
       if (!strictStore && !idRows?.length && storeFilterCandidates.length > 1) {
         for (const alt of storeFilterCandidates.slice(1)) {
-          const altFilter = `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`
+          const altFilter = appendSaasTenantFilter(
+            `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`,
+            tenantScope,
+            'pos_orders',
+          )
           idRows = (await selectPosOrders(altFilter, {
             order: 'created_at.desc',
             limit: 1,
@@ -434,7 +454,7 @@ export async function GET(request: NextRequest) {
         if (sinceId != null && sinceId > 0) {
           parts.push(`id=gt.${sinceId}`)
         }
-        return parts.join('&')
+        return appendSaasTenantFilter(parts.join('&'), tenantScope, 'pos_orders')
       }
 
       const listStoreArg =

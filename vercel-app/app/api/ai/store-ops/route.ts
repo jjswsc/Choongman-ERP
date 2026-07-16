@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
       store,
       start: start || undefined,
       end: end || undefined,
+      tenantId: access.scoped.auth.tenantId,
     })
     return NextResponse.json(insight, { headers })
   } catch (e) {

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { clearDirectSettlementCache } from '@/lib/direct-settlement-server'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 function mapTypeToDb(type: string): string {
   const t = String(type || '').toLowerCase()
@@ -14,6 +23,13 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const scope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(scope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { headers })
+    }
+
     const body = (await request.json()) as {
       code?: string
       name?: string
@@ -58,18 +74,34 @@ export async function POST(request: NextRequest) {
     // 본사 행(saveHeadOfficeInfo): type=본사 유지. 거래처 폼 저장만 하면 mapTypeToDb가 purchase로 덮어 출퇴근 본사 GPS 폴백이 깨짐.
     const rowForDb = isHqVendor ? { ...row, type: '본사' } : row
 
-    const existing = (await supabaseSelectFilter(
-      'vendors',
-      `code=eq.${encodeURIComponent(filterCode)}`
-    )) as { id?: number }[] | null
+    const codeFilter = appendInventoryTenantFilter(
+      `code=eq.${encodeURIComponent(filterCode)}`,
+      scope
+    )
+    let existing: { id?: number }[] | null
+    try {
+      existing = (await supabaseSelectFilter('vendors', codeFilter)) as { id?: number }[] | null
+    } catch (err) {
+      if (isMissingInventoryTenantIdColumnError(err)) {
+        markInventoryTenantIdColumnMissing()
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'vendors tenant_id 스키마가 없습니다. sql/inventory_tenant_id.sql 을 실행해 주세요.',
+          },
+          { headers }
+        )
+      }
+      throw err
+    }
 
     if (existing && existing.length > 0) {
-      await supabaseUpdateByFilter('vendors', `code=eq.${encodeURIComponent(filterCode)}`, rowForDb)
+      await supabaseUpdateByFilter('vendors', codeFilter, rowForDb)
       clearDirectSettlementCache()
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
-    await supabaseInsert('vendors', rowForDb)
+    await supabaseInsert('vendors', stampInventoryTenantId(rowForDb, scope))
     clearDirectSettlementCache()
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {

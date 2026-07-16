@@ -36,7 +36,7 @@ import {
   type PosPromo,
   type PosPromoItem,
 } from "@/lib/api-client"
-import { POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+import { resolveConfiguredCategoriesForMain } from "@/lib/pos-menu-categories"
 import {
   PROMOTION_DEFAULT_SUBCATEGORIES,
   PROMOTION_MAIN_CATEGORY,
@@ -367,10 +367,7 @@ export function PosSetMenuTabWorkspace({
       }
       return Array.from(s).sort()
     }
-    const presetFromConfig = categoriesConfig?.categoriesByMain?.[main]
-    const presetFromLib =
-      main in POS_CATEGORIES_BY_MAIN ? POS_CATEGORIES_BY_MAIN[main as keyof typeof POS_CATEGORIES_BY_MAIN] : null
-    const preset = presetFromConfig?.length ? presetFromConfig : presetFromLib ?? []
+    const preset = resolveConfiguredCategoriesForMain(main, categoriesConfig?.categoriesByMain)
     const fromMenus = menus
       .filter((m) => (m.categoryMain ?? "") === main)
       .map((m) => m.category)

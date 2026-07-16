@@ -739,6 +739,7 @@ export default function PosTerminalPage() {
   const [feeStackMode, setFeeStackMode] = useState<'parallel' | 'sequential'>('parallel')
   const [feeStackOrder, setFeeStackOrder] = useState<Array<'vat' | 'service' | 'other'>>(['service', 'vat', 'other'])
   const [dualMonitorEnabled, setDualMonitorEnabled] = useState(false)
+  const [requireGuestCount, setRequireGuestCount] = useState(true)
   const [customerDisplayAutoOpen, setCustomerDisplayAutoOpen] = useState(true)
   const [customerDisplayMonitorPreference, setCustomerDisplayMonitorPreference] = useState<'secondary-first' | 'primary-only'>('secondary-first')
   const [customerDisplayLangMode, setCustomerDisplayLangMode] = useState<'follow-pos' | 'custom'>('follow-pos')
@@ -1588,6 +1589,7 @@ export default function PosTerminalPage() {
         setFeeStackMode(normalizeFeeStackMode(s.feeStackMode))
         setFeeStackOrder(normalizeFeeStackOrder(s.feeStackOrder))
         setDualMonitorEnabled(Boolean(s.dualMonitorEnabled))
+        setRequireGuestCount(s.requireGuestCount !== false)
         setCustomerDisplayAutoOpen(s.customerDisplayAutoOpen !== false)
         setCustomerDisplayMonitorPreference(
           s.customerDisplayMonitorPreference === 'primary-only' ? 'primary-only' : 'secondary-first'
@@ -1674,6 +1676,7 @@ export default function PosTerminalPage() {
         setOtherRate(0)
         setOtherMode('separate')
         setDualMonitorEnabled(false)
+        setRequireGuestCount(true)
         setCustomerDisplayAutoOpen(true)
         setCustomerDisplayMonitorPreference('secondary-first')
         setCustomerDisplayLangMode('follow-pos')
@@ -8176,6 +8179,7 @@ export default function PosTerminalPage() {
             onPaymentComplete={() => setTourPaymentCompletedCount((v) => v + 1)}
             onPostPaymentCashChange={setPostPaymentCashChangeBaht}
             onGuestCountChange={setTourCartGuestCount}
+            requireGuestCount={requireGuestCount}
             posDineInDemoDefaultGuestCount={undefined}
             lockOrderType
             orderType={cartOrderType}

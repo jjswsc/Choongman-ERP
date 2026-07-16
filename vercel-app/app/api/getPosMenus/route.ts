@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { runDuePriceSchedules } from '@/lib/price-schedule'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import {
@@ -17,6 +17,13 @@ import {
   syncOptionSelectionConfigToGroupKeys,
 } from '@/lib/pos-option-selection-groups'
 import { normalizeMenuScopeStoreCodes, shouldMenuBeVisibleForStore } from '@/lib/pos-menu-store-scope'
+import {
+  appendPosCatalogTenantFilter,
+  isMissingTenantIdColumnError,
+  isPosCatalogTenantQueryBlocked,
+  resolvePosCatalogTenantScope,
+} from '@/lib/pos-catalog-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
@@ -39,7 +46,7 @@ const POS_MENUS_SELECT_CANDIDATES = [
 ] as const
 
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   /** 짧은 CDN/브라우저 캐시 — 매장 POS 반복 진입 체감 개선 (저장 후 fresh=true로 우회) */
@@ -50,7 +57,21 @@ export async function GET(request: Request) {
     const requestedStoreCode = String(searchParams.get('storeCode') ?? '').trim()
     const strictStoreScope =
       searchParams.get('strictStoreScope') === '1' || searchParams.get('memberPortal') === '1'
-    const menuScopeCompatibilityMode = String(process.env.POS_MENU_SCOPE_COMPATIBILITY_MODE ?? '1') !== '0'
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({
+      auth,
+      storeCode: requestedStoreCode,
+    })
+    /** Omni: 테넌트 격리 시 빈 스코프·매장 폴백으로 타사 메뉴가 새면 안 됨 */
+    const menuScopeCompatibilityMode =
+      !catalogScope.enforce &&
+      String(process.env.POS_MENU_SCOPE_COMPATIBILITY_MODE ?? '1') !== '0'
+    if (isPosCatalogTenantQueryBlocked(catalogScope)) {
+      if (catalogScope.enforce && !catalogScope.tenantId) {
+        console.warn('getPosMenus: Omni tenant missing — returning empty menu list')
+      }
+      return NextResponse.json([], { headers })
+    }
     /** 가격 스케줄은 메뉴 GET을 막지 않음 — 백그라운드 적용 */
     void runDuePriceSchedules(new Date()).catch((scheduleErr) => {
       console.error('getPosMenus runDuePriceSchedules:', scheduleErr)
@@ -60,7 +81,7 @@ export async function GET(request: Request) {
     let linksByMenuId = new Map<number, PosMenuOptionGroupLinkRow[]>()
     try {
       const [{ groups }, links] = await Promise.all([
-        loadPosOptionGroupsWithItems(),
+        loadPosOptionGroupsWithItems(catalogScope),
         loadMenuGroupLinks(),
       ])
       const nextGroupsById = new Map<number, typeof groups[number]>()
@@ -119,19 +140,32 @@ export async function GET(request: Request) {
     }
 
     let rows: unknown[] | null = null
+    const tenantFilter = appendPosCatalogTenantFilter('', catalogScope)
     const selectOrder = cachedPosMenusSelect
       ? [cachedPosMenusSelect, ...POS_MENUS_SELECT_CANDIDATES.filter((c) => c !== cachedPosMenusSelect)]
       : [...POS_MENUS_SELECT_CANDIDATES]
     for (const cols of selectOrder) {
       try {
-        rows = (await supabaseSelect('pos_menus', {
-          order: 'sort_order.asc,name.asc',
-          limit: 10000,
-          select: cols,
-        })) as unknown[] | null
+        if (tenantFilter) {
+          rows = (await supabaseSelectFilter('pos_menus', tenantFilter, {
+            order: 'sort_order.asc,name.asc',
+            limit: 10000,
+            select: cols,
+          })) as unknown[] | null
+        } else {
+          rows = (await supabaseSelect('pos_menus', {
+            order: 'sort_order.asc,name.asc',
+            limit: 10000,
+            select: cols,
+          })) as unknown[] | null
+        }
         cachedPosMenusSelect = cols
         break
       } catch (colErr: unknown) {
+        if (tenantFilter && isMissingTenantIdColumnError(colErr)) {
+          console.error('getPosMenus: pos_menus.tenant_id missing — run sql/pos_catalog_tenant_id.sql')
+          return NextResponse.json([], { headers })
+        }
         if (cols === cachedPosMenusSelect) cachedPosMenusSelect = null
         if (cols === POS_MENUS_SELECT_BASE) throw colErr
       }
@@ -283,8 +317,10 @@ export async function GET(request: Request) {
       }]
     })
 
-    // 매장 코드 표기 차이로 필터 결과가 0건이면 POS 빈 화면 방지용 1회 폴백(회원앱 strictStoreScope 제외)
+    // 매장 코드 표기 차이로 필터 결과가 0건이면 POS 빈 화면 방지용 1회 폴백
+    // — Omni 테넌트 격리 중에는 절대 전체(타사) 메뉴로 폴백하지 않음
     if (
+      !catalogScope.enforce &&
       !strictStoreScope &&
       requestedStoreCode &&
       list.length === 0 &&

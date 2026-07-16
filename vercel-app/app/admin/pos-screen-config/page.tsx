@@ -4,7 +4,7 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone, Save } from "lucide-react"
+import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone, Save, Users } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
@@ -22,6 +22,7 @@ import { PosPaymentSettingsContent } from "@/components/pos/pos-payment-settings
 import { PosTerminalMenuScreen } from "@/components/pos/pos-terminal-menu-screen"
 import { PosMenuBoardManagementContent } from "@/components/pos/pos-menu-board-management-content"
 import { PosTerminalSettingsContent } from "@/components/pos/pos-terminal-settings-content"
+import { PosOrderBehaviorSettingsContent } from "@/components/pos/pos-order-behavior-settings-content"
 import {
   PosCustomerDisplayContentSettings,
   type PosCustomerDisplayContentSettingsHandle,
@@ -69,7 +70,9 @@ export default function PosScreenConfigPage() {
 
   const tabParam = searchParams.get("tab") || "tables"
   const [activeTab, setActiveTab] = React.useState(
-    ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "dual-monitor"].includes(tabParam) ? tabParam : "tables"
+    ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "order-behavior", "dual-monitor"].includes(tabParam)
+      ? tabParam
+      : "tables"
   )
   const [menusSubTab, setMenusSubTab] = React.useState<"menu-screen" | "menu-board">("menu-screen")
   const [menuScreenOrderType, setMenuScreenOrderType] = React.useState<"dine-in" | "delivery" | "takeout">("dine-in")
@@ -93,7 +96,12 @@ export default function PosScreenConfigPage() {
 
   React.useEffect(() => {
     const tab = searchParams.get("tab")
-    if (tab && ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "dual-monitor"].includes(tab)) setActiveTab(tab)
+    if (
+      tab &&
+      ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "order-behavior", "dual-monitor"].includes(tab)
+    ) {
+      setActiveTab(tab)
+    }
   }, [searchParams])
 
   return (
@@ -139,6 +147,10 @@ export default function PosScreenConfigPage() {
                 <TabsTrigger value="terminal" className={adminTabsTriggerCn}>
                   <Smartphone className={adminTabsIconCn} aria-hidden />
                   {t("posScreenConfigTabTerminal") || "단말 설정"}
+                </TabsTrigger>
+                <TabsTrigger value="order-behavior" className={adminTabsTriggerCn}>
+                  <Users className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabOrderBehavior") || "주문 동작"}
                 </TabsTrigger>
                 <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
                   <Monitor className={adminTabsIconCn} aria-hidden />
@@ -293,6 +305,17 @@ export default function PosScreenConfigPage() {
                 {t("posScreenConfigTabTerminalDesc") || "메인 포스(프린터 연결) 1대 지정. 주문 단말은 인쇄 없이 주문만 입력합니다."}
               </p>
               <PosTerminalSettingsContent />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="order-behavior" className={adminTabsContentFlushCn}>
+            <div className="rounded-xl border bg-card p-6">
+              <h3 className="mb-2 text-sm font-bold">{t("posScreenConfigTabOrderBehavior") || "주문 동작"}</h3>
+              <p className="mb-4 text-sm text-muted-foreground">
+                {t("posScreenConfigTabOrderBehaviorDesc") ||
+                  "홀 주문 시 손님 수 필수 여부 등 매장별 주문 규칙을 설정합니다."}
+              </p>
+              <PosOrderBehaviorSettingsContent />
             </div>
           </TabsContent>
 

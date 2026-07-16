@@ -175,9 +175,12 @@ BEGIN
 END;
 $$;
 
--- RETURNS TABLE 컬럼 변경 시 CREATE OR REPLACE 불가 → 기존 시그니처 DROP 후 재생성
+-- RETURNS TABLE / 인자 변경 시 CREATE OR REPLACE 불가 → 기존 시그니처 DROP 후 재생성
 DROP FUNCTION IF EXISTS public.get_pos_sales_analytics_agg(
   timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean
+);
+DROP FUNCTION IF EXISTS public.get_pos_sales_analytics_agg(
+  timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean, text
 );
 
 CREATE OR REPLACE FUNCTION public.get_pos_sales_analytics_agg(
@@ -191,7 +194,8 @@ CREATE OR REPLACE FUNCTION public.get_pos_sales_analytics_agg(
   p_period_group text DEFAULT 'day',
   p_biz_hours jsonb DEFAULT '{"global":{"startHour":8,"startMinute":0,"endHour":8,"endMinute":0},"stores":{}}'::jsonb,
   p_menu_search_tokens text[] DEFAULT NULL,
-  p_menu_search_and boolean DEFAULT false
+  p_menu_search_and boolean DEFAULT false,
+  p_tenant_id text DEFAULT NULL
 )
 RETURNS TABLE (
   bucket_key text,
@@ -247,6 +251,10 @@ BEGIN
         p_store_codes IS NULL
         OR coalesce(array_length(p_store_codes, 1), 0) = 0
         OR btrim(coalesce(o.store_code, '')) = ANY (p_store_codes)
+      )
+      AND (
+        coalesce(trim(p_tenant_id), '') = ''
+        OR coalesce(trim(o.tenant_id), '') = trim(p_tenant_id)
       )
   ),
   filtered AS (
@@ -587,9 +595,9 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_pos_sales_analytics_agg(
-  timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean
-) IS '매출 관리: store/period/channel/payment/menu 등 DB 집계 (pos_orders 행 상한 없음).';
+  timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean, text
+) IS '매출 관리: store/period/channel/payment/menu 등 DB 집계 (pos_orders 행 상한 없음). Omni는 p_tenant_id로 격리.';
 
 GRANT EXECUTE ON FUNCTION public.get_pos_sales_analytics_agg(
-  timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean
+  timestamptz, timestamptz, text, text, text[], text[], text, text, jsonb, text[], boolean, text
 ) TO anon, authenticated, service_role;

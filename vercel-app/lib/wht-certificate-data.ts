@@ -99,6 +99,50 @@ export function whtCertificateFromPurchaseOrder(
   )
 }
 
+/** 지출 등록 직후 50 ทวิ형 증명서 — outbound(당사 원천징수) */
+export function whtCertificateFromExpenseRegister(
+  params: {
+    certificateNo: string
+    paymentDate: string
+    payeeName: string
+    payeeTaxId?: string
+    grossInclVat: number
+    vatAmount: number
+    whtRate: number | null
+    whtAmount: number
+    memo?: string
+    storeName?: string
+    incomeType?: string
+  },
+  headOffice: HeadOfficeCompany
+): WhtCertificateData | null {
+  const wht = Math.max(0, Number(params.whtAmount) || 0)
+  if (wht <= 0) return null
+  const paymentDate = String(params.paymentDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) return null
+  const grossIncl = Math.max(0, Number(params.grossInclVat) || 0)
+  const vat = Math.max(0, Number(params.vatAmount) || 0)
+  const grossExVat = Math.round(Math.max(0, grossIncl - vat) * 100) / 100
+  return whtCertificateFromLedgerRow(
+    {
+      payment_date: paymentDate,
+      tax_month: paymentDate.slice(0, 7),
+      payee_name: String(params.payeeName || '').trim(),
+      payee_tax_id: String(params.payeeTaxId || '').trim(),
+      income_type: String(params.incomeType || '').trim() || '서비스',
+      gross_amount: grossExVat > 0 ? grossExVat : grossIncl,
+      wht_rate: params.whtRate,
+      wht_amount: wht,
+      form_hint: '50 ทวิ',
+      certificate_no: String(params.certificateNo || '').trim() || undefined,
+      memo: params.memo,
+      store_name: params.storeName,
+      direction: 'outbound',
+    },
+    headOffice
+  )
+}
+
 export function whtCertificateFromLedgerRow(
   row: {
     payment_date?: string

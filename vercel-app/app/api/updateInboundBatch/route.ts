@@ -19,6 +19,15 @@ import {
 } from '@/lib/inbound-payable-sync'
 import { roundErp3 } from '@/lib/utils'
 import { inboundPersistLocation } from '@/lib/office-store-canonical'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
 
 type InboundLineBody = {
   date?: string
@@ -59,13 +68,19 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 400, headers })
+    }
     const body = await request.json()
     const batchId = Number(body.batchId ?? body.id ?? 0)
     if (!batchId || isNaN(batchId)) {
       return NextResponse.json({ success: false, message: '배치 ID가 필요합니다.' }, { status: 400, headers })
     }
 
-    const existing = (await supabaseSelectFilter('inbound_batches', `id=eq.${batchId}`, {
+    const existing = (await supabaseSelectFilter('inbound_batches', appendInventoryTenantFilter(`id=eq.${batchId}`, tenantScope), {
       limit: 1,
       select: 'id,location,vendor_name,vendor_code',
     })) as {
@@ -127,7 +142,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '저장할 목록이 없습니다.' }, { status: 400, headers })
     }
 
-    const itemRows = (await supabaseSelect('items', {
+    const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter('', tenantScope), {
       order: 'id.asc',
       limit: 5000,
       select: 'code,tax',
@@ -168,7 +183,7 @@ export async function POST(request: NextRequest) {
       if (costVal != null && !isNaN(costVal) && costVal >= 0) {
         row.unit_cost = roundErp3(costVal)
       }
-      return row
+      return stampInventoryTenantId(row, tenantScope)
     })
 
     const validRows = rows.filter((r) => r.item_code && Number(r.qty) > 0)
@@ -193,7 +208,7 @@ export async function POST(request: NextRequest) {
     await supabaseUpdate('inbound_batches', batchId, batchPatch)
 
     // insert 먼저 → 성공 후 구행 삭제 (delete-first 시 insert 실패하면 재고 유실)
-    const oldLogs = (await supabaseSelectFilter('stock_logs', `inbound_batch_id=eq.${batchId}`, {
+    const oldLogs = (await supabaseSelectFilter('stock_logs', appendInventoryTenantFilter(`inbound_batch_id=eq.${batchId}`, tenantScope), {
       select: 'id',
       limit: 5000,
     })) as { id?: number }[] | null
@@ -207,7 +222,10 @@ export async function POST(request: NextRequest) {
       const chunkSize = 200
       for (let i = 0; i < oldIds.length; i += chunkSize) {
         const chunk = oldIds.slice(i, i + chunkSize)
-        await supabaseDeleteByFilter('stock_logs', `id=in.(${chunk.join(',')})`)
+        await supabaseDeleteByFilter(
+          'stock_logs',
+          appendInventoryTenantFilter(`id=in.(${chunk.join(',')})`, tenantScope)
+        )
       }
     }
 
@@ -232,6 +250,13 @@ export async function POST(request: NextRequest) {
       { headers }
     )
   } catch (e) {
+    if (isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+      return NextResponse.json(
+        { success: false, message: 'inventory tenant_id 스키마가 없습니다.' },
+        { status: 400, headers }
+      )
+    }
     console.error('updateInboundBatch:', e)
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '수정 실패' },

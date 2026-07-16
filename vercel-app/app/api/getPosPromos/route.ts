@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { campaignNoByIdMap } from '@/lib/marketing-campaign-code-resolve'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendPosCatalogTenantFilter,
+  isMissingTenantIdColumnError,
+  isPosCatalogTenantQueryBlocked,
+  markPosMenusTenantIdColumnMissing,
+  resolvePosCatalogTenantScope,
+} from '@/lib/pos-catalog-tenant-scope'
 
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to,grab_campaign_start_time_bkk,grab_campaign_end_time_bkk'
@@ -107,6 +115,11 @@ export async function GET(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({ auth })
+    if (isPosCatalogTenantQueryBlocked(catalogScope)) {
+      return NextResponse.json([], { headers })
+    }
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
     const standaloneOnly =
@@ -114,11 +127,12 @@ export async function GET(req: NextRequest) {
     let rows: RawRow[] | null = null
     for (const sel of [SELECT_WITH_COMPOSE_BASIS, SELECT_WITH_MARKETING_COST, SELECT_EXTENDED, SELECT_BASE]) {
       try {
-        const filter = standaloneOnly
+        const baseFilter = standaloneOnly
           ? 'marketing_campaign_id=is.null'
           : campaignId
             ? `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`
-            : null
+            : ''
+        const filter = appendPosCatalogTenantFilter(baseFilter, catalogScope)
         rows = filter
           ? ((await supabaseSelectFilter('pos_promos', filter, {
               order: 'sort_order.asc,name.asc',
@@ -131,7 +145,11 @@ export async function GET(req: NextRequest) {
               select: sel,
             })) as RawRow[] | null)
         break
-      } catch {
+      } catch (err) {
+        if (isMissingTenantIdColumnError(err)) {
+          markPosMenusTenantIdColumnMissing()
+          if (catalogScope.enforce) return NextResponse.json([], { headers })
+        }
         if (sel === SELECT_BASE) rows = []
       }
     }

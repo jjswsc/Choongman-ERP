@@ -673,6 +673,7 @@ export async function executeWithdrawal(params: {
   invoicePhotoUrl?: string
   vatAmount?: number
   withholdingTaxAmount?: number
+  withholdingTaxRate?: number
   attachmentUrls?: string[]
   userName?: string
   userRole?: string

@@ -238,6 +238,8 @@ export async function POST(request: NextRequest) {
       if (invoicePhotoUrl) row.invoice_photo_url = invoicePhotoUrl
       if (vatAmount > 0) row.vat_amount = vatAmount
       if (withholdingTaxAmount > 0) row.withholding_tax_amount = withholdingTaxAmount
+      const withholdingTaxRate = Math.max(0, Number(body.withholdingTaxRate ?? body.withholding_tax_rate ?? 0) || 0)
+      if (withholdingTaxRate > 0) row.withholding_tax_rate = withholdingTaxRate
       if (attachmentUrlsJson) row.attachment_urls = attachmentUrlsJson
       if (category === 'transfer_external') {
         const extMemo = [memo, `받는사람: ${transferBankRecipientName}`, `계좌: ${transferBankAccountNo}`].filter(Boolean).join(' / ')
@@ -412,6 +414,15 @@ export async function POST(request: NextRequest) {
       })
     } catch (postingErr) {
       console.error('executeWithdrawal posting:', postingErr)
+    }
+
+    if (withholdingTaxAmount > 0 && bankTransactionId) {
+      try {
+        const { syncTaxWithholdingLedgerForBankTransaction } = await import('@/lib/tax-ledger-auto-sync')
+        await syncTaxWithholdingLedgerForBankTransaction(bankTransactionId)
+      } catch (whtErr) {
+        console.error('executeWithdrawal wht ledger:', whtErr)
+      }
     }
 
     return NextResponse.json({

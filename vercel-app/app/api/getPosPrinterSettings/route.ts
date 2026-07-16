@@ -196,6 +196,7 @@ export async function GET(request: NextRequest) {
     kitchenRouteByMenu: {} as Record<string, 0 | 1 | 2 | 3>,
     kitchenRouteByCategory: {} as Record<string, 0 | 1 | 2 | 3>,
     kitchenRouteByCategoryMain: {} as Record<string, 0 | 1 | 2 | 3>,
+    requireGuestCount: true,
     dualMonitorEnabled: false,
     customerDisplayAutoOpen: true,
     customerDisplayMonitorPreference: 'secondary-first' as const,
@@ -316,6 +317,7 @@ export async function GET(request: NextRequest) {
       kitchen_route_by_menu?: unknown
       kitchen_route_by_category?: unknown
       kitchen_route_by_category_main?: unknown
+      require_guest_count?: boolean
       dual_monitor_enabled?: boolean
       customer_display_auto_open?: boolean
       customer_display_monitor_preference?: string
@@ -513,6 +515,7 @@ export async function GET(request: NextRequest) {
       kitchenRouteByCategoryMain: alignKitchenCategoryRouteKeyMap(
         parseKitchenRouteMapDb(raw?.kitchen_route_by_category_main)
       ),
+      requireGuestCount: raw?.require_guest_count !== false,
       dualMonitorEnabled: Boolean(raw?.dual_monitor_enabled),
       customerDisplayAutoOpen: raw?.customer_display_auto_open !== false,
       customerDisplayMonitorPreference:

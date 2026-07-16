@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   ATTENDANCE_LOG_ADMIN_GRID_COLS,
   ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
@@ -25,6 +25,11 @@ import {
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope, isManagerOrFranchiseeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const TZ = 'Asia/Bangkok'
 
@@ -131,6 +136,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const startDate = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
@@ -425,7 +434,7 @@ export async function GET(request: NextRequest) {
     let displayByEmployeeId: Record<number, string> = {}
     let displayByStoreAndBareName: Record<string, string> = {}
     try {
-      const empRows = (await supabaseSelect('employees', {
+      const empRows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
         select: 'id,store,name,name_title,nick,job,sal_type,employee_code',
         limit: 5000,
       })) as {

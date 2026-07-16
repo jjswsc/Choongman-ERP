@@ -29,6 +29,7 @@ import {
   buildReceivableListForInvoiceFilter,
   scopeReceivableLedger,
 } from '@/lib/receivable-ledger-scope'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
   const s = String(storeFilter || '').trim()
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
   const { searchParams } = new URL(request.url)
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
         await loadPayableTransactionsToEnd({
           vendorFilter: vendorFilter || undefined,
           endStr: endStr || '',
+          tenantScope,
         })
       )
       const payableStoreScope = isPayableStoreFilterActive(storeFilter) ? storeFilter : undefined
@@ -206,6 +209,7 @@ export async function GET(request: NextRequest) {
       startStr,
       storeFilter: isReceivableStoreFilterActive(storeFilter) ? storeFilter : undefined,
       filterByVendorLink: canSelectStores,
+      tenantScope,
     })
 
     const list = invoiceFilter

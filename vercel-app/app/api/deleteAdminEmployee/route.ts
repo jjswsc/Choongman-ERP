@@ -13,6 +13,11 @@ import {
   sanitizeEmployeeAuditRow,
   writeEmployeeAudit,
 } from '@/lib/employee-audit'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** 직원 삭제 */
 export async function POST(req: NextRequest) {
@@ -26,6 +31,14 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'employees',
+      label: '직원',
+    })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
+    }
     const body = await req.json()
     const r = Number(body.r != null ? body.r : body.row)
     const reason = String(body.reason ?? '').trim()
@@ -40,14 +53,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '❌ 잘못된 행' }, { headers })
     }
 
-    let beforeRow = await fetchEmployeeAuditSnapshot(r)
-    if (!beforeRow) {
-      const fallback = (await supabaseSelectFilter('employees', `id=eq.${r}`, {
-        select: 'id,store,resign_date,name,employee_code',
-        limit: 1,
-      })) as Record<string, unknown>[]
-      beforeRow = fallback?.[0] ?? null
-    }
+    const fallback = (await supabaseSelectFilter(
+      'employees',
+      appendSaasTenantFilter(`id=eq.${r}`, tenantScope, 'employees'),
+      { select: 'id,store,resign_date,name,employee_code', limit: 1 }
+    )) as Record<string, unknown>[]
+    const beforeRow = fallback?.[0] ?? null
     if (!beforeRow) {
       return NextResponse.json({ success: false, message: '❌ 해당 직원을 찾을 수 없습니다.' }, { headers })
     }
@@ -80,11 +91,11 @@ export async function POST(req: NextRequest) {
       resign_date: resignDateRaw ? String(resignDateRaw).slice(0, 10) : today,
     }
     try {
-      await supabaseUpdateByFilter('employees', `id=eq.${r}`, patch)
+      await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${r}`, tenantScope, 'employees'), patch)
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
       if (!/employment_status|deleted_at|deleted_by|delete_reason|42703|column/i.test(em)) throw e
-      await supabaseUpdateByFilter('employees', `id=eq.${r}`, { resign_date: patch.resign_date })
+      await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${r}`, tenantScope, 'employees'), { resign_date: patch.resign_date })
     }
 
     let afterRow = await fetchEmployeeAuditSnapshot(r)

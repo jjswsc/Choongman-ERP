@@ -7,6 +7,13 @@ import { createVendorNameResolver, resolveVendorFilterAliases } from '@/lib/vend
 import { formatStockLogDateBangkokYmd } from '@/lib/inbound-payable-amount'
 import { roundErp3 } from '@/lib/utils'
 import { isItemVatExempt, normalizeItemTaxType } from '@/lib/income-statement-item-vat'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
 
 /** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) */
 export async function GET(request: NextRequest) {
@@ -21,6 +28,10 @@ export async function GET(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    if (isInventoryTenantQueryBlocked(tenantScope)) {
+      return NextResponse.json([], { headers })
+    }
     const authRole = String(auth.role || '').toLowerCase()
     const isDirector = authRole.includes('director') || authRole.includes('secretary') || authRole.includes('ceo') || authRole.includes('hr')
     const isOfficeLevel = isDirector || authRole.includes('officer') || isAccountingRole(authRole)
@@ -59,7 +70,7 @@ export async function GET(request: NextRequest) {
       endStr = last.toISOString().slice(0, 10)
     }
 
-    const itemRows = (await supabaseSelect('items', {
+    const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter('', tenantScope), {
       order: 'id.asc',
       limit: 5000,
       select: 'code,spec,cost,purchase_source,tax',
@@ -99,7 +110,10 @@ export async function GET(request: NextRequest) {
           : `&or=(${locVariants.map((v) => `location.ilike.${encodeURIComponent(escapeForIlikeExact(v))}`).join(',')})`
     const gteIso = `${startStr}T00:00:00.000`
     const lteIso = `${endStr}T23:59:59.999`
-    const stockFilter = `log_type=in.(Inbound,ForcePush)${orLoc}&log_date=gte.${encodeURIComponent(gteIso)}&log_date=lte.${encodeURIComponent(lteIso)}`
+    const stockFilter = appendInventoryTenantFilter(
+      `log_type=in.(Inbound,ForcePush)${orLoc}&log_date=gte.${encodeURIComponent(gteIso)}&log_date=lte.${encodeURIComponent(lteIso)}`,
+      tenantScope
+    )
 
     const logs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
       order: 'log_date.desc',
@@ -194,7 +208,7 @@ export async function GET(request: NextRequest) {
     const batchIds = [...new Set(list.map((r) => r.inbound_batch_id).filter((id): id is number => typeof id === 'number' && id > 0))]
     const batchMap: Record<number, { po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }> = {}
     if (batchIds.length > 0) {
-      const batchFilter = `id=in.(${batchIds.join(',')})`
+      const batchFilter = appendInventoryTenantFilter(`id=in.(${batchIds.join(',')})`, tenantScope)
       const batches = (await supabaseSelectFilter('inbound_batches', batchFilter, {
         select: 'id,po_no,invoice_no,invoice_received,purchase_order_id',
       })) as { id?: number; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; purchase_order_id?: number | null }[]
@@ -228,6 +242,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(list, { headers })
   } catch (e) {
+    if (isMissingInventoryTenantIdColumnError(e)) {
+      markInventoryTenantIdColumnMissing()
+    }
     console.error('getInboundForStore:', e)
     return NextResponse.json([], { headers })
   }

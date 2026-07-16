@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to,grab_campaign_start_time_bkk,grab_campaign_end_time_bkk'
@@ -55,6 +61,10 @@ function parseDeliveryCodes(dac: unknown): string[] | null {
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(req, 'any')
+  if (authResult.errorResponse) return authResult.errorResponse
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'pos_promos')) return NextResponse.json([], { headers })
 
   try {
     const { searchParams } = new URL(req.url)
@@ -68,13 +78,13 @@ export async function GET(req: NextRequest) {
         if (campaignId) filterParts.push(`marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`)
         if (!includeInactive) filterParts.push('is_active=eq.true')
         if (filterParts.length > 0) {
-          promos = (await supabaseSelectFilter('pos_promos', filterParts.join('&'), {
+          promos = (await supabaseSelectFilter('pos_promos', appendSaasTenantFilter(filterParts.join('&'), tenantScope, 'pos_promos'), {
             order: 'sort_order.asc,name.asc',
             limit: 10000,
             select: sel,
           })) as RawPromo[] | null
         } else {
-          promos = (await supabaseSelect('pos_promos', {
+          promos = (await supabaseSelectFilter('pos_promos', appendSaasTenantFilter('id=gt.0', tenantScope, 'pos_promos'), {
             order: 'sort_order.asc,name.asc',
             limit: 10000,
             select: sel,

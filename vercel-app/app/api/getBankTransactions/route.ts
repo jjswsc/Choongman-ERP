@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parseMoneyAmount } from '@/lib/money-amount'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const BANK_TX_SUMMARY_SCAN_MAX_ROWS = 1_000_000
@@ -9,7 +17,19 @@ const BANK_TX_SUMMARY_SCAN_MAX_ROWS = 1_000_000
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+  headers.set('Cache-Control', 'private, no-store')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (
+    isSaasTenantQueryBlocked(tenantScope, 'bank_accounts') ||
+    isSaasTenantQueryBlocked(tenantScope, 'bank_transactions')
+  ) {
+    return NextResponse.json({ list: [], summary: null }, { headers })
+  }
   const { searchParams } = new URL(request.url)
   const accountId = String(searchParams.get('accountId') || '').trim()
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
@@ -26,10 +46,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const accountRows = (await supabaseSelectFilter('bank_accounts', `id=eq.${accountId}`, {
+    const accountRows = (await supabaseSelectFilter(
+      'bank_accounts',
+      appendSaasTenantFilter(`id=eq.${accountId}`, tenantScope, 'bank_accounts'),
+      {
       select: 'id,opening_balance,opening_balance_date',
       limit: 1,
-    })) as { id?: number; opening_balance?: number; opening_balance_date?: string }[]
+      }
+    )) as { id?: number; opening_balance?: number; opening_balance_date?: string }[]
     const account = accountRows?.[0]
     const openingBalance = Number(account?.opening_balance) ?? 0
 
@@ -51,6 +75,7 @@ export async function GET(request: NextRequest) {
     if (hasPagination && Number.isFinite(cursorIdParam) && cursorIdParam > 0) {
       filter += isDesc ? `&id=lt.${Math.floor(cursorIdParam)}` : `&id=gt.${Math.floor(cursorIdParam)}`
     }
+    filter = appendSaasTenantFilter(filter, tenantScope, 'bank_transactions')
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: isDesc ? 'id.desc' : 'id.asc',
       limit: pageSize,
@@ -157,7 +182,11 @@ export async function GET(request: NextRequest) {
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)
     const periodWithdrawals = list.filter((t) => t.transType === 'withdraw').reduce((s, t) => s + Math.abs(t.amount), 0)
 
-    const beforeStartFilter = `account_id=eq.${accountId}&trans_date=lt.${startStr}`
+    const beforeStartFilter = appendSaasTenantFilter(
+      `account_id=eq.${accountId}&trans_date=lt.${startStr}`,
+      tenantScope,
+      'bank_transactions'
+    )
     const beforeRows = (await supabaseSelectFilterAllPages('bank_transactions', beforeStartFilter, {
       select: 'trans_type,amount,note',
       pageSize: 8000,
@@ -207,6 +236,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(responseBody, { headers })
   } catch (e) {
     console.error('getBankTransactions:', e)
+    if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('bank_accounts')
+      markSaasTenantColumnMissing('bank_transactions')
+    }
     return NextResponse.json({ list: [], summary: null }, { headers })
   }
 }

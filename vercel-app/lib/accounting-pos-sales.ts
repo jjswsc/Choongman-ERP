@@ -36,13 +36,22 @@ export async function sumCompletedPosSalesTotal(params: {
   startStr: string
   endStr: string
   storeFilter: string
+  /** Omni JWT tenantId — 없으면 storeFilter 로 추론 */
+  tenantId?: string
 }): Promise<PosSalesSumResult> {
+  const { resolveSaasTenantScope } = await import('@/lib/saas-tenant-scope')
+  const tenantScope = await resolveSaasTenantScope({
+    auth: params.tenantId ? { tenantId: params.tenantId } : null,
+    storeCode:
+      params.storeFilter && params.storeFilter !== 'All' ? params.storeFilter : null,
+  })
   const { rows, truncated, bizCtx } = await fetchPosSalesOrdersForBusinessRange({
     startStr: params.startStr,
     endStr: params.endStr,
     storeCodes:
       params.storeFilter && params.storeFilter !== 'All' ? [params.storeFilter] : undefined,
     queryLabel: 'incomeStatementPosSales',
+    tenantScope,
   })
 
   const resolveHours = (storeCode: string) =>

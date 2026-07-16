@@ -72,3 +72,10 @@ export async function resolvePosSalesStoresFromRequest(
   const auth = await getVerifiedAuth(request)
   return resolvePosSalesStoresForAuth(auth, requestedStores)
 }
+
+/** POS 매출 조회용 Omni tenant 스코프 (JWT) */
+export async function resolvePosSalesTenantScopeFromRequest(request: NextRequest) {
+  const { resolveSaasTenantScope } = await import('@/lib/saas-tenant-scope')
+  const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+  return resolveSaasTenantScope({ auth })
+}

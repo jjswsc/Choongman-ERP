@@ -59,6 +59,7 @@ import {
 } from '@/lib/supabase-server'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { resolveInventoryAsOfUtcIso, resolveStockValuationUnitCost } from '@/lib/accounting-inventory-asof'
+import { appendInventoryTenantFilter } from '@/lib/inventory-tenant-scope'
 import {
   sumEbitdaAddBacksFromExpenseSubjects,
   type IncomeStatementAmountBasisKind,
@@ -131,6 +132,8 @@ export type IncomeScopeInput = {
   /** JWT allowedStores — 가맹 복수 매장·매니저 허용 매장 */
   allowedStores?: string[]
   includeDebug?: boolean
+  /** Omni JWT tenantId */
+  tenantId?: string
 }
 
 export type IncomeStatementLineDetail = {
@@ -904,12 +907,15 @@ function isExcludedHqStockLocation(location: string): boolean {
 
 async function resolveInventoryLocationPatterns(
   locationFilter: string | null,
-  excludeHq: boolean
+  excludeHq: boolean,
+  tenantId?: string
 ): Promise<string[]> {
   if (locationFilter) return getStockLocationPatterns(locationFilter)
   if (!excludeHq) return []
   try {
-    const rows = (await supabaseRpc<{ location: string }[]>('get_distinct_stock_locations', {})) as
+    const rows = (await supabaseRpc<{ location: string }[]>('get_distinct_stock_locations', {
+      ...(tenantId ? { p_tenant_id: tenantId } : {}),
+    })) as
       | { location?: string }[]
       | null
     const patterns = (rows || [])
@@ -925,13 +931,15 @@ async function resolveInventoryLocationPatterns(
 /** get_store_stock RPC 우선, 미배포 시 getAppData와 동일한 select fallback */
 async function fetchStoreStockQtyByItem(
   locationPatterns: string[],
-  asOfUtcIso: string
+  asOfUtcIso: string,
+  tenantId?: string
 ): Promise<Record<string, number>> {
   if (locationPatterns.length === 0) return {}
   try {
     const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>('get_store_stock', {
       p_location_patterns: locationPatterns,
       p_as_of_date: asOfUtcIso,
+      ...(tenantId ? { p_tenant_id: tenantId } : {}),
     })) as { item_code?: string; total_qty?: number }[] | null
 
     const m: Record<string, number> = {}
@@ -949,7 +957,8 @@ async function fetchStoreStockQtyByItem(
       locFilter = `or=(${locationPatterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
     }
     const dateSuffix = `&log_date=lte.${encodeURIComponent(asOfUtcIso)}`
-    const rows = (await supabaseSelectFilterAllPages('stock_logs', `${locFilter}${dateSuffix}`, {
+    const tenantScope = { enforce: Boolean(tenantId), tenantId: tenantId || '' }
+    const rows = (await supabaseSelectFilterAllPages('stock_logs', appendInventoryTenantFilter(`${locFilter}${dateSuffix}`, tenantScope), {
       order: 'id.asc',
       pageSize: 8000,
       maxRows: ACCOUNTING_ROWS_MAX,
@@ -1008,12 +1017,13 @@ async function getInventoryVatBuckets(
   isBefore: boolean,
   itemUnitCostMap: Record<string, number>,
   itemTaxMap: Map<string, ItemTaxType>,
-  excludeHq = false
+  excludeHq = false,
+  tenantId?: string
 ): Promise<NetVatBuckets> {
   const buckets = emptyNetVatBuckets()
   const asOfUtcIso = resolveInventoryAsOfUtcIso(cutoffDate, isBefore)
-  const locationPatterns = await resolveInventoryLocationPatterns(locationFilter, excludeHq)
-  const byItem = await fetchStoreStockQtyByItem(locationPatterns, asOfUtcIso)
+  const locationPatterns = await resolveInventoryLocationPatterns(locationFilter, excludeHq, tenantId)
+  const byItem = await fetchStoreStockQtyByItem(locationPatterns, asOfUtcIso, tenantId)
   for (const [code, qty] of Object.entries(byItem)) {
     const unit = itemUnitCostMap[code] ?? 0
     accumulateNetByItemTax(buckets, code, qty * unit, itemTaxMap)
@@ -1453,6 +1463,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       startStr,
       endStr,
       storeFilter,
+      tenantId: input.tenantId,
     })
     sales += posSalesSum.total
     salesNetForDisplay += posSalesSum.totalNet
@@ -1828,7 +1839,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     true,
     itemUnitCostMap,
     itemTaxMap,
-    !isHQ && storeFilter === 'All'
+    !isHQ && storeFilter === 'All',
+    input.tenantId
   )
   const endInvBuckets = await getInventoryVatBuckets(
     isHQ ? '본사' : storeFilter !== 'All' ? storeFilter : null,
@@ -1836,7 +1848,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     false,
     itemUnitCostMap,
     itemTaxMap,
-    !isHQ && storeFilter === 'All'
+    !isHQ && storeFilter === 'All',
+    input.tenantId
   )
 
   if (isHQ) {

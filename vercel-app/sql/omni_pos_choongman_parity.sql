@@ -250,7 +250,8 @@ END $$;
 
 -- ── 7) POS 메뉴·옵션·프린터 — PostgREST 42703 (Omni 로그 기준) ──
 -- pos_menus.category_main, pos_menu_options.option_code / price_modifier_packaging 등
--- pos_printer_settings.main_device_max_count 등
+-- pos_printer_settings: 기기 한도 3컬럼만 여기. 프린터 설정 전체는
+--   sql/omni_pos_printer_settings_full_columns.sql (savePosPrinterSettings 필수)
 DO $$
 BEGIN
   IF to_regclass('public.pos_menus') IS NOT NULL THEN

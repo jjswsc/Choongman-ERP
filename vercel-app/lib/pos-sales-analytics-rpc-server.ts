@@ -81,10 +81,31 @@ export async function fetchPosSalesAnalyticsAgg(params: {
   menuSearchTokens?: string[]
   menuSearchAnd?: boolean
   bizCtx?: PosBusinessDaySettingsContext
+  /** Omni JWT tenant — 없으면 request/storeCodes 로 resolve */
+  tenantScope?: import('@/lib/saas-tenant-scope').SaasTenantScope
+  request?: import('next/server').NextRequest
 }): Promise<PosSalesAnalyticsAggRow[]> {
   const startStr = params.startStr.trim().slice(0, 10)
   const endStr = params.endStr.trim().slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
+    return []
+  }
+
+  const {
+    isSaasTenantQueryBlocked,
+    resolveSaasTenantScope,
+  } = await import('@/lib/saas-tenant-scope')
+
+  let tenantScope = params.tenantScope
+  if (!tenantScope && params.request) {
+    const { getVerifiedAuth } = await import('@/lib/verify-auth')
+    const auth = await getVerifiedAuth(params.request, { skipSaasGate: true })
+    tenantScope = await resolveSaasTenantScope({
+      auth,
+      storeCode: params.storeCodes?.[0] ?? null,
+    })
+  }
+  if (tenantScope && isSaasTenantQueryBlocked(tenantScope, 'pos_orders')) {
     return []
   }
 
@@ -94,6 +115,9 @@ export async function fetchPosSalesAnalyticsAgg(params: {
     params.storeCodes && params.storeCodes.length > 0
       ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
       : null
+
+  const pTenantId =
+    tenantScope?.enforce && tenantScope.tenantId ? tenantScope.tenantId : null
 
   const rows = (await supabaseRpc<PosSalesAnalyticsAggRow[]>('get_pos_sales_analytics_agg', {
     p_start_utc: startISO,
@@ -108,6 +132,7 @@ export async function fetchPosSalesAnalyticsAgg(params: {
     p_menu_search_tokens:
       params.menuSearchTokens && params.menuSearchTokens.length > 0 ? params.menuSearchTokens : null,
     p_menu_search_and: params.menuSearchAnd === true,
+    p_tenant_id: pTenantId,
   })) as PosSalesAnalyticsAggRow[] | null
 
   return Array.isArray(rows) ? rows : []

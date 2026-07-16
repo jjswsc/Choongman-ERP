@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 import { runDuePriceSchedules } from '@/lib/price-schedule'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 const ITEMS_SELECT_FULL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order,stock_base_unit,stock_unit_options,standard_units,account_subject_id'
 const ITEMS_SELECT_MINIMAL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order'
@@ -64,6 +72,12 @@ export async function GET(request: NextRequest) {
   const isHqOnly = scope === 'outbound' || scope === 'order'
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    if (isInventoryTenantQueryBlocked(tenantScope)) {
+      return NextResponse.json([], { headers })
+    }
+
     try {
       await runDuePriceSchedules(new Date())
     } catch (scheduleErr) {
@@ -73,23 +87,42 @@ export async function GET(request: NextRequest) {
     const resolveVendorName = await createVendorNameResolver()
     let rows: ItemRow[] | null = null
     let hasStockCols = true
+    const hqFilter = 'or=(purchase_source.eq.hq,purchase_source.is.null)'
+    const baseFilter = isHqOnly ? hqFilter : ''
+    const filter = appendInventoryTenantFilter(baseFilter, tenantScope)
+
+    const selectItems = async (selectCols: string) => {
+      if (filter) {
+        return (await supabaseSelectFilter('items', filter, {
+          order: 'sort_order.asc.nullslast,id.asc',
+          limit: 5000,
+          select: selectCols,
+        })) as ItemRow[] | null
+      }
+      return (await supabaseSelect('items', {
+        order: 'sort_order.asc.nullslast,id.asc',
+        limit: 5000,
+        select: selectCols,
+      })) as ItemRow[] | null
+    }
+
     try {
-      rows = isHqOnly
-        ? ((await supabaseSelectFilter(
-            'items',
-            'or=(purchase_source.eq.hq,purchase_source.is.null)',
-            { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_FULL }
-          )) as ItemRow[] | null)
-        : ((await supabaseSelect('items', { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_FULL })) as ItemRow[] | null)
-    } catch {
+      rows = await selectItems(ITEMS_SELECT_FULL)
+    } catch (err) {
+      if (filter && isMissingInventoryTenantIdColumnError(err)) {
+        markInventoryTenantIdColumnMissing()
+        if (tenantScope.enforce) return NextResponse.json([], { headers })
+      }
       hasStockCols = false
-      rows = isHqOnly
-        ? ((await supabaseSelectFilter(
-            'items',
-            'or=(purchase_source.eq.hq,purchase_source.is.null)',
-            { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_MINIMAL }
-          )) as ItemRow[] | null)
-        : ((await supabaseSelect('items', { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_MINIMAL })) as ItemRow[] | null)
+      try {
+        rows = await selectItems(ITEMS_SELECT_MINIMAL)
+      } catch (err2) {
+        if (filter && isMissingInventoryTenantIdColumnError(err2)) {
+          markInventoryTenantIdColumnMissing()
+          if (tenantScope.enforce) return NextResponse.json([], { headers })
+        }
+        throw err2
+      }
     }
     const list = (rows || [])
       .filter((row) => {

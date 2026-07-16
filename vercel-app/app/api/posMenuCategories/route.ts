@@ -5,8 +5,15 @@ import {
   POS_CATEGORIES_BY_MAIN,
   mergePromotionIntoCategoriesConfig,
 } from '@/lib/pos-menu-categories'
-
-const SETTINGS_KEY = 'pos_menu_categories'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendPosCatalogTenantFilter,
+  assertPosCatalogTenantWritable,
+  isPosCatalogTenantQueryBlocked,
+  posMenuCategoriesSettingsKey,
+  resolvePosCatalogTenantScope,
+  type PosCatalogTenantScope,
+} from '@/lib/pos-catalog-tenant-scope'
 
 export interface PosMenuCategoriesConfig {
   mainCategories: string[]
@@ -23,7 +30,8 @@ const defaultConfig: PosMenuCategoriesConfig = {
 /** oldConfig → newConfig 기준으로 pos_menus의 category_main·category 매핑 후 업데이트 */
 async function applyCategoryChangesToMenus(
   oldConfig: PosMenuCategoriesConfig,
-  newConfig: PosMenuCategoriesConfig
+  newConfig: PosMenuCategoriesConfig,
+  catalogScope: PosCatalogTenantScope
 ): Promise<{ updated: number }> {
   const mainMap = new Map<string, string>()
   const fallbackMain = newConfig.mainCategories[0] ?? ''
@@ -60,10 +68,18 @@ async function applyCategoryChangesToMenus(
     if (subMap.size > 0) subMapByMain.set(oldMain, subMap)
   }
 
-  const rows = (await supabaseSelect('pos_menus', {
-    select: 'id,category_main,category',
-    limit: 10000,
-  })) as { id: string; category_main?: string; category?: string }[]
+  const tenantFilter = appendPosCatalogTenantFilter('', catalogScope)
+  const rows = (
+    tenantFilter
+      ? await supabaseSelectFilter('pos_menus', tenantFilter, {
+          select: 'id,category_main,category',
+          limit: 10000,
+        })
+      : await supabaseSelect('pos_menus', {
+          select: 'id,category_main,category',
+          limit: 10000,
+        })
+  ) as { id: string; category_main?: string; category?: string }[]
 
   let updated = 0
   for (const row of rows || []) {
@@ -141,14 +157,20 @@ async function applyCategoryChangesToMenus(
 }
 
 /** GET: POS 메뉴 대분류·소분류 설정 조회 */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({ auth })
+    if (isPosCatalogTenantQueryBlocked(catalogScope)) {
+      return NextResponse.json(defaultConfig, { headers })
+    }
+    const settingsKey = posMenuCategoriesSettingsKey(catalogScope)
     const rows = (await supabaseSelectFilter(
       'system_settings',
-      `key=eq.${encodeURIComponent(SETTINGS_KEY)}`,
+      `key=eq.${encodeURIComponent(settingsKey)}`,
       { limit: 1 }
     )) as { key?: string; value_json?: PosMenuCategoriesConfig }[] | null
 
@@ -173,6 +195,14 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({ auth })
+    const writeBlock = assertPosCatalogTenantWritable(catalogScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 403, headers })
+    }
+    const settingsKey = posMenuCategoriesSettingsKey(catalogScope)
+
     const body = (await request.json()) as {
       mainCategories?: string[]
       categoriesByMain?: Record<string, string[]>
@@ -201,7 +231,7 @@ export async function POST(request: NextRequest) {
     if (body.applyToMenus) {
       const oldRows = (await supabaseSelectFilter(
         'system_settings',
-        `key=eq.${encodeURIComponent(SETTINGS_KEY)}`,
+        `key=eq.${encodeURIComponent(settingsKey)}`,
         { limit: 1 }
       )) as { key?: string; value_json?: PosMenuCategoriesConfig }[] | null
       const raw = oldRows?.[0]?.value_json
@@ -209,7 +239,7 @@ export async function POST(request: NextRequest) {
         raw && typeof raw === 'object' && Array.isArray(raw.mainCategories) && typeof raw.categoriesByMain === 'object'
           ? { mainCategories: raw.mainCategories, categoriesByMain: raw.categoriesByMain }
           : defaultConfig
-      const result = await applyCategoryChangesToMenus(oldConfig, newConfig)
+      const result = await applyCategoryChangesToMenus(oldConfig, newConfig, catalogScope)
       menusUpdated = result.updated
     }
 
@@ -217,8 +247,11 @@ export async function POST(request: NextRequest) {
       'system_settings',
       [
         {
-          key: SETTINGS_KEY,
-          value_json: { mainCategories, categoriesByMain },
+          key: settingsKey,
+          value_json: {
+            mainCategories: newConfig.mainCategories,
+            categoriesByMain: newConfig.categoriesByMain,
+          },
           updated_at: new Date().toISOString(),
         },
       ],
@@ -226,7 +259,12 @@ export async function POST(request: NextRequest) {
     )
 
     return NextResponse.json(
-      { success: true, mainCategories, categoriesByMain, menusUpdated },
+      {
+        success: true,
+        mainCategories: newConfig.mainCategories,
+        categoriesByMain: newConfig.categoriesByMain,
+        menusUpdated,
+      },
       { headers }
     )
   } catch (e) {

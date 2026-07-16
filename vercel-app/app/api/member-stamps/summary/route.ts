@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMemberStampSummaryForPos } from '@/lib/member-stamp-card'
+import { getMemberSummaryById } from '@/lib/members-server-core'
+import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(req: NextRequest) {
@@ -7,9 +9,16 @@ export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, 'any')
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    const tenantScope = await resolveMembersTenantScope({ auth: authRes.auth })
     const memberId = Number(req.nextUrl.searchParams.get('memberId') || 0)
     if (!memberId) {
       return NextResponse.json({ success: false, message: 'memberId가 필요합니다.' }, { headers, status: 400 })
+    }
+    if (tenantScope.enforce) {
+      const owned = await getMemberSummaryById(memberId, tenantScope)
+      if (!owned) {
+        return NextResponse.json({ success: true, summary: null }, { headers })
+      }
     }
     const summary = await getMemberStampSummaryForPos(memberId)
     return NextResponse.json({ success: true, summary }, { headers })

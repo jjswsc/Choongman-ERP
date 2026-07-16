@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
@@ -12,6 +12,14 @@ import {
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -39,6 +47,19 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError =
+      assertSaasTenantWritable(tenantScope, {
+        tableHint: 'bank_transactions',
+        label: '통장 거래',
+      }) ||
+      assertSaasTenantWritable(tenantScope, {
+        tableHint: 'bank_accounts',
+        label: '통장 계좌',
+      })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 400, headers })
+    }
     const body = await request.json()
     const userRole = String(auth.role || '').trim()
     const userStore = String(auth.store || '').trim()
@@ -121,6 +142,14 @@ export async function POST(request: NextRequest) {
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
     }
+    const accountRows = (await supabaseSelectFilter(
+      'bank_accounts',
+      appendSaasTenantFilter(`id=eq.${accountId}`, tenantScope, 'bank_accounts'),
+      { select: 'id', limit: 1 }
+    )) as { id?: number }[]
+    if (!accountRows[0]?.id) {
+      return NextResponse.json({ success: false, message: '해당 계좌가 없습니다.' }, { status: 404, headers })
+    }
     if (!transDate) {
       return NextResponse.json({ success: false, message: '날짜를 선택하세요.' }, { status: 400, headers })
     }
@@ -178,7 +207,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const row: Record<string, unknown> = {
+    const row = stampSaasTenantId<Record<string, unknown>>({
       account_id: accountId,
       trans_date: transDate,
       trans_type: transType,
@@ -190,7 +219,7 @@ export async function POST(request: NextRequest) {
       user_employee_id: userEmployeeId,
       user_employee_code: userEmployeeCode,
       category: validCategory,
-    }
+    }, tenantScope, 'bank_transactions')
     if (accountSubjectId != null && validCategory !== 'receivable_receive') {
       const asid = Number(accountSubjectId)
       if (!isNaN(asid)) {
@@ -273,6 +302,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {
     console.error('addBankTransaction:', e)
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('bank_transactions')
+      markSaasTenantColumnMissing('bank_accounts')
+      return NextResponse.json(
+        { success: false, message: '통장 거래 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
       { status: 500, headers }

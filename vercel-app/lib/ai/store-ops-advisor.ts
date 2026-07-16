@@ -61,9 +61,23 @@ function aggregateHqOutboundByStore(lines: Awaited<ReturnType<typeof loadHqOutbo
   return map
 }
 
-async function buildStoreBreakdown(start: string, end: string, maxStores = 30): Promise<StoreOpsStoreRow[]> {
+async function buildStoreBreakdown(
+  start: string,
+  end: string,
+  opts?: {
+    tenantId?: string
+    tenantScope?: import('@/lib/saas-tenant-scope').SaasTenantScope
+    maxStores?: number
+  }
+): Promise<StoreOpsStoreRow[]> {
+  const maxStores = opts?.maxStores ?? 30
   const [salesRows, outbound] = await Promise.all([
-    tryFetchPosSalesAnalyticsAgg({ startStr: start, endStr: end, aggMode: 'store' }),
+    tryFetchPosSalesAnalyticsAgg({
+      startStr: start,
+      endStr: end,
+      aggMode: 'store',
+      tenantScope: opts?.tenantScope,
+    }),
     loadHqOutboundProcessedLines({ startStr: start, endStr: end, storeFilter: null }),
   ])
   if (!salesRows?.length) return []
@@ -104,6 +118,9 @@ export async function buildStoreOpsInsight(params: {
   start?: string
   end?: string
   includeBreakdown?: boolean
+  /** Omni JWT tenantId — 생략 시 scoped.auth.tenantId */
+  tenantId?: string
+  tenantScope?: import('@/lib/saas-tenant-scope').SaasTenantScope
 }): Promise<StoreOpsInsight> {
   const fallback = resolveDefaultRange()
   const start = String(params.start || fallback.start).trim().slice(0, 10) || fallback.start
@@ -131,15 +148,26 @@ export async function buildStoreOpsInsight(params: {
     Boolean(params.includeBreakdown) ||
     (storeFilter === 'All' && isOfficeRole(params.scoped.role))
 
+  const tenantId =
+    String(params.tenantId || params.scoped.auth.tenantId || '').trim() || undefined
+  let tenantScope = params.tenantScope
+  if (!tenantScope && tenantId) {
+    const { resolveSaasTenantScope } = await import('@/lib/saas-tenant-scope')
+    tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId },
+      storeCode: storeFilter !== 'All' ? storeFilter : null,
+    })
+  }
+
   try {
     const [sales, hq, breakdown] = await Promise.all([
-      sumCompletedPosSalesTotal({ startStr: start, endStr: end, storeFilter }),
+      sumCompletedPosSalesTotal({ startStr: start, endStr: end, storeFilter, tenantId }),
       sumHqOutboundSubtotalMatchingOutboundManagement({
         startStr: start,
         endStr: end,
         storeFilter: storeFilter === 'All' ? null : storeFilter,
       }),
-      wantBreakdown ? buildStoreBreakdown(start, end) : Promise.resolve([] as StoreOpsStoreRow[]),
+      wantBreakdown ? buildStoreBreakdown(start, end, { tenantScope, tenantId }) : Promise.resolve([] as StoreOpsStoreRow[]),
     ])
 
     const salesTotal = Math.max(0, Number(sales.total) || 0)
@@ -209,6 +237,8 @@ export async function fetchStoreOpsSnapshot(params: {
   store?: string
   start?: string
   end?: string
+  tenantId?: string
+  tenantScope?: import('@/lib/saas-tenant-scope').SaasTenantScope
 }): Promise<StoreOpsInsight> {
   return buildStoreOpsInsight({
     scoped: params.scoped,
@@ -216,5 +246,7 @@ export async function fetchStoreOpsSnapshot(params: {
     start: params.start,
     end: params.end,
     includeBreakdown: true,
+    tenantId: params.tenantId ?? params.scoped.auth.tenantId,
+    tenantScope: params.tenantScope,
   })
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectPageCap } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectPageCap } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import { requireAuth } from '@/lib/verify-auth'
@@ -16,6 +16,13 @@ import {
 import { loadEmployeeJobCatalog } from '@/lib/employee-job-catalog-server'
 import { isEmployeeOfficePayrollManagerFlag, redactOfficeEmployeePayrollIfNeeded } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,6 +70,10 @@ export async function GET(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
+      return NextResponse.json({ list: [], stores: [], jobOptions: [] }, { headers })
+    }
     const { searchParams } = new URL(req.url)
     const userStore = String(auth.store || '').trim()
     const userRole = String(auth.role || '').toLowerCase()
@@ -122,13 +133,17 @@ export async function GET(req: NextRequest) {
     const empFetchLimit = supabaseSelectPageCap()
     for (const sel of empSelectCandidates) {
       try {
-        rows = (await supabaseSelect('employees', { order: 'id.asc', select: sel, limit: empFetchLimit })) as Record<
+        rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), { order: 'id.asc', select: sel, limit: empFetchLimit })) as Record<
           string,
           unknown
         >[] | null
         loadErr = null
         break
       } catch (e) {
+        if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('employees')
+          return NextResponse.json({ list: [], stores: [], jobOptions: [] }, { headers })
+        }
         loadErr = e
       }
     }

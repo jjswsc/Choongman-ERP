@@ -31,7 +31,18 @@ import {
   type MemberRow,
   type MemberTierRow,
   type MemberPointLedgerRow,
+  getMemberSummaryById,
+  type MembersTenantScope,
 } from './members-server-core'
+import {
+  appendMembersTenantFilter,
+  assertMembersTenantWritable,
+  isMembersTenantQueryBlocked,
+  isMissingMembersTenantIdColumnError,
+  LEGACY_MEMBERS_TENANT_SCOPE,
+  markMembersTenantIdColumnMissing,
+  stampMembersTenantId,
+} from '@/lib/members-tenant-scope'
 
 async function getActiveTiers(): Promise<MemberTierRow[]> {
   const rows = (await supabaseSelect('member_tiers', { order: 'sort_order.asc,min_points.asc', limit: 1000 })) as MemberTierRow[]
@@ -176,8 +187,17 @@ export async function listMemberPoints(params?: {
   startStr?: string
   endStr?: string
   offset?: number
+  tenantScope?: MembersTenantScope
 }) {
+  const tenantScope = params?.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
+  if (isMembersTenantQueryBlocked(tenantScope)) return []
+
   const memberId = Number(params?.memberId || 0)
+  if (tenantScope.enforce && memberId) {
+    const owned = await getMemberSummaryById(memberId, tenantScope)
+    if (!owned) return []
+  }
+
   const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
   const offset = Math.max(0, Number(params?.offset || 0))
   const filters: string[] = []
@@ -190,11 +210,18 @@ export async function listMemberPoints(params?: {
   if (endStr) {
     filters.push(`created_at=lte.${encodeURIComponent(`${endStr}T23:59:59`)}`)
   }
-  const filter = filters.join('&')
+  const filter = appendMembersTenantFilter(filters.join('&') || 'id=gt.0', tenantScope)
   const opts = { order: 'id.desc' as const, limit, offset }
-  const rows = filter
-    ? ((await supabaseSelectFilter('member_points_ledger', filter, opts)) as MemberPointLedgerRow[])
-    : ((await supabaseSelect('member_points_ledger', opts)) as MemberPointLedgerRow[])
+  let rows: MemberPointLedgerRow[]
+  try {
+    rows = (await supabaseSelectFilter('member_points_ledger', filter, opts)) as MemberPointLedgerRow[]
+  } catch (e) {
+    if (tenantScope.enforce && isMissingMembersTenantIdColumnError(e)) {
+      markMembersTenantIdColumnMissing()
+      return []
+    }
+    throw e
+  }
   return (rows || []).map((row) => ({
     id: Number(row.id || 0),
     memberId: Number(row.member_id || 0),
@@ -213,26 +240,42 @@ export async function adjustMemberPoints(params: {
   note?: string
   /** 소급 적립 등 — 원장 amount에 기록할 사용(결제) 금액 */
   amount?: number
+  tenantScope?: MembersTenantScope
 }) {
+  const tenantScope = params.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
+  const writeBlock = assertMembersTenantWritable(tenantScope)
+  if (writeBlock) throw new Error(writeBlock)
+  if (isMembersTenantQueryBlocked(tenantScope)) throw new Error('회원 포인트를 조정할 수 없습니다.')
+
   const memberId = Number(params.memberId || 0)
   const points = normalizeMemberPoints(params.points)
   if (!memberId) throw new Error('유효한 memberId가 필요합니다.')
   if (!points) throw new Error('포인트 변경값이 필요합니다.')
   const amount = Math.max(0, Number(params.amount || 0))
-  const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
+  const rows = (await supabaseSelectFilter(
+    'members',
+    appendMembersTenantFilter(`id=eq.${memberId}`, tenantScope),
+    { limit: 1 },
+  )) as MemberRow[]
   if (!rows?.length) throw new Error('회원을 찾을 수 없습니다.')
   const member = rows[0]
   const nextBalance = normalizeMemberPoints(Number(member.point_balance || 0) + points)
   if (nextBalance < 0) throw new Error('포인트가 부족합니다.')
-  await supabaseInsert('member_points_ledger', {
-    member_id: memberId,
-    kind: 'adjust',
-    points,
-    amount,
-    note: toText(params.note) || 'manual_adjust',
-    created_at: getBangkokDateTimeString(),
-  })
-  await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
+  await supabaseInsert(
+    'member_points_ledger',
+    stampMembersTenantId(
+      {
+        member_id: memberId,
+        kind: 'adjust',
+        points,
+        amount,
+        note: toText(params.note) || 'manual_adjust',
+        created_at: getBangkokDateTimeString(),
+      },
+      tenantScope,
+    ),
+  )
+  await supabaseUpdateByFilter('members', appendMembersTenantFilter(`id=eq.${memberId}`, tenantScope), {
     point_balance: nextBalance,
     updated_at: getBangkokDateTimeString(),
     ...(points > 0 ? { tier_points: roundMemberPointsEarn(Number(member.tier_points || 0) + points) } : {}),

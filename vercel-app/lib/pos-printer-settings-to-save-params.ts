@@ -182,6 +182,7 @@ export function posPrinterSettingsToSaveParams(
     otherMode: (String(s.otherMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",
     feeStackMode,
     feeStackOrder,
+    requireGuestCount: s.requireGuestCount !== false,
     dualMonitorEnabled: Boolean(s.dualMonitorEnabled),
     customerDisplayAutoOpen: s.customerDisplayAutoOpen !== false,
     customerDisplayMonitorPreference,

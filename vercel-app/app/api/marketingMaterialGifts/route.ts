@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   supabaseInsert,
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -34,6 +40,8 @@ export async function GET(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    if (isSaasTenantQueryBlocked(tenantScope, 'marketing_material_gifts')) return NextResponse.json([], { headers })
     const userRole = String(auth.role || '')
     const userStore = normalizeStoreName(auth.store || '')
     const allowedStores =
@@ -52,17 +60,17 @@ export async function GET(req: NextRequest) {
     if (materialId) {
       rows = (await supabaseSelectFilter(
         'marketing_material_gifts',
-        `material_id=eq.${encodeURIComponent(materialId)}`,
+        appendSaasTenantFilter(`material_id=eq.${encodeURIComponent(materialId)}`, tenantScope, 'marketing_material_gifts'),
         { order: 'id.asc', limit: 5000 }
       )) as Record<string, unknown>[] | null
     } else if (campaignId) {
       rows = (await supabaseSelectFilter(
         'marketing_material_gifts',
-        `campaign_id=eq.${encodeURIComponent(campaignId)}`,
+        appendSaasTenantFilter(`campaign_id=eq.${encodeURIComponent(campaignId)}`, tenantScope, 'marketing_material_gifts'),
         { order: 'id.asc', limit: 5000 }
       )) as Record<string, unknown>[] | null
     } else {
-      rows = (await supabaseSelect('marketing_material_gifts', {
+      rows = (await supabaseSelectFilter('marketing_material_gifts', appendSaasTenantFilter('id=gt.0', tenantScope, 'marketing_material_gifts'), {
         order: 'id.desc',
         limit: 5000,
       })) as Record<string, unknown>[] | null
@@ -105,6 +113,9 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'marketing_material_gifts', label: '마케팅 사은품' })
+    if (tenantError) return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
     const body = (await req.json()) as {
       id?: string
       materialId?: string
@@ -171,7 +182,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const row: Record<string, unknown> = {
+    const row: Record<string, unknown> = stampSaasTenantId({
       material_id: Number(materialId),
       campaign_id: campaignId,
       store_name: storeName,
@@ -181,16 +192,16 @@ export async function POST(req: NextRequest) {
       remaining_qty: remainingQty,
       rule_note: String(body.ruleNote ?? '').trim(),
       updated_at: new Date().toISOString(),
-    }
+    }, tenantScope, 'marketing_material_gifts')
 
     if (editingId) {
       const existing = (await supabaseSelectFilter(
         'marketing_material_gifts',
-        `id=eq.${encodeURIComponent(editingId)}`,
+        appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_material_gifts'),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing?.length) {
-        await supabaseUpdateByFilter('marketing_material_gifts', `id=eq.${editingId}`, row)
+        await supabaseUpdateByFilter('marketing_material_gifts', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_material_gifts'), row)
         return NextResponse.json({ success: true, message: '수정되었습니다.', id: editingId }, { headers })
       }
     }

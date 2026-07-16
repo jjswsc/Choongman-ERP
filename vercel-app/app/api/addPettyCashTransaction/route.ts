@@ -6,6 +6,13 @@ import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -32,6 +39,14 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'petty_cash_transactions',
+      label: '패티캐시 거래',
+    })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 400, headers })
+    }
     const body = await request.json()
     const store = String(body.store || '').trim()
     const transDate = String(body.transDate || body.trans_date || '').slice(0, 10)
@@ -80,11 +95,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: '해당 매장만 등록할 수 있습니다.' }, { status: 403, headers })
       }
     }
+    if (transType === 'expense' && category === 'purchase_payment' && vendorCode) {
+      const payableTenantError = assertSaasTenantWritable(tenantScope, {
+        tableHint: 'payable_transactions',
+        label: '미지급 거래',
+      })
+      if (payableTenantError) {
+        return NextResponse.json({ success: false, message: payableTenantError }, { status: 400, headers })
+      }
+    }
 
     let amt = amount
     if (transType === 'expense') amt = -Math.abs(amt)
 
-    const row: Record<string, unknown> = {
+    const row = stampSaasTenantId<Record<string, unknown>>({
       store,
       trans_date: transDate,
       trans_type: transType,
@@ -93,7 +117,7 @@ export async function POST(request: NextRequest) {
       user_name: userName,
       user_employee_id: userEmployeeId,
       user_employee_code: userEmployeeCode,
-    }
+    }, tenantScope, 'petty_cash_transactions')
     if (receiptUrl) row.receipt_url = receiptUrl
     if (vendorCode) row.vendor_code = vendorCode
     if (typeof invoiceReceived === 'boolean') row.invoice_received = invoiceReceived
@@ -135,7 +159,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (transType === 'expense' && category === 'purchase_payment' && vendorCode) {
-      await supabaseInsert('payable_transactions', {
+      await supabaseInsert('payable_transactions', stampSaasTenantId({
         vendor_code: vendorCode,
         amount: -Math.abs(amount),
         ref_type: 'Payment',
@@ -144,7 +168,7 @@ export async function POST(request: NextRequest) {
         memo: memo ? `패티 지급: ${memo.slice(0, 200)}` : '패티 지급',
         petty_cash_transaction_id: pettyCashId || null,
         expense_accrual_id: expenseAccrualId,
-      })
+      }, tenantScope, 'payable_transactions'))
       try {
         await postPayableSettlementJournal({
           sourceType: 'petty_cash',
@@ -179,6 +203,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {
     console.error('addPettyCashTransaction:', e)
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('petty_cash_transactions')
+      markSaasTenantColumnMissing('payable_transactions')
+      return NextResponse.json(
+        { success: false, message: '회계 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
       { status: 500, headers }

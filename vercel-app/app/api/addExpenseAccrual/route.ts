@@ -12,6 +12,13 @@ import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { canonicalOfficeStore } from '@/lib/office-store-canonical'
 import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
+import {
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -86,6 +93,19 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantError =
+      assertSaasTenantWritable(tenantScope, {
+        tableHint: 'expense_accruals',
+        label: '지출 발생',
+      }) ||
+      assertSaasTenantWritable(tenantScope, {
+        tableHint: 'payable_transactions',
+        label: '미지급 거래',
+      })
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 400, headers })
+    }
     const body = await request.json()
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
 
@@ -186,7 +206,7 @@ export async function POST(request: NextRequest) {
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
     const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
 
-    const accrualRow: Record<string, unknown> = {
+    const accrualRow = stampSaasTenantId<Record<string, unknown>>({
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode,
       amount,
@@ -199,7 +219,7 @@ export async function POST(request: NextRequest) {
       created_by: userName || null,
       status: 'planned',
       ...(attachmentUrlsJson ? { attachment_urls: attachmentUrlsJson } : {}),
-    }
+    }, tenantScope, 'expense_accruals')
     if (typeof invoiceReceived === 'boolean') accrualRow.invoice_received = invoiceReceived
     if (invoiceNoRaw !== undefined) accrualRow.invoice_no = String(invoiceNoRaw || '').trim() || null
     if (invoicePhotoRaw !== undefined) {
@@ -229,7 +249,7 @@ export async function POST(request: NextRequest) {
 
     const prepaymentAccrual = isPrepaymentAccrualCategory(withdrawalCategory)
 
-    await supabaseInsert('payable_transactions', {
+    await supabaseInsert('payable_transactions', stampSaasTenantId({
       vendor_code: payeeCode.startsWith('auto_') ? null : payeeCode,
       amount: Math.abs(netPayable),
       ref_type: 'Expense',
@@ -250,7 +270,7 @@ export async function POST(request: NextRequest) {
       account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
       expense_date: expenseDate,
       due_date: dueDate,
-    })
+    }, tenantScope, 'payable_transactions'))
 
     if (!prepaymentAccrual) {
       try {
@@ -277,6 +297,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (withholdingTaxAmount > 0) {
+      try {
+        const { syncTaxWithholdingLedgerForExpenseAccrual } = await import('@/lib/tax-ledger-auto-sync')
+        await syncTaxWithholdingLedgerForExpenseAccrual(expenseAccrualId)
+      } catch (whtErr) {
+        console.error('addExpenseAccrual wht ledger:', whtErr)
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -289,6 +318,14 @@ export async function POST(request: NextRequest) {
     )
   } catch (e) {
     console.error('addExpenseAccrual:', e)
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('expense_accruals')
+      markSaasTenantColumnMissing('payable_transactions')
+      return NextResponse.json(
+        { success: false, message: '회계 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '처리 실패' },
       { status: 500, headers }

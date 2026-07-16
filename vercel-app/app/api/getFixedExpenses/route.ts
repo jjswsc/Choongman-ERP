@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** 고정비 목록 조회 */
 export async function GET(request: NextRequest) {
@@ -14,6 +21,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'fixed_expenses')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
   const userStore = String(auth.store || '').trim()
@@ -41,12 +52,12 @@ export async function GET(request: NextRequest) {
     type Row = { id?: number; name?: string; monthly_amount?: number; store?: string; start_year_month?: string; end_year_month?: string; memo?: string; account_subject_id?: number }
     let rows: Row[] = []
     if (effectiveStore && effectiveStore !== 'All') {
-      rows = (await supabaseSelectFilter('fixed_expenses', `store=ilike.${encodeURIComponent(effectiveStore)}`, {
+      rows = (await supabaseSelectFilter('fixed_expenses', appendSaasTenantFilter(`store=ilike.${encodeURIComponent(effectiveStore)}`, tenantScope, 'fixed_expenses'), {
         order: 'store.asc,name.asc',
         limit: 200,
       })) as Row[]
     } else {
-      rows = (await supabaseSelect('fixed_expenses', {
+      rows = (await supabaseSelectFilter('fixed_expenses', appendSaasTenantFilter('id=gt.0', tenantScope, 'fixed_expenses'), {
         order: 'store.asc,name.asc',
         limit: 200,
       })) as Row[]
@@ -66,6 +77,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getFixedExpenses:', e)
+    if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('fixed_expenses')
+    }
     return NextResponse.json([], { headers })
   }
 }

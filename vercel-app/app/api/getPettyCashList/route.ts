@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -22,6 +29,13 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'petty_cash_transactions')) {
+    return NextResponse.json(
+      { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
+      { headers }
+    )
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -88,18 +102,26 @@ export async function GET(request: NextRequest) {
       if (effectiveStore === 'Office' && !departmentFilter) {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
-          'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
+          appendSaasTenantFilter(
+            'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
+            tenantScope,
+            'petty_cash_transactions'
+          ),
           { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
         )) as typeof rows
       } else {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
-          'store=eq.' + encodeURIComponent(effectiveStore),
+          appendSaasTenantFilter(
+            'store=eq.' + encodeURIComponent(effectiveStore),
+            tenantScope,
+            'petty_cash_transactions'
+          ),
           { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
         )) as typeof rows
       }
     } else {
-      rows = (await supabaseSelect('petty_cash_transactions', {
+      rows = (await supabaseSelectFilter('petty_cash_transactions', appendSaasTenantFilter('id=gt.0', tenantScope, 'petty_cash_transactions'), {
         order: 'trans_date.asc,id.asc',
         limit: 20000,
         select: PETTY_CASH_LIST_COLS,
@@ -171,6 +193,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items, total, page, pageSize }, { headers })
   } catch (e) {
     console.error('getPettyCashList:', e)
+    if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('petty_cash_transactions')
+    }
     return NextResponse.json(
       { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
       { headers }

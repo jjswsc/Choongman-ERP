@@ -435,6 +435,140 @@ function parseSheetRows(data: unknown[][]): {
   }
 }
 
+/** LINE CRM tier label → ERP tier_code */
+export function normalizeLineCrmTierCode(raw: string): string {
+  const key = String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+  if (!key) return ''
+  const aliases: Record<string, string> = {
+    BRONZE: 'BRONZE',
+    BRONZ: 'BRONZE',
+    SILVER: 'SILVER',
+    GOLD: 'GOLD',
+    DIAMOND: 'DIAMOND',
+    VIP: 'VIP',
+  }
+  return aliases[key] || key
+}
+
+const TIER_RANK: Record<string, number> = {
+  BRONZE: 1,
+  SILVER: 2,
+  GOLD: 3,
+  DIAMOND: 4,
+  VIP: 5,
+}
+
+/** 등급 코드 중 더 높은 쪽 반환 (단위 테스트용 export) */
+export function pickHigherMemberTierCode(current: string, incoming: string): string {
+  const a = normalizeLineCrmTierCode(current)
+  const b = normalizeLineCrmTierCode(incoming)
+  if (!a) return b
+  if (!b) return a
+  return (TIER_RANK[b] || 0) >= (TIER_RANK[a] || 0) ? b : a
+}
+
+type ImportMemberSnapshot = {
+  phone?: string | null
+  tier_code?: string | null
+  point_balance?: number | null
+  tier_points?: number | null
+  line_current_points?: number | null
+  line_total_points?: number | null
+  line_tier_points?: number | null
+}
+
+/** import 갱신 시 기존 회원의 등급·포인트를 낮추지 않음 (단위 테스트용 export) */
+export function mergeLineCrmImportMemberPatch(params: {
+  existing: ImportMemberSnapshot | null
+  incoming: Record<string, unknown>
+  importCurrentPoints: number
+}): Record<string, unknown> {
+  const existing = params.existing
+  const out: Record<string, unknown> = { ...params.incoming }
+  if (!existing) return out
+
+  const existingTier = normalizeLineCrmTierCode(String(existing.tier_code || ''))
+  const incomingTier = normalizeLineCrmTierCode(String(out.tier_code || ''))
+  const mergedTier = pickHigherMemberTierCode(existingTier, incomingTier)
+  if (mergedTier) out.tier_code = mergedTier
+  else delete out.tier_code
+
+  const maxFields: Array<keyof ImportMemberSnapshot> = [
+    'point_balance',
+    'tier_points',
+    'line_current_points',
+    'line_total_points',
+    'line_tier_points',
+  ]
+  for (const field of maxFields) {
+    if (out[field] === undefined) continue
+    const prev = normalizeMemberPoints(Number(existing[field] ?? 0))
+    const next = normalizeMemberPoints(Number(out[field] ?? 0))
+    out[field] = Math.max(prev, next)
+  }
+
+  const existingPhone = canonicalMemberPhoneForStorage(String(existing.phone || ''))
+  const importPhone = canonicalMemberPhoneForStorage(String(out.phone || ''))
+  if (importPhone && existingPhone && importPhone !== existingPhone) {
+    const existingPts = normalizeMemberPoints(Number(existing.point_balance ?? 0))
+    const importPts = normalizeMemberPoints(params.importCurrentPoints)
+    if (existingPts > importPts) {
+      delete out.phone
+    }
+  }
+
+  return out
+}
+
+/** 동일 import 파일 내 생년월일 중복 → 같은 memberId 사용 (customer 리포트만) */
+export function resolveBatchBirthDateMemberId(
+  batchByBirthDate: Map<string, number>,
+  birthDate: string,
+  reportType: ReportType
+): number {
+  const key = String(birthDate || '').trim()
+  if (!key || reportType !== 'customer') return 0
+  return Number(batchByBirthDate.get(key) || 0)
+}
+
+export function registerBatchBirthDateMember(
+  batchByBirthDate: Map<string, number>,
+  birthDate: string,
+  memberId: number,
+  reportType: ReportType
+): void {
+  const key = String(birthDate || '').trim()
+  const id = Number(memberId || 0)
+  if (!key || !id || reportType !== 'customer') return
+  if (!batchByBirthDate.has(key)) batchByBirthDate.set(key, id)
+}
+
+async function findMemberIdByBirthDateSingleton(birthDate: string): Promise<number> {
+  const key = String(birthDate || '').trim()
+  if (!key) return 0
+  const rows = (await supabaseSelectFilter(
+    'members',
+    `birth_date=eq.${encodeURIComponent(key)}&status=eq.active`,
+    { limit: 5, select: 'id,source' }
+  )) as Array<{ id?: number; source?: string | null }>
+  const active = (rows || []).filter((row) => Number(row.id || 0) > 0)
+  if (active.length !== 1) return 0
+  return Number(active[0]!.id || 0)
+}
+
+async function loadMemberForImportPreserve(memberId: number): Promise<ImportMemberSnapshot | null> {
+  const id = Number(memberId || 0)
+  if (!id) return null
+  const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, {
+    limit: 1,
+    select: 'phone,tier_code,point_balance,tier_points,line_current_points,line_total_points,line_tier_points',
+  })) as ImportMemberSnapshot[]
+  return rows?.[0] ?? null
+}
+
 async function findMemberIdByPhone(phone: string): Promise<number> {
   const normalized = normalizePhone(phone)
   if (!normalized) return 0
@@ -520,6 +654,7 @@ export async function processLineCrmImport(params: {
   const rowLogs: Record<string, unknown>[] = []
   let successCount = 0
   let failedCount = 0
+  const batchByBirthDate = new Map<string, number>()
 
   for (const row of parsed.rows) {
     try {
@@ -529,6 +664,12 @@ export async function processLineCrmImport(params: {
       }
       let memberId = isValidThaiMobilePhone(row.phone) ? await findMemberIdByPhone(row.phone) : 0
       if (!memberId) memberId = await findMemberIdByLineDisplayName(row.lineDisplayName)
+      if (!memberId) {
+        memberId = resolveBatchBirthDateMemberId(batchByBirthDate, row.birthDate, parsed.reportType)
+      }
+      if (!memberId && row.birthDate) {
+        memberId = await findMemberIdByBirthDateSingleton(row.birthDate)
+      }
       if (!memberId) {
         if (!isUsableImportName(importName) || !isValidThaiMobilePhone(row.phone)) {
           throw new Error('skip: refuse create without valid name+phone')
@@ -546,9 +687,8 @@ export async function processLineCrmImport(params: {
       }
       if (!memberId) throw new Error('회원 생성/조회 실패')
 
-      const membershipTierCode = String(row.membershipTier || '')
-        .trim()
-        .toUpperCase()
+      const existingMember = await loadMemberForImportPreserve(memberId)
+      const membershipTierCode = normalizeLineCrmTierCode(row.membershipTier)
       const pointPatch = resolveLineCrmMemberPointPatch({
         hasCurrentPointsCol: parsed.columnFlags.hasCurrentPointsCol,
         hasTotalPointsCol: parsed.columnFlags.hasTotalPointsCol,
@@ -589,7 +729,13 @@ export async function processLineCrmImport(params: {
         updated_at: now,
       }
       const memberPatch = Object.fromEntries(
-        Object.entries(memberPatchRaw).filter(([, v]) => v !== undefined)
+        Object.entries(
+          mergeLineCrmImportMemberPatch({
+            existing: existingMember,
+            incoming: memberPatchRaw,
+            importCurrentPoints: row.currentPoints,
+          })
+        ).filter(([, v]) => v !== undefined)
       )
       try {
         await supabaseUpdateByFilter('members', `id=eq.${memberId}`, memberPatch)
@@ -609,6 +755,8 @@ export async function processLineCrmImport(params: {
         if (row.birthDate) fallback.birth_date = row.birthDate
         await supabaseUpdateByFilter('members', `id=eq.${memberId}`, fallback)
       }
+
+      registerBatchBirthDateMember(batchByBirthDate, row.birthDate, memberId, parsed.reportType)
 
       if (parsed.reportType === 'point' && row.points !== 0) {
         await supabaseInsert('member_points_ledger', {

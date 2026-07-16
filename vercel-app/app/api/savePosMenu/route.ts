@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { upsertPosMenuFromBody } from '@/lib/pos-menu-upsert-server'
 import {
   resolveMenuStoreCodesForGrabSync,
@@ -7,6 +6,8 @@ import {
 } from '@/lib/grab-menu-sync-trigger'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { writePosMenuAuditTrail } from '@/lib/pos-menu-audit'
+import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 function normalizeStoreCodes(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -119,9 +120,14 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
+    const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({
+      auth,
+      storeCode: String(body.storeCode || storeCodes[0] || '').trim() || null,
+    })
     const beforeId = String(body.id || '').trim()
     const beforeSnapshot = beforeId ? await loadMenuAuditSnapshot(beforeId) : null
-    const result = await upsertPosMenuFromBody(body, { upsertByCode: false })
+    const result = await upsertPosMenuFromBody(body, { upsertByCode: false, catalogScope })
     if (result.success) {
       const changed = result.syncHint?.changedFields || []
       const hasMenuImpact =

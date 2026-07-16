@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdateByFilter,
@@ -13,6 +12,13 @@ import {
 import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 import { normalizeVendorCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -103,6 +109,8 @@ export async function GET(req: NextRequest) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
   }
+  const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'marketing_influencers')) return NextResponse.json([], { headers })
 
   try {
     const { searchParams } = new URL(req.url)
@@ -112,12 +120,7 @@ export async function GET(req: NextRequest) {
     if (campaignId) filter = `campaign_id=eq.${encodeURIComponent(campaignId)}`
 
     const listLimit = 8000
-    const rows = filter
-      ? ((await supabaseSelectFilter('marketing_influencers', filter, {
-          order: 'publish_date.desc.nullslast,id.desc',
-          limit: listLimit,
-        })) as Record<string, unknown>[])
-      : ((await supabaseSelect('marketing_influencers', {
+    const rows = ((await supabaseSelectFilter('marketing_influencers', appendSaasTenantFilter(filter || 'id=gt.0', tenantScope, 'marketing_influencers'), {
           order: 'publish_date.desc.nullslast,id.desc',
           limit: listLimit,
         })) as Record<string, unknown>[])
@@ -173,6 +176,9 @@ export async function POST(req: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantError = assertSaasTenantWritable(tenantScope, { tableHint: 'marketing_influencers', label: '마케팅 인플루언서' })
+  if (tenantError) return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
 
   try {
     const body = (await req.json()) as {
@@ -231,7 +237,7 @@ export async function POST(req: NextRequest) {
       try {
         const prev = (await supabaseSelectFilter(
           'marketing_influencers',
-          `id=eq.${encodeURIComponent(editingId)}`,
+          appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_influencers'),
           { limit: 1, select: 'id,expense_accrual_id' }
         )) as { expense_accrual_id?: number | null }[] | null
         const pid = prev?.[0]?.expense_accrual_id
@@ -245,7 +251,7 @@ export async function POST(req: NextRequest) {
       ? body.platformLinks
       : {}
 
-    const row: Record<string, unknown> = {
+    const row: Record<string, unknown> = stampSaasTenantId({
       campaign_id: Number(campaignId),
       name,
       contact_name: contactName,
@@ -263,7 +269,7 @@ export async function POST(req: NextRequest) {
       publish_date: body.publishDate ? parseDate(body.publishDate) : null,
       platform_links: platformLinks,
       note: String(body.note ?? '').trim(),
-    }
+    }, tenantScope, 'marketing_influencers')
 
     let recordId = editingId || ''
     let expenseSyncMessage: string | undefined
@@ -271,11 +277,11 @@ export async function POST(req: NextRequest) {
     if (editingId) {
       const existing = (await supabaseSelectFilter(
         'marketing_influencers',
-        `id=eq.${encodeURIComponent(editingId)}`,
+        appendSaasTenantFilter(`id=eq.${encodeURIComponent(editingId)}`, tenantScope, 'marketing_influencers'),
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing?.length) {
-        await supabaseUpdateByFilter('marketing_influencers', `id=eq.${editingId}`, row)
+        await supabaseUpdateByFilter('marketing_influencers', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_influencers'), row)
         recordId = editingId
       } else {
         return NextResponse.json({ success: false, message: '수정할 항목을 찾을 수 없습니다.' }, { headers })
@@ -329,7 +335,7 @@ export async function POST(req: NextRequest) {
     expenseSyncMessage = sync.message
     if (sync.linkExpenseAccrualId !== undefined) {
       try {
-        await supabaseUpdateByFilter('marketing_influencers', `id=eq.${recordId}`, {
+        await supabaseUpdateByFilter('marketing_influencers', appendSaasTenantFilter(`id=eq.${recordId}`, tenantScope, 'marketing_influencers'), {
           expense_accrual_id: sync.linkExpenseAccrualId,
         })
       } catch (e) {

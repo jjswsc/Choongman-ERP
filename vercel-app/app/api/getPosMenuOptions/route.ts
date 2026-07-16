@@ -9,6 +9,14 @@ import {
   loadMenuGroupLinks,
   loadPosOptionGroupsWithItems,
 } from '@/lib/pos-option-groups-server'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import {
+  appendPosCatalogTenantFilter,
+  isMissingTenantIdColumnError,
+  isPosCatalogTenantQueryBlocked,
+  markPosMenusTenantIdColumnMissing,
+  resolvePosCatalogTenantScope,
+} from '@/lib/pos-catalog-tenant-scope'
 
 /** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
 export async function GET(request: NextRequest) {
@@ -21,6 +29,13 @@ export async function GET(request: NextRequest) {
     searchParams.get('forCodeMap') === '1' || searchParams.get('forCodeMap') === 'true'
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const catalogScope = await resolvePosCatalogTenantScope({ auth })
+    if (isPosCatalogTenantQueryBlocked(catalogScope)) {
+      return NextResponse.json([], { headers })
+    }
+    const tenantFilter = appendPosCatalogTenantFilter('', catalogScope)
+
     const linkedOptions: ReturnType<typeof buildMenuOptionsFromLinks> = []
     const linkedMenuIds = new Set<number>()
     const menuCodeById = new Map<number, string>()
@@ -30,7 +45,7 @@ export async function GET(request: NextRequest) {
     const linksByMenuId = new Map<number, Awaited<ReturnType<typeof loadMenuGroupLinks>>>()
     try {
       const [{ groups, itemsByGroupId: loadedItemsByGroupId }, links] = await Promise.all([
-        loadPosOptionGroupsWithItems(),
+        loadPosOptionGroupsWithItems(catalogScope),
         loadMenuGroupLinks(
           menuId && Number.isFinite(Number(menuId)) ? Number(menuId) : undefined
         ),
@@ -55,13 +70,28 @@ export async function GET(request: NextRequest) {
     try {
       if (menuId && Number.isFinite(Number(menuId))) {
         const singleMenuId = Number(menuId)
-        const menuRows = (await supabaseSelectFilter('pos_menus', `id=eq.${singleMenuId}`, {
+        const menuFilter = appendPosCatalogTenantFilter(
+          `id=eq.${singleMenuId}`,
+          catalogScope
+        )
+        const menuRows = (await supabaseSelectFilter('pos_menus', menuFilter, {
           limit: 1,
           select: 'id,code',
         })) as { id?: number; code?: string }[] | null
         const first = menuRows?.[0]
         if (first?.id != null) {
           menuCodeById.set(Number(first.id), String(first.code ?? '').trim())
+        }
+      } else if (tenantFilter) {
+        const menuRows = (await supabaseSelectFilter('pos_menus', tenantFilter, {
+          order: 'id.asc',
+          limit: 10000,
+          select: 'id,code',
+        })) as { id?: number; code?: string }[] | null
+        for (const row of menuRows || []) {
+          const id = Number(row.id || 0)
+          if (!id) continue
+          menuCodeById.set(id, String(row.code ?? '').trim())
         }
       } else {
         const menuRows = (await supabaseSelectAllPages('pos_menus', {
@@ -76,11 +106,16 @@ export async function GET(request: NextRequest) {
           menuCodeById.set(id, String(row.code ?? '').trim())
         }
       }
-    } catch {
+    } catch (err) {
+      if (isMissingTenantIdColumnError(err)) {
+        markPosMenusTenantIdColumnMissing()
+        if (catalogScope.enforce) return NextResponse.json([], { headers })
+      }
       // fallback: option_code가 없으면 응답에서 빈 문자열 허용
     }
 
     for (const [mid, menuLinks] of linksByMenuId.entries()) {
+      if (catalogScope.enforce && !menuCodeById.has(mid)) continue
       linkedOptions.push(
         ...buildMenuOptionsFromLinks(
           mid,
@@ -157,8 +192,9 @@ export async function GET(request: NextRequest) {
 
     const list = (rows || [])
       .filter((row) => {
-        if (forCodeMap) return true
         const mid = Number(row.menu_id || 0)
+        if (catalogScope.enforce && mid && !menuCodeById.has(mid)) return false
+        if (forCodeMap) return true
         if (!linkedMenuIds.has(mid)) return true
         const stepValues = row.option_step_values
         const sv =

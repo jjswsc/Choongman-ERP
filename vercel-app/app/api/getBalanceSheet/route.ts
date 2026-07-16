@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       userStore,
       userRole,
       allowedStores: auth.allowedStores,
+      tenantId: auth.tenantId,
     })
     return NextResponse.json(data, { headers })
   } catch (e) {
