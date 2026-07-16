@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { thaiBahtInWords } from '@/lib/thai-baht-text'
-import { resolveWht50Tawi } from '@/lib/wht-certificate-50tawi'
+import { buildWht50TawiCertificateHtml, resolveWht50Tawi } from '@/lib/wht-certificate-50tawi'
 import type { WhtCertificateData } from '@/lib/wht-certificate-data'
 
 describe('thaiBahtInWords', () => {
@@ -32,5 +32,17 @@ describe('resolveWht50Tawi', () => {
     expect(r.bookNo).toBe('EAW')
     expect(r.certNo).toBe('42')
     expect(r.paymentDateDisplay).toBe('16/7/2569')
+  })
+
+  it('places payee block before income table (official 50 ทวิ order)', () => {
+    const html = buildWht50TawiCertificateHtml(base)
+    const agentIdx = html.indexOf('ผู้มีหน้าที่หักภาษี')
+    const recipientIdx = html.indexOf('ผู้ถูกหักภาษี')
+    const titleIdx = html.indexOf('หนังสือรับรองการหักภาษี')
+    const tableIdx = html.indexOf('ประเภทเงินได้พึงประเมินที่จ่าย')
+    expect(agentIdx).toBeGreaterThanOrEqual(0)
+    expect(recipientIdx).toBeGreaterThan(agentIdx)
+    expect(titleIdx).toBeGreaterThan(recipientIdx)
+    expect(tableIdx).toBeGreaterThan(titleIdx)
   })
 })
