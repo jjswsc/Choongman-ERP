@@ -10,6 +10,13 @@ import {
 import { createMember, getMemberSummaryById, updateMember, type MemberSummary } from '@/lib/members-server'
 import { mergeMembers } from '@/lib/member-merge-server'
 import {
+  appendMembersTenantFilter,
+  isMissingMembersTenantIdColumnError,
+  markMembersTenantIdColumnMissing,
+  type MembersTenantScope,
+} from '@/lib/members-tenant-scope'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
+import {
   supabaseInsert,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
@@ -103,16 +110,29 @@ function birthDatesMatch(stored: string, input: string): boolean {
   return memberBirthDatesMatch(stored, input)
 }
 
-async function findMembersByPhoneVariants(phone: string): Promise<MemberRow[]> {
+async function findMembersByPhoneVariants(
+  phone: string,
+  tenantScope?: MembersTenantScope
+): Promise<MemberRow[]> {
   const variants = memberPhoneLookupVariants(phone)
   const seen = new Set<number>()
   const out: MemberRow[] = []
   for (const candidate of variants) {
-    const found = (await supabaseSelectFilter(
-      'members',
-      `phone=eq.${encodeURIComponent(candidate)}`,
-      { order: 'id.desc', limit: 5 }
-    )) as MemberRow[]
+    const baseFilter = `phone=eq.${encodeURIComponent(candidate)}`
+    const filter = tenantScope ? appendMembersTenantFilter(baseFilter, tenantScope) : baseFilter
+    let found: MemberRow[] = []
+    try {
+      found = (await supabaseSelectFilter('members', filter, {
+        order: 'id.desc',
+        limit: 5,
+      })) as MemberRow[]
+    } catch (e) {
+      if (tenantScope?.enforce && isMissingMembersTenantIdColumnError(e)) {
+        markMembersTenantIdColumnMissing()
+        return []
+      }
+      throw e
+    }
     for (const row of found || []) {
       const id = Number(row.id || 0)
       if (!id || seen.has(id)) continue
@@ -225,6 +245,7 @@ export async function verifyMemberByPhoneBirthDate(params: {
   deviceLabel?: string
   userAgent?: string
   ip?: string
+  request?: import('next/server').NextRequest
 }): Promise<{ member: MemberSummary; sessionToken: string; expiresAt: string }> {
   const phone = normalizeMemberPhone(params.phone)
   const birthDate = normalizeBirthDateInput(params.birthDate)
@@ -236,7 +257,8 @@ export async function verifyMemberByPhoneBirthDate(params: {
     throw new PhoneBirthLoginError('rate_limited', '로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해 주세요.')
   }
 
-  const rows = await findMembersByPhoneVariants(phone)
+  const tenantScope = await resolveMemberPortalTenantScope({ request: params.request })
+  const rows = await findMembersByPhoneVariants(phone, tenantScope)
   let matched =
     (rows || []).find((row) => birthDatesMatch(toText(row.birth_date), birthDate)) || null
 
@@ -325,7 +347,8 @@ export async function registerMemberByPhoneBirthDate(params: {
     throw new PhoneBirthSignupError('rate_limited', '로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해 주세요.')
   }
 
-  const rows = await findMembersByPhoneVariants(phone)
+  const tenantScope = await resolveMemberPortalTenantScope({ joinStoreCode })
+  const rows = await findMembersByPhoneVariants(phone, tenantScope)
   const matched = rows.find((row) => birthDatesMatch(toText(row.birth_date), birthDate))
 
   if (matched?.id) {
@@ -367,6 +390,7 @@ export async function registerMemberByPhoneBirthDate(params: {
     joinChannel: 'homepage',
     joinStoreCode,
     consentMarketing,
+    tenantScope,
   })
   const session = await createMemberPortalSession({
     memberId: member.id,
@@ -411,7 +435,8 @@ function buildAnonymousName(phone: string): string {
 }
 
 async function findMemberByPhone(phone: string): Promise<MemberSummary | null> {
-  const rows = await findMembersByPhoneVariants(phone)
+  const tenantScope = await resolveMemberPortalTenantScope({})
+  const rows = await findMembersByPhoneVariants(phone, tenantScope)
   const row = rows[0]
   if (!row?.id) return null
   return getMemberSummaryById(Number(row.id))
@@ -613,7 +638,8 @@ export async function linkLineMemberToPhoneBirth(params: {
     throw new LinkLinePhoneBirthError('rate_limited', '시도 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요.')
   }
 
-  const rows = await findMembersByPhoneVariants(phone)
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId: lineMemberId })
+  const rows = await findMembersByPhoneVariants(phone, tenantScope)
   let matched =
     (rows || []).find((row) => birthDatesMatch(toText(row.birth_date), birthDate)) || null
   if (!matched && rows.length === 1 && !toText(rows[0]?.birth_date)) {

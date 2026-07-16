@@ -1,5 +1,14 @@
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { issueMemberCoupon } from '@/lib/members-server'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
+import {
+  appendMembersTenantFilter,
+  isMembersTenantQueryBlocked,
+  isMissingMembersTenantIdColumnError,
+  markMembersTenantIdColumnMissing,
+  stampMembersTenantId,
+  type MembersTenantScope,
+} from '@/lib/members-tenant-scope'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 export type PortalCouponClaimMode = 'none' | 'free' | 'points'
@@ -88,27 +97,43 @@ function isPortalClaimColumnMissing(error: unknown): boolean {
   )
 }
 
-async function loadPortalCouponRows(): Promise<CouponPortalRow[]> {
+async function loadPortalCouponRows(tenantScope: MembersTenantScope): Promise<CouponPortalRow[]> {
+  if (isMembersTenantQueryBlocked(tenantScope)) return []
+  const base = 'portal_visible=eq.true'
+  const filter = appendMembersTenantFilter(base, tenantScope)
   try {
-    return (await supabaseSelectFilter('pos_coupons', 'portal_visible=eq.true', {
+    return (await supabaseSelectFilter('pos_coupons', filter, {
       order: 'portal_sort_order.asc,code.asc',
       limit: 200,
     })) as CouponPortalRow[]
   } catch (e) {
+    if (tenantScope.enforce && isMissingMembersTenantIdColumnError(e)) {
+      markMembersTenantIdColumnMissing()
+      return []
+    }
     if (!isPortalClaimColumnMissing(e)) throw e
     return []
   }
 }
 
-async function loadPortalCouponByCode(code: string): Promise<CouponPortalRow | null> {
+async function loadPortalCouponByCode(
+  code: string,
+  tenantScope: MembersTenantScope
+): Promise<CouponPortalRow | null> {
   const upper = toText(code).toUpperCase()
   if (!upper) return null
+  if (isMembersTenantQueryBlocked(tenantScope)) return null
+  const filter = appendMembersTenantFilter(`code=eq.${encodeURIComponent(upper)}`, tenantScope)
   try {
-    const rows = (await supabaseSelectFilter('pos_coupons', `code=eq.${encodeURIComponent(upper)}`, {
+    const rows = (await supabaseSelectFilter('pos_coupons', filter, {
       limit: 1,
     })) as CouponPortalRow[]
     return rows?.[0] ?? null
-  } catch {
+  } catch (e) {
+    if (tenantScope.enforce && isMissingMembersTenantIdColumnError(e)) {
+      markMembersTenantIdColumnMissing()
+      return null
+    }
     return null
   }
 }
@@ -223,8 +248,12 @@ export async function listMemberPortalCouponOffers(memberId: number): Promise<Po
   const id = Number(memberId || 0)
   if (!id) return []
 
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId: id })
   const todayYmd = getBangkokTodayDateString()
-  const [rows, ctx] = await Promise.all([loadPortalCouponRows(), loadMemberClaimContext(id)])
+  const [rows, ctx] = await Promise.all([
+    loadPortalCouponRows(tenantScope),
+    loadMemberClaimContext(id),
+  ])
 
   return (rows || [])
     .map((row) => mapOfferRow(row, ctx, todayYmd))
@@ -236,6 +265,7 @@ async function redeemMemberPointsForCouponClaim(params: {
   memberId: number
   points: number
   couponCode: string
+  tenantScope: MembersTenantScope
 }) {
   const memberId = Number(params.memberId || 0)
   const points = Math.max(0, Math.trunc(Number(params.points || 0)))
@@ -249,14 +279,20 @@ async function redeemMemberPointsForCouponClaim(params: {
   const nextBalance = balance - points
   if (nextBalance < 0) throw new Error('insufficient_points')
 
-  await supabaseInsert('member_points_ledger', {
-    member_id: memberId,
-    kind: 'redeem',
-    points: -points,
-    amount: 0,
-    note: `coupon_claim:${toText(params.couponCode).toUpperCase()}`,
-    created_at: getBangkokDateTimeString(),
-  })
+  await supabaseInsert(
+    'member_points_ledger',
+    stampMembersTenantId(
+      {
+        member_id: memberId,
+        kind: 'redeem',
+        points: -points,
+        amount: 0,
+        note: `coupon_claim:${toText(params.couponCode).toUpperCase()}`,
+        created_at: getBangkokDateTimeString(),
+      },
+      params.tenantScope,
+    ),
+  )
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
     point_balance: nextBalance,
     updated_at: getBangkokDateTimeString(),
@@ -269,8 +305,9 @@ export async function claimMemberPortalCoupon(params: { memberId: number; coupon
   if (!memberId) throw new Error('member_not_found')
   if (!couponCode) throw new Error('coupon_code_required')
 
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId })
   const todayYmd = getBangkokTodayDateString()
-  const row = await loadPortalCouponByCode(couponCode)
+  const row = await loadPortalCouponByCode(couponCode, tenantScope)
   if (!row?.id) throw new Error('coupon_not_found')
   if (row.is_active === false) throw new Error('coupon_inactive')
   if (!row.portal_visible) throw new Error('coupon_not_in_catalog')
@@ -294,7 +331,7 @@ export async function claimMemberPortalCoupon(params: { memberId: number; coupon
   }
 
   if (claimMode === 'points') {
-    await redeemMemberPointsForCouponClaim({ memberId, points: pointCost, couponCode })
+    await redeemMemberPointsForCouponClaim({ memberId, points: pointCost, couponCode, tenantScope })
   }
 
   await issueMemberCoupon({ memberId, couponCode })

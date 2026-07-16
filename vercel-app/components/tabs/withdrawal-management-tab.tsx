@@ -159,7 +159,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [inboundLinkAmounts, setInboundLinkAmounts] = React.useState<Record<number, string>>({})
   const [inboundLinkLoading, setInboundLinkLoading] = React.useState(false)
 
-  const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
+  const [vendors, setVendors] = React.useState<
+    { code: string; name: string; bankAccountNo?: string | null; taxId?: string; address?: string }[]
+  >([])
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
   const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
@@ -642,6 +644,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     setAccrualWithholdingTax(wht > 0 ? moneyInputStringFromAmount(wht) : "")
   }, [categoryMain, amount, accrualVatAmount, accrualWhtRate])
 
+  const resolvePayeeTaxIdForWht = React.useCallback(
+    (codeRaw: string, nameRaw: string) => {
+      const code = String(codeRaw || "").trim()
+      const name = String(nameRaw || "").trim()
+      const found = vendors.find((v) => v.code === code || (name && v.name === name))
+      return String(found?.taxId || "").trim()
+    },
+    [vendors]
+  )
+
   const openExpenseWhtCertificateIfNeeded = React.useCallback(
     async (params: {
       certificateNo: string
@@ -898,6 +910,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         await openExpenseWhtCertificateIfNeeded({
           certificateNo: `EAW-${editAccrualIdParam}`,
           payeeName: name || code,
+          payeeTaxId: resolvePayeeTaxIdForWht(code, name),
           grossInclVat: amt,
           vatAmount: vatV,
           whtAmount: whtV,
@@ -957,6 +970,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           await openExpenseWhtCertificateIfNeeded({
             certificateNo: newId > 0 ? `EAW-${newId}` : `EAW-${Date.now()}`,
             payeeName: name || code,
+            payeeTaxId: resolvePayeeTaxIdForWht(code, name),
             grossInclVat: amt,
             vatAmount: vatV,
             whtAmount: whtV,
@@ -1309,9 +1323,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           categoryMain === "purchase"
             ? resolvePurchaseVendorPayee(vendorCode).name || vendorCode
             : payeeName.trim() || payeeCode.trim() || "—"
+        const payeeCodeForWht =
+          categoryMain === "purchase" ? vendorCode : payeeCode.trim() || vendorCode.trim()
         await openExpenseWhtCertificateIfNeeded({
           certificateNo: newBankTxId ? `BTW-${newBankTxId}` : `BTW-${Date.now()}`,
           payeeName: payeeLabel,
+          payeeTaxId: resolvePayeeTaxIdForWht(payeeCodeForWht, payeeLabel),
           grossInclVat: submitAmt,
           vatAmount: submitVat,
           whtAmount: submitWht,
