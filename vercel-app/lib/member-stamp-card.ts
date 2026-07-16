@@ -1,6 +1,7 @@
 import { getBangkokTodayDateString, getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { adjustMemberPoints, issueMemberCoupon } from '@/lib/members-server'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import { resolvePointEarnChannel } from '@/lib/member-point-earn-policy'
 import { notifyMemberStampLineMessage } from '@/lib/member-stamp-notify'
 import {
@@ -11,6 +12,7 @@ import {
   supabaseUpdateByFilter,
   supabaseUpsert,
 } from '@/lib/supabase-server'
+import { getMemberSummaryById } from '@/lib/members-server-core'
 
 export const MEMBER_STAMP_POLICY_KEY = 'member_stamp_policy'
 
@@ -888,6 +890,9 @@ export async function adjustMemberStampBalance(params: {
 export async function listMemberStampHistory(memberId: number, limit = 20): Promise<MemberStampHistoryRow[]> {
   const id = Number(memberId || 0)
   if (!id) return []
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId: id })
+  const owned = await getMemberSummaryById(id, tenantScope)
+  if (!owned) return []
   try {
     const rows = (await supabaseSelectFilter('member_stamp_ledger', `member_id=eq.${id}`, {
       limit: Math.max(1, Math.min(limit, 50)),
@@ -932,6 +937,12 @@ export async function getMemberStampCardStatus(
   memberId: number,
   lang: 'ko' | 'en' | 'th' = 'ko'
 ): Promise<MemberStampCardStatus | null> {
+  const id = Number(memberId || 0)
+  if (!id) return null
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId: id })
+  const owned = await getMemberSummaryById(id, tenantScope)
+  if (!owned) return tenantScope.enforce ? buildMemberStampPreparingStatus() : null
+
   const globalPolicy = await loadMemberStampPolicy()
   if (!globalPolicy.enabled) return buildMemberStampPreparingStatus()
 

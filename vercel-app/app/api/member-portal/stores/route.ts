@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { memberPortalStoresForSession } from '@/lib/member-portal-stores-server'
-import { requireMemberSession } from '@/lib/member-portal-session'
+import { requireMemberSessionWithTenant } from '@/lib/member-portal-session'
 
 export async function GET(req: NextRequest) {
-  const { error } = await requireMemberSession(req)
+  const { member, error } = await requireMemberSessionWithTenant(req)
   if (error) return error
 
   try {
-    const stores = await memberPortalStoresForSession()
+    const stores = await memberPortalStoresForSession(req, member?.id)
     return NextResponse.json({ success: true, stores })
   } catch (e) {
     return NextResponse.json(

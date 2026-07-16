@@ -334,7 +334,7 @@ export async function claimMemberPortalCoupon(params: { memberId: number; coupon
     await redeemMemberPointsForCouponClaim({ memberId, points: pointCost, couponCode, tenantScope })
   }
 
-  await issueMemberCoupon({ memberId, couponCode })
+  await issueMemberCoupon({ memberId, couponCode, tenantScope })
 
   const after = await loadMemberClaimContext(memberId)
   const newActiveIssueId = findActiveIssueId(after.issues, couponCode)

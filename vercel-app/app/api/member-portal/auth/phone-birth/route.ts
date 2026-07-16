@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       deviceLabel: String(body.deviceLabel || '').trim() || 'member-web',
       userAgent: req.headers.get('user-agent') || '',
       ip: clientIp(req),
+      request: req,
     })
     const res = NextResponse.json({
       success: true,

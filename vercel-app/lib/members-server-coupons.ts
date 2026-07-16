@@ -6,26 +6,42 @@ import {
 } from '@/lib/supabase-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { memberPhoneLookupVariants, normalizeMemberPhone } from '@/lib/member-phone-lookup'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import { resolveMemberPortalCouponStatus } from '@/lib/member-portal-coupon-status'
 import { buildUsedMemberCouponIssueMap, type MemberPortalCouponScope } from '@/lib/member-portal-coupon-reconcile'
 import { repairFalsePositiveAndDuplicateUsedCouponIssues, cancelOtherIssuedMemberCouponIssues } from '@/lib/member-portal-coupon-repair'
+import {
+  appendMembersTenantFilter,
+  isMembersTenantQueryBlocked,
+  isMissingMembersTenantIdColumnError,
+  LEGACY_MEMBERS_TENANT_SCOPE,
+  markMembersTenantIdColumnMissing,
+  stampMembersTenantId,
+  type MembersTenantScope,
+} from '@/lib/members-tenant-scope'
 import { toText, getMemberSummaryById } from './members-server-core'
 
-export async function resolveMemberIdsSharingPhone(memberId: number): Promise<number[]> {
+export async function resolveMemberIdsSharingPhone(
+  memberId: number,
+  tenantScope: MembersTenantScope = LEGACY_MEMBERS_TENANT_SCOPE
+): Promise<number[]> {
   const id = Number(memberId || 0)
   if (!id) return []
-  const member = await getMemberSummaryById(id)
-  if (!member) return [id]
+  const member = await getMemberSummaryById(id, tenantScope)
+  if (!member) return []
   const phone = normalizeMemberPhone(member.phone)
   if (!phone) return [id]
   const ids = new Set<number>([id])
   for (const candidate of memberPhoneLookupVariants(phone)) {
     try {
-      const rows = (await supabaseSelectFilter(
-        'members',
+      const filter = appendMembersTenantFilter(
         `phone=eq.${encodeURIComponent(candidate)}`,
-        { limit: 30, select: 'id' }
-      )) as Array<{ id?: number }>
+        tenantScope
+      )
+      const rows = (await supabaseSelectFilter('members', filter, {
+        limit: 30,
+        select: 'id',
+      })) as Array<{ id?: number }>
       for (const row of rows || []) {
         const mid = Number(row.id || 0)
         if (mid) ids.add(mid)
@@ -38,7 +54,8 @@ export async function resolveMemberIdsSharingPhone(memberId: number): Promise<nu
 }
 
 export async function resolveMemberPortalCouponScope(memberId: number): Promise<MemberPortalCouponScope> {
-  const memberIds = await resolveMemberIdsSharingPhone(memberId)
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId })
+  const memberIds = await resolveMemberIdsSharingPhone(memberId, tenantScope)
   const memberNos = new Set<string>()
   for (const id of memberIds) {
     const member = await getMemberSummaryById(id)
@@ -117,12 +134,13 @@ export async function listMemberCouponIssuesForPortalMember(
   memberId: number,
   limit = 100
 ): Promise<Awaited<ReturnType<typeof listMemberCouponIssues>>> {
-  const memberIds = await resolveMemberIdsSharingPhone(memberId)
+  const tenantScope = await resolveMemberPortalTenantScope({ memberId })
+  const memberIds = await resolveMemberIdsSharingPhone(memberId, tenantScope)
   const scope = await resolveMemberPortalCouponScope(memberId)
   const rows =
     memberIds.length <= 1
-      ? await listMemberCouponIssues({ memberId: memberIds[0] || memberId, limit })
-      : await listMemberCouponIssues({ memberIds, limit })
+      ? await listMemberCouponIssues({ memberId: memberIds[0] || memberId, limit, tenantScope })
+      : await listMemberCouponIssues({ memberIds, limit, tenantScope })
   const repaired = await repairFalsePositiveAndDuplicateUsedCouponIssues(rows)
   return reconcileMemberCouponIssueStatusesForPortal(repaired, scope)
 }
@@ -134,7 +152,11 @@ export async function listMemberCouponIssues(params?: {
   status?: string
   couponCode?: string
   q?: string
+  tenantScope?: MembersTenantScope
 }) {
+  const tenantScope = params?.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
+  if (isMembersTenantQueryBlocked(tenantScope)) return []
+
   const filterMemberIds = (params?.memberIds || [])
     .map((id) => Number(id || 0))
     .filter((id) => id > 0)
@@ -158,10 +180,9 @@ export async function listMemberCouponIssues(params?: {
       ? `${filter}&coupon_code=eq.${encodeURIComponent(couponCodeFilter)}`
       : `coupon_code=eq.${encodeURIComponent(couponCodeFilter)}`
   }
+  filter = appendMembersTenantFilter(filter || 'id=gt.0', tenantScope)
 
-  const rows = (filter
-    ? await supabaseSelectFilter('member_coupon_issues', filter, { order: 'id.desc', limit })
-    : await supabaseSelect('member_coupon_issues', { order: 'id.desc', limit })) as {
+  let rows: {
     id?: number
     member_id?: number
     coupon_code?: string
@@ -176,6 +197,15 @@ export async function listMemberCouponIssues(params?: {
     restore_reason?: string | null
     restored_from_order_id?: number | null
   }[]
+  try {
+    rows = (await supabaseSelectFilter('member_coupon_issues', filter, { order: 'id.desc', limit })) as typeof rows
+  } catch (e) {
+    if (tenantScope.enforce && isMissingMembersTenantIdColumnError(e)) {
+      markMembersTenantIdColumnMissing()
+      return []
+    }
+    throw e
+  }
 
   const couponCodes = Array.from(
     new Set((rows || []).map((row) => toText(row.coupon_code).toUpperCase()).filter(Boolean))
@@ -195,7 +225,10 @@ export async function listMemberCouponIssues(params?: {
     portalImageUrl: string
   }>()
   if (couponCodes.length > 0) {
-    const codeFilter = `code=in.(${couponCodes.map((code) => encodeURIComponent(code)).join(',')})`
+    const codeFilter = appendMembersTenantFilter(
+      `code=in.(${couponCodes.map((code) => encodeURIComponent(code)).join(',')})`,
+      tenantScope
+    )
     const couponRows = (await supabaseSelectFilter('pos_coupons', codeFilter, {
       limit: 1000,
     })) as Array<{
@@ -338,17 +371,36 @@ function isMissingColumnError(error: unknown): boolean {
   )
 }
 
-export async function issueMemberCoupon(params: { memberId: number; couponCode: string }) {
+export async function issueMemberCoupon(params: {
+  memberId: number
+  couponCode: string
+  tenantScope?: MembersTenantScope
+}) {
   const memberId = Number(params.memberId || 0)
   const couponCode = toText(params.couponCode).toUpperCase()
   if (!memberId) throw new Error('유효한 memberId가 필요합니다.')
   if (!couponCode) throw new Error('couponCode가 필요합니다.')
 
-  const couponRows = (await supabaseSelectFilter(
-    'pos_coupons',
+  const tenantScope =
+    params.tenantScope ?? (await resolveMemberPortalTenantScope({ memberId }))
+  if (isMembersTenantQueryBlocked(tenantScope)) {
+    throw new Error('회사(테넌트) 정보가 없어 쿠폰을 발급할 수 없습니다.')
+  }
+  const owned = await getMemberSummaryById(memberId, tenantScope)
+  if (!owned) {
+    throw new Error(
+      tenantScope.enforce ? '회원을 찾을 수 없거나 다른 회사 회원입니다.' : '회원을 찾을 수 없습니다.'
+    )
+  }
+
+  const couponFilter = appendMembersTenantFilter(
     `code=eq.${encodeURIComponent(couponCode)}`,
-    { limit: 1, select: 'id,is_active,valid_to,redemption_mode' }
-  )) as Array<{ id?: number; is_active?: boolean; valid_to?: string | null; redemption_mode?: string | null }>
+    tenantScope
+  )
+  const couponRows = (await supabaseSelectFilter('pos_coupons', couponFilter, {
+    limit: 1,
+    select: 'id,is_active,valid_to,redemption_mode',
+  })) as Array<{ id?: number; is_active?: boolean; valid_to?: string | null; redemption_mode?: string | null }>
   const coupon = couponRows?.[0]
   if (!coupon?.id) {
     throw new Error(`POS 쿠폰 마스터에 ${couponCode} 코드가 없습니다.`)
@@ -363,22 +415,28 @@ export async function issueMemberCoupon(params: { memberId: number; couponCode: 
     )
   }
 
-  const duplicateRows = (await supabaseSelectFilter(
-    'member_coupon_issues',
+  const duplicateFilter = appendMembersTenantFilter(
     `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(couponCode)}&status=eq.issued`,
-    { limit: 1, select: 'id' }
-  )) as Array<{ id?: number }>
+    tenantScope
+  )
+  const duplicateRows = (await supabaseSelectFilter('member_coupon_issues', duplicateFilter, {
+    limit: 1,
+    select: 'id',
+  })) as Array<{ id?: number }>
   if (duplicateRows?.length) {
     throw new Error('이 회원에게 이미 사용 가능한 동일 쿠폰이 있습니다.')
   }
 
   const issuedAt = getBangkokDateTimeString()
-  const baseRow = {
-    member_id: memberId,
-    coupon_code: couponCode,
-    issued_at: issuedAt,
-    status: 'issued',
-  }
+  const baseRow = stampMembersTenantId(
+    {
+      member_id: memberId,
+      coupon_code: couponCode,
+      issued_at: issuedAt,
+      status: 'issued',
+    },
+    tenantScope
+  )
   const expiresAt = toText(coupon.valid_to) || null
   try {
     await supabaseInsert('member_coupon_issues', {

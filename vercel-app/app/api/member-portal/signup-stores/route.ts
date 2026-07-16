@@ -4,7 +4,7 @@ import { listMemberSignupStoreOptions, MEMBER_SIGNUP_OFFICE_STORE_CODE } from '@
 export async function GET(req: NextRequest) {
   try {
     const lang = String(req.nextUrl.searchParams.get('lang') || 'ko').trim()
-    const stores = await listMemberSignupStoreOptions(lang)
+    const stores = await listMemberSignupStoreOptions(lang, { request: req })
     return NextResponse.json({
       success: true,
       officeStoreCode: MEMBER_SIGNUP_OFFICE_STORE_CODE,

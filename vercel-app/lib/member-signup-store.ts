@@ -2,7 +2,8 @@ import 'server-only'
 
 import { bangkokInclusivePeriod, bangkokTodayYmd, bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
-import { fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { fetchErpStoresMaster, fetchErpStoresMasterForTenant } from '@/lib/erp-store-master'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { resolveMemberPortalStoreDisplayName } from '@/lib/member-portal-store-display'
 import {
@@ -97,8 +98,18 @@ export async function filterSignupStoreCodeForScope(
   return storesMatchForGradeLookup(canonicalScoped, storeCode)
 }
 
-export async function listMemberSignupStoreOptions(lang = 'ko'): Promise<MemberSignupStoreOption[]> {
-  const rows = await fetchErpStoresMaster()
+export async function listMemberSignupStoreOptions(
+  lang = 'ko',
+  opts?: { request?: import('next/server').NextRequest; joinStoreCode?: string | null }
+): Promise<MemberSignupStoreOption[]> {
+  const tenantScope = await resolveMemberPortalTenantScope({
+    request: opts?.request,
+    joinStoreCode: opts?.joinStoreCode,
+  })
+  const rows =
+    tenantScope.enforce && tenantScope.tenantId
+      ? await fetchErpStoresMasterForTenant(tenantScope.tenantId)
+      : await fetchErpStoresMaster()
   const stores = memberPortalStoresFromMasters(rows, {
     orderStoreFilter: isMemberPortalPublicStore,
   })
