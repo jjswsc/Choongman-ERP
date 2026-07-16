@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { thaiBahtInWords } from '@/lib/thai-baht-text'
-import { buildWht50TawiCertificateHtml, resolveWht50Tawi } from '@/lib/wht-certificate-50tawi'
+import {
+  buildWht50TawiCertificateHtml,
+  buildWht50TawiCertificateHtmlBothCopies,
+  resolveWht50Tawi,
+} from '@/lib/wht-certificate-50tawi'
+import { buildWhtCertificateDocumentHtml } from '@/lib/wht-certificate-html'
 import type { WhtCertificateData } from '@/lib/wht-certificate-data'
 
 describe('thaiBahtInWords', () => {
@@ -13,7 +18,7 @@ describe('thaiBahtInWords', () => {
 describe('resolveWht50Tawi', () => {
   const base: WhtCertificateData = {
     certificateNo: 'EAW-42',
-    formHint: 'PND3',
+    formHint: 'PND53',
     paymentDate: '2026-07-16',
     taxMonth: '2026-07',
     incomeType: 'ค่าบริการ',
@@ -22,27 +27,64 @@ describe('resolveWht50Tawi', () => {
     whtAmount: 279,
     direction: 'outbound',
     withholdingAgent: { name: 'บริษัท ทดสอบ', taxId: '0123456789012', address: 'กรุงเทพฯ' },
-    incomeRecipient: { name: 'ผู้รับเงิน', taxId: '9876543210987' },
+    incomeRecipient: { name: 'Polonext Co., Ltd.', taxId: '9876543210987' },
   }
 
-  it('maps service income to row 5 and PND3', () => {
+  it('maps service income to row 5 and PND53 for juristic person vendor', () => {
     const r = resolveWht50Tawi(base)
     expect(r.incomeRow).toBe('r5')
-    expect(r.pndChecks.pnd3).toBe(true)
+    expect(r.pndChecks.pnd53).toBe(true)
+    expect(r.pndChecks.pnd3).toBe(false)
     expect(r.bookNo).toBe('EAW')
     expect(r.certNo).toBe('42')
     expect(r.paymentDateDisplay).toBe('16/7/2569')
   })
 
-  it('places payee block before income table (official 50 ทวิ order)', () => {
-    const html = buildWht50TawiCertificateHtml(base)
-    const agentIdx = html.indexOf('ผู้มีหน้าที่หักภาษี')
-    const recipientIdx = html.indexOf('ผู้ถูกหักภาษี')
-    const titleIdx = html.indexOf('หนังสือรับรองการหักภาษี')
+  it('uses PND3 for natural person when form hint is not set', () => {
+    const r = resolveWht50Tawi({
+      ...base,
+      formHint: '',
+      incomeRecipient: { name: 'นายสมชาย ใจดี', taxId: '1234567890123' },
+    })
+    expect(r.pndChecks.pnd3).toBe(true)
+    expect(r.pndChecks.pnd53).toBe(false)
+  })
+
+  it('overrides stale PND3 form hint when recipient is a juristic person', () => {
+    const r = resolveWht50Tawi({
+      ...base,
+      formHint: 'PND3',
+      incomeRecipient: { name: 'Polonext Co., Ltd.', taxId: '0105561000000' },
+    })
+    expect(r.pndChecks.pnd53).toBe(true)
+    expect(r.pndChecks.pnd3).toBe(false)
+  })
+
+  it('places title header first, then payer, payee, income table', () => {
+    const html = buildWht50TawiCertificateHtml(base, 1)
+    const titleIdx = html.indexOf('wht-header-title')
+    const agentIdx = html.indexOf('ผู้มีหน้าที่หักภาษี ณ ที่จ่าย : -')
+    const recipientIdx = html.indexOf('ผู้ถูกหักภาษี ณ ที่จ่าย : -')
     const tableIdx = html.indexOf('ประเภทเงินได้พึงประเมินที่จ่าย')
-    expect(agentIdx).toBeGreaterThanOrEqual(0)
+    expect(titleIdx).toBeGreaterThanOrEqual(0)
+    expect(agentIdx).toBeGreaterThan(titleIdx)
     expect(recipientIdx).toBeGreaterThan(agentIdx)
-    expect(titleIdx).toBeGreaterThan(recipientIdx)
-    expect(tableIdx).toBeGreaterThan(titleIdx)
+    expect(tableIdx).toBeGreaterThan(recipientIdx)
+  })
+
+  it('marks active copy number in header badge', () => {
+    const copy1 = buildWht50TawiCertificateHtml(base, 1)
+    const copy2 = buildWht50TawiCertificateHtml(base, 2)
+    expect(copy1).toContain('wht-copy-badge">ฉบับที่ 1')
+    expect(copy2).toContain('wht-copy-badge">ฉบับที่ 2')
+    expect(copy1).toContain('wht-copy-active">ฉบับที่ 1')
+    expect(copy2).toContain('wht-copy-active">ฉบับที่ 2')
+  })
+
+  it('prints both copies per certificate for vendor', () => {
+    const both = buildWht50TawiCertificateHtmlBothCopies(base)
+    expect((both.match(/wht-copy-badge/g) || []).length).toBe(2)
+    const doc = buildWhtCertificateDocumentHtml([base])
+    expect((doc.match(/class="wht50-sheet/g) || []).length).toBe(2)
   })
 })

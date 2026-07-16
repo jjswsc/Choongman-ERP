@@ -2383,7 +2383,7 @@ export const i18n = {
     adminLeaveSub: '휴가 승인·반려와 사용·잔여 통계를 관리합니다.',
     adminAccountingPurchaseOrder: 'PO 관리',
     adminAccountingPurchaseOrderTitle: 'PO 관리',
-    adminAccountingPurchaseOrderSub: '로얄티·배달·Grab GP 등 매장 청구를 발주서로 기록합니다. [청구 비율 설정]에서 비율을 저장한 뒤, 본사 발주 탭에서 POS 매출 연동으로 줄을 넣을 수 있습니다.',
+    adminAccountingPurchaseOrderSub: '로얄티·배달·Grab GP 등 매장 청구를 발주서로 기록합니다. [청구 비율 설정]에서 비율을 저장한 뒤, 본사 발주 탭에서 POS 매출 연동으로 줄을 넣을 수 있습니다. 매장 간 청구(Silom→The Street 등)는 발행 매장에서 해당 매장을 선택하세요.',
     poBillingTabSettings: '청구 비율 설정',
     poBillingSettingsTitle: '매장별 청구 비율 (%)',
     poBillingSettingsHint:
@@ -2515,6 +2515,9 @@ export const i18n = {
       '로열티·GP 청구 PO: 먼저 매장(지점)을 선택하면 연결된 법인이 아래에 맞춰집니다.',
     poIssuerStoreTitle: '발행 매장',
     poIssuerStoreHint: '로그인 매장이 청구서 발행 주체입니다. 인쇄 FROM에 표시됩니다.',
+    poIssuerStoreSelectHint:
+      '본사(로열티·GP) 또는 매장을 선택하세요. 매장을 고르면 해당 매장 명의로 다른 매장에 청구합니다.',
+    poIssuerStoreHqOption: '본사 (로열티·GP 청구)',
     poBillToStoreTitle: '청구 대상 매장',
     poBillToStoreHint: '청구받을 매장을 선택하면 연결된 법인이 오른쪽에 맞춰집니다.',
     poBillingIssuerStoreMissing: '발행 매장 정보를 확인할 수 없습니다. 다시 로그인해 주세요.',
@@ -9796,7 +9799,7 @@ Only matters the employee must handle personally on a working day:
     adminAccountingPurchaseOrder: 'PO management',
     adminAccountingPurchaseOrderTitle: 'PO management',
     adminAccountingPurchaseOrderSub:
-      'Bill stores for royalty, delivery GP, Grab GP, etc. as POs. Set rates under [Billing rates], then add lines from POS sales on the HQ PO tab.',
+      'Bill stores for royalty, delivery GP, Grab GP, etc. as POs. Set rates under [Billing rates], then add lines from POS sales on the HQ PO tab. For inter-store billing (e.g. Silom→The Street), pick the issuing store in the Issuing store dropdown.',
     adminAccountingPurchaseOrderSubStore:
       'Store billing: your logged-in store issues invoices to other stores. Set your rates under [Billing rates], then load POS sales lines.',
     poBillingTabSettings: 'Billing rates',
@@ -9924,6 +9927,9 @@ Only matters the employee must handle personally on a working day:
       'For royalty / billing POs: pick the store first—the linked legal entity is set below.',
     poIssuerStoreTitle: 'Issuing store',
     poIssuerStoreHint: 'Your logged-in store is the invoice issuer (FROM on print).',
+    poIssuerStoreSelectHint:
+      'Choose HQ (royalty/GP) or a store. Store selection issues invoices to other stores on that store\'s behalf.',
+    poIssuerStoreHqOption: 'HQ (royalty / GP billing)',
     poBillToStoreTitle: 'Bill-to store',
     poBillToStoreHint: 'Select the store to bill—the linked legal entity is set on the right.',
     poBillingIssuerStoreMissing: 'Cannot resolve issuing store. Please sign in again.',
@@ -30680,6 +30686,9 @@ orderItemQty: 'ຈຳນວນ',
       'For royalty / billing POs: pick the store first—the linked legal entity is set below.',
     poIssuerStoreTitle: 'Issuing store',
     poIssuerStoreHint: 'Your logged-in store is the invoice issuer (FROM on print).',
+    poIssuerStoreSelectHint:
+      'Choose HQ (royalty/GP) or a store. Store selection issues invoices to other stores on that store\'s behalf.',
+    poIssuerStoreHqOption: 'HQ (royalty / GP billing)',
     poBillToStoreTitle: 'Bill-to store',
     poBillToStoreHint: 'Select the store to bill—the linked legal entity is set on the right.',
     poBillingIssuerStoreMissing: 'Cannot resolve issuing store. Please sign in again.',

@@ -1,5 +1,6 @@
 /** 원천징수 증명서(หนังสือรับรอง) 인쇄용 당사자·금액 */
 
+import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
 import { purchaseOrderMetaOrderDate } from '@/lib/purchase-order-cart'
 
 export type WhtCertificateParty = {
@@ -91,7 +92,6 @@ export function whtCertificateFromPurchaseOrder(
       gross_amount: gross > 0 ? gross : total,
       wht_rate: rateRaw,
       wht_amount: wht,
-      form_hint: 'PND3',
       certificate_no: po.po_no ? `PO-${po.po_no}` : undefined,
       direction: 'inbound',
     },
@@ -133,7 +133,6 @@ export function whtCertificateFromExpenseRegister(
       gross_amount: grossExVat > 0 ? grossExVat : grossIncl,
       wht_rate: params.whtRate,
       wht_amount: wht,
-      form_hint: 'PND3',
       certificate_no: String(params.certificateNo || '').trim() || undefined,
       memo: params.memo,
       store_name: params.storeName,
@@ -172,9 +171,16 @@ export function whtCertificateFromLedgerRow(
     payeeTaxId: String(row.payee_tax_id || ''),
     headOffice,
   })
+  const incomeType = String(row.income_type || '').trim()
+  const manualHint = String(row.form_hint || '').trim()
   return {
     certificateNo: String(row.certificate_no || '').trim() || '—',
-    formHint: String(row.form_hint || '').trim() || (direction === 'inbound' ? 'PND3' : 'PND3'),
+    formHint:
+      manualHint ||
+      resolveWhtPndFormHint({
+        payeeName: parties.incomeRecipient.name,
+        incomeType,
+      }),
     paymentDate: String(row.payment_date || '').slice(0, 10),
     taxMonth: String(row.tax_month || '').slice(0, 7),
     incomeType: String(row.income_type || '').trim() || '—',

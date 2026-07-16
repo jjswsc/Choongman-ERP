@@ -1,7 +1,9 @@
 import type { WhtCertificateData } from '@/lib/wht-certificate-data'
 import { thaiBahtInWords } from '@/lib/thai-baht-text'
+import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
 
 export type Wht50TawiIncomeRowKey = 'r1' | 'r2' | 'r3' | 'r4a' | 'r4b' | 'r5' | 'r6'
+export type Wht50TawiCopyNo = 1 | 2
 
 export type Wht50TawiResolved = {
   bookNo: string
@@ -99,10 +101,22 @@ function resolvePndChecks(formHint: string): Record<string, boolean> {
 export function resolveWht50Tawi(data: WhtCertificateData): Wht50TawiResolved {
   const { bookNo, certNo } = parseBookCertNo(data.certificateNo)
   const income = resolveIncomeRow(data)
-  const pnd = resolvePndChecks(data.formHint)
-  if (data.direction === 'outbound' && !Object.values(pnd).some(Boolean)) {
-    pnd.pnd3 = true
+  const fromHint = resolvePndChecks(data.formHint)
+  const pnd = {
+    pnd1k: fromHint.pnd1k,
+    pnd1kSpecial: fromHint.pnd1kSpecial,
+    pnd2: fromHint.pnd2,
+    pnd2k: fromHint.pnd2k,
+    pnd3k: fromHint.pnd3k,
+    pnd3: false,
+    pnd53: false,
   }
+  const recipientHint = resolveWhtPndFormHint({
+    payeeName: data.incomeRecipient.name,
+    incomeType: data.incomeType,
+  })
+  if (recipientHint === 'PND3') pnd.pnd3 = true
+  else pnd.pnd53 = true
   return {
     bookNo,
     certNo,
@@ -150,9 +164,6 @@ function partyBlock(params: {
   name: string
   address: string
   taxId: string
-  bookNo?: string
-  certNo?: string
-  showBook?: boolean
 }): string {
   const nameLine = params.name
     ? `<span class="wht-val">${esc(params.name)}</span>`
@@ -160,10 +171,6 @@ function partyBlock(params: {
   const addrLine = params.address
     ? `<span class="wht-val">${esc(params.address)}</span>`
     : `<span class="wht-dots">${dots(95)}</span>`
-
-  const bookHtml = params.showBook
-    ? `<div class="wht-bookno">เล่มที่ <span class="wht-val-sm">${esc(params.bookNo || '')}</span> เลขที่ <span class="wht-val-sm">${esc(params.certNo || '')}</span></div>`
-    : ''
 
   return `
 <div class="wht-party-block">
@@ -177,7 +184,6 @@ function partyBlock(params: {
         <div class="wht-hint">(ให้ระบุ ชื่ออาคาร/หมู่บ้าน ห้องเลขที่ ชั้นที่ เลขที่ ตรอก/ซอย หมู่ที่ ถนน ตำบล/แขวง อำเภอ/เขต จังหวัด)</div>
       </td>
       <td class="wht-party-right">
-        ${bookHtml}
         <div class="wht-tin-caption">เลขประจำตัวผู้เสียภาษีอากร</div>
         <div class="wht-tin-caption-sm">เลขประจำตัวผู้เสียภาษีอากร (13 หลัก)*</div>
         <table class="wht-tin-grid" cellspacing="0" cellpadding="0"><tr>${taxIdCells(params.taxId)}</tr></table>
@@ -187,7 +193,28 @@ function partyBlock(params: {
 </div>`
 }
 
-export function buildWht50TawiCertificateHtml(data: WhtCertificateData): string {
+function headerBlock(params: { copyNo: Wht50TawiCopyNo; bookNo: string; certNo: string }): string {
+  const copy1Class = params.copyNo === 1 ? ' wht-copy-active' : ''
+  const copy2Class = params.copyNo === 2 ? ' wht-copy-active' : ''
+  return `
+<div class="wht-page-header">
+  <div class="wht-header-copies">
+    <div class="wht-copy-legend${copy1Class}">ฉบับที่ 1 (สำหรับผู้ถูกหักภาษี ณ ที่จ่าย ใช้แนบพร้อมกับแบบแสดงรายการภาษี)</div>
+    <div class="wht-copy-legend${copy2Class}">ฉบับที่ 2 (สำหรับผู้ถูกหักภาษี ณ ที่จ่าย เก็บไว้เป็นหลักฐาน)</div>
+  </div>
+  <div class="wht-header-title">
+    <div class="wht-title-main">หนังสือรับรองการหักภาษี ณ ที่จ่าย</div>
+    <div class="wht-title-sub">ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร</div>
+  </div>
+  <div class="wht-header-meta">
+    <div class="wht-copy-badge">ฉบับที่ ${params.copyNo}</div>
+    <div class="wht-bookno">เล่มที่ <span class="wht-val-sm">${esc(params.bookNo || '')}</span></div>
+    <div class="wht-bookno">เลขที่ <span class="wht-val-sm">${esc(params.certNo || '')}</span></div>
+  </div>
+</div>`
+}
+
+function buildWht50TawiCertificateBody(data: WhtCertificateData, copyNo: Wht50TawiCopyNo): string {
   const r = resolveWht50Tawi(data)
   const issueDate = r.paymentDateDisplay || '....../....../........'
   const active = r.incomeRow
@@ -225,16 +252,13 @@ export function buildWht50TawiCertificateHtml(data: WhtCertificateData): string 
 </table>`
 
   return `
-<section class="wht50-sheet">
   <div class="wht50-border">
+    ${headerBlock({ copyNo, bookNo: r.bookNo, certNo: r.certNo })}
     ${partyBlock({
       title: 'ผู้มีหน้าที่หักภาษี ณ ที่จ่าย : -',
       name: r.agentName,
       address: r.agentAddress,
       taxId: r.agentTaxId,
-      bookNo: r.bookNo,
-      certNo: r.certNo,
-      showBook: true,
     })}
     ${partyBlock({
       title: 'ผู้ถูกหักภาษี ณ ที่จ่าย : -',
@@ -252,13 +276,6 @@ export function buildWht50TawiCertificateHtml(data: WhtCertificateData): string 
       (6) ภ.ง.ด.3ก <span class="wht-chk">${pndMark(r.pndChecks.pnd3k)}</span>
       (7) ภ.ง.ด.53 <span class="wht-chk">${pndMark(r.pndChecks.pnd53)}</span>
       <span class="wht-pnd-hint">(ให้สามารถอ้างอิงหรือสอบยันกันได้ระหว่างลำดับที่ตามหนังสือรับรองฯ กับแบบยื่นรายการภาษีหัก ที่จ่าย)</span>
-    </div>
-
-    <div class="wht-title-block">
-      <div class="wht-title-main">หนังสือรับรองการหักภาษี ณ ที่จ่าย</div>
-      <div>ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร</div>
-      <div class="wht-copy-line">ฉบับที่ 1 (สำหรับผู้ถูกหักภาษี ณ ที่จ่าย ใช้แนบพร้อมกับแบบแสดงรายการภาษี)</div>
-      <div class="wht-copy-line">ฉบับที่ 2 (สำหรับผู้ถูกหักภาษี ณ ที่จ่าย เก็บไว้เป็นหลักฐาน)</div>
     </div>
 
     ${incomeTable}
@@ -298,8 +315,20 @@ export function buildWht50TawiCertificateHtml(data: WhtCertificateData): string 
       2. กรณีนิติบุคคล ให้ใช้เลขทะเบียนนิติบุคคลของกรมพัฒนาธุรกิจการค้า
       3. กรณีอื่น ๆ นอกเหนือจาก 1. และ 2. ให้ใช้เลขประจำตัวผู้เสียภาษีอากร (13 หลัก) ของกรมสรรพากร
     </div>
-  </div>
-</section>`
+  </div>`
+}
+
+export function buildWht50TawiCertificateHtml(
+  data: WhtCertificateData,
+  copyNo: Wht50TawiCopyNo = 1
+): string {
+  const pageBreakClass = copyNo === 2 ? ' wht50-sheet-page-break' : ''
+  return `<section class="wht50-sheet${pageBreakClass}">${buildWht50TawiCertificateBody(data, copyNo)}</section>`
+}
+
+/** Vendor 전달용 — 증명서 1건당 ฉบับที่ 1·2 각 1페이지 */
+export function buildWht50TawiCertificateHtmlBothCopies(data: WhtCertificateData): string {
+  return [1, 2].map((copyNo) => buildWht50TawiCertificateHtml(data, copyNo as Wht50TawiCopyNo)).join('\n')
 }
 
 export const WHT_50_TAWI_STYLES = `
@@ -313,8 +342,32 @@ export const WHT_50_TAWI_STYLES = `
     color: #000;
     line-height: 1.2;
   }
-  .wht50-sheet { width: 100%; max-width: 200mm; margin: 0 auto; }
+  .wht50-sheet { width: 100%; max-width: 200mm; margin: 0 auto 8px; }
+  .wht50-sheet-page-break { page-break-before: always; }
   .wht50-border { border: 1.5px solid #000; padding: 4px 6px 6px; }
+  .wht-page-header {
+    display: grid;
+    grid-template-columns: 38% 34% 28%;
+    gap: 4px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+    align-items: start;
+  }
+  .wht-header-copies { font-size: 9px; line-height: 1.25; }
+  .wht-copy-legend { margin-bottom: 1px; }
+  .wht-copy-active { font-weight: 700; text-decoration: underline; }
+  .wht-header-title { text-align: center; padding-top: 2px; }
+  .wht-title-sub { font-size: 11px; }
+  .wht-header-meta { text-align: right; font-size: 11px; }
+  .wht-copy-badge {
+    font-size: 14px;
+    font-weight: 700;
+    border: 1.5px solid #000;
+    display: inline-block;
+    padding: 1px 10px;
+    margin-bottom: 4px;
+  }
   .wht-party-block { border-bottom: 1px solid #000; padding-bottom: 4px; margin-bottom: 2px; }
   .wht-party-table { width: 100%; border-collapse: collapse; }
   .wht-party-left { width: 68%; vertical-align: top; padding-right: 6px; }
@@ -354,9 +407,7 @@ export const WHT_50_TAWI_STYLES = `
     vertical-align: middle;
     margin: 0 1px;
   }
-  .wht-title-block { text-align: center; padding: 5px 0; border-bottom: 1px solid #000; }
-  .wht-title-main { font-size: 16px; font-weight: 700; }
-  .wht-copy-line { font-size: 10px; }
+  .wht-title-main { font-size: 16px; font-weight: 700; line-height: 1.15; }
   .wht-income-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 2px; }
   .wht-income-table th, .wht-income-table td { border: 1px solid #000; padding: 2px 3px; vertical-align: top; }
   .wht-col-type { width: 54%; text-align: center; }

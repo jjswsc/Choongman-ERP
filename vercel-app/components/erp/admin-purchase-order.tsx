@@ -47,6 +47,9 @@ import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip } from "lucide-react"
 
+/** 본사 화면: 발행 주체 선택 — 본사 로열티·GP vs 매장 간 청구 */
+const PO_ISSUER_HQ = "_hq"
+
 function bangkokYearMonth(): string {
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -196,24 +199,36 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   >(null)
   const { stores: storeList } = useStoreList()
 
-  const poIssuerStore = React.useMemo(
+  const authIssuerStore = React.useMemo(
     () =>
       allowManualLines && auth
         ? resolvePoIssuerStoreFromAuth({ role: auth.role, store: auth.store })
         : null,
     [allowManualLines, auth]
   )
-  const isStoreIssuerMode = Boolean(poIssuerStore)
+  /** 본사·회계: PO 화면에서 발행 매장 선택 (매장 로그인 시 무시) */
+  const [hqIssuerPick, setHqIssuerPick] = React.useState<string>(PO_ISSUER_HQ)
+  const canPickIssuerStore = allowManualLines && !authIssuerStore
+
+  const effectiveIssuerStore = React.useMemo(() => {
+    if (authIssuerStore) return authIssuerStore
+    if (!canPickIssuerStore || hqIssuerPick === PO_ISSUER_HQ || hqIssuerPick === "_none") {
+      return null
+    }
+    return hqIssuerPick
+  }, [authIssuerStore, canPickIssuerStore, hqIssuerPick])
+
+  const isStoreIssuerMode = Boolean(effectiveIssuerStore)
 
   const issuerOutletVendor = React.useMemo(
-    () => (poIssuerStore ? vendorForSalesOutletStore(vendors, poIssuerStore) : null),
-    [poIssuerStore, vendors]
+    () => (effectiveIssuerStore ? vendorForSalesOutletStore(vendors, effectiveIssuerStore) : null),
+    [effectiveIssuerStore, vendors]
   )
 
   const billToStoreOptions = React.useMemo(() => {
-    if (!isStoreIssuerMode || !poIssuerStore) return storeList
-    return storeList.filter((s) => !storesMatchForGradeLookup(s, poIssuerStore))
-  }, [isStoreIssuerMode, poIssuerStore, storeList])
+    if (!isStoreIssuerMode || !effectiveIssuerStore) return storeList
+    return storeList.filter((s) => !storesMatchForGradeLookup(s, effectiveIssuerStore))
+  }, [isStoreIssuerMode, effectiveIssuerStore, storeList])
 
   const filteredVendors = React.useMemo(() => {
     let list = vendors
@@ -346,13 +361,42 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   }, [allowManualLines, auth?.role, auth?.store])
 
   React.useEffect(() => {
-    if (!isStoreIssuerMode || !poIssuerStore || !issuerOutletVendor) return
+    if (!canPickIssuerStore || !effectiveIssuerStore) return
+    if (
+      relatedStore !== "_none" &&
+      storesMatchForGradeLookup(relatedStore, effectiveIssuerStore)
+    ) {
+      setRelatedStore("_none")
+      setVendorSelect(null)
+    }
+  }, [canPickIssuerStore, effectiveIssuerStore, relatedStore])
+
+  React.useEffect(() => {
+    if (!isStoreIssuerMode || !effectiveIssuerStore) {
+      if (canPickIssuerStore && hqIssuerPick === PO_ISSUER_HQ) {
+        const hq = locations.find(
+          (l) =>
+            String(l.location_code || "").toLowerCase() === "본사" ||
+            String(l.name || "").toLowerCase().includes("본사")
+        )
+        if (hq) setLocationSelect(hq)
+      }
+      return
+    }
     setLocationSelect({
-      name: poIssuerStore,
-      address: String(issuerOutletVendor.address || "").trim(),
-      location_code: poIssuerStore,
+      name: effectiveIssuerStore,
+      address: String(issuerOutletVendor?.address || "").trim(),
+      location_code: effectiveIssuerStore,
     })
-  }, [isStoreIssuerMode, poIssuerStore, issuerOutletVendor])
+  }, [
+    isStoreIssuerMode,
+    effectiveIssuerStore,
+    issuerOutletVendor?.address,
+    issuerOutletVendor?.code,
+    canPickIssuerStore,
+    hqIssuerPick,
+    locations,
+  ])
 
   React.useEffect(() => {
     if (!transferToPo || transferToPo.cart.length === 0) return
@@ -535,7 +579,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   }
 
   const appendBillingFromPos = async (mode: "all" | "royalty" | "delivery_gp" | "grab_gp") => {
-    const salesStore = isStoreIssuerMode && poIssuerStore ? poIssuerStore : relatedStore
+    const salesStore = isStoreIssuerMode && effectiveIssuerStore ? effectiveIssuerStore : relatedStore
     if (!salesStore || salesStore === "_none") {
       await appAlert(
         isStoreIssuerMode ? t("poBillingIssuerStoreMissing") : t("poBillingSelectStoreFirst")
@@ -737,7 +781,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         locationCode: locationSelect.location_code,
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store, taxType: c.taxType })),
         userName: auth.user,
-        issuerStore: isStoreIssuerMode && poIssuerStore ? poIssuerStore : undefined,
+        issuerStore: isStoreIssuerMode && effectiveIssuerStore ? effectiveIssuerStore : undefined,
         relatedStore:
           allowManualLines && relatedStore && relatedStore !== "_none" ? relatedStore : undefined,
         billingMonthYm: passBillingUpsert ? billingMonthYm : undefined,
@@ -780,16 +824,69 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">
-              {isStoreIssuerMode ? t("poIssuerStoreTitle") : t("purchaseOrderLocation")}
+              {isStoreIssuerMode || canPickIssuerStore
+                ? t("poIssuerStoreTitle")
+                : t("purchaseOrderLocation")}
             </CardTitle>
-            {isStoreIssuerMode ? (
+            {canPickIssuerStore ? (
+              <p className="mt-1 text-xs font-normal text-muted-foreground">
+                {t("poIssuerStoreSelectHint")}
+              </p>
+            ) : isStoreIssuerMode ? (
               <p className="mt-1 text-xs font-normal text-muted-foreground">{t("poIssuerStoreHint")}</p>
             ) : null}
           </CardHeader>
-          <CardContent>
-            {isStoreIssuerMode && poIssuerStore ? (
+          <CardContent className="space-y-2">
+            {canPickIssuerStore ? (
+              <>
+                <Select value={hqIssuerPick} onValueChange={setHqIssuerPick}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={t("poIssuerStoreTitle")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PO_ISSUER_HQ}>{t("poIssuerStoreHqOption")}</SelectItem>
+                    {storeList.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {effectiveIssuerStore ? (
+                  <div className="space-y-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+                    <p className="font-semibold">{effectiveIssuerStore}</p>
+                    {issuerOutletVendor ? (
+                      <p className="text-xs text-muted-foreground">{issuerOutletVendor.name}</p>
+                    ) : (
+                      <p className="text-xs text-amber-700 dark:text-amber-500">
+                        {t("poStoreNoVendorMatch")}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <Select
+                    value={locationSelect?.location_code ?? ""}
+                    onValueChange={(v) => {
+                      const loc = locations.find((l) => l.location_code === v)
+                      setLocationSelect(loc || null)
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={t("purchaseOrderSelectLocation")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((loc) => (
+                        <SelectItem key={loc.location_code} value={loc.location_code}>
+                          {loc.name} — {loc.address}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            ) : isStoreIssuerMode && effectiveIssuerStore ? (
               <div className="space-y-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
-                <p className="font-semibold">{poIssuerStore}</p>
+                <p className="font-semibold">{effectiveIssuerStore}</p>
                 {issuerOutletVendor ? (
                   <p className="text-xs text-muted-foreground">{issuerOutletVendor.name}</p>
                 ) : (

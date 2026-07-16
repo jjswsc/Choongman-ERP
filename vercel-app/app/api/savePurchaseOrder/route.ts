@@ -102,6 +102,15 @@ export async function POST(request: NextRequest) {
         { success: false, message: '매장 발행 권한이 없습니다.' },
         { status: 403, headers }
       )
+    } else if (
+      issuerStore &&
+      relatedStore &&
+      storesMatchForGradeLookup(relatedStore, issuerStore)
+    ) {
+      return NextResponse.json(
+        { success: false, message: '청구 대상은 발행 매장과 같을 수 없습니다.' },
+        { status: 400, headers }
+      )
     }
 
     const storeVendorCode = String(body.storeVendorCode ?? body.store_vendor_code ?? '').trim()
