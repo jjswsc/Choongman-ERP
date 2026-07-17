@@ -4485,7 +4485,7 @@ export const i18n = {
     salesSummaryCurrent: '현재 기간 매출',
     salesSummaryPrevRange: '직전 동일기간',
     salesSummaryPrevWeek: '전주 동기간',
-    salesNetGross: '총액(공급+세금)',
+    salesNetGross: '총액(할인·서비스 전)',
     salesNetDiscount: '할인',
     salesServiceAmount: '서비스처리 금액',
     salesNetResult: '순매출',
@@ -5661,6 +5661,10 @@ export const i18n = {
     memberConsentMarketing: '마케팅 동의',
     memberConsentPrivacy: '개인정보 동의',
     memberConsentAt: '동의 일시',
+    memberJoinAt: '가입일시',
+    memberJoinAtNewHint: '비워 두면 저장 시각(방콕)으로 자동 기록됩니다. 소급 등록 시 직접 입력하세요.',
+    memberJoinDateFrom: '가입일 시작',
+    memberJoinDateTo: '가입일 종료',
     memberStatus: '상태(active/inactive)',
     memberRegisterMaster: '신규 등록 (마스터)',
     memberClearSelection: '선택 해제',
@@ -7001,9 +7005,9 @@ export const i18n = {
     helpHow_admin_employees:
       '① 직원 목록: 화면 진입 시 재직 중 목록이 자동으로 불러와집니다. 매장·직무·등급·재직·검색어로 좁힌 뒤「조회」로 다시 적용할 수 있습니다. 표에서 행을 클릭하거나 연필을 누르면 우측 패널에 그 직원이 열리고,「신규」로 빈 등록 패널을 열 수 있습니다. 저장 전 필수(※)와 날짜·숫자 형식을 확인합니다.\n② 권한: 매장 매니저·가맹점주는 보통 자기 매장 위주이며 Officer/Director 역할 부여 등은 본사(디렉터) 정책에 따릅니다. 가맹 복수 매장이 켜져 있으면 본사에서 허용한 경우에만「추가 매장」을 편집할 수 있습니다.\n③ 직원 입력 이력: 기간·작업·담당자로 직원 등록·수정·퇴사 처리 기록을 조회합니다. 행을 클릭하면 항목별 변경 전·후를 확인할 수 있습니다(비밀번호는 기록하지 않음).\n④ 인원 이동·적정 인원: 기간·매장 기준으로 이동·편성·목표 인원을 봅니다.\n⑤ 직원 평가: 상단「직원 평가」탭 안에서 하위 탭(평가 입력·직원평가분석·평가 목록·경고서·평가 항목 설정)을 고릅니다. 분석·목록·경고서에서 직원 행을 열면「평가 입력」하위 탭으로 이동합니다. 항목 설정은 본사 위주입니다.\n⑥ 급여·근태 등 다른 메뉴에서 직원 링크로 들어온 경우에도 목록을 조회한 뒤 같은 패널로 수정합니다.\n⑦ 자세한 단계는「도움말」본문을 보고, 끝나면「화면으로 돌아가기」로 목록으로 돌아갑니다.',
     helpSum_admin_members:
-      '목록에서 회원을 선택해 좌측 프로필·포인트·메모로 실행하는 회원 운영 화면입니다.',
+      '목록에서 회원을 선택해 좌측 프로필·포인트·메모로 실행하는 회원 운영 화면입니다. 가입일시 표시·가입일 기간 검색을 지원합니다.',
     helpHow_admin_members:
-      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색·등급/상태 필터(전체 DB 기준)·CSV/Import. LINE 리셋은 위험 작업으로 접혀 있습니다.',
+      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입(가입일시·채널·추천)/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색(상세에 가입일 시작·종료)·등급/상태 필터(전체 DB 기준)·CSV. CRM 가져오기·LINE 리셋은 본사(오피스)만「고급 · 위험 작업」을 펼쳐 사용합니다.',
     helpSum_admin_members_points:
       '(메뉴 통합) 포인트 조회·조정은 「회원 리스트」화면의 포인트 탭으로 이동했습니다. 적립 규칙은 등급 관리에서 설정합니다.',
     helpHow_admin_members_points:
@@ -11909,7 +11913,7 @@ Only matters the employee must handle personally on a working day:
     salesSummaryCurrent: 'Sales this period',
     salesSummaryPrevRange: 'Prior equal period',
     salesSummaryPrevWeek: 'Same days last week',
-    salesNetGross: 'Gross (supply + tax)',
+    salesNetGross: 'Gross (before discount/service)',
     salesNetDiscount: 'Discount',
     salesServiceAmount: 'Service charge',
     salesNetResult: 'Net sales',
@@ -13088,6 +13092,10 @@ orderItemQty: 'Qty',
     memberConsentMarketing: 'Marketing consent',
     memberConsentPrivacy: 'Privacy consent',
     memberConsentAt: 'Consent at',
+    memberJoinAt: 'Joined at',
+    memberJoinAtNewHint: 'Leave blank to record the save time (Bangkok). Enter a value to backdate registration.',
+    memberJoinDateFrom: 'Joined from',
+    memberJoinDateTo: 'Joined to',
     memberStatus: 'Status(active/inactive)',
     memberRegisterMaster: 'New register (master)',
     memberClearSelection: 'Clear selection',
@@ -14431,9 +14439,9 @@ orderItemQty: 'Qty',
     helpHow_admin_employees:
       '① Employee list: active staff load automatically on entry. Narrow with store, job, grade, employment status, and search, then press Query to re-apply filters. Click a row or the pencil icon to open the right panel; use New for a blank profile. Check required fields (※) and date/number formats before Save.\n② Roles: store managers and franchisees usually work within their store scope; assigning Officer/Director follows head-office policy. If multi-store franchise is enabled, edit Extra stores only when head office allows it.\n③ Input history: review who changed employee records and when (passwords are not logged).\n④ Movement & headcount: review transfers and staffing targets by period and store.\n⑤ Employee Eval: open the top tab, then pick sub-tabs (entry, analytics, history, warning letters, item setup). Rows in analytics/history/warnings open Evaluation entry.\n⑥ Deep links from Payroll or Attendance still load the list first—then edit in the same panel.\n⑦ Open Help for the long guide, then Back to screen when you are done.',
     helpSum_admin_members:
-      'Pick a member from the list and run Profile, Points, and notes on the left.',
+      'Pick a member from the list and run Profile, Points, and notes on the left. Shows joined-at and supports join-date range search.',
     helpHow_admin_members:
-      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search, tier/status filters (full DB), CSV/Import. LINE reset is folded under dangerous actions.',
+      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields including joined-at, channel, referral, and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search (advanced: join date from/to), tier/status filters (full DB), CSV. CRM import and LINE reset are office-only under the collapsed Advanced · dangerous actions control.',
     helpSum_admin_members_points:
       '(Merged) Point lookup and adjustment moved to the Points tab on Member list. Earn rules stay under Tier management.',
     helpHow_admin_members_points:
@@ -18324,7 +18332,7 @@ orderItemQty: 'จำนวน',
     salesSummaryCurrent: 'ยอดขายช่วงปัจจุบัน',
     salesSummaryPrevRange: 'ช่วงก่อนหน้าเท่ากัน',
     salesSummaryPrevWeek: 'สัปดาห์ก่อนช่วงเดียวกัน',
-    salesNetGross: 'ยอดรวม (ขาย+ภาษี)',
+    salesNetGross: 'ยอดรวม (ก่อนหักส่วนลด/บริการ)',
     salesNetDiscount: 'ส่วนลด',
     salesServiceAmount: 'ค่าบริการ',
     salesNetResult: 'ยอดขายสุทธิ',

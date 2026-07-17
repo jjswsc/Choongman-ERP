@@ -171,6 +171,19 @@ export function sumStoreSalesTotals(rows: StoreSalesAggregateRow[]) {
   )
 }
 
+/**
+ * 순매출 워터폴 시작액(할인·서비스 차감 전).
+ * VAT included 모드에서 subtotal·total은 이미 세포함이고 vat는 분해액이므로
+ * subtotal+vat 하면 세금이 이중으로 더해진다. total+discount+service 가 항등식.
+ */
+export function salesWaterfallGross(parts: {
+  total: number
+  discount: number
+  service: number
+}): number {
+  return Number(parts.total) + Number(parts.discount) + Number(parts.service)
+}
+
 export function mapPosSalesPeriodRowToChartRow(
   r: Partial<PosSalesPeriodRow> & Pick<PosSalesPeriodRow, "label" | "key">,
   periodGroup: PeriodGroupValue,

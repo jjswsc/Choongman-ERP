@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   getMemberTiers,
   getMembersCursor,
@@ -33,8 +32,10 @@ import {
   type MemberSearchFieldDraft,
   type MemberSearchFieldKey,
 } from "@/lib/member-search-filter"
+import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
+import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 const MEMBER_PAGE_SIZE = 100
@@ -49,6 +50,8 @@ const SEARCH_FIELD_LABEL_KEYS: Record<MemberSearchFieldKey, string> = {
   memberNo: "memberNo",
   email: "email",
   birthDate: "birthDate",
+  joinFrom: "memberJoinDateFrom",
+  joinTo: "memberJoinDateTo",
 }
 
 const MemberSearchPanel = React.memo(function MemberSearchPanel({
@@ -190,6 +193,24 @@ const MemberSearchPanel = React.memo(function MemberSearchPanel({
               type="date"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("memberJoinDateFrom")}</Label>
+            <Input
+              value={draft.joinFrom}
+              onChange={(e) => patch("joinFrom", e.target.value)}
+              className="bg-background"
+              type="date"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("memberJoinDateTo")}</Label>
+            <Input
+              value={draft.joinTo}
+              onChange={(e) => patch("joinTo", e.target.value)}
+              className="bg-background"
+              type="date"
+            />
+          </div>
         </div>
       ) : null}
 
@@ -232,6 +253,13 @@ function calcMemberAge(birthDate?: string): string {
   return age >= 0 ? String(age) : "-"
 }
 
+/** 가입일시 표시 — DB 방콕 시각 문자열을 그대로 보여 줌 */
+function formatMemberJoinedAt(value?: string): string {
+  const s = String(value || "").trim()
+  if (!s) return "—"
+  return s.slice(0, 19).replace("T", " ")
+}
+
 const MemberListTable = React.memo(function MemberListTable({
   members,
   loading,
@@ -271,18 +299,19 @@ const MemberListTable = React.memo(function MemberListTable({
 
   return (
     <div className="overflow-auto rounded-md border max-h-[min(70vh,720px)]">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[920px] text-sm">
         <thead className="bg-muted/40 sticky top-0 z-10">
           <tr>
-            <th className="p-2 text-left">{t("name")}</th>
-            <th className="p-2 text-left">{t("memberPhone")}</th>
-            <th className="p-2 text-left">{t("memberNo")}</th>
-            <th className="p-2 text-left">{t("memberJoinStore")}</th>
-            <th className="p-2 text-left">{t("memberTier")}</th>
-            <th className="p-2 text-right">{t("memberPointsBalance")}</th>
-            <th className="p-2 text-left">{t("status")}</th>
-            <th className="hidden p-2 text-left lg:table-cell">{t("birthDate")}</th>
-            <th className="hidden p-2 text-left xl:table-cell">{t("age")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("name")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("memberPhone")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("memberNo")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("memberJoinStore")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("memberJoinAt")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("memberTier")}</th>
+            <th className="whitespace-nowrap p-2 text-right">{t("memberPointsBalance")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("status")}</th>
+            <th className="hidden whitespace-nowrap p-2 text-left lg:table-cell">{t("birthDate")}</th>
+            <th className="hidden whitespace-nowrap p-2 text-left xl:table-cell">{t("age")}</th>
           </tr>
         </thead>
         <tbody>
@@ -298,27 +327,30 @@ const MemberListTable = React.memo(function MemberListTable({
                 )}
                 onClick={() => onSelect(m)}
               >
-                <td className="p-2 font-medium">{m.name || "—"}</td>
-                <td className="p-2">{m.phone || "—"}</td>
-                <td className="p-2 text-xs tabular-nums">{m.memberNo || "—"}</td>
-                <td className="p-2 text-xs">
+                <td className="whitespace-nowrap p-2 font-medium">{m.name || "—"}</td>
+                <td className="whitespace-nowrap p-2">{m.phone || "—"}</td>
+                <td className="whitespace-nowrap p-2 text-xs tabular-nums">{m.memberNo || "—"}</td>
+                <td className="whitespace-nowrap p-2 text-xs">
                   {m.joinStoreCode
                     ? joinStoreLabels[m.joinStoreCode] || m.joinStoreCode
                     : joinStoreLabels.__unset__ || "—"}
                 </td>
-                <td className="p-2">
+                <td className="whitespace-nowrap p-2 text-xs tabular-nums">
+                  {formatMemberJoinedAt(m.createdAt)}
+                </td>
+                <td className="whitespace-nowrap p-2">
                   <Badge variant="outline">{m.tierCode || "—"}</Badge>
                 </td>
-                <td className="p-2 text-right tabular-nums font-medium">
+                <td className="whitespace-nowrap p-2 text-right tabular-nums font-medium">
                   {Number(m.pointBalance || 0).toLocaleString()}
                 </td>
-                <td className="p-2">
+                <td className="whitespace-nowrap p-2">
                   <Badge variant={active ? "default" : "secondary"}>
                     {active ? t("crmMemberStatusActive") : t("crmMemberStatusInactive")}
                   </Badge>
                 </td>
-                <td className="hidden p-2 text-xs lg:table-cell">{m.birthDate || "—"}</td>
-                <td className="hidden p-2 text-xs xl:table-cell">{calcMemberAge(m.birthDate)}</td>
+                <td className="hidden whitespace-nowrap p-2 text-xs lg:table-cell">{m.birthDate || "—"}</td>
+                <td className="hidden whitespace-nowrap p-2 text-xs xl:table-cell">{calcMemberAge(m.birthDate)}</td>
               </tr>
             )
           })}
@@ -344,6 +376,8 @@ export const MemberListPanel = React.memo(
   ) {
     const { lang } = useLang()
     const t = useT(lang)
+    const { auth } = useAuth()
+    const canUseCrmDangerTools = isOfficeRole(auth?.role || "")
     const [, startTransition] = React.useTransition()
 
     const [members, setMembers] = React.useState<Member[]>([])
@@ -441,6 +475,8 @@ export const MemberListPanel = React.memo(
             memberNo: fields.memberNo,
             email: fields.email,
             birthDate: fields.birthDate,
+            joinFrom: fields.joinFrom,
+            joinTo: fields.joinTo,
             afterId,
             limit: MEMBER_PAGE_SIZE,
             status: filterStatusRef.current || "active",
@@ -519,6 +555,8 @@ export const MemberListPanel = React.memo(
           memberNo: params.fields.memberNo.trim(),
           email: params.fields.email.trim(),
           birthDate: params.fields.birthDate.trim(),
+          joinFrom: params.fields.joinFrom.trim(),
+          joinTo: params.fields.joinTo.trim(),
         }
         const nextQ = params.q.trim()
         if (!nextQ && !hasMemberSearchFields(nextFields)) {
@@ -587,6 +625,7 @@ export const MemberListPanel = React.memo(
           t("name"),
           t("memberPhone"),
           t("memberNo"),
+          t("memberJoinAt"),
           t("memberTier"),
           t("memberPointsBalance"),
           t("memberPointsTierCumulative"),
@@ -596,6 +635,7 @@ export const MemberListPanel = React.memo(
           m.name || "",
           m.phone || "",
           m.memberNo || "",
+          formatMemberJoinedAt(m.createdAt),
           m.tierCode || "",
           String(Number(m.pointBalance || 0)),
           String(Number(m.tierPoints || 0)),
@@ -661,120 +701,123 @@ export const MemberListPanel = React.memo(
                 <Download className="mr-1.5 h-3.5 w-3.5" />
                 {t("crmMemberExportCsv")}
               </CrmOutlineButton>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  setSelectedImportFileName(file ? file.name : "")
-                }}
-              />
-              <CrmOutlineButton disabled={importing} onClick={() => importFileRef.current?.click()}>
-                <Upload className="mr-1.5 h-3.5 w-3.5" />
-                {t("memberFileSelect")}
-              </CrmOutlineButton>
-              {hasImportFile ? (
-                <span className="max-w-[200px] truncate rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                  {selectedImportFileName}
-                </span>
-              ) : null}
-              <Button
-                size="sm"
-                variant={hasImportFile ? "default" : "outline"}
-                disabled={importing || !hasImportFile}
-                onClick={async () => {
-                  const file = importFileRef.current?.files?.[0]
-                  if (!file) {
-                    await appAlert(t("memberCrmFileSelectFirst"))
-                    return
-                  }
-                  setImporting(true)
-                  try {
-                    const res = await importLineCrmFile({ file })
-                    if (!res.success) {
-                      await appAlert(res.message || t("memberCrmImportFail"))
-                      return
-                    }
-                    setActionMessage(
-                      `${t("memberCrmImportDone")}: ${t("memberTotal")} ${Number(res.rowCount || 0).toLocaleString()}${t("posCount")} / ${t("memberSuccess")} ${Number(
-                        res.successCount || 0
-                      ).toLocaleString()}${t("posCount")} / ${t("memberFail")} ${Number(res.failedCount || 0).toLocaleString()}${t("posCount")}`
-                    )
-                    if (importFileRef.current) importFileRef.current.value = ""
-                    setSelectedImportFileName("")
-                    setPageCursors([undefined])
-                    setPageIndex(0)
-                    await loadPage({
-                      fields: appliedFieldsRef.current,
-                      afterId: undefined,
-                      pageIdx: 0,
-                      cursors: [undefined],
-                      isSearch: true,
-                    })
-                  } finally {
-                    setImporting(false)
-                  }
-                }}
-              >
-                {importing ? t("memberImporting") : t("memberCrmImportBtn")}
-              </Button>
-            </CrmActionBar>
-            <MemberCrmHint text={crmHintText} />
-          </div>
-
-          <Collapsible open={dangerOpen} onOpenChange={setDangerOpen}>
-            <div className="rounded-lg border border-destructive/25 bg-destructive/5">
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between px-3 py-2.5 text-left text-[11px] font-medium text-destructive/90"
-                >
-                  <span>{t("memberDangerTools")}</span>
-                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", dangerOpen && "rotate-180")} />
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="space-y-2 border-t border-destructive/20 px-3 pb-3 pt-2">
-                  <p className="text-[11px] text-destructive/80">{t("memberLineResetSectionHint")}</p>
+              {canUseCrmDangerTools ? (
+                <>
                   <Button
-                    variant="destructive"
+                    type="button"
                     size="sm"
-                    disabled={resettingLine}
-                    onClick={async () => {
-                      const ok = await appConfirm(t("memberLineResetConfirm"))
-                      if (!ok) return
-                      setResettingLine(true)
-                      try {
-                        const res = await resetLineMemberList()
-                        if (!res.success) {
-                          await appAlert(res.message || t("memberLineResetFail"))
-                          return
-                        }
-                        setActionMessage(
-                          `${t("memberLineResetDone")}: identity ${Number(res.deactivatedLineIdentities || 0).toLocaleString()} / members ${Number(res.deactivatedLineMembers || 0).toLocaleString()} / importRows ${Number(res.deletedImportRows || 0).toLocaleString()} / importJobs ${Number(res.deletedImportJobs || 0).toLocaleString()}`
-                        )
-                        setPageCursors([undefined])
-                        setPageIndex(0)
-                        await loadPage({
-                          fields: appliedFieldsRef.current,
-                          afterId: undefined,
-                          pageIdx: 0,
-                          cursors: [undefined],
-                          isSearch: true,
-                        })
-                      } finally {
-                        setResettingLine(false)
-                      }
-                    }}
+                    variant="outline"
+                    className="h-8 border-destructive/30 text-[11px] text-destructive/90 hover:bg-destructive/5 hover:text-destructive"
+                    onClick={() => setDangerOpen((v) => !v)}
+                    aria-expanded={dangerOpen}
                   >
-                    {resettingLine ? t("loading") : t("memberLineResetBtn")}
+                    {t("memberDangerTools")}
+                    <ChevronDown
+                      className={cn("ml-1.5 h-3.5 w-3.5 transition-transform", dangerOpen && "rotate-180")}
+                    />
                   </Button>
-                </div>
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
+                  {dangerOpen ? (
+                    <>
+                      <input
+                        ref={importFileRef}
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          setSelectedImportFileName(file ? file.name : "")
+                        }}
+                      />
+                      <CrmOutlineButton disabled={importing} onClick={() => importFileRef.current?.click()}>
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />
+                        {t("memberFileSelect")}
+                      </CrmOutlineButton>
+                      {hasImportFile ? (
+                        <span className="max-w-[200px] truncate rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                          {selectedImportFileName}
+                        </span>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant={hasImportFile ? "default" : "outline"}
+                        disabled={importing || !hasImportFile}
+                        onClick={async () => {
+                          const file = importFileRef.current?.files?.[0]
+                          if (!file) {
+                            await appAlert(t("memberCrmFileSelectFirst"))
+                            return
+                          }
+                          setImporting(true)
+                          try {
+                            const res = await importLineCrmFile({ file })
+                            if (!res.success) {
+                              await appAlert(res.message || t("memberCrmImportFail"))
+                              return
+                            }
+                            setActionMessage(
+                              `${t("memberCrmImportDone")}: ${t("memberTotal")} ${Number(res.rowCount || 0).toLocaleString()}${t("posCount")} / ${t("memberSuccess")} ${Number(
+                                res.successCount || 0
+                              ).toLocaleString()}${t("posCount")} / ${t("memberFail")} ${Number(res.failedCount || 0).toLocaleString()}${t("posCount")}`
+                            )
+                            if (importFileRef.current) importFileRef.current.value = ""
+                            setSelectedImportFileName("")
+                            setPageCursors([undefined])
+                            setPageIndex(0)
+                            await loadPage({
+                              fields: appliedFieldsRef.current,
+                              afterId: undefined,
+                              pageIdx: 0,
+                              cursors: [undefined],
+                              isSearch: true,
+                            })
+                          } finally {
+                            setImporting(false)
+                          }
+                        }}
+                      >
+                        {importing ? t("memberImporting") : t("memberCrmImportBtn")}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={resettingLine}
+                        title={t("memberLineResetSectionHint")}
+                        onClick={async () => {
+                          const ok = await appConfirm(t("memberLineResetConfirm"))
+                          if (!ok) return
+                          setResettingLine(true)
+                          try {
+                            const res = await resetLineMemberList()
+                            if (!res.success) {
+                              await appAlert(res.message || t("memberLineResetFail"))
+                              return
+                            }
+                            setActionMessage(
+                              `${t("memberLineResetDone")}: identity ${Number(res.deactivatedLineIdentities || 0).toLocaleString()} / members ${Number(res.deactivatedLineMembers || 0).toLocaleString()} / importRows ${Number(res.deletedImportRows || 0).toLocaleString()} / importJobs ${Number(res.deletedImportJobs || 0).toLocaleString()}`
+                            )
+                            setPageCursors([undefined])
+                            setPageIndex(0)
+                            await loadPage({
+                              fields: appliedFieldsRef.current,
+                              afterId: undefined,
+                              pageIdx: 0,
+                              cursors: [undefined],
+                              isSearch: true,
+                            })
+                          } finally {
+                            setResettingLine(false)
+                          }
+                        }}
+                      >
+                        {resettingLine ? t("loading") : t("memberLineResetBtn")}
+                      </Button>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </CrmActionBar>
+            {canUseCrmDangerTools && dangerOpen ? <MemberCrmHint text={crmHintText} /> : null}
+          </div>
 
           {errorMessage ? (
             <p className="text-xs text-destructive">{errorMessage}</p>
@@ -790,6 +833,8 @@ export const MemberListPanel = React.memo(
                       memberNo: t("memberNo"),
                       email: t("email"),
                       birthDate: t("birthDate"),
+                      joinFrom: t("memberJoinDateFrom"),
+                      joinTo: t("memberJoinDateTo"),
                     })}`
                   : ""}
                 {pageIndex > 0 ? ` · ${pageIndex + 1}` : ""}

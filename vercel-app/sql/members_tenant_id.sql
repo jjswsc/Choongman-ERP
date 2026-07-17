@@ -30,9 +30,20 @@ begin
 end $$;
 
 -- 백필: join_store_code → erp_stores.tenant_id
+-- 충만 레거시 등 erp_stores.tenant_id 가 없으면 스킵
 do $$
 begin
   if to_regclass('public.erp_stores') is null then
+    return;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'erp_stores'
+      and column_name = 'tenant_id'
+  ) then
+    raise notice 'skip members tenant backfill: erp_stores.tenant_id missing';
     return;
   end if;
 

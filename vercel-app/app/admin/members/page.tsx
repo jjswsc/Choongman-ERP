@@ -54,6 +54,7 @@ type MemberForm = {
   consentMarketing: boolean
   consentPrivacy: boolean
   consentAt: string
+  createdAt: string
   status: "active" | "inactive"
 }
 
@@ -73,6 +74,7 @@ const emptyForm: MemberForm = {
   consentMarketing: false,
   consentPrivacy: false,
   consentAt: "",
+  createdAt: "",
   status: "active",
 }
 
@@ -118,6 +120,7 @@ function memberToForm(m: Member): MemberForm {
     consentMarketing: Boolean(m.consentMarketing),
     consentPrivacy: Boolean(m.consentPrivacy),
     consentAt: toDateTimeLocalInput(m.consentAt || ""),
+    createdAt: toDateTimeLocalInput(m.createdAt || ""),
     status: m.status === "inactive" ? "inactive" : "active",
   }
 }
@@ -230,6 +233,17 @@ const MemberFormPanel = React.memo(function MemberFormPanel({
         </FormSection>
 
         <FormSection title={t("memberSectionJoin")}>
+          <div className="space-y-1.5">
+            <Label>{t("memberJoinAt")}</Label>
+            <Input
+              type="datetime-local"
+              value={form.createdAt ?? ""}
+              onChange={(e) => onFormChange({ createdAt: e.target.value })}
+            />
+            {!form.id ? (
+              <p className="text-[11px] text-muted-foreground">{t("memberJoinAtNewHint")}</p>
+            ) : null}
+          </div>
           <div className="space-y-1.5">
             <Label>{t("memberJoinChannel")}</Label>
             <Select value={form.joinChannel || "store"} onValueChange={(v) => onFormChange({ joinChannel: v })}>
@@ -467,6 +481,7 @@ export default function MembersPage() {
           consentMarketing: form.consentMarketing,
           consentPrivacy: form.consentPrivacy,
           consentAt: form.consentAt.trim(),
+          createdAt: form.createdAt.trim() || undefined,
           status: form.status,
         })
         if (!res.success || !res.member) {
@@ -493,6 +508,7 @@ export default function MembersPage() {
         consentMarketing: form.consentMarketing,
         consentPrivacy: form.consentPrivacy,
         consentAt: form.consentAt.trim(),
+        createdAt: form.createdAt.trim() || undefined,
         status: form.status,
       })
       if (!res.success || !res.member) {
@@ -509,7 +525,7 @@ export default function MembersPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[90rem] space-y-4 px-4 py-6 sm:px-6 lg:px-8">
         <CrmPageHero
           icon={Users}
           title={t("memberManagementTitle")}
@@ -547,7 +563,7 @@ export default function MembersPage() {
           />
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[min(440px,100%)_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[min(390px,100%)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4 lg:sticky lg:top-0 lg:self-start">
             <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v === "points" ? "points" : "profile")}>
               <TabsList className="grid w-full grid-cols-2">

@@ -4,7 +4,7 @@ import { processLineCrmImport } from '@/lib/line-crm-import'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers({ 'Access-Control-Allow-Origin': '*' })
-  const authRes = await requireAuth(req, 'manager')
+  const authRes = await requireAuth(req, 'office')
   if (authRes.errorResponse) return authRes.errorResponse
 
   try {

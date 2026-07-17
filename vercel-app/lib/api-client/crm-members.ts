@@ -405,6 +405,8 @@ export async function getMembersCursor(params?: {
   memberNo?: string
   email?: string
   birthDate?: string
+  joinFrom?: string
+  joinTo?: string
   afterId?: number
   limit?: number
   /** 기본 active. 'all'이면 전체 */
@@ -419,6 +421,8 @@ export async function getMembersCursor(params?: {
   if (params?.memberNo?.trim()) q.set('memberNo', params.memberNo.trim())
   if (params?.email?.trim()) q.set('email', params.email.trim())
   if (params?.birthDate?.trim()) q.set('birthDate', params.birthDate.trim())
+  if (params?.joinFrom?.trim()) q.set('joinFrom', params.joinFrom.trim())
+  if (params?.joinTo?.trim()) q.set('joinTo', params.joinTo.trim())
   if (params?.afterId != null) q.set('afterId', String(params.afterId))
   if (params?.limit != null) q.set('limit', String(params.limit))
   if (params?.status?.trim()) q.set('status', params.status.trim())
@@ -528,6 +532,7 @@ export async function updateMember(params: {
   consentMarketing?: boolean
   consentPrivacy?: boolean
   consentAt?: string
+  createdAt?: string
   status?: string
 }) {
   const res = await apiFetchWithOffline(`/api/members/${params.id}`, {
@@ -548,6 +553,7 @@ export async function updateMember(params: {
       consentMarketing: params.consentMarketing,
       consentPrivacy: params.consentPrivacy,
       consentAt: params.consentAt,
+      createdAt: params.createdAt,
       status: params.status,
     }),
   })

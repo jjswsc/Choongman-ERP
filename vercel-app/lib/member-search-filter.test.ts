@@ -3,6 +3,7 @@ import {
   buildMemberSearchPostgrestAndFilter,
   buildMemberSearchPostgrestOrFilter,
   countFilledMemberSearchFields,
+  emptyMemberSearchFieldDraft,
   hasMemberSearchFields,
   listFilledMemberSearchFields,
 } from '@/lib/member-search-filter'
@@ -36,11 +37,10 @@ describe('buildMemberSearchPostgrestOrFilter', () => {
 describe('buildMemberSearchPostgrestAndFilter', () => {
   it('joins filled fields with AND (&)', () => {
     const filter = buildMemberSearchPostgrestAndFilter({
+      ...emptyMemberSearchFieldDraft,
       name: 'Kim',
       phone: '0988583544',
       memberNo: 'M007359',
-      email: '',
-      birthDate: '',
     })
     expect(filter).toContain('name.ilike.')
     expect(filter).toContain('phone.eq.0988583544')
@@ -50,43 +50,36 @@ describe('buildMemberSearchPostgrestAndFilter', () => {
 
   it('uses birth_date eq for birth field only', () => {
     const filter = buildMemberSearchPostgrestAndFilter({
-      name: '',
-      phone: '',
-      memberNo: '',
-      email: '',
+      ...emptyMemberSearchFieldDraft,
       birthDate: '1990-05-15',
     })
     expect(filter).toBe('birth_date.eq.1990-05-15')
   })
 
+  it('filters created_at by join date range', () => {
+    const filter = buildMemberSearchPostgrestAndFilter({
+      ...emptyMemberSearchFieldDraft,
+      joinFrom: '2026-01-01',
+      joinTo: '2026-01-31',
+    })
+    expect(filter).toContain('created_at=gte.2026-01-01T00%3A00%3A00')
+    expect(filter).toContain('created_at=lte.2026-01-31T23%3A59%3A59')
+  })
+
   it('returns empty when all fields blank', () => {
-    expect(
-      buildMemberSearchPostgrestAndFilter({
-        name: '',
-        phone: '',
-        memberNo: '',
-        email: '',
-        birthDate: '',
-      })
-    ).toBe('')
-    expect(hasMemberSearchFields({
-      name: '',
-      phone: '',
-      memberNo: '',
-      email: '',
-      birthDate: '',
-    })).toBe(false)
+    expect(buildMemberSearchPostgrestAndFilter({ ...emptyMemberSearchFieldDraft })).toBe('')
+    expect(hasMemberSearchFields({ ...emptyMemberSearchFieldDraft })).toBe(false)
   })
 
   it('lists all filled keys for chips', () => {
     const fields = {
+      ...emptyMemberSearchFieldDraft,
       name: 'Jane',
       phone: '01',
-      memberNo: '',
       email: 'j@example.com',
-      birthDate: '',
+      joinFrom: '2026-07-01',
     }
-    expect(listFilledMemberSearchFields(fields)).toEqual(['name', 'phone', 'email'])
-    expect(countFilledMemberSearchFields(fields)).toBe(3)
+    expect(listFilledMemberSearchFields(fields)).toEqual(['name', 'phone', 'email', 'joinFrom'])
+    expect(countFilledMemberSearchFields(fields)).toBe(4)
   })
 })

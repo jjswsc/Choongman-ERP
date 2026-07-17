@@ -187,6 +187,8 @@ export type UpdateMemberInput = {
   consentMarketing?: boolean
   consentPrivacy?: boolean
   consentAt?: string
+  /** 가입일시(created_at). 비우면 변경하지 않음 */
+  createdAt?: string
   status?: string
   tenantScope?: MembersTenantScope
 }
@@ -396,6 +398,8 @@ function normalizeMemberSearchFields(fields?: MemberSearchFieldDraft | null): Me
     memberNo: toText(fields.memberNo),
     email: toText(fields.email),
     birthDate: toText(fields.birthDate),
+    joinFrom: toText(fields.joinFrom),
+    joinTo: toText(fields.joinTo),
   }
 }
 
@@ -1009,6 +1013,15 @@ export async function updateMember(input: UpdateMemberInput): Promise<MemberSumm
   if (input.consentMarketing != null) patch.consent_marketing = Boolean(input.consentMarketing)
   if (input.consentPrivacy != null) patch.consent_privacy = Boolean(input.consentPrivacy)
   if (input.consentAt != null) patch.consent_at = toText(input.consentAt) || null
+  if (input.createdAt != null) {
+    const createdAt = toText(input.createdAt).replace('T', ' ')
+    if (createdAt) {
+      // datetime-local은 초가 없을 수 있음 → 비교·표시용으로 초 보정
+      patch.created_at = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(createdAt)
+        ? `${createdAt}:00`
+        : createdAt
+    }
+  }
   if (input.status != null) patch.status = toText(input.status) || 'active'
   try {
     await supabaseUpdateByFilter(

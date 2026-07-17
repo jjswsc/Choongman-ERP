@@ -121,7 +121,7 @@ export function SalesManagementSummaryInsights({
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</span>
+                  <span className="text-muted-foreground">{tr("salesNetGross", "총액(할인·서비스 전)")}</span>
                   <span className={`font-semibold ${ADMIN_NUMERIC_CN}`}>
                     {formatSalesAmount(activeTotalsSummary.gross)}
                   </span>

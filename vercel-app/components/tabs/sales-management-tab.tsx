@@ -127,6 +127,7 @@ import {
   resolveDefaultSalesLanding,
   SALES_FILTER_PRESET_STORAGE_KEY,
   SALES_ORDER_TYPE_TOGGLES,
+  salesWaterfallGross,
   sumStoreSalesTotals,
   type SalesFilterPreset,
   type StoreSalesAggregateRow,
@@ -1002,12 +1003,19 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const discount = periodChartRows.reduce((a, x) => a + Number(x.discount ?? 0), 0)
     const service = periodChartRows.reduce((a, x) => a + Number(x.service ?? 0), 0)
     const total = periodChartRows.reduce((a, x) => a + Number(x.total ?? x.sales ?? 0), 0)
-    return { subtotal, vat, discount, service, total, gross: subtotal + vat }
+    return {
+      subtotal,
+      vat,
+      discount,
+      service,
+      total,
+      gross: salesWaterfallGross({ total, discount, service }),
+    }
   }, [periodChartRows])
 
   const storeTotalsSummary = React.useMemo(() => {
     const t = sumStoreSalesTotals(scopedStoreData)
-    return { ...t, gross: t.subtotal + t.vat }
+    return { ...t, gross: salesWaterfallGross(t) }
   }, [scopedStoreData])
 
   const paymentTotalsSummary = React.useMemo(() => {
@@ -1019,7 +1027,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const activeTotalsSummary = React.useMemo(() => {
     if (scopedStoreData.length > 0 && (selectedStoresParam?.length ?? 0) > 0) {
       const t = sumStoreSalesTotals(scopedStoreData)
-      return { ...t, gross: t.subtotal + t.vat }
+      return { ...t, gross: salesWaterfallGross(t) }
     }
     if (
       selectedView === "store" ||

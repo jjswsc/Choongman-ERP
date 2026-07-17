@@ -15,6 +15,10 @@ export type MemberSearchFieldDraft = {
   memberNo: string
   email: string
   birthDate: string
+  /** 가입일(created_at) 시작 YYYY-MM-DD */
+  joinFrom: string
+  /** 가입일(created_at) 종료 YYYY-MM-DD */
+  joinTo: string
 }
 
 export const emptyMemberSearchFieldDraft: MemberSearchFieldDraft = {
@@ -23,6 +27,8 @@ export const emptyMemberSearchFieldDraft: MemberSearchFieldDraft = {
   memberNo: '',
   email: '',
   birthDate: '',
+  joinFrom: '',
+  joinTo: '',
 }
 
 export type MemberSearchFieldKey = keyof MemberSearchFieldDraft
@@ -33,6 +39,8 @@ const MEMBER_SEARCH_FIELD_KEYS: MemberSearchFieldKey[] = [
   'memberNo',
   'email',
   'birthDate',
+  'joinFrom',
+  'joinTo',
 ]
 
 export function listFilledMemberSearchFields(fields: MemberSearchFieldDraft): MemberSearchFieldKey[] {
@@ -99,6 +107,24 @@ function buildBirthDateFilter(value: string): string {
   return `birth_date.eq.${encodeURIComponent(birthIso)}`
 }
 
+function isYmd(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+/** 가입일(created_at) 범위 — 방콕 달력일 기준 문자열 비교 (쿠폰 오디언스와 동일) */
+function buildJoinDateRangeFilter(joinFrom: string, joinTo: string): string {
+  const from = toText(joinFrom)
+  const to = toText(joinTo)
+  const parts: string[] = []
+  if (isYmd(from)) {
+    parts.push(`created_at=gte.${encodeURIComponent(`${from}T00:00:00`)}`)
+  }
+  if (isYmd(to)) {
+    parts.push(`created_at=lte.${encodeURIComponent(`${to}T23:59:59`)}`)
+  }
+  return parts.join('&')
+}
+
 /**
  * 필드별 조건을 `&` 로 이어 PostgREST AND 검색.
  * 각 필드 내부(이름 OR LINE표시명 등)는 or=() 유지.
@@ -110,6 +136,7 @@ export function buildMemberSearchPostgrestAndFilter(fields: MemberSearchFieldDra
     buildMemberNoFilter(fields.memberNo),
     buildEmailFilter(fields.email),
     buildBirthDateFilter(fields.birthDate),
+    buildJoinDateRangeFilter(fields.joinFrom, fields.joinTo),
   ]
     .filter(Boolean)
     .join('&')

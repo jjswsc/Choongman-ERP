@@ -262,7 +262,7 @@ function detectHeaderRowIndex(data: unknown[][]): number {
   return bestScore >= 2 ? bestIndex : 0
 }
 
-function parseSheetRows(data: unknown[][]): {
+export function parseSheetRows(data: unknown[][]): {
   reportType: ReportType
   rows: ParsedRow[]
   meta: ReportMeta
@@ -356,10 +356,16 @@ function parseSheetRows(data: unknown[][]): {
     const lastName = idx.lastName >= 0 ? String(row[idx.lastName] || '').trim() : ''
     const phone = idx.phone >= 0 ? normalizePhone(String(row[idx.phone] || '')) : ''
     let fullName = idx.fullName >= 0 ? String(row[idx.fullName] || '').trim() : ''
-    if (!fullName && (firstName || lastName)) {
-      fullName = `${firstName} ${lastName}`.trim()
+    const composedName = `${firstName} ${lastName}`.trim()
+    // LINE 리포트에 Name=이름만, First/Last가 따로 있는 경우 Name만 쓰면 성이 누락됨
+    if (firstName && lastName) {
+      if (!fullName || fullName === firstName || fullName === lastName) {
+        fullName = composedName
+      }
+    } else if (!fullName && composedName) {
+      fullName = composedName
     }
-    const finalDisplayName = lineDisplayName || firstName
+    const finalDisplayName = lineDisplayName || fullName || firstName
     const age = idx.age >= 0 ? toNumber(row[idx.age]) : 0
     const email = idx.email >= 0 ? String(row[idx.email] || '').trim().toLowerCase() : ''
     const birthDate = idx.birthDate >= 0 ? normalizeDate(row[idx.birthDate]) : ''
@@ -598,12 +604,22 @@ async function findMemberIdByLineDisplayName(lineDisplayName: string): Promise<n
   return Number(rows?.[0]?.id || 0)
 }
 
+/** CSV/TSV는 SheetJS 기본 코드페이지(Latin1)로 읽으면 태국어가 깨지므로 UTF-8(65001) 고정 */
+export function readLineCrmWorkbook(fileName: string, fileBuffer: ArrayBuffer): XLSX.WorkBook {
+  const lower = String(fileName || '').toLowerCase()
+  const isTextSheet = lower.endsWith('.csv') || lower.endsWith('.tsv') || lower.endsWith('.txt')
+  return XLSX.read(new Uint8Array(fileBuffer), {
+    type: 'array',
+    ...(isTextSheet ? { codepage: 65001 } : {}),
+  })
+}
+
 export async function processLineCrmImport(params: {
   fileName: string
   fileBuffer: ArrayBuffer
   createdBy?: string
 }): Promise<LineCrmImportResult> {
-  const wb = XLSX.read(new Uint8Array(params.fileBuffer), { type: 'array' })
+  const wb = readLineCrmWorkbook(params.fileName, params.fileBuffer)
   const ws = wb.Sheets[wb.SheetNames[0] || 'Sheet1']
   if (!ws) return { success: false, message: '시트를 찾을 수 없습니다.' }
 
@@ -670,6 +686,7 @@ export async function processLineCrmImport(params: {
       if (!memberId && row.birthDate) {
         memberId = await findMemberIdByBirthDateSingleton(row.birthDate)
       }
+      let createdThisRow = false
       if (!memberId) {
         if (!isUsableImportName(importName) || !isValidThaiMobilePhone(row.phone)) {
           throw new Error('skip: refuse create without valid name+phone')
@@ -684,6 +701,7 @@ export async function processLineCrmImport(params: {
           source: 'line_import',
         })
         memberId = Number(created.id || 0)
+        createdThisRow = true
       }
       if (!memberId) throw new Error('회원 생성/조회 실패')
 
@@ -724,6 +742,8 @@ export async function processLineCrmImport(params: {
         line_member_status: row.memberStatus || null,
         line_registered_at: row.registeredAt || null,
         line_exported_at: parsed.meta.exportedAt || null,
+        // 신규 시에만 LINE Registered Date → created_at (기존 회원 가입일 덮어쓰기 방지)
+        ...(createdThisRow && row.registeredAt ? { created_at: row.registeredAt } : {}),
         tier_code: membershipTierCode || undefined,
         ...pointPatch,
         updated_at: now,

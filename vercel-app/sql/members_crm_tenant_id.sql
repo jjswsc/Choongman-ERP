@@ -34,20 +34,39 @@ begin
   create unique index if not exists uq_member_signup_store_goals_tenant_store_month
     on public.member_signup_store_goals (tenant_id, store_code, month_ymd);
 
-  if to_regclass('public.erp_stores') is not null then
+  if to_regclass('public.erp_stores') is not null
+     and exists (
+       select 1 from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'erp_stores'
+         and column_name = 'tenant_id'
+     ) then
     update public.member_signup_store_goals g
     set tenant_id = es.tenant_id
     from public.erp_stores es
     where coalesce(trim(g.tenant_id), '') = ''
       and nullif(trim(es.tenant_id), '') is not null
       and lower(trim(coalesce(g.store_code, ''))) = lower(trim(coalesce(es.store_code, '')));
+  else
+    raise notice 'skip member_signup_store_goals backfill: erp_stores.tenant_id missing';
   end if;
 end $$;
 
 -- 0b) members.tenant_id 백필 (join_store_code → erp_stores)
+-- 충만 레거시 등 erp_stores.tenant_id 가 없으면 스킵
 do $$
 begin
   if to_regclass('public.erp_stores') is null then
+    return;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'erp_stores'
+      and column_name = 'tenant_id'
+  ) then
+    raise notice 'skip members tenant backfill: erp_stores.tenant_id missing';
     return;
   end if;
 

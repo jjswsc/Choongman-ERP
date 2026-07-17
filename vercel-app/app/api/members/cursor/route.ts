@@ -11,6 +11,8 @@ function readSearchFields(searchParams: URLSearchParams): MemberSearchFieldDraft
     memberNo: searchParams.get('memberNo') || '',
     email: searchParams.get('email') || '',
     birthDate: searchParams.get('birthDate') || '',
+    joinFrom: searchParams.get('joinFrom') || '',
+    joinTo: searchParams.get('joinTo') || '',
   }
 }
 

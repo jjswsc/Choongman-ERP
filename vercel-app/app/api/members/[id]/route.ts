@@ -63,6 +63,7 @@ export async function PATCH(
       consentMarketing?: boolean
       consentPrivacy?: boolean
       consentAt?: string
+      createdAt?: string
       status?: string
     }
     const member = await updateMember({
@@ -81,6 +82,7 @@ export async function PATCH(
       consentMarketing: body.consentMarketing,
       consentPrivacy: body.consentPrivacy,
       consentAt: body.consentAt,
+      createdAt: body.createdAt,
       status: body.status,
       tenantScope,
     })
