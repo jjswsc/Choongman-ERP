@@ -363,6 +363,8 @@ export type MemberPortalKey =
   | 'couponQrTitle'
   | 'couponQrHint'
   | 'scanCouponAtStore'
+  | 'couponQrManualCodeLabel'
+  | 'couponQrManualEntryHint'
   | 'pwaInstallTitle'
   | 'pwaInstallDesc'
   | 'pwaInstallBtn'
@@ -1561,9 +1563,19 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '결제 시 카운터에서 보여 주세요',
   },
   scanCouponAtStore: {
-    en: 'Staff will scan this QR at POS payment',
-    th: 'พนักงานจะสแกน QR นี้ตอนชำระเงินที่ POS',
-    ko: '매장 POS 결제 화면에서 QR을 스캔합니다',
+    en: 'Staff: scan this QR at POS, or type the coupon code below if there is no scanner',
+    th: 'พนักงาน: สแกน QR ที่ POS หรือพิมพ์รหัสคูปองด้านล่างถ้าไม่มีเครื่องสแกน',
+    ko: '매장: POS에서 QR 스캔, 스캐너가 없으면 아래 쿠폰 코드를 입력하세요',
+  },
+  couponQrManualCodeLabel: {
+    en: 'Coupon code',
+    th: 'รหัสคูปอง',
+    ko: '쿠폰 코드',
+  },
+  couponQrManualEntryHint: {
+    en: 'Type into the POS coupon field (link member first if needed)',
+    th: 'พิมพ์ในช่องคูปองที่ POS (ถ้าจำเป็นให้ผูกสมาชิกก่อน)',
+    ko: 'POS 쿠폰 입력란에 입력 (필요 시 회원 연결 후)',
   },
   pwaInstallTitle: {
     en: 'Install as app',

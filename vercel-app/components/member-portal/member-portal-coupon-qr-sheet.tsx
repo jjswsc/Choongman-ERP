@@ -26,18 +26,22 @@ export function MemberPortalCouponQrSheet({
 }: MemberPortalCouponQrSheetProps) {
   const { t } = useMemberPortalLang()
   const [qrDataUrl, setQrDataUrl] = React.useState("")
+  const displayCode = String(couponCode ?? "").trim().toUpperCase()
+  const qrPayload = React.useMemo(
+    () => buildMemberCouponQrPayload({ memberNo, couponCode: displayCode, issueId }),
+    [memberNo, displayCode, issueId]
+  )
 
   React.useEffect(() => {
     if (!open) {
       setQrDataUrl("")
       return
     }
-    const payload = buildMemberCouponQrPayload({ memberNo, couponCode, issueId })
-    if (!payload) return
-    QRCode.toDataURL(payload, { width: 280, margin: 1, errorCorrectionLevel: "H" })
+    if (!qrPayload) return
+    QRCode.toDataURL(qrPayload, { width: 280, margin: 1, errorCorrectionLevel: "H" })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(""))
-  }, [open, memberNo, couponCode, issueId])
+  }, [open, qrPayload])
 
   React.useEffect(() => {
     if (!open) return
@@ -86,8 +90,8 @@ export function MemberPortalCouponQrSheet({
           </div>
         </div>
 
-        <p className="mt-4 font-mono text-lg font-semibold tracking-wide text-amber-800">{couponCode}</p>
-        {couponName && couponName !== couponCode ? (
+        <p className="mt-4 font-mono text-lg font-semibold tracking-wide text-amber-800">{displayCode}</p>
+        {couponName && couponName !== displayCode ? (
           <p className="mt-0.5 text-xs text-stone-500">{couponName}</p>
         ) : null}
 
@@ -98,6 +102,23 @@ export function MemberPortalCouponQrSheet({
             <p className="text-center text-xs text-stone-400">…</p>
           )}
         </div>
+
+        {displayCode ? (
+          <div className="mt-3 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2.5 text-center">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-stone-400">
+              {t("couponQrManualCodeLabel")}
+            </p>
+            <p
+              className="mt-0.5 select-all font-mono text-lg font-semibold tracking-wider text-stone-800"
+              aria-label={t("couponQrManualCodeLabel")}
+            >
+              {displayCode}
+            </p>
+            <p className="mt-1.5 text-[10px] leading-snug text-stone-400">
+              {t("couponQrManualEntryHint")}
+            </p>
+          </div>
+        ) : null}
 
         <p className="mt-3 text-center text-[11px] text-stone-400">{t("scanCouponAtStore")}</p>
 
