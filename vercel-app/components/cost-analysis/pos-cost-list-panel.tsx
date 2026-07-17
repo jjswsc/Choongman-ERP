@@ -28,6 +28,7 @@ import { useT } from "@/lib/i18n"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
 import {
   POS_MAIN_CATEGORIES,
   getPresetCategoriesForMain,
@@ -469,7 +470,7 @@ export function PosCostListPanel({
           ) : null}
 
           <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="overflow-x-auto max-h-[min(70vh,900px)] overflow-y-auto">
+            <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(70vh,900px)]")}>
               <table className="w-full text-sm min-w-[980px] table-fixed">
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
                   <tr className="border-b">

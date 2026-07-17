@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ADMIN_TABLE_SCROLL_PANEL_CN } from "@/lib/admin-ui-standards"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
@@ -405,8 +406,7 @@ export function EmployeeEvalListTab({ stores, onEditInEvalTab }: EmployeeEvalLis
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <div className="max-h-[480px] overflow-y-auto">
+      <div className={`${ADMIN_TABLE_SCROLL_PANEL_CN} rounded-lg border border-border bg-card`}>
           <table className="w-full text-xs">
             <thead>
               <tr className="sticky top-0 z-10 border-b bg-[#1E293B] text-white">
@@ -525,7 +525,6 @@ export function EmployeeEvalListTab({ stores, onEditInEvalTab }: EmployeeEvalLis
               )}
             </tbody>
           </table>
-        </div>
         {!loading && list.length > 0 && (
           <p className="border-t px-3 py-2 text-xs text-muted-foreground">
             {list.length}

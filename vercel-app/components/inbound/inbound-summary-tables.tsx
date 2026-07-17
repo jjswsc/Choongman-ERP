@@ -4,7 +4,7 @@ import * as React from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
-import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_NUMERIC_CN, ADMIN_TABLE_SCROLL_PANEL_CN } from "@/lib/admin-ui-standards"
 import { formatErpNum } from "@/lib/utils"
 import { BarChart3 } from "lucide-react"
 
@@ -158,7 +158,7 @@ function SummaryTable({
   totalCells: string[]
 }) {
   return (
-    <div className="overflow-x-auto max-h-[480px]">
+    <div className={ADMIN_TABLE_SCROLL_PANEL_CN}>
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
           <tr className="border-b">

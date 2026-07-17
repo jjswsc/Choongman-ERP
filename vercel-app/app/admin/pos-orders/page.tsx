@@ -91,6 +91,8 @@ import {
   ADMIN_BTN_XS_CN,
   ADMIN_DIALOG_SCROLL_CN,
   ADMIN_NUMERIC_CN,
+  ADMIN_TABLE_SCROLL_PANEL_CN,
+  ADMIN_TABLE_SCROLL_VIEWPORT_CN,
 } from "@/lib/admin-ui-standards"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { useErpActiveSubscription, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
@@ -1992,7 +1994,7 @@ export default function PosOrdersPage() {
               />
             ) : (
             <div className="rounded-xl border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
@@ -2463,7 +2465,7 @@ export default function PosOrdersPage() {
               </span>
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
@@ -2708,7 +2710,7 @@ export default function PosOrdersPage() {
               </div>
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
                 {attemptsLoading ? (
                   <AdminTableSkeleton columns={8} rows={8} className="border-0 rounded-none" />
                 ) : (
@@ -2830,7 +2832,7 @@ export default function PosOrdersPage() {
               </div>
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
@@ -2954,7 +2956,7 @@ export default function PosOrdersPage() {
           </TabsContent>
           <TabsContent value="grabIntegration" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
@@ -3026,7 +3028,7 @@ export default function PosOrdersPage() {
               </div>
             ) : (
               <div className="rounded-xl border bg-card overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className={ADMIN_TABLE_SCROLL_PANEL_CN}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">

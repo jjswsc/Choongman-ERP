@@ -67,6 +67,7 @@ import {
   type InboundTableRow,
 } from "@/components/inbound"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 import { parsePurchaseOrderCart } from "@/lib/purchase-order-cart"
 import {
   buildInboundPrintHtmlBulk,
@@ -1658,7 +1659,7 @@ export default function InboundPage() {
               onHistPurchaseSourceChange={setHistPurchaseSource}
               onSearch={fetchHistory}
             />
-            <div className="overflow-x-auto overflow-y-auto max-h-[70vh] min-h-[320px]">
+            <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "min-h-[320px] max-h-[70vh]")}>
               <InboundTable
                 rows={inboundTableRows}
                 loading={historyLoading}

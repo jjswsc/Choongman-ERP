@@ -87,7 +87,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
-import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
+import {
+  ADMIN_BTN_XS_CN,
+  ADMIN_TABLE_SCROLL_PANEL_CN,
+  ADMIN_TABLE_SCROLL_PANEL_SM_CN,
+  ADMIN_TABLE_SCROLL_VIEWPORT_TALL_CN,
+} from "@/lib/admin-ui-standards"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "Head Office", "HQ", "Head office", "head office"]
 
@@ -1948,7 +1953,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         {t("outWaitList")} <span className="badge bg-muted px-2 py-0.5 rounded text-xs">{cart.length}</span>
                       </h3>
                     </div>
-                    <div className="overflow-x-auto max-h-[400px]">
+                    <div className={ADMIN_TABLE_SCROLL_PANEL_SM_CN}>
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b">
@@ -2435,7 +2440,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       {t("outExcelDownload")}
                     </Button>
                   </div>
-                  <div className="overflow-x-auto max-h-[480px]">
+                  <div className={ADMIN_TABLE_SCROLL_PANEL_CN}>
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                         <tr className="border-b">
@@ -2508,7 +2513,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       {t("outExcelDownload")}
                     </Button>
                   </div>
-                  <div className="overflow-x-auto max-h-[480px]">
+                  <div className={ADMIN_TABLE_SCROLL_PANEL_CN}>
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                         <tr className="border-b">
@@ -2623,7 +2628,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               deleteBusy={deletingOutbound}
               selectedCount={selectedForPrint.size}
             />
-            <div className="overflow-x-auto max-h-[500px]">
+            <div className={ADMIN_TABLE_SCROLL_VIEWPORT_TALL_CN}>
               <ShipmentTable
                 isOffice={isOffice}
                 canEditLogUnitPrice={canEditOutboundLogUnitPrice}

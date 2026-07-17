@@ -29,7 +29,7 @@ import type { StockStatusItem } from "@/lib/api-client"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
-import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -272,9 +272,9 @@ ${filteredList.map((r) => {
         </AdminFilterBar>
       </div>
 
-      <div className="overflow-x-auto" ref={tableRef}>
+      <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN} ref={tableRef}>
         <table className="w-full text-left text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>

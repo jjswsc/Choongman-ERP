@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { cn } from "@/lib/utils"
+import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 
 export interface Vendor {
   code: string
@@ -114,7 +115,7 @@ export function VendorTable({
         </Button>
       </div>
 
-      <div className="min-h-0 max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-scroll">
+      <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "max-h-[calc(100vh-14rem)]")}>
         <table className="w-full text-left text-sm table-fixed">
           <colgroup>
             <col className="w-[72px]" />

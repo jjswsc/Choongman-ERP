@@ -235,9 +235,9 @@ export function InboundTable({
           )}
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div>
         <table className="w-full text-xs">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-[#1E293B] text-white">
               {showBulk && (
                 <th className="w-9 px-1 py-2.5 text-center">

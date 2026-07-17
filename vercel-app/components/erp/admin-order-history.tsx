@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerRole } from "@/lib/permissions"
+import { ADMIN_TABLE_SCROLL_PANEL_CN } from "@/lib/admin-ui-standards"
 import {
   getAdminOrders,
   getOrderFilterOptions,
@@ -666,7 +667,7 @@ ${rowsToPrint.map((r) => {
       </div>
 
       <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <div className={ADMIN_TABLE_SCROLL_PANEL_CN}>
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-muted/80 backdrop-blur">
               <tr>

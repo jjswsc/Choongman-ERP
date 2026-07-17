@@ -30,6 +30,7 @@ import {
   filterStockListRows,
   type StockViewKind,
 } from "@/lib/stock-history-filter"
+import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 import { useItemCategoryOptions } from "@/lib/use-item-category-options"
 
 interface StockListRow {
@@ -302,12 +303,12 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
         </AdminFilterBar>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
         {storeRequired ? (
           <div className="px-4 py-12 text-center text-sm text-muted-foreground">{storeRequiredMessage}</div>
         ) : viewKind === "list" ? (
           <table className="w-full text-left text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">
                   {t("stockColCode")}
@@ -375,7 +376,7 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
           </table>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground w-28 min-w-[90px] whitespace-nowrap text-center">
                   {t("stockHistColDate")}

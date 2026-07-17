@@ -139,7 +139,7 @@ import {
   normalizeOptionGroupsForMenu,
   syncOptionSelectionConfigToGroupKeys,
 } from "@/lib/pos-option-selection-groups"
-import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-storage-path"
 import {
   menuHasPersistedStoreScope,
@@ -5182,7 +5182,7 @@ export default function PosMenusPage() {
                 className="h-9 flex-1 text-xs"
               />
             </div>
-            <div className="min-h-0 max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-scroll">
+            <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "max-h-[calc(100vh-14rem)]")}>
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
                   <tr className="border-b bg-muted/30">

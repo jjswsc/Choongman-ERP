@@ -196,9 +196,9 @@ export function ShipmentTable({
   /* 매장: 출고 행이 있으면 출고 테이블(인보이스 인쇄) 표시, 없으면 사용 내역 테이블 표시 */
   if (!isOffice && rows.length === 0) {
     return (
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <div className="rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-[#1E293B] text-white">
               <th className="px-3 py-3 text-center text-xs font-semibold tracking-wide whitespace-nowrap">{t("stockColDate")}</th>
               <th className="px-3 py-3 text-left text-xs font-semibold tracking-wide">{t("outColItem")}</th>
@@ -304,7 +304,7 @@ export function ShipmentTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div className="rounded-lg border border-border bg-card">
       <table className="w-full min-w-[1180px] table-fixed border-collapse text-xs sm:text-[13px]">
         <colgroup>
           <col style={{ width: "36px" }} />
@@ -319,7 +319,7 @@ export function ShipmentTable({
           <col style={{ width: "64px" }} />
           <col style={{ width: "120px" }} />
         </colgroup>
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-[#1E293B] text-white">
             <th className="px-2 py-2.5 text-center sm:px-2.5 sm:py-3">
               <input

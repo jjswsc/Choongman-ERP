@@ -32,7 +32,7 @@ import { useT } from "@/lib/i18n"
 import { appAlert } from "@/lib/app-message"
 import { addBangkokCalendarDays, getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_PANEL_WARNING_CN, ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
 import {
   getHqWarehouseDailyStockMatrix,
   type HqWarehouseDailyItemRow,
@@ -527,7 +527,7 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
           <div className="border-b bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground print:hidden">
             {filteredItems.length} items · {t("stockDailyMatrixScrollHint")}
           </div>
-          <div className="overflow-x-auto max-h-[min(72vh,760px)]">
+          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(72vh,760px)]")}>
             <table className="w-full text-[12px] border-collapse min-w-[960px]">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b">

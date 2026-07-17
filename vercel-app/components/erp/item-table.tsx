@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
-import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_NUMERIC_CN, ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/app/admin/items/page"
 
@@ -139,7 +139,7 @@ export function ItemTable({
       </div>
 
       {/* Table */}
-      <div className="min-h-0 max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-scroll">
+      <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "max-h-[calc(100vh-14rem)]")}>
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">

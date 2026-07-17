@@ -36,6 +36,7 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import Link from "next/link"
+import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 import { Badge } from "@/components/ui/badge"
 import {
   Printer,
@@ -642,9 +643,9 @@ ${allRows.map((row, ri) => {
         ) : filteredList.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("poHistoryNoMatch")}</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN}>
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                 <tr className="border-b border-border bg-muted/50">
                   <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("poHistoryColOrigin")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poNo")}</th>

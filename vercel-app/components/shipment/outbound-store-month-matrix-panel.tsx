@@ -20,6 +20,7 @@ import {
   type OutboundStoreMonthMatrixResult,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
 
 function defaultMatrixYear(): number {
   return Number(getBangkokTodayDateString().slice(0, 4))
@@ -359,7 +360,7 @@ export function OutboundStoreMonthMatrixPanel({
         ) : !data || data.stores.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">{t("outNoData")}</div>
         ) : singleMonthMode ? (
-          <div className="overflow-x-auto max-h-[min(70vh,720px)]">
+          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(70vh,720px)]")}>
             <table className="w-full text-xs border-collapse min-w-[720px]">
               <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                 <tr className="border-b">
@@ -420,7 +421,7 @@ export function OutboundStoreMonthMatrixPanel({
             </table>
           </div>
         ) : (
-          <div className="overflow-x-auto max-h-[min(70vh,720px)]">
+          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(70vh,720px)]")}>
             <table className="w-full text-xs border-collapse min-w-[960px]">
               <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                 <tr className="border-b">

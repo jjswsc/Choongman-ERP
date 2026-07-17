@@ -10,6 +10,7 @@ import {
   addEvaluationItem,
   deleteEvaluationItem,
 } from "@/lib/api-client"
+import { ADMIN_TABLE_SCROLL_PANEL_SM_CN } from "@/lib/admin-ui-standards"
 import {
   Dialog,
   DialogContent,
@@ -218,7 +219,7 @@ export function EmployeeEvalSettingTab({
         <p className="text-sm text-muted-foreground mb-4">{t(descKey)}</p>
       )}
 
-      <div className="overflow-x-auto max-h-[400px] rounded border border-border">
+      <div className={`${ADMIN_TABLE_SCROLL_PANEL_SM_CN} rounded border border-border`}>
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>

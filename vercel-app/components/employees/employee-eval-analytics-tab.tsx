@@ -27,6 +27,8 @@ import {
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { appAlert } from "@/lib/app-message"
 import { shouldRedirectToAdminLoginAfterEvalAnalyticsError } from "@/lib/eval-analytics-http-error"
+import { cn } from "@/lib/utils"
+import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -499,7 +501,7 @@ export function EmployeeEvalAnalyticsTab({
             {data.byEvaluator.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t("emp_result_empty")}</p>
             ) : (
-              <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+              <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[280px]")}>
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-card">
                     <tr className="border-b text-left text-xs text-muted-foreground">

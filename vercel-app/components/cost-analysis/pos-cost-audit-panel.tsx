@@ -16,6 +16,7 @@ import { useT } from "@/lib/i18n"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { getPosCostAnalysisAudit, type PosCostAnalysisAuditRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 type Props = {
@@ -229,7 +230,7 @@ export function PosCostAuditPanel({ allowed }: Props) {
         </div>
       ) : (
         <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="overflow-x-auto max-h-[min(65vh,800px)] overflow-y-auto">
+          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(65vh,800px)]")}>
             <table className="w-full text-sm min-w-[960px]">
               <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
                 <tr className="border-b">

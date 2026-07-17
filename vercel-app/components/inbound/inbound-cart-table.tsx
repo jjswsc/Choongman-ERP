@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
-import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_TABLE_SCROLL_PANEL_SM_CN } from "@/lib/admin-ui-standards"
 import { formatErpNum, normalizeErpDecimalInput, roundErp3, formatErpCostInputString } from "@/lib/utils"
 
 export type InboundCartLine = {
@@ -78,7 +78,7 @@ export function InboundCartTable({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto max-h-[400px]">
+      <div className={ADMIN_TABLE_SCROLL_PANEL_SM_CN}>
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
             <tr className="border-b">
