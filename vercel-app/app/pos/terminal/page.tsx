@@ -120,6 +120,11 @@ import { posOrderCouponFieldsFromOrderRow, posOrderCouponFieldsFromPayload } fro
 import { posOrderTierDiscountFieldsFromPayload } from '@/lib/pos-order-tier-discount-fields'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { mapDineInAddonCartLineForKitchenPrint, mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
+import {
+  classifyKitchenAutoprintFailure,
+  shouldShowKitchenAutoprintNotice,
+} from '@/lib/pos-kitchen-autoprint-notice'
+import { markKitchenPrintFailure } from '@/lib/pos-kitchen-print-tracking'
 import { isBanbanKitchenLine } from '@/lib/pos-banban-utils'
 import {
   buildOptionNameByCodeFromMenus,
@@ -695,6 +700,20 @@ export default function PosTerminalPage() {
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = useState(false)
+  /** 주방 자동인쇄 실패 — 서버/네트워크 끊김 시 조용히 스킵되지 않도록 상단 안내 */
+  const [kitchenAutoprintNotice, setKitchenAutoprintNotice] = useState<{
+    text: string
+    orderRef?: string
+  } | null>(null)
+  const kitchenAutoprintNoticeShownAtRef = useRef(0)
+  const kitchenAutoprintNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (kitchenAutoprintNoticeTimerRef.current != null) {
+        clearTimeout(kitchenAutoprintNoticeTimerRef.current)
+      }
+    }
+  }, [])
   const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = useState(false)
   const [receiptBizName, setReceiptBizName] = useState('')
   const [receiptBizTaxId, setReceiptBizTaxId] = useState('')
@@ -2207,6 +2226,49 @@ export default function PosTerminalPage() {
     [currentStoreId, isMainPosDevice]
   )
 
+  const notifyKitchenAutoprintFailure = useCallback(
+    (params: { error: unknown; orderRef?: string; flow?: string }) => {
+      const kind = classifyKitchenAutoprintFailure(params.error)
+      if (kind === 'skip') return
+      const orderRef = String(params.orderRef ?? '').trim()
+      const message = params.error instanceof Error ? params.error.message : String(params.error ?? '')
+      if (orderRef) {
+        markKitchenPrintFailure({
+          orderRef,
+          reason: `${kind}:${message || 'kitchen_autoprint_failed'}`,
+        })
+      }
+      logPosPrintDebug('kitchen_autoprint_notice', {
+        kind,
+        flow: params.flow,
+        orderRef,
+        message,
+      })
+      const now = Date.now()
+      if (!shouldShowKitchenAutoprintNotice(kitchenAutoprintNoticeShownAtRef.current, now)) return
+      kitchenAutoprintNoticeShownAtRef.current = now
+      const text =
+        kind === 'network'
+          ? t('posKitchenAutoprintFailNetwork') ||
+            '주방 주문서 출력이 실패했습니다. 서버 연결을 확인해 주세요.'
+          : kind === 'print'
+            ? t('posKitchenAutoprintFailPrint') ||
+              '주방 주문서 출력이 실패했습니다. 프린터 연결을 확인해 주세요.'
+            : t('posKitchenAutoprintFailOther') ||
+              '주방 주문서 출력이 실패했습니다. 잠시 후 주문을 다시 출력해 주세요.'
+      const withOrder = orderRef ? `${text} (#${orderRef})` : text
+      setKitchenAutoprintNotice({ text: withOrder, ...(orderRef ? { orderRef } : {}) })
+      if (kitchenAutoprintNoticeTimerRef.current != null) {
+        clearTimeout(kitchenAutoprintNoticeTimerRef.current)
+      }
+      kitchenAutoprintNoticeTimerRef.current = setTimeout(() => {
+        kitchenAutoprintNoticeTimerRef.current = null
+        setKitchenAutoprintNotice(null)
+      }, 12_000)
+    },
+    [logPosPrintDebug, t]
+  )
+
   /** 주방 자동인쇄 — dedupe + await 순차 출력(printKitchenFromPosOrder). onAfterCleanup 체인 회귀 방지 */
   const dispatchKitchenAutoPrintForPosOrder = useCallback(
     async (
@@ -2236,12 +2298,18 @@ export default function PosTerminalPage() {
         } else {
           console.error(`Kitchen slip print (${opts.flow}):`, e)
           logPosPrintDebug('kitchen_autoprint_failed', { orderId, flow: opts.flow, message })
+          notifyKitchenAutoprintFailure({
+            error: e,
+            orderRef: String(order.orderNo || orderId || '').trim(),
+            flow: opts.flow,
+          })
         }
       }
     },
     [
       autoPrintKitchenSlipOnOrder,
       logPosPrintDebug,
+      notifyKitchenAutoprintFailure,
       printKitchenFromPosOrder,
       releaseKitchenAutoPrintKey,
       reserveKitchenAutoPrintKey,
@@ -2429,7 +2497,11 @@ export default function PosTerminalPage() {
               kitchenStation: slip.station,
               escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
               onPrintUnavailable: () => {
-                void appAlert(t('posPrintUnavailable'))
+                notifyKitchenAutoprintFailure({
+                  error: new Error('print_unavailable'),
+                  orderRef: orderNo,
+                  flow: logEvent,
+                })
               },
               onAfterCleanup: () => {
                 if (idx + 1 < slips.length)
@@ -2439,10 +2511,19 @@ export default function PosTerminalPage() {
           }
           setTimeout(() => printOne(0), 0)
         })
-        .catch((e) => console.error('Kitchen slip print (dine-in add):', e))
+        .catch((e) => {
+          console.error('Kitchen slip print (dine-in add):', e)
+          releaseKitchenAutoPrintKey(dedupeKeys)
+          notifyKitchenAutoprintFailure({
+            error: e,
+            orderRef: orderNo,
+            flow: logEvent,
+          })
+        })
     },
     [
       reserveKitchenAutoPrintKey,
+      releaseKitchenAutoPrintKey,
       logPosPrintDebug,
       enrichPromoItemsWithOptionName,
       getPrinterSettingsForStore,
@@ -2454,6 +2535,7 @@ export default function PosTerminalPage() {
       lang,
       kitchenSlipItemsForPrint,
       optionNameByCode,
+      notifyKitchenAutoprintFailure,
       t,
       tPrint,
     ]
@@ -4972,6 +5054,7 @@ export default function PosTerminalPage() {
         ...it,
         ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
       }))
+      const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
 
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNoStr = String(row.order_no ?? '')
@@ -4990,7 +5073,10 @@ export default function PosTerminalPage() {
         couponDiscountAmt,
         discountReason: String(row.discount_reason ?? '').trim() || undefined,
         total: pricing.finalTotal,
-        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
+        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(
+          hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines,
+          { formatNote: formatLineNoteForPrint }
+        )}`,
         vatFeeAmt: pricing.vatFeeAmt,
         vatFeeMode: pricing.vatFeeMode,
         ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -5412,6 +5498,7 @@ export default function PosTerminalPage() {
                   ...it,
                   ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
                 }))
+                const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
                 const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
                 const discountAmt = Number(o.discountAmt ?? 0)
                 const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
@@ -5436,7 +5523,10 @@ export default function PosTerminalPage() {
                   couponDiscountAmt,
                   discountReason: String(o.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
-                  _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
+                  _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(
+                    hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines,
+                    { formatNote: formatLineNoteForPrint }
+                  )}`,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
                   ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -8706,6 +8796,17 @@ export default function PosTerminalPage() {
                         formatNote: formatLineNoteForPrint,
                       })
                     : payloadItemsNormalized
+                /** 홀 추가주문 dedupe는 주방 delta가 아니라 isAddon 줄 기준.
+                 * 음료만 추가 시 예전엔 kitchenCartLines가 비어 `hall:add:0`으로 묶여 이후 홀 출력이 막힘. */
+                const hallAddonLinesForDedupe = isAddOrder
+                  ? receiptPrintItems.filter((it) => it.isAddon === true)
+                  : []
+                const addHallDedupeSuffix = isAddOrder
+                  ? buildDineInAddKitchenPrintDedupeSuffix(
+                      hallAddonLinesForDedupe.length > 0 ? hallAddonLinesForDedupe : kitchenCartLines,
+                      { formatNote: formatLineNoteForPrint }
+                    )
+                  : ''
                 const addKitchenDedupeSuffix = isAddOrder
                   ? buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, {
                       formatNote: formatLineNoteForPrint,
@@ -8714,7 +8815,7 @@ export default function PosTerminalPage() {
                 const hallDedupeKeyForSubmit =
                   savedOrderId != null && savedOrderId > 0
                     ? isAddOrder
-                      ? `order:${savedOrderId}:hall:add:${addKitchenDedupeSuffix}`
+                      ? `order:${savedOrderId}:hall:add:${addHallDedupeSuffix}`
                       : `order:${savedOrderId}:hall:auto`
                     : `submit:hall:${orderNoStr}`
                 const receiptPayloadSubmit = {
@@ -10104,6 +10205,22 @@ export default function PosTerminalPage() {
         mainDeviceRoleLocked={mainDeviceMeta.roleLocked}
       />
       <OfflineBanner onSyncComplete={refetchCurrentStore} queueScope="pos_runtime_critical" />
+      {kitchenAutoprintNotice ? (
+        <div
+          role="status"
+          className="shrink-0 border-b border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 flex items-start gap-2"
+        >
+          <span className="flex-1 min-w-0 leading-snug">{kitchenAutoprintNotice.text}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded px-1.5 py-0.5 text-amber-900/80 hover:bg-amber-100"
+            onClick={() => setKitchenAutoprintNotice(null)}
+            aria-label={t('posDialogClose') || '닫기'}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <div
         className={cn(
           'flex-1 flex min-h-0 min-w-0',

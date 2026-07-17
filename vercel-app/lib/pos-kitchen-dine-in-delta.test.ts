@@ -317,6 +317,18 @@ describe('buildDineInAddKitchenPrintDedupeSuffix', () => {
     expect(b).toContain('m:44@1')
   })
 
+  it('hall addon lines keep a unique suffix when kitchen delta is empty (drink-only add)', () => {
+    // 홀 추가주문 dedupe는 isAddon 줄을 써야 함. kitchen delta가 [] 이면 suffix "0" 으로
+    // 연속 음료 추가가 모두 같은 키에 막힌다.
+    const kitchenDelta: { menuId: string; name: string; price: number; quantity: number }[] = []
+    const hallAddonLines = [
+      { menuId: '90', name: 'Singha 630 ML.', price: 140, quantity: 1, isAddon: true },
+    ]
+    expect(buildDineInAddKitchenPrintDedupeSuffix(kitchenDelta)).toBe('0')
+    expect(buildDineInAddKitchenPrintDedupeSuffix(hallAddonLines)).toContain('m:90@1')
+    expect(buildDineInAddKitchenPrintDedupeSuffix(hallAddonLines)).not.toBe('0')
+  })
+
   it('normalizes note via formatNote so local and remote paths share dedupe key', () => {
     const formatNote = (note: string) => (note === 'optc:SIZE_M' ? 'M - Boneless' : note.trim())
     const raw = [{ menuId: '26', name: 'Chicken', price: 219, quantity: 1, note: 'optc:SIZE_M' }]
