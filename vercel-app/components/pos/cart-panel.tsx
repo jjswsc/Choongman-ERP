@@ -94,6 +94,7 @@ import {
 } from '@/lib/pos-collab-discount'
 import {
   normalizeMemberTierCodeForDiscount,
+  resolveMemberTierDisplayLabel,
 } from '@/lib/member-tier-discount'
 import {
   DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
@@ -183,6 +184,8 @@ import {
   PosPaymentModalAmountCard,
   type CartPanelMenuLineDiscountMode,
 } from '@/components/pos/cart-panel-payment-modal-amount-card'
+import { PosMemberResultsSection, PosPaymentMemberBlock } from '@/components/pos/pos-payment-member-block'
+import { buildPosMemberSearchOptionLabel } from '@/lib/pos-member-option-label'
 import {
   buildPaymentPayloadForOrderSubmit,
   capCartPanelPaymentSnapshot,
@@ -502,6 +505,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
   const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }>>({})
   const [tierDiscountRates, setTierDiscountRates] = useState<Record<string, number>>({})
+  const [tierNames, setTierNames] = useState<Record<string, string>>({})
   const [tierDiscountPolicy, setTierDiscountPolicy] = useState<MemberTierDiscountPolicy>(
     DEFAULT_MEMBER_TIER_DISCOUNT_POLICY
   )
@@ -1023,6 +1027,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const tierCode = normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')
     return Math.max(0, Number(tierDiscountRates[tierCode] ?? 0))
   }, [memberMap, selectedMemberId, tierDiscountRates])
+  const selectedMemberTierLabel = useMemo(() => {
+    if (!selectedMemberId) return ''
+    return resolveMemberTierDisplayLabel(memberMap[selectedMemberId]?.tierCode || 'BRONZE', tierNames)
+  }, [memberMap, selectedMemberId, tierNames])
   const tierDiscountAmt = useMemo(() => {
     if (!selectedMemberId || selectedMemberTierDiscountRate <= 0) return 0
     const eligibleSubtotal = computeMemberTierDiscountEligibleSubtotal({
@@ -1930,7 +1938,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         .filter((row) => row.status !== 'inactive')
         .map((row) => ({
           value: String(row.id),
-          label: `${row.name}${row.memberNo ? ` (${row.memberNo})` : ''}${row.phone ? ` · ${row.phone}` : ''}`,
+          label: buildPosMemberSearchOptionLabel(row),
         }))
       const map: Record<string, { id: number; memberNo: string; name: string; phone: string; email: string; tierCode: string }> = {}
       for (const row of rows) {
@@ -1984,7 +1992,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setSelectedMemberId(value)
       setMemberKeyword(match.memberNo || keyword)
       setMemberOptions((prev) => {
-        const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+        const label = buildPosMemberSearchOptionLabel(match)
         if (prev.some((row) => row.value === value)) return prev
         return [{ value, label }, ...prev]
       })
@@ -2016,7 +2024,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setSelectedMemberId(value)
       setMemberKeyword(match.memberNo || String(id))
       setMemberOptions((prev) => {
-        const label = `${match.name || ''}${match.memberNo ? ` (${match.memberNo})` : ''}${match.phone ? ` · ${match.phone}` : ''}`
+        const label = buildPosMemberSearchOptionLabel(match)
         if (prev.some((row) => row.value === value)) return prev
         return [{ value, label }, ...prev]
       })
@@ -2101,6 +2109,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     getPosMemberTierRates()
       .then((res) => {
         if (res.success && res.rates) setTierDiscountRates(res.rates)
+        if (res.success && res.names) setTierNames(res.names)
         if (res.success && res.discountPolicy) setTierDiscountPolicy(res.discountPolicy)
       })
       .catch(() => {})
@@ -5192,43 +5201,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </div>
           )}
 
-          {/* 회원 검색 결과 & 비회원 버튼 — 비어 있을 때는 높이를 두지 않아 손님 메모와 간격 축소 */}
-          <div
-            className={cn(
-              'flex flex-wrap items-center gap-1',
-              selectedMemberId || memberOptions.length > 0 ? 'min-h-[26px]' : 'min-h-0'
-            )}
-          >
-            {selectedMemberId && (
-              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setSelectedMemberId('')}>
-                {t('posMemberNone') || '비회원'}
-              </Button>
-            )}
-            {memberOptions.length > 0 && memberOptions.map((m) => (
-              <Button
-                key={m.value}
-                type="button"
-                size="sm"
-                variant={selectedMemberId === m.value ? 'default' : 'outline'}
-                className="h-7 px-2 text-xs"
-                onClick={() => setSelectedMemberId(m.value)}
-              >
-                {m.label}
-              </Button>
-            ))}
-          </div>
-          {selectedMemberId && tierDiscountAmt > 0 ? (
-            <p className="text-[11px] font-medium text-violet-800 dark:text-violet-200">
-              {tr('posTierDiscountExpected', '등급 할인 예상')}: -{formatBahtNum(tierDiscountAmt)} ฿ (
-              {normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')}{' '}
-              {(selectedMemberTierDiscountRate * 100).toFixed(1)}%)
-            </p>
-          ) : null}
-          {memberSearchEmpty && (
-            <p className="text-xs text-amber-600">
-              {t('posMemberSearchEmpty') || '검색 결과가 없습니다. ERP 회원관리에서 회원을 먼저 등록해 주세요.'}
-            </p>
-          )}
+          {/* 회원 검색 결과 — 선택 시 등급 카드, 미선택 시 pill */}
+          <PosMemberResultsSection
+            compact
+            selectedMemberId={selectedMemberId}
+            selectedMemberDetail={
+              selectedMemberDetail
+                ? {
+                    name: selectedMemberDetail.name,
+                    memberNo: selectedMemberDetail.memberNo,
+                    phone: selectedMemberDetail.phone,
+                    tierCode: selectedMemberDetail.tierCode,
+                  }
+                : null
+            }
+            selectedMemberTierLabel={selectedMemberTierLabel}
+            memberOptions={memberOptions}
+            onSelectMember={setSelectedMemberId}
+            onClearMember={() => setSelectedMemberId('')}
+            tierDiscountAmt={tierDiscountAmt}
+            selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
+            memberSearchEmpty={memberSearchEmpty}
+            t={t}
+            tr={tr}
+          />
 
           <Dialog open={guestDirectOpen} onOpenChange={setGuestDirectOpen}>
             <DialogContent className="sm:max-w-xs">
@@ -5600,105 +5596,42 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               t={t}
             />
 
-            <div className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-50/80 via-card to-card p-3 shadow-sm dark:from-amber-950/20 dark:via-card dark:to-card">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                <div className="flex shrink-0 items-center gap-2 sm:min-w-[7.5rem]">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
-                    <Users className="h-4 w-4" />
-                  </div>
-                  <p className="text-sm font-semibold leading-tight">
-                    {t('posPaymentSectionMember') || t('posMember') || '회원 검색'}
-                  </p>
-                </div>
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                  <Input
-                    ref={paymentMemberScanInputRef}
-                    lang="en"
-                    data-pos-member-scan="1"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    inputMode="text"
-                    placeholder={t('posMemberSearchPh') || '회원번호/이름/번호'}
-                    value={memberKeyword}
-                    onChange={(e) => handleMemberKeywordInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        // 결제 화면에서 쿠폰 QR이 회원란에 잘못 스캔되는 경우가 잦다.
-                        // 쿠폰 QR이면 회원 검색을 막고, 아래 effect가 쿠폰 적용으로 처리한다(회원 연결도 함께).
-                        const scanned = normalizeCouponScanDelimiters(e.currentTarget.value.trim())
-                        if (isMemberCouponQrPayload(scanned)) return
-                        void handleMemberSearch(e.currentTarget.value)
-                      }
-                    }}
-                    className={cn(
-                      'h-10 min-w-0 flex-1 text-sm rounded-xl [ime-mode:disabled]',
-                      posScanFieldFlashClass(memberScanFlash)
-                    )}
-                    style={{ imeMode: 'disabled' }}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-10 shrink-0 rounded-xl px-4"
-                    onClick={() => void handleMemberSearch()}
-                    disabled={membersLoading}
-                  >
-                    {membersLoading ? '...' : t('posSearch') || '검색'}
-                  </Button>
-                </div>
-              </div>
-              {(selectedMemberId || memberOptions.length > 0) && (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {selectedMemberId && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 rounded-lg px-2.5 text-xs"
-                      onClick={() => setSelectedMemberId('')}
-                    >
-                      {t('posMemberNone') || '비회원'}
-                    </Button>
-                  )}
-                  {memberOptions.map((m) => (
-                    <Button
-                      key={m.value}
-                      type="button"
-                      size="sm"
-                      variant={selectedMemberId === m.value ? 'default' : 'outline'}
-                      className="h-8 max-w-full rounded-lg px-2.5 text-xs"
-                      onClick={() => setSelectedMemberId(m.value)}
-                    >
-                      <span className="truncate">{m.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-              {selectedMemberId && selectedMemberDetail ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {selectedMemberDetail.name}
-                  {selectedMemberDetail.memberNo ? ` · ${selectedMemberDetail.memberNo}` : ''}
-                  {selectedMemberDetail.phone ? ` · ${selectedMemberDetail.phone}` : ''}
-                </p>
-              ) : null}
-              {selectedMemberId && tierDiscountAmt > 0 ? (
-                <p className="mt-1 text-[11px] font-medium text-violet-800 dark:text-violet-200">
-                  {tr('posTierDiscountExpected', '등급 할인 예상')}: -{formatBahtNum(tierDiscountAmt)} ฿ (
-                  {normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')}{' '}
-                  {(selectedMemberTierDiscountRate * 100).toFixed(1)}%)
-                </p>
-              ) : null}
-              {memberSearchEmpty && (
-                <p className="mt-2 text-xs text-amber-600">
-                  {t('posMemberSearchEmpty') ||
-                    '검색 결과가 없습니다. ERP 회원관리에서 회원을 먼저 등록해 주세요.'}
-                </p>
-              )}
-            </div>
+            <PosPaymentMemberBlock
+              memberKeyword={memberKeyword}
+              onMemberKeywordChange={handleMemberKeywordInput}
+              onMemberKeywordKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const scanned = normalizeCouponScanDelimiters(e.currentTarget.value.trim())
+                  if (isMemberCouponQrPayload(scanned)) return
+                  void handleMemberSearch(e.currentTarget.value)
+                }
+              }}
+              onSearch={() => void handleMemberSearch()}
+              membersLoading={membersLoading}
+              memberScanFlash={memberScanFlash}
+              memberScanInputRef={paymentMemberScanInputRef}
+              selectedMemberId={selectedMemberId}
+              selectedMemberDetail={
+                selectedMemberDetail
+                  ? {
+                      name: selectedMemberDetail.name,
+                      memberNo: selectedMemberDetail.memberNo,
+                      phone: selectedMemberDetail.phone,
+                      tierCode: selectedMemberDetail.tierCode,
+                    }
+                  : null
+              }
+              selectedMemberTierLabel={selectedMemberTierLabel}
+              memberOptions={memberOptions}
+              onSelectMember={setSelectedMemberId}
+              onClearMember={() => setSelectedMemberId('')}
+              tierDiscountAmt={tierDiscountAmt}
+              selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
+              memberSearchEmpty={memberSearchEmpty}
+              t={t}
+              tr={tr}
+            />
 
             <div className="space-y-3">
               {/* 협업 할인 — 항상 표시, 없음 선택 가능 */}

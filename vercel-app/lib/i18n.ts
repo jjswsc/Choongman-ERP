@@ -5145,6 +5145,12 @@ export const i18n = {
     complaint_customer_reply: '고객 답변 (회원앱)',
     complaint_ph_customer_reply: '고객에게 보여줄 답변을 적어 주세요',
     complaint_customer_reply_hint: '회원앱 컴플레인 목록에 표시됩니다. 내부 메모는 넣지 마세요.',
+    complaint_confirm_copy_action_to_reply:
+      '「내부 조치」만 입력되어 있습니다. 이 내용을 「고객 답변」으로 복사해 회원앱에 표시할까요?',
+    complaint_warn_use_customer_reply_field:
+      '고객에게 보이려면 위 「고객 답변 (회원앱)」 칸에 적어 주세요. 「내부 조치」는 회원앱에 표시되지 않습니다.',
+    complaint_saved_member_reply_hint:
+      '저장되었습니다. 고객은 회원앱 → 내 컴플레인 목록에서 답변을 확인할 수 있습니다. (LINE/문자 자동 발송 없음)',
     complaint_action: '내부 조치',
     complaint_ph_action: '환불, 재제공, 직원 교육 등 (내부용)',
     complaint_action_hint: '내부 기록용입니다. 회원앱에는 보이지 않습니다.',
@@ -12566,6 +12572,12 @@ Only matters the employee must handle personally on a working day:
     complaint_customer_reply: 'Customer reply (member app)',
     complaint_ph_customer_reply: 'Write the reply the customer will see',
     complaint_customer_reply_hint: 'Shown in the member app complaint list. Do not include internal notes.',
+    complaint_confirm_copy_action_to_reply:
+      'Only Internal action is filled. Copy it to Customer reply so it shows in the member app?',
+    complaint_warn_use_customer_reply_field:
+      'To reach the customer, write in Customer reply (member app) above. Internal action is not shown in the app.',
+    complaint_saved_member_reply_hint:
+      'Saved. The customer can see the reply in the member app → My complaints. (No auto LINE/SMS)',
     complaint_action: 'Internal action',
     complaint_ph_action: 'Refund, re-serve, staff coaching, etc. (internal)',
     complaint_action_hint: 'Internal only. Not shown in the member app.',
@@ -18644,6 +18656,12 @@ orderItemQty: 'จำนวน',
     complaint_customer_reply: 'ข้อความตอบลูกค้า (แอปสมาชิก)',
     complaint_ph_customer_reply: 'เขียนข้อความที่ลูกค้าจะเห็น',
     complaint_customer_reply_hint: 'แสดงในรายการคำร้องของแอปสมาชิก อย่าใส่บันทึกภายใน',
+    complaint_confirm_copy_action_to_reply:
+      'กรอกเฉพาะ 「การดำเนินการภายใน」 ต้องการคัดลอกไป 「ข้อความตอบลูกค้า」 เพื่อให้ลูกค้าเห็นในแอปสมาชิกหรือไม่?',
+    complaint_warn_use_customer_reply_field:
+      'ถ้าต้องการให้ลูกค้าเห็น ให้เขียนที่ช่อง 「ข้อความตอบลูกค้า (แอปสมาชิก)」 ด้านบน 「การดำเนินการภายใน」 จะไม่แสดงในแอปสมาชิก',
+    complaint_saved_member_reply_hint:
+      'บันทึกแล้ว ลูกค้าดูคำตอบได้ที่แอปสมาชิก → รายการคำร้องของฉัน (ไม่ส่ง LINE/ข้อความอัตโนมัติ)',
     complaint_action: 'การดำเนินการภายใน',
     complaint_ph_action: 'คืนเงิน, ให้บริการใหม่, อบรมพนักงาน ฯลฯ (ภายใน)',
     complaint_action_hint: 'บันทึกภายในเท่านั้น ไม่แสดงในแอปสมาชิก',

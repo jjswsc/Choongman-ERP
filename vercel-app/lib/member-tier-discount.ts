@@ -1,6 +1,7 @@
 export type MemberTierDiscountRow = {
   code?: string | null
   discount_rate?: number | null
+  name?: string | null
 }
 
 export function normalizeMemberTierCodeForDiscount(raw: string): string {
@@ -42,4 +43,23 @@ export function buildMemberTierDiscountRateMap(
     out[code] = Math.max(0, Number(row.discount_rate ?? 0))
   }
   return out
+}
+
+export function buildMemberTierNameMap(tiers: MemberTierDiscountRow[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of tiers || []) {
+    const code = normalizeMemberTierCodeForDiscount(String(row.code || ''))
+    if (!code) continue
+    const name = String(row.name || '').trim()
+    out[code] = name || code
+  }
+  return out
+}
+
+export function resolveMemberTierDisplayLabel(
+  tierCodeRaw: string,
+  names?: Record<string, string>
+): string {
+  const code = normalizeMemberTierCodeForDiscount(tierCodeRaw)
+  return names?.[code] || code
 }

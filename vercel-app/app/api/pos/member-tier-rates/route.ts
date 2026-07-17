@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { buildMemberTierDiscountRateMap } from '@/lib/member-tier-discount'
+import { buildMemberTierDiscountRateMap, buildMemberTierNameMap } from '@/lib/member-tier-discount'
 import { loadMemberTierDiscountPolicy } from '@/lib/member-tier-discount-policy-server'
 import { listMemberTiers } from '@/lib/members-server'
 import { requireAuth } from '@/lib/verify-auth'
@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       rates: buildMemberTierDiscountRateMap(tiers),
+      names: buildMemberTierNameMap(tiers),
       discountPolicy,
     })
   } catch (e) {

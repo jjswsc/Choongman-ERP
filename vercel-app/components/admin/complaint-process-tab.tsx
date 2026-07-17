@@ -18,6 +18,10 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { appAlert } from "@/lib/app-message"
+import {
+  isMemberPortalComplaint,
+  resolveComplaintCustomerReplyForSave,
+} from "@/lib/complaint-admin-customer-reply"
 import { updateComplaintLog, type ComplaintLogItem } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
@@ -83,6 +87,16 @@ export function ComplaintProcessTab({
     if (!selected) return
     const id = String(selected.row ?? selected.id ?? "")
     if (!id) return
+
+    const isMember = isMemberPortalComplaint(selected.sourceChannel, selected.memberId)
+    const customerReply = await resolveComplaintCustomerReplyForSave(
+      draftCustomerReply,
+      draftAction,
+      isMember,
+      t
+    )
+    if (customerReply === null) return
+
     setSaving(true)
     try {
       const res = await updateComplaintLog(id, {
@@ -103,12 +117,16 @@ export function ComplaintProcessTab({
         handler: draftHandler,
         doneDate: draftDoneDate,
         action: draftAction,
-        customerReply: draftCustomerReply,
+        customerReply,
         photoUrl: selected.photoUrl,
         remark: selected.remark,
       })
       if (res.success) {
-        await appAlert(translateApiMessage(res.message, t) || t("store_check_updated"))
+        const hint =
+          isMember && String(customerReply).trim()
+            ? t("complaint_saved_member_reply_hint")
+            : translateApiMessage(res.message, t) || t("store_check_updated")
+        await appAlert(hint)
         onSaved()
       } else {
         await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail"))

@@ -155,3 +155,43 @@ export function tierVisual(codeRaw: string): TierVisual {
     ...base,
   }
 }
+
+/** POS 결제·카트 — 등급별 배지 (라이트/다크) */
+export const POS_TIER_BADGE: Record<TierFamily, string> = {
+  bronze:
+    'bg-amber-700/12 text-amber-950 ring-amber-700/25 dark:bg-amber-500/20 dark:text-amber-100 dark:ring-amber-400/35',
+  silver:
+    'bg-slate-500/12 text-slate-900 ring-slate-400/25 dark:bg-slate-400/15 dark:text-slate-100 dark:ring-slate-300/30',
+  gold: 'bg-yellow-500/18 text-yellow-950 ring-yellow-600/25 dark:bg-yellow-500/20 dark:text-yellow-100 dark:ring-yellow-400/35',
+  platinum:
+    'bg-sky-500/12 text-sky-950 ring-sky-400/25 dark:bg-sky-400/15 dark:text-sky-100 dark:ring-sky-300/30',
+  diamond:
+    'bg-violet-500/12 text-violet-950 ring-violet-400/25 dark:bg-violet-500/20 dark:text-violet-100 dark:ring-violet-300/35',
+  vip: 'bg-rose-500/12 text-rose-950 ring-rose-400/25 dark:bg-rose-500/20 dark:text-rose-100 dark:ring-rose-400/35',
+  default:
+    'bg-amber-500/12 text-amber-950 ring-amber-400/20 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/25',
+}
+
+/** POS — 선택된 회원 카드 배경·테두리 */
+export const POS_TIER_CARD: Record<TierFamily, string> = {
+  bronze:
+    'border-amber-700/30 bg-gradient-to-br from-amber-50/95 via-card to-amber-100/35 dark:from-amber-950/35 dark:via-card dark:to-amber-950/10 dark:border-amber-700/35',
+  silver:
+    'border-slate-400/30 bg-gradient-to-br from-slate-50/95 via-card to-slate-100/40 dark:from-slate-900/40 dark:via-card dark:to-slate-900/15 dark:border-slate-500/30',
+  gold: 'border-yellow-500/35 bg-gradient-to-br from-yellow-50/95 via-card to-amber-100/40 dark:from-yellow-950/30 dark:via-card dark:to-amber-950/10 dark:border-yellow-600/35',
+  platinum:
+    'border-sky-400/30 bg-gradient-to-br from-sky-50/95 via-card to-slate-50/40 dark:from-sky-950/30 dark:via-card dark:to-slate-900/15 dark:border-sky-500/30',
+  diamond:
+    'border-violet-400/35 bg-gradient-to-br from-violet-50/95 via-card to-fuchsia-50/30 dark:from-violet-950/35 dark:via-card dark:to-violet-950/10 dark:border-violet-500/35',
+  vip: 'border-rose-400/35 bg-gradient-to-br from-rose-50/95 via-card to-rose-100/35 dark:from-rose-950/35 dark:via-card dark:to-rose-950/10 dark:border-rose-500/35',
+  default:
+    'border-amber-400/25 bg-gradient-to-br from-amber-50/90 via-card to-card dark:from-amber-950/25 dark:via-card dark:to-card dark:border-amber-600/25',
+}
+
+export function posTierBadgeClass(codeRaw: string): string {
+  return POS_TIER_BADGE[resolveTierFamily(codeRaw)]
+}
+
+export function posTierCardClass(codeRaw: string): string {
+  return POS_TIER_CARD[resolveTierFamily(codeRaw)]
+}

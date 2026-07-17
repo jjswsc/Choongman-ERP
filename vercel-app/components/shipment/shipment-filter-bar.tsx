@@ -410,9 +410,6 @@ export function ShipmentFilterBar({
           ) : null}
         </div>
     </AdminFilterBar>
-      <p className="text-[11px] text-muted-foreground px-1">
-        {histMonth ? t("adminMonthFilterActiveHint") : t("adminMonthFilterManualHint")}
-      </p>
 
       <Dialog open={isMonthDialogOpen} onOpenChange={setIsMonthDialogOpen}>
         <DialogContent className="sm:max-w-sm">

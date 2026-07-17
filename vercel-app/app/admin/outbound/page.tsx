@@ -925,12 +925,22 @@ export default function OutboundPage() {
       receiveImageUrls?: string[]
     }> = {}
     for (const i of historyList) {
-      const k = `${i.date}_${i.target}_${i.type}_${i.orderRowId || ""}`
+      const target = String(i.target || "").trim()
+      const type = String(i.type || "")
+      const orderRowId = String(i.orderRowId || "").trim()
+      const invoiceNo = String(i.invoiceNo || "").trim()
+      // 주문 출고: IV 번호가 같으면 한 행으로 합침 (출고처 표기 차이·창고별 분할로 같은 IV가 여러 줄이 되던 문제)
+      const k =
+        orderRowId && invoiceNo
+          ? `${invoiceNo}_${type}_${orderRowId}`
+          : i.stockLogId
+            ? `force_${i.stockLogId}_${target}_${type}`
+            : `${i.date}_${target}_${type}_${orderRowId}`
       if (!g[k]) {
         g[k] = {
           date: i.date,
-          target: i.target,
-          type: i.type,
+          target,
+          type,
           totalQty: 0,
           totalAmt: 0,
           items: [],
@@ -939,6 +949,7 @@ export default function OutboundPage() {
       g[k].items.push(i)
       g[k].totalQty += i.qty
       g[k].totalAmt += (i.amount || 0)
+      if (i.date && i.date < g[k].date) g[k].date = i.date
       if (i.invoiceNo) g[k].invoiceNo = i.invoiceNo
       if (i.receiveImageUrls?.length) g[k].receiveImageUrls = i.receiveImageUrls
       else if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
@@ -1066,7 +1077,19 @@ export default function OutboundPage() {
     return displayGroupedHistory.map((g, i) => {
       const first = g.items[0]
       const orderDate = first?.orderDate || g.date?.slice(0, 10) || ""
-      const deliveryDate = first?.deliveryDate || ""
+      const deliveryDateYmds = [
+        ...new Set(
+          g.items
+            .map((it) => (it.deliveryDate || "").slice(0, 10))
+            .filter((d) => d && d !== "-")
+        ),
+      ].sort()
+      const deliveryDate =
+        deliveryDateYmds.length === 0
+          ? first?.deliveryDate || ""
+          : deliveryDateYmds.length === 1
+            ? deliveryDateYmds[0]
+            : `${deliveryDateYmds[0]}~${deliveryDateYmds[deliveryDateYmds.length - 1]}`
       const deliveryStatus = first?.deliveryStatus
       const itemsSummary =
         g.items.length === 1
@@ -2381,9 +2404,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       onChange={(e) => setSummaryMonthDraft(e.target.value)}
                       className="h-9"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      {histMonth ? t("adminMonthFilterActiveHint") : t("adminMonthFilterManualHint")}
-                    </p>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

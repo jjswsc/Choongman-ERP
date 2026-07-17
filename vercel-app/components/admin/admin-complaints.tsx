@@ -2,6 +2,10 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
+import {
+  isMemberPortalComplaint,
+  resolveComplaintCustomerReplyForSave,
+} from "@/lib/complaint-admin-customer-reply"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import Link from "next/link"
@@ -449,6 +453,15 @@ export function AdminComplaints() {
       await appAlert(t("store_load_hint"))
       return
     }
+    const isMember = isMemberPortalComplaint(viewSourceChannel, viewMemberId)
+    const customerReply = await resolveComplaintCustomerReplyForSave(
+      form.customerReply,
+      form.action,
+      isMember,
+      t
+    )
+    if (customerReply === null) return
+
     setSaveLoading(true)
     try {
       const data = {
@@ -469,14 +482,18 @@ export function AdminComplaints() {
         handler: form.handler,
         doneDate: form.doneDate,
         action: form.action,
-        customerReply: form.customerReply,
+        customerReply,
         photoUrl: form.photoUrl,
         remark: form.remark,
       }
       if (editId) {
         const res = await updateComplaintLog(editId, data)
         if (res.success) {
-          await appAlert(translateApiMessage(res.message, t) || t("store_check_updated"))
+          const hint =
+            isMember && String(customerReply).trim()
+              ? t("complaint_saved_member_reply_hint")
+              : translateApiMessage(res.message, t) || t("store_check_updated")
+          await appAlert(hint)
           resetForm()
           loadList()
         } else {
@@ -823,7 +840,12 @@ export function AdminComplaints() {
                     value={form.customerReply}
                     onChange={(e) => setForm((f) => ({ ...f, customerReply: e.target.value }))}
                     rows={2}
-                    className="text-xs"
+                    className={cn(
+                      "text-xs",
+                      isMemberPortalComplaint(viewSourceChannel, viewMemberId) &&
+                        !form.customerReply.trim() &&
+                        "border-amber-400/80 bg-amber-50/40 focus-visible:ring-amber-400/50"
+                    )}
                     placeholder={t("complaint_ph_customer_reply")}
                   />
                 </div>

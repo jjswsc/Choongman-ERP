@@ -1814,9 +1814,6 @@ export default function InboundPage() {
                       onChange={(e) => setSummaryMonthDraft(e.target.value)}
                       className="h-9"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      {summaryMonth ? t("adminMonthFilterActiveHint") : t("adminMonthFilterManualHint")}
-                    </p>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

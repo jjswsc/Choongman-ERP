@@ -305,19 +305,19 @@ export function ShipmentTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full table-fixed border-collapse text-xs sm:text-[13px]">
+      <table className="w-full min-w-[1180px] table-fixed border-collapse text-xs sm:text-[13px]">
         <colgroup>
-          <col style={{ width: "3%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "8%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "5%" }} />
-          <col style={{ width: "12%" }} />
-          <col style={{ width: "25%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "10%" }} />
+          <col style={{ width: "36px" }} />
+          <col style={{ width: "88px" }} />
+          <col style={{ width: "96px" }} />
+          <col style={{ width: "136px" }} />
+          <col style={{ width: "72px" }} />
+          <col style={{ width: "88px" }} />
+          <col style={{ width: "52px" }} />
+          <col style={{ width: "148px" }} />
+          <col style={{ width: "28%" }} />
+          <col style={{ width: "64px" }} />
+          <col style={{ width: "120px" }} />
         </colgroup>
         <thead>
           <tr className="bg-[#1E293B] text-white">
@@ -606,7 +606,10 @@ function TableRow({
         <td className="px-2 py-2.5 text-center text-[11px] leading-snug text-card-foreground whitespace-nowrap tabular-nums sm:px-2.5 sm:py-3 sm:text-xs">
           {row.deliveryDate || "-"}
         </td>
-        <td className="px-2 py-2.5 text-center font-mono text-[11px] leading-snug text-card-foreground whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
+        <td
+          className="px-2 py-2.5 text-center font-mono text-[11px] leading-snug text-card-foreground whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs"
+          title={row.invoiceNo}
+        >
           {row.invoiceNo}
         </td>
         <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">

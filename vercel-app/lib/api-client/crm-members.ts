@@ -266,6 +266,7 @@ export async function getPosMemberTierRates() {
   return res.json() as Promise<{
     success: boolean
     rates: Record<string, number>
+    names?: Record<string, string>
     discountPolicy?: import('@/lib/member-tier-discount-policy').MemberTierDiscountPolicy
   }>
 }
