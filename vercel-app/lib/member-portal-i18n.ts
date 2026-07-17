@@ -69,6 +69,7 @@ export type MemberPortalKey =
   | 'complaintSelectStore'
   | 'complaintRequiredHint'
   | 'complaintActionLabel'
+  | 'complaintReplyLabel'
   | 'complaintStatusRecv'
   | 'complaintStatusInv'
   | 'complaintStatusDone'
@@ -691,6 +692,7 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '필수 항목을 입력해 주세요.',
   },
   complaintActionLabel: { en: 'Resolution', th: 'การดำเนินการ', ko: '조치' },
+  complaintReplyLabel: { en: 'Store reply', th: 'ข้อความตอบกลับจากร้าน', ko: '매장 답변' },
   complaintStatusRecv: { en: 'Received', th: 'รับเรื่อง', ko: '접수' },
   complaintStatusInv: { en: 'Investigating', th: 'กำลังตรวจสอบ', ko: '조사중' },
   complaintStatusDone: { en: 'Resolved', th: 'ดำเนินการแล้ว', ko: '처리완료' },

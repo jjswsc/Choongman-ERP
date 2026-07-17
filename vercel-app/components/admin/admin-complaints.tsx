@@ -52,14 +52,19 @@ import {
 } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
-import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { StorePageShell } from "@/components/erp/store-page-shell"
 import { ComplaintProcessTab } from "@/components/admin/complaint-process-tab"
 
 const CHART_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626", "#8b5cf6", "#6b7280"]
+const PERIOD_PRESETS = [7, 30, 90] as const
 
 function todayStr() {
   return getBangkokTodayDateString()
+}
+
+function startDaysAgo(days: number, end = getBangkokTodayDateString()) {
+  return addBangkokCalendarDays(end, -days)
 }
 
 function timeStr() {
@@ -96,6 +101,7 @@ const emptyForm = () => ({
   handler: "",
   doneDate: "",
   action: "",
+  customerReply: "",
   photoUrl: "",
   remark: "",
 })
@@ -115,11 +121,7 @@ export function AdminComplaints() {
   const [uploadLoading, setUploadLoading] = useState(false)
 
   const defaultEnd = getBangkokTodayDateString()
-  const defaultStart = (() => {
-    const d = new Date(`${defaultEnd}T12:00:00+07:00`)
-    d.setDate(d.getDate() - 30)
-    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
-  })()
+  const defaultStart = startDaysAgo(30, defaultEnd)
 
   const [listStart, setListStart] = useState(defaultStart)
   const [listEnd, setListEnd] = useState(defaultEnd)
@@ -127,9 +129,14 @@ export function AdminComplaints() {
   const [listVisitPath, setListVisitPath] = useState("__all__")
   const [listType, setListType] = useState("__all__")
   const [listStatus, setListStatus] = useState("__all__")
+  const [listSeverity, setListSeverity] = useState("__all__")
   const [listSourceChannel, setListSourceChannel] = useState("__all__")
+  const [listQ, setListQ] = useState("")
+  const [listQInput, setListQInput] = useState("")
+  const [processOpenOnly, setProcessOpenOnly] = useState(true)
   const [listData, setListData] = useState<ComplaintLogItem[]>([])
   const [listLoading, setListLoading] = useState(false)
+  const [hasQueried, setHasQueried] = useState(false)
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
   const [viewMemberId, setViewMemberId] = useState<number | null>(null)
   const [viewSourceChannel, setViewSourceChannel] = useState("")
@@ -193,36 +200,160 @@ export function AdminComplaints() {
   const tr = (val: string | undefined, keyMap: Record<string, string>) =>
     val && keyMap[val] ? t(keyMap[val] as never) : (val || "-")
 
+  const applyPeriodPreset = useCallback((days: number) => {
+    const end = getBangkokTodayDateString()
+    setListEnd(end)
+    setListStart(startDaysAgo(days, end))
+  }, [])
+
+  const activePeriodDays = useMemo(() => {
+    const today = getBangkokTodayDateString()
+    if (!listStart || listEnd !== today) return null
+    for (const days of PERIOD_PRESETS) {
+      if (listStart === startDaysAgo(days, today)) return days
+    }
+    return null
+  }, [listStart, listEnd])
+
   const loadList = useCallback(async () => {
     setListLoading(true)
     try {
+      const processMode = tab === "process"
+      const listMode = tab === "list"
+      const dashMode = tab === "dash"
+      const skipDate = processMode && processOpenOnly
       const list = await getComplaintLogList({
-        startStr: listStart || undefined,
-        endStr: listEnd || undefined,
+        startStr: skipDate ? undefined : listStart || undefined,
+        endStr: skipDate ? undefined : listEnd || undefined,
+        skipDate,
+        openOnly: processMode && processOpenOnly ? true : undefined,
         store: listStore && listStore !== "All" ? listStore : undefined,
-        visitPath: listVisitPath && listVisitPath !== "__all__" ? listVisitPath : undefined,
-        typeFilter: listType && listType !== "__all__" ? listType : undefined,
-        statusFilter: listStatus && listStatus !== "__all__" ? listStatus : undefined,
-        sourceChannel:
-          listSourceChannel === "member_portal"
+        visitPath: listMode && listVisitPath && listVisitPath !== "__all__" ? listVisitPath : undefined,
+        typeFilter:
+          (listMode || dashMode) && listType && listType !== "__all__" ? listType : undefined,
+        statusFilter:
+          processMode && processOpenOnly
+            ? undefined
+            : listMode && listStatus && listStatus !== "__all__"
+              ? listStatus
+              : undefined,
+        severityFilter:
+          (listMode || processMode) && listSeverity && listSeverity !== "__all__"
+            ? listSeverity
+            : undefined,
+        sourceChannel: listMode
+          ? listSourceChannel === "member_portal"
             ? "member_portal"
             : listSourceChannel === "admin"
               ? "admin"
               : listSourceChannel === "staff_manual"
                 ? "__empty__"
-                : undefined,
+                : undefined
+          : undefined,
+        q: (listMode || processMode) && listQ.trim() ? listQ.trim() : undefined,
       })
       setListData(list || [])
+      setHasQueried(true)
     } catch {
       setListData([])
+      setHasQueried(true)
     } finally {
       setListLoading(false)
     }
-  }, [listStart, listEnd, listStore, listVisitPath, listType, listStatus, listSourceChannel])
+  }, [
+    tab,
+    processOpenOnly,
+    listStart,
+    listEnd,
+    listStore,
+    listVisitPath,
+    listType,
+    listStatus,
+    listSeverity,
+    listSourceChannel,
+    listQ,
+  ])
+
+  const runSearch = useCallback(() => {
+    const next = listQInput.trim()
+    if (next === listQ) void loadList()
+    else setListQ(next)
+  }, [listQInput, listQ, loadList])
 
   useEffect(() => {
     if (tab === "list" || tab === "dash" || tab === "process") void loadList()
   }, [tab, loadList])
+
+  const periodPresetButtons = (
+    <div className="flex flex-wrap gap-1">
+      {PERIOD_PRESETS.map((days) => (
+        <Button
+          key={days}
+          type="button"
+          variant={activePeriodDays === days ? "default" : "outline"}
+          size="sm"
+          className="h-8 px-2.5 text-xs"
+          disabled={tab === "process" && processOpenOnly}
+          onClick={() => applyPeriodPreset(days)}
+        >
+          {t(`complaint_period_${days}d` as never)}
+        </Button>
+      ))}
+    </div>
+  )
+
+  const dateRangeInputs = (
+    <>
+      <div>
+        <label className="text-xs font-semibold block mb-1">{t("visit_start_date")}</label>
+        <Input
+          type="date"
+          value={listStart}
+          onChange={(e) => setListStart(e.target.value)}
+          className="h-9 w-[130px] text-xs"
+          disabled={tab === "process" && processOpenOnly}
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold block mb-1">{t("visit_end_date")}</label>
+        <Input
+          type="date"
+          value={listEnd}
+          onChange={(e) => setListEnd(e.target.value)}
+          className="h-9 w-[130px] text-xs"
+          disabled={tab === "process" && processOpenOnly}
+        />
+      </div>
+    </>
+  )
+
+  const storeFilterSelect = (
+    <Select value={listStore || "All"} onValueChange={setListStore}>
+      <SelectTrigger className="h-9 w-[130px] text-xs">
+        <SelectValue placeholder={t("store")} />
+      </SelectTrigger>
+      <SelectContent>
+        {listStoresForFilter.filter((s) => s).map((st) => (
+          <SelectItem key={st} value={st}>{st === "All" ? t("all") : st}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  const keywordInput = (
+    <Input
+      value={listQInput}
+      onChange={(e) => setListQInput(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          runSearch()
+        }
+      }}
+      className="h-9 w-[160px] text-xs"
+      placeholder={t("complaint_search_keyword_ph")}
+    />
+  )
 
   const dashStats = useMemo(() => {
     const open = listData.filter((x) => x.status === "접수" || x.status === "조사중" || x.status === "보류").length
@@ -305,6 +436,7 @@ export function AdminComplaints() {
       handler: item.handler || "",
       doneDate: item.doneDate || "",
       action: item.action || "",
+      customerReply: item.customerReply || "",
       photoUrl: item.photoUrl || "",
       remark: item.remark || "",
     })
@@ -337,6 +469,7 @@ export function AdminComplaints() {
         handler: form.handler,
         doneDate: form.doneDate,
         action: form.action,
+        customerReply: form.customerReply,
         photoUrl: form.photoUrl,
         remark: form.remark,
       }
@@ -409,6 +542,30 @@ export function AdminComplaints() {
           </AdminTabsBarWithHelp>
 
           <TabsContent value="dash" className={cn(adminTabsContentCn, "space-y-4")}>
+            <div className="flex flex-wrap items-end gap-2">
+              {periodPresetButtons}
+              {dateRangeInputs}
+              {storeFilterSelect}
+              <Select value={listType || "__all__"} onValueChange={setListType}>
+                <SelectTrigger className="h-9 w-[110px] text-xs">
+                  <SelectValue placeholder={t("complaint_type")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t("all")}</SelectItem>
+                  {TYPES.map((ty) => (
+                    <SelectItem key={ty} value={ty}>{t("complaint_type_" + (ty === "음식" ? "food" : ty === "서비스" ? "service" : ty === "환경/청결" ? "env" : ty === "가격/결제" ? "price" : "etc"))}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button className="h-9 font-medium" onClick={runSearch} disabled={listLoading}>
+                <Search className="mr-1.5 h-3.5 w-3.5" />
+                {listLoading ? t("loading") : t("search")}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {t("complaint_period_range_hint")}: {listStart} ~ {listEnd}
+              {listData.length > 0 ? ` · ${listData.length}${t("visit_count_suffix")}` : ""}
+            </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { label: t("complaint_kpi_total"), value: dashStats.total, className: "border-slate-500/40" },
@@ -461,12 +618,42 @@ export function AdminComplaints() {
             </div>
           </TabsContent>
 
-          <TabsContent value="process" className={adminTabsContentCn}>
+          <TabsContent value="process" className={cn(adminTabsContentCn, "space-y-3")}>
+            <div className="flex flex-wrap items-end gap-2">
+              {periodPresetButtons}
+              {dateRangeInputs}
+              {storeFilterSelect}
+              {keywordInput}
+              <Select value={listSeverity || "__all__"} onValueChange={setListSeverity}>
+                <SelectTrigger className="h-9 w-[100px] text-xs">
+                  <SelectValue placeholder={t("complaint_severity")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t("all")}</SelectItem>
+                  {SEVERITIES.map((s) => (
+                    <SelectItem key={s} value={s}>{t("complaint_sev_" + (s === "경미" ? "low" : s === "보통" ? "mid" : "high"))}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button className="h-9 font-medium" onClick={runSearch} disabled={listLoading}>
+                <Search className="mr-1.5 h-3.5 w-3.5" />
+                {listLoading ? t("loading") : t("search")}
+              </Button>
+            </div>
+            {processOpenOnly ? (
+              <p className="text-[11px] text-muted-foreground">{t("complaint_open_skip_date_hint")}</p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                {t("complaint_period_range_hint")}: {listStart} ~ {listEnd}
+              </p>
+            )}
             <ComplaintProcessTab
               items={listData}
               loading={listLoading}
               writerName={writerName}
               getTrans={getTrans}
+              openOnly={processOpenOnly}
+              onOpenOnlyChange={setProcessOpenOnly}
               onSaved={() => void loadList()}
             />
           </TabsContent>
@@ -630,7 +817,20 @@ export function AdminComplaints() {
                 </div>
 
                 <div>
+                  <label className="text-xs font-semibold block mb-1">{t("complaint_customer_reply")}</label>
+                  <p className="text-[11px] text-muted-foreground mb-1">{t("complaint_customer_reply_hint")}</p>
+                  <Textarea
+                    value={form.customerReply}
+                    onChange={(e) => setForm((f) => ({ ...f, customerReply: e.target.value }))}
+                    rows={2}
+                    className="text-xs"
+                    placeholder={t("complaint_ph_customer_reply")}
+                  />
+                </div>
+
+                <div>
                   <label className="text-xs font-semibold block mb-1">{t("complaint_action")}</label>
+                  <p className="text-[11px] text-muted-foreground mb-1">{t("complaint_action_hint")}</p>
                   <Textarea value={form.action} onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))} rows={2} className="text-xs" placeholder={t("complaint_ph_action")} />
                 </div>
 
@@ -687,25 +887,11 @@ export function AdminComplaints() {
           <TabsContent value="list" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
-                <div className="flex flex-wrap items-end gap-2 mb-4">
-                  <div>
-                    <label className="text-xs font-semibold block mb-1">{t("visit_start_date")}</label>
-                    <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="h-9 w-[130px] text-xs" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold block mb-1">{t("visit_end_date")}</label>
-                    <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
-                  </div>
-                  <Select value={listStore || "All"} onValueChange={setListStore}>
-                    <SelectTrigger className="h-9 w-[110px] text-xs">
-                      <SelectValue placeholder={t("store")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {listStoresForFilter.filter((s) => s).map((st) => (
-                        <SelectItem key={st} value={st}>{st === "All" ? t("all") : st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-wrap items-end gap-2 mb-2">
+                  {periodPresetButtons}
+                  {dateRangeInputs}
+                  {storeFilterSelect}
+                  {keywordInput}
                   <Select value={listVisitPath || "__all__"} onValueChange={setListVisitPath}>
                     <SelectTrigger className="h-9 w-[100px] text-xs">
                       <SelectValue placeholder={t("complaint_visit_path")} />
@@ -725,6 +911,17 @@ export function AdminComplaints() {
                       <SelectItem value="__all__">{t("all")}</SelectItem>
                       {TYPES.map((ty) => (
                         <SelectItem key={ty} value={ty}>{t("complaint_type_" + (ty === "음식" ? "food" : ty === "서비스" ? "service" : ty === "환경/청결" ? "env" : ty === "가격/결제" ? "price" : "etc"))}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={listSeverity || "__all__"} onValueChange={setListSeverity}>
+                    <SelectTrigger className="h-9 w-[100px] text-xs">
+                      <SelectValue placeholder={t("complaint_severity")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      {SEVERITIES.map((s) => (
+                        <SelectItem key={s} value={s}>{t("complaint_sev_" + (s === "경미" ? "low" : s === "보통" ? "mid" : "high"))}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -750,11 +947,15 @@ export function AdminComplaints() {
                       <SelectItem value="staff_manual">{t("complaint_source_staff")}</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button className="h-9 font-medium" onClick={loadList} disabled={listLoading}>
+                  <Button className="h-9 font-medium" onClick={runSearch} disabled={listLoading}>
                     <Search className="mr-1.5 h-3.5 w-3.5" />
                     {listLoading ? t("loading") : t("search")}
                   </Button>
                 </div>
+                <p className="mb-4 text-[11px] text-muted-foreground">
+                  {t("complaint_period_range_hint")}: {listStart} ~ {listEnd}
+                  {hasQueried && !listLoading ? ` · ${listData.length}${t("visit_count_suffix")}` : ""}
+                </p>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs border-collapse">
@@ -780,7 +981,9 @@ export function AdminComplaints() {
                         </tr>
                       ) : listData.length === 0 ? (
                         <tr>
-                          <td colSpan={11} className="p-6 text-center text-muted-foreground">{t("complaint_query_please")}</td>
+                          <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                            {hasQueried ? t("complaint_no_results") : t("complaint_query_please")}
+                          </td>
                         </tr>
                       ) : (
                         listData.map((item, i) => (

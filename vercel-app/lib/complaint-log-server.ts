@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { normalizeTenantId } from '@/lib/tenant-context'
 
@@ -35,6 +36,7 @@ export type ComplaintLogDbRow = {
   content?: string
   severity?: string
   action?: string
+  customer_reply?: string
   status?: string
   handler?: string
   done_date?: string
@@ -63,6 +65,7 @@ export type ComplaintLogDto = {
   content: string
   severity: string
   action: string
+  customerReply: string
   status: string
   handler: string
   doneDate: string
@@ -88,6 +91,7 @@ export type InsertComplaintLogInput = {
   content?: string
   severity?: string
   action?: string
+  customerReply?: string
   status?: string
   handler?: string
   doneDate?: string | null
@@ -144,6 +148,7 @@ export function mapComplaintLogRowToDto(d: ComplaintLogDbRow): ComplaintLogDto {
     content: String(d.content || ''),
     severity: String(d.severity || ''),
     action: String(d.action || ''),
+    customerReply: String(d.customer_reply || ''),
     status: String(d.status || ''),
     handler: String(d.handler || ''),
     doneDate: d.done_date ? String(d.done_date).slice(0, 10) : '',
@@ -178,6 +183,7 @@ export async function insertComplaintLog(input: InsertComplaintLogInput): Promis
     content: String(input.content || '').trim(),
     severity: String(input.severity || '').trim(),
     action: String(input.action || '').trim(),
+    customer_reply: String(input.customerReply || '').trim(),
     status: String(input.status || '접수').trim(),
     handler: String(input.handler || '').trim(),
     done_date: (input.doneDate || '').toString().trim().slice(0, 10) || null,
@@ -196,20 +202,8 @@ export async function insertComplaintLog(input: InsertComplaintLogInput): Promis
     row.source_channel = sourceChannel
   }
 
-  try {
-    await supabaseInsert('complaint_logs', row)
-  } catch (e) {
-    // tenant_id/store_code 컬럼이 아직 없는 환경이면 기존 컬럼으로 폴백
-    const msg = e instanceof Error ? e.message : String(e)
-    if (/tenant_id|store_code|42703/i.test(msg)) {
-      const legacyRow = { ...row } as Record<string, unknown>
-      delete legacyRow.tenant_id
-      delete legacyRow.store_code
-      await supabaseInsert('complaint_logs', legacyRow)
-      return { number: num }
-    }
-    throw e
-  }
+  // tenant_id/store_code 등 미적용 DB면 해당 컬럼만 빼고 재시도
+  await supabaseInsertWithPgrst204Fallback('complaint_logs', row, 'insertComplaintLog')
 
   return { number: num }
 }

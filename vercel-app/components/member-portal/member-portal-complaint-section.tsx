@@ -34,7 +34,7 @@ type ComplaintRow = {
   type: string
   title: string
   status: string
-  action: string
+  customerReply: string
   createdAt: string
   date: string
   time: string
@@ -416,9 +416,9 @@ export function MemberPortalComplaintSection({
                     {t(statusKey(row.status))}
                   </span>
                 </div>
-                {row.status === "처리완료" && row.action ? (
-                  <p className={`mt-2 border-t border-stone-200/60 pt-2 text-xs ${MP_CARD_TEXT_SECONDARY}`}>
-                    {t("complaintActionLabel")}: {row.action}
+                {row.customerReply ? (
+                  <p className={`mt-2 whitespace-pre-wrap border-t border-stone-200/60 pt-2 text-xs ${MP_CARD_TEXT_SECONDARY}`}>
+                    {t("complaintReplyLabel")}: {row.customerReply}
                   </p>
                 ) : null}
               </li>

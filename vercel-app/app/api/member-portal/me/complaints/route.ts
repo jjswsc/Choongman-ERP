@@ -46,13 +46,18 @@ type MemberComplaintBody = {
 
 function memberComplaintListItem(d: ComplaintLogDbRow) {
   const row = mapComplaintLogRowToDto(d)
+  const customerReply = String(row.customerReply || '').trim()
+  // 레거시: customer_reply 없이 처리완료+action 만 있는 건은 action 을 답변으로 노출
+  const visibleReply =
+    customerReply ||
+    (row.status === '처리완료' && String(row.action || '').trim() ? String(row.action || '').trim() : '')
   return {
     number: row.number,
     store: row.store,
     type: row.type,
     title: row.title,
     status: row.status,
-    action: row.action,
+    customerReply: visibleReply,
     createdAt: row.createdAt || (row.date ? `${row.date}T${row.time || '00:00'}:00+07:00` : ''),
     date: row.date,
     time: row.time,

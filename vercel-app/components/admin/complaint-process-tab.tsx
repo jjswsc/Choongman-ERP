@@ -21,7 +21,6 @@ import { appAlert } from "@/lib/app-message"
 import { updateComplaintLog, type ComplaintLogItem } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
-const OPEN_STATUSES = new Set(["접수", "조사중", "보류"])
 const STATUSES = ["접수", "조사중", "처리완료", "보류", "종료"] as const
 const statusToKey: Record<string, string> = {
   접수: "complaint_status_recv",
@@ -41,28 +40,33 @@ type Props = {
   loading: boolean
   writerName: string
   getTrans: (text: string) => string
+  openOnly: boolean
+  onOpenOnlyChange: (v: boolean) => void
   onSaved: () => void
 }
 
-export function ComplaintProcessTab({ items, loading, writerName, getTrans, onSaved }: Props) {
+export function ComplaintProcessTab({
+  items,
+  loading,
+  writerName,
+  getTrans,
+  openOnly,
+  onOpenOnlyChange,
+  onSaved,
+}: Props) {
   const { lang } = useLang()
   const t = useT(lang)
-  const [openOnly, setOpenOnly] = useState(true)
   const [selectedKey, setSelectedKey] = useState<string>("")
   const [saving, setSaving] = useState(false)
   const [draftStatus, setDraftStatus] = useState("")
   const [draftHandler, setDraftHandler] = useState("")
   const [draftAction, setDraftAction] = useState("")
+  const [draftCustomerReply, setDraftCustomerReply] = useState("")
   const [draftDoneDate, setDraftDoneDate] = useState("")
 
-  const filtered = useMemo(() => {
-    const arr = openOnly ? items.filter((x) => OPEN_STATUSES.has(String(x.status || ""))) : items
-    return arr
-  }, [items, openOnly])
-
   const selected = useMemo(
-    () => filtered.find((x) => String(x.row ?? x.id ?? "") === selectedKey) ?? null,
-    [filtered, selectedKey]
+    () => items.find((x) => String(x.row ?? x.id ?? "") === selectedKey) ?? null,
+    [items, selectedKey]
   )
 
   const selectItem = (item: ComplaintLogItem) => {
@@ -71,6 +75,7 @@ export function ComplaintProcessTab({ items, loading, writerName, getTrans, onSa
     setDraftStatus(item.status || "접수")
     setDraftHandler(item.handler || writerName)
     setDraftAction(item.action || "")
+    setDraftCustomerReply(item.customerReply || "")
     setDraftDoneDate(item.doneDate || "")
   }
 
@@ -98,6 +103,7 @@ export function ComplaintProcessTab({ items, loading, writerName, getTrans, onSa
         handler: draftHandler,
         doneDate: draftDoneDate,
         action: draftAction,
+        customerReply: draftCustomerReply,
         photoUrl: selected.photoUrl,
         remark: selected.remark,
       })
@@ -123,18 +129,23 @@ export function ComplaintProcessTab({ items, loading, writerName, getTrans, onSa
         <CardContent className="p-0">
           <div className="flex items-center justify-between border-b px-3 py-2">
             <label className="flex items-center gap-2 text-xs">
-              <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} className="rounded" />
+              <input
+                type="checkbox"
+                checked={openOnly}
+                onChange={(e) => onOpenOnlyChange(e.target.checked)}
+                className="rounded"
+              />
               {t("complaint_kpi_open")}
             </label>
-            <span className="text-xs text-muted-foreground tabular-nums">{filtered.length}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{items.length}</span>
           </div>
           <div className="max-h-[520px] overflow-y-auto">
             {loading ? (
               <p className="p-6 text-center text-xs text-muted-foreground">{t("loading")}</p>
-            ) : filtered.length === 0 ? (
-              <p className="p-6 text-center text-xs text-muted-foreground">—</p>
+            ) : items.length === 0 ? (
+              <p className="p-6 text-center text-xs text-muted-foreground">{t("complaint_no_results")}</p>
             ) : (
-              filtered.map((item) => {
+              items.map((item) => {
                 const id = String(item.row ?? item.id ?? "")
                 const active = id === selectedKey
                 return (
@@ -199,8 +210,24 @@ export function ComplaintProcessTab({ items, loading, writerName, getTrans, onSa
                 <Input type="date" value={draftDoneDate} onChange={(e) => setDraftDoneDate(e.target.value)} className="h-8" />
               </div>
               <div>
+                <label className="font-semibold block mb-1">{t("complaint_customer_reply")}</label>
+                <p className="text-[11px] text-muted-foreground mb-1">{t("complaint_customer_reply_hint")}</p>
+                <Textarea
+                  value={draftCustomerReply}
+                  onChange={(e) => setDraftCustomerReply(e.target.value)}
+                  rows={3}
+                  placeholder={t("complaint_ph_customer_reply")}
+                />
+              </div>
+              <div>
                 <label className="font-semibold block mb-1">{t("complaint_action")}</label>
-                <Textarea value={draftAction} onChange={(e) => setDraftAction(e.target.value)} rows={3} />
+                <p className="text-[11px] text-muted-foreground mb-1">{t("complaint_action_hint")}</p>
+                <Textarea
+                  value={draftAction}
+                  onChange={(e) => setDraftAction(e.target.value)}
+                  rows={2}
+                  placeholder={t("complaint_ph_action")}
+                />
               </div>
               <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving}>
                 <Save className="h-3.5 w-3.5 mr-1" />

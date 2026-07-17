@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
       content: String(data.content || '').trim(),
       severity: String(data.severity || '').trim(),
       action: String(data.action || '').trim(),
+      customerReply: String(data.customerReply || '').trim(),
       status: String(data.status || '접수').trim(),
       handler: String(data.handler || '').trim(),
       doneDate: (data.doneDate || '').toString().trim().slice(0, 10) || null,

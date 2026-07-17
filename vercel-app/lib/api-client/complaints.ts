@@ -22,6 +22,7 @@ export interface ComplaintLogItem {
   content: string
   severity: string
   action: string
+  customerReply?: string
   status: string
   handler: string
   doneDate: string
@@ -39,7 +40,12 @@ export async function getComplaintLogList(params: {
   visitPath?: string
   typeFilter?: string
   statusFilter?: string
+  severityFilter?: string
   sourceChannel?: string
+  q?: string
+  openOnly?: boolean
+  /** 미완료 처리 탭 등 — 날짜 범위 없이 조회 */
+  skipDate?: boolean
 }) {
   const q = new URLSearchParams()
   if (params.startStr) q.set('startStr', params.startStr)
@@ -48,7 +54,11 @@ export async function getComplaintLogList(params: {
   if (params.visitPath) q.set('visitPath', params.visitPath)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.statusFilter) q.set('statusFilter', params.statusFilter)
+  if (params.severityFilter) q.set('severityFilter', params.severityFilter)
   if (params.sourceChannel) q.set('sourceChannel', params.sourceChannel)
+  if (params.q) q.set('q', params.q)
+  if (params.openOnly) q.set('openOnly', '1')
+  if (params.skipDate) q.set('skipDate', '1')
   const res = await apiFetchWithOffline(`/api/getComplaintLogList?${q}`)
   return jsonAsArray<ComplaintLogItem>(await res.json())
 }

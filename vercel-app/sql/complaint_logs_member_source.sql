@@ -24,9 +24,32 @@ SET store_code = store_name
 WHERE COALESCE(NULLIF(TRIM(store_code), ''), '') = '';
 
 -- 백필: tenant_id = erp_stores.tenant_id (store_code 기준)
+-- 충만 레거시 등 erp_stores.tenant_id 가 없으면 스킵합니다.
 DO $$
 BEGIN
-  IF to_regclass('public.erp_stores') IS null THEN
+  IF to_regclass('public.erp_stores') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'erp_stores'
+      AND column_name = 'tenant_id'
+  ) THEN
+    RAISE NOTICE 'skip complaint_logs tenant backfill: erp_stores.tenant_id missing';
+    RETURN;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'erp_stores'
+      AND column_name = 'store_code'
+  ) THEN
+    RAISE NOTICE 'skip complaint_logs tenant backfill: erp_stores.store_code missing';
     RETURN;
   END IF;
 

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { mapComplaintLogRowToDto, type ComplaintLogDbRow } from '@/lib/complaint-log-server'
+import { escapeIlikePattern } from '@/lib/postgrest-ilike'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+
+const OPEN_STATUSES = ['접수', '조사중', '보류'] as const
 
 /** 컴플레인 일지 목록 조회 */
 export async function GET(request: NextRequest) {
@@ -16,7 +19,11 @@ export async function GET(request: NextRequest) {
   const visitPath = searchParams.get('visitPath')?.trim() || ''
   const typeFilter = searchParams.get('typeFilter')?.trim() || ''
   const statusFilter = searchParams.get('statusFilter')?.trim() || ''
+  const severityFilter = searchParams.get('severityFilter')?.trim() || ''
   const sourceChannel = searchParams.get('sourceChannel')?.trim() || ''
+  const openOnly = searchParams.get('openOnly') === '1' || searchParams.get('openOnly') === 'true'
+  const q = String(searchParams.get('q') || '').trim().slice(0, 80)
+  const skipDate = searchParams.get('skipDate') === '1' || searchParams.get('skipDate') === 'true'
 
   const filters: string[] = []
   const tenantId = String(authRes.auth?.tenantId || '').trim()
@@ -24,16 +31,29 @@ export async function GET(request: NextRequest) {
     if (!tenantId) return NextResponse.json([], { status: 403 })
     filters.push(`tenant_id=eq.${encodeURIComponent(tenantId)}`)
   }
-  if (startStr) filters.push(`log_date=gte.${startStr}`)
-  if (endStr) filters.push(`log_date=lte.${endStr}`)
+  if (!skipDate) {
+    if (startStr) filters.push(`log_date=gte.${startStr}`)
+    if (endStr) filters.push(`log_date=lte.${endStr}`)
+  }
   if (storeFilter && storeFilter !== 'All') filters.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
   if (visitPath) filters.push(`visit_path=eq.${encodeURIComponent(visitPath)}`)
   if (typeFilter) filters.push(`complaint_type=eq.${encodeURIComponent(typeFilter)}`)
-  if (statusFilter) filters.push(`status=eq.${encodeURIComponent(statusFilter)}`)
+  if (severityFilter) filters.push(`severity=eq.${encodeURIComponent(severityFilter)}`)
+  if (openOnly) {
+    filters.push(`status=in.(${OPEN_STATUSES.map((s) => encodeURIComponent(s)).join(',')})`)
+  } else if (statusFilter) {
+    filters.push(`status=eq.${encodeURIComponent(statusFilter)}`)
+  }
   if (sourceChannel === '__empty__') {
     filters.push('source_channel=eq.')
   } else if (sourceChannel) {
     filters.push(`source_channel=eq.${encodeURIComponent(sourceChannel)}`)
+  }
+  if (q) {
+    const pattern = encodeURIComponent(`%${escapeIlikePattern(q)}%`)
+    filters.push(
+      `or=(title.ilike.${pattern},customer.ilike.${pattern},content.ilike.${pattern},contact.ilike.${pattern},number.ilike.${pattern},menu.ilike.${pattern})`
+    )
   }
 
   const filterStr = filters.length ? filters.join('&') : 'id=gt.0'
