@@ -107,6 +107,7 @@ import {
 import { buildCouponDiscountLineAllocations, summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
+  isLikelyIncompleteCouponQrScan,
   isMemberCouponQrPayload,
   isMemberCouponScanPayload,
   normalizeCouponScanDelimiters,
@@ -2090,17 +2091,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       return
     }
     if (isMemberCouponScanPayload(sanitized)) {
-      // 정식 쿠폰 QR(CM|CPN 헤더)은 회원번호로 줄이지 않고 전체 페이로드를 유지한다.
-      // → 회원란에 잘못 스캔돼도 Enter에서 쿠폰 적용으로 라우팅할 수 있다.
-      if (isMemberCouponQrPayload(sanitized)) {
-        setMemberKeyword(sanitized)
-        return
-      }
-      const couponParsed = parseLooseMemberCouponScanInput(sanitized)
-      if (couponParsed?.memberNo) {
-        setMemberKeyword(couponParsed.memberNo)
-        return
-      }
+      // 쿠폰 QR/loose 페이로드는 회원번호만 남기지 않고 전체를 유지한다.
+      // → 회원란에 잘못 스캔돼도 idle/Enter에서 쿠폰 적용으로 라우팅할 수 있다.
+      setMemberKeyword(sanitized)
+      return
     }
     setMemberKeyword(sanitized)
   }
@@ -3741,46 +3735,59 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     [applyCouponFromQrPayload, finishCouponScanInput]
   )
 
-  const applyCouponCode = async (rawOverride?: string) => {
-    const pendingQrRaw = pendingMemberCouponQrRawRef.current
-    if (pendingQrRaw) {
-      const ok = await runCouponScanPayload(pendingQrRaw)
-      if (ok) pendingMemberCouponQrRawRef.current = null
-      return
-    }
-
-    const raw = normalizeCouponScanDelimiters(String(rawOverride ?? couponCode).trim())
-    if (!raw) {
-      setCouponMessage(t('posCouponPleaseEnterCode'))
-      return
-    }
-
-    const memberOnly = parseMemberPosScanInput(raw)
-    if (memberOnly) {
-      const linked = await linkMemberByMemberNo(memberOnly.memberNo, { beep: false })
-      if (linked) {
-        setCouponCode('')
-        setCouponMessage(i18nTr(t, 'posCouponQrMemberLinked', { name: linked.name }))
-        finishCouponScanInput('success')
-      } else {
-        setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
-        finishCouponScanInput('error')
+  const applyCouponCode = useCallback(
+    async (rawOverride?: string) => {
+      const pendingQrRaw = pendingMemberCouponQrRawRef.current
+      if (pendingQrRaw) {
+        const ok = await runCouponScanPayload(pendingQrRaw)
+        if (ok) pendingMemberCouponQrRawRef.current = null
+        return
       }
-      return
-    }
 
-    const loose = parseLooseMemberCouponScanInput(raw)
-    if (isMemberCouponQrPayload(raw) || loose) {
-      await runCouponScanPayload(raw)
-      return
-    }
-    const ok = await applyCouponWithParams({
-      code: raw,
-      memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-    })
-    if (ok) finishCouponScanInput('success')
-    else finishCouponScanInput('error')
-  }
+      const raw = normalizeCouponScanDelimiters(String(rawOverride ?? couponCode).trim())
+      if (!raw) {
+        setCouponMessage(t('posCouponPleaseEnterCode'))
+        return
+      }
+
+      const memberOnly = parseMemberPosScanInput(raw)
+      if (memberOnly) {
+        const linked = await linkMemberByMemberNo(memberOnly.memberNo, { beep: false })
+        if (linked) {
+          setCouponCode('')
+          setCouponMessage(i18nTr(t, 'posCouponQrMemberLinked', { name: linked.name }))
+          finishCouponScanInput('success')
+        } else {
+          setCouponMessage(t('posCouponQrMemberNotFound') || 'QR의 회원번호를 찾을 수 없습니다.')
+          finishCouponScanInput('error')
+        }
+        return
+      }
+
+      const loose = parseLooseMemberCouponScanInput(raw)
+      if (isMemberCouponQrPayload(raw) || loose) {
+        await runCouponScanPayload(raw)
+        return
+      }
+      const ok = await applyCouponWithParams({
+        code: raw,
+        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+      })
+      if (ok) finishCouponScanInput('success')
+      else finishCouponScanInput('error')
+    },
+    [
+      applyCouponWithParams,
+      couponCode,
+      finishCouponScanInput,
+      linkMemberByMemberNo,
+      runCouponScanPayload,
+      selectedMemberId,
+      t,
+    ]
+  )
+  const applyCouponCodeRef = useRef(applyCouponCode)
+  applyCouponCodeRef.current = applyCouponCode
 
   const sanitizeCouponCodeInput = (raw: string) =>
     normalizeCouponScanDelimiters(String(raw ?? '').replace(/[^\x20-\x7E\uFF5E\u223C\u02DC\u2053]/g, ''))
@@ -3817,24 +3824,49 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     }
 
-    const submitCouponScan = (raw: string) => {
+    const submitMemberCouponPayload = (raw: string, opts?: { allowIncomplete?: boolean }) => {
       const normalized = normalizeCouponScanDelimiters(raw.trim())
-      if (!normalized || !isMemberCouponScanPayload(normalized)) return
+      if (!normalized || !isMemberCouponScanPayload(normalized)) return false
+      if (!opts?.allowIncomplete && isLikelyIncompleteCouponQrScan(normalized)) return false
       clearIdleSubmit()
       resetBuffer()
       setCouponCode('')
       pendingMemberCouponQrRawRef.current = null
       couponScanAutoSubmitRef.current = normalized
       void runCouponScanPayload(normalized)
+      return true
     }
 
-    const scheduleIdleSubmit = () => {
+    const submitPlainCouponFromField = (raw: string) => {
+      const normalized = normalizeCouponScanDelimiters(raw.trim())
+      if (!normalized || isMemberCouponScanPayload(normalized)) return false
+      clearIdleSubmit()
+      resetBuffer()
+      pendingMemberCouponQrRawRef.current = null
+      setCouponCode(normalized)
+      void applyCouponCodeRef.current(normalized)
+      return true
+    }
+
+    const scheduleIdleSubmit = (opts?: { fromCouponField?: boolean; allowIncomplete?: boolean }) => {
       clearIdleSubmit()
       idleSubmitTimer = window.setTimeout(() => {
         idleSubmitTimer = null
         const raw = normalizeCouponScanDelimiters(buffer.trim())
-        if (!raw || !isMemberCouponScanPayload(raw)) return
-        submitCouponScan(raw)
+        if (!raw) return
+        if (!opts?.allowIncomplete && isLikelyIncompleteCouponQrScan(raw)) {
+          scheduleIdleSubmit({ ...opts, allowIncomplete: true })
+          return
+        }
+        if (isMemberCouponScanPayload(raw)) {
+          if (!submitMemberCouponPayload(raw) && !opts?.allowIncomplete) {
+            scheduleIdleSubmit({ ...opts, allowIncomplete: true })
+          }
+          return
+        }
+        if (opts?.fromCouponField) {
+          submitPlainCouponFromField(raw)
+        }
       }, POS_SCAN_IDLE_SUBMIT_MS)
     }
 
@@ -3860,11 +3892,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         const hadScanBuffer = buffer.length > 0
         clearIdleSubmit()
         resetBuffer()
-        if (hadScanBuffer && raw) {
+        if (hadScanBuffer && raw && isMemberCouponScanPayload(raw)) {
           e.preventDefault()
           e.stopPropagation()
-          submitCouponScan(raw)
+          // Enter = 스캔 종료 신호이므로 issueId 미도착이어도 제출
+          submitMemberCouponPayload(raw, { allowIncomplete: true })
+          return
         }
+        // plain 코드·느린 타이핑: preventDefault 하지 않음
+        // → 쿠폰 입력란 onKeyDown이 필드 전체 값으로 applyCouponCode 호출
+        // USB plain(Enter 없음)은 scheduleIdleSubmit({ fromCouponField })가 처리
         return
       }
 
@@ -3894,7 +3931,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             pendingMemberCouponQrRawRef.current = null
             setCouponCode(normalized)
           }
-          scheduleIdleSubmit()
+          scheduleIdleSubmit({ fromCouponField: true })
         }
 
         if (!isMemberCouponScanPayload(buffer) && buffer.length > 128) resetBuffer()
@@ -4017,11 +4054,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     if (!showPaymentModal || couponQrScannerOpen) return
     const raw = normalizeCouponScanDelimiters(memberKeyword.trim())
-    if (!raw || !isMemberCouponQrPayload(raw)) return
+    if (!raw || !isMemberCouponScanPayload(raw)) return
+    if (isLikelyIncompleteCouponQrScan(raw)) return
 
     const timer = window.setTimeout(() => {
       const latest = normalizeCouponScanDelimiters(memberKeyword.trim())
       if (!latest || !isMemberCouponScanPayload(latest)) return
+      if (isLikelyIncompleteCouponQrScan(latest)) return
       if (memberFieldCouponAutoRef.current === latest) return
       memberFieldCouponAutoRef.current = latest
       setMemberKeyword('')
@@ -5603,7 +5642,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 if (e.key === 'Enter') {
                   e.preventDefault()
                   const scanned = normalizeCouponScanDelimiters(e.currentTarget.value.trim())
-                  if (isMemberCouponQrPayload(scanned)) return
+                  if (isMemberCouponScanPayload(scanned)) {
+                    setMemberKeyword('')
+                    void runCouponScanPayload(scanned)
+                    return
+                  }
                   void handleMemberSearch(e.currentTarget.value)
                 }
               }}
