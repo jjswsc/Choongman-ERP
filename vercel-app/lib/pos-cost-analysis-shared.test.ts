@@ -61,6 +61,33 @@ describe("pos-cost-analysis-shared", () => {
     expect(m.costRatioH).toBeGreaterThan(28.5)
   })
 
+  it("배달 원가율·마진 분모에서 배달앱 수수료를 차감하지 않는다", () => {
+    const withFee = computePosCostRowMetrics(
+      {
+        ...baseRow,
+        priceDelivery: 159,
+        costDelivery: 56.4,
+        deliveryAppFeePercent: 25,
+      },
+      0
+    )
+    const noFee = computePosCostRowMetrics(
+      {
+        ...baseRow,
+        priceDelivery: 159,
+        costDelivery: 56.4,
+        deliveryAppFeePercent: 0,
+      },
+      0
+    )
+    expect(withFee.netSalesD).toBe(noFee.netSalesD)
+    expect(withFee.costRatioD).toBe(noFee.costRatioD)
+    expect(withFee.marginD).toBe(noFee.marginD)
+    // SOY SAUCE CHICKEN 회귀: 56.4 ÷ (159/1.07) ≈ 38%
+    expect(withFee.costRatioD).toBeCloseTo(38, 0)
+    expect(withFee.costRatioD).toBeLessThan(40)
+  })
+
   it("품목 사용 메뉴 수를 센다", () => {
     const { count } = countMenusUsingItemCode([baseRow], "ITEM1")
     expect(count).toBe(1)

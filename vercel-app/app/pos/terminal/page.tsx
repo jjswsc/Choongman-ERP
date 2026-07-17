@@ -119,7 +119,7 @@ import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { posOrderCouponFieldsFromOrderRow, posOrderCouponFieldsFromPayload } from '@/lib/pos-order-coupon-fields'
 import { posOrderTierDiscountFieldsFromPayload } from '@/lib/pos-order-tier-discount-fields'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
+import { mapDineInAddonCartLineForKitchenPrint, mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
 import { isBanbanKitchenLine } from '@/lib/pos-banban-utils'
 import {
   buildOptionNameByCodeFromMenus,
@@ -2360,28 +2360,12 @@ export default function PosTerminalPage() {
         dedupeKeys,
         kitchenLines: kitchenCartLines.length,
       })
-      const itemsForKitchen = kitchenCartLines.map((i) => {
-        const line = i as DineInAddonKitchenCartLine
-        const menuId = String(
-          line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
-        ).trim()
-        const note = String(line.note ?? '').trim()
-        const promoId = String(line.promoId ?? '').trim()
-        const promoCode = String(line.promoCode ?? '').trim()
-        return {
-          id: String(i.id ?? ''),
-          name: String(i.name ?? ''),
-          price: Number(i.price ?? 0),
-          qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
-          ...(menuId ? { menuId } : {}),
-          ...(note ? { note } : {}),
-          ...(promoId ? { promoId } : {}),
-          ...(promoCode ? { promoCode } : {}),
-          ...(Array.isArray(line.promoItems)
-            ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) }
-            : {}),
-        }
-      })
+      const itemsForKitchen = kitchenCartLines.map((line) =>
+        mapDineInAddonCartLineForKitchenPrint(line as Record<string, unknown>, {
+          menus,
+          enrichPromoItems: enrichPromoItemsWithOptionName,
+        })
+      )
       const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
       void getPrinterSettingsForStore(printSettingsStoreCode)
         .then(async (settings) => {
@@ -2466,6 +2450,7 @@ export default function PosTerminalPage() {
       kitchenItemsWithResolvedPromo,
       resolveMenusForKitchenPrint,
       resolveOptionNameByCodeForKitchenPrint,
+      menus,
       lang,
       kitchenSlipItemsForPrint,
       optionNameByCode,
@@ -3388,59 +3373,53 @@ export default function PosTerminalPage() {
     qty: number
     note?: string
     menuId?: string
+    menuId1?: string
+    menuId2?: string
     optionCode?: string
+    optionCode1?: string
+    optionCode2?: string
+    optionCodes?: string[]
+    promoId?: string
+    promoCode?: string
     promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
+    lineDiscountAmt?: number
   }
+
+  const mapPosOrderItemForKitchenDelta = useCallback(
+    (it: Record<string, unknown>): RealtimeParsedPosOrderItem => {
+      const mapped = mapPosOrderRowForKitchenPrint(it, {
+        menus,
+        enrichPromoItems: enrichPromoItemsWithOptionName,
+      })
+      const displayName = resolveOrderItemDisplayName({
+        id: mapped.id,
+        name: mapped.name,
+        menuId: String(mapped.menuId ?? mapped.menuId1 ?? '').trim(),
+      })
+      const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
+      return {
+        ...mapped,
+        name: displayName,
+        ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
+      }
+    },
+    [enrichPromoItemsWithOptionName, menus, resolveOrderItemDisplayName]
+  )
 
   const parseRealtimePosOrderRowItemsJson = useCallback(
     (row: Record<string, unknown>): { ok: true; items: RealtimeParsedPosOrderItem[] } | { ok: false } => {
       try {
         const raw = row.items_json
         const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : []
-        const items = (Array.isArray(arr) ? arr : []).map(
-          (it: {
-            id?: string
-            name?: string
-            price?: number
-            qty?: number
-            quantity?: number
-            note?: string
-            menuId1?: string
-            menu_id1?: string
-            menuId?: string
-            optionCode1?: string
-            option_code1?: string
-            optionCode?: string
-            promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
-          }) => {
-            const note = String(it.note ?? '').trim()
-            const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
-            const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
-            const displayName = resolveOrderItemDisplayName({
-              id: String(it.id ?? ''),
-              name: String(it.name ?? ''),
-              menuId,
-            })
-            const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
-            return {
-              id: String(it.id ?? ''),
-              name: displayName,
-              price: Number(it.price ?? 0),
-              qty: Number(it.qty ?? it.quantity ?? 1),
-              ...(menuId ? { menuId } : {}),
-              ...(optionCode ? { optionCode } : {}),
-              ...(note ? { note } : {}),
-              ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
-              ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
-            }
-          }
+        const items = (Array.isArray(arr) ? arr : []).map((it) =>
+          mapPosOrderItemForKitchenDelta(it as Record<string, unknown>)
         )
         return { ok: true, items }
       } catch {
         return { ok: false }
       }
     },
-    [enrichPromoItemsWithOptionName, resolveOrderItemDisplayName]
+    [mapPosOrderItemForKitchenDelta]
   )
 
   const resolveDineInSnapshotItemKey = useCallback(
@@ -4966,14 +4945,11 @@ export default function PosTerminalPage() {
       }
 
       const cartLikeNew = items.map((it) => ({
+        ...it,
         id: resolveDineInSnapshotItemKey(it),
-        name: it.name,
-        price: it.price,
         quantity: it.qty,
         qty: it.qty,
         ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
-        ...(it.menuId ? { menuId: it.menuId } : {}),
-        ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
       }))
       const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
         cartLikeNew,
@@ -5014,7 +4990,7 @@ export default function PosTerminalPage() {
         couponDiscountAmt,
         discountReason: String(row.discount_reason ?? '').trim() || undefined,
         total: pricing.finalTotal,
-        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
         vatFeeAmt: pricing.vatFeeAmt,
         vatFeeMode: pricing.vatFeeMode,
         ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -5027,7 +5003,9 @@ export default function PosTerminalPage() {
         ...posGuestCountSpread(row.guest_count),
       }
 
-      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenCartLines)
+      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenCartLines, {
+        formatNote: formatLineNoteForPrint,
+      })
 
       dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
       logPosPrintDebug('remote_dine_in_add_autoprint', { orderId, changedCount: changedIds.length })
@@ -5376,45 +5354,8 @@ export default function PosTerminalPage() {
                 if (statusLower === 'completed' || statusLower === 'cancelled' || statusLower === 'canceled') continue
                 if (isPosOrderPaidLikeStatus(statusLower)) continue
                 if (posOrderPaymentSum(o) > 0) continue
-                const items = (o.items || []).map(
-                  (it: {
-                    id?: string
-                    name?: string
-                    price?: number
-                    qty?: number
-                    quantity?: number
-                    note?: string
-                    menuId1?: string
-                    menu_id1?: string
-                    menuId?: string
-                    optionCode1?: string
-                    option_code1?: string
-                    optionCode?: string
-                    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-                  }) => {
-                    const note = String(it.note ?? '').trim()
-                    const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
-                    const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
-                    const displayName = resolveOrderItemDisplayName({
-                      id: String(it.id ?? ''),
-                      name: String(it.name ?? ''),
-                      menuId,
-                    })
-                    const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
-                    return {
-                      id: String(it.id ?? ''),
-                      name: displayName,
-                      price: Number(it.price ?? 0),
-                      qty: Number(it.qty ?? it.quantity ?? 1),
-                      ...(menuId ? { menuId } : {}),
-                      ...(optionCode ? { optionCode } : {}),
-                      ...(note ? { note: formatLineNoteForPrint(note) } : {}),
-                      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
-                      ...(Array.isArray(it.promoItems)
-                        ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
-                        : {}),
-                    }
-                  }
+                const items = (o.items || []).map((it) =>
+                  mapPosOrderItemForKitchenDelta(it as unknown as Record<string, unknown>)
                 )
                 if (!items.length) continue
                 const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
@@ -5453,14 +5394,11 @@ export default function PosTerminalPage() {
                   continue
                 }
                 const cartLikeNew = items.map((it) => ({
+                  ...it,
                   id: resolveDineInSnapshotItemKey(it),
-                  name: it.name,
-                  price: it.price,
                   quantity: it.qty,
                   qty: it.qty,
                   ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
-                  ...(it.menuId ? { menuId: it.menuId } : {}),
-                  ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
                 }))
                 const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
                   cartLikeNew,
@@ -5498,7 +5436,7 @@ export default function PosTerminalPage() {
                   couponDiscountAmt,
                   discountReason: String(o.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
-                  _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+                  _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
                   ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -5526,7 +5464,9 @@ export default function PosTerminalPage() {
                   setTimeout(() => {
                     dispatchDineInAddonKitchenPrint({
                       kitchenCartLines,
-                      dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines),
+                      dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines, {
+                        formatNote: formatLineNoteForPrint,
+                      }),
                       orderNo: orderNoStr,
                       storeCode: storeCodePoll,
                       tableName: tableNamePoll,
@@ -5617,6 +5557,7 @@ export default function PosTerminalPage() {
     printReceiptNow,
     dispatchDineInAddonKitchenPrint,
     formatLineNoteForPrint,
+    mapPosOrderItemForKitchenDelta,
   ])
 
   /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */
@@ -8766,7 +8707,9 @@ export default function PosTerminalPage() {
                       })
                     : payloadItemsNormalized
                 const addKitchenDedupeSuffix = isAddOrder
-                  ? buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)
+                  ? buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, {
+                      formatNote: formatLineNoteForPrint,
+                    })
                   : ''
                 const hallDedupeKeyForSubmit =
                   savedOrderId != null && savedOrderId > 0
@@ -8821,7 +8764,8 @@ export default function PosTerminalPage() {
                       kitchenCartLines,
                       dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(
                         savedOrderId ?? orderNoStr,
-                        kitchenCartLines
+                        kitchenCartLines,
+                        { formatNote: formatLineNoteForPrint }
                       ),
                       orderNo: orderNoStr,
                       storeCode: currentStoreId,
@@ -9570,7 +9514,7 @@ export default function PosTerminalPage() {
                     cardFeeMode: pricing.cardFeeMode,
                     otherFeeAmt: pricing.otherFeeAmt,
                     otherFeeMode: pricing.otherFeeMode,
-                    _autoPrintDedupeKey: `order:${existingTakeoutId}:takeout:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+                    _autoPrintDedupeKey: `order:${existingTakeoutId}:takeout:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
                   }
                   const kitchenDelayAfterReceiptMs =
                     typeof window !== 'undefined' && window.cmPosShell
@@ -9591,7 +9535,8 @@ export default function PosTerminalPage() {
                           kitchenCartLines,
                           dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(
                             existingTakeoutId,
-                            kitchenCartLines
+                            kitchenCartLines,
+                            { formatNote: formatLineNoteForPrint }
                           ),
                           orderNo: savedOrderNo,
                           storeCode: currentStoreId,

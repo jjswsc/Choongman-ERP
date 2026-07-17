@@ -317,6 +317,15 @@ describe('buildDineInAddKitchenPrintDedupeSuffix', () => {
     expect(b).toContain('m:44@1')
   })
 
+  it('normalizes note via formatNote so local and remote paths share dedupe key', () => {
+    const formatNote = (note: string) => (note === 'optc:SIZE_M' ? 'M - Boneless' : note.trim())
+    const raw = [{ menuId: '26', name: 'Chicken', price: 219, quantity: 1, note: 'optc:SIZE_M' }]
+    const formatted = [{ menuId: '26', name: 'Chicken', price: 219, quantity: 1, note: 'M - Boneless' }]
+    expect(buildDineInAddKitchenPrintDedupeSuffix(raw, { formatNote })).toBe(
+      buildDineInAddKitchenPrintDedupeSuffix(formatted, { formatNote })
+    )
+  })
+
   it('buildDineInAddKitchenAutoPrintDedupeKey is stable across paths', () => {
     const lines = [{ menuId: '44', name: 'SET', price: 250, quantity: 1 }]
     expect(buildDineInAddKitchenAutoPrintDedupeKey(58, lines)).toBe(

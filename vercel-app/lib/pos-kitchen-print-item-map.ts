@@ -132,3 +132,15 @@ export function mapPosOrderRowForKitchenPrint(
     ...(promoItems && promoItems.length > 0 ? { promoItems } : {}),
   }
 }
+
+/** 홀 추가 주문 cart line → 주방 슬립 인쇄용 (신규 주문 `prepareOrderItemsForKitchenPrint`와 동일 매핑) */
+export function mapDineInAddonCartLineForKitchenPrint(
+  line: Record<string, unknown>,
+  opts?: {
+    menus?: PosMenu[]
+    enrichPromoItems?: PromoEnricher
+  }
+): KitchenPrintMappedItem {
+  const qty = Math.max(0, Math.trunc(Number(line.quantity ?? line.qty ?? 1) || 1))
+  return mapPosOrderRowForKitchenPrint({ ...line, qty, quantity: qty }, opts)
+}

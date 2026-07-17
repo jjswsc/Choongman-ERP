@@ -1,5 +1,4 @@
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
-import { resolveDeliveryAppFeePercent } from "@/lib/cost-data"
 import { toPosCostSalesExclVat } from "@/lib/pos-cost-vat"
 
 /** 목록·KPI 공통 — 원가율 구간 (%) */
@@ -64,7 +63,7 @@ export function costRatioTierBgClass(tier: CostRatioTier): string {
 export type PosCostRowMetrics = {
   priceH: number
   priceD: number
-  /** VAT 제외(배달은 앱 수수료 차감 후) — 원가율·마진 분모 */
+  /** VAT 제외 매출 — 원가율·마진 분모(배달앱 수수료 미차감) */
   netSalesH: number
   netSalesD: number
   costHMise: number
@@ -91,19 +90,16 @@ export function computePosCostRowMetrics(
   const costHMise = roundCost(r.costHall ?? 0)
   const costDMise = roundCost(r.costDelivery ?? 0)
   const vatIncluded = r.vatIncluded !== false
-  const feePct = resolveDeliveryAppFeePercent(r.deliveryAppFeePercent)
 
   const netHall = toPosCostSalesExclVat(priceH, vatIncluded)
-  const netDelGross = toPosCostSalesExclVat(priceD, vatIncluded)
-  /** 앱 수수료는 VAT 포함 판매가 기준 %(계산기와 동일) */
-  const netDel = netDelGross - priceD * (feePct / 100)
+  const netDel = toPosCostSalesExclVat(priceD, vatIncluded)
 
   const marginH = netHall - costHMise
   const marginD = netDel - costDMise
   const marginPctH = netHall > 0 ? (marginH / netHall) * 100 : 0
   const marginPctD = netDel > 0 ? (marginD / netDel) * 100 : 0
 
-  /** 원가율 = 원가(공급가) ÷ 매출(부가세 제외) — 원가 계산기와 동일 */
+  /** 원가율 = 원가(공급가) ÷ 매출(부가세 제외) — 배달앱 수수료는 분모에서 제외 */
   const costRatioH = netHall > 0 ? (costHMise / netHall) * 100 : 0
   const costRatioD = netDel > 0 ? (costDMise / netDel) * 100 : 0
 

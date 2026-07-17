@@ -99,12 +99,16 @@ function looksLikeOptionTokenNote(note: string): boolean {
 }
 
 /** 추가 주문 주방·홀 자동인쇄 dedupe — 줄 수만 쓰면 연속 1품목 추가가 막힘 */
-export function buildDineInAddKitchenPrintDedupeSuffix(lines: KitchenComparableLine[]): string {
+export function buildDineInAddKitchenPrintDedupeSuffix(
+  lines: KitchenComparableLine[],
+  opts?: { formatNote?: DineInNoteNormalizer }
+): string {
   if (!lines.length) return '0'
+  const formatNote = opts?.formatNote ?? defaultDineInNoteNormalize
   const parts = lines.map((line) => {
     const menuId = resolveKitchenLineMenuId(line)
     const qty = lineQty(line)
-    const note = String(line.note ?? '').trim()
+    const note = formatNote(String(line.note ?? '').trim())
     const name = String(line.name ?? '').trim()
     const price = Number(line.price ?? 0) || 0
     const id = resolveExistingId(line)
@@ -118,10 +122,11 @@ export function buildDineInAddKitchenPrintDedupeSuffix(lines: KitchenComparableL
 /** 로컬·Realtime·폴링 공통 — 동일 추가분 주방 중복 인쇄 방지 */
 export function buildDineInAddKitchenAutoPrintDedupeKey(
   orderId: number | string,
-  lines: KitchenComparableLine[]
+  lines: KitchenComparableLine[],
+  opts?: { formatNote?: DineInNoteNormalizer }
 ): string {
   const id = String(orderId ?? '').trim()
-  return `order:${id}:kitchen:add:${buildDineInAddKitchenPrintDedupeSuffix(lines)}`
+  return `order:${id}:kitchen:add:${buildDineInAddKitchenPrintDedupeSuffix(lines, opts)}`
 }
 
 function lineQty(line: KitchenComparableLine): number {
