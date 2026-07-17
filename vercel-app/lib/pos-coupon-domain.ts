@@ -182,6 +182,17 @@ export function cartLineMatchesScope(
     const idSet = new Set(menuIds)
     const idUpperSet = new Set(menuIds.map((v) => v.toUpperCase()))
     if (menuId && (idSet.has(menuId) || idUpperSet.has(menuId.toUpperCase()))) return true
+    // 옵션 포함 복합 id (예: 26-opt) → scope 메뉴 id(26)와 매칭
+    if (menuId) {
+      for (const sid of menuIds) {
+        const s = String(sid ?? '').trim()
+        if (!s) continue
+        if (menuId === s || menuId.startsWith(`${s}-`)) return true
+        if (menuId.toUpperCase() === s.toUpperCase() || menuId.toUpperCase().startsWith(`${s.toUpperCase()}-`)) {
+          return true
+        }
+      }
+    }
     if (menuCode && idUpperSet.has(menuCode)) return true
   }
   if (categories.length > 0 && category && categories.includes(category)) return true
@@ -454,6 +465,12 @@ export function validatePosCouponCandidate(
 
   const discountAmt = computeDiscountForTemplate(c, ctx, quantity)
   if (discountAmt <= 0.0001) {
+    if (
+      couponItemScopeIsRestricted(c.itemScope) &&
+      resolveEligibleCartStats(c, ctx.cartLines).eligibleQty <= 0
+    ) {
+      return { valid: false, message: '장바구니에 쿠폰 대상 메뉴가 없습니다.' }
+    }
     return { valid: false, message: '적용 가능한 할인 금액이 없습니다.' }
   }
 

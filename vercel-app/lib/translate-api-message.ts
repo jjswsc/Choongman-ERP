@@ -213,6 +213,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "이 쿠폰은 수동 할인과 함께 사용할 수 없습니다.": "posCouponNoStackManual",
   "이 쿠폰은 다른 쿠폰과 함께 사용할 수 없습니다.": "posCouponNoStackOther",
   "적용 가능한 할인 금액이 없습니다.": "posCouponNoDiscountAmount",
+  "장바구니에 쿠폰 대상 메뉴가 없습니다.": "posCouponNoEligibleMenu",
   "쿠폰 검증 중 오류가 발생했습니다.": "posCouponValidateError",
 
   // verify-auth / 공통 API

@@ -1080,7 +1080,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const buildCouponCartLines = useCallback(
     () =>
       cartItems.map((item) => {
-        const menuId = String((item as { menuId?: string }).menuId ?? '').trim() || undefined
+        const rawMenuId = String((item as { menuId?: string }).menuId ?? '').trim()
+        const resolvedMenuId =
+          (rawMenuId && menuByIdForCollab.has(rawMenuId) ? rawMenuId : '') ||
+          resolveCartLineMenuIdFromCatalog(
+            {
+              id: String((item as { id?: string }).id ?? ''),
+              name: String(item.name ?? ''),
+              menuId: rawMenuId || undefined,
+              menuId1: String((item as { menuId1?: string }).menuId1 ?? '').trim() || undefined,
+              menuId2: String((item as { menuId2?: string }).menuId2 ?? '').trim() || undefined,
+            },
+            menuByIdForCollab
+          ) ||
+          rawMenuId
+        const menuId = resolvedMenuId.trim() || undefined
         const menu = menuId ? menuByIdForCollab.get(menuId) : undefined
         const categoryCode =
           String((item as { categoryCode?: string }).categoryCode ?? '').trim() ||
@@ -5854,7 +5868,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </p>
                   </div>
                 )}
-                {!!couponMessage && <p className="mt-2 text-xs text-muted-foreground">{couponMessage}</p>}
+                {!!couponMessage && (
+                  <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-50 px-2.5 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/20 dark:bg-amber-950/40 dark:text-amber-100">
+                    {couponMessage}
+                  </p>
+                )}
+                {couponCode.trim() && appliedCoupons.length === 0 && !couponMessage ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {t('posCouponPressAddHint') || '「추가」를 눌러 쿠폰을 적용하세요.'}
+                  </p>
+                ) : null}
               </div>
 
               {/* 포인트 사용 — 제목 옆 입력 */}

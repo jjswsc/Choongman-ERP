@@ -718,6 +718,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posCouponMaxPerOrderExceeded: '이 쿠폰은 주문당 최대 {max}장까지 사용할 수 있습니다.',
     posCouponMaxReceiptExceeded: '영수증당 쿠폰은 최대 {max}장까지 사용할 수 있습니다.',
     posCouponNoDiscountAmount: '적용 가능한 할인 금액이 없습니다.',
+    posCouponNoEligibleMenu: '장바구니에 쿠폰 대상 메뉴가 없습니다.',
+    posCouponPressAddHint: '「추가」를 눌러 쿠폰을 적용하세요.',
     posCouponAdd: '쿠폰 추가',
     posCouponEdit: '쿠폰 수정',
     posCouponName: '쿠폰명',
@@ -898,6 +900,12 @@ export const I18N_POS_KO: Record<string, string> = {
     posPrintRequestError: '인쇄 요청 중 오류가 발생했습니다.',
     posPrintBlocked: '팝업이 차단되었습니다. 인쇄를 허용해 주세요.',
     posPrintUnavailable: '인쇄할 수 없습니다.',
+    posKitchenAutoprintFailNetwork:
+      '주방 주문서 출력이 실패했습니다. 서버 연결을 확인해 주세요.',
+    posKitchenAutoprintFailPrint:
+      '주방 주문서 출력이 실패했습니다. 프린터 연결을 확인해 주세요.',
+    posKitchenAutoprintFailOther:
+      '주방 주문서 출력이 실패했습니다. 잠시 후 주문을 다시 출력해 주세요.',
     posPrintBlockedBrowser:
       '팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정에서 팝업·인쇄를 허용해 주세요.',
     posMenuBoardNameRequired: '메뉴판 이름을 입력해 주세요.',
@@ -3937,6 +3945,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'Up to {max} of this coupon per order.',
     posCouponMaxReceiptExceeded: 'Up to {max} coupons per receipt.',
     posCouponNoDiscountAmount: 'No applicable discount amount.',
+    posCouponNoEligibleMenu: 'No coupon-eligible menu in the cart.',
+    posCouponPressAddHint: 'Press Add to apply the coupon.',
     posCouponAdd: 'Add coupon',
     posCouponEdit: 'Edit coupon',
     posCouponName: 'Coupon name',
@@ -4120,6 +4130,12 @@ export const I18N_POS_EN: Record<string, string> = {
     posPrintRequestError: 'An error occurred while requesting print.',
     posPrintBlocked: 'Popup blocked. Please allow popups for printing.',
     posPrintUnavailable: 'Cannot print.',
+    posKitchenAutoprintFailNetwork:
+      'Kitchen slip failed to print. Check the server connection.',
+    posKitchenAutoprintFailPrint:
+      'Kitchen slip failed to print. Check the printer connection.',
+    posKitchenAutoprintFailOther:
+      'Kitchen slip failed to print. Please reprint the order shortly.',
     posPrintBlockedBrowser:
       'Printing is blocked by popup or browser settings. Please allow popups/printing and try again.',
     posMenuBoardNameRequired: 'Please enter a menu board name.',
@@ -6876,6 +6892,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posCouponMaxPerOrderExceeded: 'คูปองนี้ใช้ได้สูงสุด {max} ใบต่อออเดอร์',
     posCouponMaxReceiptExceeded: 'ใช้คูปองได้สูงสุด {max} ใบต่อใบเสร็จ',
     posCouponNoDiscountAmount: 'ไม่มีส่วนลดที่ใช้ได้',
+    posCouponNoEligibleMenu: 'ไม่มีเมนูในตะกร้าที่ตรงกับคูปอง',
+    posCouponPressAddHint: 'กด「เพิ่มคูปอง」เพื่อใช้คูปอง',
     posDiscount: 'ส่วนลด',
     posDiscountReasonPh: 'เหตุผล',
     posDeliveryFee: 'ค่าจัดส่ง',
@@ -7116,6 +7134,12 @@ export const I18N_POS_TH: Record<string, string> = {
     posOrderEdit: 'แก้ไขออเดอร์',
     posEditItemsRequired: 'ต้องมีอย่างน้อย 1 รายการ',
     posPrintUnavailable: 'ไม่สามารถพิมพ์ได้',
+    posKitchenAutoprintFailNetwork:
+      'พิมพ์ใบสั่งครัวไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อเซิร์ฟเวอร์ครับ',
+    posKitchenAutoprintFailPrint:
+      'พิมพ์ใบสั่งครัวไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อเครื่องพิมพ์ครับ',
+    posKitchenAutoprintFailOther:
+      'พิมพ์ใบสั่งครัวไม่สำเร็จ กรุณาพิมพ์ออเดอร์ใหม่อีกครั้งในอีกสักครู่ครับ',
     posPrintBlockedBrowser:
       'ไม่สามารถพิมพ์ได้เนื่องจากป๊อปอัปหรือการตั้งค่าเบราว์เซอร์ โปรดอนุญาตป๊อปอัป/การพิมพ์แล้วลองอีกครั้ง',
     posMenuBoardNameRequired: 'กรุณากรอกชื่อเมนูบอร์ด',

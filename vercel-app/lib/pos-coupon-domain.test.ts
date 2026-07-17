@@ -148,6 +148,34 @@ describe('validatePosCouponCandidate item_fixed scope', () => {
     expect(res.discountAmt).toBe(249)
     expect(res.appliedCoupons?.[0]?.itemScope).toEqual({ menuIds: ['8'] })
   })
+
+  it('복합 menuId(옵션 접미사)도 scope에 매칭', () => {
+    const res = validatePosCouponCandidate(
+      snowTemplate,
+      {
+        ...ctx(),
+        subtotal: 249,
+        cartLines: [{ menuId: '8-bone', quantity: 1, lineSubtotal: 249 }],
+      },
+      { code: 'SNOW249' }
+    )
+    expect(res.valid).toBe(true)
+    expect(res.discountAmt).toBe(249)
+  })
+
+  it('대상 메뉴 없으면 명확한 거절 메시지', () => {
+    const res = validatePosCouponCandidate(
+      snowTemplate,
+      {
+        ...ctx(),
+        subtotal: 249,
+        cartLines: [{ menuId: '9', quantity: 1, lineSubtotal: 249 }],
+      },
+      { code: 'SNOW249' }
+    )
+    expect(res.valid).toBe(false)
+    expect(res.message).toBe('장바구니에 쿠폰 대상 메뉴가 없습니다.')
+  })
 })
 
 describe('resolvePosSalesDiscountAmount', () => {

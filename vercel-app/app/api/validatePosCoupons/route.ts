@@ -34,6 +34,7 @@ function parseApplied(raw: unknown): PosAppliedCouponLine[] {
 
 function parseCartLines(raw: unknown): Array<{
   menuId?: string
+  menuCode?: string
   categoryCode?: string
   quantity: number
   lineSubtotal: number
@@ -41,6 +42,7 @@ function parseCartLines(raw: unknown): Array<{
   if (!Array.isArray(raw)) return []
   const lines: Array<{
     menuId?: string
+    menuCode?: string
     categoryCode?: string
     quantity: number
     lineSubtotal: number
@@ -51,6 +53,7 @@ function parseCartLines(raw: unknown): Array<{
     const qty = Math.max(1, Math.trunc(Number(r.quantity ?? r.qty ?? 1) || 1))
     lines.push({
       menuId: String(r.menuId ?? r.menu_id ?? '').trim() || undefined,
+      menuCode: String(r.menuCode ?? r.menu_code ?? '').trim() || undefined,
       categoryCode: String(r.categoryCode ?? r.category_code ?? '').trim() || undefined,
       quantity: qty,
       lineSubtotal: Math.max(
