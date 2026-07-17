@@ -99,7 +99,7 @@ function computeIngredientLineCost(ing: IngRow, itemLookup: Record<string, ItemR
   return { food: costTotal, packaging: 0 }
 }
 
-/** menuId|optionId → 홀/배달·음식/포장 단위 원가 (미즈 3% 미포함 — 호출측에서 가산) */
+/** menuId|optionId → 홀/배달·음식/포장 단위 원가 (재료별 loss_rate 포함) */
 export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIndexEntry>> {
   const [ingRows, itemRows] = await Promise.all([
     supabaseSelectAllPages('pos_menu_ingredients', {

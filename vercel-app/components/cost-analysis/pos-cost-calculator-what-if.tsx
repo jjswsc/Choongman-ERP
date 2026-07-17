@@ -18,7 +18,6 @@ import {
   calculateSubTotal,
   getIngredient,
   getIngredientItemCode,
-  resolveDeliveryAppFeePercent,
 } from "@/lib/cost-data"
 import {
   costRatioTierClass,
@@ -35,7 +34,6 @@ type Props = {
   vatIncluded: boolean
   deliveryFeePercent: number
   serviceType: "Dine-In" | "Delivery"
-  misePercent: number
 }
 
 export function PosCostCalculatorWhatIf({
@@ -44,9 +42,8 @@ export function PosCostCalculatorWhatIf({
   priceHall,
   priceDelivery,
   vatIncluded,
-  deliveryFeePercent,
+  deliveryFeePercent: _deliveryFeePercent,
   serviceType,
-  misePercent,
 }: Props) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -93,14 +90,11 @@ export function PosCostCalculatorWhatIf({
   const price = serviceType === "Delivery" ? (priceDelivery ?? priceHall) : priceHall
   const vatIncl = vatIncluded !== false
   const net = vatIncl ? price / 1.07 : price
-  const feePct = resolveDeliveryAppFeePercent(deliveryFeePercent)
-  const netAfterFee =
-    serviceType === "Delivery" ? net - price * (feePct / 100) : net
 
-  const beforeRatio = price > 0 ? (baseTotal / price) * 100 : 0
-  const afterRatio = price > 0 ? (afterTotal / price) * 100 : 0
-  const beforeMargin = netAfterFee - baseTotal
-  const afterMargin = netAfterFee - afterTotal
+  const beforeRatio = net > 0 ? (baseTotal / net) * 100 : 0
+  const afterRatio = net > 0 ? (afterTotal / net) * 100 : 0
+  const beforeMargin = net - baseTotal
+  const afterMargin = net - afterTotal
 
   if (ingredientOptions.length === 0) return null
 

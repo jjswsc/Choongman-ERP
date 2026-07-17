@@ -868,7 +868,7 @@ export function ManagementMarginTab({
                     <span className="font-erp-numeric tabular-nums">{formatBath(theory.packagingCost)}</span>
                   </div>
                   <p className="pt-1 text-[11px] text-muted-foreground leading-relaxed">
-                    {t("mmBridgeTheoryHint").replace("{mise}", String(theory.miseRatePercent))}
+                    {t("mmBridgeTheoryHint")}
                   </p>
                   {theory.unmatchedLineQty > 0 ? (
                     <p className="text-[11px] text-amber-700">

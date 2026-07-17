@@ -4,7 +4,8 @@ import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
 import type { PromoLineLike, PromoMenuLike } from '@/lib/promo-economics'
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
 
-export const MANAGEMENT_MARGIN_MISE_RATE = 3
+/** 전역 미즈 미사용 — BOM 재료별 loss_rate만 반영 */
+export const MANAGEMENT_MARGIN_MISE_RATE = 0
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -435,7 +436,6 @@ export function aggregateTheoreticalCostFromOrders(params: {
   miseRatePercent?: number
   resolveContext?: TheoreticalCostResolveContext
 }): TheoreticalCostAgg {
-  const miseMult = 1 + (params.miseRatePercent ?? MANAGEMENT_MARGIN_MISE_RATE) / 100
   let foodCost = 0
   let packagingCost = 0
   let matchedLineQty = 0
@@ -458,8 +458,8 @@ export function aggregateTheoreticalCostFromOrders(params: {
           continue
         }
         matchedLineQty += qty
-        const unitFood = entry.foodCost * miseMult
-        const unitPack = entry.packagingCost * miseMult
+        const unitFood = entry.foodCost
+        const unitPack = entry.packagingCost
         foodCost += unitFood * qty
         if (isDelivery) packagingCost += unitPack * qty
       }

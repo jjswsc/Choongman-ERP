@@ -283,7 +283,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
       priceDelivery,
       deliveryPercent,
       cookingTimeMin: row.cookingTimeMin ?? null,
-      misePercent: listMisePercent,
+      misePercent: 0,
     })
 
     if (!runtimeReady) return
@@ -625,7 +625,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
           <CostSummary
             foodSubTotal={foodSubTotal}
             packagingSubTotal={packagingSubTotal}
-            misePercent={listMisePercent}
+            misePercent={0}
             inclVat={menuItem.inclVat}
             vatIncluded={menuItem.vatIncluded !== false}
             serviceType={menuItem.serviceType}
@@ -633,7 +633,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
             onDeliveryPercentChange={
               canEdit ? (v) => setMenuItem((prev) => ({ ...prev, deliveryPercent: v })) : undefined
             }
-            miseIncludedInFood={false}
+            miseIncludedInFood
             listAlignedCostHall={listCostBases?.costHall}
             listAlignedCostDelivery={listCostBases?.costDelivery}
             editablePrice={canEdit && !!initialLoadFromRow}
@@ -664,7 +664,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
           <CostChart
             foodItems={foodItems}
             packagingItems={packagingItems}
-            misePercent={listCostBases ? listMisePercent : 0}
+            misePercent={0}
             serviceType={menuItem.serviceType}
           />
           {initialLoadFromRow ? (
@@ -676,7 +676,6 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
               vatIncluded={menuItem.vatIncluded !== false}
               deliveryFeePercent={menuItem.deliveryPercent}
               serviceType={menuItem.serviceType}
-              misePercent={listMisePercent}
             />
           ) : null}
         </div>

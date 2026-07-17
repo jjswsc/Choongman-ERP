@@ -64,39 +64,23 @@ export function CostSummary({
     ? Math.max(0, baseDel - baseHall)
     : packagingSubTotal
 
-  const costWithMiseHall = useListAligned
-    ? Math.round(baseHall * (1 + misePercent / 100) * 10) / 10
-    : null
-  const costWithMiseDel = useListAligned
-    ? Math.round(baseDel * (1 + misePercent / 100) * 10) / 10
-    : null
-
   const foodCost = baseHall
-  const miseCost = useListAligned
-    ? (serviceType === "Delivery" ? costWithMiseDel! : costWithMiseHall!) - (serviceType === "Delivery" ? baseDel : baseHall)
-    : miseIncludedInFood
-      ? 0
-      : foodSubTotal * (misePercent / 100)
-  const totalFoodCost = useListAligned
-    ? serviceType === "Delivery"
-      ? baseHall
-      : costWithMiseHall!
-    : foodSubTotal + (miseIncludedInFood ? 0 : miseCost)
+  const totalFoodCost = foodCost
   const deliveryPackageCost = serviceType === "Delivery" ? packagingBase : 0
   const totalCost = useListAligned
     ? serviceType === "Delivery"
-      ? costWithMiseDel!
-      : costWithMiseHall!
+      ? baseDel
+      : baseHall
     : serviceType === "Delivery"
       ? totalFoodCost + deliveryPackageCost
       : totalFoodCost
 
   const exclVat = vatIncluded ? inclVat / 1.07 : inclVat
   const deliveryFee = serviceType === "Delivery" ? inclVat * (deliveryPercent / 100) : 0
-  const exclAppFee = serviceType === "Delivery" ? exclVat - deliveryFee : exclVat
-  const margin = exclAppFee - totalCost
-  const marginPercent = exclAppFee > 0 ? (margin / exclAppFee) * 100 : 0
-  const costPercent = exclAppFee > 0 ? (totalCost / exclAppFee) * 100 : 0
+  /** 원가율·마진 분모는 VAT 제외 매출만 — 배달앱 수수료는 참고 표시만 */
+  const margin = exclVat - totalCost
+  const marginPercent = exclVat > 0 ? (margin / exclVat) * 100 : 0
+  const costPercent = exclVat > 0 ? (totalCost / exclVat) * 100 : 0
 
   const isHealthyMargin = marginPercent >= 60
 
@@ -202,15 +186,6 @@ export function CostSummary({
             label={miseIncludedInFood ? t("posCostFoodCostInclMise") : t("posCostFoodCost")}
             value={foodCost}
           />
-          {!miseIncludedInFood &&
-            misePercent > 0 &&
-            (serviceType !== "Delivery" || !useListAligned || packagingBase <= 0) && (
-            <CostRow
-              label={`${t("posCostMiseEnPlace")} (${misePercent}%)`}
-              value={miseCost}
-              indent
-            />
-          )}
           <div className="border-t border-border my-2" />
           <CostRow
             label={t("posCostTotalFoodCost")}
@@ -223,13 +198,6 @@ export function CostSummary({
             <>
               <div className="border-t border-dashed border-border my-2" />
               <CostRow label={t("posCostDeliveryPackageCost")} value={deliveryPackageCost} />
-              {useListAligned && misePercent > 0 && packagingBase > 0 ? (
-                <CostRow
-                  label={`${t("posCostMiseEnPlace")} (${misePercent}%)`}
-                  value={miseCost}
-                  indent
-                />
-              ) : null}
               <div className="flex items-center justify-between text-sm gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-muted-foreground pl-4 shrink-0">{t("posCostAppFee")}</span>
@@ -262,13 +230,6 @@ export function CostSummary({
             </>
           )}
 
-          {!miseIncludedInFood && !useListAligned && (
-            <>
-              <div className="border-t border-border my-2" />
-              <CostRow label={t("posCostSubTotal")} value={foodCost} />
-              <CostRow label={`${t("posCostMiseEnPlace")} (${misePercent}%)`} value={miseCost} indent />
-            </>
-          )}
           <div className="border-t border-border my-2" />
 
           <div className="flex items-center justify-between rounded-lg bg-secondary/50 px-4 py-3">

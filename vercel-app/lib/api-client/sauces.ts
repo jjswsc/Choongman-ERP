@@ -175,7 +175,7 @@ export async function getCostSettings() {
   return {
     defaultOverheadPercent: data?.defaultOverheadPercent ?? 5,
     globalOverheadPercent: data?.globalOverheadPercent ?? 5,
-    defaultMisePercent: data?.defaultMisePercent ?? 3,
+    defaultMisePercent: data?.defaultMisePercent ?? 0,
     costRatioGoodMax: data?.costRatioGoodMax ?? 35,
     costRatioCautionMax: data?.costRatioCautionMax ?? 42,
     categoryTargets: data?.categoryTargets ?? {},

@@ -47,7 +47,7 @@ describe("pos-cost-analysis-shared", () => {
 
   it("행 메트릭에 마진과 이슈를 포함한다", () => {
     const m = computePosCostRowMetrics(baseRow, 3)
-    expect(m.costHMise).toBeGreaterThan(30)
+    expect(m.costHMise).toBe(30)
     expect(m.marginH).toBeGreaterThan(0)
     expect(m.issues).not.toContain("no_bom")
   })

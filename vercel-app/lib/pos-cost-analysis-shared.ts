@@ -1,5 +1,5 @@
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
-import { MISE_DEFAULT, resolveDeliveryAppFeePercent } from "@/lib/cost-data"
+import { resolveDeliveryAppFeePercent } from "@/lib/cost-data"
 import { toPosCostSalesExclVat } from "@/lib/pos-cost-vat"
 
 /** 목록·KPI 공통 — 원가율 구간 (%) */
@@ -18,7 +18,8 @@ export type PosCostListSettings = {
 }
 
 export const DEFAULT_POS_COST_LIST_SETTINGS: PosCostListSettings = {
-  misePercent: MISE_DEFAULT,
+  /** 전역 미즈는 사용하지 않음 — 재료별 loss_rate만 반영 */
+  misePercent: 0,
   costRatioGoodMax: COST_RATIO_GOOD_MAX,
   costRatioCautionMax: COST_RATIO_CAUTION_MAX,
   categoryTargets: {},
@@ -81,15 +82,14 @@ export type PosCostRowMetrics = {
 
 export function computePosCostRowMetrics(
   r: PosMenuCostAnalysisRow,
-  misePercent: number = MISE_DEFAULT,
+  _misePercent: number = 0,
   cautionMax: number = COST_RATIO_CAUTION_MAX
 ): PosCostRowMetrics {
-  const miseMult = 1 + misePercent / 100
-  const m = (c: number) => Math.round(c * miseMult * 10) / 10
+  const roundCost = (c: number) => Math.round(c * 10) / 10
   const priceH = Number(r.priceHall ?? 0)
   const priceD = Number(r.priceDelivery ?? r.priceHall ?? 0)
-  const costHMise = m(r.costHall ?? 0)
-  const costDMise = m(r.costDelivery ?? 0)
+  const costHMise = roundCost(r.costHall ?? 0)
+  const costDMise = roundCost(r.costDelivery ?? 0)
   const vatIncluded = r.vatIncluded !== false
   const feePct = resolveDeliveryAppFeePercent(r.deliveryAppFeePercent)
 
@@ -134,10 +134,9 @@ export function computePosCostRowMetrics(
   }
 }
 
-/** 목록·KPI와 동일 — BOM 베이스에 미세(mise) % 적용 */
-export function applyPosCostListMise(base: number, misePercent: number = MISE_DEFAULT): number {
-  const miseMult = 1 + misePercent / 100
-  return Math.round(base * miseMult * 10) / 10
+/** 목록·KPI — BOM 합계(재료별 loss_rate 포함) 그대로 반환 */
+export function applyPosCostListMise(base: number, _misePercent: number = 0): number {
+  return Math.round(base * 10) / 10
 }
 
 export type PosCostListSummary = {
@@ -159,7 +158,7 @@ export type PosCostListSummary = {
 
 export function summarizePosCostRows(
   rows: PosMenuCostAnalysisRow[],
-  misePercent: number = MISE_DEFAULT,
+  misePercent: number = 0,
   cautionMax: number = COST_RATIO_CAUTION_MAX
 ): PosCostListSummary | null {
   if (rows.length === 0) return null
@@ -248,7 +247,7 @@ export function rowMatchesSaleFilter(
 export function rowMatchesIssueFilter(
   r: PosMenuCostAnalysisRow,
   filter: PosCostIssueFilter,
-  misePercent: number = MISE_DEFAULT,
+  misePercent: number = 0,
   cautionMax: number = COST_RATIO_CAUTION_MAX
 ): boolean {
   if (filter === "all") return true
@@ -278,7 +277,7 @@ export function simulateItemPriceDelta(
   rows: PosMenuCostAnalysisRow[],
   itemCode: string,
   deltaPct: number,
-  misePercent: number = MISE_DEFAULT
+  _misePercent: number = 0
 ): Array<{
   row: PosMenuCostAnalysisRow
   beforeRatioH: number
@@ -300,14 +299,13 @@ export function simulateItemPriceDelta(
     const lines = breakdown.filter((b) => String(b.itemCode ?? "").trim().toLowerCase() === code)
     if (lines.length === 0) continue
 
-    const before = computePosCostRowMetrics(r, misePercent)
+    const before = computePosCostRowMetrics(r, _misePercent)
     let addedCost = 0
     for (const line of lines) {
       const base = Number(line.costTotal ?? 0)
       addedCost += base * (mult - 1)
     }
-    const miseMult = 1 + misePercent / 100
-    const afterCostH = before.costHMise + addedCost * miseMult
+    const afterCostH = before.costHMise + addedCost
     const afterRatioH = before.priceH > 0 ? (afterCostH / before.priceH) * 100 : 0
     out.push({
       row: r,
@@ -321,7 +319,7 @@ export function simulateItemPriceDelta(
 
 export function exportPosCostListCsv(
   rows: Array<PosMenuCostAnalysisRow & { displayCode?: string }>,
-  misePercent: number = MISE_DEFAULT
+  _misePercent: number = 0
 ): string {
   const header = [
     "code",
@@ -341,7 +339,7 @@ export function exportPosCostListCsv(
   ]
   const lines = [header.join(",")]
   for (const r of rows) {
-    const m = computePosCostRowMetrics(r, misePercent)
+    const m = computePosCostRowMetrics(r, _misePercent)
     const displayCode = (r as { displayCode?: string }).displayCode ?? r.menuCode ?? ""
     const cells = [
       displayCode,

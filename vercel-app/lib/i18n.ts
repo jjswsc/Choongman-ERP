@@ -2747,7 +2747,7 @@ export const i18n = {
     mmBridgeCostStructureTheory: '원가 구조 (이론)',
     mmBridgeFoodCostTheory: '음식 원가',
     mmBridgePackagingCostTheory: '포장재 원가',
-    mmBridgeTheoryHint: '판매 mix × 메뉴 BOM 기준. 미즈 {mise}% 포함. 배달·포장 채널만 포장재 반영.',
+    mmBridgeTheoryHint: '판매 mix × 메뉴 BOM 기준(재료별 Loss 포함). 배달·포장 채널만 포장재 반영.',
     mmBridgeUnmatchedLines: 'BOM 미매칭 수량 {qty} — POS 원가 분석에서 레시피를 확인하세요.',
     mmBridgeOpenDiscountReport: '매출 관리 · 할인 리포트',
     mmBridgeOpenCostAnalysis: 'POS 원가 분석',
@@ -6930,7 +6930,7 @@ export const i18n = {
     helpSum_admin_pos_cost_analysis:
       'POS 메뉴별 홀·배달 판매가와 원가·원가율·마진을 조회하고, 실적 원가율·What-if·재료 구성·배합 단가·원가 계산기로 검토하는 화면입니다. (본사 오피스만 저장·수정)',
     helpHow_admin_pos_cost_analysis:
-      '① 목록: 대분류·카테고리·판매 상태(기본 판매중)·상태 필터·검색어를 정한 뒤「조회」로 불러옵니다. 상단 KPI 카드에서 평균 원가율·마진·문제 메뉴 수를 확인하고, CSV 내보내기를 사용할 수 있습니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다(요약 조회 후 펼치면 BOM을 lazy 로드). 행을 누르면「원가 계산기」탭으로 이동합니다.\n② 실적 원가율: 목록 조회 없이도 기간·매장·채널을 고른 뒤「실적 조회」로 판매 가중 원가율을 확인합니다. 상단 KPI·채널별·대분류별 표(합계 행 포함)를 봅니다. 대분류 목표·What-if는 목록「조회」후 사용합니다(가맹·매니저는 조회만).\n③ 표시되는 원가·원가율에는 미즈(en place) 계수(기본 3%)가 반영됩니다.\n④ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 조회합니다. 추가·수정·재계산은 본사 오피스만 가능합니다.\n⑤ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 원가를 확인합니다. 저장·BOM 수정은 본사 오피스만 가능합니다.\n⑥ 수정 이력: 기간과 검색어를 정한 뒤「조회」— update 행은 변경 전·후 수량·로스 diff를 표시합니다.',
+      '① 목록: 대분류·카테고리·판매 상태(기본 판매중)·상태 필터·검색어를 정한 뒤「조회」로 불러옵니다. 상단 KPI 카드에서 평균 원가율·마진·문제 메뉴 수를 확인하고, CSV 내보내기를 사용할 수 있습니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다(요약 조회 후 펼치면 BOM을 lazy 로드). 행을 누르면「원가 계산기」탭으로 이동합니다.\n② 실적 원가율: 목록 조회 없이도 기간·매장·채널을 고른 뒤「실적 조회」로 판매 가중 원가율을 확인합니다. 상단 KPI·채널별·대분류별 표(합계 행 포함)를 봅니다. 대분류 목표·What-if는 목록「조회」후 사용합니다(가맹·매니저는 조회만).\n③ 표시되는 원가·원가율은 재료별 Loss(%)가 반영된 BOM 합계입니다(전역 미즈는 더하지 않음).\n④ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 조회합니다. 추가·수정·재계산은 본사 오피스만 가능합니다.\n⑤ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 원가를 확인합니다. 저장·BOM 수정은 본사 오피스만 가능합니다.\n⑥ 수정 이력: 기간과 검색어를 정한 뒤「조회」— update 행은 변경 전·후 수량·로스 diff를 표시합니다.',
     helpSum_admin_total_sales:
       '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
@@ -10170,7 +10170,7 @@ Only matters the employee must handle personally on a working day:
     mmBridgeCostStructureTheory: 'Cost structure (theoretical)',
     mmBridgeFoodCostTheory: 'Food cost',
     mmBridgePackagingCostTheory: 'Packaging cost',
-    mmBridgeTheoryHint: 'Sold mix × menu BOM. Includes {mise}% mise. Packaging applies on delivery/takeaway channels only.',
+    mmBridgeTheoryHint: 'Sold mix × menu BOM (per-ingredient loss included). Packaging applies on delivery/takeaway channels only.',
     mmBridgeUnmatchedLines: 'Unmatched BOM qty {qty} — check recipes in POS cost analysis.',
     mmBridgeOpenDiscountReport: 'Sales management · discount report',
     mmBridgeOpenCostAnalysis: 'POS cost analysis',
@@ -14358,7 +14358,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_cost_analysis:
       'Review POS menu hall vs delivery prices, costs, cost ratios, and margins; use actual cost %, What-if, BOM, blend costs, and the cost calculator. (Head office only for save/edit)',
     helpHow_admin_pos_cost_analysis:
-      '① List: set filters including sale status (default Active), then press Query. KPI cards, CSV export, sort columns, expand rows for BOM (lazy-loaded). Click a row to open Cost calculator.\n② Actual cost %: without List query, set period, store, and channel, then press Query actuals for sales-weighted cost %. See KPI cards plus channel/category tables with total rows. Category targets and What-if need List Query first (managers/franchisees: view only).\n③ Costs include default mise (3%).\n④ Blend costs: view sauce recipes and unit costs; add/edit/recalculate is head office only.\n⑤ Cost calculator: pick menu/option and review ingredients; save/BOM edit is head office only.\n⑥ Audit: set period and keyword, then Query — update rows show before/after quantity and loss diff.',
+      '① List: set filters including sale status (default Active), then press Query. KPI cards, CSV export, sort columns, expand rows for BOM (lazy-loaded). Click a row to open Cost calculator.\n② Actual cost %: without List query, set period, store, and channel, then press Query actuals for sales-weighted cost %. See KPI cards plus channel/category tables with total rows. Category targets and What-if need List Query first (managers/franchisees: view only).\n③ Costs use BOM totals with per-ingredient loss % only (no extra global mise).\n④ Blend costs: view sauce recipes and unit costs; add/edit/recalculate is head office only.\n⑤ Cost calculator: pick menu/option and review ingredients; save/BOM edit is head office only.\n⑥ Audit: set period and keyword, then Query — update rows show before/after quantity and loss diff.',
     helpSum_admin_total_sales:
       'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:

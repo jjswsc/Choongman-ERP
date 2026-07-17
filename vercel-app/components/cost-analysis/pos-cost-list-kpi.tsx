@@ -23,7 +23,7 @@ export function PosCostListKpi({ summary, lastLoadedAt, onIssueFilter }: Props) 
           {t("posCostLastLoaded")}: {lastLoadedAt}
         </p>
       ) : null}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2">
         <MetricCard
           size="sm"
           label={t("posCostListAverage")}
@@ -39,20 +39,6 @@ export function PosCostListKpi({ summary, lastLoadedAt, onIssueFilter }: Props) 
           subLabel={`${summary.nDelivery}${t("posCostItemsUnit")}`}
           variant="default"
           icon={<Package className="h-4 w-4" />}
-        />
-        <MetricCard
-          size="sm"
-          label={t("posCostMarginHall")}
-          value={summary.avgMarginH.toFixed(1)}
-          subLabel={t("posCostDineIn")}
-          variant="success"
-        />
-        <MetricCard
-          size="sm"
-          label={t("posCostMarginDelivery")}
-          value={summary.avgMarginD.toFixed(1)}
-          subLabel={t("posCostDelivery")}
-          variant="success"
         />
         <MetricCard
           size="sm"

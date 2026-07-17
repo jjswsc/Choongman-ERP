@@ -66,8 +66,6 @@ type PosCostListSortKey =
   | "costDel"
   | "ratioH"
   | "ratioD"
-  | "marginH"
-  | "marginD"
 
 function formatCookingTimeList(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v) || v < 0) return ""
@@ -224,10 +222,6 @@ export function PosCostListPanel({
           return cmp(ma.costRatioH - mb.costRatioH)
         case "ratioD":
           return cmp(ma.costRatioD - mb.costRatioD)
-        case "marginH":
-          return cmp(ma.marginH - mb.marginH)
-        case "marginD":
-          return cmp(ma.marginD - mb.marginD)
         default:
           return 0
       }
@@ -476,7 +470,7 @@ export function PosCostListPanel({
 
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="overflow-x-auto max-h-[min(70vh,900px)] overflow-y-auto">
-              <table className="w-full text-sm min-w-[1200px]">
+              <table className="w-full text-sm min-w-[980px] table-fixed">
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
                   <tr className="border-b">
                     <th className="w-8 px-2 py-3 sticky left-0 z-20 bg-muted/95" aria-hidden />
@@ -485,16 +479,13 @@ export function PosCostListPanel({
                     </th>
                     <th className="px-2 py-2.5 text-center text-xs">{sortBtn("mainCat", t("posMenuCategoryMain"), "center")}</th>
                     <th className="px-2 py-2.5 text-center text-xs">{sortBtn("category", t("posMenuCategory"), "center")}</th>
-                    <th className="px-2 py-2.5 text-center text-xs min-w-[140px]">{sortBtn("name", t("posMenuName"), "center")}</th>
+                    <th className="px-2 py-2.5 text-center text-xs w-[22%] min-w-[160px]">{sortBtn("name", t("posMenuName"), "center")}</th>
                     <th className="px-2 py-2.5 text-center text-xs">{sortBtn("cook", t("posCostTableHdrCook"), "center")}</th>
                     <th className="px-2 py-2.5 text-center text-xs border-l border-border/60" colSpan={3}>
                       <span className="block text-center text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostDineIn")}</span>
                     </th>
                     <th className="px-2 py-2.5 text-center text-xs border-l border-border/60" colSpan={3}>
                       <span className="block text-center text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostDelivery")}</span>
-                    </th>
-                    <th className="px-2 py-2.5 text-center text-xs border-l border-border/60" colSpan={2}>
-                      <span className="block text-center text-[10px] uppercase tracking-wide text-muted-foreground">{t("posCostMargin")}</span>
                     </th>
                   </tr>
                   <tr className="border-b bg-muted/80 text-xs">
@@ -505,8 +496,6 @@ export function PosCostListPanel({
                     <th className="px-2 py-1.5 text-right border-l border-border/60">{sortBtn("priceDel", t("posCostPriceDelivery"), "right")}</th>
                     <th className="px-2 py-1.5 text-right">{sortBtn("costDel", t("posCostCostDelivery"), "right")}</th>
                     <th className="px-2 py-1.5 text-right">{sortBtn("ratioD", t("posCostRatioDelivery"), "right")}</th>
-                    <th className="px-2 py-1.5 text-right border-l border-border/60">{sortBtn("marginH", t("posCostMarginHall"), "right")}</th>
-                    <th className="px-2 py-1.5 text-right">{sortBtn("marginD", t("posCostMarginDelivery"), "right")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -578,16 +567,10 @@ export function PosCostListPanel({
                           <td className={cn("px-3 py-2 text-right tabular-nums font-medium", costRatioTierClass(m.tierD))}>
                             {m.costRatioD.toFixed(1)}%
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400 border-l border-border/40">
-                            {m.marginH.toFixed(1)}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
-                            {m.marginD.toFixed(1)}
-                          </td>
                         </tr>
                         {expanded ? (
                           <tr className="border-b bg-muted/10">
-                            <td colSpan={14} className="px-4 py-3">
+                            <td colSpan={12} className="px-4 py-3">
                               {hasBreakdown ? (
                                 <div className="rounded border bg-background overflow-hidden">
                                   <table className="w-full text-xs">
@@ -632,12 +615,6 @@ export function PosCostListPanel({
                                     <span>
                                       {t("posCostSubTotal")}: {(r.costDelivery ?? 0).toFixed(1)}
                                     </span>
-                                    {settings.misePercent > 0 ? (
-                                      <span>
-                                        {t("posCostMiseEnPlace")} ({settings.misePercent}%):{" "}
-                                        {(m.costDMise - (r.costDelivery ?? 0)).toFixed(1)}
-                                      </span>
-                                    ) : null}
                                     <span className="font-semibold">
                                       {t("posMenuCost")}: {m.costDMise.toFixed(1)}
                                     </span>

@@ -46,7 +46,7 @@ export async function GET() {
       {
         defaultOverheadPercent: parseNum(map.default_overhead_percent, 5),
         globalOverheadPercent: parseNum(map.global_overhead_percent, 5),
-        defaultMisePercent: parseNum(map.default_mise_percent, 3),
+        defaultMisePercent: parseNum(map.default_mise_percent, 0),
         costRatioGoodMax: parseNum(map.cost_ratio_good_max, 35),
         costRatioCautionMax: parseNum(map.cost_ratio_caution_max, 42),
         categoryTargets,
@@ -59,7 +59,7 @@ export async function GET() {
       {
         defaultOverheadPercent: 5,
         globalOverheadPercent: 5,
-        defaultMisePercent: 3,
+        defaultMisePercent: 0,
         costRatioGoodMax: 35,
         costRatioCautionMax: 42,
         categoryTargets: {},

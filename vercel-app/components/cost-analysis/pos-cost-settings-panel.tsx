@@ -24,7 +24,6 @@ export function PosCostSettingsPanel({ settings, rows, canEdit, onSaved }: Props
   const t = useT(lang)
   const [open, setOpen] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
-  const [misePercent, setMisePercent] = React.useState(String(settings.misePercent))
   const [goodMax, setGoodMax] = React.useState(String(settings.costRatioGoodMax))
   const [cautionMax, setCautionMax] = React.useState(String(settings.costRatioCautionMax))
   const [targets, setTargets] = React.useState<Record<string, string>>({})
@@ -39,7 +38,6 @@ export function PosCostSettingsPanel({ settings, rows, canEdit, onSaved }: Props
   }, [rows])
 
   React.useEffect(() => {
-    setMisePercent(String(settings.misePercent))
     setGoodMax(String(settings.costRatioGoodMax))
     setCautionMax(String(settings.costRatioCautionMax))
     const next: Record<string, string> = {}
@@ -52,13 +50,8 @@ export function PosCostSettingsPanel({ settings, rows, canEdit, onSaved }: Props
 
   const handleSave = async () => {
     if (!canEdit || saving) return
-    const mise = parseFloat(misePercent)
     const good = parseFloat(goodMax)
     const caution = parseFloat(cautionMax)
-    if (!Number.isFinite(mise) || mise < 0 || mise > 20) {
-      await appAlert(t("posCostSettingsMiseInvalid"))
-      return
-    }
     if (!Number.isFinite(good) || !Number.isFinite(caution) || good <= 0 || caution <= good) {
       await appAlert(t("posCostSettingsRatioInvalid"))
       return
@@ -71,13 +64,13 @@ export function PosCostSettingsPanel({ settings, rows, canEdit, onSaved }: Props
     setSaving(true)
     try {
       await updateCostSettings({
-        defaultMisePercent: mise,
+        defaultMisePercent: 0,
         costRatioGoodMax: good,
         costRatioCautionMax: caution,
         categoryTargets,
       })
       const next: PosCostListSettings = {
-        misePercent: mise,
+        misePercent: 0,
         costRatioGoodMax: good,
         costRatioCautionMax: caution,
         categoryTargets,
@@ -110,20 +103,7 @@ export function PosCostSettingsPanel({ settings, rows, canEdit, onSaved }: Props
           {!canEdit ? (
             <p className="text-xs text-muted-foreground">{t("posCostEditOfficeOnly")}</p>
           ) : null}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">{t("posCostSettingsMise")}</Label>
-              <Input
-                type="number"
-                min={0}
-                max={20}
-                step={0.5}
-                value={misePercent}
-                onChange={(e) => setMisePercent(e.target.value)}
-                disabled={!canEdit}
-                className="h-9 font-mono text-sm"
-              />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">{t("posCostSettingsGoodMax")}</Label>
               <Input

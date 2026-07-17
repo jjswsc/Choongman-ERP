@@ -201,7 +201,6 @@ export function aggregatePosCostWeightedByCategory(params: {
   miseRatePercent?: number
   resolveContext?: TheoreticalCostResolveContext
 }): PosCostCategoryWeightedResult {
-  const miseMult = 1 + (params.miseRatePercent ?? 3) / 100
   const categoryByMenuId = buildMenuCategoryById(params.menus)
   const resolveContext =
     params.resolveContext ??
@@ -301,8 +300,8 @@ export function aggregatePosCostWeightedByCategory(params: {
         const bucket = upsertBucket(orderBuckets, p.categoryMain)
         bucket.netSales = round2(bucket.netSales + share)
         bucket.matchedQty = round2(bucket.matchedQty + p.qty)
-        const unitFood = entry.foodCost * miseMult
-        const unitPack = entry.packagingCost * miseMult
+        const unitFood = entry.foodCost
+        const unitPack = entry.packagingCost
         bucket.foodCost = round2(bucket.foodCost + unitFood * p.qty)
         if (isDelivery) {
           bucket.packagingCost = round2(bucket.packagingCost + unitPack * p.qty)
