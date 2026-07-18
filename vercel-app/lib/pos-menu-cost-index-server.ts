@@ -1,6 +1,6 @@
 /**
- * POS 완료 주문 × 메뉴 BOM 이론 원가 집계용 경량 lookup.
- * 원가 분석 API 전체 옵션·프로모 합성은 생략하고 menuId(+optionId) 기준 기본 BOM을 사용한다.
+ * POS 완료 주문 × 메뉴 BOM 이론 원가 집계용 lookup.
+ * 목록/getMenuCost와 동일: 대체형은 옵션 BOM(없으면 기본), 가산형은 기본+소스/품목(+옵션 전용 BOM).
  */
 import { supabaseSelectAllPages } from '@/lib/supabase-server'
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
@@ -32,6 +32,17 @@ type ItemRow = {
   category?: string
 }
 
+type OptRow = {
+  id?: number
+  menu_id?: number
+  option_type?: string
+  item_code?: string | null
+  additive_source_menu_id?: number | null
+  quantity?: number
+}
+
+type CostParts = { food: number; packaging: number }
+
 function effectiveItemCodeKey(r: ItemRow): string {
   const raw = String(r.code ?? '').trim()
   if (raw) return raw
@@ -52,7 +63,7 @@ function itemCodeLookupVariants(raw: string): string[] {
     variants.add(x.toUpperCase())
     variants.add(x.toLowerCase())
   }
-  const digitsOnly = asciiDigits.replace(/\s/g, '')
+  const digitsOnly = asciiDigits.replace(/\s+/g, '')
   if (/^[0-9]+$/.test(digitsOnly)) variants.add(String(Number(digitsOnly)))
   return [...variants].filter(Boolean)
 }
@@ -75,7 +86,7 @@ function resolveItem(rawCode: string, lookup: Record<string, ItemRow>): ItemRow 
   return undefined
 }
 
-function costKey(menuId: number, optionId: number | null | undefined): string {
+export function costIndexKey(menuId: number, optionId: number | null | undefined): string {
   const opt =
     optionId != null && Number.isFinite(Number(optionId)) && Number(optionId) > 0
       ? String(Number(optionId))
@@ -83,12 +94,20 @@ function costKey(menuId: number, optionId: number | null | undefined): string {
   return `${Number(menuId)}|${opt}`
 }
 
-function computeIngredientLineCost(ing: IngRow, itemLookup: Record<string, ItemRow>): {
-  food: number
-  packaging: number
-} {
+function emptyParts(): CostParts {
+  return { food: 0, packaging: 0 }
+}
+
+function addParts(a: CostParts, b: CostParts, mult = 1): CostParts {
+  return {
+    food: a.food + b.food * mult,
+    packaging: a.packaging + b.packaging * mult,
+  }
+}
+
+function computeIngredientLineCost(ing: IngRow, itemLookup: Record<string, ItemRow>): CostParts {
   const code = String(ing.item_code ?? '').trim()
-  if (!code) return { food: 0, packaging: 0 }
+  if (!code) return emptyParts()
   const item = resolveItem(code, itemLookup)
   const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
   const costPerUnit = item ? getItemCostPerUnit(item, itype === 'packaging') : 0
@@ -99,9 +118,91 @@ function computeIngredientLineCost(ing: IngRow, itemLookup: Record<string, ItemR
   return { food: costTotal, packaging: 0 }
 }
 
-/** menuId|optionId → 홀/배달·음식/포장 단위 원가 (재료별 loss_rate 포함) */
+function toEntry(parts: CostParts): PosMenuCostIndexEntry {
+  const food = Math.round(parts.food * 10) / 10
+  const packaging = Math.round(parts.packaging * 10) / 10
+  return {
+    foodCost: food,
+    packagingCost: packaging,
+    costHall: food,
+    costDelivery: Math.round((food + packaging) * 10) / 10,
+  }
+}
+
+/**
+ * 재료 합계 맵 + 옵션 메타로 menuId|optionId 단위 원가 합성.
+ * (테스트·실적 인덱스 공통)
+ */
+export function assemblePosMenuCostIndexEntries(params: {
+  /** menuId|optionId → 해당 키 재료만 합산(가산/대체 합성 전) */
+  ingredientPartsByKey: Map<string, CostParts>
+  options: {
+    id: number
+    menuId: number
+    optionType: string
+    itemCode: string | null
+    additiveSourceMenuId: number | null
+    quantity: number
+  }[]
+  /** item_code 가산용 — 코드 → 단위 원가(식재) */
+  itemFoodCostByCode?: Record<string, number>
+}): Map<string, PosMenuCostIndexEntry> {
+  const partsByKey = params.ingredientPartsByKey
+  const getParts = (menuId: number, optionId: number | null): CostParts =>
+    partsByKey.get(costIndexKey(menuId, optionId)) ?? emptyParts()
+
+  const out = new Map<string, PosMenuCostIndexEntry>()
+
+  const menuIds = new Set<number>()
+  for (const key of partsByKey.keys()) {
+    const mid = Number(key.split('|')[0] ?? 0)
+    if (Number.isFinite(mid) && mid > 0) menuIds.add(mid)
+  }
+  for (const opt of params.options) {
+    if (opt.menuId > 0) menuIds.add(opt.menuId)
+  }
+
+  for (const mid of menuIds) {
+    const base = getParts(mid, null)
+    out.set(costIndexKey(mid, null), toEntry(base))
+  }
+
+  for (const opt of params.options) {
+    const mid = opt.menuId
+    const oid = opt.id
+    if (!(mid > 0) || !(oid > 0)) continue
+    const base = getParts(mid, null)
+    const optOwn = getParts(mid, oid)
+    const isAdditive = (opt.optionType || 'substitution') === 'additive'
+
+    if (!isAdditive) {
+      const use =
+        optOwn.food > 0 || optOwn.packaging > 0 ? optOwn : base
+      out.set(costIndexKey(mid, oid), toEntry(use))
+      continue
+    }
+
+    let merged = addParts(emptyParts(), base)
+    const qty = Number(opt.quantity) > 0 ? Number(opt.quantity) : 1
+    if (opt.additiveSourceMenuId && opt.additiveSourceMenuId > 0) {
+      merged = addParts(merged, getParts(opt.additiveSourceMenuId, null), qty)
+    } else if (opt.itemCode) {
+      const unit = params.itemFoodCostByCode?.[opt.itemCode] ?? 0
+      merged = {
+        food: merged.food + unit * qty,
+        packaging: merged.packaging,
+      }
+    }
+    merged = addParts(merged, optOwn)
+    out.set(costIndexKey(mid, oid), toEntry(merged))
+  }
+
+  return out
+}
+
+/** menuId|optionId → 홀/배달·음식/포장 단위 원가 (재료별 loss_rate + 가산형 합성 포함) */
 export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIndexEntry>> {
-  const [ingRows, itemRows] = await Promise.all([
+  const [ingRows, itemRows, optRows] = await Promise.all([
     supabaseSelectAllPages('pos_menu_ingredients', {
       order: 'menu_id.asc,id.asc',
       select: 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
@@ -110,6 +211,10 @@ export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIn
       order: 'code.asc',
       select: 'id,code,cost,price,total_quantity,unit,purchase_source,category',
     }) as Promise<ItemRow[]>,
+    supabaseSelectAllPages('pos_menu_options', {
+      order: 'id.asc',
+      select: 'id,menu_id,option_type,item_code,additive_source_menu_id,quantity',
+    }).catch(() => []) as Promise<OptRow[]>,
   ])
 
   const itemMap: Record<string, ItemRow> = {}
@@ -119,29 +224,42 @@ export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIn
   }
   const itemLookup = buildItemLookup(itemMap)
 
-  const byKey = new Map<string, { food: number; packaging: number }>()
+  const ingredientPartsByKey = new Map<string, CostParts>()
   for (const ing of ingRows || []) {
     const mid = Number(ing.menu_id ?? 0)
     if (!Number.isFinite(mid) || mid <= 0) continue
     const oid = ing.option_id != null ? Number(ing.option_id) : null
-    const key = costKey(mid, oid)
+    const key = costIndexKey(mid, oid != null && oid > 0 ? oid : null)
     const line = computeIngredientLineCost(ing, itemLookup)
-    const prev = byKey.get(key) ?? { food: 0, packaging: 0 }
-    prev.food += line.food
-    prev.packaging += line.packaging
-    byKey.set(key, prev)
+    const prev = ingredientPartsByKey.get(key) ?? emptyParts()
+    ingredientPartsByKey.set(key, addParts(prev, line))
   }
 
-  const out = new Map<string, PosMenuCostIndexEntry>()
-  for (const [key, v] of byKey) {
-    const food = Math.round(v.food * 10) / 10
-    const packaging = Math.round(v.packaging * 10) / 10
-    out.set(key, {
-      foodCost: food,
-      packagingCost: packaging,
-      costHall: food,
-      costDelivery: Math.round((food + packaging) * 10) / 10,
-    })
+  const itemFoodCostByCode: Record<string, number> = {}
+  for (const [code, item] of Object.entries(itemLookup)) {
+    itemFoodCostByCode[code] = getItemCostPerUnit(item, false)
   }
-  return out
+
+  const options = (optRows || [])
+    .map((o) => {
+      const id = Number(o.id ?? 0)
+      const menuId = Number(o.menu_id ?? 0)
+      const aid = o.additive_source_menu_id
+      return {
+        id,
+        menuId,
+        optionType: String(o.option_type || 'substitution'),
+        itemCode: o.item_code ? String(o.item_code).trim() : null,
+        additiveSourceMenuId:
+          aid != null && Number.isFinite(Number(aid)) && Number(aid) > 0 ? Number(aid) : null,
+        quantity: Number(o.quantity) ?? 1,
+      }
+    })
+    .filter((o) => o.id > 0 && o.menuId > 0)
+
+  return assemblePosMenuCostIndexEntries({
+    ingredientPartsByKey,
+    options,
+    itemFoodCostByCode,
+  })
 }

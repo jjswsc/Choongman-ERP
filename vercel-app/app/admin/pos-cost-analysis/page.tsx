@@ -8,7 +8,9 @@ import {
   ClipboardList,
   FlaskConical,
   List,
+  Scale,
 } from "lucide-react"
+import { StockIngredientVariancePanel } from "@/components/erp/stock-ingredient-variance-panel"
 import {
   adminTabsContentCn,
   adminTabsIconCn,
@@ -23,14 +25,20 @@ import { PosCostListPanel } from "@/components/cost-analysis/pos-cost-list-panel
 import { PosCostAuditPanel } from "@/components/cost-analysis/pos-cost-audit-panel"
 import { PosCostActualTab } from "@/components/cost-analysis/pos-cost-actual-tab"
 import { useAuth } from "@/lib/auth-context"
-import { canAccessPosCostAnalysis, canEditPosCostAnalysis } from "@/lib/permissions"
+import {
+  canAccessPosCostAnalysis,
+  canEditPosCostAnalysis,
+  isManagerOrFranchiseeRole,
+} from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getCostSettings,
   getPosMenuCostAnalysis,
+  useStoreList,
   type PosMenuCostAnalysisRow,
 } from "@/lib/api-client"
+import { dedupeOfficeStoreOptions } from "@/lib/office-store-canonical"
 import { cn } from "@/lib/utils"
 import {
   costAnalysisMenuIdKey,
@@ -55,6 +63,23 @@ export default function PosCostAnalysisPage() {
   const { auth } = useAuth()
   const canEdit = canEditPosCostAnalysis(auth?.role || "")
   const allowed = canAccessPosCostAnalysis(auth?.role || "")
+  const isManager = React.useMemo(
+    () => isManagerOrFranchiseeRole(auth?.role || ""),
+    [auth?.role]
+  )
+  const userStore = (auth?.store || "").trim()
+  const { posStores: rawStores } = useStoreList()
+  const storesForVariance = React.useMemo(() => {
+    const all = dedupeOfficeStoreOptions(rawStores || [])
+    if (isManager && userStore) return [userStore]
+    return all
+  }, [rawStores, isManager, userStore])
+  const [varianceStoreFilter, setVarianceStoreFilter] = React.useState("")
+  const storeSelectDisabled = isManager && !!userStore
+
+  React.useEffect(() => {
+    if (isManager && userStore) setVarianceStoreFilter(userStore)
+  }, [isManager, userStore])
 
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -63,6 +88,7 @@ export default function PosCostAnalysisPage() {
   const [activeTab, setActiveTab] = React.useState(() => {
     const tab = (searchParams.get("tab") || "").trim()
     if (tab === "actual" || tab === "insights") return "actual"
+    if (tab === "variance") return "variance"
     if (tab === "list" || tab === "sauce" || tab === "calculator" || tab === "audit") return tab
     return "list"
   })
@@ -217,6 +243,10 @@ export default function PosCostAnalysisPage() {
                 <BarChart3 className={adminTabsIconCn} aria-hidden />
                 {t("posCostTabActual")}
               </TabsTrigger>
+              <TabsTrigger value="variance" className={adminTabsTriggerCn}>
+                <Scale className={adminTabsIconCn} aria-hidden />
+                {t("posCostTabVariance")}
+              </TabsTrigger>
               <TabsTrigger value="sauce" className={adminTabsTriggerCn}>
                 <FlaskConical className={adminTabsIconCn} aria-hidden />
                 {t("posCostTabSauce")}
@@ -256,6 +286,15 @@ export default function PosCostAnalysisPage() {
               listQueried={listQueried}
               canEdit={canEdit}
               onSettingsSaved={setSettings}
+            />
+          </TabsContent>
+
+          <TabsContent value="variance" className={cn(adminTabsContentCn, "space-y-4")}>
+            <StockIngredientVariancePanel
+              stores={storesForVariance}
+              storeFilter={varianceStoreFilter}
+              setStoreFilter={setVarianceStoreFilter}
+              storeSelectDisabled={storeSelectDisabled}
             />
           </TabsContent>
 

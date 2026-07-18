@@ -89,6 +89,63 @@ export async function getStockUsageAggregate(params: {
   }>
 }
 
+export type IngredientUsageMenuContribution = {
+  menuId: string
+  optionId: string
+  menuLabel: string
+  optionLabel: string
+  theoreticalQty: number
+}
+
+export type IngredientUsageVarianceRow = {
+  itemCode: string
+  itemName: string
+  unit: string
+  cost: number
+  ingredientType: 'food' | 'packaging' | 'unknown'
+  theoreticalQty: number
+  actualQty: number
+  varianceQty: number
+  variancePct: number | null
+  varianceCost: number
+  beginningQty: number
+  endingQty: number
+  inboundQty: number
+  outboundQty: number
+  usageQty: number
+  adjustmentQty: number
+  posQty: number
+  hasAdjustment: boolean
+  menuContributions: IngredientUsageMenuContribution[]
+}
+
+/** 원재료 이론 소진(판매×BOM) vs 실제 소진(재고등식) */
+export async function getIngredientUsageVariance(params: {
+  store: string
+  startYmd: string
+  endYmd: string
+}) {
+  const q = new URLSearchParams({
+    store: params.store,
+    startYmd: params.startYmd,
+    endYmd: params.endYmd,
+  })
+  const res = await apiFetchWithOffline(`/api/getIngredientUsageVariance?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    startYmd: string
+    endYmd: string
+    store: string
+    posTruncated: boolean
+    actualSource: 'rpc' | 'fallback' | 'none'
+    unmatchedOrderLines: number
+    orderCount: number
+    rows: IngredientUsageVarianceRow[]
+    warnings: string[]
+  }>
+}
+
 export async function getStockStores() {
   const res = await apiFetchWithOffline('/api/getStockStores')
   return jsonAsArray<string>(await res.json())

@@ -21,13 +21,17 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import {
   getAdminVendors,
+  getPosBusinessDaySettings,
   getPosSalesByChannel,
   getPosSalesByDeliveryApp,
   getPosSalesByPeriod,
   getPosSalesByStore,
   getPosSalesByStoreChannel,
 } from "@/lib/api-client"
-import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import {
+  getPosBusinessDateStr,
+  getPosBusinessDateStrFromConfig,
+} from "@/lib/pos-business-day"
 import { ERP_NUMERIC_CHART_TICK, ADMIN_CHART_COLORS } from "@/lib/admin-ui-standards"
 import {
   translateChannelKey,
@@ -99,7 +103,6 @@ export function AdminSalesDashboardCharts({
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
 
-  const today = React.useMemo(() => getBangkokTodayDateString(), [])
   const storesParam = React.useMemo(() => {
     if (salesStoreCodes?.length) return salesStoreCodes
     return resolveStoresParam(effectiveStoreCode)
@@ -107,6 +110,8 @@ export function AdminSalesDashboardCharts({
   const isAllStores =
     effectiveStoreCode === "All" && !salesStoreCodes?.length ? true : (salesStoreCodes?.length ?? 0) > 1
 
+  /** POS 영업일(설정 구간) — 달력 자정이 아니라 getPosTodaySales와 동일 기준 */
+  const [businessDayYmd, setBusinessDayYmd] = React.useState(() => getPosBusinessDateStr())
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
   const [storeRows, setStoreRows] = React.useState<
@@ -147,6 +152,20 @@ export function AdminSalesDashboardCharts({
     setLoading(true)
     setError("")
     try {
+      const settingsStore =
+        storesParam?.length === 1 ? storesParam[0] : null
+      let today = getPosBusinessDateStr()
+      try {
+        const j = await getPosBusinessDaySettings(settingsStore)
+        today = getPosBusinessDateStrFromConfig(new Date(), {
+          start: { hour: j.hour, minute: j.minute },
+          end: { hour: j.endHour, minute: j.endMinute },
+        })
+      } catch {
+        /* 전사/기본 영업시간으로 폴백 */
+      }
+      setBusinessDayYmd(today)
+
       const [stores, storeChannels, channels, delivery, periodRes] = await Promise.all([
         getPosSalesByStore({ startStr: today, endStr: today, stores: storesParam }),
         getPosSalesByStoreChannel({ startStr: today, endStr: today, stores: storesParam }),
@@ -194,7 +213,7 @@ export function AdminSalesDashboardCharts({
     } finally {
       setLoading(false)
     }
-  }, [today, storesParam, tr])
+  }, [storesParam, tr])
 
   /** 첫 화면·매장 변경 시 자동 조회. 이후 갱신은 검색 버튼만(60초 폴링 없음) */
   React.useEffect(() => {
@@ -299,11 +318,11 @@ export function AdminSalesDashboardCharts({
     const q = new URLSearchParams()
     q.set("menu", "sales-compare")
     q.set("topic", "compare-store-category")
-    q.set("start", today)
-    q.set("end", today)
+    q.set("start", businessDayYmd)
+    q.set("end", businessDayYmd)
     if (storesParam?.length) q.set("stores", storesParam.join(","))
     return `/admin/sales-management?${q.toString()}`
-  }, [today, storesParam])
+  }, [businessDayYmd, storesParam])
 
   const showStoreTable = isAllStores && storeChartRows.length > 0
   const hasAnyChart =
@@ -324,7 +343,7 @@ export function AdminSalesDashboardCharts({
           </div>
           <p className="text-xs text-muted-foreground">
             {tr("adminDashboardChartsSub", "POS 영업일 기준 — 매장·홀/포장/배달·배달앱별 매출을 도표로 확인합니다.")}{" "}
-            <span className="font-medium text-foreground">{today}</span>
+            <span className="font-medium text-foreground">{businessDayYmd}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

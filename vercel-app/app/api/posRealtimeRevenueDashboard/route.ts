@@ -13,7 +13,11 @@ import {
 import { applyPosSalesStoreSelectionFilterAsync } from '@/lib/pos-sales-fetch-rows'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
+import {
+  loadPosBusinessDaySettingsContext,
+  resolvePosBusinessHoursFromContext,
+} from '@/lib/pos-business-day-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { resolvePosSalesStoresForAuth } from '@/lib/pos-sales-request-scope'
 import { isPosOrderStatsCancellation } from '@/lib/pos-order-merge'
@@ -73,15 +77,6 @@ type StoreAccumulator = {
   stockoutCancelCount: number
   hourlyRevenue: number[]
   delayedTopOrders: DelayedOrderSummary[]
-}
-
-function toBangkokYmd(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date)
 }
 
 function toBangkokHour(dateIso: string): number | null {
@@ -199,9 +194,6 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await getVerifiedAuth(request)
     const { searchParams } = new URL(request.url)
-    const todayYmd = toBangkokYmd(new Date())
-    const startStr = searchParams.get('startStr')?.trim() || todayYmd
-    const endStr = searchParams.get('endStr')?.trim() || startStr
     const pos = searchParams.get('pos')?.trim()
     const requestedStores = resolveStoresFromParams(pos, searchParams.get('stores'))
     const stores = resolvePosSalesStoresForAuth(auth, requestedStores)
@@ -213,6 +205,13 @@ export async function GET(request: NextRequest) {
     const nowMs = Date.now()
 
     const bizCtx = await loadPosBusinessDaySettingsContext()
+    const hours = resolvePosBusinessHoursFromContext(
+      bizCtx,
+      stores.length === 1 ? stores[0] : ''
+    )
+    const todayYmd = getPosBusinessDateStrFromConfig(new Date(), hours)
+    const startStr = searchParams.get('startStr')?.trim() || todayYmd
+    const endStr = searchParams.get('endStr')?.trim() || startStr
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = await appendStoreCodeFilterAsync(filter, stores)
