@@ -74,6 +74,8 @@ const EMPTY_CATEGORY_META: PosCostCategoryWeightedMeta = {
   excludedUnmatchedQty: 0,
   paymentDiscountAllocated: 0,
   serviceAmtAllocated: 0,
+  optionBaseFallbackQty: 0,
+  optionBaseFallbackSales: 0,
 }
 
 function isHqPosScope(storeFilter: string): boolean {
@@ -202,6 +204,12 @@ export async function computePosCostSalesWeighted(params: {
     categoryAgg.meta.serviceAmtAllocated > 0.0001
   ) {
     warnings.push('CAT_ORDER_DISCOUNT_APPLIED')
+  }
+  if (
+    categoryAgg.meta.optionBaseFallbackQty > 0.0001 ||
+    categoryAgg.meta.optionBaseFallbackSales > 0.0001
+  ) {
+    warnings.push('CAT_OPTION_BASE_FALLBACK')
   }
 
   return {

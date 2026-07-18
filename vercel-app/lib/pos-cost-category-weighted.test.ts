@@ -191,4 +191,33 @@ describe('aggregatePosCostWeightedByCategory', () => {
     expect(rows[0]?.netSales).toBe(toPosCostSalesExclVat(70))
     expect(rows[0]?.costPctOfNet).toBe(61.14)
   })
+
+  it('tracks topMenus and option→base BOM fallback', () => {
+    const costIndex = new Map([
+      ['10|', { costHall: 40, costDelivery: 40, foodCost: 40, packagingCost: 0 }],
+      // option 99 has no dedicated BOM → fallback to base
+    ])
+    const menus = [{ id: '10', name: '치킨', category_main: 'Chicken' }]
+    const orderRows = [
+      {
+        order_type: 'dine_in',
+        items_json: JSON.stringify([
+          { menuId: '10', optionId: '99', name: '치킨', optionName: 'M-Wings', price: 200, quantity: 1 },
+        ]),
+      },
+    ]
+    const { rows, meta } = aggregatePosCostWeightedByCategory({
+      orderRows,
+      menus,
+      costIndex,
+      miseRatePercent: 0,
+    })
+    expect(meta.optionBaseFallbackQty).toBe(1)
+    expect(meta.optionBaseFallbackSales).toBe(toPosCostSalesExclVat(200))
+    expect(rows[0]?.topMenus[0]?.baseFallbackQty).toBe(1)
+    expect(rows[0]?.topMenus[0]?.costPctOfNet).toBe(
+      // 40 / (200/1.07) ≈ 21.4% — 목록 옵션 원가보다 낮게 잡히는 전형
+      Math.round((40 / toPosCostSalesExclVat(200)) * 10000) / 100
+    )
+  })
 })

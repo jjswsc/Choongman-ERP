@@ -283,12 +283,27 @@ export type PosCostSalesWeightedResult = {
     costPctOfNet: number
     matchedQty: number
     unmatchedQty: number
+    topMenus?: {
+      menuId: string
+      optionId: string
+      menuLabel: string
+      optionLabel: string
+      netSales: number
+      totalCost: number
+      foodCost: number
+      packagingCost: number
+      costPctOfNet: number
+      matchedQty: number
+      baseFallbackQty: number
+    }[]
   }[]
   categoryMeta?: {
     excludedUnmatchedSales: number
     excludedUnmatchedQty: number
     paymentDiscountAllocated: number
     serviceAmtAllocated: number
+    optionBaseFallbackQty?: number
+    optionBaseFallbackSales?: number
   }
   bomUnmatchedLines: {
     menuId: string

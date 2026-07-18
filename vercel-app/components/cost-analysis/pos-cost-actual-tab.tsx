@@ -100,6 +100,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<PosCostSalesWeightedResult | null>(null)
+  const [expandedCategory, setExpandedCategory] = React.useState<string | null>(null)
 
   const [itemCode, setItemCode] = React.useState("")
   const [whatIfPct, setWhatIfPct] = React.useState(10)
@@ -161,7 +162,10 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
       misePercent: settings.misePercent,
     })
       .then((data) => {
-        if (!cancelled) setResult(data)
+        if (!cancelled) {
+          setResult(data)
+          setExpandedCategory(null)
+        }
       })
       .catch((e) => {
         if (!cancelled) {
@@ -218,6 +222,14 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
         t("posCostActualOrderDiscWarn")
           .replace("{payment}", formatBaht(meta?.paymentDiscountAllocated ?? 0))
           .replace("{service}", formatBaht(meta?.serviceAmtAllocated ?? 0))
+      )
+    }
+    if (result.warnings.includes("CAT_OPTION_BASE_FALLBACK")) {
+      const meta = result.categoryMeta
+      msgs.push(
+        t("posCostActualOptionFallbackWarn")
+          .replace("{qty}", String(Math.round(meta?.optionBaseFallbackQty ?? 0)))
+          .replace("{sales}", formatBaht(meta?.optionBaseFallbackSales ?? 0))
       )
     }
     return msgs
@@ -425,6 +437,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
               <div>
                 <h3 className="text-sm font-semibold">{t("posCostActualByCategory")}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{t("posCostActualByCategoryHint")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("posCostActualTopMenusHint")}</p>
               </div>
               <table className="w-full text-xs">
                 <thead>
@@ -440,21 +453,81 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
                   {result.byCategory.map((row) => {
                     const target = settings.categoryTargets[row.categoryMain] ?? settings.costRatioGoodMax
                     const over = row.costPctOfNet > target
+                    const open = expandedCategory === row.categoryMain
+                    const topMenus = row.topMenus ?? []
                     return (
-                      <tr key={row.categoryMain} className="border-b border-border/60">
-                        <td className="px-3 py-2 font-medium">{row.categoryMain}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">฿{formatBaht(row.netSales)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">฿{formatBaht(row.totalCost)}</td>
-                        <td
-                          className={cn(
-                            "px-3 py-2 text-right tabular-nums font-medium",
-                            over ? "text-rose-600" : "text-emerald-600"
-                          )}
+                      <React.Fragment key={row.categoryMain}>
+                        <tr
+                          className="border-b border-border/60 cursor-pointer hover:bg-muted/30"
+                          onClick={() =>
+                            setExpandedCategory((prev) =>
+                              prev === row.categoryMain ? null : row.categoryMain
+                            )
+                          }
                         >
-                          {row.costPctOfNet.toFixed(1)}%
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{target}%</td>
-                      </tr>
+                          <td className="px-3 py-2 font-medium">
+                            <span className="text-muted-foreground mr-1">{open ? "▾" : "▸"}</span>
+                            {row.categoryMain}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">฿{formatBaht(row.netSales)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">฿{formatBaht(row.totalCost)}</td>
+                          <td
+                            className={cn(
+                              "px-3 py-2 text-right tabular-nums font-medium",
+                              over ? "text-rose-600" : "text-emerald-600"
+                            )}
+                          >
+                            {row.costPctOfNet.toFixed(1)}%
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{target}%</td>
+                        </tr>
+                        {open && topMenus.length > 0 ? (
+                          <tr className="border-b border-border/60 bg-muted/20">
+                            <td colSpan={5} className="px-3 py-2">
+                              <table className="w-full text-[11px]">
+                                <thead>
+                                  <tr className="text-muted-foreground">
+                                    <th className="py-1 text-left font-normal">{t("posMenuName")}</th>
+                                    <th className="py-1 text-right font-normal">{t("posCostActualNetSales")}</th>
+                                    <th className="py-1 text-right font-normal">{t("posCostActualTotalCost")}</th>
+                                    <th className="py-1 text-right font-normal">{t("posCostWeightedRatioTitle")}</th>
+                                    <th className="py-1 text-right font-normal">{t("posCostQty")}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {topMenus.map((m) => (
+                                    <tr key={`${m.menuId}|${m.optionId}`} className="border-t border-border/40">
+                                      <td className="py-1 pr-2">
+                                        {m.menuLabel}
+                                        {m.optionLabel ? ` · ${m.optionLabel}` : ""}
+                                        {m.baseFallbackQty > 0 ? (
+                                          <span className="ml-1 text-amber-700 dark:text-amber-300">
+                                            ({t("posCostActualBaseFallbackBadge")})
+                                          </span>
+                                        ) : null}
+                                      </td>
+                                      <td className="py-1 text-right tabular-nums">฿{formatBaht(m.netSales)}</td>
+                                      <td className="py-1 text-right tabular-nums">฿{formatBaht(m.totalCost)}</td>
+                                      <td className="py-1 text-right tabular-nums font-medium">
+                                        {m.costPctOfNet.toFixed(1)}%
+                                      </td>
+                                      <td className="py-1 text-right tabular-nums text-muted-foreground">
+                                        {m.matchedQty.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        ) : open ? (
+                          <tr className="border-b border-border/60 bg-muted/20">
+                            <td colSpan={5} className="px-3 py-2 text-muted-foreground">
+                              —
+                            </td>
+                          </tr>
+                        ) : null}
+                      </React.Fragment>
                     )
                   })}
                 </tbody>

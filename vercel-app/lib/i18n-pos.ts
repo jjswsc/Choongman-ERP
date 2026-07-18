@@ -2909,6 +2909,10 @@ export const I18N_POS_KO: Record<string, string> = {
       'BOM 미매칭 라인 매출 ฿{sales} · 수량 {qty}는 대분류 합계에서 제외했습니다. 상단 요약 순매출에는 해당 결제액이 포함될 수 있어 원가율이 낮게 보일 수 있습니다. 아래 미매칭 목록을 확인하세요.',
     posCostActualOrderDiscWarn:
       '대분류 순매출에 결제·쿠폰 할인 ฿{payment} · 서비스(컴프) ฿{service}를 반영했습니다.',
+    posCostActualOptionFallbackWarn:
+      '옵션이 지정됐지만 옵션 BOM이 없어 기본 BOM으로 계산한 라인: 수량 {qty} · 매출 ฿{sales}. 옵션 원가가 기본보다 크면 실적 원가율이 목록보다 낮게 나옵니다. 대분류 행을 펼쳐 메뉴별 원가율을 확인하세요.',
+    posCostActualTopMenusHint: '행을 클릭하면 해당 대분류 매출 상위 메뉴(옵션)별 실적 원가율을 봅니다.',
+    posCostActualBaseFallbackBadge: '기본BOM폴백',
     posCostActualFormulaHint:
       '완료 주문 × BOM 이론 원가. 순매출·원가율 분모는 VAT 제외(공급가). 세트는 정가 비중 배분, 결제·서비스 할인 반영, BOM 미매칭은 대분류에서 제외. (관리마진과 동일 원가 엔진)',
     posCostActualCostPctNetHint: '순매출(VAT 제외) 대비',
@@ -5978,6 +5982,10 @@ export const I18N_POS_EN: Record<string, string> = {
       'BOM-unmatched line sales ฿{sales} · qty {qty} excluded from category totals. Summary net sales may still include those payments, which can lower the headline cost%. See unmatched list below.',
     posCostActualOrderDiscWarn:
       'Category net sales reflect payment/coupon discount ฿{payment} and service/comp ฿{service}.',
+    posCostActualOptionFallbackWarn:
+      'Lines with an option but no option BOM used the base BOM: qty {qty} · sales ฿{sales}. If option cost > base, actual cost% can look lower than the list. Expand a category row to see per-menu cost%.',
+    posCostActualTopMenusHint: 'Click a row to see top menus (options) by sales for that category.',
+    posCostActualBaseFallbackBadge: 'base BOM fallback',
     posCostActualFormulaHint:
       'Completed orders × BOM theoretical cost. Net sales and cost% use excl.-VAT amounts. Sets use regular-price weight; payment/service discounts applied; unmatched BOM excluded from categories.',
     posCostActualCostPctNetHint: 'vs net sales (excl. VAT)',

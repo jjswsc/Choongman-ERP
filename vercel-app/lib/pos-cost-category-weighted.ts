@@ -17,6 +17,7 @@ import type { PosMenuCatalogRow } from '@/lib/pos-sales-menu-hierarchy-aggregate
 import { resolvePosOrderVatExclFactor } from '@/lib/pos-cost-vat'
 
 const EMPTY_MAIN = '(대분류 없음)'
+const TOP_MENUS_PER_CATEGORY = 20
 
 export type PosCostCategoryWeightedRow = {
   categoryMain: string
@@ -27,6 +28,23 @@ export type PosCostCategoryWeightedRow = {
   costPctOfNet: number
   matchedQty: number
   unmatchedQty: number
+  /** 매출 상위 메뉴(옵션) — 대분류 평균이 목록과 어긋날 때 원인 확인용 */
+  topMenus: PosCostCategoryMenuContribution[]
+}
+
+export type PosCostCategoryMenuContribution = {
+  menuId: string
+  optionId: string
+  menuLabel: string
+  optionLabel: string
+  netSales: number
+  totalCost: number
+  foodCost: number
+  packagingCost: number
+  costPctOfNet: number
+  matchedQty: number
+  /** 옵션이 있었는데 옵션 BOM 없이 기본 BOM으로 폴백된 수량 */
+  baseFallbackQty: number
 }
 
 export type PosCostCategoryWeightedMeta = {
@@ -37,6 +55,9 @@ export type PosCostCategoryWeightedMeta = {
   paymentDiscountAllocated: number
   /** 서비스(컴프) 금액(대분류 분모에 반영) */
   serviceAmtAllocated: number
+  /** 옵션 지정인데 기본 BOM 폴백(원가 과소·원가율 하락 가능) */
+  optionBaseFallbackQty: number
+  optionBaseFallbackSales: number
 }
 
 export type PosCostCategoryWeightedResult = {
@@ -106,10 +127,16 @@ function lookupCostEntry(
   costIndex: Map<string, PosMenuCostIndexEntry>,
   menuId: string,
   optionId: string
-): PosMenuCostIndexEntry | undefined {
+): { entry: PosMenuCostIndexEntry | undefined; baseFallback: boolean } {
   const keyWithOpt = `${menuId}|${optionId}`
   const keyBase = `${menuId}|`
-  return costIndex.get(keyWithOpt) ?? costIndex.get(keyBase)
+  if (optionId) {
+    const optHit = costIndex.get(keyWithOpt)
+    if (optHit) return { entry: optHit, baseFallback: false }
+    const baseHit = costIndex.get(keyBase)
+    return { entry: baseHit, baseFallback: Boolean(baseHit) }
+  }
+  return { entry: costIndex.get(keyBase), baseFallback: false }
 }
 
 function resolveCategoryForMenu(
@@ -152,6 +179,15 @@ type Bucket = {
   unmatchedQty: number
 }
 
+type MenuBucket = Bucket & {
+  menuId: string
+  optionId: string
+  menuLabel: string
+  optionLabel: string
+  categoryMain: string
+  baseFallbackQty: number
+}
+
 function emptyBucket(): Bucket {
   return {
     netSales: 0,
@@ -171,12 +207,61 @@ function upsertBucket(map: Map<string, Bucket>, categoryMain: string): Bucket {
   return next
 }
 
+function menuKey(categoryMain: string, menuId: string, optionId: string): string {
+  return `${categoryMain}\0${menuId}\0${optionId}`
+}
+
+function upsertMenuBucket(
+  map: Map<string, MenuBucket>,
+  params: {
+    categoryMain: string
+    menuId: string
+    optionId: string
+    menuLabel: string
+    optionLabel: string
+  }
+): MenuBucket {
+  const key = menuKey(params.categoryMain, params.menuId, params.optionId)
+  const prev = map.get(key)
+  if (prev) {
+    if (params.menuLabel && (!prev.menuLabel || prev.menuLabel.startsWith('#'))) {
+      prev.menuLabel = params.menuLabel
+    }
+    if (params.optionLabel && (!prev.optionLabel || prev.optionLabel.startsWith('#'))) {
+      prev.optionLabel = params.optionLabel
+    }
+    return prev
+  }
+  const next: MenuBucket = {
+    ...emptyBucket(),
+    menuId: params.menuId,
+    optionId: params.optionId,
+    menuLabel: params.menuLabel || (params.menuId ? `#${params.menuId}` : '—'),
+    optionLabel: params.optionLabel || (params.optionId ? `#${params.optionId}` : ''),
+    categoryMain: params.categoryMain,
+    baseFallbackQty: 0,
+  }
+  map.set(key, next)
+  return next
+}
+
 function mergeBucket(target: Bucket, src: Bucket, salesFactor: number) {
   target.netSales = round2(target.netSales + src.netSales * salesFactor)
   target.foodCost = round2(target.foodCost + src.foodCost)
   target.packagingCost = round2(target.packagingCost + src.packagingCost)
   target.matchedQty = round2(target.matchedQty + src.matchedQty)
   target.unmatchedQty = round2(target.unmatchedQty + src.unmatchedQty)
+}
+
+function mergeMenuBucket(target: MenuBucket, src: MenuBucket, salesFactor: number) {
+  mergeBucket(target, src, salesFactor)
+  target.baseFallbackQty = round2(target.baseFallbackQty + src.baseFallbackQty)
+  if (src.menuLabel && (!target.menuLabel || target.menuLabel.startsWith('#'))) {
+    target.menuLabel = src.menuLabel
+  }
+  if (src.optionLabel && (!target.optionLabel || target.optionLabel.startsWith('#'))) {
+    target.optionLabel = src.optionLabel
+  }
 }
 
 /**
@@ -210,11 +295,14 @@ export function aggregatePosCostWeightedByCategory(params: {
     })
 
   const globalBuckets = new Map<string, Bucket>()
+  const globalMenus = new Map<string, MenuBucket>()
   const meta: PosCostCategoryWeightedMeta = {
     excludedUnmatchedSales: 0,
     excludedUnmatchedQty: 0,
     paymentDiscountAllocated: 0,
     serviceAmtAllocated: 0,
+    optionBaseFallbackQty: 0,
+    optionBaseFallbackSales: 0,
   }
 
   for (const order of params.orderRows) {
@@ -222,6 +310,7 @@ export function aggregatePosCostWeightedByCategory(params: {
     const channel = orderTypeToPromoRegularPriceChannel(order.order_type)
     const vatExclFactor = resolvePosOrderVatExclFactor(order)
     const orderBuckets = new Map<string, Bucket>()
+    const orderMenus = new Map<string, MenuBucket>()
     let lineDiscountSum = 0
 
     for (const row of parseOrderItems(order.items_json)) {
@@ -240,7 +329,10 @@ export function aggregatePosCostWeightedByCategory(params: {
         qty: number
         categoryMain: string
         entry: PosMenuCostIndexEntry | undefined
+        baseFallback: boolean
         weight: number
+        menuLabel: string
+        optionLabel: string
       }
 
       const prepared: Prepared[] = []
@@ -249,7 +341,7 @@ export function aggregatePosCostWeightedByCategory(params: {
         if (qty <= 0) continue
         const menuId = str(line.menuId)
         const optionId = str(line.optionId)
-        const entry = menuId ? lookupCostEntry(params.costIndex, menuId, optionId) : undefined
+        const looked = menuId ? lookupCostEntry(params.costIndex, menuId, optionId) : { entry: undefined, baseFallback: false }
         const catalogWeight = catalogRegularWeight({
           menuId,
           optionId,
@@ -262,8 +354,11 @@ export function aggregatePosCostWeightedByCategory(params: {
           optionId,
           qty,
           categoryMain: resolveCategoryForMenu(menuId, row, categoryByMenuId),
-          entry,
+          entry: looked.entry,
+          baseFallback: looked.baseFallback,
           weight: catalogWeight > 0.0001 ? catalogWeight : qty,
+          menuLabel: str(line.menuName) || (menuId ? `#${menuId}` : '—'),
+          optionLabel: str(line.optionName) || (optionId ? `#${optionId}` : ''),
         })
       }
       if (prepared.length === 0) continue
@@ -277,7 +372,6 @@ export function aggregatePosCostWeightedByCategory(params: {
       const unmatchedQty = round2(unmatched.reduce((s, p) => s + p.qty, 0))
       if (unmatchedQty > 0) {
         meta.excludedUnmatchedQty = round2(meta.excludedUnmatchedQty + unmatchedQty)
-        // 대분류별 unmatched 수량만 표시용으로 남김(매출·원가 없음)
         for (const p of unmatched) {
           const bucket = upsertBucket(orderBuckets, p.categoryMain)
           bucket.unmatchedQty = round2(bucket.unmatchedQty + p.qty)
@@ -305,6 +399,23 @@ export function aggregatePosCostWeightedByCategory(params: {
         bucket.foodCost = round2(bucket.foodCost + unitFood * p.qty)
         if (isDelivery) {
           bucket.packagingCost = round2(bucket.packagingCost + unitPack * p.qty)
+        }
+
+        const mBucket = upsertMenuBucket(orderMenus, {
+          categoryMain: p.categoryMain,
+          menuId: p.menuId,
+          optionId: p.optionId,
+          menuLabel: p.menuLabel,
+          optionLabel: p.optionLabel,
+        })
+        mBucket.netSales = round2(mBucket.netSales + share)
+        mBucket.matchedQty = round2(mBucket.matchedQty + p.qty)
+        mBucket.foodCost = round2(mBucket.foodCost + unitFood * p.qty)
+        if (isDelivery) {
+          mBucket.packagingCost = round2(mBucket.packagingCost + unitPack * p.qty)
+        }
+        if (p.baseFallback) {
+          mBucket.baseFallbackQty = round2(mBucket.baseFallbackQty + p.qty)
         }
       }
     }
@@ -334,6 +445,48 @@ export function aggregatePosCostWeightedByCategory(params: {
     for (const [cat, bucket] of orderBuckets) {
       mergeBucket(upsertBucket(globalBuckets, cat), bucket, salesFactor)
     }
+    for (const [, mb] of orderMenus) {
+      const key = menuKey(mb.categoryMain, mb.menuId, mb.optionId)
+      const prev = globalMenus.get(key)
+      if (prev) mergeMenuBucket(prev, mb, salesFactor)
+      else {
+        globalMenus.set(key, {
+          ...mb,
+          netSales: round2(mb.netSales * salesFactor),
+        })
+      }
+      if (mb.baseFallbackQty > 0) {
+        meta.optionBaseFallbackQty = round2(meta.optionBaseFallbackQty + mb.baseFallbackQty)
+        meta.optionBaseFallbackSales = round2(
+          meta.optionBaseFallbackSales + mb.netSales * salesFactor
+        )
+      }
+    }
+  }
+
+  const menusByCategory = new Map<string, PosCostCategoryMenuContribution[]>()
+  for (const mb of globalMenus.values()) {
+    const totalCost = round2(mb.foodCost + mb.packagingCost)
+    const contrib: PosCostCategoryMenuContribution = {
+      menuId: mb.menuId,
+      optionId: mb.optionId,
+      menuLabel: mb.menuLabel,
+      optionLabel: mb.optionLabel,
+      netSales: round2(mb.netSales),
+      totalCost,
+      foodCost: mb.foodCost,
+      packagingCost: mb.packagingCost,
+      costPctOfNet: pctOf(totalCost, mb.netSales),
+      matchedQty: mb.matchedQty,
+      baseFallbackQty: mb.baseFallbackQty,
+    }
+    const arr = menusByCategory.get(mb.categoryMain) || []
+    arr.push(contrib)
+    menusByCategory.set(mb.categoryMain, arr)
+  }
+  for (const [cat, arr] of menusByCategory) {
+    arr.sort((a, b) => b.netSales - a.netSales || a.menuLabel.localeCompare(b.menuLabel, 'ko'))
+    menusByCategory.set(cat, arr.slice(0, TOP_MENUS_PER_CATEGORY))
   }
 
   const rows = Array.from(globalBuckets.entries())
@@ -348,6 +501,7 @@ export function aggregatePosCostWeightedByCategory(params: {
         costPctOfNet: pctOf(totalCost, b.netSales),
         matchedQty: b.matchedQty,
         unmatchedQty: b.unmatchedQty,
+        topMenus: menusByCategory.get(categoryMain) || [],
       }
     })
     .filter((r) => r.netSales > 0 || r.totalCost > 0)
