@@ -29,6 +29,25 @@ export function normalizeBangkokDateTimeCompareKey(raw: string | null | undefine
   return v
 }
 
+/**
+ * 타임존이 있는 ISO(Z·±offset)는 방콕 벽시계로 변환한 뒤 비교키로 만든다.
+ * 타임존 없는 `YYYY-MM-DD HH:mm:ss`는 이미 방콕 시각으로 본다(issued_at 등).
+ * `paid_at`(UTC ISO) vs `issued_at`(방콕 naive) 비교에 필수.
+ */
+export function toBangkokWallClockCompareKey(raw: string | null | undefined): string {
+  const v = String(raw || '').trim()
+  if (!v) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v} 00:00:00`
+
+  const hasExplicitTz = /[zZ]$/.test(v) || /[+-]\d{2}:?\d{2}$/.test(v)
+  if (hasExplicitTz) {
+    const d = new Date(v)
+    if (!Number.isNaN(d.getTime())) return getBangkokDateTimeString(d)
+  }
+
+  return normalizeBangkokDateTimeCompareKey(v)
+}
+
 export function isBangkokDateTimeBefore(a: string, b: string): boolean {
   const ka = normalizeBangkokDateTimeCompareKey(a)
   const kb = normalizeBangkokDateTimeCompareKey(b)

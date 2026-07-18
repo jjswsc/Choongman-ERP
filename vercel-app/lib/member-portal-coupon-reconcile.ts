@@ -40,17 +40,11 @@ function normalizeCouponCode(code: string): string {
   return String(code || '').trim().toUpperCase()
 }
 
-function parseBangkokComparable(raw: string): string {
-  const text = String(raw || '').trim()
-  if (!text) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 23:59:59`
-  return text.replace('T', ' ').slice(0, 19)
-}
-
+/** paid_at/created_at 원문 유지(UTC ISO 포함). 비교는 couponIssueEligibleForOrderTime 에서 방콕 변환 */
 function orderPaidAtComparable(order: OrderRow): string {
-  const paid = parseBangkokComparable(String(order.paid_at || ''))
+  const paid = String(order.paid_at || '').trim()
   if (paid) return paid
-  return parseBangkokComparable(String(order.created_at || ''))
+  return String(order.created_at || '').trim()
 }
 
 function legacyCouponCodesFromOrderField(couponCode: string): string[] {

@@ -1,22 +1,25 @@
-import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { getBangkokDateTimeString, toBangkokWallClockCompareKey } from '@/lib/bangkok-time'
 
-function parseBangkokComparable(raw: string): string {
+function parseExpiryComparable(raw: string): string {
   const text = String(raw || '').trim()
   if (!text) return ''
+  // 날짜만 있으면 그날 끝까지 유효
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 23:59:59`
-  return text.replace('T', ' ').slice(0, 19)
+  return toBangkokWallClockCompareKey(text)
 }
 
 /** 발급 시각이 주문(사용) 시각 이전이어야 같은 쿠폰코드로 매칭 가능 */
 export function couponIssueEligibleForOrderTime(issuedAt?: string | null, orderPaidAt?: string | null): boolean {
-  const issued = parseBangkokComparable(String(issuedAt || ''))
-  const paid = parseBangkokComparable(String(orderPaidAt || ''))
-  if (!issued || !paid) return false
+  const paid = toBangkokWallClockCompareKey(String(orderPaidAt || ''))
+  if (!paid) return false
+  const issued = toBangkokWallClockCompareKey(String(issuedAt || ''))
+  // 발급시각 없으면 false-positive로 단정하지 않음(used → issued 되돌림 방지)
+  if (!issued) return true
   return issued <= paid
 }
 
 export function isMemberCouponIssueExpired(expiresAt?: string | null, validTo?: string | null): boolean {
-  const cutoff = parseBangkokComparable(String(expiresAt || validTo || ''))
+  const cutoff = parseExpiryComparable(String(expiresAt || validTo || ''))
   if (!cutoff) return false
   return cutoff < getBangkokDateTimeString()
 }

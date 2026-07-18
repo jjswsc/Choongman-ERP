@@ -21,4 +21,11 @@ describe('member-portal-coupon-repair policy', () => {
     expect(couponIssueEligibleForOrderTime('2026-06-30 13:07:07', orderPaidAt)).toBe(true)
     expect(couponIssueEligibleForOrderTime('2026-06-30 13:07:19', orderPaidAt)).toBe(true)
   })
+
+  it('does not false-positive when paid_at is UTC ISO and issued_at is Bangkok wall clock', () => {
+    // 영수증 19:09 방콕 / paid_at UTC 12:09 — 당일 오후 교환 쿠폰이 used→issued 로 되돌아가면 안 됨
+    expect(
+      couponIssueEligibleForOrderTime('2026-07-18 18:50:00', '2026-07-18T12:09:08.000Z')
+    ).toBe(true)
+  })
 })

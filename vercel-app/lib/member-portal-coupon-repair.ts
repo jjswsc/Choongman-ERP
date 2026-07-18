@@ -36,9 +36,11 @@ async function loadOrderPaidAtById(orderIds: number[]): Promise<Map<number, stri
       for (const order of orderRows || []) {
         const id = Number(order.id || 0)
         if (!id) continue
+        // UTC ISO 원문을 유지 — couponIssueEligibleForOrderTime 이 방콕 벽시계로 변환한다.
+        // 여기서 T/Z 를 잘라 내면 UTC 시각이 방콕 naive 로 오인된다.
         const paid = String(order.paid_at || '').trim()
         const created = String(order.created_at || '').trim()
-        const comparable = (paid || created).replace('T', ' ').slice(0, 19)
+        const comparable = paid || created
         if (comparable) orderPaidAtById.set(id, comparable)
       }
     } catch {
