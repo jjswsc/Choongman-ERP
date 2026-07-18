@@ -66,7 +66,8 @@ import {
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum, formatBahtWhole, formatPosQtyCompact } from '@/lib/utils'
-import { formatBahtAmountForField, formatBahtInputDisplay, formatIntegerInputDisplay, parseBahtAmount, parseIntegerInput, parsePosDiscountValueInput } from '@/lib/baht-input-format'
+import { formatBahtAmountForField, formatBahtInputDisplay, formatIntegerInputDisplay, parseBahtAmount, parseIntegerInput, parsePosDiscountValueInput, selectionAfterBahtFormat } from '@/lib/baht-input-format'
+import { PosPaymentBahtInput } from '@/components/pos/pos-payment-baht-input'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
@@ -563,6 +564,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
   /** 결제 모달 금액·할인·포인트 입력 중 자동 합계 덮어쓰기·스캔 포커스가 키보드를 끊지 않도록 */
   const paymentAmountInputFocusedRef = useRef(false)
+  /**
+   * 금액 입력을 한 번이라도 시작하면 스캔 autofocus를 세션 락.
+   * (타이머 grace만으로는 OSK/리렌더 레이스에 뚫려 한 글자마다 끊김이 재발함)
+   * 회원·쿠폰 스캔 칸을 직접 포커스하면 해제.
+   */
+  const paymentAmountLocksScanRef = useRef(false)
   const paymentAmountInputBlurTimerRef = useRef<number | null>(null)
   const activePaymentAmountInputRef = useRef<HTMLInputElement | null>(null)
   const lastPaymentAmountInputAtRef = useRef(0)
@@ -585,12 +592,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (el) activePaymentAmountInputRef.current = el
     lastPaymentAmountInputAtRef.current = Date.now()
     paymentAmountInputFocusedRef.current = true
+    paymentAmountLocksScanRef.current = true
   }, [])
   const isActivelyEditingPaymentAmount = useCallback(() => {
     if (paymentAmountInputFocusedRef.current) return true
     if (Date.now() - lastPaymentAmountInputAtRef.current < PAYMENT_AMOUNT_TYPING_GRACE_MS) return true
     return isPaymentAmountInputEl(document.activeElement)
   }, [isPaymentAmountInputEl])
+  /** 스캔 자동 focus 호출 금지 — 세션 락 + 타이핑 가드 (하드 락) */
+  const blockScanAutofocusNow = useCallback(() => {
+    if (paymentAmountLocksScanRef.current) return true
+    if (paymentAmountInputFocusedRef.current) return true
+    if (Date.now() - lastPaymentAmountInputAtRef.current < PAYMENT_AMOUNT_TYPING_GRACE_MS) return true
+    return isPaymentAmountInputEl(document.activeElement)
+  }, [isPaymentAmountInputEl])
+  const releasePaymentAmountScanLock = useCallback(() => {
+    paymentAmountLocksScanRef.current = false
+  }, [])
   const restorePaymentAmountInputFocus = useCallback((el: HTMLInputElement) => {
     window.requestAnimationFrame(() => {
       if (document.activeElement !== el) {
@@ -602,10 +620,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (e: React.ChangeEvent<HTMLInputElement>, apply: (formatted: string) => void) => {
       const el = e.currentTarget
       markPaymentAmountInputFocused(el)
-      apply(formatBahtInputDisplay(e.target.value))
-      restorePaymentAmountInputFocus(el)
+      const raw = e.target.value
+      const caret = el.selectionStart ?? raw.length
+      const formatted = formatBahtInputDisplay(raw)
+      const nextCaret = selectionAfterBahtFormat(raw, caret, formatted)
+      apply(formatted)
+      window.requestAnimationFrame(() => {
+        if (document.activeElement !== el) {
+          el.focus({ preventScroll: true })
+        }
+        try {
+          el.setSelectionRange(nextCaret, nextCaret)
+        } catch {
+          /* ignore */
+        }
+      })
     },
-    [markPaymentAmountInputFocused, restorePaymentAmountInputFocus]
+    [markPaymentAmountInputFocused]
   )
   const handlePaymentIntegerInputChange = useCallback(
     (
@@ -654,6 +685,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }),
     [bumpDiscountPaymentSync, isPaymentAmountInputEl, markPaymentAmountInputFocused]
   )
+
   const triggerScanFieldFeedback = useCallback(
     (field: 'member' | 'coupon', outcome: 'success' | 'error') => {
       playPosScanBeep(outcome, lastScanBeepAtRef)
@@ -680,13 +712,32 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [collabQuantity, setCollabQuantity] = useState(1)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+
+  /** 금액 입력 세션 락: 스캔칸 직접 포커스 시 해제 / 모달 닫히면 해제 */
+  useEffect(() => {
+    if (!showPaymentModal) {
+      paymentAmountLocksScanRef.current = false
+      return
+    }
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (t.closest('[data-pos-member-scan="1"], [data-pos-coupon-scan="1"]')) {
+        releasePaymentAmountScanLock()
+      }
+    }
+    document.addEventListener('focusin', onFocusIn, true)
+    return () => document.removeEventListener('focusin', onFocusIn, true)
+  }, [releasePaymentAmountScanLock, showPaymentModal])
+
   const refocusActiveScanInput = useCallback(() => {
     window.setTimeout(() => {
       if (couponQrScannerOpenRef.current) return
+      if (blockScanAutofocusNow()) return
       if (showPaymentModal) couponScanInputRef.current?.focus()
       else memberScanInputRef.current?.focus()
     }, 60)
-  }, [showPaymentModal])
+  }, [blockScanAutofocusNow, showPaymentModal])
   const finishMemberScanInput = useCallback(
     (outcome: 'success' | 'error') => {
       triggerScanFieldFeedback('member', outcome)
@@ -1522,17 +1573,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     })
   }, [buildPaymentSnapshot, total])
 
-  /** 고객용 모니터·터미널 상위 리렌더가 결제 입력 포커스를 끊지 않도록 디바운스 */
+  /** 고객용 모니터·터미널 상위 리렌더가 결제 입력 포커스를 끊지 않도록: 타이핑 중 push 보류 */
   useEffect(() => {
     if (!showPaymentModal) {
       onCustomerDisplayPaymentDraftChange?.(null)
       return
     }
     const id = window.setTimeout(() => {
+      // 세션 락(blockScan)과 달리, 실제 타이핑 중에만 보류 — 입력 끝나면 모니터 갱신
+      if (isActivelyEditingPaymentAmount()) return
       onCustomerDisplayPaymentDraftChange?.(buildPaymentSnapshot())
-    }, 250)
+    }, 400)
     return () => window.clearTimeout(id)
-  }, [showPaymentModal, buildPaymentSnapshot, onCustomerDisplayPaymentDraftChange])
+  }, [showPaymentModal, buildPaymentSnapshot, onCustomerDisplayPaymentDraftChange, isActivelyEditingPaymentAmount])
   /** 더치페이·일부 결제 단계가 실제로 진행 중일 때만 금액 누적(add) 입력 */
   const activeDutchSplitFlow = showSplit || splitPaidSteps > 0
   /** UI 표시용: 합계 불일치 시에도 잔액·진행 바 등 강조 (금액 입력은 activeDutchSplitFlow일 때만 add) */
@@ -3979,15 +4032,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
+      if (blockScanAutofocusNow()) return
       memberScanInputRef.current?.focus()
     }, 80)
     return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, showPaymentModal])
+  }, [blockScanAutofocusNow, couponQrScannerOpen, showPaymentModal])
 
   useEffect(() => {
     if (!showPaymentModal || couponQrScannerOpen) return
     const id = window.setTimeout(() => {
-      if (isActivelyEditingPaymentAmount()) return
+      // 하드 락: 금액 입력 세션 중이면 회원/쿠폰 스캔칸으로 focus 호출 자체 금지
+      if (blockScanAutofocusNow()) return
       if (!selectedMemberId) {
         paymentMemberScanInputRef.current?.focus()
       } else {
@@ -3995,7 +4050,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     }, 120)
     return () => window.clearTimeout(id)
-  }, [couponQrScannerOpen, isActivelyEditingPaymentAmount, selectedMemberId, showPaymentModal])
+  }, [blockScanAutofocusNow, couponQrScannerOpen, selectedMemberId, showPaymentModal])
 
   useEffect(() => {
     if (showPaymentModal || couponQrScannerOpen) return
@@ -4099,7 +4154,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   useEffect(() => {
     const tick = window.setInterval(() => {
       if (couponQrScannerOpen) return
-      if (guestDirectOpen || editingNoteItemId || isActivelyEditingPaymentAmount()) return
+      if (guestDirectOpen || editingNoteItemId || blockScanAutofocusNow()) return
       if (Date.now() - lastPosActivityRef.current < POS_SCAN_IDLE_REFOCUS_MS) return
       const active = document.activeElement
       if (active === memberScanInputRef.current || active === couponScanInputRef.current) return
@@ -4116,7 +4171,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       lastPosActivityRef.current = Date.now()
     }, 4000)
     return () => window.clearInterval(tick)
-  }, [couponQrScannerOpen, editingNoteItemId, guestDirectOpen, isActivelyEditingPaymentAmount, showPaymentModal])
+  }, [blockScanAutofocusNow, couponQrScannerOpen, editingNoteItemId, guestDirectOpen, showPaymentModal])
+
+  const cashTenderedFocusBind = useMemo(() => bindPaymentAmountInputFocus(), [bindPaymentAmountInputFocus])
 
   const removeAppliedCoupon = (index: number) => {
     setAppliedCoupons((prev) => prev.filter((_, i) => i !== index))
@@ -5511,13 +5568,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           if (lockPaymentModalForTour) e.preventDefault()
         }}
         onPointerDownOutside={(e) => {
-          // 터치 POS·가상 키보드 탭이 outside로 잡혀 금액 입력이 한 글자마다 끊기는 문제 방지
+          // 회귀 금지: 터치 POS·가상 키보드 탭이 outside로 잡혀 금액 입력이 한 글자마다 끊김
           e.preventDefault()
         }}
         onInteractOutside={(e) => {
+          // 회귀 금지: Dialog dismiss가 금액 입력 포커스를 뺏지 않도록
           e.preventDefault()
         }}
         onFocusOutside={(e) => {
+          // 회귀 금지: 포커스 트랩이 스캔칸으로 되돌리지 않도록
           e.preventDefault()
         }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
@@ -6047,14 +6106,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             {tr('posCashTenderedAmount', '받은 금액')}
                           </Label>
                           <div className="flex items-center gap-2">
-                            <Input
+                            <PosPaymentBahtInput
                               ref={cashTenderedInputRef}
-                              type="text"
-                              inputMode="decimal"
-                              autoComplete="off"
                               value={cashTendered}
-                              {...bindPaymentAmountInputFocus()}
-                              onChange={(e) => handlePaymentBahtInputChange(e, setCashTendered)}
+                              onValueChange={setCashTendered}
+                              focusBind={cashTenderedFocusBind}
+                              markFocused={markPaymentAmountInputFocused}
                               className="h-10 rounded-lg border-sky-300/70 bg-sky-50/60 text-right tabular-nums text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100"
                               placeholder="0"
                             />

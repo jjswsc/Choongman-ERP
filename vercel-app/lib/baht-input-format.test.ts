@@ -5,6 +5,7 @@ import {
   normalizeDigitChars,
   parseBahtAmount,
   parseIntegerInput,
+  selectionAfterBahtFormat,
 } from '@/lib/baht-input-format'
 
 describe('normalizeDigitChars', () => {
@@ -25,6 +26,13 @@ describe('formatBahtInputDisplay', () => {
 describe('formatIntegerInputDisplay', () => {
   it('accepts Thai digits for percent discount', () => {
     expect(formatIntegerInputDisplay('๑๕', 3)).toBe('15')
+  })
+})
+
+describe('selectionAfterBahtFormat', () => {
+  it('keeps caret after digits when commas are inserted', () => {
+    expect(selectionAfterBahtFormat('1234', 4, '1,234')).toBe(5)
+    expect(selectionAfterBahtFormat('12', 2, '12')).toBe(2)
   })
 })
 

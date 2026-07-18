@@ -15,6 +15,45 @@ export function parseBahtAmount(raw: string | undefined | null): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/** 캐럿 앞의 숫자·소수점 개수 (콤마 무시) — 포맷 후 selection 복원용 */
+export function countBahtDigitLikeBefore(raw: string, caret: number): number {
+  const s = String(raw || '')
+  const end = Math.max(0, Math.min(caret, s.length))
+  let n = 0
+  for (let i = 0; i < end; i++) {
+    const ch = s[i]
+    if ((ch >= '0' && ch <= '9') || ch === '.') n++
+  }
+  return n
+}
+
+/** digitLike 개수에 해당하는 포맷 문자열 내 캐럿 위치 */
+export function caretFromBahtDigitLikeCount(formatted: string, digitLikeCount: number): number {
+  if (digitLikeCount <= 0) return 0
+  const s = String(formatted || '')
+  let seen = 0
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if ((ch >= '0' && ch <= '9') || ch === '.') {
+      seen++
+      if (seen >= digitLikeCount) return i + 1
+    }
+  }
+  return s.length
+}
+
+/** 콤마 재삽입 후에도 타이핑 위치가 유지되도록 selection 인덱스 계산 */
+export function selectionAfterBahtFormat(
+  rawBeforeFormat: string,
+  caretBefore: number,
+  formatted: string
+): number {
+  return caretFromBahtDigitLikeCount(
+    formatted,
+    countBahtDigitLikeBefore(rawBeforeFormat, caretBefore)
+  )
+}
+
 /** 입력 문자열을 정규 포맷(정수 부분 천단위 콤마, 소수 최대 2자리). */
 export function formatBahtInputDisplay(raw: string): string {
   const normalized = normalizeDigitChars(String(raw)).replace(/,/g, '').replace(/[^\d.]/g, '')
