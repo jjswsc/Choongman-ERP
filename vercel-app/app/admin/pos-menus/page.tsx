@@ -146,6 +146,7 @@ import {
   resolveEffectiveMenuScopeStoreCodes,
 } from "@/lib/pos-menu-store-scope"
 
+import { posMenuCodePlaceholderForMain } from "@/lib/pos-menu-next-code"
 import {
   POS_MENUS_EDIT_RESUME_KEY,
   menuScopeStoreCodes,
@@ -4949,13 +4950,7 @@ export default function PosMenusPage() {
                   <div>
                     <label className="text-xs font-semibold">{t("posMenuCode")}</label>
                     <Input
-                      placeholder={
-                        formData.categoryMain === "Topping"
-                          ? "T001"
-                          : formData.categoryMain === "Chicken"
-                            ? "C001"
-                            : "C001 / T001"
-                      }
+                      placeholder={posMenuCodePlaceholderForMain(formData.categoryMain)}
                       className="mt-1 h-10"
                       value={formData.code}
                       onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}

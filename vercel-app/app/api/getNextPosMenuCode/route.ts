@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { posMenuCodePrefixForMain } from '@/lib/pos-menu-next-code'
 
-const PREFIX_BY_MAIN: Record<string, string> = {
-  Chicken: 'C',
-  Korean: 'K',
-  Side: 'S',
-  Drinks: 'D',
-  /** 토핑은 치킨(C)과 겹치지 않도록 T 접두사 */
-  Topping: 'T',
-}
-
-/** GET ?mainCategory=Chicken → 다음 코드 C013 (Topping → T001) */
+/** GET ?mainCategory=Chicken → 다음 코드 C013 (Food → F001, Topping → T001) */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -21,7 +13,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ code: null, message: 'mainCategory 파라미터가 필요합니다.' }, { headers })
     }
 
-    const prefix = PREFIX_BY_MAIN[mainCategory]
+    const prefix = posMenuCodePrefixForMain(mainCategory)
     if (!prefix) {
       return NextResponse.json({ code: null, message: `지원하지 않는 대분류: ${mainCategory}` }, { headers })
     }

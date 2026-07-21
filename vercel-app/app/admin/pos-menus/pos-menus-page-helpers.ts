@@ -27,8 +27,8 @@ export function storeScopeCodesEqual(a: string[], b: string[]): boolean {
   return sa.every((v, i) => v === sb[i])
 }
 
-/** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
-export const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as const
+/** 코드 자동 생성 대상 대분류 (C/K/S/D/T/F 접두사) — lib/pos-menu-next-code 와 동일 */
+export { CODE_AUTO_MAINS } from "@/lib/pos-menu-next-code"
 
 /** 옵션관리 탭: 고정 2단계 — 1. 사이즈, 2. 부위 */
 export const OPTION_SIZE_VALUES = ["S", "M", "L"]
