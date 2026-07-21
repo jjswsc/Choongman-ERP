@@ -106,6 +106,7 @@ import {
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { buildCode128SvgDataUri } from "@/lib/barcode-code128-svg"
 import {
   buildPaymentReceiptMemberFooterHtml,
   PAYMENT_RECEIPT_MEMBER_BLOCK_CSS,
@@ -155,7 +156,7 @@ const readKitchenRouteDraftCache = (storeCode: string): KitchenRouteDraftCachePa
 const buildCode128BarcodeUrl = (raw: string) => {
   const text = String(raw || "").trim()
   if (!text) return ""
-  return `https://quickchart.io/barcode?type=code128&text=${encodeURIComponent(text)}&scale=2&height=38&includetext=true`
+  return buildCode128SvgDataUri(text, { barHeight: 38, scale: 2, includeText: true })
 }
 
 const buildMembershipQrPreviewSrc = (linkUrl: string, imageUrl: string) => {

@@ -43,6 +43,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
+import { storeMatchesIncomeFilter } from "@/lib/accounting-store-match"
 import {
   getAdminItems,
   getAdminVendors,
@@ -792,12 +793,14 @@ export default function OutboundPage() {
     URL.revokeObjectURL(a.href)
   }
 
-  const fetchHistory = React.useCallback(async () => {
+  const fetchHistory = React.useCallback(async (override?: { histStore?: string; histMonth?: string }) => {
 
+    const effectiveHistMonth = override?.histMonth ?? histMonth
+    const effectiveHistStore = override?.histStore ?? histStore
     let s = histStart
     let e = histEnd
-    if (histMonth) {
-      const { startStr, endStr } = getBangkokMonthRange(histMonth)
+    if (effectiveHistMonth) {
+      const { startStr, endStr } = getBangkokMonthRange(effectiveHistMonth)
       s = startStr
       e = endStr
     }
@@ -809,7 +812,7 @@ export default function OutboundPage() {
         const list = await getCombinedOutboundHistory({
           startStr: s,
           endStr: e,
-          vendorFilter: histStore || undefined,
+          vendorFilter: effectiveHistStore || undefined,
           typeFilter: histType || undefined,
           itemSearch: itemSearch.trim() || undefined,
         })
@@ -844,9 +847,16 @@ export default function OutboundPage() {
       setHistTargetType("store")
       setHistStore(params.store)
       handleHistMonthChange(params.yearMonth)
+      setInvoiceSearch("")
+      setItemSearch("")
+      setSelectedForPrint(new Set())
+      setHistoryList([])
+      setUsageList([])
+      setHistoryLoading(true)
       setTabValue("hist")
-      plDrillAutoFetchRef.current = false
-      void fetchHistory()
+      // 손익 드릴다운 effect가 histStart/histEnd 변경 시 중복·구 필터로 재조회하지 않게
+      plDrillAutoFetchRef.current = true
+      void fetchHistory({ histStore: params.store, histMonth: params.yearMonth })
     },
     [handleHistMonthChange, fetchHistory]
   )
@@ -928,6 +938,8 @@ export default function OutboundPage() {
       invoiceNo?: string
       receiveImageUrl?: string
       receiveImageUrls?: string[]
+      billPlaced?: boolean
+      billPlacedAt?: string
     }> = {}
     for (const i of historyList) {
       const target = String(i.target || "").trim()
@@ -958,6 +970,10 @@ export default function OutboundPage() {
       if (i.invoiceNo) g[k].invoiceNo = i.invoiceNo
       if (i.receiveImageUrls?.length) g[k].receiveImageUrls = i.receiveImageUrls
       else if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
+      if (i.billPlaced) {
+        g[k].billPlaced = true
+        if (!g[k].billPlacedAt && i.billPlacedAt) g[k].billPlacedAt = i.billPlacedAt
+      }
     }
     return Object.values(g).sort((a, b) => (b.date + b.target).localeCompare(a.date + a.target))
   }, [historyList])
@@ -965,7 +981,9 @@ export default function OutboundPage() {
   const filteredGroupedHistory = React.useMemo(() => {
     if (!isOffice) return groupedHistory
     let result = groupedHistory
-    if (histTargetType && !histStore) {
+    if (histStore) {
+      result = result.filter((g) => storeMatchesIncomeFilter(g.target, histStore))
+    } else if (histTargetType) {
       if (histTargetType === "store") {
         result = result.filter((g) => storeTargets.includes(g.target))
       } else if (histTargetType === "sales") {
@@ -1127,6 +1145,8 @@ export default function OutboundPage() {
         totalAmt: g.totalAmt,
         receiveImageUrl: g.receiveImageUrls?.[0] ?? g.receiveImageUrl,
         receiveImageUrls: g.receiveImageUrls ?? (g.receiveImageUrl ? [g.receiveImageUrl] : undefined),
+        billPlaced: g.billPlaced,
+        billPlacedAt: g.billPlacedAt,
       }
     })
   }, [displayGroupedHistory, isOffice, t])

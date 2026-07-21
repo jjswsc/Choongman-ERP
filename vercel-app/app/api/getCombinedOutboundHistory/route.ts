@@ -20,12 +20,17 @@ import {
 } from '@/lib/hq-outbound-income-total'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import {
+  ensureErpStoreMatchIndex,
+  storeMatchesIncomeFilterWithIndex,
+} from '@/lib/accounting-store-match'
+import {
   appendInventoryTenantFilter,
   isInventoryTenantQueryBlocked,
   isMissingInventoryTenantIdColumnError,
   markInventoryTenantIdColumnMissing,
   resolveInventoryTenantScope,
 } from '@/lib/inventory-tenant-scope'
+import { postgrestQuotedInList } from '@/lib/office-store-canonical'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,6 +68,10 @@ export interface OutboundHistoryItem {
   lineRemarks?: string
   /** 출고 로그 스냅샷 단가 — 응답 전 제거 */
   frozenUnitPrice?: number
+  /** 인보이스 인쇄(=วางบิล) 완료 여부 */
+  billPlaced?: boolean
+  /** 인보이스 인쇄(=วางบิล) 처리 시각 (방콕 문자열) */
+  billPlacedAt?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -86,6 +95,45 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const attachBillPlacedStatus = async (rows: OutboundHistoryItem[]) => {
+      const invoiceNos = [...new Set(rows.map((r) => String(r.invoiceNo || '').trim()).filter(Boolean))]
+      if (invoiceNos.length === 0) return rows
+      const inList = postgrestQuotedInList(invoiceNos)
+      if (!inList) return rows
+      try {
+        const statusRows = (await supabaseSelectFilter(
+          'outbound_invoice_print_status',
+          `invoice_no=in.(${inList})`,
+          {
+            select: 'invoice_no,printed,printed_at',
+            limit: Math.min(invoiceNos.length + 20, 10000),
+          }
+        )) as { invoice_no?: string; printed?: boolean; printed_at?: string }[]
+        const statusMap = new Map<string, { printed: boolean; printedAt?: string }>()
+        for (const s of statusRows || []) {
+          const key = String(s.invoice_no || '').trim()
+          if (!key) continue
+          statusMap.set(key, { printed: Boolean(s.printed), printedAt: String(s.printed_at || '').trim() || undefined })
+        }
+        for (const row of rows) {
+          const key = String(row.invoiceNo || '').trim()
+          const status = statusMap.get(key)
+          if (!status?.printed) continue
+          row.billPlaced = true
+          row.billPlacedAt = status.printedAt
+        }
+      } catch (statusErr) {
+        console.error('getCombinedOutboundHistory: print status join failed', statusErr)
+      }
+      return rows
+    }
+
+    const storeMatchIndex = await ensureErpStoreMatchIndex()
+    const matchesVendorFilter = (target: string) => {
+      if (!vendorFilter || vendorFilter === 'All' || vendorFilter === '전체 매출처') return true
+      return storeMatchesIncomeFilterWithIndex(target, vendorFilter, storeMatchIndex)
+    }
+
     const items = (await supabaseSelectFilter(
       'items',
       appendInventoryTenantFilter('', tenantScope),
@@ -234,7 +282,7 @@ export async function GET(request: NextRequest) {
         seenOrderIds.add(oid)
 
         const target = String(o.store_name || '').trim()
-        if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처' && target !== vendorFilter) continue
+        if (!matchesVendorFilter(target)) continue
 
         let cart: OrderCartLine[] = []
         try {
@@ -281,7 +329,7 @@ export async function GET(request: NextRequest) {
       if (Number.isNaN(rowDate.getTime())) continue
 
       const target = String(row.vendor_target || '')
-      if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처' && target !== vendorFilter) continue
+      if (!matchesVendorFilter(target)) continue
 
       const typeCode = type === 'ForceOutbound' ? 'Force' : 'Outbound'
       const filterOk =
@@ -590,7 +638,8 @@ export async function GET(request: NextRequest) {
       }
 
       for (const r of filteredList) delete r.frozenUnitPrice
-      return NextResponse.json(filteredList, { headers })
+      const withBillPlaced = await attachBillPlacedStatus(filteredList)
+      return NextResponse.json(withBillPlaced, { headers })
     }
 
     // 직접정산(지두방) 품목: 인보이스 금액에서 제외 (가격 0 처리)
@@ -601,7 +650,8 @@ export async function GET(request: NextRequest) {
     }
 
     for (const r of list) delete r.frozenUnitPrice
-    return NextResponse.json(list, { headers })
+    const withBillPlaced = await attachBillPlacedStatus(list)
+    return NextResponse.json(withBillPlaced, { headers })
   } catch (e) {
     if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) {
       markInventoryTenantIdColumnMissing()

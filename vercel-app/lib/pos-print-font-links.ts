@@ -1,8 +1,9 @@
 /**
- * 열전사 HTML 인쇄용 Noto Sans Thai (Google Fonts).
- * 네트워크 없으면 CSS font-family의 OS 폰트(Leelawadee UI, Tahoma 등)로 폴백.
+ * 열전사 HTML 인쇄용 폰트 링크.
+ *
+ * 이전: Google Fonts CDN (Noto Sans Thai) — 매 인쇄마다 외부 네트워크 요청 → 2~5초 지연.
+ * 현재: 빈 문자열. CSS font-family 정의(Leelawadee UI, Tahoma, Noto Sans Thai 등)가
+ *       OS 설치 폰트로 폴백하므로 Windows·Android 모두 태국어 정상 출력.
+ *       Electron `document.fonts.ready` 도 외부 웹폰트 없이 즉시 resolve → settle 단축.
  */
-export const POS_PRINT_NOTO_SANS_THAI_FONT_LINKS =
-  '<link rel="preconnect" href="https://fonts.googleapis.com"/>' +
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>' +
-  '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>'
+export const POS_PRINT_NOTO_SANS_THAI_FONT_LINKS = ''

@@ -12,6 +12,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getInvoicePrintOverrides,
+  markOutboundInvoicesPrinted,
   updateInvoicePrintOverrides,
   getTaxInvoiceDepositSeq,
   type InvoicePrintOverridePayload,
@@ -129,11 +130,23 @@ function InvoicePrintPageInner() {
     }
   }, [])
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(editDatas))
     } catch {
       // ignore session storage failures
+    }
+    try {
+      const invoiceNos = [...new Set(
+        editDatas
+          .map((d) => String(d.referenceNo || '').trim())
+          .filter((s) => /^IVF?\d{8}-/i.test(s))
+      )]
+      if (invoiceNos.length > 0) {
+        await markOutboundInvoicesPrinted({ invoiceNos })
+      }
+    } catch (e) {
+      console.error('markOutboundInvoicesPrinted failed:', e)
     }
     window.print()
   }

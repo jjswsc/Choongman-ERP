@@ -15,6 +15,20 @@ type MemberRowLite = {
   pointBalance?: number
 }
 
+const MEMBER_ENRICH_TIMEOUT_MS = 250
+
+async function withTimeout<T>(job: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  const ms = Math.max(1, Math.trunc(Number(timeoutMs) || 0))
+  try {
+    return await Promise.race<T>([
+      job,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ])
+  } catch {
+    return fallback
+  }
+}
+
 async function fetchMemberById(memberId: number): Promise<MemberRowLite | null> {
   try {
     const res = await apiFetch(`/api/members/${memberId}`)
@@ -57,10 +71,10 @@ export async function enrichReceiptModalDataWithMember(
   try {
     let match: MemberRowLite | null = null
     if (memberId > 0) {
-      match = await fetchMemberById(memberId)
+      match = await withTimeout(fetchMemberById(memberId), MEMBER_ENRICH_TIMEOUT_MS, null)
     }
     if (!match && memberNo) {
-      const list = await getMembers({ q: memberNo, limit: 30 })
+      const list = await withTimeout(getMembers({ q: memberNo, limit: 30 }), MEMBER_ENRICH_TIMEOUT_MS, [])
       match =
         (memberId > 0 ? list.find((row) => Number(row.id) === memberId) : undefined) ||
         list.find((row) => String(row.memberNo || '').trim() === memberNo) ||

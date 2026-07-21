@@ -32,6 +32,10 @@ export interface OutboundHistoryItem {
   stockLogId?: number
   /** 주문 cart line_remarks — 송장 품목 하단 */
   lineRemarks?: string
+  /** 인보이스 인쇄(=วางบิล) 완료 여부 */
+  billPlaced?: boolean
+  /** 인보이스 인쇄(=วางบิล) 처리 시각 (방콕 문자열) */
+  billPlacedAt?: string
 }
 
 export type DeleteOutboundPreview = {
@@ -164,6 +168,23 @@ export async function getCombinedOutboundHistory(params: {
   if (params.itemSearch?.trim()) q.set('itemSearch', params.itemSearch.trim())
   const res = await apiFetchWithOffline(`/api/getCombinedOutboundHistory?${q}`)
   return jsonAsArray<OutboundHistoryItem>(await res.json())
+}
+
+/** 출고 인보이스 인쇄(วางบิล) 상태 저장 */
+export async function markOutboundInvoicesPrinted(params: {
+  invoiceNos: string[]
+}) {
+  const cleaned = [...new Set((params.invoiceNos || []).map((s) => String(s || '').trim()).filter(Boolean))]
+  const res = await apiFetchWithOffline('/api/markOutboundInvoicesPrinted', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ invoiceNos: cleaned }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    saved?: number
+    message?: string
+  }>
 }
 
 export type OutboundStoreMonthAmountCell = {

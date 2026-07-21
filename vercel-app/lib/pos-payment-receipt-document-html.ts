@@ -74,6 +74,7 @@ import {
   PAYMENT_RECEIPT_MEMBER_BLOCK_CSS,
 } from '@/lib/pos-receipt-member-block'
 import { resolveMembershipQrLinkUrl, resolveReceiptAssetUrl } from '@/lib/pos-membership-qr-defaults'
+import { buildCode128SvgDataUri } from '@/lib/barcode-code128-svg'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -135,10 +136,16 @@ function extractDutchSplitBadgeFromMemo(rawMemo: string): {
   return { plainMemo: kept.join('\n'), splitBadgeLabel }
 }
 
+/** @deprecated 외부 API 호출 — buildCode128BarcodeDataUri 사용 */
 export function buildCode128BarcodeUrl(raw: string): string {
+  return buildCode128BarcodeDataUri(raw)
+}
+
+/** Code128 바코드를 로컬 SVG data URI로 생성 (네트워크 불필요) */
+export function buildCode128BarcodeDataUri(raw: string): string {
   const text = String(raw || '').trim()
   if (!text) return ''
-  return `https://quickchart.io/barcode?type=code128&text=${encodeURIComponent(text)}&scale=2&height=38&includetext=true`
+  return buildCode128SvgDataUri(text, { barHeight: 38, scale: 2, includeText: true })
 }
 
 /** 결제 완료 영수증: 사용된 수단 라벨 (0 초과만, 금액은 합계에 이미 표시) */

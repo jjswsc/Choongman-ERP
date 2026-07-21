@@ -414,9 +414,23 @@ const PRINT_HTML_SETTLE_MS = readConfigInt(
   80,
   5000
 );
+/** 영수증 role 전용 settle (지정 없으면 공통값 사용) */
+const PRINT_HTML_SETTLE_MS_RECEIPT = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_HTML_SETTLE_MS_RECEIPT || runtimeConfig.printHtmlSettleMsReceipt || 140,
+  140,
+  60,
+  5000
+);
 const POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED = readConfigInt(
   process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS || runtimeConfig.postHtmlPrintSpoolFlushMs || 350,
   350,
+  0,
+  10000
+);
+/** 영수증 role 전용 스풀 flush (지정 없으면 공통값 사용) */
+const POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS_RECEIPT || runtimeConfig.postHtmlPrintSpoolFlushMsReceipt || 120,
+  120,
   0,
   10000
 );
@@ -429,6 +443,13 @@ const PRINT_HTML_SILENT_RETRY_COUNT = readConfigInt(
 const PRINT_HTML_QUEUE_GAP_MS = readConfigInt(
   process.env.WINDOWS_POS_PRINT_HTML_QUEUE_GAP_MS || runtimeConfig.printHtmlQueueGapMs || 80,
   80,
+  0,
+  2000
+);
+/** 영수증 role 전용 큐 간격 (지정 없으면 20ms) */
+const PRINT_HTML_QUEUE_GAP_MS_RECEIPT = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_HTML_QUEUE_GAP_MS_RECEIPT || runtimeConfig.printHtmlQueueGapMsReceipt || 20,
+  20,
   0,
   2000
 );
@@ -1280,12 +1301,15 @@ function delayMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, n));
 }
 
-function queueHtmlPrintTask(runTask) {
+function queueHtmlPrintTask(runTask, gapMsOverride) {
   const queued = htmlPrintQueue
     .catch(() => {})
     .then(async () => {
-      if (PRINT_HTML_QUEUE_GAP_MS > 0) {
-        await delayMs(PRINT_HTML_QUEUE_GAP_MS);
+      const gapMs = Number.isFinite(Number(gapMsOverride))
+        ? Math.max(0, Math.trunc(Number(gapMsOverride) || 0))
+        : PRINT_HTML_QUEUE_GAP_MS;
+      if (gapMs > 0) {
+        await delayMs(gapMs);
       }
       return runTask();
     });
@@ -1366,9 +1390,10 @@ function resolvePrintHtmlSilentRetryMax(options) {
  * @param {{ preferDialog?: boolean }} [options] preferDialog true면 무인쇄·열전사 최적화를 건너뛰고 시스템 인쇄 대화상자만 사용(프린터 선택·미리보기)
  */
 async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
+  const isReceiptRole = Boolean(options && options.printRole === "receipt");
+  const queueGapMsForJob = isReceiptRole ? PRINT_HTML_QUEUE_GAP_MS_RECEIPT : undefined;
   return queueHtmlPrintTask(async () => {
     const preferDialog = Boolean(options && options.preferDialog);
-    const isReceiptRole = Boolean(options && options.printRole === "receipt");
     const silentRetryMax = resolvePrintHtmlSilentRetryMax(options);
     const tmpRoot = app.getPath("temp");
     const tmpPath = path.join(
@@ -1430,7 +1455,8 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       }
 
       await printWindow.loadFile(tmpPath);
-      await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
+      const settleMsForJob = isReceiptRole ? PRINT_HTML_SETTLE_MS_RECEIPT : PRINT_HTML_SETTLE_MS;
+      await waitForHiddenWindowSettle(printWindow, settleMsForJob);
 
       if (preferDialog) {
         const printStage = "dialog_only";
@@ -1479,7 +1505,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       while (!r.success && thermalAttempts <= silentRetryMax) {
         thermalAttempts += 1;
         await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
-        await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
+        await waitForHiddenWindowSettle(printWindow, settleMsForJob);
         r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
       }
       // #region agent log
@@ -1497,7 +1523,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         while (!r.success && driverAttempts <= silentRetryMax) {
           driverAttempts += 1;
           await delayMs(120 * driverAttempts + htmlPrintFailureStreak * 80);
-          await waitForHiddenWindowSettle(printWindow, PRINT_HTML_SETTLE_MS);
+          await waitForHiddenWindowSettle(printWindow, settleMsForJob);
           r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
         }
         // #region agent log
@@ -1534,8 +1560,11 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       // #endregion
       if (r.success) {
         htmlPrintFailureStreak = 0;
-        if (POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED > 0) {
-          await delayMs(POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED);
+        const spoolFlushMs = isReceiptRole
+          ? POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT
+          : POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED;
+        if (spoolFlushMs > 0) {
+          await delayMs(spoolFlushMs);
         }
       } else {
         htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
@@ -1566,7 +1595,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         /* ignore */
       }
     }
-  });
+  }, queueGapMsForJob);
 }
 
 async function printWithDialogManual() {

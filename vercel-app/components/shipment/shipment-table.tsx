@@ -13,7 +13,7 @@ import { appAlert } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 
-type StatusBadgeKey = "outTypeOrder" | "statusPartialDelivered" | "statusInTransit" | "statusDelivered" | "outTypeForce"
+type StatusBadgeKey = "outTypeOrder" | "statusPartialDelivered" | "statusInTransit" | "statusDelivered" | "outTypeForce" | "billPlacedDone"
 
 /** 주문 유형 = 중립, 배송중 = 스카이, 배송완료 = 초록 — 관리자·모바일 동일 의미 */
 const statusStyles: Record<StatusBadgeKey, string> = {
@@ -23,6 +23,7 @@ const statusStyles: Record<StatusBadgeKey, string> = {
   statusInTransit: "bg-sky-600 text-white dark:bg-sky-600",
   statusDelivered: "bg-emerald-600 text-white dark:bg-emerald-600",
   outTypeForce: "bg-amber-500 text-white dark:bg-amber-600",
+  billPlacedDone: "bg-emerald-600 text-white dark:bg-emerald-600",
 }
 
 /** 미수령 품목 배지 스타일 */
@@ -64,6 +65,8 @@ export interface ShipmentTableRow {
   totalAmt: number
   receiveImageUrl?: string
   receiveImageUrls?: string[]
+  billPlaced?: boolean
+  billPlacedAt?: string
 }
 
 export type ShipmentHistorySortKey =
@@ -231,7 +234,7 @@ export function ShipmentTable({
     )
   }
 
-  const colCount = 11
+  const colCount = 12
 
   const handleQtyStrChange = (s: string) => {
     setQtyStr(s)
@@ -313,6 +316,7 @@ export function ShipmentTable({
           <col style={{ width: "136px" }} />
           <col style={{ width: "72px" }} />
           <col style={{ width: "88px" }} />
+          <col style={{ width: "100px" }} />
           <col style={{ width: "52px" }} />
           <col style={{ width: "148px" }} />
           <col style={{ width: "28%" }} />
@@ -378,6 +382,9 @@ export function ShipmentTable({
                 {t("outColOutboundType")}
                 {sortMark("outboundType")}
               </button>
+            </th>
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
+              สถานะวางบิล
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               <button
@@ -464,7 +471,7 @@ export function ShipmentTable({
         {!loading && rows.length > 0 && (
           <tfoot>
             <tr className="sticky bottom-0 z-[1] border-t-2 border-border bg-muted/95 backdrop-blur">
-              <td colSpan={9} className="px-2 py-2.5 text-right text-[11px] font-semibold sm:px-2.5 sm:py-3 sm:text-xs">
+              <td colSpan={10} className="px-2 py-2.5 text-right text-[11px] font-semibold sm:px-2.5 sm:py-3 sm:text-xs">
                 {t("inv_total")}
               </td>
               <td className="px-2 py-2.5 text-center text-[11px] font-semibold tabular-nums sm:px-2.5 sm:py-3 sm:text-xs">
@@ -641,6 +648,21 @@ function TableRow({
           )}
         </td>
         <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">
+          {row.billPlaced ? (
+            <span
+              className={cn(
+                "inline-flex max-w-full items-center justify-center rounded-md px-1.5 py-1 text-[10px] font-semibold leading-tight whitespace-nowrap sm:text-[11px]",
+                statusStyles.billPlacedDone
+              )}
+              title={row.billPlacedAt || "วางบิลแล้ว"}
+            >
+              วางบิลแล้ว
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </td>
+        <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">
           <div className="flex items-center justify-center gap-1">
             {row.orderRowId && row.type === "Outbound" ? (
               <button
@@ -723,7 +745,7 @@ function TableRow({
       </tr>
       {isExpanded && hasDetails && (
         <tr>
-          <td colSpan={11} className="px-0 py-0">
+          <td colSpan={12} className="px-0 py-0">
             <div className="mx-3 my-3 overflow-x-auto rounded-lg border border-border/80 bg-muted/40 shadow-sm">
               <table
                 className={cn(
