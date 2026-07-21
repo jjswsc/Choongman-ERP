@@ -2145,6 +2145,8 @@ export const I18N_POS_KO: Record<string, string> = {
       '노출할 매장을 선택하세요. 선택한 매장 POS에서만 메뉴가 보입니다.',
     posMenuVisibleStoresCompatHint:
       '아직 DB에 매장 지정이 없어 전 매장 POS에 노출 중입니다. 아래는 현재 노출 상태입니다. 매장을 바꾼 뒤 저장하면 DB에 반영됩니다.',
+    posMenuVisibleStoresUnscopedStrictHint:
+      '매장 지정이 DB에 없어 POS에 표시되지 않습니다. 아래에서 매장을 선택한 뒤 저장하세요.',
     posMenuVisibleStoresRequiredNewMenu: '신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.',
     posMenuSameAsHallPlaceholder: '홀과 동일',
     posMenuVatIncluded: 'VAT 포함',
@@ -5364,6 +5366,8 @@ export const I18N_POS_EN: Record<string, string> = {
       'Choose which stores show this menu. It appears only on POS for selected stores.',
     posMenuVisibleStoresCompatHint:
       'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+    posMenuVisibleStoresUnscopedStrictHint:
+      'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
     posMenuVisibleStoresRequiredNewMenu: 'For a new menu, select at least one store where it is shown.',
     posMenuSameAsHallPlaceholder: 'Same as dine-in',
     posMenuVatIncluded: 'VAT Included',
@@ -6468,6 +6472,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuVisibleStoresRequiredToSave: 'ต้องเลือกร้านที่แสดงเมนูอย่างน้อย 1 ร้านจึงจะบันทึกได้',
     posMenuVisibleStoresScopeHint:
       'เลือกร้านที่จะแสดงเมนู เมนูจะปรากฏเฉพาะ POS ของร้านที่เลือก',
+    posMenuVisibleStoresUnscopedStrictHint:
+      'ยังไม่ได้บันทึกร้านในฐานข้อมูล จึงไม่แสดงบน POS กรุณาเลือกร้านด้านล่างแล้วกดบันทึก',
     posMenuVisibleStoresRequiredNewMenu: 'เมนูใหม่ต้องเลือกร้านที่แสดงเมนูอย่างน้อย 1 ร้าน',
     posMenuSameAsHallPlaceholder: 'เท่ากับหน้าร้าน',
     posMenuVatIncluded: 'รวม VAT',

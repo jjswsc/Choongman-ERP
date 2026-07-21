@@ -5,6 +5,7 @@ import {
   normalizeMenuScopeStoreCodes,
   resolveEffectiveMenuScopeStoreCodes,
   shouldMenuBeVisibleForStore,
+  isPosMenuStoreScopeCompatibilityModeForBrand,
 } from '@/lib/pos-menu-store-scope'
 import { posMenusCatalogCacheKey } from '@/lib/offline/pos-catalog-offline'
 
@@ -46,6 +47,12 @@ describe('pos-menu-store-scope', () => {
         scopeSchemaReady: true,
       })
     ).toBe(false)
+  })
+
+  it('Omni brand disables compatibility (empty scope = not all stores)', () => {
+    expect(isPosMenuStoreScopeCompatibilityModeForBrand('omnifoodtech')).toBe(false)
+    expect(isPosMenuStoreScopeCompatibilityModeForBrand('choongman')).toBe(true)
+    expect(resolveEffectiveMenuScopeStoreCodes([], ['A', 'B'], false)).toEqual([])
   })
 })
 

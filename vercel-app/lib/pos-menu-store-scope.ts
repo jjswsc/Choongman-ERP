@@ -52,7 +52,7 @@ export function shouldMenuBeVisibleForStore(params: {
   return false
 }
 
-/** 서버 기본값(POS_MENU_SCOPE_COMPATIBILITY_MODE=1)과 동일 — 클라이언트 표시용 */
+/** 서버 기본값(POS_MENU_SCOPE_COMPATIBILITY_MODE=1)과 동일 — 충만(레거시) 클라이언트 표시용 */
 export function isPosMenuScopeCompatibilityModeEnabled(): boolean {
   if (typeof process !== 'undefined') {
     const raw =
@@ -62,6 +62,17 @@ export function isPosMenuScopeCompatibilityModeEnabled(): boolean {
     return String(raw) !== '0'
   }
   return true
+}
+
+/**
+ * Omni(SaaS)는 getPosMenus에서 tenant enforce → 빈 매장 스코프 = POS 미노출.
+ * 관리 UI도 서버와 같이 “호환(전 매장)”이 아니라 엄격 모드로 다룬다.
+ */
+export function isPosMenuStoreScopeCompatibilityModeForBrand(
+  brandKey?: string | null
+): boolean {
+  if (String(brandKey || '').trim().toLowerCase() === 'omnifoodtech') return false
+  return isPosMenuScopeCompatibilityModeEnabled()
 }
 
 export function menuHasPersistedStoreScope(scopedStores: unknown): boolean {

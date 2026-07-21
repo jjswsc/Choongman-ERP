@@ -142,9 +142,11 @@ import {
 import { ADMIN_BTN_XS_CN, ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-storage-path"
 import {
+  isPosMenuStoreScopeCompatibilityModeForBrand,
   menuHasPersistedStoreScope,
   resolveEffectiveMenuScopeStoreCodes,
 } from "@/lib/pos-menu-store-scope"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 import { posMenuCodePlaceholderForMain } from "@/lib/pos-menu-next-code"
 import {
@@ -180,6 +182,10 @@ import {
 
 export default function PosMenusPage() {
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
+  const storeScopeCompatMode = isPosMenuStoreScopeCompatibilityModeForBrand(brand.key)
+  /** Omni: 빈 스코프 = POS 미노출 → 저장 시 매장 스코프를 반드시 보냄 */
+  const storeScopeStrictPersist = !storeScopeCompatMode
   const { posStores: stores, storeLabels, formatStoreLabel } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
@@ -334,15 +340,25 @@ export default function PosMenusPage() {
   const [storeScopeDirty, setStoreScopeDirty] = React.useState(false)
   // 편집 시에는 실제 메뉴에 저장된 노출 매장을 그대로 보여준다.
   // (신규 메뉴 기본값은 defaultScopeStoreCodes가 담당)
+  // Omni(엄격): 미저장 스코프는 “전 매장 체크”로 위장하지 않고, 로그인/기본 매장을 제안한다.
   const getEditorScopeStoreCodes = React.useCallback(
     (menu?: PosMenu | null): string[] => {
       const persisted = menu ? menuScopeStoreCodes(menu) : []
-      return resolveEffectiveMenuScopeStoreCodes(persisted, availableScopeStores)
+      const effective = resolveEffectiveMenuScopeStoreCodes(
+        persisted,
+        availableScopeStores,
+        storeScopeCompatMode
+      )
+      if (effective.length > 0) return effective
+      if (menu && !menuHasPersistedStoreScope(persisted) && storeScopeStrictPersist) {
+        return defaultScopeStoreCodes
+      }
+      return effective
     },
-    [availableScopeStores]
+    [availableScopeStores, defaultScopeStoreCodes, storeScopeCompatMode, storeScopeStrictPersist]
   )
   const editingMenuForScope = editingId ? menus.find((m) => m.id === editingId) : null
-  const showStoreScopeCompatHint =
+  const showStoreScopeUnscopedHint =
     !!editingMenuForScope &&
     !menuHasPersistedStoreScope(menuScopeStoreCodes(editingMenuForScope))
   const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
@@ -372,9 +388,12 @@ export default function PosMenusPage() {
     <div className="rounded-md border border-dashed p-3">
       <label className="text-xs font-semibold">{t("store") || "매장"}</label>
       <p className="mt-1 text-[11px] text-muted-foreground">{t(hintKey)}</p>
-      {showStoreScopeCompatHint && (
+      {showStoreScopeUnscopedHint && (
         <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
-          {t("posMenuVisibleStoresCompatHint")}
+          {storeScopeStrictPersist
+            ? t("posMenuVisibleStoresUnscopedStrictHint") ||
+              "매장 지정이 DB에 없어 POS에 표시되지 않습니다. 매장을 선택한 뒤 저장하세요."
+            : t("posMenuVisibleStoresCompatHint")}
         </p>
       )}
       <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
@@ -1143,7 +1162,11 @@ export default function PosMenusPage() {
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
     const persistedScope = editingMenu ? menuScopeStoreCodes(editingMenu) : []
     const shouldPersistStoreScope =
-      !editingId || storeScopeDirty || menuHasPersistedStoreScope(persistedScope)
+      !editingId ||
+      storeScopeDirty ||
+      menuHasPersistedStoreScope(persistedScope) ||
+      /** Omni 등 엄격 모드: 미저장 스코프 메뉴도 저장 시 체크된 매장을 DB에 남김 */
+      (storeScopeStrictPersist && !!editingId)
     const scopeForSave = shouldPersistStoreScope
       ? (() => {
           if (!editingMenu || storeScopeDirty) return selectedStoreCodes
