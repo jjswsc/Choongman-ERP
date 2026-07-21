@@ -43,7 +43,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
-import { storeMatchesIncomeFilter } from "@/lib/accounting-store-match"
+import { storeCodeSearchVariants } from "@/lib/pos-sales-store-filter"
 import {
   getAdminItems,
   getAdminVendors,
@@ -96,6 +96,20 @@ import {
 } from "@/lib/admin-ui-standards"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "Head Office", "HQ", "Head office", "head office"]
+
+/** 클라이언트 안전 — accounting-store-match(server-only) 체인 금지 */
+function storeMatchesHistoryFilterClient(storeValue: string, filter: string): boolean {
+  const a = String(storeValue || "").trim().toLowerCase()
+  const f = String(filter || "").trim().toLowerCase()
+  if (!f || f === "all") return true
+  if (!a) return false
+  for (const v of storeCodeSearchVariants(filter)) {
+    const b = String(v || "").trim().toLowerCase()
+    if (!b) continue
+    if (a === b || a.includes(b) || b.includes(a)) return true
+  }
+  return false
+}
 
 /** 품목 코드 자연 정렬 (CM005 < CM022, CT005 < CT005.1 등). */
 function compareItemCodes(a: string, b: string): number {
@@ -982,7 +996,7 @@ export default function OutboundPage() {
     if (!isOffice) return groupedHistory
     let result = groupedHistory
     if (histStore) {
-      result = result.filter((g) => storeMatchesIncomeFilter(g.target, histStore))
+      result = result.filter((g) => storeMatchesHistoryFilterClient(g.target, histStore))
     } else if (histTargetType) {
       if (histTargetType === "store") {
         result = result.filter((g) => storeTargets.includes(g.target))
