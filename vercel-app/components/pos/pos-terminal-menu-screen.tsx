@@ -630,7 +630,14 @@ export function PosTerminalMenuScreen({
     const id = `banban-${ids.join('-')}`
     const name = `${banbanMenu.name} (${menu1.name} / ${menu2.name})`
     const price = getMenuPrice(banbanMenu)
-    onAddItem?.({ id, name, price, menuId: banbanMenu.id })
+    onAddItem?.({
+      id,
+      name,
+      price,
+      menuId: banbanMenu.id,
+      menuId1: menu1.id,
+      menuId2: menu2.id,
+    })
     setOptionPickerMenu(null)
     setOptionPickerBanbanFirst(null)
   }

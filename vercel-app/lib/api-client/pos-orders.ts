@@ -40,6 +40,9 @@ export interface PosOrderItem {
       packedBy?: string | null
     }
   >
+  menuId?: string
+  optionId?: string
+  optionCode?: string
   menuId1?: string
   optionId1?: string
   optionCode1?: string

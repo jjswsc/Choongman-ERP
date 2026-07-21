@@ -143,6 +143,7 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
     const it = rows[i] as PosOrderItem
     const menuId1 = String(it.menuId1 ?? '').trim()
     const menuId2 = String(it.menuId2 ?? '').trim()
+    const parentMenuId = String(it.menuId ?? '').trim()
     const optionId1 = String(it.optionId1 ?? '').trim()
     const optionId2 = String(it.optionId2 ?? '').trim()
     const optionCode1 = String(it.optionCode1 ?? '').trim()
@@ -166,6 +167,7 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       name,
       price,
       note,
+      parentMenuId || menuId1 || menuId2,
       menuId1 || menuId2,
       optionId1 || optionId2,
       promoId,
@@ -182,14 +184,17 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       continue
     }
     const safeId = idRaw || `line-${i}`
+    const resolvedMenuId =
+      parentMenuId ||
+      (menuId1 && menuId2 && menuId1 !== menuId2 ? '' : menuId1 || menuId2)
     merged.set(dedupeKey, {
       id: safeId,
       name,
       quantity: qty,
       price,
+      ...(resolvedMenuId ? { menuId: resolvedMenuId } : {}),
       ...(menuId1 ? { menuId1 } : {}),
       ...(menuId2 ? { menuId2 } : {}),
-      ...(menuId1 || menuId2 ? { menuId: menuId1 || menuId2 } : {}),
       ...(optionId1 ? { optionId1 } : {}),
       ...(optionId2 ? { optionId2 } : {}),
       ...(optionId1 || optionId2 ? { optionId: optionId1 || optionId2 } : {}),

@@ -1238,6 +1238,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         ? resolveCartLineQuantityForSave({ quantity: quantityOverride })
         : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
     const menuIdLine = String(i.menuId ?? '').trim()
+    const menuId1Line = String(i.menuId1 ?? '').trim()
+    const menuId2Line = String(i.menuId2 ?? '').trim()
     const optionIdLine = String(i.optionId ?? '').trim()
     const optionCodeLine = String(i.optionCode ?? '').trim()
     const lineDiscountAmt =
@@ -1251,6 +1253,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
       ...(lineNote ? { note: lineNote } : {}),
       ...(menuIdLine ? { menuId: menuIdLine } : {}),
+      ...(menuId1Line ? { menuId1: menuId1Line } : {}),
+      ...(menuId2Line ? { menuId2: menuId2Line } : {}),
       ...(optionIdLine ? { optionId: optionIdLine } : {}),
       ...(optionCodeLine ? { optionCode: optionCodeLine } : {}),
       ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),

@@ -1,3 +1,4 @@
+import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 
 export type PosSalesHierarchyLevel = 'main' | 'category' | 'menu' | 'option'
@@ -54,8 +55,12 @@ function isLineCancelled(row: Record<string, unknown>): boolean {
   return Boolean(str(row.cancelledAt ?? row.cancelled_at))
 }
 
+/**
+ * 주문 줄의 메뉴 ID. `row.id`는 Grab 줄 고유키라 집계 키로 쓰면 안 됨.
+ * (menuId1만 있는 단품·반반은 상위에서 분기)
+ */
 function resolveLineMenuId(row: Record<string, unknown>): string {
-  return str(row.menuId1 ?? row.menu_id1 ?? row.menuId ?? row.menu_id ?? row.id)
+  return str(row.menuId1 ?? row.menu_id1 ?? row.menuId ?? row.menu_id)
 }
 
 function resolveLineOptionId(row: Record<string, unknown>): string {
@@ -64,6 +69,142 @@ function resolveLineOptionId(row: Record<string, unknown>): string {
 
 function resolveLineOptionCode(row: Record<string, unknown>): string {
   return str(row.optionCode1 ?? row.option_code1 ?? row.optionCode ?? row.option_code)
+}
+
+/** `Menu (opt)` → base / suffix. 카탈로그 없을 때도 메인 메뉴 합치기용 */
+export function splitOrderLineDisplayName(lineName: string): {
+  baseName: string
+  optionSuffix: string
+} {
+  const raw = str(lineName).replace(/\s+/g, ' ')
+  if (!raw) return { baseName: '', optionSuffix: '' }
+  const paren = raw.match(/^(.+?)\s*\(([^()]*)\)\s*$/u)
+  if (paren?.[1]) {
+    return { baseName: paren[1].trim(), optionSuffix: str(paren[2]) }
+  }
+  return { baseName: raw, optionSuffix: '' }
+}
+
+function normalizeMenuAggKeyPart(name: string): string {
+  return str(name).replace(/\s+/g, ' ').toLowerCase()
+}
+
+/** 메인 메뉴 합치기: 동일 표시명이면 catalog id 유무와 관계없이 한 행으로 */
+function resolveMenuAggregationKey(menuId: string, menuName: string): string {
+  const nameKey = normalizeMenuAggKeyPart(menuName)
+  if (nameKey) return `name:${nameKey}`
+  const id = str(menuId)
+  if (id) return `id:${id}`
+  return `name:${EMPTY_MENU}`
+}
+
+function resolveOptionAggregationKey(
+  menuKey: string,
+  optionId: string,
+  optionCode: string,
+  optionName: string
+): string {
+  if (str(optionId)) return `${menuKey}::oid:${str(optionId)}`
+  if (str(optionCode)) return `${menuKey}::ocode:${normalizeMenuAggKeyPart(optionCode)}`
+  return `${menuKey}::oname:${normalizeMenuAggKeyPart(optionName) || DEFAULT_OPTION_LABEL}`
+}
+
+/**
+ * 줄 menuId가 카탈로그에 없으면 이름(베이스)으로 재매칭하고,
+ * 매칭되면 카탈로그 id로 통일해 메인 메뉴 집계가 합쳐지게 한다.
+ */
+function resolveContributionMenuIdentity(
+  rawMenuId: string,
+  lineName: string,
+  menuCatalog: ReturnType<typeof buildMenuCatalog>
+): {
+  menuId: string
+  menuName: string
+  menuMeta: PosMenuCatalogRow | undefined
+  lineBaseName: string
+  lineOptionSuffix: string
+} {
+  const { baseName, optionSuffix } = splitOrderLineDisplayName(lineName)
+  const lookupName = baseName || lineName
+  let menuMeta = resolveMenuMeta(rawMenuId, lookupName, menuCatalog)
+  if (!menuMeta && lookupName !== lineName) {
+    menuMeta = resolveMenuMeta('', lineName, menuCatalog)
+  }
+  const catalogId = str(menuMeta?.id)
+  const rawInCatalog = Boolean(rawMenuId && menuCatalog.menuById.has(rawMenuId))
+  const menuId = catalogId || (rawInCatalog ? rawMenuId : '')
+  const menuName = str(menuMeta?.name) || lookupName || lineName || EMPTY_MENU
+  return {
+    menuId,
+    menuName,
+    menuMeta,
+    lineBaseName: lookupName,
+    lineOptionSuffix: optionSuffix,
+  }
+}
+
+/** 반반: 서로 다른 맛 메뉴 ID 두 개가 있으면 단품(menuId1)이 아니라 반반 상품으로 집계 */
+function resolveBanbanDualFlavorIds(row: Record<string, unknown>): {
+  flavorId1: string
+  flavorId2: string
+} | null {
+  const flavorId1 = str(row.menuId1 ?? row.menu_id1)
+  const flavorId2 = str(row.menuId2 ?? row.menu_id2)
+  if (!flavorId1 || !flavorId2 || flavorId1 === flavorId2) return null
+  return { flavorId1, flavorId2 }
+}
+
+/**
+ * 반반 줄 → Banban 부모 메뉴·카테고리 + 옵션명 `맛1 / 맛2`.
+ * (menuId1 우선이면 Hot Snow 등 단품 카테고리로 잘못 붙음)
+ */
+function resolveBanbanSalesContribution(
+  row: Record<string, unknown>,
+  menuCatalog: ReturnType<typeof buildMenuCatalog>,
+  qty: number,
+  sales: number
+): LineContribution | null {
+  const dual = resolveBanbanDualFlavorIds(row)
+  if (!dual) return null
+
+  const lineName = str(row.name) || EMPTY_MENU
+  const parsed = parseBanbanFlavorsFromName(lineName)
+  const parentRaw = str(row.menuId ?? row.menu_id)
+  const parentLooksLikeFlavor =
+    Boolean(parentRaw) &&
+    (parentRaw === dual.flavorId1 || parentRaw === dual.flavorId2)
+
+  let menuId = parentRaw && !parentLooksLikeFlavor ? parentRaw : ''
+  let menuMeta = menuId ? menuCatalog.menuById.get(menuId) : undefined
+
+  if (!menuMeta && parsed?.baseName) {
+    menuMeta = menuCatalog.menuByName.get(parsed.baseName.toLowerCase())
+    if (menuMeta) menuId = str(menuMeta.id) || menuId
+  }
+
+  const menuName = str(menuMeta?.name) || parsed?.baseName || lineName
+  if (!menuId) menuId = str(menuMeta?.id) || menuName
+
+  let optionName = ''
+  if (parsed) {
+    optionName = `${parsed.flavor1} / ${parsed.flavor2}`
+  } else {
+    const f1 = str(menuCatalog.menuById.get(dual.flavorId1)?.name) || dual.flavorId1
+    const f2 = str(menuCatalog.menuById.get(dual.flavorId2)?.name) || dual.flavorId2
+    optionName = `${f1} / ${f2}`
+  }
+
+  return {
+    menuId,
+    optionId: '',
+    optionCode: '',
+    menuName,
+    optionName: optionName || DEFAULT_OPTION_LABEL,
+    categoryMain: str(menuMeta?.category_main) || EMPTY_MAIN,
+    category: str(menuMeta?.category) || EMPTY_CATEGORY,
+    qty,
+    sales,
+  }
 }
 
 function resolveLineSales(row: Record<string, unknown>, qty: number): number {
@@ -312,11 +453,11 @@ function lineToContributions(
   if (parentMatchesSearch) {
     const lineName = str(row.name) || EMPTY_MENU
     const promoGroup = parsePromoBracketName(lineName)
-    const menuId = resolveLineMenuId(row)
     const sales = resolveLineSales(row, qty)
+    const promoId = str(row.promoId ?? row.promo_id)
     return [
       {
-        menuId: menuId || lineName,
+        menuId: promoId ? `promo:${promoId}` : '',
         optionId: '',
         optionCode: '',
         menuName: lineName,
@@ -343,13 +484,17 @@ function lineToContributions(
               optionCode: child.optionCode,
               menuId: child.menuId,
             } as Record<string, unknown>)
-      const menuMeta = resolveMenuMeta(child.menuId, child.menuName, menuCatalog)
-      const menuName = str(menuMeta?.name) || child.menuName || EMPTY_MENU
+      const identity = resolveContributionMenuIdentity(
+        child.menuId,
+        child.menuName || EMPTY_MENU,
+        menuCatalog
+      )
+      const menuName = identity.menuName || child.menuName || EMPTY_MENU
       const optionName =
         str(child.optionName) ||
         resolveLineOptionDisplayName(
           rawChild,
-          child.menuId,
+          identity.menuId || child.menuId,
           menuName,
           child.optionId,
           child.optionCode,
@@ -359,45 +504,55 @@ function lineToContributions(
         childQtySum > 0 ? (parentSales * child.qty) / childQtySum : 0
       return {
         ...child,
+        menuId: identity.menuId || child.menuId,
         menuName,
         optionName,
-        categoryMain: str(menuMeta?.category_main) || EMPTY_MAIN,
-        category: str(menuMeta?.category) || EMPTY_CATEGORY,
+        categoryMain: str(identity.menuMeta?.category_main) || EMPTY_MAIN,
+        category: str(identity.menuMeta?.category) || EMPTY_CATEGORY,
         sales,
       }
     })
   }
 
+  const qtySales = resolveLineSales(row, qty)
+  const banban = resolveBanbanSalesContribution(row, menuCatalog, qty, qtySales)
+  if (banban) return [banban]
+
   const lineName = str(row.name) || EMPTY_MENU
-  const menuId = resolveLineMenuId(row)
+  const rawMenuId = resolveLineMenuId(row)
   const optionId = resolveLineOptionId(row)
   const optionCode = resolveLineOptionCode(row)
-  const menuMeta = resolveMenuMeta(menuId, lineName, menuCatalog)
-  const menuName = str(menuMeta?.name) || lineName
+  const identity = resolveContributionMenuIdentity(rawMenuId, lineName, menuCatalog)
   const optionName = resolveLineOptionDisplayName(
     row,
-    menuId,
-    menuName,
+    identity.menuId || rawMenuId,
+    identity.menuName,
     optionId,
     optionCode,
     optionCatalog
   )
-  const sales = resolveLineSales(row, qty)
+  const optionFromLine =
+    optionName === DEFAULT_OPTION_LABEL && identity.lineOptionSuffix
+      ? identity.lineOptionSuffix
+      : optionName
 
   return [
     {
-      menuId: menuId || str(menuMeta?.id),
+      menuId: identity.menuId,
       optionId,
       optionCode,
-      menuName,
-      optionName,
+      menuName: identity.menuName,
+      optionName: optionFromLine,
       categoryMain:
         str(row.category_main ?? row.categoryMain) ||
-        str(menuMeta?.category_main) ||
+        str(identity.menuMeta?.category_main) ||
         EMPTY_MAIN,
-      category: str(row.category ?? row.categoryName) || str(menuMeta?.category) || EMPTY_CATEGORY,
+      category:
+        str(row.category ?? row.categoryName) ||
+        str(identity.menuMeta?.category) ||
+        EMPTY_CATEGORY,
       qty,
-      sales,
+      sales: qtySales,
     },
   ]
 }
@@ -492,7 +647,7 @@ export function aggregatePosSalesMenuHierarchy(params: {
         catBucket.sales += c.sales
         categoryMap.set(catKey, catBucket)
 
-        const menuKey = c.menuId || c.menuName
+        const menuKey = resolveMenuAggregationKey(c.menuId, c.menuName)
         const menuBucket = menuMap.get(menuKey) ?? {
           qty: 0,
           sales: 0,
@@ -505,9 +660,33 @@ export function aggregatePosSalesMenuHierarchy(params: {
         }
         menuBucket.qty += c.qty
         menuBucket.sales += c.sales
+        if (!menuBucket.meta?.menuId && c.menuId) {
+          menuBucket.meta = { ...menuBucket.meta, menuId: c.menuId }
+        }
+        if (
+          (menuBucket.meta?.categoryMain === EMPTY_MAIN || !menuBucket.meta?.categoryMain) &&
+          mainLabel !== EMPTY_MAIN
+        ) {
+          menuBucket.meta = {
+            ...menuBucket.meta,
+            categoryMain: mainLabel,
+            category:
+              catLabel !== EMPTY_CATEGORY ? catLabel : menuBucket.meta?.category,
+          }
+        } else if (
+          (menuBucket.meta?.category === EMPTY_CATEGORY || !menuBucket.meta?.category) &&
+          catLabel !== EMPTY_CATEGORY
+        ) {
+          menuBucket.meta = { ...menuBucket.meta, category: catLabel }
+        }
         menuMap.set(menuKey, menuBucket)
 
-        const optKey = `${menuKey}::${c.optionId || c.optionCode || c.optionName}`
+        const optKey = resolveOptionAggregationKey(
+          menuKey,
+          c.optionId,
+          c.optionCode,
+          c.optionName
+        )
         const optLabel = c.optionName
         const optBucket = optionMap.get(optKey) ?? {
           qty: 0,

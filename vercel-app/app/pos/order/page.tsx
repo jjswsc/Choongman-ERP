@@ -178,6 +178,8 @@ interface CartItem {
   optionId?: string
   optionCode?: string
   optionName?: string
+  /** 반반 부모 메뉴 ID (Banban 상품). 맛은 menuId1/menuId2 */
+  menuId?: string
   /** 반반: 1번째 맛 메뉴/옵션 ID (S Boneless) */
   menuId1?: string
   optionId1?: string
@@ -1045,6 +1047,7 @@ export default function PosOrderPage() {
         name,
         price,
         qty: 1,
+        menuId: banbanMenu.id,
         menuId1: menu1.id,
         optionId1: undefined,
         menuId2: menu2.id,
@@ -1231,7 +1234,7 @@ export default function PosOrderPage() {
     if (!order.items?.length) return
     setCart((prev) => {
       const next = [...prev]
-      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; note?: string; menuId1?: string; optionId1?: string; optionCode1?: string; menuId2?: string; optionId2?: string; optionCode2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[] }[]) {
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; note?: string; menuId?: string; menuId1?: string; optionId1?: string; optionCode1?: string; menuId2?: string; optionId2?: string; optionCode2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[] }[]) {
         const id = String(it.id ?? "")
         const name = String(it.name ?? "")
         const price = Number(it.price ?? 0)
@@ -1245,6 +1248,7 @@ export default function PosOrderPage() {
           price,
           qty,
           ...(note && { note }),
+          ...(it.menuId != null && String(it.menuId).trim() ? { menuId: String(it.menuId).trim() } : {}),
           ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, optionCode1: it.optionCode1, menuId2: it.menuId2, optionId2: it.optionId2, optionCode2: it.optionCode2 }),
           ...(it.promoId
             ? {
@@ -1460,6 +1464,7 @@ export default function PosOrderPage() {
             : {}),
           note: it.note,
           orderType,
+          ...(it.menuId != null && String(it.menuId).trim() ? { menuId: String(it.menuId).trim() } : {}),
           ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, optionCode1: it.optionCode1, menuId2: it.menuId2, optionId2: it.optionId2, optionCode2: it.optionCode2 }),
           ...(it.promoId
             ? {

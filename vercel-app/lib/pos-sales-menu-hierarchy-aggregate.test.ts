@@ -98,6 +98,206 @@ describe('aggregatePosSalesMenuHierarchy', () => {
     )
   })
 
+  it('merges same display name even when line ids differ (Grab-style)', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [],
+      options: [],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              id: 'grab:item-1:L0',
+              name: 'Jeju black lava chicken',
+              price: 333,
+              qty: 1,
+            },
+            {
+              id: 'grab:item-2:L0',
+              name: 'Jeju black lava chicken',
+              price: 333,
+              qty: 1,
+            },
+            {
+              id: 'grab:item-3:L0',
+              name: 'Jeju black lava chicken',
+              menuId: 'grab:item-3:L0',
+              price: 333,
+              qty: 1,
+            },
+            {
+              id: 'x1',
+              name: 'Samgyetang',
+              price: 320,
+              qty: 1,
+            },
+            {
+              id: 'x2',
+              name: 'Samgyetang',
+              price: 320,
+              qty: 1,
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu).toHaveLength(2)
+    const jeju = result.levels.menu.find((r) => r.label === 'Jeju black lava chicken')
+    expect(jeju?.qty).toBe(3)
+    expect(jeju?.sales).toBe(999)
+    const sam = result.levels.menu.find((r) => r.label === 'Samgyetang')
+    expect(sam?.qty).toBe(2)
+    expect(sam?.sales).toBe(640)
+  })
+
+  it('merges menu level across option variants when catalog missing', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [],
+      options: [],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            { id: 'a', name: 'Snow Onion (S - Boneless)', price: 139, qty: 1 },
+            { id: 'b', name: 'Snow Onion (M - Wing)', price: 159, qty: 2 },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu).toHaveLength(1)
+    expect(result.levels.menu[0]?.label).toBe('Snow Onion')
+    expect(result.levels.menu[0]?.qty).toBe(3)
+    expect(result.levels.option).toHaveLength(2)
+  })
+
+  it('resolves catalog id by name when line menuId is opaque', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [
+        {
+          id: 77,
+          name: 'Jeju black lava chicken',
+          category_main: 'Chicken',
+          category: 'SPECIALTIES',
+        },
+      ],
+      options: [],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              id: 'grab:1:L0',
+              menuId: 'grab:1:L0',
+              name: 'Jeju black lava chicken',
+              price: 333,
+              qty: 1,
+            },
+            {
+              id: 'grab:2:L0',
+              name: 'Jeju black lava chicken',
+              price: 333,
+              qty: 1,
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu).toHaveLength(1)
+    expect(result.levels.menu[0]?.qty).toBe(2)
+    expect(result.levels.menu[0]?.category).toBe('SPECIALTIES')
+    expect(result.levels.menu[0]?.categoryMain).toBe('Chicken')
+  })
+
+  it('attributes banban dual-flavor lines to Banban parent, not first flavor', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [
+        {
+          id: 24,
+          name: 'Banban Chicken',
+          category_main: 'Chicken',
+          category: 'Banban',
+        },
+        {
+          id: 101,
+          name: 'HOT SNOW ONION',
+          category_main: 'Chicken',
+          category: 'ChickenSNOW',
+        },
+        {
+          id: 202,
+          name: 'CURRY Bar.B.Q FRIED CHICKEN',
+          category_main: 'Chicken',
+          category: 'ChickenBar.B.Q',
+        },
+      ],
+      options: [],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              name: 'Banban Chicken (HOT SNOW ONION / CURRY Bar.B.Q FRIED CHICKEN)',
+              price: 199,
+              qty: 2,
+              menuId1: '101',
+              menuId2: '202',
+            },
+            {
+              name: 'Banban Chicken (RED HOT CHICKEN / GOLDEN FRIED CHICKEN)',
+              price: 199,
+              qty: 1,
+              menuId: '24',
+              menuId1: '301',
+              menuId2: '302',
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu).toHaveLength(1)
+    expect(result.levels.menu[0]?.label).toBe('Banban Chicken')
+    expect(result.levels.menu[0]?.qty).toBe(3)
+    expect(result.levels.category[0]?.label).toBe('Banban')
+    expect(result.levels.option.every((r) => r.label.startsWith('Banban Chicken —'))).toBe(true)
+    expect(result.levels.option.some((r) => r.label.includes('HOT SNOW ONION / CURRY'))).toBe(true)
+    expect(result.levels.menu.some((r) => r.label === 'HOT SNOW ONION')).toBe(false)
+  })
+
+  it('keeps single-flavor menuId1 lines on the regular menu', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [{ id: 101, name: 'Snow Onion', category_main: 'Chicken', category: 'Series' }],
+      options: [
+        {
+          id: 'm101-g5i10-g6i20',
+          menu_id: 101,
+          name: 'S - Boneless',
+          option_step_values: { size: 'S', part: 'Boneless' },
+        },
+      ],
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              menuId1: '101',
+              optionId1: 'm101-g5i10-g6i20',
+              name: 'Snow Onion (S - Boneless)',
+              price: 139,
+              qty: 1,
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu[0]?.label).toBe('Snow Onion')
+    expect(result.levels.option[0]?.label).toContain('S - Boneless')
+  })
+
   it('filters rows by search tokens', () => {
     const rows = [
       { key: 'a', label: 'Snow Onion', qty: 1, sales: 100 },

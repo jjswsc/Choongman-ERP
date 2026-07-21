@@ -69,6 +69,9 @@ export type CartPanelAddItemPayload = {
   price: number
   note?: string
   menuId?: string
+  /** 반반 맛1·맛2 (부모 menuId와 별도) */
+  menuId1?: string
+  menuId2?: string
   optionId?: string | null
   optionCode?: string | null
   promoId?: string
