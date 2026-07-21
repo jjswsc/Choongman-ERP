@@ -77,7 +77,7 @@ export function ComplaintProcessTab({
     const id = String(item.row ?? item.id ?? "")
     setSelectedKey(id)
     setDraftStatus(item.status || "접수")
-    setDraftHandler(item.handler || writerName)
+    setDraftHandler(String(item.handler || "").trim() || writerName)
     setDraftAction(item.action || "")
     setDraftCustomerReply(item.customerReply || "")
     setDraftDoneDate(item.doneDate || "")
@@ -99,6 +99,8 @@ export function ComplaintProcessTab({
 
     setSaving(true)
     try {
+      const handlerName = String(draftHandler || "").trim() || writerName
+      if (handlerName && draftHandler !== handlerName) setDraftHandler(handlerName)
       const res = await updateComplaintLog(id, {
         date: selected.date,
         time: selected.time,
@@ -114,7 +116,7 @@ export function ComplaintProcessTab({
         content: selected.content,
         severity: selected.severity,
         status: draftStatus,
-        handler: draftHandler,
+        handler: handlerName,
         doneDate: draftDoneDate,
         action: draftAction,
         customerReply,

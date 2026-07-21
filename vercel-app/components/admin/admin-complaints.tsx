@@ -161,18 +161,40 @@ export function AdminComplaints() {
     let list: string[]
     if (isManager) {
       list = [auth.store]
-      setForm((f) => ({ ...f, store: auth.store, writer: writerName }))
+      setForm((f) => {
+        // 기존 건(회원앱 등) 편집 중이면 작성자·담당자를 덮어쓰지 않음
+        if (editId) return { ...f, store: auth.store }
+        return {
+          ...f,
+          store: auth.store,
+          writer: writerName,
+          handler: String(f.handler || "").trim() || writerName,
+        }
+      })
       // 조회 탭에서는 전 매장 조회 가능 → listStore는 "All" 유지
     } else {
       list = isHQ ? ["All", ...keys] : keys
-      if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
+      if (keys.length && !form.store && !editId) {
+        setForm((f) => ({
+          ...f,
+          store: keys[0],
+          writer: writerName,
+          handler: String(f.handler || "").trim() || writerName,
+        }))
+      }
     }
     setStores(list)
-  }, [auth?.store, auth?.role, isManager, isHQ, storeList])
+  }, [auth?.store, auth?.role, isManager, isHQ, storeList, writerName, editId])
 
   useEffect(() => {
-    setForm((f) => ({ ...f, writer: writerName }))
-  }, [writerName])
+    // 신규 입력만 작성자·담당자 기본값 갱신 (기존 건 작성자「회원앱」등 덮어쓰지 않음)
+    if (editId) return
+    setForm((f) => ({
+      ...f,
+      writer: writerName,
+      handler: String(f.handler || "").trim() || writerName,
+    }))
+  }, [writerName, editId])
 
   useEffect(() => {
     if (lang === "ko") {
@@ -415,7 +437,7 @@ export function AdminComplaints() {
     setViewMemberId(null)
     setViewSourceChannel("")
     setForm(emptyForm())
-    setForm((f) => ({ ...f, writer: writerName }))
+    setForm((f) => ({ ...f, writer: writerName, handler: writerName }))
   }, [writerName])
 
   const openDetail = useCallback((item: ComplaintLogItem) => {
@@ -437,7 +459,8 @@ export function AdminComplaints() {
       content: item.content || "",
       severity: item.severity || "경미",
       status: item.status || "접수",
-      handler: item.handler || "",
+      // 담당자 비어 있으면 현재 저장·처리하는 로그인 사용자로 채움 (처리 탭과 동일)
+      handler: String(item.handler || "").trim() || writerName,
       doneDate: item.doneDate || "",
       action: item.action || "",
       customerReply: item.customerReply || "",
@@ -462,6 +485,11 @@ export function AdminComplaints() {
     )
     if (customerReply === null) return
 
+    const handlerName = String(form.handler || "").trim() || writerName
+    if (handlerName && form.handler !== handlerName) {
+      setForm((f) => ({ ...f, handler: handlerName }))
+    }
+
     setSaveLoading(true)
     try {
       const data = {
@@ -479,7 +507,7 @@ export function AdminComplaints() {
         content: form.content,
         severity: form.severity,
         status: form.status,
-        handler: form.handler,
+        handler: handlerName,
         doneDate: form.doneDate,
         action: form.action,
         customerReply,
