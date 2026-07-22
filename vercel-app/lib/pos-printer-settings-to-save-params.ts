@@ -106,7 +106,7 @@ export function posPrinterSettingsToSaveParams(
     // 레거시 컬럼: 과거 카드/수표 자동 열기 — 정책상 비활성(항상 false)
     cardAutoOpen: false,
     checkAutoOpen: false,
-    linkposSkipTerminalForCard: s.linkposSkipTerminalForCard !== false,
+    linkposSkipTerminalForCard: Boolean(s.linkposSkipTerminalForCard),
     drawerOpenOption,
     logoPrint: Boolean(s.logoPrint),
     receiptPrintTiming: (String(s.receiptPrintTiming || "per_payment") === "final_payment"

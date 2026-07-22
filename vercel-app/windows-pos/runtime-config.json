@@ -15,5 +15,12 @@
     "openDevtools":  false,
     "updateManifestUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/latest-choongman.json",
     "kiosk":  "1",
+    "linkpos":  {
+                    "enabled":  true,
+                    "httpPort":  18181,
+                    "serialPath":  "COM3",
+                    "baudRate":  9600,
+                    "responseTimeoutMs":  120000
+                },
     "posUrl":  "https://choongman-erp.vercel.app/pos/login"
 }

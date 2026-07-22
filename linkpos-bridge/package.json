@@ -1,0 +1,14 @@
+{
+  "name": "linkpos-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local HTTP ↔ RS232 bridge for EDC (Hypercom protocol)",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js",
+    "dev": "node bridge.js --verbose"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  }
+}

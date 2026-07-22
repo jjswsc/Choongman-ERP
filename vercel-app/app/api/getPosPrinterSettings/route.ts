@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     cookingDelayAlertOverMin: 0,
     cardAutoOpen: false,
     checkAutoOpen: false,
-    linkposSkipTerminalForCard: true,
+    linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(null),
     drawerOpenOption: 'reason_only' as const,
     logoPrint: false,
     receiptPrintTiming: 'per_payment' as const,
@@ -391,9 +391,11 @@ export async function GET(request: NextRequest) {
       // 레거시 컬럼: 과거 카드/수표 자동 열기 — 정책상 비활성(클라이언트엔 항상 false)
       cardAutoOpen: false,
       checkAutoOpen: false,
-      /** DB에 명시적으로 false만 단말 연동. 전 매장 수기 강제 시 항상 true */
+      /** DB에 true만 수기. 미설정 + API 활성이면 단말 사용 */
       linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(
-        raw?.linkpos_skip_terminal_for_card !== false
+        typeof raw?.linkpos_skip_terminal_for_card === 'boolean'
+          ? raw.linkpos_skip_terminal_for_card
+          : null
       ),
       drawerOpenOption: String(raw?.drawer_open_option || 'reason_only') === 'password_and_reason'
         ? 'password_and_reason'

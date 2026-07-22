@@ -32,6 +32,8 @@ Windows POS를 실행하면 **LinkPOS 브리지가 자동으로 함께 시작**�
 
 (구버전 수동 브리지 `linkpos-bridge` / PowerShell 테스터는 개발·진단용으로만 쓰면 됩니다.)
 
+**매장 적용 (간단):** POS 메뉴 → **EDC / LinkPOS setup…** → COM 포트 선택 → 저장. JSON을 직접 편집할 필요 없습니다.
+
 ---
 
 

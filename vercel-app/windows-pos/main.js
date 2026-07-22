@@ -35,12 +35,14 @@ function readLinkposBridgeOptionsFromRuntime() {
   const cfg = readRuntimeConfig() || {};
   const lp = cfg.linkpos && typeof cfg.linkpos === "object" ? cfg.linkpos : {};
   const enabledRaw = lp.enabled;
-  // 기본 OFF — EDC 없는 매장에서 COM/브릿지 기동 방지. 필요 시 runtime-config linkpos.enabled=true
+  // 기본 ON — runtime-config에 linkpos 블록이 있으면 브리지 기동. 끄려면 enabled=false
   const enabled =
-    enabledRaw === true ||
-    enabledRaw === 1 ||
-    String(enabledRaw ?? "false").trim().toLowerCase() === "true" ||
-    String(enabledRaw ?? "0").trim() === "1";
+    enabledRaw === false ||
+    enabledRaw === 0 ||
+    String(enabledRaw ?? "").trim().toLowerCase() === "false" ||
+    String(enabledRaw ?? "").trim() === "0"
+      ? false
+      : true;
   const serialPath = String(lp.serialPath || lp.comPort || lp.path || "COM3").trim() || "COM3";
   const baudRate = Math.max(1200, Number(lp.baudRate || 9600) || 9600);
   const httpPort = Math.max(1, Number(lp.httpPort || 18181) || 18181);
@@ -106,6 +108,126 @@ async function stopEmbeddedLinkposBridge() {
     linkposBridgeStarted = false;
   }
 }
+
+function writeLinkposIntoUserRuntimeConfig(patch) {
+  ensureUserRuntimeConfigSeeded();
+  const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+  let parsed = {};
+  try {
+    let raw = fs.readFileSync(userPath, "utf8");
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    parsed = JSON.parse(raw) || {};
+  } catch {
+    parsed = {};
+  }
+  const prev = parsed.linkpos && typeof parsed.linkpos === "object" ? parsed.linkpos : {};
+  parsed.linkpos = {
+    enabled: true,
+    httpPort: 18181,
+    serialPath: "COM3",
+    baudRate: 9600,
+    responseTimeoutMs: 120000,
+    ...prev,
+    ...patch,
+  };
+  fs.writeFileSync(userPath, JSON.stringify(parsed, null, 4) + "\n", "utf8");
+  return parsed.linkpos;
+}
+
+async function listLinkposSerialPorts() {
+  try {
+    const SP = require("serialport").SerialPort;
+    const ports = await SP.list();
+    return (ports || [])
+      .map((p) => ({
+        path: String(p.path || "").trim(),
+        label: [p.path, p.friendlyName || p.manufacturer].filter(Boolean).join(" — "),
+      }))
+      .filter((p) => p.path);
+  } catch (e) {
+    console.warn("[cm-pos] list serial ports:", e && e.message ? e.message : e);
+    return [];
+  }
+}
+
+/** 매장용: COM 포트 선택 → runtime-config 저장 → 브리지 재시작 (JSON 수동 편집 불필요) */
+async function configureLinkposEdcFromMenu() {
+  const ports = await listLinkposSerialPorts();
+  const current = readLinkposBridgeOptionsFromRuntime();
+  if (!ports.length) {
+    await dialog.showMessageBox({
+      type: "warning",
+      title: "EDC / LinkPOS",
+      message: "No COM port found",
+      detail:
+        "Connect the EDC RS232/USB cable, check Device Manager → Ports (COM & LPT), then try again.\n\nไม่พบพอร์ต COM — เช็คสาย EDC และ Device Manager แล้วลองใหม่ครับ",
+    });
+    return;
+  }
+
+  const buttons = ports.map((p) => p.path);
+  buttons.push("Disable EDC", "Cancel");
+  const { response } = await dialog.showMessageBox({
+    type: "question",
+    title: "EDC / LinkPOS setup",
+    message: "Select EDC COM port",
+    detail:
+      `Current: ${current.serial.path} (enabled=${current.enabled})\n\n` +
+      ports.map((p) => `• ${p.label}`).join("\n") +
+      "\n\nเลือกพอร์ต COM ของเครื่อง EDC แล้วกดปุ่มด้านล่างครับ",
+    buttons,
+    defaultId: Math.max(
+      0,
+      ports.findIndex((p) => p.path.toUpperCase() === String(current.serial.path || "").toUpperCase())
+    ),
+    cancelId: buttons.length - 1,
+  });
+
+  if (response === buttons.length - 1) return;
+
+  if (response === buttons.length - 2) {
+    writeLinkposIntoUserRuntimeConfig({ enabled: false });
+    await stopEmbeddedLinkposBridge();
+    await dialog.showMessageBox({
+      type: "info",
+      title: "EDC / LinkPOS",
+      message: "EDC bridge disabled",
+      detail: "linkpos.enabled=false saved. Card payments will not call the terminal.",
+    });
+    return;
+  }
+
+  const selected = ports[response];
+  if (!selected) return;
+  writeLinkposIntoUserRuntimeConfig({
+    enabled: true,
+    serialPath: selected.path,
+    baudRate: current.serial.baudRate || 9600,
+    httpPort: current.httpPort || 18181,
+  });
+  await stopEmbeddedLinkposBridge();
+  const started = await startEmbeddedLinkposBridge();
+  const st =
+    linkposBridgeApi && typeof linkposBridgeApi.getStatus === "function"
+      ? linkposBridgeApi.getStatus()
+      : {};
+  await dialog.showMessageBox({
+    type: started && started.ok ? "info" : "warning",
+    title: "EDC / LinkPOS",
+    message: started && started.ok ? `Saved: ${selected.path}` : `Saved ${selected.path}, but bridge start failed`,
+    detail: [
+      `HTTP: 127.0.0.1:${st.httpPort || 18181}`,
+      `Serial ready: ${st.serialReady ? "yes" : "no (cable/driver/port?)"}`,
+      started && started.error ? `Error: ${started.error}` : "",
+      "",
+      "Restart POS if Serial ready stays no. Then try card payment.",
+      "ถ้า Serial ready=no ให้เช็คสาย/ไดรเวอร์ แล้วเปิด POS ใหม่ครับ",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
+}
+
 
 function readJsonFileIfExists(filePath) {
   try {
@@ -261,39 +383,65 @@ function userRuntimeConfigNeedsSeeding(userPath) {
 
 /**
  * 첫 실행(또는 0바이트 복구): userData에 runtime-config.json이 반드시 생기게 함.
+ * 이미 있는 파일에는 linkpos 블록만 없으면 병합(기존 키는 유지).
  */
 function ensureUserRuntimeConfigSeeded() {
   try {
     const userPath = path.join(app.getPath("userData"), "runtime-config.json");
-    if (!userRuntimeConfigNeedsSeeding(userPath)) return;
-    const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
-    fs.mkdirSync(path.dirname(userPath), { recursive: true });
-    let written = false;
-    if (fs.existsSync(bundledPath)) {
-      try {
-        fs.copyFileSync(bundledPath, userPath);
-        written = true;
-      } catch (e1) {
+    if (userRuntimeConfigNeedsSeeding(userPath)) {
+      const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
+      fs.mkdirSync(path.dirname(userPath), { recursive: true });
+      let written = false;
+      if (fs.existsSync(bundledPath)) {
         try {
-          const raw = fs.readFileSync(bundledPath, "utf8");
-          fs.writeFileSync(userPath, raw, "utf8");
+          fs.copyFileSync(bundledPath, userPath);
           written = true;
-        } catch (e2) {
-          console.warn(
-            "[cm-pos] copy bundled runtime-config (asar→userData) failed, using generated default",
-            e1 && e1.message,
-            e2 && e2.message
-          );
+        } catch (e1) {
+          try {
+            const raw = fs.readFileSync(bundledPath, "utf8");
+            fs.writeFileSync(userPath, raw, "utf8");
+            written = true;
+          } catch (e2) {
+            console.warn(
+              "[cm-pos] copy bundled runtime-config (asar→userData) failed, using generated default",
+              e1 && e1.message,
+              e2 && e2.message
+            );
+          }
         }
+      } else {
+        console.warn("[cm-pos] packaged runtime-config.json not found, writing generated default to userData");
       }
-    } else {
-      console.warn("[cm-pos] packaged runtime-config.json not found, writing generated default to userData");
+      if (!written) {
+        fs.writeFileSync(userPath, buildDefaultUserRuntimeConfigText(), "utf8");
+      }
     }
-    if (!written) {
-      fs.writeFileSync(userPath, buildDefaultUserRuntimeConfigText(), "utf8");
-    }
+    ensureLinkposRuntimeConfigMerged(userPath);
   } catch (e) {
     console.warn("[cm-pos] ensureUserRuntimeConfigSeeded:", e && e.message ? e.message : e);
+  }
+}
+
+/** 기존 매장 runtime-config에 linkpos 키가 없으면 기본값을 추가한다. */
+function ensureLinkposRuntimeConfigMerged(userPath) {
+  try {
+    if (!userPath || !fs.existsSync(userPath)) return;
+    let raw = fs.readFileSync(userPath, "utf8");
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return;
+    if (parsed.linkpos && typeof parsed.linkpos === "object") return;
+    parsed.linkpos = {
+      enabled: true,
+      httpPort: 18181,
+      serialPath: "COM3",
+      baudRate: 9600,
+      responseTimeoutMs: 120000,
+    };
+    fs.writeFileSync(userPath, JSON.stringify(parsed, null, 4) + "\n", "utf8");
+    console.log("[cm-pos] merged default linkpos into runtime-config.json — set serialPath to your EDC COM port");
+  } catch (e) {
+    console.warn("[cm-pos] ensureLinkposRuntimeConfigMerged:", e && e.message ? e.message : e);
   }
 }
 
@@ -2218,6 +2366,12 @@ function buildAppMenu() {
           },
         },
         {
+          label: "EDC / LinkPOS setup…",
+          click: () => {
+            void configureLinkposEdcFromMenu();
+          },
+        },
+        {
           label: "LinkPOS bridge status…",
           click: () => {
             const st =
@@ -2232,7 +2386,7 @@ function buildAppMenu() {
               `Serial ready: ${st.serialReady ? "yes" : "no"}`,
               `Mock (no serialport): ${st.mock ? "yes" : "no"}`,
               "",
-              "Edit runtime-config.json → linkpos.serialPath (e.g. COM3)",
+              "Use menu → EDC / LinkPOS setup… to pick COM port (no JSON edit).",
             ];
             dialog.showMessageBox({
               type: "info",

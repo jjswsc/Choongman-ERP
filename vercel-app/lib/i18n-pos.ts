@@ -634,7 +634,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posLinkposSkipTerminalCardTitle: '카드 결제 (LINKPOS)',
     posLinkposSkipTerminalCardLabel: '단말 승인 없이 카드 금액만 반영',
     posLinkposSkipTerminalCardHint:
-      '연동 전·수기: 켜 두면 카드 금액만 POS에 입력하고 승인 API를 호출하지 않습니다(앱 기본과 동일). 실제 단말 승인을 쓰려면 끄고 배포에 NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true·LINKPOS_RELAY_URL 등을 설정하세요.',
+      '끄면(권장) 카드 결제 시 EDC 단말로 승인합니다. 단말 없이 금액만 넣을 매장만 켜세요.',
     posLinkposSkipTerminalCardForcedHint:
       '현재 전 매장 수기 모드입니다. 카드 금액만 POS에 입력하며 단말/릴레이 승인을 호출하지 않습니다. 브리지 준비 후 코드 플래그를 해제하면 매장별로 단말 연동을 켤 수 있습니다.',
     posPromoCostSummary: '원가·할인·마진',
@@ -3627,7 +3627,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posLinkposSkipTerminalCardTitle: 'Card payment (LINKPOS)',
     posLinkposSkipTerminalCardLabel: 'Record card amount only (no terminal approval)',
     posLinkposSkipTerminalCardHint:
-      'Before integration: leave on to type card amounts only (matches app default; no approval API). For real terminal approval, turn off and set NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true plus LINKPOS_RELAY_URL on deployment.',
+      'Turn off (recommended) to approve cards on the EDC. Turn on only for stores that enter card amounts without a terminal.',
     posLinkposSkipTerminalCardForcedHint:
       'All stores are in manual card mode for now. Card amounts are entered in POS only; terminal/relay approval is not called. After the bridge is ready, turn off the code flag to enable per-store terminal linking.',
     posKitchenOptionsHint: 'Configure kitchen slip output mode, category routing, and auto print.',
@@ -7878,7 +7878,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posLinkposSkipTerminalCardTitle: 'ชำระบัตร (LINKPOS)',
     posLinkposSkipTerminalCardLabel: 'บันทึกยอดบัตรใน POS เท่านั้น (ไม่เรียกเครื่องอนุมัติ)',
     posLinkposSkipTerminalCardHint:
-      'ก่อนเชื่อมธนาคาร: เปิดไว้ = กรอกยอดบัตรใน POS เท่านั้น ไม่เรียก API อนุมัติ (ค่าเริ่มต้นแอป) ใช้เครื่อง EDC จริงให้ปิดแล้วตั้ง NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true และ LINKPOS_RELAY_URL บน deploy',
+      'ปิด (แนะนำ) = ชำระบัตรผ่านเครื่อง EDC เปิดเฉพาะร้านที่กรอกยอดบัตรเองโดยไม่ใช้เครื่อง',
     posLinkposSkipTerminalCardForcedHint:
       'ขณะนี้ทุกสาขาใช้โหมดกรอกยอดบัตรเอง ไม่เรียกเครื่อง EDC/relay อนุมัติ เมื่อ bridge พร้อมแล้วค่อยปิด flag ในโค้ดเพื่อเปิดเชื่อมเครื่องรายสาขาได้ครับ',
     posDrawerTab: 'ลิ้นชักเงิน',

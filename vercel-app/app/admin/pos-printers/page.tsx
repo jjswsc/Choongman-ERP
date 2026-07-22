@@ -2561,7 +2561,7 @@ export default function PosPrintersPage() {
                         )
                       : tr(
                           "posLinkposSkipTerminalCardHint",
-                          "연동 전·수기: 켜 두면 카드 금액만 POS에 입력하고 승인 API를 호출하지 않습니다(앱 기본과 동일). 실제 단말 승인을 쓰려면 끄고 배포에 NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true·LINKPOS_RELAY_URL 등을 설정하세요."
+                          "끄면(권장) 카드 결제 시 EDC 단말로 승인합니다. 단말 없이 금액만 넣을 매장만 켜세요."
                         )}
                   </p>
                   <ToggleRow

@@ -1,0 +1,12 @@
+{
+  "httpPort": 18181,
+  "serial": {
+    "path": "COM3",
+    "baudRate": 9600,
+    "dataBits": 8,
+    "stopBits": 1,
+    "parity": "none"
+  },
+  "responseTimeoutMs": 120000,
+  "verbose": false
+}
