@@ -27,6 +27,7 @@ import type {
 } from "@/lib/api-client"
 import type { StoreVendorLinkEvaluation } from "@/lib/store-vendor-tax-link"
 import { StoreVendorTaxLinkBanner } from "@/components/admin/tax-filing/store-vendor-tax-link-banner"
+import { RdPrepFilingHelper } from "@/components/admin/tax-filing/rd-prep-filing-helper"
 import {
   AccountingEmptyState,
   AccountingPeriodChip,
@@ -549,23 +550,86 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               {t("search")}
             </Button>
           </div>
-          <div className="shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              className={cn(
-                "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
-                "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
-                "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
-                "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
-              )}
-              disabled={loading || summaryLoading}
-              onClick={() => void handleDownloadPp30RdPrepTxt()}
-            >
-              <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
-              {t("accCompPp30RdPrepTxt")}
-            </Button>
-            <p className="text-xs text-muted-foreground w-full basis-full">{t("accCompRdFilingWorkflowNote")}</p>
+          <div className="shrink-0 max-w-[min(100%,28rem)]">
+            {pp30Mode !== "wht_only" ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                    "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                  )}
+                  disabled={loading || summaryLoading}
+                  onClick={() => void handleDownloadPp30RdPrepTxt()}
+                >
+                  <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
+                  {t("accCompPp30RdPrepTxt")}
+                </Button>
+                <p className="text-xs text-muted-foreground w-full basis-full leading-snug mt-1 whitespace-pre-line">
+                  {t("accCompRdFilingWorkflowNote")}
+                </p>
+                <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPp30")} />
+              </>
+            ) : showPnd1Area ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                    "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                  )}
+                  disabled={loading || summaryLoading}
+                  onClick={() => {
+                    if (!pp30Queried) {
+                      appAlert(t("accCompPp30ExportNeedSearch"))
+                      return
+                    }
+                    window.open(pnd1RdPrepUrl, "_blank", "noopener,noreferrer")
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
+                  {pnd1RdPrepBtnLabel}
+                </Button>
+                <p className="text-xs text-muted-foreground w-full basis-full leading-snug mt-1 whitespace-pre-line">
+                  {t("accCompRdFilingWorkflowNote")}
+                </p>
+                {!pp30Queried ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{t("accCompPp30ExportNeedSearch")}</p>
+                ) : null}
+                <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")} />
+              </>
+            ) : isPnd5354CompactList ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                    "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                  )}
+                  disabled={loading || summaryLoading}
+                  onClick={() => void handleDownloadPnd53RdFilingTxt()}
+                >
+                  <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
+                  {t("accCompPnd53RdFilingTxt")}
+                </Button>
+                <p className="text-xs text-muted-foreground w-full basis-full leading-snug mt-1 whitespace-pre-line">
+                  {t("accCompRdFilingWorkflowNote")}
+                </p>
+                {!pp30Queried ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{t("accCompPp30ExportNeedSearch")}</p>
+                ) : null}
+                <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd53")} />
+              </>
+            ) : null}
           </div>
         </div>
         ) : null}
@@ -1983,6 +2047,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
               <div className="font-medium text-foreground/90">{pnd1RdPrepGuideTitle}</div>
               <p>{pnd1RdPrepGuideNote}</p>
+              <RdPrepFilingHelper t={t} mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")} />
               <a
                 href="https://flowaccount.com/blog/rd-prep-pnd1/"
                 target="_blank"

@@ -2883,9 +2883,20 @@ export const i18n = {
     accCompVatAdd: '행 추가',
     accCompVatExport: 'CSV보내기',
     accCompPp30VatReconcileXlsx: 'PP30 정산 엑셀 (Flowaccount 양식)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep용 TXT (→ RD Prep에서 .rdx)',
     accCompRdFilingWorkflowNote:
-      '① ERP에서 RD Prep용 TXT 다운로드 → ② RD Prep에서 가져오기 후 .rdx 저장 → ③ efiling.rd.go.th 에서 .rdx 업로드',
+      '※ e-Filing에는 .rdx만 업로드됩니다. ① ERP에서 TXT 다운로드 → ② 국세청 RD Prep에서 가져오기 후 .rdx 저장 → ③ efiling.rd.go.th 에 .rdx 업로드',
+    accCompRdPrepDownloadApp: 'RD Prep 다운로드 (국세청)',
+    accCompRdPrepOpenEfiling: 'e-Filing 열기',
+    accCompRdPrepMappingGuideTitle: '처음 1회만: RD Prep 컬럼 매핑 저장',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → โอนย้ายข้อมูล(데이터 이관) → 해당 양식 선택\n② 구분 기호 | (pipe) 선택 · 첫 행이 헤더면 체크\n③ 왼쪽 컬럼을 오른쪽으로 끌어 매핑한 뒤 저장\n④ 다음 달부터는 같은 매핑으로 TXT만 다시 가져오면 됩니다',
+    accCompRdPrepMappingGuideBodyPp30:
+      'ภ.พ.30: RD Prep에서 「ภ.พ.30」 선택 → 구분 기호 | → 매출/매입 컬럼 매핑 저장 → 「บันทึกและสร้างไฟล์」로 .rdx 생성',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'ภ.ง.ด.1: RD Prep에서 「ภ.ง.ด.1」 선택 → 구분 기호 | → 지급일·수취인·TIN·금액 매핑 저장 → .rdx 생성\n(행이 1,000건 이하면 e-Filing 화면 직접 입력도 가능)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'ภ.ง.ด.53: RD Prep에서 「ภ.ง.ด.53」 선택 → 구분 기호 | → 매핑 저장 → .rdx 생성',
     accCompPp30ExportNeedSearch: '조건을 맞춘 뒤 검색을 누른 다음 다운로드할 수 있습니다.',
     accCompPp30ExportRequiredMissing:
       '필수 정보가 없어 파일을 만들 수 없습니다: {fields}. 「매장 납세자 정보」 탭에서 법인명·13자리 TIN을 저장하거나, KT20k/E-tax 전역 설정을 확인하세요.',
@@ -3457,7 +3468,7 @@ export const i18n = {
     accCompPnd5354SubPnd53: 'P.N.D.53 (법인 원천)',
     accCompPnd5354SubPnd54: 'P.N.D.54 (해외 지급)',
     accCompPnd53SubmissionCsv: 'P.N.D.53 신고 제출형 CSV',
-    accCompPnd53RdFilingTxt: 'ภ.ง.ด.53 RD Filing TXT (e-Filing · .rdx)',
+    accCompPnd53RdFilingTxt: 'PND53 RD Prep용 TXT (→ RD Prep에서 .rdx)',
     accCompPnd54ExportCsv: 'P.N.D.54 CSV보내기',
     accCompPnd53ValidateBtn: 'P.N.D.53 검증',
     accCompPp36EmbeddedSearchHint: '위 부가세(P.P.30)에서 검색을 누르면 이 영역도 함께 조회됩니다.',
@@ -3565,7 +3576,7 @@ export const i18n = {
     accCompFlowRdPrepExample: 'FlowAccount RD Prep 예시 보기',
     accCompFilingSubmittedAt: '제출 시각',
     accCompFilingSubmittedBy: '제출자',
-    accCompPnd1ExportTxt: 'RD Prep PND1 TXT 다운로드',
+    accCompPnd1ExportTxt: 'PND1 RD Prep용 TXT 다운로드',
     accCompPnd1GuideTitle: 'RD Prep 제출 가이드 (PND1 / PND1A)',
     accCompPnd1GuideNotePipe: '이 파일은 RD Prep의 데이터 이관 단계에서 `|` 구분자로 컬럼 매핑하는 용도입니다.',
     accCompPnd1ValidateBeforeExport: '내보내기 전 검증',
@@ -6969,7 +6980,7 @@ export const i18n = {
     helpSum_admin_tax_filing:
       '태국 세무신고(부가세·원천세·법인세·SSO) 데이터를 기간/매장 기준으로 조회하고 신고용 자료를 내보내는 화면입니다.',
     helpHow_admin_tax_filing:
-      '① 상단 탭에서 신고 유형(PP30/36, PND1/3/53/54, PND50/51, SSO)을 선택합니다.\n② 기준 월(또는 연도)과 매장을 정한 뒤 먼저 조회/검색으로 데이터를 확정합니다.\n③ P.N.D.50/51 탭에서는 세무조정 초안을 저장한 후 CSV/PDF 신고양식을 내보냅니다.\n④ 경고가 있으면 수치와 분개 범위를 검토한 뒤 다시 생성합니다.',
+      '① 상단 탭에서 신고 유형(PP30/36, PND1/3/53/54, PND50/51, SSO)을 선택합니다.\n② 기준 월(또는 연도)과 매장을 정한 뒤 먼저 조회/검색으로 데이터를 확정합니다.\n③ RD Prep용 TXT는 탭에 맞는 버튼만 사용합니다(PND 탭≠PP30). e-Filing에는 .rdx만 업로드되며, TXT는 RD Prep에서 1회 매핑 저장 후 .rdx로 만듭니다.\n④ P.N.D.50/51은 세무조정 초안 저장 후 CSV/PDF를 내보냅니다. 경고가 있으면 수치·분개를 재검토합니다.',
     helpSum_admin_work_log:
       '매일의 업무·진행률을 기록하고, 권한이 있으면 검토·피드백을 처리하며, 주·월 실적·HR 인사이트·변경 이력을 조회하는 화면입니다.',
     helpHow_admin_work_log:
@@ -10353,9 +10364,20 @@ Only matters the employee must handle personally on a working day:
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (convert to .rdx in RD Prep)',
     accCompRdFilingWorkflowNote:
-      '① Download RD Prep TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+      '※ e-Filing accepts .rdx only. ① Download TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'Download RD Prep (Revenue Dept.)',
+    accCompRdPrepOpenEfiling: 'Open e-Filing',
+    accCompRdPrepMappingGuideTitle: 'First time only: save RD Prep column mapping',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → Transfer data → pick the form\n② Choose delimiter | (pipe); check header row if present\n③ Drag columns left→right, then save mapping\n④ Next months: reuse the same mapping and only re-import TXT',
+    accCompRdPrepMappingGuideBodyPp30:
+      'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing:
       'Cannot build the file — missing: {fields}. Save this store’s taxpayer profile (legal name + 13-digit TIN), or check KT20k / E-tax global settings.',
@@ -11038,7 +11060,7 @@ Only matters the employee must handle personally on a working day:
     accCompFlowRdPrepExample: 'FlowAccount RD Prep example',
     accCompFilingSubmittedAt: 'Submitted at',
     accCompFilingSubmittedBy: 'Submitted by',
-    accCompPnd1ExportTxt: 'Export RD Prep PND1 TXT',
+    accCompPnd1ExportTxt: 'Export P.N.D.1 RD Prep TXT',
     accCompPnd1GuideTitle: 'RD Prep guide (PND1 / PND1A)',
     accCompPnd1GuideNotePipe: 'Pipe-delimited (`|`) for RD Prep column mapping during data transfer.',
     accCompPnd1ValidateBeforeExport: 'Validate before export',
@@ -14444,7 +14466,7 @@ orderItemQty: 'Qty',
     helpSum_admin_tax_filing:
       'Prepare Thai tax filings (VAT, WHT, CIT, SSO) by period and store, then export filing-ready outputs.',
     helpHow_admin_tax_filing:
-      '① Select a filing tab (PP30/36, PND1/3/53/54, PND50/51, SSO).\n② Set year-month (or fiscal year) and store scope, then run Search to lock the dataset.\n③ In P.N.D.50/51, save tax adjustment draft first, then export CSV/PDF filing sheets.\n④ If warnings appear, review ledger scope and numbers before final submission.',
+      '① Select a filing tab (PP30/36, PND1/3/53/54, PND50/51, SSO).\n② Set year-month (or fiscal year) and store, then Search.\n③ Use the RD Prep TXT button that matches the tab (PND ≠ PP30). e-Filing accepts .rdx only — import TXT in RD Prep once (save mapping) then save .rdx.\n④ In P.N.D.50/51, save tax adjustment draft first, then export CSV/PDF. Review warnings before filing.',
     helpSum_admin_work_log:
       'Record daily tasks and progress; handle review/feedback when permitted; view weekly/monthly rollups, HR insights, and change history.',
     helpHow_admin_work_log:
@@ -17413,10 +17435,23 @@ orderItemQty: 'จำนวน',
     accCompVatAdd: 'เพิ่มแถว',
     accCompVatExport: 'ส่งออก CSV',
     accCompPp30VatReconcileXlsx: 'ดาวน์โหลด Excel ภ.พ.30 (รูปแบบ Flowaccount)',
-    accCompPp30RdPrepTxt: 'ดาวน์โหลด TXT ภ.พ.30 สำหรับ RD Prep (.rdx)',
+    accCompPp30RdPrepTxt: 'ดาวน์โหลด TXT ภ.พ.30 สำหรับ RD Prep (ยังไม่ใช่ .rdx)',
     accCompRdFilingWorkflowNote:
-      '① ดาวน์โหลด TXT จาก ERP → ② นำเข้า RD Prep แล้วบันทึกเป็น .rdx → ③ อัปโหลด .rdx ที่ efiling.rd.go.th',
+      '※ e-Filing รับเฉพาะไฟล์ .rdx เท่านั้น ไม่สามารถอัปโหลด .txt ได้\n① ดาวน์โหลด TXT จาก ERP → ② เปิดโปรแกรม RD Prep นำเข้าแล้วบันทึกเป็น .rdx → ③ อัปโหลด .rdx ที่ efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'ดาวน์โหลด RD Prep (กรมสรรพากร)',
+    accCompRdPrepOpenEfiling: 'เปิด e-Filing',
+    accCompRdPrepMappingGuideTitle: 'ครั้งแรกเท่านั้น: บันทึกการจับคู่คอลัมน์ใน RD Prep',
+    accCompRdPrepMappingGuideBody:
+      '① เปิด RD Prep → โอนย้ายข้อมูล → เลือกแบบภาษี\n② เลือกตัวคั่นข้อมูลเป็น | (pipe) · ถ้าแถวแรกเป็นหัวตารางให้ติ๊ก\n③ ลากคอลัมน์จากซ้ายไปขวาแล้วบันทึกการจับคู่\n④ เดือนถัดไปใช้ mapping เดิม แค่ import TXT ใหม่ครับ',
+    accCompRdPrepMappingGuideBodyPp30:
+      'ภ.พ.30: ใน RD Prep เลือก 「ภ.พ.30」 → ตัวคั่น | → จับคู่คอลัมน์ขาย/ซื้อ → กดบันทึกและสร้างไฟล์เป็น .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'ภ.ง.ด.1: ใน RD Prep เลือก 「ภ.ง.ด.1」 → ตัวคั่น | → จับคู่ วันจ่าย·ผู้รับ·TIN·ยอด → สร้าง .rdx\n(ถ้าไม่เกิน 1,000 รายการ กรอกใบแนบบน e-Filing ได้โดยไม่ต้องใช้ RD Prep)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'ภ.ง.ด.53: ใน RD Prep เลือก 「ภ.ง.ด.53」 → ตัวคั่น | → บันทึก mapping → สร้าง .rdx',
     accCompPp30ExportNeedSearch: 'ตั้งค่าตัวกรองแล้วกดค้นหาก่อน จึงจะดาวน์โหลดได้',
+    accCompPnd1ExportTxt: 'ดาวน์โหลด TXT ภ.ง.ด.1 สำหรับ RD Prep (ยังไม่ใช่ .rdx)',
+    accCompPnd53RdFilingTxt: 'ดาวน์โหลด TXT ภ.ง.ด.53 สำหรับ RD Prep (ยังไม่ใช่ .rdx)',
     accCompPp30ExportRequiredMissing: 'สร้างไฟล์ไม่ได้ — ขาดข้อมูล: {fields} กรอกชื่อบริษัทและเลขประจำตัวผู้เสียภาษี 13 หลักใน KT20k หรือแท็บ E-tax',
     accCompPp30ExportOptionalGaps: 'หัวตาราง/คอลัมน์คู่ค้าให้ตรง Flowaccount — กรอกเองใน Excel: {fields}',
     accCompPp30ExportRowGapsNote:
@@ -22756,9 +22791,20 @@ orderItemQty: 'အရေအတွက်',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (convert to .rdx in RD Prep)',
     accCompRdFilingWorkflowNote:
-      '① Download RD Prep TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+      '※ e-Filing accepts .rdx only. ① Download TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'Download RD Prep (Revenue Dept.)',
+    accCompRdPrepOpenEfiling: 'Open e-Filing',
+    accCompRdPrepMappingGuideTitle: 'First time only: save RD Prep column mapping',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → Transfer data → pick the form\n② Choose delimiter | (pipe); check header row if present\n③ Drag columns left→right, then save mapping\n④ Next months: reuse the same mapping and only re-import TXT',
+    accCompRdPrepMappingGuideBodyPp30:
+      'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -27508,9 +27554,20 @@ orderItemQty: 'ຈຳນວນ',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (convert to .rdx in RD Prep)',
     accCompRdFilingWorkflowNote:
-      '① Download RD Prep TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+      '※ e-Filing accepts .rdx only. ① Download TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'Download RD Prep (Revenue Dept.)',
+    accCompRdPrepOpenEfiling: 'Open e-Filing',
+    accCompRdPrepMappingGuideTitle: 'First time only: save RD Prep column mapping',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → Transfer data → pick the form\n② Choose delimiter | (pipe); check header row if present\n③ Drag columns left→right, then save mapping\n④ Next months: reuse the same mapping and only re-import TXT',
+    accCompRdPrepMappingGuideBodyPp30:
+      'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -30436,9 +30493,20 @@ orderItemQty: 'ຈຳນວນ',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (convert to .rdx in RD Prep)',
     accCompRdFilingWorkflowNote:
-      '① Download RD Prep TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+      '※ e-Filing accepts .rdx only. ① Download TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'Download RD Prep (Revenue Dept.)',
+    accCompRdPrepOpenEfiling: 'Open e-Filing',
+    accCompRdPrepMappingGuideTitle: 'First time only: save RD Prep column mapping',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → Transfer data → pick the form\n② Choose delimiter | (pipe); check header row if present\n③ Drag columns left→right, then save mapping\n④ Next months: reuse the same mapping and only re-import TXT',
+    accCompRdPrepMappingGuideBodyPp30:
+      'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -32176,9 +32244,20 @@ orderItemQty: 'ຈຳນວນ',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (convert to .rdx in RD Prep)',
     accCompRdFilingWorkflowNote:
-      '① Download RD Prep TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+      '※ e-Filing accepts .rdx only. ① Download TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'Download RD Prep (Revenue Dept.)',
+    accCompRdPrepOpenEfiling: 'Open e-Filing',
+    accCompRdPrepMappingGuideTitle: 'First time only: save RD Prep column mapping',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → Transfer data → pick the form\n② Choose delimiter | (pipe); check header row if present\n③ Drag columns left→right, then save mapping\n④ Next months: reuse the same mapping and only re-import TXT',
+    accCompRdPrepMappingGuideBodyPp30:
+      'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -33891,9 +33970,20 @@ orderItemQty: 'ຈຳນວນ',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
-    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (e-Filing · .rdx)',
+    accCompPp30RdPrepTxt: 'PP30 RD Prep TXT (convert to .rdx in RD Prep)',
     accCompRdFilingWorkflowNote:
-      '① Download RD Prep TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+      '※ e-Filing accepts .rdx only. ① Download TXT from ERP → ② Import in RD Prep and save .rdx → ③ Upload .rdx at efiling.rd.go.th',
+    accCompRdPrepDownloadApp: 'Download RD Prep (Revenue Dept.)',
+    accCompRdPrepOpenEfiling: 'Open e-Filing',
+    accCompRdPrepMappingGuideTitle: 'First time only: save RD Prep column mapping',
+    accCompRdPrepMappingGuideBody:
+      '① RD Prep → Transfer data → pick the form\n② Choose delimiter | (pipe); check header row if present\n③ Drag columns left→right, then save mapping\n④ Next months: reuse the same mapping and only re-import TXT',
+    accCompRdPrepMappingGuideBodyPp30:
+      'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
+    accCompRdPrepMappingGuideBodyPnd1:
+      'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd53:
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',

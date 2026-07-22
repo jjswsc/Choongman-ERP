@@ -3652,13 +3652,12 @@ export function AdminAccountingCompliance({
     },
     [auth?.user]
   )
-  const pnd1RdPrepBtnLabel =
-    lang === "th" ? "ส่งออก RD Prep ภ.ง.ด.1 TXT" : t("accCompPnd1ExportTxt")
+  const pnd1RdPrepBtnLabel = t("accCompPnd1ExportTxt")
   const pnd1RdPrepGuideTitle =
     lang === "th" ? "แนวทางยื่น RD Prep (ภ.ง.ด.1 / ภ.ง.ด.1ก)" : t("accCompPnd1GuideTitle")
   const pnd1RdPrepGuideNote =
     lang === "th"
-      ? "ไฟล์นี้เป็นแบบคั่นด้วย | เพื่อนำเข้าใน RD Prep โดยแมปคอลัมน์ในขั้นตอนโอนย้ายข้อมูล"
+      ? "ไฟล์ TXT คั่นด้วย | สำหรับนำเข้าใน RD Prep เท่านั้น — ต้องบันทึกเป็น .rdx จาก RD Prep ก่อนอัปโหลด e-Filing"
       : t("accCompPnd1GuideNotePipe")
   const pnd1ValidateBtnLabel =
     lang === "th" ? "ตรวจสอบก่อนส่งออก" : t("accCompPnd1ValidateBeforeExport")
