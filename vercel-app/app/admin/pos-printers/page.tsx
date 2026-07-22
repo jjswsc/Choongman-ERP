@@ -1542,12 +1542,13 @@ export default function PosPrintersPage() {
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "주문 유형"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
           </div>
           <div class="receipt-divider"></div>
-          ${(receiptBizName || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) ? '<div class="text-xs receipt-muted">' : ""}
+          ${(receiptBizName || receiptBizAbn || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) ? '<div class="text-xs receipt-muted">' : ""}
           ${receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
+          ${receiptBizAbn ? `<div class="biz-line">${escapeHtml(tr("posPosIdLabel", "POS ID"))}: ${escapeHtml(receiptBizAbn)}</div>` : ""}
           ${receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "사업자번호"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
           ${receiptShowBizAddress && receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
           ${receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "전화"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
-          ${(receiptBizName || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) ? "</div>" : ""}
+          ${(receiptBizName || receiptBizAbn || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) ? "</div>" : ""}
           <div class="receipt-divider-strong"></div>
           <div class="receipt-item-head"><span>${escapeHtml(tr("posMenuName", "품목"))}</span><span>${escapeHtml(tr("amount", "금액"))}</span></div>
           ${lines}
@@ -2439,7 +2440,7 @@ export default function PosPrintersPage() {
                 <p className="text-[11px] text-muted-foreground">
                   {tr(
                     "posBizInfoPrintHint",
-                    "간이 영수증에는 상호·Tax ID·전화번호가 항상 인쇄됩니다. 주소만 아래 토글로 선택할 수 있습니다."
+                    "간이 영수증에는 상호·POS ID(입력 시)·Tax ID·전화번호가 인쇄됩니다. 주소만 아래 토글로 선택할 수 있습니다."
                   )}
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -2448,12 +2449,23 @@ export default function PosPrintersPage() {
                     <Input value={receiptBizName} onChange={(e) => setReceiptBizName(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizNamePh", "예: 청만 아속점")} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">{tr("posBizTaxIdLabel", "사업자등록번호")}</label>
-                    <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizTaxIdPh", "예: 0105566137147")} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizAbnLabel", "POS ID")}</label>
+                    <Input
+                      value={receiptBizAbn}
+                      onChange={(e) => setReceiptBizAbn(e.target.value)}
+                      className="mt-1 h-9"
+                      placeholder={tr("posBizAbnPh", "예: E020160003A0036")}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {tr(
+                        "posBizAbnHint",
+                        "입력하면 손님 영수증 상단에 POS ID: … 형식으로 인쇄됩니다. 비우면 생략됩니다."
+                      )}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">{tr("posBizAbnLabel", "POS ID")}</label>
-                    <Input value={receiptBizAbn} onChange={(e) => setReceiptBizAbn(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizAbnPh", "예: E020133303A0117")} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizTaxIdLabel", "사업자등록번호")}</label>
+                    <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizTaxIdPh", "예: 0105566137147")} />
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">{tr("posBizOwnerLabel", "대표자명")}</label>
