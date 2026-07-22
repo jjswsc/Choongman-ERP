@@ -1,19 +1,19 @@
 {
-  "version": "0.1.9",
-  "publishedAtUtc": "2026-07-22T05:35:17.7975259Z",
-  "notes": "Choongman POS Windows 0.1.9 - receipt print speed; hybrid cash drawer skips local bridge fallback and getPrintersAsync",
+  "version": "0.1.10",
+  "publishedAtUtc": "2026-07-22T07:50:00.0000000Z",
+  "notes": "Choongman POS Windows 0.1.10 - payment receipt: separate from kitchen queue; cap print() wait 2.2s; no dialog fallback",
   "installerUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
-  "installerSha256": "464a992a7f741de93c1eae271a99152c1f13c895d27e3608c4a6317d5468631c",
+  "installerSha256": "c6f6b3bb192bcd9b3fd1322590f1291d0b75a6a4cfb6f05051089503775f5889",
   "files": [
     {
       "name": "cm-pos-windows-choongman-latest-setup.exe",
       "url": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
-      "sha256": "464a992a7f741de93c1eae271a99152c1f13c895d27e3608c4a6317d5468631c"
+      "sha256": "c6f6b3bb192bcd9b3fd1322590f1291d0b75a6a4cfb6f05051089503775f5889"
     },
     {
-      "name": "cm-pos-windows-choongman-0.1.9-setup.exe",
-      "url": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.9-setup.exe",
-      "sha256": "464a992a7f741de93c1eae271a99152c1f13c895d27e3608c4a6317d5468631c"
+      "name": "cm-pos-windows-choongman-0.1.10-setup.exe",
+      "url": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.10-setup.exe",
+      "sha256": "c6f6b3bb192bcd9b3fd1322590f1291d0b75a6a4cfb6f05051089503775f5889"
     }
   ]
 }
