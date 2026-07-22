@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import {
+  buildPosPaymentReceiptDocumentHtml,
+  buildPosPaymentReceiptDocumentHtmlAsync,
+} from '@/lib/pos-payment-receipt-document-html'
 
 describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () => {
   const baseReceipt = {
@@ -13,6 +16,39 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     total: 88,
     paymentCash: 88,
   }
+
+  it('does not embed quickchart.io for membership QR (local data URI only)', async () => {
+    const html = await buildPosPaymentReceiptDocumentHtmlAsync({
+      receiptData: baseReceipt,
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://example.com',
+      designOverride: {
+        receiptShowMembershipQr: true,
+        receiptMembershipQrLinkUrl: 'https://example.com/m',
+      },
+    })
+    expect(html).not.toContain('quickchart.io')
+    expect(html).toMatch(/data:image\/(png|svg\+xml)/i)
+  })
+
+  it('sync builder never falls back to quickchart.io', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: baseReceipt,
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://example.com',
+      designOverride: {
+        receiptShowMembershipQr: true,
+        receiptMembershipQrLinkUrl: 'https://example.com/m',
+      },
+    })
+    expect(html).not.toContain('quickchart.io')
+  })
 
   it('prints digits-only order number below date and omits store name (standard layout)', () => {
     const html = buildPosPaymentReceiptDocumentHtml({

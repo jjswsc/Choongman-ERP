@@ -75,6 +75,7 @@ import {
 } from '@/lib/pos-receipt-member-block'
 import { resolveMembershipQrLinkUrl, resolveReceiptAssetUrl } from '@/lib/pos-membership-qr-defaults'
 import { buildCode128SvgDataUri } from '@/lib/barcode-code128-svg'
+import { buildQrDataUri, peekCachedQrDataUri } from '@/lib/qr-svg-sync'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -428,6 +429,51 @@ export type BuildPosPaymentReceiptDocumentHtmlParams = {
   /** Grab 등 option_code → 표시명 (미전달 시 menus·menuOptions로 구성) */
   optionNameByCode?: Map<string, string> | Record<string, string>
   menuOptions?: PosMenuOption[]
+  /**
+   * 멤버십 QR img src (data URI 권장).
+   * 미지정 시 링크는 로컬 캐시만 사용하고 quickchart 등 외부 URL은 쓰지 않음.
+   */
+  membershipQrSrcOverride?: string
+}
+
+/** 멤버십 QR: 로컬 data URI 우선(네트워크 대기 없음). */
+export async function resolvePaymentReceiptMembershipQrSrc(params: {
+  receiptShowMembershipQr: boolean
+  receiptMembershipQrLinkUrl: string
+  receiptMembershipQrImageUrl: string
+  origin: string
+  membershipQrSrcOverride?: string
+}): Promise<string> {
+  if (params.membershipQrSrcOverride) return String(params.membershipQrSrcOverride || '').trim()
+  if (!params.receiptShowMembershipQr) return ''
+  const link = resolveMembershipQrLinkUrl(
+    String(params.receiptMembershipQrLinkUrl || '').trim(),
+    params.origin
+  )
+  if (link) {
+    const local = await buildQrDataUri(link, 180)
+    if (local) return local
+  }
+  return resolveReceiptAssetUrl(String(params.receiptMembershipQrImageUrl || '').trim(), params.origin)
+}
+
+/** 인쇄용: 멤버십 QR을 로컬로 만든 뒤 HTML 생성 (Electron loadFile 지연 방지). */
+export async function buildPosPaymentReceiptDocumentHtmlAsync(
+  params: BuildPosPaymentReceiptDocumentHtmlParams
+): Promise<string> {
+  const d = resolvePaymentReceiptDesign(params.printerSettings, params.designOverride)
+  const membershipQrSrcOverride =
+    params.membershipQrSrcOverride ||
+    (await resolvePaymentReceiptMembershipQrSrc({
+      receiptShowMembershipQr: d.receiptShowMembershipQr,
+      receiptMembershipQrLinkUrl: d.receiptMembershipQrLinkUrl,
+      receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
+      origin: params.origin,
+    }))
+  return buildPosPaymentReceiptDocumentHtml({
+    ...params,
+    membershipQrSrcOverride,
+  })
 }
 
 export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceiptDocumentHtmlParams): string {
@@ -444,6 +490,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     forceSimpleTextMode,
     optionNameByCode: optionNameByCodeParam,
     menuOptions,
+    membershipQrSrcOverride,
   } = params
   const receiptPrintLayout = resolvePosPrintLayoutCalibration(printerSettings).receipt
   const optionNameByCode =
@@ -602,9 +649,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     String(d.receiptMembershipQrLinkUrl || '').trim(),
     origin
   )
-  const membershipQrSrc = membershipQrLinkResolved
-    ? `https://quickchart.io/qr?text=${encodeURIComponent(membershipQrLinkResolved)}&size=180&margin=1&format=png`
-    : resolveReceiptAssetUrl(String(d.receiptMembershipQrImageUrl || ''), origin)
+  /** quickchart 등 외부 URL 금지 — Electron loadFile이 이미지 대기하며 ~10초 지연 */
+  const membershipQrSrc =
+    String(membershipQrSrcOverride || '').trim() ||
+    (membershipQrLinkResolved ? peekCachedQrDataUri(membershipQrLinkResolved, 180) : '') ||
+    resolveReceiptAssetUrl(String(d.receiptMembershipQrImageUrl || ''), origin)
   const showMembershipQr = Boolean(d.receiptShowMembershipQr && membershipQrSrc)
   const membershipQrText = String(d.receiptMembershipQrText || '').trim()
   const memberFooterHtml =
@@ -919,7 +968,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="receipt-divider"></div>
         ${
           d.receiptShowTitle
-            ? `<div class="receipt-title-block"><div class="receipt-section-title">${esc(tr('posReceipt', '영수증'))}</div><div class="receipt-sub-title">${esc(taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div></div>`
+            ? taxInvoice
+              ? `<div class="receipt-title-block"><div class="receipt-section-title">${esc(tr('posReceipt', '영수증'))}</div><div class="receipt-sub-title">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div></div>`
+              : `<div class="receipt-title-block"><div class="receipt-section-title">${esc(tr('posReceiptSimpleTaxInvoice', '영수증/간이 세금계산서'))}</div></div>`
             : ''
         }
         ${

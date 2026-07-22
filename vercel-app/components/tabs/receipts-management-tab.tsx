@@ -87,7 +87,7 @@ import {
 } from '@/lib/pos-payment-receipt-from-order'
 import { buildSplitPaymentReceiptBatchFromOrder } from '@/lib/pos-split-payment-receipt-batch'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
-import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import { resolvePosOrderPaidAt, resolvePosOrderPaidAtDate } from '@/lib/pos-order-paid-at'
 import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
@@ -798,7 +798,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
       for (let idx = 0; idx < receiptRows.length; idx += 1) {
         const receiptData = await enrichReceiptModalDataWithMember(receiptRows[idx], o)
-        const fullHtml = buildPosPaymentReceiptDocumentHtml({
+        const fullHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
           receiptData,
           menus,
           orderTypeLabels,

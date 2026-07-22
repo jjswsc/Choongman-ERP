@@ -10,7 +10,7 @@ import {
   type PosPromoWithItems,
 } from '@/lib/api-client'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
-import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import {
   buildKitchenSlipGroupOpts,
@@ -646,7 +646,7 @@ export async function printPaymentReceiptForOrder(
     }
     const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
     const enrichedWithMember = await enrichReceiptModalDataWithMember(enriched, order)
-    const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+    const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
       receiptData: enrichedWithMember,
       menus: ctx.menus,
       optionNameByCode: ctx.optionNameByCode,

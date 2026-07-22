@@ -10,7 +10,7 @@ import {
   buildPosHallOrderReceiptDocumentHtml,
   type HallOrderPayload,
 } from '@/lib/pos-hall-order-receipt-document-html'
-import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import {
   enrichReceiptModalItemsForPromoDisplay,
   hallOrderReceiptPayloadFromPosOrder,
@@ -170,7 +170,7 @@ export async function printPosVoidReceiptForOrder(params: PrintPosVoidReceiptPar
         ...voidBase,
         items: enrichReceiptModalItemsForPromoDisplay(voidBase.items, lineOpts),
       }
-      const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+      const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
         receiptData,
         menus: params.menus,
         optionNameByCode,

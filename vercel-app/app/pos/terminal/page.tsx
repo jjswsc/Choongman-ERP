@@ -211,7 +211,7 @@ import {
   buildCheckoutPaymentReceiptModalData,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
-import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import {
   mergeMemberReceiptFields,
   pickMemberReceiptFieldsFromApi,
@@ -3878,7 +3878,7 @@ export default function PosTerminalPage() {
       }
       const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
       const enrichedWithMember = await enrichReceiptModalDataWithMember(enriched)
-      const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+      const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
         receiptData: enrichedWithMember,
         menus,
         optionNameByCode,
@@ -7102,7 +7102,7 @@ export default function PosTerminalPage() {
             deliveryAppCode: receiptBase.deliveryAppCode,
           }),
         }
-        const receiptHtml = buildPosPaymentReceiptDocumentHtml({
+        const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
           receiptData,
           menus,
           optionNameByCode,

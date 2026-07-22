@@ -26,7 +26,7 @@ import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display
 import { kitchenSlipSourceItemsForAddOrderReceipt } from '@/lib/pos-kitchen-dine-in-delta'
 import type { PosOrderReceiptLineOptions } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
-import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import { enrichReceiptModalItemsForPromoDisplay } from '@/lib/pos-payment-receipt-from-order'
 import {
   printPosHtmlDocument,
@@ -317,7 +317,7 @@ export function PosReceiptModal({
           ),
           optionNameByCode,
         })
-      : buildPosPaymentReceiptDocumentHtml({
+      : await buildPosPaymentReceiptDocumentHtmlAsync({
           receiptData: { ...receiptData, items: itemsForReceipt },
           menus,
           optionNameByCode,
