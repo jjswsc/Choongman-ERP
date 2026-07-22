@@ -50,6 +50,47 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     expect(html).not.toContain('quickchart.io')
   })
 
+  it('prints POS ID from receiptBizAbn after business name when set', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: { ...baseReceipt, receiptAutoPrintContext: 'payment' },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) =>
+        k === 'posPosIdLabel' ? 'POS ID' : k === 'posTaxIdLabel' ? 'Tax ID' : k,
+      lang: 'en',
+      origin: 'https://example.com',
+      designOverride: {
+        receiptBizName: 'ZUS COFFEE - THYME BANGNA',
+        receiptBizAbn: 'E020160003A0036',
+        receiptBizTaxId: '0105568110459',
+      },
+    })
+    expect(html).toContain('POS ID')
+    expect(html).toContain('E020160003A0036')
+    const nameIdx = html.indexOf('ZUS COFFEE - THYME BANGNA')
+    const posIdIdx = html.indexOf('E020160003A0036')
+    const taxIdx = html.indexOf('0105568110459')
+    expect(nameIdx).toBeGreaterThanOrEqual(0)
+    expect(posIdIdx).toBeGreaterThan(nameIdx)
+    expect(taxIdx).toBeGreaterThan(posIdIdx)
+  })
+
+  it('omits POS ID line when receiptBizAbn is empty', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: { ...baseReceipt, receiptAutoPrintContext: 'payment' },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => (k === 'posPosIdLabel' ? 'POS ID' : k),
+      lang: 'en',
+      origin: 'https://example.com',
+      designOverride: {
+        receiptBizName: 'Demo Store',
+        receiptBizAbn: '',
+      },
+    })
+    expect(html).not.toMatch(/POS ID\s*:/)
+  })
+
   it('prints digits-only order number below date and omits store name (standard layout)', () => {
     const html = buildPosPaymentReceiptDocumentHtml({
       receiptData: baseReceipt,

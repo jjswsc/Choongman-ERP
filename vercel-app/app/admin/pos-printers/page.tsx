@@ -2761,9 +2761,14 @@ export default function PosPrintersPage() {
                     <div className="my-1 flex items-center justify-between"><span>{t("posOrderType") || "Order Type"}</span><span>{previewData.orderType}</span></div>
                   </div>
                   <div className="my-2 border-t border-dashed border-black" />
-                  {(receiptBizName || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) && (
+                  {(receiptBizName || receiptBizAbn || receiptBizTaxId || receiptBizPhone || (receiptShowBizAddress && receiptBizAddress)) && (
                     <div className="space-y-0.5 text-black">
                       {receiptBizName && <div className="font-semibold">{receiptBizName}</div>}
+                      {receiptBizAbn && (
+                        <div>
+                          {tr("posPosIdLabel", "POS ID")}: {receiptBizAbn}
+                        </div>
+                      )}
                       {receiptBizTaxId && <div>{tr("posTaxIdLabel", "사업자번호")}: {receiptBizTaxId}</div>}
                       {receiptShowBizAddress && receiptBizAddress && <div>{receiptBizAddress}</div>}
                       {receiptBizPhone && <div>{tr("posTelLabel", "전화")}: {receiptBizPhone}</div>}
