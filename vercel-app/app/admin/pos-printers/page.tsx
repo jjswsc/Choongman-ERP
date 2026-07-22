@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
+import { LINKPOS_FORCE_MANUAL_CARD } from "@/lib/linkpos-card-api-enabled"
 import {
   applyMembershipQrToAllStores,
   getPosPrinterSettings,
@@ -263,11 +264,13 @@ function ToggleRow({
   value,
   onChange,
   t,
+  disabled,
 }: {
   label: string
   value: boolean
   onChange: (v: boolean) => void
   t: (k: string) => string
+  disabled?: boolean
 }) {
   const yesLabel = t("yes")
   const noLabel = t("no")
@@ -277,9 +280,11 @@ function ToggleRow({
       <div className="flex gap-1">
         <button
           type="button"
+          disabled={disabled}
           onClick={() => onChange(true)}
           className={cn(
             "rounded-md border px-3 py-1 text-sm",
+            disabled && "opacity-50 cursor-not-allowed",
             value ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
           )}
         >
@@ -287,9 +292,11 @@ function ToggleRow({
         </button>
         <button
           type="button"
+          disabled={disabled}
           onClick={() => onChange(false)}
           className={cn(
             "rounded-md border px-3 py-1 text-sm",
+            disabled && "opacity-50 cursor-not-allowed",
             !value ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
           )}
         >
@@ -703,7 +710,9 @@ export default function PosPrintersPage() {
         ? settings.drawerOpenOption
         : "reason_only") as "password_and_reason" | "reason_only" | "force"
     )
-    setLinkposSkipTerminalForCard(Boolean(settings.linkposSkipTerminalForCard))
+    setLinkposSkipTerminalForCard(
+      LINKPOS_FORCE_MANUAL_CARD || settings.linkposSkipTerminalForCard !== false
+    )
     setLogoPrint(Boolean(settings.logoPrint))
     setReceiptPrintTiming(settings.receiptPrintTiming === "final_payment" ? "final_payment" : "per_payment")
     setSignatureLine(Boolean(settings.signatureLine))
@@ -2545,15 +2554,21 @@ export default function PosPrintersPage() {
                     {tr("posLinkposSkipTerminalCardTitle", "카드 결제 (LINKPOS)")}
                   </p>
                   <p className="text-xs text-muted-foreground mb-2">
-                    {tr(
-                      "posLinkposSkipTerminalCardHint",
-                      "연동 전·수기: 켜 두면 카드 금액만 POS에 입력하고 승인 API를 호출하지 않습니다(앱 기본과 동일). 실제 단말 승인을 쓰려면 끄고 배포에 NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true·LINKPOS_RELAY_URL 등을 설정하세요."
-                    )}
+                    {LINKPOS_FORCE_MANUAL_CARD
+                      ? tr(
+                          "posLinkposSkipTerminalCardForcedHint",
+                          "현재 전 매장 수기 모드입니다. 카드 금액만 POS에 입력하며 단말/릴레이 승인을 호출하지 않습니다. 브리지 준비 후 코드 플래그를 해제하면 매장별로 단말 연동을 켤 수 있습니다."
+                        )
+                      : tr(
+                          "posLinkposSkipTerminalCardHint",
+                          "연동 전·수기: 켜 두면 카드 금액만 POS에 입력하고 승인 API를 호출하지 않습니다(앱 기본과 동일). 실제 단말 승인을 쓰려면 끄고 배포에 NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true·LINKPOS_RELAY_URL 등을 설정하세요."
+                        )}
                   </p>
                   <ToggleRow
                     label={tr("posLinkposSkipTerminalCardLabel", "단말 승인 없이 카드 금액만 반영")}
-                    value={linkposSkipTerminalForCard}
+                    value={LINKPOS_FORCE_MANUAL_CARD ? true : linkposSkipTerminalForCard}
                     onChange={setLinkposSkipTerminalForCard}
+                    disabled={LINKPOS_FORCE_MANUAL_CARD}
                     t={t}
                   />
                 </div>

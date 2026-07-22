@@ -9,6 +9,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { canPickPosTerminalStore } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
 import { coerceMembershipQrLinkUrl } from '@/lib/pos-membership-qr-defaults'
+import { shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
 
 type VendorBizInfo = {
   name?: string
@@ -390,8 +391,10 @@ export async function GET(request: NextRequest) {
       // 레거시 컬럼: 과거 카드/수표 자동 열기 — 정책상 비활성(클라이언트엔 항상 false)
       cardAutoOpen: false,
       checkAutoOpen: false,
-      /** DB에 명시적으로 false만 단말 연동. null/미컬럼/누락 행은 수동(생략) 기본 */
-      linkposSkipTerminalForCard: raw?.linkpos_skip_terminal_for_card !== false,
+      /** DB에 명시적으로 false만 단말 연동. 전 매장 수기 강제 시 항상 true */
+      linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(
+        raw?.linkpos_skip_terminal_for_card !== false
+      ),
       drawerOpenOption: String(raw?.drawer_open_option || 'reason_only') === 'password_and_reason'
         ? 'password_and_reason'
         : String(raw?.drawer_open_option || 'reason_only') === 'force'

@@ -72,6 +72,7 @@ import {
   type PosPaymentAttempt,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
+import { shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
@@ -5762,7 +5763,8 @@ export default function PosTerminalPage() {
       if (isPosDemo) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
-      if (posPrinterSettingsRef.current?.linkposSkipTerminalForCard) {
+      // 전 매장 수기 강제 또는 매장 설정(미설정=수기). 단말 연동 시 shouldSkip… / FORCE 플래그 해제
+      if (shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)) {
         return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       }
       if (!currentStoreId) {
