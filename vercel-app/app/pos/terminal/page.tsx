@@ -489,6 +489,8 @@ export default function PosTerminalPage() {
   const businessOpenBlocked = !businessOpenGate.allowed
   const ensureBusinessOpenForOrder = useCallback(async (): Promise<boolean> => {
     if (isPosDemo) return true
+    /** Omni 결제 핫패스: 게이트가 이미 허용이면 시재 API 재조회 생략 */
+    if (isOmniPaymentFastPath && businessOpenGate.allowed) return true
     return ensurePosBusinessOpenForOrder({
       storeCode: currentStoreId,
       resolveStoreKey,
@@ -504,7 +506,16 @@ export default function PosTerminalPage() {
       },
       onAlert: appAlert,
     })
-  }, [isPosDemo, currentStoreId, resolveStoreKey, legacyToCanonical, storeLabels, t])
+  }, [
+    isPosDemo,
+    isOmniPaymentFastPath,
+    businessOpenGate.allowed,
+    currentStoreId,
+    resolveStoreKey,
+    legacyToCanonical,
+    storeLabels,
+    t,
+  ])
 
   useEffect(() => {
     if (loadingTables) return

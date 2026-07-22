@@ -44,6 +44,7 @@ import {
 } from '@/lib/pos-order-payment-reconcile'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
+import { settlePosOrderPaymentFast } from '@/lib/settle-pos-order-payment-fast'
 
 function isMissingServiceColumnsError(e: unknown): boolean {
   const msg = String(e ?? '').toLowerCase()
@@ -76,6 +77,22 @@ export async function POST(req: NextRequest) {
     }
     const id = Number(body?.id)
     const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
+    /**
+     * Omni 결제 단축: 클라이언트 skipPostPaymentSideEffects=true.
+     * items enrich·재계산·주방·동기 적립 없이 결제 필드만 저장.
+     */
+    const skipPostPaymentSideEffectsEarly =
+      body.skipPostPaymentSideEffects === true ||
+      String(body.skipPostPaymentSideEffects ?? '') === '1'
+    if (skipPostPaymentSideEffectsEarly && id && !Number.isNaN(id)) {
+      return await settlePosOrderPaymentFast({
+        auth,
+        body,
+        fromOfflineQueueSync,
+        idempotencyKey,
+      })
+    }
+
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
     const itemsWithOption = await enrichOrderItemsWithOptionCode(itemsRaw)
     let items = itemsWithOption
