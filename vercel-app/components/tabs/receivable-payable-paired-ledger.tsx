@@ -82,6 +82,7 @@ export function ReceivablePairedLedgerList({
   getMemo,
   formatRefType,
   formatOrderNo,
+  formatTaxInvoiceDocNo,
 }: {
   groups: LedgerPairGroup<LedgerRow>[]
   labels: {
@@ -100,6 +101,7 @@ export function ReceivablePairedLedgerList({
   getMemo: (memo?: string) => string
   formatRefType: (refType?: string) => string
   formatOrderNo: (row: LedgerRow) => string
+  formatTaxInvoiceDocNo?: (row: LedgerRow) => string
 }) {
   if (groups.length === 0) {
     return null
@@ -142,6 +144,11 @@ export function ReceivablePairedLedgerList({
                 </span>
                 <span className="text-sm font-medium">{formatRefType(accrual.ref_type)}</span>
                 <span className="text-sm text-muted-foreground truncate max-w-[200px]">{formatOrderNo(accrual)}</span>
+                {formatTaxInvoiceDocNo ? (
+                  <span className="text-[11px] font-mono text-muted-foreground truncate max-w-[180px]">
+                    {formatTaxInvoiceDocNo(accrual) || "—"}
+                  </span>
+                ) : null}
                 <span className="text-sm font-semibold tabular-nums ml-auto">{fmtBahtSigned(accrual.amount)}</span>
               </div>
             ) : null}

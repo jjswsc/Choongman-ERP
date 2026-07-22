@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getWorkLogManagerReport,
@@ -578,7 +579,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
             </Button>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div>
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -592,6 +593,9 @@ export function WorklogApproval({ onPendingChange }: Props) {
           ) : sortedList.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">{t("workLogNoSearchResult")}</div>
           ) : (
+            <>
+            <AdminDesktopOnly>
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b bg-muted/10">
@@ -776,6 +780,144 @@ export function WorklogApproval({ onPendingChange }: Props) {
                 })}
               </tbody>
             </table>
+            </div>
+            </AdminDesktopOnly>
+            <AdminMobileOnly className="divide-y divide-border/60">
+              {sortedList.map((it) => {
+                const hasComment =
+                  !!it.managerComment?.trim() && !it.managerComment.startsWith("⚡")
+                const isPending = it.managerCheck === "대기"
+                return (
+                  <div key={it.id} className="space-y-2 px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      {canEdit && isPending ? (
+                        <Checkbox
+                          checked={selectedIds.has(it.id)}
+                          onCheckedChange={() => toggleSelect(it.id)}
+                          className="mt-1"
+                          aria-label="select"
+                        />
+                      ) : null}
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold tabular-nums">
+                            {formatWorkLogDateMonthDay(it.date)}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {it.dept === "기타" ? t("workLogOther") : it.dept} · {employeeLabel(it.name)}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex rounded px-2 py-0.5 text-[10px] font-semibold",
+                              workLogWorkTypeBadgeClass(it.status)
+                            )}
+                          >
+                            {getWorkTypeLabel(it.status)}
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold",
+                              workLogReviewBadgeClass(it.managerCheck, hasComment)
+                            )}
+                          >
+                            {getReviewStatusLabel(it)}
+                          </span>
+                          <span className="text-xs font-bold tabular-nums">{it.progress}%</span>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">
+                          {getTransContent(it.content || "")}
+                        </p>
+                        {it.managerComment ? (
+                          <p className="text-[10px] text-muted-foreground whitespace-pre-wrap">
+                            {getTransComment(it.managerComment)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={it.priority || "_none"}
+                        onValueChange={(v) => handlePriorityChange(it.id, v === "_none" ? "" : v)}
+                        disabled={!canEdit || updating === it.id}
+                      >
+                        <SelectTrigger className="h-9 w-[7rem] text-xs">
+                          <SelectValue placeholder={t("workLogPriority")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">-</SelectItem>
+                          {WORK_LOG_PRIORITIES.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {t(p.key)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {canEdit ? (
+                        <>
+                          {isPending ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-9 gap-1 text-xs text-success"
+                                onClick={() => handleConfirm(it.id)}
+                                disabled={updating === it.id}
+                              >
+                                ✓ {t("workLogConfirmBtn")}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-9 gap-1 text-xs"
+                                onClick={() => void handleAddComment(it.id, it.managerComment)}
+                                disabled={updating === it.id}
+                              >
+                                <MessageSquarePlus className="h-3.5 w-3.5" />
+                                {t("workLogCommentBtn")}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-9 gap-1 text-xs text-warning"
+                                onClick={() => handleHold(it.id)}
+                                disabled={updating === it.id}
+                              >
+                                <PauseCircle className="h-3.5 w-3.5" />
+                                {t("workLogHoldBtn")}
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 gap-1 text-xs"
+                              onClick={() => void handleAddComment(it.id, it.managerComment)}
+                              disabled={updating === it.id}
+                            >
+                              <MessageSquarePlus className="h-3.5 w-3.5" />
+                              {t("workLogCommentBtn")}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9 gap-1 text-xs text-destructive"
+                            onClick={() => void handleDelete(it.id)}
+                            disabled={updating === it.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {t("workLogDeleteBtn")}
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              })}
+            </AdminMobileOnly>
+            </>
           )}
         </div>
       </div>

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, Camera, Pencil, Trash2 } from "lucide-react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ExpenseSearchTimelineCell } from "@/components/erp/expense-search-timeline-cell"
 import { useLang } from "@/lib/lang-context"
@@ -571,7 +572,7 @@ export function ExpenseRegisterSearchTab() {
               {tt("pettyNoData", "No expense registration records found.")}
             </p>
           ) : (
-            <div className="rounded-lg border overflow-auto max-h-[560px]">
+            <AdminTableScroll className="rounded-lg border max-h-[560px] overflow-auto">
               <table className="w-full text-sm min-w-[980px]">
                 <thead className="bg-muted/50 sticky top-0 z-[1]">
                   <tr>
@@ -760,7 +761,7 @@ export function ExpenseRegisterSearchTab() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           )}
         </CardContent>
       </Card>

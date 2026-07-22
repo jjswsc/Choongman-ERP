@@ -30,6 +30,7 @@ import {
 import { CrmCouponMenuScopePicker } from "@/components/admin/crm-coupon-menu-scope-picker"
 import { CrmImageUploadField } from "@/components/crm/crm-image-upload-field"
 import { cn } from "@/lib/utils"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import {
   MEMBER_PORTAL_CONTENT_IMAGE_RULES,
   readMemberPortalImageSize,
@@ -366,6 +367,7 @@ export function CrmCouponDefinitionPanel() {
       </form>
 
       <div className="overflow-hidden rounded-xl border bg-card">
+        <AdminDesktopOnly>
         <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left">
@@ -425,6 +427,44 @@ export function CrmCouponDefinitionPanel() {
             </tbody>
           </table>
         </div>
+        </AdminDesktopOnly>
+        <AdminMobileOnly>
+          {filtered.length === 0 ? (
+            <p className="p-8 text-center text-sm text-muted-foreground">
+              {loading ? t("loading") : t("posCouponEmpty") || "등록된 쿠폰이 없습니다."}
+            </p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {filtered.map((c) => (
+                <div key={c.id ?? c.code} className="space-y-2 px-3 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-semibold">{c.code}</p>
+                      <p className="text-sm">{c.name || c.code}</p>
+                    </div>
+                    <Badge variant={c.isActive === false ? "secondary" : "default"} className="shrink-0 text-[10px]">
+                      {c.isActive === false
+                        ? t("crmCouponStatusInactive") || "비활성"
+                        : t("crmCouponStatusActive") || "활성"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs tabular-nums">{formatCouponBenefit(c, t)}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {(c.validFrom || "—") + " ~ " + (c.validTo || "—")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => openEdit(c)}>
+                      {t("posEdit") || "수정"}
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-9 text-xs text-destructive" onClick={() => handleDelete(c)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </AdminMobileOnly>
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

@@ -425,6 +425,10 @@ export const i18n = {
     tabVisit: '방문',
     tabAdmin: '관리',
     goToMobile: '모바일',
+    goToStaffMobile: '현장앱',
+    adminDesktopPreferredBanner:
+      '이 화면은 PC에서 보시는 것이 편합니다. 폰에서는 표를 좌우로 밀어 확인하세요.',
+    adminTableScrollHint: '표를 좌우로 밀어 보세요',
     logout: '로그아웃',
     // 시간표
     scheduleToday: '당일 실시간 근무',
@@ -7913,6 +7917,10 @@ Only matters the employee must handle personally on a working day:
     tabVisit: 'Visit',
     tabAdmin: 'Admin',
     goToMobile: 'Mobile',
+    goToStaffMobile: 'Field app',
+    adminDesktopPreferredBanner:
+      'This screen works best on a PC. On phone, swipe the table sideways to see more columns.',
+    adminTableScrollHint: 'Swipe the table sideways',
     logout: 'Logout',
     scheduleToday: "Today's Schedule",
     scheduleTodayEmpty: 'No schedule for this date/store.',

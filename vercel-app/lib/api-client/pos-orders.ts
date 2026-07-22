@@ -74,7 +74,7 @@ export interface PosOrder {
   paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
-  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD' | 'EDC'
   paymentOther?: number
   /** payment_other 세부(트루머니·위챗·관리자 지갑 등). 합계는 payment_other 와 일치 */
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
@@ -365,7 +365,7 @@ export async function updatePosOrder(params: {
   paymentCashTendered?: number
   paymentCard?: number
   paymentQr?: number
-  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD' | 'EDC'
   paymentOther?: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number

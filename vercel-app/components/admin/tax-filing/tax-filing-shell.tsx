@@ -35,12 +35,34 @@ import { TaxFilingSsoTab } from "@/components/admin/tax-filing/tab-sso"
 import { TaxFilingStoreProfilesTab } from "@/components/admin/tax-filing/tab-store-profiles"
 
 type FilingTabKey =
-  | "pp30pp36"
-  | "pnd1391"
+  | "pp30"
+  | "pp36"
+  | "pnd1"
+  | "pnd3"
   | "pnd5051"
-  | "pnd5354"
+  | "pnd53"
+  | "pnd54"
   | "sso"
   | "storeProfiles"
+
+type FilingFilterProps = {
+  filingYearMonth: string
+  onFilingYearMonthChange: (v: string) => void
+  filingStoreFilter: string
+  onFilingStoreFilterChange: (v: string) => void
+}
+
+function useYmStoreFilter(defaultYm: () => string, defaultStore: () => string) {
+  const [yearMonth, setYearMonth] = React.useState(defaultYm)
+  const [store, setStore] = React.useState(defaultStore)
+  return {
+    filingYearMonth: yearMonth,
+    onFilingYearMonthChange: setYearMonth,
+    filingStoreFilter: store,
+    onFilingStoreFilterChange: setStore,
+    setStore,
+  }
+}
 
 function useFilingTabFilters(
   storeOptions: string[],
@@ -58,27 +80,29 @@ function useFilingTabFilters(
     [isManager, managerStore]
   )
 
-  const [pp30pp36Ym, setPp30pp36Ym] = React.useState(defaultYm)
-  const [pp30pp36Store, setPp30pp36Store] = React.useState(defaultStore)
-  const [pnd1391Ym, setPnd1391Ym] = React.useState(defaultYm)
-  const [pnd1391Store, setPnd1391Store] = React.useState(defaultStore)
-  const [pnd5051Ym, setPnd5051Ym] = React.useState(defaultYm)
-  const [pnd5051Store, setPnd5051Store] = React.useState(defaultStore)
-  const [pnd5354Ym, setPnd5354Ym] = React.useState(defaultYm)
-  const [pnd5354Store, setPnd5354Store] = React.useState(defaultStore)
-  const [ssoYm, setSsoYm] = React.useState(defaultYm)
-  const [ssoStore, setSsoStore] = React.useState(defaultStore)
+  const pp30 = useYmStoreFilter(defaultYm, defaultStore)
+  const pp36 = useYmStoreFilter(defaultYm, defaultStore)
+  const pnd1 = useYmStoreFilter(defaultYm, defaultStore)
+  const pnd3 = useYmStoreFilter(defaultYm, defaultStore)
+  const pnd5051 = useYmStoreFilter(defaultYm, defaultStore)
+  const pnd53 = useYmStoreFilter(defaultYm, defaultStore)
+  const pnd54 = useYmStoreFilter(defaultYm, defaultStore)
+  const sso = useYmStoreFilter(defaultYm, defaultStore)
   const [storeProfilesStore, setStoreProfilesStore] = React.useState(defaultStore)
 
   React.useEffect(() => {
     if (isManager && managerStore) {
-      setPp30pp36Store(managerStore)
-      setPnd1391Store(managerStore)
-      setPnd5051Store(managerStore)
-      setPnd5354Store(managerStore)
-      setSsoStore(managerStore)
+      pp30.setStore(managerStore)
+      pp36.setStore(managerStore)
+      pnd1.setStore(managerStore)
+      pnd3.setStore(managerStore)
+      pnd5051.setStore(managerStore)
+      pnd53.setStore(managerStore)
+      pnd54.setStore(managerStore)
+      sso.setStore(managerStore)
       setStoreProfilesStore(managerStore)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync manager store once when auth store changes
   }, [isManager, managerStore])
 
   const FilingFiltersCard = React.useCallback(
@@ -157,54 +181,55 @@ function useFilingTabFilters(
     [isOffice, isManager, managerStore, storeOptionLabel, storeOptions, tAccCompStore, tAccCompYearMonth, tSearch]
   )
 
+  const pick = (f: ReturnType<typeof useYmStoreFilter>): FilingFilterProps => ({
+    filingYearMonth: f.filingYearMonth,
+    onFilingYearMonthChange: f.onFilingYearMonthChange,
+    filingStoreFilter: f.filingStoreFilter,
+    onFilingStoreFilterChange: f.onFilingStoreFilterChange,
+  })
+
   const tabProps = React.useMemo(
     () => ({
-      pp30pp36: {
-        filingYearMonth: pp30pp36Ym,
-        onFilingYearMonthChange: setPp30pp36Ym,
-        filingStoreFilter: pp30pp36Store,
-        onFilingStoreFilterChange: setPp30pp36Store,
-      },
-      pnd1391: {
-        filingYearMonth: pnd1391Ym,
-        onFilingYearMonthChange: setPnd1391Ym,
-        filingStoreFilter: pnd1391Store,
-        onFilingStoreFilterChange: setPnd1391Store,
-      },
-      pnd5051: {
-        filingYearMonth: pnd5051Ym,
-        onFilingYearMonthChange: setPnd5051Ym,
-        filingStoreFilter: pnd5051Store,
-        onFilingStoreFilterChange: setPnd5051Store,
-      },
-      pnd5354: {
-        filingYearMonth: pnd5354Ym,
-        onFilingYearMonthChange: setPnd5354Ym,
-        filingStoreFilter: pnd5354Store,
-        onFilingStoreFilterChange: setPnd5354Store,
-      },
-      sso: {
-        filingYearMonth: ssoYm,
-        onFilingYearMonthChange: setSsoYm,
-        filingStoreFilter: ssoStore,
-        onFilingStoreFilterChange: setSsoStore,
-      },
+      pp30: pick(pp30),
+      pp36: pick(pp36),
+      pnd1: pick(pnd1),
+      pnd3: pick(pnd3),
+      pnd5051: pick(pnd5051),
+      pnd53: pick(pnd53),
+      pnd54: pick(pnd54),
+      sso: pick(sso),
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- individual filter fields listed below
     [
-      pp30pp36Ym,
-      pp30pp36Store,
-      pnd1391Ym,
-      pnd1391Store,
-      pnd5051Ym,
-      pnd5051Store,
-      pnd5354Ym,
-      pnd5354Store,
-      ssoYm,
-      ssoStore,
+      pp30.filingYearMonth,
+      pp30.filingStoreFilter,
+      pp36.filingYearMonth,
+      pp36.filingStoreFilter,
+      pnd1.filingYearMonth,
+      pnd1.filingStoreFilter,
+      pnd3.filingYearMonth,
+      pnd3.filingStoreFilter,
+      pnd5051.filingYearMonth,
+      pnd5051.filingStoreFilter,
+      pnd53.filingYearMonth,
+      pnd53.filingStoreFilter,
+      pnd54.filingYearMonth,
+      pnd54.filingStoreFilter,
+      sso.filingYearMonth,
+      sso.filingStoreFilter,
     ]
   )
 
   return { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore }
+}
+
+function openStoreProfilesFrom(
+  setTab: (v: string) => void,
+  setStoreProfilesStore: (v: string) => void,
+  storeFilter: string
+) {
+  if (storeFilter && storeFilter !== "All") setStoreProfilesStore(storeFilter)
+  setTab("storeProfiles")
 }
 
 export function TaxFilingShell() {
@@ -219,30 +244,33 @@ export function TaxFilingShell() {
   const isManager = !isOffice && isManagerOrFranchiseeRole(role)
 
   const searchParams = useSearchParams()
-  const [tab, setTab] = React.useState("pp30pp36")
+  const [tab, setTab] = React.useState("pp30")
 
   React.useEffect(() => {
     const q = String(searchParams.get("tab") || "").trim()
     if (
       q === "storeProfiles" ||
-      q === "pp30pp36" ||
-      q === "pnd1391" ||
+      q === "pp30" ||
+      q === "pp36" ||
+      q === "pnd1" ||
+      q === "pnd3" ||
       q === "pnd5051" ||
-      q === "pnd5354" ||
+      q === "pnd53" ||
+      q === "pnd54" ||
       q === "sso"
     ) {
       setTab(q)
       return
     }
-    // 이전 링크 호환성(vat/wht/cit 등)
-    if (q === "vat") {
-      setTab("pp30pp36")
-    } else if (q === "wht") {
-      setTab("pnd1391")
+    // 이전 링크 호환성
+    if (q === "vat" || q === "pp30pp36") {
+      setTab("pp30")
+    } else if (q === "wht" || q === "pnd1391") {
+      setTab("pnd1")
     } else if (q === "cit") {
       setTab("pnd5051")
-    } else if (q === "dbd" || q === "workflow") {
-      setTab("pnd5354")
+    } else if (q === "dbd" || q === "workflow" || q === "pnd5354") {
+      setTab("pnd53")
     }
   }, [searchParams])
 
@@ -257,7 +285,6 @@ export function TaxFilingShell() {
   const storeOptionLabel = React.useCallback((code: string) => (code === "All" ? t("all") : code), [t])
 
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
-  const [pp30SearchTick, setPp30SearchTick] = React.useState(0)
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
@@ -274,27 +301,36 @@ export function TaxFilingShell() {
     <div className="space-y-3">
       <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
         <AdminTabsBarWithHelp>
-              <TabsList className={adminTabsListRowCn}>
-              <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>
-                {t("taxFilingTabStoreProfiles")}
-              </TabsTrigger>
-              <TabsTrigger value="pp30pp36" className={adminTabsTriggerCn}>
-                {t("taxFilingTabPp30Pp36")}
-              </TabsTrigger>
-              <TabsTrigger value="pnd1391" className={adminTabsTriggerCn}>
-                {t("taxFilingTabPnd1391")}
-              </TabsTrigger>
-              <TabsTrigger value="pnd5051" className={adminTabsTriggerCn}>
-                {t("taxFilingTabPnd5051")}
-              </TabsTrigger>
-              <TabsTrigger value="pnd5354" className={adminTabsTriggerCn}>
-                {t("taxFilingTabPnd5354")}
-              </TabsTrigger>
-              <TabsTrigger value="sso" className={adminTabsTriggerCn}>
-                {t("taxFilingTabSso")}
-              </TabsTrigger>
-            </TabsList>
-          </AdminTabsBarWithHelp>
+          <TabsList className={adminTabsListRowCn}>
+            <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>
+              {t("taxFilingTabStoreProfiles")}
+            </TabsTrigger>
+            <TabsTrigger value="pp30" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPp30")}
+            </TabsTrigger>
+            <TabsTrigger value="pp36" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPp36")}
+            </TabsTrigger>
+            <TabsTrigger value="pnd1" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPnd1")}
+            </TabsTrigger>
+            <TabsTrigger value="pnd3" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPnd3")}
+            </TabsTrigger>
+            <TabsTrigger value="pnd5051" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPnd5051")}
+            </TabsTrigger>
+            <TabsTrigger value="pnd53" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPnd53")}
+            </TabsTrigger>
+            <TabsTrigger value="pnd54" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPnd54")}
+            </TabsTrigger>
+            <TabsTrigger value="sso" className={adminTabsTriggerCn}>
+              {t("taxFilingTabSso")}
+            </TabsTrigger>
+          </TabsList>
+        </AdminTabsBarWithHelp>
 
         <TabsContent value="storeProfiles" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingStoreProfilesTab
@@ -302,56 +338,70 @@ export function TaxFilingShell() {
             onFilingStoreFilterChange={setStoreProfilesStore}
           />
         </TabsContent>
-        <TabsContent value="pp30pp36" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pp30" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingVatTab
-            {...tabProps.pp30pp36}
-            onFilingSearch={() => setPp30SearchTick((n) => n + 1)}
-            onOpenStoreProfiles={() => {
-              const s = tabProps.pp30pp36.filingStoreFilter
-              if (s && s !== "All") setStoreProfilesStore(s)
-              setTab("storeProfiles")
-            }}
-          />
-          <TaxFilingWhtTab
-            {...tabProps.pp30pp36}
-            filingSearchTick={pp30SearchTick}
-            embeddedPp36Section
-            whtFocusMode="pp36"
-            initialWhtSubmissionFormHint="ALL"
+            {...tabProps.pp30}
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pp30.filingStoreFilter)
+            }
           />
         </TabsContent>
-        <TabsContent value="pnd1391" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pp36" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingWhtTab
-            {...tabProps.pnd1391}
-            whtFocusMode="pnd1391"
+            {...tabProps.pp36}
+            whtFocusMode="pp36"
+            initialWhtSubmissionFormHint="ALL"
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pp36.filingStoreFilter)
+            }
+          />
+        </TabsContent>
+        <TabsContent value="pnd1" className={cn(adminTabsContentCn, "space-y-3")}>
+          <TaxFilingWhtTab
+            {...tabProps.pnd1}
+            whtFocusMode="pnd1"
+            initialWhtSubmissionFormHint="ALL"
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd1.filingStoreFilter)
+            }
+          />
+        </TabsContent>
+        <TabsContent value="pnd3" className={cn(adminTabsContentCn, "space-y-3")}>
+          <TaxFilingWhtTab
+            {...tabProps.pnd3}
+            whtFocusMode="pnd3"
             initialWhtSubmissionFormHint="PND3"
-            onOpenStoreProfiles={() => {
-              const s = tabProps.pnd1391.filingStoreFilter
-              if (s && s !== "All") setStoreProfilesStore(s)
-              setTab("storeProfiles")
-            }}
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd3.filingStoreFilter)
+            }
           />
         </TabsContent>
         <TabsContent value="pnd5051" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingCitTab
             {...tabProps.pnd5051}
-            onOpenStoreProfiles={() => {
-              const s = tabProps.pnd5051.filingStoreFilter
-              if (s && s !== "All") setStoreProfilesStore(s)
-              setTab("storeProfiles")
-            }}
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd5051.filingStoreFilter)
+            }
           />
         </TabsContent>
-        <TabsContent value="pnd5354" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd53" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingWhtTab
-            {...tabProps.pnd5354}
-            whtFocusMode="pnd5354"
+            {...tabProps.pnd53}
+            whtFocusMode="pnd53"
             initialWhtSubmissionFormHint="PND53"
-            onOpenStoreProfiles={() => {
-              const s = tabProps.pnd5354.filingStoreFilter
-              if (s && s !== "All") setStoreProfilesStore(s)
-              setTab("storeProfiles")
-            }}
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd53.filingStoreFilter)
+            }
+          />
+        </TabsContent>
+        <TabsContent value="pnd54" className={cn(adminTabsContentCn, "space-y-3")}>
+          <TaxFilingWhtTab
+            {...tabProps.pnd54}
+            whtFocusMode="pnd54"
+            initialWhtSubmissionFormHint="ALL"
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd54.filingStoreFilter)
+            }
           />
         </TabsContent>
         <TabsContent value="sso" className={cn(adminTabsContentCn, "space-y-3")}>

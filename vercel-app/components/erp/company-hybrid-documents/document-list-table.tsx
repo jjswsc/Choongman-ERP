@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table"
 import { CompanyHybridDocumentExpiryBadge } from "@/components/erp/company-hybrid-documents/document-expiry-badge"
 import { formatFileSize, formatHybridDocumentCreatedAt } from "@/components/erp/company-hybrid-documents/shared"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import { cn } from "@/lib/utils"
 
 type Props = {
@@ -66,6 +67,8 @@ export function CompanyHybridDocumentListTable({
   onDelete,
 }: Props) {
   return (
+    <>
+    <AdminDesktopOnly>
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
@@ -238,5 +241,103 @@ export function CompanyHybridDocumentListTable({
         </TableBody>
       </Table>
     </div>
+    </AdminDesktopOnly>
+    <AdminMobileOnly className="divide-y divide-border/60 rounded-lg border border-border/60">
+      {list.map((row) => {
+        const canM = canMutateDocStore(row.store)
+        const hasCorr = documentHasCorrespondence(row.metadata)
+        const corr = hasCorr ? getCorrespondenceFromMetadata(row.metadata) : null
+        return (
+          <div
+            key={row.id}
+            role="button"
+            tabIndex={0}
+            className="space-y-2 px-3 py-3 text-left active:bg-muted/40"
+            onClick={() => onRowClick(row)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onRowClick(row)
+              }
+            }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-semibold leading-snug">{row.title}</p>
+                {showStoreColumn ? (
+                  <p className="text-[11px] text-muted-foreground">{formatStoreLabel(row.store)}</p>
+                ) : null}
+              </div>
+              <span
+                className={cn(
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                  row.source === "drive"
+                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                    : "bg-sky-500/15 text-sky-800 dark:text-sky-200"
+                )}
+              >
+                {row.source === "drive" ? (
+                  <Link2 className="h-4 w-4" aria-hidden />
+                ) : (
+                  <FileUp className="h-4 w-4" aria-hidden />
+                )}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <CompanyHybridDocumentExpiryBadge
+                validTo={row.valid_to}
+                labels={{
+                  expiringSoon: t("companyHybridDocExpiryBadgeExpiringSoon"),
+                  expired: t("companyHybridDocExpiryBadgeExpired"),
+                }}
+              />
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                {labelCategory(row)}
+              </Badge>
+              {hasCorr && corr ? (
+                <span className="inline-flex max-w-full items-center gap-1 text-[11px] text-muted-foreground">
+                  <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="truncate">{formatCorrHint(corr)}</span>
+                </span>
+              ) : null}
+            </div>
+            {row.file_name ? (
+              <p className="truncate text-[11px] text-muted-foreground">
+                {row.file_name} · {formatFileSize(row.file_size)}
+              </p>
+            ) : null}
+            <div
+              className="flex flex-wrap gap-2 pt-1"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <Button type="button" size="sm" variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => onOpen(row)}>
+                <ExternalLink className="h-3.5 w-3.5" />
+                {t("companyHybridDocOpen")}
+              </Button>
+              {canM ? (
+                <Button type="button" size="sm" variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => onEdit(row)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  {t("companyHybridDocEdit")}
+                </Button>
+              ) : null}
+              {canM ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 text-xs text-destructive"
+                  onClick={() => onDelete(row)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {t("companyHybridDocDelete")}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        )
+      })}
+    </AdminMobileOnly>
+    </>
   )
 }

@@ -29,4 +29,9 @@ describe('tax invoice deposit seq (issueDate global)', () => {
     // 두 건 모두 -001로 저장된 상태 → 새 순번 2
     expect(allocateSeq({ selfSeq: 1, usedByOthers: [1] })).toBe(2)
   })
+
+  it('reallocates shared -011 across many corrupted rows', () => {
+    expect(allocateSeq({ selfSeq: 11, usedByOthers: [11] })).toBe(12)
+    expect(allocateSeq({ selfSeq: null, usedByOthers: [1, 2, 11] })).toBe(12)
+  })
 })

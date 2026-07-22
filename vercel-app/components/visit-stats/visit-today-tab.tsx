@@ -15,6 +15,10 @@ import {
   type StoreVisitTodaySnapshotActive,
 } from "@/lib/api-client"
 import { RankedBarChart } from "./ranked-bar-chart"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+} from "@/components/erp/admin-responsive-list"
 import { attendanceBusinessDayBoundsMs } from "@/lib/attendance-utils"
 import { useErpPolling } from "@/lib/erp-page-visibility"
 
@@ -265,6 +269,8 @@ export function VisitTodayTab() {
           {active.length === 0 ? (
             <p className="text-sm text-muted-foreground py-2">{t("visit_today_active_empty")}</p>
           ) : (
+            <>
+            <AdminDesktopOnly>
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -293,6 +299,26 @@ export function VisitTodayTab() {
                 </tbody>
               </table>
             </div>
+            </AdminDesktopOnly>
+            <AdminMobileOnly className="divide-y divide-border/60 rounded-lg border border-border/60">
+              {active.map((a) => (
+                <div key={`${a.name}-${a.store}-${a.startedAt}`} className="space-y-1 px-3 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold">{a.name}</p>
+                    <span className="text-xs font-medium tabular-nums text-primary">
+                      {elapsedLabel(a.startedAt, now, t)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {a.store} · {a.department || "-"} · {translateVisitPurpose(a.purpose, t) || "-"}
+                  </p>
+                  <p className="text-[11px] tabular-nums text-muted-foreground">
+                    {t("visit_today_col_started")}: {formatTimeBangkok(a.startedAt)}
+                  </p>
+                </div>
+              ))}
+            </AdminMobileOnly>
+            </>
           )}
         </CardContent>
       </Card>

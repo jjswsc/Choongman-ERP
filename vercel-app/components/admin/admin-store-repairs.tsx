@@ -25,6 +25,11 @@ import {
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Save, Wrench, ImageIcon, X, Pencil } from "lucide-react"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useLang } from "@/lib/lang-context"
@@ -596,7 +601,9 @@ export function AdminStoreRepairs() {
               </Button>
             </div>
             <Card>
-              <CardContent className="p-0 overflow-x-auto">
+              <CardContent className="p-0">
+                <AdminDesktopOnly>
+                  <AdminTableScroll className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/50">
@@ -696,6 +703,75 @@ export function AdminStoreRepairs() {
                     )}
                   </tbody>
                 </table>
+                  </AdminTableScroll>
+                </AdminDesktopOnly>
+                <AdminMobileOnly>
+                  {listLoading ? (
+                    <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("loading")}</p>
+                  ) : listData.length === 0 ? (
+                    <p className="px-3 py-8 text-center text-xs text-muted-foreground">—</p>
+                  ) : (
+                    <div className="divide-y divide-border/60">
+                      {listData.map((row) => {
+                        const stale = row.status === "접수" && daysSinceReportedBangkok(row.reportedAt) >= 3
+                        return (
+                          <button
+                            key={row.id}
+                            type="button"
+                            className={`w-full space-y-2 px-3 py-3 text-left active:bg-muted/40 ${stale ? "bg-amber-500/10" : ""}`}
+                            onClick={() => goToProcessWithTicket(row)}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-snug">
+                                  {translateTitle(row.title || "") || "—"}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {row.ticketNumber} · {row.store}
+                                </p>
+                              </div>
+                              <span className="shrink-0 text-[11px] font-medium">{t(labelSt(row.status))}</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              {t(labelPri(row.priority))} ·{" "}
+                              {row.reportedAt ? row.reportedAt.slice(0, 16).replace("T", " ") : "—"}
+                              {stale
+                                ? ` · ${daysSinceReportedBangkok(row.reportedAt)} ${t("repair_stale_days")}`
+                                : ""}
+                            </p>
+                            <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                              {row.photoUrls?.length ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9 gap-1 text-xs"
+                                  onClick={() => {
+                                    const u = row.photoUrls![0]
+                                    if (u) setPhotoPreview(u)
+                                  }}
+                                >
+                                  <ImageIcon className="h-3.5 w-3.5" />
+                                  {t("photo")}
+                                </Button>
+                              ) : null}
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-9 gap-1 text-xs"
+                                onClick={() => openEdit(row)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                {t("repair_list_full_edit")}
+                              </Button>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </AdminMobileOnly>
               </CardContent>
             </Card>
           </TabsContent>

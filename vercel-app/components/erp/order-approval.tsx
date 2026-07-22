@@ -677,10 +677,10 @@ export function OrderApproval() {
                 <div key={order.id} className={cn(isExpanded && "bg-primary/5")}>
                   <button
                     type="button"
-                    className="w-full px-4 py-3 text-left"
+                    className="w-full px-4 py-3.5 text-left active:bg-muted/30"
                     onClick={() => toggleExpand(order.id)}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-3">
                       <div
                         className="pt-0.5"
                         onClick={(e) => e.stopPropagation()}
@@ -689,13 +689,13 @@ export function OrderApproval() {
                         <Checkbox
                           checked={checkedOrders.has(order.id)}
                           onCheckedChange={() => toggleOrder(order.id)}
-                          className="h-4 w-4"
+                          className="h-5 w-5"
                         />
                       </div>
-                      <div className="flex flex-1 items-start justify-between gap-2 min-w-0">
+                      <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
                       <div className="min-w-0 space-y-1">
-                        <p className="text-xs font-semibold text-foreground">{order.store}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">{order.summary}</p>
+                        <p className="text-sm font-semibold text-foreground">{order.store}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{order.summary}</p>
                         <p className={cn("text-[11px] tabular-nums text-muted-foreground", ADMIN_NUMERIC_CN)}>
                           {order.orderDate} · #{order.id}
                         </p>

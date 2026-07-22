@@ -785,7 +785,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payAlipay, setPayAlipay] = useState('')
   const [payUnionPay, setPayUnionPay] = useState('')
   const [payPromptPay, setPayPromptPay] = useState('')
-  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
+  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD' | 'EDC'>('THAI_QR')
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')
@@ -6073,7 +6073,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       <p className="mb-2 text-[11px] font-semibold text-sky-800 dark:text-sky-300">
                         {tr('posQrTypeLabel', 'QR 타입')}
                       </p>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <Button
                           type="button"
                           variant={payQrType === 'THAI_QR' ? 'default' : 'outline'}
@@ -6090,12 +6090,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         >
                           {tr('posQrTypeCredit', 'Credit Card QR')}
                         </Button>
+                        <Button
+                          type="button"
+                          variant={payQrType === 'EDC' ? 'default' : 'outline'}
+                          className="h-9 rounded-lg text-xs"
+                          onClick={() => setPayQrType('EDC')}
+                        >
+                          {tr('posQrTypeEdcFallback', 'ส่ง EDC')}
+                        </Button>
                       </div>
                       <p className="mt-2 text-[10px] leading-snug text-sky-700/90 dark:text-sky-300/90">
-                        {tr(
-                          'posKbankCreditCardQrHint',
-                          'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.'
-                        )}
+                        {payQrType === 'EDC'
+                          ? tr(
+                              'posQrTypeEdcHint',
+                              'โหมดสำรอง: ข้าม KBank QR API แล้วส่งยอดไปที่เครื่อง EDC เพื่อรับชำระแทน'
+                            )
+                          : tr(
+                              'posKbankCreditCardQrHint',
+                              'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.'
+                            )}
                       </p>
                     </div>
                   )}

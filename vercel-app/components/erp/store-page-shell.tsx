@@ -22,13 +22,13 @@ export function StorePageShell({
 }: StorePageShellProps) {
   return (
     <div className={cn("flex-1 overflow-auto", className)}>
-      <div className={cn("mx-auto space-y-4 px-4 py-6 sm:px-6 lg:px-8", maxWidthClass)}>
+      <div className={cn("mx-auto space-y-4 px-3 py-4 sm:px-6 sm:py-6 lg:px-8", maxWidthClass)}>
         <div className="mb-2 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             <Icon className="h-5 w-5 text-primary" aria-hidden />
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">{title}</h1>
             {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
           </div>
         </div>

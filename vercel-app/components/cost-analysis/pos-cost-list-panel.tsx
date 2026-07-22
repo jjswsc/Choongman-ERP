@@ -29,6 +29,7 @@ import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import {
   POS_MAIN_CATEGORIES,
   getPresetCategoriesForMain,
@@ -470,6 +471,7 @@ export function PosCostListPanel({
           ) : null}
 
           <div className="rounded-xl border bg-card overflow-hidden">
+            <AdminDesktopOnly>
             <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(70vh,900px)]")}>
               <table className="w-full text-sm min-w-[980px] table-fixed">
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
@@ -641,6 +643,61 @@ export function PosCostListPanel({
                 </tbody>
               </table>
             </div>
+            </AdminDesktopOnly>
+            <AdminMobileOnly className="max-h-[min(70vh,900px)] overflow-y-auto divide-y divide-border/60">
+              {sortedFlatList.map((r) => {
+                const key = rowKey(r)
+                const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax)
+                const menuLabel =
+                  (r.menuName ?? "—") +
+                  (r.optionName ? ` (${translatePosMenuLineForReceipt(r.optionName, t)})` : "")
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={cn(
+                      "w-full space-y-1.5 px-3 py-3 text-left active:bg-muted/40",
+                      m.issues.length > 0 && "bg-rose-500/[0.03]"
+                    )}
+                    onClick={() =>
+                      onSelectRow({
+                        ...r,
+                        breakdown: Array.isArray(r.breakdown) ? r.breakdown : [],
+                      })
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[11px] text-muted-foreground">{r.displayCode || "—"}</p>
+                        <p className="text-sm font-semibold leading-snug">{menuLabel}</p>
+                      </div>
+                      {m.issues.includes("no_bom") ? (
+                        <span className="shrink-0 text-[10px] text-rose-600">{t("posCostIssueNoBom")}</span>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {r.categoryMain ?? "-"} · {r.category ?? "—"}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <p className="text-muted-foreground">{t("posCostDineIn")}</p>
+                        <p className="tabular-nums">
+                          {m.priceH.toFixed(0)} / {m.costHMise.toFixed(1)} /{" "}
+                          <span className={costRatioTierClass(m.tierH)}>{m.costRatioH.toFixed(1)}%</span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">{t("posCostDelivery")}</p>
+                        <p className="tabular-nums">
+                          {m.priceD.toFixed(0)} / {m.costDMise.toFixed(1)} /{" "}
+                          <span className={costRatioTierClass(m.tierD)}>{m.costRatioD.toFixed(1)}%</span>
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </AdminMobileOnly>
             {flatList.length === 0 && !loading && rows.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-muted-foreground space-y-2">
                 <p>{t("posCostEmptyAfterLoad")}</p>

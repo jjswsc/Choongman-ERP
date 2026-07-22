@@ -1803,6 +1803,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posQrTypeLabel: 'QR 타입',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
+    posQrTypeEdcFallback: 'EDC 전송',
+    posQrTypeEdcHint:
+      '예비 모드: KBank QR API를 건너뛰고 금액을 EDC 단말로 보내 결제합니다.',
     posKbankFollowupTitle: 'KBank 후속 처리 (현재 POS)',
     posKbankOrigTxnUidHint: 'QR 요청 TxnUid',
     posKbankTxnNoHint: '결제 txnNo (숫자, 예: 26440008 — Generate APIC* 아님)',
@@ -5032,6 +5035,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
+    posQrTypeEdcFallback: 'Send to EDC',
+    posQrTypeEdcHint:
+      'Fallback: skip KBank QR API and send the amount to the EDC terminal for payment.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
     posKbankOrigTxnUidHint: 'QR Request TxnUid',
     posKbankTxnNoHint: 'Payment txnNo (numeric, e.g. 26440008 — not Generate APIC*)',
@@ -6955,6 +6961,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posQrTypeLabel: 'ประเภท QR',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
+    posQrTypeEdcFallback: 'ส่ง EDC',
+    posQrTypeEdcHint:
+      'โหมดสำรอง: ข้าม KBank QR API แล้วส่งยอดไปที่เครื่อง EDC เพื่อรับชำระแทนครับ',
     posKbankFollowupTitle: 'KBank ดำเนินการต่อ (POS ปัจจุบัน)',
     posKbankOrigTxnUidHint: 'TxnUid ของ QR ที่ขอ',
     posKbankTxnNoHint: 'txnNo หลังชำระ (เช่น 26440008 — ไม่ใช่ APIC ตอน Generate)',
@@ -16983,6 +16992,9 @@ export const I18N_POS_KH: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
+    posQrTypeEdcFallback: 'Send to EDC',
+    posQrTypeEdcHint:
+      'Fallback: skip KBank QR API and send the amount to the EDC terminal for payment.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
     posKbankOrigTxnUidHint: 'QR Request TxnUid',
     posKbankTxnNoHint: 'Payment txnNo (numeric, e.g. 26440008 — not Generate APIC*)',

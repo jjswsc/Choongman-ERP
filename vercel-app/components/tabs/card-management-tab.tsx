@@ -13,6 +13,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, Plus, Pencil, Trash2, CreditCard, Link2, Landmark, ListTree } from "lucide-react"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
@@ -651,6 +656,7 @@ export function CardManagementTab() {
             <p className="text-sm text-muted-foreground py-2">{tt("cardManagementNoUnlinkedBank", "No unlinked withdrawals.")}</p>
           ) : (
             <div className="rounded-lg border overflow-auto max-h-[220px]">
+              <AdminDesktopOnly>
               <table className="w-full text-sm min-w-[520px]">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
@@ -683,6 +689,34 @@ export function CardManagementTab() {
                   ))}
                 </tbody>
               </table>
+              </AdminDesktopOnly>
+              <AdminMobileOnly className="divide-y divide-border/60">
+                {unlinkedBankRows.map((row) => (
+                  <div key={row.id} className="space-y-2 px-3 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold tabular-nums">{fmt(row.amount)}</p>
+                        <p className="text-[11px] text-muted-foreground">{row.transDate}</p>
+                      </div>
+                      {row.likelyCardBill ? (
+                        <Badge variant="secondary" className="shrink-0 text-[10px]">
+                          {tt("cardManagementLikelyCardBill", "Likely card bill")}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2">{getMemo(row.memo)}</p>
+                    <Button
+                      size="sm"
+                      className="h-9 w-full gap-1 text-xs"
+                      onClick={() => openBankLinkDialog(row)}
+                      disabled={filteredCardAccounts.length === 0}
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      {tt("cardManagementBankLinkRegister", "Register")}
+                    </Button>
+                  </div>
+                ))}
+              </AdminMobileOnly>
             </div>
           )}
         </CardContent>
@@ -789,7 +823,7 @@ export function CardManagementTab() {
           ) : transactions.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{tt("pettyNoData", "No transactions found.")}</p>
           ) : (
-            <div className="rounded-lg border overflow-auto max-h-[400px]">
+            <AdminTableScroll className="rounded-lg border max-h-[400px] overflow-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
@@ -884,7 +918,7 @@ export function CardManagementTab() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           )}
         </CardContent>
       </Card>

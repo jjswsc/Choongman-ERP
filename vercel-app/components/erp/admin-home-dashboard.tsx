@@ -54,14 +54,14 @@ export function AdminHomeDashboard() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-6 sm:py-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
               <LayoutDashboard className="h-4 w-4 text-primary" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{tr("adminDashboard", "대시보드")}</h1>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold tracking-tight sm:text-xl">{tr("adminDashboard", "대시보드")}</h1>
               <p className="text-xs text-muted-foreground">
                 {isLogisticsHome
                   ? tr("adminDashboardLogisticsSub", "물류 · 미승인 주문·입출고 현황")
@@ -111,14 +111,14 @@ export function AdminHomeDashboard() {
                 {tr("erpNavFavoritesEdit", "바로가기 편집")}
               </Button>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {quickLinks.map((link) => {
                 const Icon = link.icon
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`group rounded-xl border p-4 shadow-sm transition-colors hover:bg-muted/30 ${
+                    className={`group rounded-xl border p-4 shadow-sm transition-colors hover:bg-muted/30 active:bg-muted/50 ${
                       link.primary ? "border-primary/30 bg-primary/5" : "border-border/70 bg-card"
                     }`}
                   >

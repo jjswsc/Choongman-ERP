@@ -106,6 +106,10 @@ export interface AccountingComplianceSummaryTabProps {
   summaryLoading: boolean
   isEmbeddedPp36Section: boolean
   isPnd5354CompactList: boolean
+  /** pnd5354 통합 탭일 때만 53/54 하위 토글 표시 */
+  showPnd5354SubToggle?: boolean
+  /** pnd3/pnd53 단일 탭일 때 서식 힌트 셀렉트 숨김 */
+  lockWhtSubmissionFormHint?: boolean
 
   // PP30 search / nav
   pp30Queried: boolean
@@ -321,6 +325,8 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     summaryLoading,
     isEmbeddedPp36Section,
     isPnd5354CompactList,
+    showPnd5354SubToggle = true,
+    lockWhtSubmissionFormHint = false,
     pp30Queried,
     setPp30Queried,
     setPp30SearchSeq,
@@ -604,7 +610,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 ) : null}
                 <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")} />
               </>
-            ) : isPnd5354CompactList ? (
+            ) : isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
               <>
                 <Button
                   type="button"
@@ -760,7 +766,9 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               ? t("accCompPp36EmbeddedSearchHint")
               : isPnd5354CompactList
                 ? t("accCompPnd5354EmptySearchHint")
-                : t("accCompPp30EmptySearchHint")}
+                : showPp36Ledger && pp30Mode === "wht_only"
+                  ? t("accCompPp36EmptySearchHint")
+                  : t("accCompPp30EmptySearchHint")}
           </AccountingEmptyState>
         ) : (
           <>
@@ -782,7 +790,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             ) : null}
           </div>
         ) : null}
-        {!isEmbeddedPp36Section && isPnd5354CompactList ? (
+        {!isEmbeddedPp36Section && isPnd5354CompactList && showPnd5354SubToggle ? (
         <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
           <Button
             type="button"
@@ -1154,18 +1162,18 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                         }
                       >
                         <SelectTrigger className="md:col-span-2">
-                          <SelectValue placeholder="증빙 상태" />
+                          <SelectValue placeholder={t("accCompEvidenceStatusPh")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="required_pending">증빙미완료</SelectItem>
-                          <SelectItem value="received">증빙완료</SelectItem>
-                          <SelectItem value="not_required">증빙불요</SelectItem>
-                          <SelectItem value="unobtainable">수취불가/신고제외</SelectItem>
+                          <SelectItem value="required_pending">{t("accCompEvidenceStatusPending")}</SelectItem>
+                          <SelectItem value="received">{t("accCompEvidenceStatusReceived")}</SelectItem>
+                          <SelectItem value="not_required">{t("accCompEvidenceStatusNotRequired")}</SelectItem>
+                          <SelectItem value="unobtainable">{t("accCompEvidenceStatusUnobtainable")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
                         className="md:col-span-2"
-                        placeholder="증빙 사유 코드 (small_amount, supplier_refused...)"
+                        placeholder={t("accCompEvidenceReasonCodePh")}
                         value={row.invoice_evidence_reason_code}
                         onChange={(e) =>
                           setVatRows((prev) =>
@@ -1254,11 +1262,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               />
             </AccountingStatGrid>
             <AccountingStatGrid>
-              <AccountingStatCard label="신고가능 매입VAT" value={Math.round(vatInputClaimable.claimableVat).toLocaleString()} tone="ok" />
-              <AccountingStatCard label="증빙미완료 VAT" value={Math.round(vatInputClaimable.pendingVat).toLocaleString()} tone="warn" />
-              <AccountingStatCard label="신고제외 VAT" value={Math.round(vatInputClaimable.unobtainableVat).toLocaleString()} />
+              <AccountingStatCard label={t("accCompVatClaimableInputVat")} value={Math.round(vatInputClaimable.claimableVat).toLocaleString()} tone="ok" />
+              <AccountingStatCard label={t("accCompVatPendingEvidenceVat")} value={Math.round(vatInputClaimable.pendingVat).toLocaleString()} tone="warn" />
+              <AccountingStatCard label={t("accCompVatExcludedVat")} value={Math.round(vatInputClaimable.unobtainableVat).toLocaleString()} />
               <AccountingStatCard
-                label="체크 건수(완료/미완료/제외)"
+                label={t("accCompVatEvidenceCheckCounts")}
                 value={`${vatInputClaimable.claimableCount}/${vatInputClaimable.pendingCount}/${vatInputClaimable.unobtainableCount}`}
               />
             </AccountingStatGrid>
@@ -1538,18 +1546,18 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                         }
                       >
                         <SelectTrigger className="md:col-span-2">
-                          <SelectValue placeholder="증빙 상태" />
+                          <SelectValue placeholder={t("accCompEvidenceStatusPh")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="required_pending">증빙미완료</SelectItem>
-                          <SelectItem value="received">증빙완료</SelectItem>
-                          <SelectItem value="not_required">증빙불요</SelectItem>
-                          <SelectItem value="unobtainable">수취불가/신고제외</SelectItem>
+                          <SelectItem value="required_pending">{t("accCompEvidenceStatusPending")}</SelectItem>
+                          <SelectItem value="received">{t("accCompEvidenceStatusReceived")}</SelectItem>
+                          <SelectItem value="not_required">{t("accCompEvidenceStatusNotRequired")}</SelectItem>
+                          <SelectItem value="unobtainable">{t("accCompEvidenceStatusUnobtainable")}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
                         className="md:col-span-2"
-                        placeholder="증빙 사유 코드 (small_amount, supplier_refused...)"
+                        placeholder={t("accCompEvidenceReasonCodePh")}
                         value={row.invoice_evidence_reason_code}
                         onChange={(e) =>
                           setVatRows((prev) =>
@@ -1784,7 +1792,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   />
                   <Input
                     className="lg:col-span-2"
-                    placeholder={lang === "th" ? "ชื่อนิติบุคคลผู้จ่าย" : t("accCompPnd1PayerLegalNamePlaceholder")}
+                    placeholder={t("accCompPnd1PayerLegalNamePlaceholder")}
                     value={pnd1PayerName}
                     onChange={(e) => setPnd1PayerName(e.target.value)}
                   />
@@ -1863,18 +1871,12 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   {t("whtCertPrintBulk")}
                 </Button>
               ) : null}
-              {showPnd1Area ? (
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <a
-                    href={pnd1RdPrepUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {pnd1RdPrepBtnLabel}
-                  </a>
-                </Button>
-              ) : null}
               {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
+                lockWhtSubmissionFormHint ? (
+                  <div className="inline-flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium">
+                    {whtSubmissionFormHint}
+                  </div>
+                ) : (
                 <Select
                   value={whtSubmissionFormHint}
                   onValueChange={(v) => setWhtSubmissionFormHint(v as "PND3" | "PND53" | "ALL")}
@@ -1883,21 +1885,12 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">PND3/53 전체</SelectItem>
+                    <SelectItem value="ALL">{t("accCompPnd353FormHintAll")}</SelectItem>
                     <SelectItem value="PND3">PND3</SelectItem>
                     <SelectItem value="PND53">PND53</SelectItem>
                   </SelectContent>
                 </Select>
-              ) : null}
-              {showPnd353Tools && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleDownloadPnd53RdFilingTxt()}
-                >
-                  {t("accCompPnd53RdFilingTxt")}
-                </Button>
+                )
               ) : null}
               {showPnd1Area ? (
                 <Button
@@ -1929,16 +1922,22 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   onClick={() => void runPayrollTinGapCheck()}
                   disabled={payrollTinGapLoading}
                 >
-                  {payrollTinGapLoading ? t("loading") : lang === "th" ? "ตรวจสอบ TIN พนักงาน" : t("accCompPayrollTinCheckBtn")}
+                  {payrollTinGapLoading ? t("loading") : t("accCompPayrollTinCheckBtn")}
                 </Button>
               ) : null}
             </div>
             {showPnd353Tools && pnd353ValidationResult ? (
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-1">
-                <div className="font-medium">PND3/53 검증 결과</div>
-                <div>검증 행: {pnd353ValidationResult.totalRows.toLocaleString()}</div>
-                <div>정상 행: {pnd353ValidationResult.validRows.toLocaleString()}</div>
-                <div>경고 건수: {(pnd353ValidationResult.issues || []).length.toLocaleString()}</div>
+                <div className="font-medium">{t("accCompPnd353ValidationTitle")}</div>
+                <div>
+                  {t("accCompPnd353ValidationTotalRows")}: {pnd353ValidationResult.totalRows.toLocaleString()}
+                </div>
+                <div>
+                  {t("accCompPnd353ValidationValidRows")}: {pnd353ValidationResult.validRows.toLocaleString()}
+                </div>
+                <div>
+                  {t("accCompPnd353ValidationWarningCount")}: {(pnd353ValidationResult.issues || []).length.toLocaleString()}
+                </div>
               </div>
             ) : null}
             {(showPp36Ledger || (showPnd54Ledger && (!isPnd5354CompactList || pnd5354SubView === "pnd54"))) ? (
@@ -1946,14 +1945,14 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               {showPp36Ledger ? (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">PP.36 원장</CardTitle>
+                  <CardTitle className="text-sm">{t("accCompTabPp36")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={() => setPp36Rows((prev) => [...prev, emptyPp36(taxMonth, storeTb !== "All" ? storeTb : "")])}>
-                      <Plus className="h-3 w-3 mr-1" /> 행 추가
+                      <Plus className="h-3 w-3 mr-1" /> {t("accCompVatAdd")}
                     </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void loadPp36()}>조회</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void loadPp36()}>{t("search")}</Button>
                     <Button type="button" size="sm" variant="outline" asChild>
                       <a href={pp36ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
                     </Button>
@@ -1982,11 +1981,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <div className={cn("flex gap-2", isPnd5354CompactList ? "px-4 py-3 border-b border-border/60" : "")}>
                     {!isPnd5354CompactList ? (
                       <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
-                        <Plus className="h-3 w-3 mr-1" /> 행 추가
+                        <Plus className="h-3 w-3 mr-1" /> {t("accCompVatAdd")}
                       </Button>
                     ) : null}
                     {!isPnd5354CompactList ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>조회</Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>{t("search")}</Button>
                     ) : null}
                     <Button type="button" size="sm" variant="outline" asChild>
                       <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
@@ -2188,7 +2187,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-bold">
-                    {lang === "th" ? "ผลตรวจ TIN พนักงาน (รายเดือน)" : t("accCompPayrollTinGapTitleMonthly")}
+                    {t("accCompPayrollTinGapTitleMonthly")}
                   </div>
                   <Button
                     type="button"
@@ -2196,20 +2195,20 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     size="sm"
                     onClick={() => setPayrollTinGapResult(null)}
                   >
-                    {lang === "th" ? "ล้างผลลัพธ์" : t("accCompPayrollTinGapClearResult")}
+                    {t("accCompPayrollTinGapClearResult")}
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div>
-                    {lang === "th" ? "แถวเงินเดือนรวม" : t("accCompPayrollStatWhtRows")}:{" "}
+                    {t("accCompPayrollStatWhtRows")}:{" "}
                     {payrollTinGapResult.payrollRowCount.toLocaleString()}
                   </div>
                   <div>
-                    {lang === "th" ? "แถวที่ TIN หาย" : t("accCompPayrollStatTinMissingRows")}:{" "}
+                    {t("accCompPayrollStatTinMissingRows")}:{" "}
                     {payrollTinGapResult.gapRowCount.toLocaleString()}
                   </div>
                   <div>
-                    {lang === "th" ? "พนักงานที่ได้รับผลกระทบ" : t("accCompPayrollStatImpactedEmployees")}:{" "}
+                    {t("accCompPayrollStatImpactedEmployees")}:{" "}
                     {payrollTinGapResult.uniqueEmployeeCount.toLocaleString()}
                   </div>
                 </div>
@@ -2251,7 +2250,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       {!payrollTinGapResult.gaps.length ? (
                         <tr>
                           <td colSpan={7} className="p-4 text-center text-muted-foreground">
-                            {lang === "th" ? "ไม่พบพนักงานที่ TIN หาย" : t("accCompPayrollNoTinGaps")}
+                            {t("accCompPayrollNoTinGaps")}
                           </td>
                         </tr>
                       ) : null}
@@ -2285,9 +2284,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-xs text-muted-foreground">
-                    Rows: {pnd1ValidationResult.totalRows.toLocaleString()} · Issues:{" "}
-                    {pnd1ValidationResult.issues.length.toLocaleString()} · Filtered:{" "}
-                    {pnd1IssueRowsFiltered.length.toLocaleString()}
+                    {tr(t, "accCompPnd1ValidationStatLine", {
+                      rows: pnd1ValidationResult.totalRows.toLocaleString(),
+                      issues: pnd1ValidationResult.issues.length.toLocaleString(),
+                      filtered: pnd1IssueRowsFiltered.length.toLocaleString(),
+                    })}
                   </div>
                   <div className="ml-auto w-full lg:w-auto space-y-1">
                     <div className="text-xs text-muted-foreground">{pnd1IssueFilterLabel}</div>
@@ -2299,7 +2300,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                         onClick={() => setPnd1IssueFilterCodes([])}
                         className="justify-between"
                       >
-                        <span>{lang === "th" ? "ทั้งหมด" : t("all")}</span>
+                        <span>{t("all")}</span>
                         <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px]">
                           {(pnd1ValidationResult?.issues.length || 0).toLocaleString()}
                         </span>
@@ -2365,7 +2366,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       {!pnd1IssueRowsFiltered.length ? (
                         <tr>
                           <td colSpan={4} className="p-4 text-center text-muted-foreground">
-                            {lang === "th" ? "ไม่พบข้อมูล" : t("accCompPnd1ValidationNoIssues")}
+                            {t("accCompPnd1ValidationNoIssues")}
                           </td>
                         </tr>
                       ) : null}

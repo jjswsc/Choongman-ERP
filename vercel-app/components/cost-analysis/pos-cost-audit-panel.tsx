@@ -17,6 +17,7 @@ import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { getPosCostAnalysisAudit, type PosCostAnalysisAuditRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 type Props = {
@@ -230,6 +231,7 @@ export function PosCostAuditPanel({ allowed }: Props) {
         </div>
       ) : (
         <div className="rounded-xl border bg-card overflow-hidden">
+          <AdminDesktopOnly>
           <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(65vh,800px)]")}>
             <table className="w-full text-sm min-w-[960px]">
               <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
@@ -299,6 +301,53 @@ export function PosCostAuditPanel({ allowed }: Props) {
               </tbody>
             </table>
           </div>
+          </AdminDesktopOnly>
+          <AdminMobileOnly className="max-h-[min(65vh,800px)] overflow-y-auto divide-y divide-border/60">
+            {filteredAuditRows.map((r) => {
+              const isUpdate = r.actionType === "update"
+              const bQty = r.beforeQuantity
+              const aQty = r.afterQuantity ?? r.quantity
+              const bLoss = r.beforeLossRate
+              const aLoss = r.afterLossRate ?? r.lossRate
+              return (
+                <div key={r.id} className="space-y-1 px-3 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[11px] text-muted-foreground">{r.menuCode || "-"}</p>
+                      <p className="text-sm font-semibold leading-snug">
+                        {r.menuName || "-"}
+                        {r.optionName ? ` (${translatePosMenuLineForReceipt(r.optionName, t)})` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px]">
+                      {r.actionType === "insert"
+                        ? t("create")
+                        : r.actionType === "update"
+                          ? t("edit")
+                          : r.actionType === "delete"
+                            ? t("delete")
+                            : r.actionType}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {r.itemCode || "-"} · {r.itemName || "-"}
+                  </p>
+                  <p className="text-[11px] tabular-nums text-muted-foreground">
+                    {t("posCostQty")}: {isUpdate ? diffCell(bQty, aQty) : fmtNum(aQty)} ·{" "}
+                    {t("posIngredientLoss")}:{" "}
+                    {isUpdate
+                      ? diffCell(bLoss, aLoss)
+                      : (aLoss ?? 0) > 0
+                        ? `${fmtNum(aLoss)}%`
+                        : "—"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {r.changedAt || "-"} · {r.actorName || "-"}
+                  </p>
+                </div>
+              )
+            })}
+          </AdminMobileOnly>
           {filteredAuditRows.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-muted-foreground">{t("posCostNoData")}</div>
           ) : null}

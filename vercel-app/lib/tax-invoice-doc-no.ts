@@ -22,6 +22,22 @@ export function isTaxInvoiceDocumentNo(value: string | undefined | null): boolea
   return /^IV\.\d{8}-\d+$/i.test(String(value || '').trim())
 }
 
+/**
+ * Tax Invoice 인쇄의 Reference 표기 정규화.
+ * - 기존 출고번호(IVYYYYMMDD-1234)는 유지
+ * - Tax Invoice 형식(IV.YYYYMMDD-001)이 들어오면 현재 문서번호로 동기화
+ */
+export function normalizeTaxInvoiceReferenceNo(
+  referenceNo: string | undefined | null,
+  documentNo: string | undefined | null
+): string {
+  const doc = String(documentNo || '').trim()
+  const ref = String(referenceNo || '').trim()
+  if (!ref) return doc
+  if (isTaxInvoiceDocumentNo(ref) && !isOutboundReceivableInvoiceNo(ref)) return doc
+  return ref
+}
+
 /** 기존 문서번호에서 순번(마지막 3자리) 추출 — 인쇄 화면 수정 시 보존용 */
 export function parseTaxInvoiceDocNoSuffix(documentNo: string | undefined | null): number | null {
   const m = String(documentNo || '').match(RE_TAX_INVOICE_DOC_SUFFIX)

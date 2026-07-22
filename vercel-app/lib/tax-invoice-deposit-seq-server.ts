@@ -1,5 +1,5 @@
-import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from '@/lib/tax-invoice-doc-no'
+import { supabaseSelectFilterAllPages, supabaseUpsert } from '@/lib/supabase-server'
+import { buildTaxInvoiceDocNo, isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from '@/lib/tax-invoice-doc-no'
 
 type OverrideRow = { code?: string; value?: string }
 type ReceivableRow = { id?: number; invoice_no?: string | null; memo?: string | null }
@@ -18,12 +18,27 @@ function seqFromDocNoForDate(docNo: string | undefined | null, dateDigits: strin
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-function parseOverridePayload(value: string | undefined | null): { documentNo?: string; issueDate?: string } {
+function parseOverridePayload(value: string | undefined | null): {
+  documentNo?: string
+  issueDate?: string
+  dueDate?: string
+  referenceNo?: string
+  shipTo?: string
+} {
   try {
-    const parsed = JSON.parse(String(value || '{}')) as { documentNo?: string; issueDate?: string }
+    const parsed = JSON.parse(String(value || '{}')) as {
+      documentNo?: string
+      issueDate?: string
+      dueDate?: string
+      referenceNo?: string
+      shipTo?: string
+    }
     return {
       documentNo: String(parsed.documentNo || '').trim() || undefined,
       issueDate: String(parsed.issueDate || '').trim().slice(0, 10) || undefined,
+      dueDate: String(parsed.dueDate || '').trim().slice(0, 10) || undefined,
+      referenceNo: String(parsed.referenceNo || '').trim() || undefined,
+      shipTo: String(parsed.shipTo || '').trim() || undefined,
     }
   } catch {
     return {}
@@ -40,6 +55,11 @@ function overrideCodesForRef(refType: string, refId: number): string[] {
     ]
   }
   return [`invoice_print_override:tax:${rt}:${refId}`]
+}
+
+function primaryOverrideCode(refType: string, refId: number): string | null {
+  const codes = overrideCodesForRef(refType, refId)
+  return codes[0] || null
 }
 
 /**
@@ -85,21 +105,33 @@ export async function resolveTaxInvoiceDepositSeq(params: {
     usedByOthers.add(seq)
   }
 
+  // receivable.invoice_no 에 남은 레거시 Tax Invoice 번호(잘못된 덮어쓰기)도 사용 중으로 취급.
+  // self 소유는 「해당 accrual에만 단독」일 때만 인정 — 여러 행이 같은 IV.날짜-순번이면 충돌로 보고 재할당.
   const receivables = (await supabaseSelectFilterAllPages(
     'receivable_transactions',
     `invoice_no=like.IV.${dateDigits}-*`,
     { select: 'id,invoice_no,memo', order: 'id.asc', pageSize: 5000 }
   )) as ReceivableRow[]
 
+  const seqOwners = new Map<number, Set<number>>()
   for (const row of receivables) {
-    const isSelf = accrualId > 0 && Number(row.id) === accrualId
+    const rowId = Number(row.id || 0)
     for (const candidate of [row.invoice_no, row.memo]) {
       const seq = seqFromDocNoForDate(candidate, dateDigits)
       if (seq == null) continue
-      if (isSelf) {
-        if (selfSeq == null) selfSeq = seq
-        continue
+      let set = seqOwners.get(seq)
+      if (!set) {
+        set = new Set()
+        seqOwners.set(seq, set)
       }
+      if (rowId > 0) set.add(rowId)
+    }
+  }
+  for (const [seq, owners] of seqOwners) {
+    const onlySelf = accrualId > 0 && owners.size === 1 && owners.has(accrualId)
+    if (onlySelf) {
+      if (selfSeq == null) selfSeq = seq
+    } else {
       usedByOthers.add(seq)
     }
   }
@@ -111,23 +143,6 @@ export async function resolveTaxInvoiceDepositSeq(params: {
     if (matched != null && fromExisting != null) selfSeq = matched
   }
 
-  // override에 아직 없고 accrual로도 못 찾은 경우 한 번 더 조회
-  if (selfSeq == null && accrualId > 0) {
-    const self = (await supabaseSelectFilter(
-      'receivable_transactions',
-      `id=eq.${accrualId}`,
-      { select: 'id,invoice_no,memo', limit: 1 }
-    )) as ReceivableRow[] | null
-    const row = self?.[0]
-    for (const candidate of [row?.invoice_no, row?.memo]) {
-      const seq = seqFromDocNoForDate(candidate, dateDigits)
-      if (seq != null) {
-        selfSeq = seq
-        break
-      }
-    }
-  }
-
   if (selfSeq != null && !usedByOthers.has(selfSeq)) return selfSeq
 
   const maxSeq = usedByOthers.size > 0 ? Math.max(...usedByOthers) : 0
@@ -136,4 +151,72 @@ export async function resolveTaxInvoiceDepositSeq(params: {
     ? Math.max(maxSeq, selfSeq)
     : maxSeq
   return ceiling + 1
+}
+
+/**
+ * 순번 조회 + override 즉시 예약(원자적 재시도).
+ * getSeq → 별도 reserve 사이 레이스로 같은 IV.날짜-순번이 여러 건에 붙는 것을 막는다.
+ */
+export async function resolveAndReserveTaxInvoiceDepositSeq(params: {
+  issueDate: string
+  accrualId?: number
+  refType?: string
+  refId?: number
+  existingDocumentNo?: string
+  referenceNo?: string
+  dueDate?: string
+  shipTo?: string
+}): Promise<{ seq: number; documentNo: string }> {
+  const issueDate = String(params.issueDate || '').trim().slice(0, 10)
+  const refType = String(params.refType || '').trim()
+  const refId = Number(params.refId || 0)
+  const code = primaryOverrideCode(refType, refId)
+
+  let lastSeq = 1
+  let lastDoc = buildTaxInvoiceDocNo(issueDate, 1)
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const seq = await resolveTaxInvoiceDepositSeq({
+      issueDate,
+      accrualId: params.accrualId,
+      refType: refType || undefined,
+      refId: refId > 0 ? refId : undefined,
+      existingDocumentNo: params.existingDocumentNo,
+    })
+    const documentNo = buildTaxInvoiceDocNo(issueDate, seq)
+    lastSeq = seq
+    lastDoc = documentNo
+
+    if (!code) {
+      return { seq, documentNo }
+    }
+
+    const payload = {
+      issueDate,
+      dueDate: String(params.dueDate || issueDate).trim().slice(0, 10) || issueDate,
+      referenceNo: String(params.referenceNo || '').trim() || undefined,
+      documentNo,
+      shipTo: String(params.shipTo || '').trim() || undefined,
+      updatedAt: new Date().toISOString(),
+    }
+    await supabaseUpsert(
+      'invoice_settings',
+      [{ code, value: JSON.stringify(payload) }],
+      'code'
+    )
+
+    // 예약 직후 재검증 — 다른 출처와 충돌하면 다음 순번으로 재시도
+    const verified = await resolveTaxInvoiceDepositSeq({
+      issueDate,
+      accrualId: params.accrualId,
+      refType,
+      refId,
+      existingDocumentNo: documentNo,
+    })
+    if (verified === seq) {
+      return { seq, documentNo }
+    }
+  }
+
+  return { seq: lastSeq, documentNo: lastDoc }
 }

@@ -8,7 +8,15 @@ type Props = {
   filingStoreFilter: string
   onFilingStoreFilterChange: (v: string) => void
   onOpenStoreProfiles?: () => void
-  whtFocusMode?: "all" | "pnd1391" | "pnd5354" | "pp36"
+  whtFocusMode?:
+    | "all"
+    | "pnd1391"
+    | "pnd5354"
+    | "pp36"
+    | "pnd1"
+    | "pnd3"
+    | "pnd53"
+    | "pnd54"
   initialWhtSubmissionFormHint?: "PND3" | "PND53" | "ALL"
   filingSearchTick?: number
   /** P.P30/P.P36 탭 하단 PP36 블록일 때만 true */

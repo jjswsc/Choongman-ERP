@@ -36,7 +36,7 @@ export type ReceiptPaymentSnapshotForPrint = {
   paymentCash?: number
   paymentCard?: number
   paymentQr?: number
-  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD' | 'EDC'
   paymentOther?: number
   paymentOtherBreakdown?: import('@/lib/pos-payment-other-breakdown').PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number

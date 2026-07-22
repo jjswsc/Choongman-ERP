@@ -27,6 +27,12 @@ import { hasOfficeStaffScope } from "@/lib/permissions"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
+import { cn } from "@/lib/utils"
 
 function todayStr() {
   return getBangkokTodayDateString()
@@ -215,7 +221,7 @@ export function AdminLeaveApproval() {
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={leaveDateFilterType} onValueChange={(v: 'request' | 'leave') => setLeaveDateFilterType(v)}>
-            <SelectTrigger className="h-9 w-[120px] text-xs">
+            <SelectTrigger className="h-10 w-full min-w-0 text-xs sm:h-9 sm:w-[120px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -223,10 +229,10 @@ export function AdminLeaveApproval() {
               <SelectItem value="leave">{t("adminLeaveByLeave")}</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className="h-9 w-[130px] text-xs" />
-          <Input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
+          <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className="h-10 w-[calc(50%-0.25rem)] min-w-0 flex-1 text-xs sm:h-9 sm:w-[130px] sm:flex-none" />
+          <Input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} className="h-10 w-[calc(50%-0.25rem)] min-w-0 flex-1 text-xs sm:h-9 sm:w-[130px] sm:flex-none" />
           <Select value={leaveStoreFilter} onValueChange={setLeaveStoreFilter}>
-            <SelectTrigger className="h-9 w-[100px] text-xs">
+            <SelectTrigger className="h-10 w-[calc(50%-0.25rem)] min-w-0 flex-1 text-xs sm:h-9 sm:w-[100px] sm:flex-none">
               <SelectValue placeholder={t("store")} />
             </SelectTrigger>
             <SelectContent>
@@ -236,7 +242,7 @@ export function AdminLeaveApproval() {
             </SelectContent>
           </Select>
           <Select value={leaveTypeFilter} onValueChange={setLeaveTypeFilter}>
-            <SelectTrigger className="h-9 w-[90px] text-xs">
+            <SelectTrigger className="h-10 w-[calc(50%-0.25rem)] min-w-0 flex-1 text-xs sm:h-9 sm:w-[90px] sm:flex-none">
               <SelectValue placeholder={t("leave_col_type")} />
             </SelectTrigger>
             <SelectContent>
@@ -249,7 +255,7 @@ export function AdminLeaveApproval() {
             </SelectContent>
           </Select>
           <Select value={leaveStatusFilter} onValueChange={setLeaveStatusFilter}>
-            <SelectTrigger className="h-9 w-20 text-xs">
+            <SelectTrigger className="h-10 w-[calc(50%-0.25rem)] min-w-0 flex-1 text-xs sm:h-9 sm:w-20 sm:flex-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -259,94 +265,194 @@ export function AdminLeaveApproval() {
               <SelectItem value="All">{t("all")}</SelectItem>
             </SelectContent>
           </Select>
-          <div className="min-w-[120px] flex-1 space-y-1 sm:max-w-[200px]">
+          <div className="min-w-[120px] w-full flex-1 space-y-1 sm:max-w-[200px]">
             <label className="sr-only">{t("leave_filter_name")}</label>
             <Input
               type="search"
               value={leaveNameFilter}
               onChange={(e) => setLeaveNameFilter(e.target.value)}
               placeholder={t("leave_filter_name")}
-              className="h-9 text-xs"
+              className="h-10 text-xs sm:h-9"
             />
           </div>
-          <Button className="h-9 shrink-0 px-4 font-medium" onClick={loadLeaveList} disabled={leaveLoading}>
+          <Button className="h-10 w-full shrink-0 px-4 font-medium sm:h-9 sm:w-auto" onClick={loadLeaveList} disabled={leaveLoading}>
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {leaveLoading ? t("loading") : t("search")}
           </Button>
         </div>
-        <div className="overflow-x-auto -mx-2">
-          {leaveList.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
-          ) : visibleLeaveList.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">{t("pay_hist_no_match")}</p>
-          ) : (
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="p-2 text-center font-medium">{t("store")}</th>
-                  <th className="p-2 text-center font-medium min-w-[100px] whitespace-nowrap">{t("leave_col_name")}</th>
-                  <th className="p-2 text-center font-medium whitespace-nowrap tabular-nums">{t("emp_label_employee_code")}</th>
-                  <th className="p-2 text-center font-medium whitespace-nowrap min-w-[108px]">
-                    <div>{t("leave_col_request_date")}</div>
-                    <div className="font-normal text-muted-foreground">{t("leave_col_request_time")}</div>
-                  </th>
-                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
-                  <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
-                  <th className="p-2 text-center font-medium min-w-[200px]">{t("leave_col_reason")}</th>
-                  <th className="p-2 text-center font-medium w-20">{t("leave_col_cert")}</th>
-                  <th className="p-2 text-center font-medium w-28">{t("leave_col_action")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleLeaveList.map((item) => (
-                  <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
-                    <td className="p-2 text-center">{item.store}</td>
-                    <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${displayLabelShort(item.nick)})` : ""}</td>
-                    <td className="p-2 text-center whitespace-nowrap tabular-nums">{item.employeeCode || "-"}</td>
-                    <td className="p-2 text-center whitespace-nowrap align-top">
-                      <div className="tabular-nums">{item.requestDate || "-"}</div>
-                      {item.requestTimeBangkok ? (
-                        <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground tabular-nums" title={t("leave_col_request_time")}>
-                          {item.requestTimeBangkok} ICT
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
-                    <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
-                    <td className="p-2 text-center">{item.reason || "-"}</td>
-                    <td className="p-2 text-center">
-                      {(item.type.indexOf("병가") !== -1 || item.type.indexOf("ลากิจ") !== -1) ? (
-                        item.certificateUrl ? (
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCertPreviewUrl(item.certificateUrl)} title={item.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}>
-                            <ImageIcon className="h-4 w-4" aria-hidden />
-                          </Button>
-                        ) : (
-                          <span className="text-amber-600 text-xs font-medium" title={t("leaveCertPending")}>{t("leaveCertPending")}</span>
-                        )
-                      ) : (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </td>
-                    <td className="p-2 text-center">
-                      {item.status === "대기" ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Button size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium`} onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
-                          <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium`} onClick={() => handleRejectClick(item.id)}>{t("adminRejected")}</Button>
-                          <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium text-destructive hover:text-destructive`} onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Badge variant={item.status === "승인" || item.status === "Approved" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
-                          <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs text-destructive hover:text-destructive`} onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        {leaveList.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
+        ) : visibleLeaveList.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">{t("pay_hist_no_match")}</p>
+        ) : (
+          <>
+            <AdminDesktopOnly>
+              <AdminTableScroll hint={false}>
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="p-2 text-center font-medium">{t("store")}</th>
+                      <th className="p-2 text-center font-medium min-w-[100px] whitespace-nowrap">{t("leave_col_name")}</th>
+                      <th className="p-2 text-center font-medium whitespace-nowrap tabular-nums">{t("emp_label_employee_code")}</th>
+                      <th className="p-2 text-center font-medium whitespace-nowrap min-w-[108px]">
+                        <div>{t("leave_col_request_date")}</div>
+                        <div className="font-normal text-muted-foreground">{t("leave_col_request_time")}</div>
+                      </th>
+                      <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
+                      <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
+                      <th className="p-2 text-center font-medium min-w-[200px]">{t("leave_col_reason")}</th>
+                      <th className="p-2 text-center font-medium w-20">{t("leave_col_cert")}</th>
+                      <th className="p-2 text-center font-medium w-28">{t("leave_col_action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleLeaveList.map((item) => (
+                      <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
+                        <td className="p-2 text-center">{item.store}</td>
+                        <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${displayLabelShort(item.nick)})` : ""}</td>
+                        <td className="p-2 text-center whitespace-nowrap tabular-nums">{item.employeeCode || "-"}</td>
+                        <td className="p-2 text-center whitespace-nowrap align-top">
+                          <div className="tabular-nums">{item.requestDate || "-"}</div>
+                          {item.requestTimeBangkok ? (
+                            <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground tabular-nums" title={t("leave_col_request_time")}>
+                              {item.requestTimeBangkok} ICT
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
+                        <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
+                        <td className="p-2 text-center">{item.reason || "-"}</td>
+                        <td className="p-2 text-center">
+                          {(item.type.indexOf("병가") !== -1 || item.type.indexOf("ลากิจ") !== -1) ? (
+                            item.certificateUrl ? (
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCertPreviewUrl(item.certificateUrl)} title={item.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}>
+                                <ImageIcon className="h-4 w-4" aria-hidden />
+                              </Button>
+                            ) : (
+                              <span className="text-amber-600 text-xs font-medium" title={t("leaveCertPending")}>{t("leaveCertPending")}</span>
+                            )
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-center">
+                          {item.status === "대기" ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Button size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium`} onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
+                              <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium`} onClick={() => handleRejectClick(item.id)}>{t("adminRejected")}</Button>
+                              <Button variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs font-medium text-destructive hover:text-destructive`} onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Badge variant={item.status === "승인" || item.status === "Approved" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
+                              <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs text-destructive hover:text-destructive`} onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </AdminTableScroll>
+            </AdminDesktopOnly>
+
+            <AdminMobileOnly className="rounded-lg border border-border/60">
+              {visibleLeaveList.map((item) => (
+                <div key={item.id} className="space-y-2 border-b border-border/60 px-3 py-3 last:border-b-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-sm font-semibold text-foreground">
+                        {item.name}
+                        {item.nick ? ` (${displayLabelShort(item.nick)})` : ""}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.store}
+                        {item.employeeCode ? ` · ${item.employeeCode}` : ""}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={item.status === "승인" || item.status === "Approved" ? "default" : "outline"}
+                      className="shrink-0 text-[10px]"
+                    >
+                      {t(statusLabelMap[item.status] || item.status)}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                    <span className="text-muted-foreground">{t("leave_col_leave_date")}</span>
+                    <span className="tabular-nums text-right font-medium">{item.date}</span>
+                    <span className="text-muted-foreground">{t("leave_col_type")}</span>
+                    <span className="text-right">{translateLeaveType(item.type)}</span>
+                    <span className="text-muted-foreground">{t("leave_col_request_date")}</span>
+                    <span className="tabular-nums text-right">
+                      {item.requestDate || "-"}
+                      {item.requestTimeBangkok ? ` ${item.requestTimeBangkok}` : ""}
+                    </span>
+                  </div>
+                  {item.reason ? (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{item.reason}</p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {(item.type.indexOf("병가") !== -1 || item.type.indexOf("ลากิจ") !== -1) && item.certificateUrl ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 gap-1.5 text-xs"
+                        onClick={() => setCertPreviewUrl(item.certificateUrl)}
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+                        {item.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}
+                      </Button>
+                    ) : null}
+                    {item.status === "대기" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          className="h-9 flex-1 text-xs font-medium sm:flex-none"
+                          onClick={() => handleLeaveApprove(item.id, "승인")}
+                        >
+                          {t("adminApproved")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 flex-1 text-xs font-medium sm:flex-none"
+                          onClick={() => handleRejectClick(item.id)}
+                        >
+                          {t("adminRejected")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn("h-9 text-xs font-medium text-destructive hover:text-destructive")}
+                          onClick={async () => {
+                            if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) {
+                              handleLeaveApprove(item.id, "삭제")
+                            }
+                          }}
+                        >
+                          {t("delete")}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 text-xs text-destructive hover:text-destructive"
+                        onClick={async () => {
+                          if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) {
+                            handleLeaveApprove(item.id, "삭제")
+                          }
+                        }}
+                      >
+                        {t("delete")}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </AdminMobileOnly>
+          </>
+        )}
       </CardContent>
     </Card>
 

@@ -58,6 +58,8 @@ import { canApproveExpenseAccrual, canEditExpenseAccrualClassification } from "@
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
+import { AdminDesktopOnly } from "@/components/erp/admin-responsive-list"
+import { ExpensePlanMobileList } from "@/components/erp/expense-plan-mobile-list"
 import { useSearchParams, useRouter } from "next/navigation"
 
 function todayStrBkk() {
@@ -755,6 +757,163 @@ export function ExpenseManagementTab() {
     [tt]
   )
 
+  const renderAttachmentButton = React.useCallback(
+    (r: ExpenseAccrualPlanItem) => {
+      const urls = r.attachmentUrls || []
+      if (urls.length === 0) return null
+      const firstImage = urls.find((u) => expenseAttachmentKind(u) === "image")
+      return (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-9 gap-1.5 text-xs"
+          title={tt("expenseViewAttachment", "View Attachment")}
+          onClick={() =>
+            setAttachmentPreview({
+              urls,
+              title: `${r.payeeName || ""} #${r.id}`,
+            })
+          }
+        >
+          {firstImage ? (
+            <img src={firstImage} alt="" className="h-5 w-5 rounded object-cover" />
+          ) : (
+            <Paperclip className="h-3.5 w-3.5" />
+          )}
+          {tt("expenseAccrualAttachCol", "Attachment")}
+        </Button>
+      )
+    },
+    [tt]
+  )
+
+  const renderPlanPayEditor = React.useCallback(
+    (r: ExpenseAccrualPlanItem) => (
+      <div className="flex flex-wrap items-end gap-2 rounded-md border border-border/50 bg-muted/20 p-2">
+        <Select
+          value={payMethodById[r.id] || "bank"}
+          onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}
+        >
+          <SelectTrigger className="h-9 w-full min-w-0 sm:w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bank">{tt("bankTitle", "Bank")}</SelectItem>
+            <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
+          </SelectContent>
+        </Select>
+        {(payMethodById[r.id] || "bank") === "bank" ? (
+          <Select
+            value={payBankById[r.id] || ""}
+            onValueChange={(v) => setPayBankById((p) => ({ ...p, [r.id]: v }))}
+          >
+            <SelectTrigger className="h-9 w-full min-w-0 sm:w-[220px]">
+              <SelectValue placeholder={tt("bankAccount", "Account")} />
+            </SelectTrigger>
+            <SelectContent>
+              {bankAccounts.map((a) => (
+                <SelectItem key={a.id} value={String(a.id)}>
+                  {a.bankName ? `[${a.bankName}] ` : ""}
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select
+            value={payStoreById[r.id] || ""}
+            onValueChange={(v) => setPayStoreById((p) => ({ ...p, [r.id]: v }))}
+          >
+            <SelectTrigger className="h-9 w-full min-w-0 sm:w-[180px]">
+              <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
+            </SelectTrigger>
+            <SelectContent>
+              {(stores || []).map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Input
+          value={payAmountById[r.id] ?? String(r.remainingAmount)}
+          onChange={(e) => setPayAmountById((p) => ({ ...p, [r.id]: e.target.value }))}
+          className="h-9 w-full text-right sm:w-[120px]"
+          type="number"
+        />
+        <Input
+          type="date"
+          value={payDateById[r.id] || todayStrBkk()}
+          onChange={(e) => setPayDateById((p) => ({ ...p, [r.id]: e.target.value }))}
+          className="h-9 w-full sm:w-[140px]"
+        />
+        <Input
+          value={payMemoById[r.id] || ""}
+          onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))}
+          className="h-9 w-full sm:w-[220px]"
+          placeholder={tt("memo", "Memo")}
+        />
+        <Button size="sm" onClick={() => handlePay(r)} disabled={payingId === r.id} className="h-9 w-full sm:w-auto">
+          <Wallet className="mr-1 h-4 w-4" />
+          {tt("addPayment", "Add Payment")}
+        </Button>
+        {(payMethodById[r.id] || "bank") === "bank" && payBankById[r.id] ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openLinkBank(r)}
+            disabled={payingId === r.id}
+            className="h-9 w-full sm:w-auto"
+          >
+            <Link2 className="mr-1 h-4 w-4" />
+            {tt("expenseLinkBank", "Link with Bank Transaction")}
+          </Button>
+        ) : null}
+      </div>
+    ),
+    [
+      bankAccounts,
+      handlePay,
+      openLinkBank,
+      payAmountById,
+      payBankById,
+      payDateById,
+      payMemoById,
+      payMethodById,
+      payStoreById,
+      payingId,
+      stores,
+      tt,
+    ]
+  )
+
+  const expensePlanMobileSharedProps = {
+    tt,
+    getPayeeLine,
+    getMemo,
+    renderWithdrawalType,
+    accountSubjectLabel,
+    renderPayAmount: (r: ExpenseAccrualPlanItem) => renderPlanPayAmountCell(r, tt),
+    planRowEditable,
+    canApproveByPolicy,
+    payingId,
+    deletingPlanId,
+    payEditorOpenById,
+    approvalEditById,
+    onPlanDetail: setPlanDetailRow,
+    onEdit: navigateToEditInRegister,
+    onTogglePay: (id: number) =>
+      setPayEditorOpenById((prev) => ({ ...prev, [id]: !prev[id] })),
+    onDelete: handleDeletePlan,
+    onApprove: handleApprove,
+    onApprovalEdit: (id: number) =>
+      setApprovalEditById((prev) => ({ ...prev, [id]: true })),
+    renderPayEditor: renderPlanPayEditor,
+    renderAttachmentButton,
+  } as const
+
   const handleRejectAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
       await appAlert(tt("payableEmpty", "No items to reject."))
@@ -928,6 +1087,8 @@ export function ExpenseManagementTab() {
               {filteredExpensePlans.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6">{tt("payableEmpty", "No payable items found.")}</p>
               ) : (
+                <>
+                <AdminDesktopOnly>
                 <div className="overflow-x-auto rounded-md border border-border/60">
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
@@ -1207,6 +1368,12 @@ export function ExpenseManagementTab() {
                     </tbody>
                   </table>
                 </div>
+                </AdminDesktopOnly>
+                <ExpensePlanMobileList
+                  plansByStore={expensePlansByStore}
+                  {...expensePlanMobileSharedProps}
+                />
+                </>
               )}
             </CardContent>
           </Card>
@@ -1217,6 +1384,8 @@ export function ExpenseManagementTab() {
               {filteredPurchasePlans.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6">{tt("payableEmpty", "No logistics payable plans found.")}</p>
               ) : (
+                <>
+                <AdminDesktopOnly>
                 <div className="overflow-x-auto rounded-md border border-border/60">
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
@@ -1399,6 +1568,12 @@ export function ExpenseManagementTab() {
                     </tbody>
                   </table>
                 </div>
+                </AdminDesktopOnly>
+                <ExpensePlanMobileList
+                  plansByStore={purchasePlansByStore}
+                  {...expensePlanMobileSharedProps}
+                />
+                </>
               )}
             </CardContent>
           </Card>

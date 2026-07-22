@@ -12,7 +12,7 @@ export function AdminFilterBar({ children, className }: AdminFilterBarProps) {
   return (
     <div
       className={cn(
-        "flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-4",
+        "flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3 sm:gap-3 sm:p-4",
         className
       )}
     >

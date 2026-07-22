@@ -191,7 +191,7 @@ export default function AdminLiveStoreSalesPage() {
   })
 
   const headerActions = (
-    <div className="flex flex-col items-end gap-2">
+    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
       <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
       <div className="flex items-center gap-2">
         <Checkbox
@@ -199,7 +199,7 @@ export default function AdminLiveStoreSalesPage() {
           checked={autoRefresh}
           onCheckedChange={(c) => setAutoRefresh(c === true)}
         />
-        <Label htmlFor="live-auto-refresh" className="text-xs text-muted-foreground cursor-pointer">
+        <Label htmlFor="live-auto-refresh" className="cursor-pointer text-xs text-muted-foreground">
           {t("liveStoreSalesAutoRefresh")}
         </Label>
       </div>

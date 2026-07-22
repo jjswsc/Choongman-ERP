@@ -338,17 +338,43 @@ export async function unlinkPayableSettlement(params: { transactionId: number })
   return res.json() as Promise<{ success: boolean; message?: string; removed?: number }>
 }
 
-/** Tax Invoice — 당일 입금(수금) 처리 순번 */
+/** Tax Invoice — 당일 순번 조회 (reserve 시 override 즉시 예약) */
 export async function getTaxInvoiceDepositSeq(params: {
   issueDate: string
   accrualId?: number
   refType?: string
   refId?: number
   existingDocumentNo?: string
+  referenceNo?: string
+  dueDate?: string
+  /** true면 순번 할당과 동시에 invoice_settings에 예약 (중복 방지) */
+  reserve?: boolean
 }) {
-  const q = new URLSearchParams({
-    issueDate: String(params.issueDate || '').trim().slice(0, 10),
-  })
+  const issueDate = String(params.issueDate || '').trim().slice(0, 10)
+  if (params.reserve && String(params.refType || '').trim() && Number(params.refId) > 0) {
+    const res = await apiFetchWithOffline('/api/getTaxInvoiceDepositSeq', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        issueDate,
+        accrualId: Number(params.accrualId) > 0 ? Number(params.accrualId) : undefined,
+        refType: String(params.refType).trim(),
+        refId: Number(params.refId),
+        existingDocumentNo: String(params.existingDocumentNo || '').trim() || undefined,
+        referenceNo: String(params.referenceNo || '').trim() || undefined,
+        dueDate: String(params.dueDate || '').trim().slice(0, 10) || undefined,
+        reserve: true,
+      }),
+    })
+    return res.json() as Promise<{
+      success: boolean
+      seq?: number
+      documentNo?: string
+      message?: string
+    }>
+  }
+
+  const q = new URLSearchParams({ issueDate })
   if (Number(params.accrualId) > 0) q.set('accrualId', String(params.accrualId))
   if (String(params.refType || '').trim()) q.set('refType', String(params.refType).trim())
   if (Number(params.refId) > 0) q.set('refId', String(params.refId))
@@ -356,5 +382,10 @@ export async function getTaxInvoiceDepositSeq(params: {
     q.set('existingDocumentNo', String(params.existingDocumentNo).trim())
   }
   const res = await apiFetchWithOffline(`/api/getTaxInvoiceDepositSeq?${q}`)
-  return res.json() as Promise<{ success: boolean; seq?: number; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    seq?: number
+    documentNo?: string
+    message?: string
+  }>
 }

@@ -81,17 +81,19 @@ export function ErpHeader() {
     router.replace("/admin/login")
   }
 
+  const staffMobileLabel = t("goToStaffMobile") || t("goToMobile") || "현장 모바일"
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center border-b bg-card px-4 print:hidden pointer-events-none">
-      <div className="pointer-events-auto flex items-center gap-3">
-        <SidebarTrigger className="h-8 w-8 text-muted-foreground hover:text-foreground" />
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b bg-card px-2 print:hidden pointer-events-none sm:gap-0 sm:px-4">
+      <div className="pointer-events-auto flex min-w-0 items-center gap-1 sm:gap-3">
+        <SidebarTrigger className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground md:h-8 md:w-8" />
         {showBackButton && (
           <>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="h-10 gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8"
               onClick={goBack}
               title={t("posBack") || "뒤로가기"}
             >
@@ -102,44 +104,47 @@ export function ErpHeader() {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="h-10 w-10 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
               onClick={closeCurrentPage}
               title={t("erpCloseScreen") || "화면 닫기"}
             >
               <X className="h-4 w-4" />
               <span className="sr-only">{t("erpCloseScreen") || "화면 닫기"}</span>
             </Button>
-            <Separator orientation="vertical" className="h-5" />
+            <Separator orientation="vertical" className="hidden h-5 sm:block" />
           </>
         )}
         <Link
           href="/"
-          className="flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={`${brand.appName} · ${t("goToMobile") || "모바일"}`}
+          className="flex h-10 items-center gap-1 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-auto sm:p-2"
+          title={`${brand.appName} · ${staffMobileLabel}`}
         >
-          <Smartphone className="h-4 w-4" />
+          <Smartphone className="h-4 w-4 shrink-0" />
+          <span className="max-w-[4.5rem] truncate text-[10px] font-medium sm:hidden">
+            {staffMobileLabel}
+          </span>
         </Link>
-        <Separator orientation="vertical" className="h-5" />
+        <Separator orientation="vertical" className="hidden h-5 sm:block" />
       </div>
 
-      <div className="pointer-events-auto ml-auto flex items-center gap-2">
+      <div className="pointer-events-auto ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
+          className="hidden h-8 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:inline-flex sm:px-3"
           title={erpWindowsDownloadLabel}
           onClick={() => void handleErpInstallerCopy()}
         >
           <Download className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline">{erpWindowsDownloadLabel}</span>
+          <span className="hidden md:inline">{erpWindowsDownloadLabel}</span>
         </Button>
-        <Separator orientation="vertical" className="mx-1 h-5" />
+        <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
         <Button
           type="button"
           variant={autoTranslateEnabled ? "default" : "outline"}
           size="sm"
-          className="h-8 gap-1.5 px-2 text-xs"
+          className="h-10 gap-1 px-2 text-xs sm:h-8 sm:gap-1.5"
           onClick={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
           title={`${autoTranslateLabel} ${autoTranslateEnabled ? "ON" : "OFF"}`}
         >
@@ -147,7 +152,7 @@ export function ErpHeader() {
           <span className="hidden md:inline">{autoTranslateLabel}</span>
           <span className="text-[10px] font-semibold">{autoTranslateEnabled ? "ON" : "OFF"}</span>
         </Button>
-        <Separator orientation="vertical" className="mx-1 h-5" />
+        <Separator orientation="vertical" className="mx-1 hidden h-5 md:block" />
         {franchiseeSwitchStores && auth && (
           <>
             <Select
@@ -165,7 +170,7 @@ export function ErpHeader() {
                 setAuth({ ...auth, store: v })
               }}
             >
-              <SelectTrigger className="h-8 w-[min(12rem,32vw)] text-xs" aria-label={t("header_view_store")}>
+              <SelectTrigger className="h-10 w-[min(9rem,28vw)] text-xs sm:h-8 sm:w-[min(12rem,32vw)]" aria-label={t("header_view_store")}>
                 <SelectValue placeholder={t("header_view_store")} />
               </SelectTrigger>
               <SelectContent>
@@ -184,12 +189,12 @@ export function ErpHeader() {
                 ))}
               </SelectContent>
             </Select>
-            <Separator orientation="vertical" className="mx-1 h-5" />
+            <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
           </>
         )}
         {/* Language */}
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
-          <SelectTrigger className="h-8 min-w-[7.5rem] max-w-[10rem] text-xs">
+          <SelectTrigger className="h-10 min-w-[4.5rem] max-w-[7rem] text-xs sm:h-8 sm:min-w-[7.5rem] sm:max-w-[10rem]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -200,36 +205,38 @@ export function ErpHeader() {
             ))}
           </SelectContent>
         </Select>
-        <Separator orientation="vertical" className="mx-1 h-5" />
+        <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
         {/* Search */}
-        <AiCenterDrawer />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-        >
-          <Search className="h-4 w-4" />
-          <span className="sr-only">{t("search")}</span>
-        </Button>
+        <div className="hidden sm:contents">
+          <AiCenterDrawer />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          >
+            <Search className="h-4 w-4" />
+            <span className="sr-only">{t("search")}</span>
+          </Button>
 
-        {/* Notifications */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-8 w-8 text-muted-foreground hover:text-foreground"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="sr-only">{t("header_notifications")}</span>
-        </Button>
+          {/* Notifications */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-8 w-8 text-muted-foreground hover:text-foreground"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="sr-only">{t("header_notifications")}</span>
+          </Button>
 
-        <Separator orientation="vertical" className="mx-1 h-5" />
+          <Separator orientation="vertical" className="mx-1 h-5" />
+        </div>
 
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="flex h-8 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:text-foreground"
+              className="flex h-10 items-center gap-2 rounded-lg px-1.5 text-muted-foreground hover:text-foreground sm:h-8 sm:px-2"
             >
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <User className="h-3.5 w-3.5" />

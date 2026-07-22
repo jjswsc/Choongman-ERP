@@ -226,8 +226,16 @@ export type AdminAccountingComplianceProps = {
   initialPp30SubView?: "output" | "input" | "settlement" | "wht"
   /** PP30 영역 표시 모드: all(통합) / vat_only(매출·매입만) / wht_only(원천만) */
   pp30Mode?: "all" | "vat_only" | "wht_only"
-  /** 원천징수 영역 포커스 모드: all(전체) / pnd1391 / pnd5354 / pp36 */
-  whtFocusMode?: "all" | "pnd1391" | "pnd5354" | "pp36"
+  /** 원천징수 영역 포커스 모드 — 세무신고 탭별 단일 서식 분리 포함 */
+  whtFocusMode?:
+    | "all"
+    | "pnd1391"
+    | "pnd5354"
+    | "pp36"
+    | "pnd1"
+    | "pnd3"
+    | "pnd53"
+    | "pnd54"
   /** 원천징수 제출형 기본값 */
   initialWhtSubmissionFormHint?: "PND3" | "PND53" | "ALL"
   /** 세무 신고 셸과 동기화 시 본문의 중복 년·매장 입력 숨김 */

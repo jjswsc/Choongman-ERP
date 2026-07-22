@@ -107,7 +107,7 @@ import {
   translateTexts,
   invalidateReceivablePayableListCache,
   getTaxInvoiceDepositSeq,
-  updateInvoicePrintOverrides,
+  getInvoicePrintOverrides,
   type ReceivablePayableItem,
   type PayableTransactionItem,
   type OrderInvoiceTotals,
@@ -131,7 +131,6 @@ import {
   bangkokTodayStr,
   fmtBaht,
   fmtBahtSigned,
-  buildTaxInvoiceDocNo,
   buildClientFromPosTaxMemo,
   cumulativeBalanceKey,
   buildCumulativeByKey,
@@ -142,6 +141,8 @@ import {
   resolveTaxInvoiceClientFromPoBillTo,
 } from "./receivable-payable-tab-utils"
 import { subscribeReceivablePayableListInvalidated, publishReceivablePayableListInvalidated } from "@/lib/receivable-payable-list-sync"
+import { buildTaxInvoiceDocNo, normalizeTaxInvoiceReferenceNo } from "@/lib/tax-invoice-doc-no"
+import { resolveReceivableOrderNoDisplay, resolveReceivableTaxInvoiceDocNoDisplay } from "@/lib/receivable-invoice-format"
 
 function renderReceivableLedgerDateCell(
   row: { ref_type?: string; trans_date?: string; amount?: number },
@@ -268,6 +269,9 @@ export function ReceivablePayableTab() {
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
   const invoiceFilterActive = invoiceSearch.trim().length > 0
   const [listData, setListData] = React.useState<ReceivablePayableItem[]>([])
+  const [taxInvoiceOverrideMap, setTaxInvoiceOverrideMap] = React.useState<
+    Record<string, { documentNo?: string }>
+  >({})
   const [cumulativeSummary, setCumulativeSummary] = React.useState<{ totalAmount: number; byKey: Record<string, number> }>({
     totalAmount: 0,
     byKey: {},
@@ -458,26 +462,37 @@ export function ReceivablePayableTab() {
         }
         const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
         const accrualId = Number(row.id || 0)
-        let depositSeq = 1
-        if (accrualId > 0 || (refType && refId > 0)) {
+        const outboundRef = resolveReceivableOrderNoDisplay(row)
+        let docNo = ""
+        if (refType && refId > 0) {
           const seqRes = await getTaxInvoiceDepositSeq({
             accrualId: accrualId > 0 ? accrualId : undefined,
             issueDate: dateStr,
             refType,
             refId,
+            referenceNo: outboundRef !== "-" ? outboundRef : undefined,
+            dueDate: dateStr,
+            reserve: true,
           })
-          if (seqRes?.success && Number(seqRes.seq) > 0) {
-            depositSeq = Number(seqRes.seq)
+          if (seqRes?.success && String(seqRes.documentNo || "").trim()) {
+            docNo = String(seqRes.documentNo).trim()
+          } else if (seqRes?.success && Number(seqRes.seq) > 0) {
+            docNo = buildTaxInvoiceDocNo(dateStr, Number(seqRes.seq))
           }
         }
-        const docNo = buildTaxInvoiceDocNo(dateStr, depositSeq)
-        const outboundRef = (row.invoice_no || "").trim()
+        if (!docNo) {
+          docNo = buildTaxInvoiceDocNo(dateStr, 1)
+        }
+        const referenceNo = normalizeTaxInvoiceReferenceNo(
+          outboundRef !== "-" ? outboundRef : "",
+          docNo
+        )
         const data: InvoiceData = buildThaiSalesInvoiceData({
           documentType: "Tax Invoice/Receipt",
           documentNo: docNo,
           issueDate: dateStr,
           dueDate: dateStr,
-          referenceNo: outboundRef || docNo,
+          referenceNo,
           company,
           client,
           invSettings: settings,
@@ -502,24 +517,6 @@ export function ReceivablePayableTab() {
               }
             : {}),
         })
-        // 순번 예약 — 인쇄 전에 다른 건이 같은 번호를 받지 않도록
-        if (refType && refId > 0) {
-          try {
-            await updateInvoicePrintOverrides([
-              {
-                refType,
-                refId,
-                docKind: "tax",
-                issueDate: dateStr,
-                dueDate: dateStr,
-                referenceNo: outboundRef || docNo,
-                documentNo: docNo,
-              },
-            ])
-          } catch (reserveErr) {
-            console.error("reserve tax invoice doc no failed:", reserveErr)
-          }
-        }
         sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
         const printWindow = window.open("/admin/invoice-print", "_blank")
         if (!printWindow) {
@@ -555,8 +552,51 @@ export function ReceivablePayableTab() {
         setMemoTransMap(map)
       })
       .catch(() => setMemoTransMap({}))
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [listData, lang])
+
+  React.useEffect(() => {
+    if (tab !== "receivable") {
+      setTaxInvoiceOverrideMap({})
+      return
+    }
+    const refs: { refType: string; refId: number; docKind: "tax" }[] = []
+    const seen = new Set<string>()
+    for (const item of listData) {
+      for (const row of item.items || []) {
+        const refType = String(row.ref_type || "").trim()
+        const refId = Number(row.ref_id || 0)
+        if (
+          !(refType === "Order" || refType === "ForceOutbound" || refType === "AccountingPO" || refType === "PO") ||
+          !(refId > 0)
+        ) {
+          continue
+        }
+        const key = `${refType}:${refId}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        refs.push({ refType, refId, docKind: "tax" })
+      }
+    }
+    if (refs.length === 0) {
+      setTaxInvoiceOverrideMap({})
+      return
+    }
+    let cancelled = false
+    void getInvoicePrintOverrides(refs)
+      .then((res) => {
+        if (cancelled) return
+        setTaxInvoiceOverrideMap(res?.success && res.map ? res.map : {})
+      })
+      .catch(() => {
+        if (!cancelled) setTaxInvoiceOverrideMap({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [listData, tab])
 
   const memoTransferWithdrawalLabel = tt("memoTransferWithdrawal", "Transfer Withdrawal")
   const getMemo = React.useCallback((memo: string | undefined) => {
@@ -1412,7 +1452,17 @@ export function ReceivablePayableTab() {
     const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")
     const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid")
     const header = isRec
-      ? [entityCol, t("date") || "Date", t("type") || "Type", t("recColOrderNo") || "Order No", t("recColReceiveStatus") || "Receive Status", t("recColReceiveCheck") || "Collection Check", t("amount") || "Amount", t("memo") || "Memo"]
+      ? [
+          entityCol,
+          t("date") || "Date",
+          t("type") || "Type",
+          t("recColInvoiceNo") || t("recColOrderNo") || "Invoice No",
+          t("recColTaxInvoiceDocNo") || "Tax-Invoice/Receipt No",
+          t("recColReceiveStatus") || "Receive Status",
+          t("recColReceiveCheck") || "Collection Check",
+          t("amount") || "Amount",
+          t("memo") || "Memo",
+        ]
       : [
           entityCol,
           t("date") || "Date",
@@ -1443,16 +1493,11 @@ export function ReceivablePayableTab() {
       for (const row of displayItems) {
         const orderOrInv =
           isRec && (row.ref_type === "Order" || row.ref_type === "AccountingPO" || row.ref_type === "ForceOutbound")
-            ? row.ref_type === "AccountingPO"
-              ? row.invoice_no || (row.ref_id ? `APO#${row.ref_id}` : "")
-              : row.ref_type === "ForceOutbound"
-                ? row.invoice_no || (row.ref_id ? `IVF#${row.ref_id}` : "")
-                : row.invoice_no ||
-                  (row.ref_id && row.trans_date
-                    ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}`
-                    : row.ref_id
-                      ? `#${row.ref_id}`
-                      : "")
+            ? resolveReceivableOrderNoDisplay(row)
+            : ""
+        const taxInvDoc =
+          isRec && (row.ref_type === "Order" || row.ref_type === "AccountingPO" || row.ref_type === "ForceOutbound")
+            ? resolveReceivableTaxInvoiceDocNoDisplay(row, taxInvoiceOverrideMap) || ""
             : ""
         const receiveCheckCell = isRec
           ? row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO"
@@ -1470,7 +1515,17 @@ export function ReceivablePayableTab() {
           : ""
         rows.push(
           isRec
-            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), receiveCheckCell, formatMoneyBaht(row.amount ?? 0), getMemo(row.memo) || ""]
+            ? [
+                name,
+                row.trans_date || "-",
+                typeLabel(row.ref_type || ""),
+                orderOrInv,
+                taxInvDoc,
+                statusRec(row),
+                receiveCheckCell,
+                formatMoneyBaht(row.amount ?? 0),
+                getMemo(row.memo) || "",
+              ]
             : [
                 name,
                 row.trans_date || "-",
@@ -1585,8 +1640,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <th className="text-center py-1 px-2 w-[115px]">{t("date") || "Date"}</th>
                         <th className="text-center py-1 px-2 w-[95px]">{t("type") || "Type"}</th>
                         {isRec && (
+                          <th className="text-center py-1 px-2 w-[150px] whitespace-nowrap">
+                            {t("recColInvoiceNo") || t("recColOrderNo") || "Invoice No"}
+                          </th>
+                        )}
+                        {isRec && (
                           <th className="text-center py-1 px-2 w-[160px] whitespace-nowrap">
-                            {t("recColOrderNo") || "Order No"}
+                            {t("recColTaxInvoiceDocNo") || "Tax-Invoice/Receipt No"}
                           </th>
                         )}
                         {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "Invoice"}</th>}
@@ -1615,20 +1675,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           <td className="py-1 px-2">{row.trans_date || "-"}</td>
                           <td className="py-1 px-2">{typeLabel(row.ref_type || "")}</td>
                           {isRec && (
-                            <td className="py-1 px-2 w-[160px] whitespace-nowrap">
-                              {row.ref_type === "Order"
-                                ? row.invoice_no ||
-                                  (row.ref_id && row.trans_date
-                                    ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}`
-                                    : row.ref_id
-                                      ? `#${row.ref_id}`
-                                      : "") ||
-                                  "-"
-                                : row.ref_type === "AccountingPO"
-                                  ? row.invoice_no || (row.ref_id ? `APO#${row.ref_id}` : "-")
-                                  : row.ref_type === "ForceOutbound"
-                                    ? row.invoice_no || (row.ref_id ? `IVF#${row.ref_id}` : "-")
-                                    : "-"}
+                            <td className="py-1 px-2 w-[150px] whitespace-nowrap">
+                              {row.ref_type === "Order" ||
+                              row.ref_type === "AccountingPO" ||
+                              row.ref_type === "ForceOutbound"
+                                ? resolveReceivableOrderNoDisplay(row)
+                                : "-"}
+                            </td>
+                          )}
+                          {isRec && (
+                            <td className="py-1 px-2 w-[160px] whitespace-nowrap font-mono text-[11px]">
+                              {row.ref_type === "Order" ||
+                              row.ref_type === "AccountingPO" ||
+                              row.ref_type === "ForceOutbound"
+                                ? resolveReceivableTaxInvoiceDocNoDisplay(row, taxInvoiceOverrideMap) || "—"
+                                : "—"}
                             </td>
                           )}
                           {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
@@ -1935,23 +1996,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     if (refType === "Receive") return t("recTypeReceive") || "수령"
                                     return refType || "—"
                                   }}
-                                  formatOrderNo={(row) => {
-                                    if (row.ref_type === "AccountingPO") {
-                                      return row.invoice_no || (row.ref_id != null ? `APO#${row.ref_id}` : "-")
-                                    }
-                                    if (row.ref_type === "ForceOutbound") {
-                                      return row.invoice_no || (row.ref_id != null ? `IVF#${row.ref_id}` : "-")
-                                    }
-                                    if (row.ref_type === "Order") {
-                                      const orderId = orderIdFromReceivableOrderRow(row)
-                                      return (
-                                        row.invoice_no ||
-                                        (orderId != null ? `#${orderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
-                                        "-"
-                                      )
-                                    }
-                                    return "-"
-                                  }}
+                                  formatOrderNo={(row) => resolveReceivableOrderNoDisplay(row)}
+                                  formatTaxInvoiceDocNo={(row) =>
+                                    resolveReceivableTaxInvoiceDocNoDisplay(row, taxInvoiceOverrideMap)
+                                  }
                                 />
                               ) : (
                               <div className={ledgerDetailTableWrapCn}>
@@ -1966,8 +2014,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       {t("recLedgerDateCol") || tt("recLedgerDateCol", "매출·입금일")}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
+                                    <th className="text-center py-2 px-3 w-[150px] min-w-[150px] font-semibold whitespace-nowrap">
+                                      {t("recColInvoiceNo") || t("recColOrderNo") || "Invoice No"}
+                                    </th>
                                     <th className="text-center py-2 px-3 w-[160px] min-w-[160px] font-semibold whitespace-nowrap">
-                                      {t("recColOrderNo") || "주문번호"}
+                                      {t("recColTaxInvoiceDocNo") || "Tax-Invoice/Receipt No"}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
                                     <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap" title={tt("recColReceiveCheckHint", "통장 수금은 「미수 연결」로 처리합니다. 체크는 통장 없는 수금(현금 등) 또는 연동 결과 표시용입니다.")}>
@@ -1977,7 +2028,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       {t("acct_rec_bank_link") || tt("acct_rec_bank_link", "통장")}
                                     </th>
                                     <th className="text-center py-2 px-1 w-[72px] text-sm font-bold whitespace-nowrap">
-                                      {t("recColTaxInvoice") || "Tax Invoice"}
+                                      {t("recColTaxInvoicePrint") || t("recColTaxInvoice") || "Print"}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
@@ -2019,7 +2070,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recOrderTotals = recLineEntry?.orderInvoiceTotals
                                     const recLinesLoading = loadingItemsFor === recRowKey
                                     const recLineColSpan =
-                                      10 +
+                                      11 +
                                       (showReceivableManualActions ? 1 : 0) +
                                       (showStorePurchaseJournalCol ? 1 : 0)
                                     const canEditManualRecRow =
@@ -2039,16 +2090,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         auth?.store || "",
                                         item.storeName || ""
                                       )
-                                    const orderNoDisplay =
-                                      row.ref_type === "AccountingPO"
-                                        ? row.invoice_no || (row.ref_id != null ? `APO#${row.ref_id}` : "-")
-                                        : row.ref_type === "ForceOutbound"
-                                          ? row.invoice_no || (row.ref_id != null ? `IVF#${row.ref_id}` : "-")
-                                          : row.ref_type === "Order"
-                                            ? row.invoice_no ||
-                                              (rowOrderId != null ? `#${rowOrderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
-                                              "-"
-                                            : "-"
+                                    const orderNoDisplay = resolveReceivableOrderNoDisplay(row)
+                                    const taxInvoiceDocDisplay = resolveReceivableTaxInvoiceDocNoDisplay(
+                                      row,
+                                      taxInvoiceOverrideMap
+                                    )
                                     const isAccrualRow = isAccrualRefType(row.ref_type, "receivable")
                                     const rowAgeDays =
                                       isAccrualRow && Number(row.amount ?? 0) > 0
@@ -2156,7 +2202,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </td>
                                       <td
                                         className={cn(
-                                          "py-1.5 px-3 w-[160px] min-w-[160px] whitespace-nowrap",
+                                          "py-1.5 px-3 w-[150px] min-w-[150px] whitespace-nowrap",
                                           canExpandRecLines
                                             ? "text-primary cursor-pointer hover:underline font-medium"
                                             : "text-muted-foreground"
@@ -2183,6 +2229,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       >
                                         {orderNoDisplay}
                                       </td>
+                                      <td className="py-1.5 px-3 w-[160px] min-w-[160px] whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                                        {taxInvoiceDocDisplay || "—"}
+                                      </td>
                                       <td className="py-1.5 px-4 w-[95px] text-center">
                                         <span className={cn(
                                           "text-sm font-medium px-2 py-0.5 rounded",
@@ -2207,7 +2256,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                     invoiceLabel:
                                                       orderNoDisplay !== "-"
                                                         ? String(orderNoDisplay)
-                                                        : String(row.invoice_no || row.memo || ""),
+                                                        : "",
                                                   })
                                                   return
                                                 }

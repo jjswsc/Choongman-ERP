@@ -4,6 +4,7 @@ import { Suspense } from "react"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
+import { AdminDesktopPreferredBanner } from "@/components/erp/admin-desktop-preferred-banner"
 import { AdminContentHelpTabShell } from "@/components/erp/admin-content-help-tab-shell"
 import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
@@ -25,8 +26,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <ErpNavFavoritesProvider>
             <SidebarProvider>
               <ErpSidebar />
-              <SidebarInset>
+              <SidebarInset className="min-w-0 overflow-x-clip">
                 <ErpHeader />
+                <AdminDesktopPreferredBanner />
                 <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
                 <Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
                   <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>

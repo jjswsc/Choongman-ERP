@@ -37,6 +37,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 
 const MEMBER_PAGE_SIZE = 100
 
@@ -298,6 +299,8 @@ const MemberListTable = React.memo(function MemberListTable({
   }
 
   return (
+    <>
+    <AdminDesktopOnly>
     <div className="overflow-auto rounded-md border max-h-[min(70vh,720px)]">
       <table className="w-full min-w-[920px] text-sm">
         <thead className="bg-muted/40 sticky top-0 z-10">
@@ -357,6 +360,51 @@ const MemberListTable = React.memo(function MemberListTable({
         </tbody>
       </table>
     </div>
+    </AdminDesktopOnly>
+    <AdminMobileOnly className="max-h-[min(70vh,720px)] overflow-y-auto rounded-md border">
+      <div className="divide-y divide-border/60">
+        {members.map((m) => {
+          const selected = selectedMemberId === m.id
+          const active = String(m.status || "active") !== "inactive"
+          return (
+            <button
+              key={m.id}
+              type="button"
+              className={cn(
+                "w-full space-y-1.5 px-3 py-3 text-left active:bg-muted/40",
+                selected && "bg-primary/10"
+              )}
+              onClick={() => onSelect(m)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{m.name || "—"}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {m.phone || "—"} · {m.memberNo || "—"}
+                  </p>
+                </div>
+                <Badge variant={active ? "default" : "secondary"} className="shrink-0 text-[10px]">
+                  {active ? t("crmMemberStatusActive") : t("crmMemberStatusInactive")}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                <Badge variant="outline" className="text-[10px]">{m.tierCode || "—"}</Badge>
+                <span className="tabular-nums font-medium text-foreground">
+                  {Number(m.pointBalance || 0).toLocaleString()} {t("memberPointsBalance")}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {(m.joinStoreCode
+                  ? joinStoreLabels[m.joinStoreCode] || m.joinStoreCode
+                  : joinStoreLabels.__unset__ || "—")}{" "}
+                · {formatMemberJoinedAt(m.createdAt)}
+              </p>
+            </button>
+          )
+        })}
+      </div>
+    </AdminMobileOnly>
+    </>
   )
 })
 

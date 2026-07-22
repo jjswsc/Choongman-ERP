@@ -33,6 +33,7 @@ import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 
 type VisitRow = {
   orderId: number
@@ -383,6 +384,7 @@ export default function MemberVisitsPage() {
             <Card>
               <CardHeader><CardTitle>{t("memberVisitsHistoryTitle")}</CardTitle></CardHeader>
               <CardContent>
+                <AdminDesktopOnly>
                 <div className="overflow-auto rounded-md border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40">
@@ -425,6 +427,33 @@ export default function MemberVisitsPage() {
                     </tbody>
                   </table>
                 </div>
+                </AdminDesktopOnly>
+                <AdminMobileOnly>
+                  {loading ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
+                  ) : !hasSearched || rows.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+                  ) : (
+                    <div className="divide-y divide-border/60 rounded-md border">
+                      {rows.map((r) => (
+                        <div key={r.orderId} className="space-y-1.5 px-3 py-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <CrmMemberLink memberId={r.memberId} memberNo={r.memberNo} />
+                            <span className="shrink-0 text-sm font-semibold tabular-nums">
+                              {Number(r.total || 0).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {r.visitedAt} · {r.storeCode} · {r.memberNo}
+                          </p>
+                          <Link href={`/admin/pos-orders?orderId=${r.orderId}`} className="text-xs text-primary hover:underline">
+                            {r.orderNo}
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </AdminMobileOnly>
               </CardContent>
             </Card>
           </TabsContent>
@@ -433,6 +462,7 @@ export default function MemberVisitsPage() {
             <Card>
               <CardHeader><CardTitle>{t("memberVisitsAnalysisTitle")}</CardTitle></CardHeader>
               <CardContent>
+                <AdminDesktopOnly>
                 <div className="overflow-auto rounded-md border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40">
@@ -475,6 +505,33 @@ export default function MemberVisitsPage() {
                     </tbody>
                   </table>
                 </div>
+                </AdminDesktopOnly>
+                <AdminMobileOnly>
+                  {loading ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
+                  ) : !hasSearched || analysisRows.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+                  ) : (
+                    <div className="divide-y divide-border/60 rounded-md border">
+                      {analysisRows.map((r) => (
+                        <div key={r.memberId} className="space-y-1.5 px-3 py-3">
+                          <CrmMemberLink memberId={r.memberId} name={r.memberName} memberNo={r.memberNo} />
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("memberVisitsVisitCount")} {r.visitCount.toLocaleString()} ·{" "}
+                            {t("memberVisitsTotalContribution")} {Number(r.totalContribution || 0).toLocaleString()}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("memberVisitsAvgTicketAmount")} {Number(r.avgTicketAmount || 0).toLocaleString()} ·{" "}
+                            {r.avgVisitCycleDays == null
+                              ? "-"
+                              : `${r.avgVisitCycleDays.toLocaleString()} ${t("days")}`}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">{r.lastVisitedAt || "-"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </AdminMobileOnly>
               </CardContent>
             </Card>
           </TabsContent>
@@ -490,6 +547,7 @@ export default function MemberVisitsPage() {
               <CardContent className="space-y-4">
                 <p className="text-xs text-muted-foreground">{t("crmVisitsRfmHint")}</p>
                 <CrmRfmMatrix rows={rfmRows} />
+                <AdminDesktopOnly>
                 <div className="overflow-auto rounded border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40">
@@ -522,6 +580,21 @@ export default function MemberVisitsPage() {
                     </tbody>
                   </table>
                 </div>
+                </AdminDesktopOnly>
+                <AdminMobileOnly className="divide-y divide-border/60 rounded border">
+                  {rfmRows.map((r) => (
+                    <div key={r.memberId} className="space-y-1 px-3 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <CrmMemberLink memberId={r.memberId} />
+                        <span className="text-sm font-semibold">RFM {r.rfmScore}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        R{r.rScore}/F{r.fScore}/M{r.mScore} · {r.recencyDays}d · {r.frequencyCount} ·{" "}
+                        {Number(r.monetaryAmount || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </AdminMobileOnly>
               </CardContent>
             </Card>
           </TabsContent>

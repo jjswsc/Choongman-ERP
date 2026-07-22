@@ -12,7 +12,11 @@ import {
 import { bankTransactionHasReceivableOrderLink } from './bank-receivable-link-server'
 import { shouldCreateFranchiseReceivableSubledgerFromBankReceive } from './franchise-receivable-subledger-gate'
 import { storeHasPosCompletedOrders } from './bank-settlement-guards'
-import { formatReceivableInvoiceNo } from './receivable-invoice-format'
+import {
+  formatAccountingPoInvoiceNo,
+  formatForceOutboundInvoiceNo,
+  formatReceivableInvoiceNo,
+} from './receivable-invoice-format'
 
 /** 통장 연동 미지급 「지급」적요 — 실제 은행 적요를 우선한다. */
 export function buildBankLinkedPayablePaymentMemo(params: {
@@ -264,18 +268,20 @@ export async function upsertReceivableFromOrder(params: {
 }
 
 /**
- * Tax Invoice 인쇄 화면(Update)에서 저장한 날짜·문서번호를 미수금/엑셀에도 반영.
- * (invoice_print_override는 invoice_settings에만 있고 receivable은 갱신되지 않던 문제)
+ * Tax Invoice 인쇄 화면에서 저장한 발행일을 미수금에 반영.
+ * Tax Invoice 문서번호(IV.YYYYMMDD-NNN)는 invoice_settings override에만 두고,
+ * receivable.invoice_no 는 항상 출고 Invoice(IV/IVF/APO…)로 유지·복구한다.
  *
  * 지원 refType:
- *  - 'Order'         → receivable_transactions.ref_type='Order' (invoice_no/memo는 docNo로 갱신)
- *  - 'ForceOutbound' → receivable_transactions.ref_type='ForceOutbound' (invoice_no/memo는 docNo로 갱신)
- *  - 'AccountingPO' / 'PO' → receivable_transactions.ref_type='AccountingPO' (invoice_no는 APO{YYYYMMDD}-{poId}로 재생성)
+ *  - 'Order'         → IV{YYYYMMDD}-{orderId}
+ *  - 'ForceOutbound' → IVF{YYYYMMDD}-{stockLogId}
+ *  - 'AccountingPO' / 'PO' → APO{YYYYMMDD}-{poId}
  */
 export async function applyTaxInvoiceOverrideToReceivable(params: {
   refType: string
   refId: number
   issueDate: string
+  /** @deprecated Tax Invoice 번호는 receivable.invoice_no에 쓰지 않음 (무시) */
   documentNo?: string
 }): Promise<void> {
   const refTypeRaw = String(params.refType || '').trim()
@@ -301,18 +307,21 @@ export async function applyTaxInvoiceOverrideToReceivable(params: {
 
   if (!existing?.length || !existing[0].id) return
 
-  const docNo = String(params.documentNo || '').trim()
   const patch: Record<string, string> = { trans_date: transDate }
 
   if (receivableRefType === 'AccountingPO') {
-    // 회계발주 invoice_no 패턴 APO{YYYYMMDD}-{poId} — 날짜 변경 시 자동 재생성해 표시 일관성 유지
-    const dateDigits = transDate.replace(/\D/g, '').slice(0, 8)
-    if (dateDigits.length === 8) {
-      patch.invoice_no = `APO${dateDigits}-${refId}`
+    const invNo = formatAccountingPoInvoiceNo(refId, transDate)
+    if (invNo) patch.invoice_no = invNo
+  } else if (receivableRefType === 'ForceOutbound') {
+    const invNo = formatForceOutboundInvoiceNo(refId, transDate)
+    if (invNo) {
+      patch.invoice_no = invNo
+      patch.memo = `강제출고 ${invNo}`
     }
-  } else if (docNo) {
-    patch.invoice_no = docNo
-    patch.memo = receivableRefType === 'Order' ? docNo : `강제출고 ${docNo}`
+  } else {
+    const invNo = formatReceivableInvoiceNo(refId, transDate)
+    patch.invoice_no = invNo
+    patch.memo = invNo
   }
 
   await supabaseUpdate('receivable_transactions', existing[0].id, patch)

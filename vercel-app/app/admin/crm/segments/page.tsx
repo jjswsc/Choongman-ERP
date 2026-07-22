@@ -23,6 +23,7 @@ import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 
 type SegmentRow = {
   id: number
@@ -333,6 +334,7 @@ export default function CrmSegmentsPage() {
             <CardTitle className="text-base">{t("crmSeg_resultsTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
+            <AdminDesktopOnly>
             <div className="overflow-auto rounded-xl border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
@@ -382,6 +384,44 @@ export default function CrmSegmentsPage() {
                 </tbody>
               </table>
             </div>
+            </AdminDesktopOnly>
+            <AdminMobileOnly>
+              {!filteredRows.length && !loading ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("noData")}</p>
+              ) : (
+                <div className="divide-y divide-border/60 rounded-xl border">
+                  {filteredRows.map((r) => (
+                    <div key={r.id} className="space-y-2 px-3 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{r.name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {r.phone} · {r.joinStoreCode || "—"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs font-medium">{r.tierCode}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("crmSeg_colPoints")} {Number(r.pointBalance || 0).toLocaleString()} ·{" "}
+                        {t("crmSeg_colLifetime")} {Number(r.lifetimeAmount || 0).toLocaleString()}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("crmSegColLastVisit")}: {fmtDate(r.lastVisitedAt)}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <CrmMemberLink memberId={r.id} name={r.name} memberNo={r.memberNo || r.phone} />
+                        <Link
+                          href={`/admin/crm/coupons?tab=issue&memberId=${r.id}`}
+                          className="inline-flex h-9 items-center rounded-md border px-3 text-xs text-primary"
+                        >
+                          {t("crmSegIssueCoupon")}
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </AdminMobileOnly>
           </CardContent>
         </Card>
       </div>

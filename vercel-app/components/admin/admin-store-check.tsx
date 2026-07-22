@@ -33,6 +33,11 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText, Wrench, Camera, X as XIcon, Loader2 } from "lucide-react"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -938,7 +943,9 @@ export function AdminStoreCheck() {
                     } catch { /* ignore */ }
                   }
                   return (
-                    <div className="overflow-x-auto">
+                    <>
+                    <AdminDesktopOnly>
+                    <AdminTableScroll>
                       <table className="w-full text-xs border-collapse">
                         <thead>
                           <tr className="border-b bg-muted/50">
@@ -997,7 +1004,61 @@ export function AdminStoreCheck() {
                           )}
                         </tbody>
                       </table>
-                    </div>
+                    </AdminTableScroll>
+                    </AdminDesktopOnly>
+                    <AdminMobileOnly>
+                      {histLoading ? (
+                        <p className="py-6 text-center text-xs text-muted-foreground">{t("loading")}</p>
+                      ) : xRows.length === 0 ? (
+                        <p className="py-6 text-center text-xs text-muted-foreground">-</p>
+                      ) : (
+                        <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+                          {xRows.map((x, i) => {
+                            const itemPath = [tr(x.main), tr(x.sub), tr(x.name)].filter(Boolean).join(" > ") || "-"
+                            const pCount = x.beforePhotos.length + x.afterPhotos.length
+                            return (
+                              <div key={`${x.date}-${x.store}-${i}`} className="space-y-2 px-3 py-3">
+                                <p className="text-sm font-semibold leading-snug">{itemPath}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {x.date} · {x.store} · {x.inspector}
+                                </p>
+                                {tr(x.remark) ? (
+                                  <p className="text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                                    {tr(x.remark)}
+                                  </p>
+                                ) : null}
+                                <div className="flex flex-wrap gap-2">
+                                  {pCount > 0 ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9 gap-1 text-xs"
+                                      onClick={() => {
+                                        setFailedPhotoViewing({
+                                          beforePhotos: x.beforePhotos,
+                                          afterPhotos: x.afterPhotos,
+                                          name: x.name,
+                                        })
+                                      }}
+                                    >
+                                      <Camera className="h-3.5 w-3.5" />
+                                      {t("store_check_photo_count").replace("{n}", String(pCount))}
+                                    </Button>
+                                  ) : null}
+                                  <Button asChild size="sm" className="h-9 gap-1 text-xs">
+                                    <Link href={repairPrefillHref(x.store, itemPath)}>
+                                      <Wrench className="h-3.5 w-3.5" />
+                                      {t("store_check_create_repair")}
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </AdminMobileOnly>
+                    </>
                   )
                 })()}
               </CardContent>
@@ -1090,7 +1151,9 @@ export function AdminStoreCheck() {
                   </Button>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div>
+                  <AdminDesktopOnly>
+                  <AdminTableScroll>
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="border-b bg-muted/50">
@@ -1139,6 +1202,44 @@ export function AdminStoreCheck() {
                       )}
                     </tbody>
                   </table>
+                  </AdminTableScroll>
+                  </AdminDesktopOnly>
+                  <AdminMobileOnly>
+                    {histLoading ? (
+                      <p className="py-6 text-center text-xs text-muted-foreground">{t("loading")}</p>
+                    ) : histList.length === 0 ? (
+                      <p className="py-6 text-center text-xs text-muted-foreground">-</p>
+                    ) : (
+                      <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+                        {histList.map((h) => (
+                          <div key={h.id} className="space-y-2 px-3 py-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold">{h.store}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {h.date} · {h.inspector}
+                                </p>
+                              </div>
+                              {resultBadge(h.result || "")}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="outline" className="h-9 gap-1 text-xs" onClick={() => loadHistoryIntoForm(h, true)}>
+                                <Eye className="h-3.5 w-3.5" />
+                                {t("store_check_view_readonly")}
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-9 gap-1 text-xs" onClick={() => loadHistoryIntoForm(h, false)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                                {t("store_check_edit_btn")}
+                              </Button>
+                              <Button size="sm" variant="destructive" className="h-9 text-xs" onClick={() => handleDeleteHistory(h.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </AdminMobileOnly>
                 </div>
               </CardContent>
             </Card>

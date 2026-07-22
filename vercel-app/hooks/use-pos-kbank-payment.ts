@@ -593,10 +593,14 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       if (!canGenerate) {
         return { ok: false, message: 'kbank_generate_cooldown' }
       }
-      const requestedQrType =
-        String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase() === 'CREDIT_CARD'
-          ? 'CREDIT_CARD'
-          : 'THAI_QR'
+      const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
+      if (selectedQrType === 'EDC') {
+        clearKbankQrSession()
+        setKbankOpsLastResult(`[EDC_FALLBACK] ${JSON.stringify({ amount: qrAmount, orderId: context?.orderId ?? null })}`)
+        setCustomerDisplayPaymentMessage('')
+        return { ok: true, message: 'edc_fallback' }
+      }
+      const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 
       const existingQrPayload = String(liveKbankQrPayload || '').trim()
       const existingPartnerTxnId = String(kbankOpsTxnUid || '').trim()
@@ -923,6 +927,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       liveKbankQrType,
       kbankCallbackState,
       kbankOpsTxnUid,
+      clearKbankQrSession,
       lang,
       setCustomerDisplayPaymentMessage,
     ]

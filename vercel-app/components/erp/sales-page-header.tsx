@@ -47,7 +47,9 @@ export function SalesPageHeader({
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           ) : null}
         </div>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+        {actions ? (
+          <div className="w-full shrink-0 sm:w-auto">{actions}</div>
+        ) : null}
       </div>
     </div>
   )

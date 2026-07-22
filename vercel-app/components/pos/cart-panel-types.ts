@@ -35,7 +35,7 @@ export type CartPanelPaymentPayload = {
   paymentCash: number
   paymentCard: number
   paymentQr: number
-  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD' | 'EDC'
   paymentOther: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown
   paymentDeliveryApp?: number

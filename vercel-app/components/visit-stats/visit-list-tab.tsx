@@ -12,6 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, ChevronUp, ChevronDown } from "lucide-react"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
@@ -201,7 +206,8 @@ export function VisitListTab() {
           </Button>
         </div>
 
-        <div className="overflow-x-auto">
+        <AdminDesktopOnly>
+        <AdminTableScroll hint={false}>
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b bg-muted/50">
@@ -294,7 +300,35 @@ export function VisitListTab() {
               )}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
+        </AdminDesktopOnly>
+        <AdminMobileOnly>
+          {listLoading ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">{t("loading")}</p>
+          ) : historyList.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">{t("visit_query_please")}</p>
+          ) : (
+            <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+              {sortedList.map((h, i) => (
+                <div key={i} className="space-y-1 px-3 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold">{h.name}</p>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {h.date} {h.time}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {h.store} · {translateVisitType(h.type, t)} ·{" "}
+                    {translateVisitPurpose(h.purpose || "", t) || "-"}
+                  </p>
+                  <p className="text-xs font-medium">
+                    {h.duration ? `${h.duration}${t("att_min_unit")}` : "-"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </AdminMobileOnly>
       </CardContent>
     </Card>
   )

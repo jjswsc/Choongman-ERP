@@ -56,6 +56,11 @@ import {
 } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { StorePageShell } from "@/components/erp/store-page-shell"
 import { ComplaintProcessTab } from "@/components/admin/complaint-process-tab"
@@ -1007,73 +1012,132 @@ export function AdminComplaints() {
                   {hasQueried && !listLoading ? ` · ${listData.length}${t("visit_count_suffix")}` : ""}
                 </p>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="p-2 text-center font-medium">{t("label_date")}</th>
-                        <th className="p-2 text-center font-medium">{t("store")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_col_customer")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_source_channel")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_col_visit")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_type")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_title")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_severity")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_status")}</th>
-                        <th className="p-2 text-center font-medium">{t("photo")}</th>
-                        <th className="p-2 text-center font-medium">{t("complaint_btn_detail")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {listLoading ? (
-                        <tr>
-                          <td colSpan={11} className="p-6 text-center text-muted-foreground">{t("loading")}</td>
-                        </tr>
-                      ) : listData.length === 0 ? (
-                        <tr>
-                          <td colSpan={11} className="p-6 text-center text-muted-foreground">
-                            {hasQueried ? t("complaint_no_results") : t("complaint_query_please")}
-                          </td>
-                        </tr>
-                      ) : (
-                        listData.map((item, i) => (
-                          <tr key={i} className="border-b border-border/60 hover:bg-muted/30">
-                            <td className="p-2 text-center">{item.date}</td>
-                            <td className="p-2 text-center">{item.store}</td>
-                            <td className="p-2 text-center">{getTrans(item.customer || "") || "-"}</td>
-                            <td className="p-2 text-center">
-                              {item.sourceChannel === "member_portal" ? (
-                                <Badge variant="secondary" className="text-[10px]">{t("complaint_source_member_portal")}</Badge>
-                              ) : item.sourceChannel === "admin" ? (
-                                <Badge variant="outline" className="text-[10px]">{t("complaint_source_admin")}</Badge>
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                            </td>
-                            <td className="p-2 text-center">{tr(item.visitPath, visitPathToKey)}</td>
-                            <td className="p-2 text-center">{tr(item.type, typeToKey)}</td>
-                            <td className="p-2 text-left max-w-[160px] truncate" title={getTrans(item.title || "") || item.title}>{getTrans(item.title || "") || "-"}</td>
-                            <td className="p-2 text-center">{severityBadge(item.severity)}</td>
-                            <td className="p-2 text-center">{statusBadge(item.status)}</td>
-                            <td className="p-2 text-center">
+                <div>
+                  <AdminDesktopOnly>
+                    <AdminTableScroll>
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="p-2 text-center font-medium">{t("label_date")}</th>
+                            <th className="p-2 text-center font-medium">{t("store")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_col_customer")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_source_channel")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_col_visit")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_type")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_title")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_severity")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_status")}</th>
+                            <th className="p-2 text-center font-medium">{t("photo")}</th>
+                            <th className="p-2 text-center font-medium">{t("complaint_btn_detail")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {listLoading ? (
+                            <tr>
+                              <td colSpan={11} className="p-6 text-center text-muted-foreground">{t("loading")}</td>
+                            </tr>
+                          ) : listData.length === 0 ? (
+                            <tr>
+                              <td colSpan={11} className="p-6 text-center text-muted-foreground">
+                                {hasQueried ? t("complaint_no_results") : t("complaint_query_please")}
+                              </td>
+                            </tr>
+                          ) : (
+                            listData.map((item, i) => (
+                              <tr key={i} className="border-b border-border/60 hover:bg-muted/30">
+                                <td className="p-2 text-center">{item.date}</td>
+                                <td className="p-2 text-center">{item.store}</td>
+                                <td className="p-2 text-center">{getTrans(item.customer || "") || "-"}</td>
+                                <td className="p-2 text-center">
+                                  {item.sourceChannel === "member_portal" ? (
+                                    <Badge variant="secondary" className="text-[10px]">{t("complaint_source_member_portal")}</Badge>
+                                  ) : item.sourceChannel === "admin" ? (
+                                    <Badge variant="outline" className="text-[10px]">{t("complaint_source_admin")}</Badge>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2 text-center">{tr(item.visitPath, visitPathToKey)}</td>
+                                <td className="p-2 text-center">{tr(item.type, typeToKey)}</td>
+                                <td className="p-2 text-left max-w-[160px] truncate" title={getTrans(item.title || "") || item.title}>{getTrans(item.title || "") || "-"}</td>
+                                <td className="p-2 text-center">{severityBadge(item.severity)}</td>
+                                <td className="p-2 text-center">{statusBadge(item.status)}</td>
+                                <td className="p-2 text-center">
+                                  {item.photoUrl ? (
+                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPhotoPreviewUrl(item.photoUrl || null)} title={t("photo")}>
+                                      <ImageIcon className="h-4 w-4" aria-hidden />
+                                    </Button>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2 text-center">
+                                  <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => openDetail(item)}>
+                                    {t("complaint_btn_detail")}
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </AdminTableScroll>
+                  </AdminDesktopOnly>
+
+                  <AdminMobileOnly>
+                    {listLoading ? (
+                      <p className="py-8 text-center text-xs text-muted-foreground">{t("loading")}</p>
+                    ) : listData.length === 0 ? (
+                      <p className="py-8 text-center text-xs text-muted-foreground">
+                        {hasQueried ? t("complaint_no_results") : t("complaint_query_please")}
+                      </p>
+                    ) : (
+                      <div className="rounded-lg border border-border/60">
+                        {listData.map((item, i) => (
+                          <div key={i} className="space-y-2 border-b border-border/60 px-3 py-3 last:border-b-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="text-sm font-semibold leading-snug text-foreground">
+                                  {getTrans(item.title || "") || item.title || "-"}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {item.date} · {item.store}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-col items-end gap-1">
+                                {severityBadge(item.severity)}
+                                {statusBadge(item.status)}
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              {getTrans(item.customer || "") || "-"} · {tr(item.visitPath, visitPathToKey)} ·{" "}
+                              {tr(item.type, typeToKey)}
+                            </p>
+                            <div className="flex flex-wrap gap-2 pt-1">
                               {item.photoUrl ? (
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPhotoPreviewUrl(item.photoUrl || null)} title={t("photo")}>
-                                  <ImageIcon className="h-4 w-4" aria-hidden />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9 gap-1.5 text-xs"
+                                  onClick={() => setPhotoPreviewUrl(item.photoUrl || null)}
+                                >
+                                  <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+                                  {t("photo")}
                                 </Button>
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                            </td>
-                            <td className="p-2 text-center">
-                              <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => openDetail(item)}>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                className="h-9 flex-1 text-xs sm:flex-none"
+                                onClick={() => openDetail(item)}
+                              >
                                 {t("complaint_btn_detail")}
                               </Button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </AdminMobileOnly>
                 </div>
               </CardContent>
             </Card>

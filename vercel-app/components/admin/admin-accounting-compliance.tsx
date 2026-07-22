@@ -602,12 +602,33 @@ export function AdminAccountingCompliance({
   const [whtSubmissionFormHint, setWhtSubmissionFormHint] = React.useState<"PND3" | "PND53" | "ALL">(
     initialWhtSubmissionFormHint
   )
-  const showPnd1Area = whtFocusMode === "all" || whtFocusMode === "pnd1391"
-  const showPnd353Tools = whtFocusMode !== "pp36"
+  const showPnd1Area =
+    whtFocusMode === "all" || whtFocusMode === "pnd1391" || whtFocusMode === "pnd1"
+  const showPnd353Tools =
+    whtFocusMode === "all" ||
+    whtFocusMode === "pnd1391" ||
+    whtFocusMode === "pnd3" ||
+    whtFocusMode === "pnd5354" ||
+    whtFocusMode === "pnd53"
   const showPp36Ledger = whtFocusMode === "all" || whtFocusMode === "pp36"
-  const showPnd54Ledger = whtFocusMode === "all" || whtFocusMode === "pnd5354"
-  const showWhtLedger = whtFocusMode !== "pp36"
-  const isPnd5354CompactList = whtFocusMode === "pnd5354"
+  const showPnd54Ledger =
+    whtFocusMode === "all" || whtFocusMode === "pnd5354" || whtFocusMode === "pnd54"
+  const showWhtLedger = whtFocusMode !== "pp36" && whtFocusMode !== "pnd54"
+  const isPnd5354CompactList =
+    whtFocusMode === "pnd5354" || whtFocusMode === "pnd53" || whtFocusMode === "pnd54"
+  /** 탭이 이미 53/54로 분리된 경우 하위 토글 숨김 */
+  const showPnd5354SubToggle = whtFocusMode === "pnd5354"
+  const lockWhtSubmissionFormHint = whtFocusMode === "pnd3" || whtFocusMode === "pnd53"
+
+  React.useEffect(() => {
+    if (whtFocusMode === "pnd53") setPnd5354SubView("pnd53")
+    else if (whtFocusMode === "pnd54") setPnd5354SubView("pnd54")
+  }, [whtFocusMode])
+
+  React.useEffect(() => {
+    if (whtFocusMode === "pnd3") setWhtSubmissionFormHint("PND3")
+    else if (whtFocusMode === "pnd53") setWhtSubmissionFormHint("PND53")
+  }, [whtFocusMode])
   const isCitFilingShell = citFilingShell === true
   const [pnd1IssueFilterCodes, setPnd1IssueFilterCodes] = React.useState<Pnd1IssueCode[]>([])
   const [payrollTinGapLoading, setPayrollTinGapLoading] = React.useState(false)
@@ -2567,7 +2588,9 @@ export function AdminAccountingCompliance({
             .join("\n")
           const more =
             Number(res.pendingEvidenceCount || rows.length) > rows.length
-              ? `\n... +${Number(res.pendingEvidenceCount || 0) - rows.length}건`
+              ? `\n${tr(t, "accCompMoreCountSuffix", {
+                  count: String(Number(res.pendingEvidenceCount || 0) - rows.length),
+                })}`
               : ""
           await appAlert(
             `${t("accCompEvidencePendingInMonth")}\n\n${preview || t("accCompEvidenceRequiredForSubmit")}${more}`
@@ -3122,8 +3145,12 @@ export function AdminAccountingCompliance({
     [pnd54RowsFiltered]
   )
   const summaryCardTitle = React.useMemo(() => {
-    if (isEmbeddedPp36Section) return t("accCompTabPp36")
+    if (isEmbeddedPp36Section || whtFocusMode === "pp36") return t("accCompTabPp36")
+    if (whtFocusMode === "pnd53") return t("taxFilingTabPnd53")
+    if (whtFocusMode === "pnd54") return t("taxFilingTabPnd54")
     if (isPnd5354CompactList) return t("taxFilingTabPnd5354")
+    if (whtFocusMode === "pnd1") return t("taxFilingTabPnd1")
+    if (whtFocusMode === "pnd3") return t("taxFilingTabPnd3")
     if (whtFocusMode === "pnd1391") return t("taxFilingTabPnd1391")
     return t("accCompTabPp30")
   }, [isEmbeddedPp36Section, isPnd5354CompactList, whtFocusMode, t])
@@ -3653,30 +3680,17 @@ export function AdminAccountingCompliance({
     [auth?.user]
   )
   const pnd1RdPrepBtnLabel = t("accCompPnd1ExportTxt")
-  const pnd1RdPrepGuideTitle =
-    lang === "th" ? "แนวทางยื่น RD Prep (ภ.ง.ด.1 / ภ.ง.ด.1ก)" : t("accCompPnd1GuideTitle")
-  const pnd1RdPrepGuideNote =
-    lang === "th"
-      ? "ไฟล์ TXT คั่นด้วย | สำหรับนำเข้าใน RD Prep เท่านั้น — ต้องบันทึกเป็น .rdx จาก RD Prep ก่อนอัปโหลด e-Filing"
-      : t("accCompPnd1GuideNotePipe")
-  const pnd1ValidateBtnLabel =
-    lang === "th" ? "ตรวจสอบก่อนส่งออก" : t("accCompPnd1ValidateBeforeExport")
-  const pnd1FormLabel =
-    lang === "th" ? "แบบยื่น" : t("accCompPnd1FilingForm")
-  const pnd1PayerBoxTitle =
-    lang === "th" ? "ข้อมูลผู้จ่าย (ผู้หัก ณ ที่จ่าย)" : t("accCompPnd1PayerInfoBox")
-  const pnd1ValidationTableTitle =
-    lang === "th" ? "ผลตรวจสอบ RD Prep" : t("accCompPnd1ValidationResults")
-  const pnd1GoLedgerBtnLabel =
-    lang === "th" ? "ไปที่รายการ" : t("accCompPnd1GoToLedgerRow")
-  const pnd1ClearValidationLabel =
-    lang === "th" ? "ล้างผลตรวจสอบ" : t("accCompPnd1ClearValidation")
-  const pnd1IssueFilterLabel =
-    lang === "th" ? "ตัวกรองปัญหา" : t("accCompPnd1IssueFilter")
-  const pnd1IssueExportCsvLabel =
-    lang === "th" ? "ส่งออกผลตรวจสอบ CSV" : t("accCompPnd1ExportValidationCsv")
-  const pnd1NoIssueTooltip =
-    lang === "th" ? "ไม่มีปัญหาประเภทนี้ในช่วงที่เลือก" : t("accCompPnd1NoIssuesInFilter")
+  const pnd1RdPrepGuideTitle = t("accCompPnd1GuideTitle")
+  const pnd1RdPrepGuideNote = t("accCompPnd1GuideNotePipe")
+  const pnd1ValidateBtnLabel = t("accCompPnd1ValidateBeforeExport")
+  const pnd1FormLabel = t("accCompPnd1FilingForm")
+  const pnd1PayerBoxTitle = t("accCompPnd1PayerInfoBox")
+  const pnd1ValidationTableTitle = t("accCompPnd1ValidationResults")
+  const pnd1GoLedgerBtnLabel = t("accCompPnd1GoToLedgerRow")
+  const pnd1ClearValidationLabel = t("accCompPnd1ClearValidation")
+  const pnd1IssueFilterLabel = t("accCompPnd1IssueFilter")
+  const pnd1IssueExportCsvLabel = t("accCompPnd1ExportValidationCsv")
+  const pnd1NoIssueTooltip = t("accCompPnd1NoIssuesInFilter")
   const kt20kExportUrl = React.useMemo(() => {
     const y = Number(kt20kYear)
     if (!Number.isFinite(y) || y < 2000 || y > 2100) return "#"
@@ -3684,21 +3698,11 @@ export function AdminAccountingCompliance({
   }, [kt20kYear, role, storeTb])
   const pnd1IssueCodeLabel = React.useCallback(
     (code: string) => {
-      const th: Record<string, string> = {
-        missing_payee_name: "ไม่มีชื่อผู้รับเงิน",
-        missing_payee_tax_id: "ไม่มีเลขผู้เสียภาษีผู้รับเงิน",
-        invalid_payee_tax_id_length: "เลขผู้เสียภาษีผู้รับเงินไม่ครบ 13 หลัก",
-        missing_payment_date: "ไม่มีวันที่จ่าย",
-        invalid_payment_date: "รูปแบบวันที่จ่ายไม่ถูกต้อง",
-        missing_income_type: "ไม่มีประเภทเงินได้",
-        non_positive_withheld_amount: "ภาษีหัก ณ ที่จ่าย <= 0",
-      }
-      if (lang === "th") return th[code] || code
       const key = `accCompPnd1Issue_${code}`
       const label = t(key)
       return label === key ? code : label
     },
-    [lang, t]
+    [t]
   )
   const pnd1IssueRowsFiltered = React.useMemo(() => {
     const issues = pnd1ValidationResult?.issues || []
@@ -3784,19 +3788,11 @@ export function AdminAccountingCompliance({
   }, [kt20kData?.reconciliation?.employeeTopDiff, kt20kDiffToleranceNum, kt20kReasonTagFilter])
   const kt20kReasonTagLabel = React.useCallback(
     (tag: string) => {
-      const th: Record<string, string> = {
-        missing_in_pnd1a: "ไม่มีใน PND1A",
-        missing_in_kt20k: "ไม่มีใน KT20K",
-        amount_mismatch: "ยอดไม่ตรงกัน",
-        possible_store_mismatch: "อาจแมปสาขาผิด",
-        possible_name_mismatch: "อาจแมปชื่อผิด",
-      }
-      if (lang === "th") return th[tag] || tag
       const key = `accCompKt20kTag_${tag}`
       const label = t(key)
       return label === key ? tag : label
     },
-    [lang, t]
+    [t]
   )
   const kt20kReasonTagCountMap = React.useMemo(() => {
     const base: Record<Kt20kReasonTag, number> = {
@@ -3897,16 +3893,16 @@ export function AdminAccountingCompliance({
         wc.nonPositiveWithheldAmount
       appAlert(
         warningTotal > 0
-          ? `PND3/53 검증 경고 ${warningTotal.toLocaleString()}건`
-          : "PND3/53 검증 완료 (경고 없음)"
+          ? tr(t, "accCompPnd353ValidationWarnAlert", { count: warningTotal.toLocaleString() })
+          : t("accCompPnd353ValidationOkAlert")
       )
     } catch {
       setPnd353ValidationResult(null)
-      appAlert("PND3/53 검증에 실패했습니다.")
+      appAlert(t("accCompPnd353ValidationFailAlert"))
     } finally {
       setPnd353Validating(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, whtSubmissionFormHint])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, whtSubmissionFormHint, t])
 
   const saveCitAdjustmentsDraft = React.useCallback(async () => {
     if (!canUse || !canWriteCompliance) {
@@ -4189,7 +4185,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "เทียบยอด KT20K vs PND1A" : t("accCompKt20kVsPnd1aTitle")}
+                {t("accCompKt20kVsPnd1aTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -4197,7 +4193,7 @@ export function AdminAccountingCompliance({
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "เกณฑ์ส่วนต่าง (บาท)" : t("accCompKt20kDiffToleranceLabel")}
+                      {t("accCompKt20kDiffToleranceLabel")}
                     </div>
                     <Input
                       type="number"
@@ -4259,7 +4255,7 @@ export function AdminAccountingCompliance({
                         {!kt20kMonthlyDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "ไม่พบส่วนต่างตามเกณฑ์" : t("accCompKt20kNoMonthlyDiff")}
+                              {t("accCompKt20kNoMonthlyDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -4269,7 +4265,7 @@ export function AdminAccountingCompliance({
 
                   <div className="space-y-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "ตัวกรองแท็กสาเหตุ" : t("accCompKt20kReasonTagQuickFilter")}
+                      {t("accCompKt20kReasonTagQuickFilter")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <Button
@@ -4278,7 +4274,7 @@ export function AdminAccountingCompliance({
                         variant={kt20kReasonTagFilter.length === 0 ? "default" : "outline"}
                         onClick={() => setKt20kReasonTagFilter([])}
                       >
-                        {lang === "th" ? "ทั้งหมด" : t("all")}
+                        {t("all")}
                       </Button>
                       {KT20K_REASON_TAGS.map((tag) => {
                         const cnt = kt20kReasonTagCountMap[tag] || 0
@@ -4347,7 +4343,7 @@ export function AdminAccountingCompliance({
                         {!kt20kEmployeeDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "ไม่พบส่วนต่างรายบุคคล" : t("accCompKt20kNoEmployeeDiff")}
+                              {t("accCompKt20kNoEmployeeDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -4357,7 +4353,7 @@ export function AdminAccountingCompliance({
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  {lang === "th" ? "ยังไม่มีข้อมูลเทียบยอด" : t("accCompKt20kNoReconcileData")}
+                  {t("accCompKt20kNoReconcileData")}
                 </div>
               )}
             </CardContent>
@@ -4643,6 +4639,8 @@ export function AdminAccountingCompliance({
             summaryLoading={summaryLoading}
             isEmbeddedPp36Section={isEmbeddedPp36Section}
             isPnd5354CompactList={isPnd5354CompactList}
+            showPnd5354SubToggle={showPnd5354SubToggle}
+            lockWhtSubmissionFormHint={lockWhtSubmissionFormHint}
             pp30Queried={pp30Queried}
             setPp30Queried={setPp30Queried}
             setPp30SearchSeq={setPp30SearchSeq}
@@ -4983,7 +4981,7 @@ export function AdminAccountingCompliance({
                 {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
               </div>
               <div>
-                신고폼: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
+                {t("accCompCitFilingFormLabel")}: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
               </div>
               <div>
                 {t("accCompCitProjectedAnnualTaxableIncome")}: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
@@ -4998,7 +4996,7 @@ export function AdminAccountingCompliance({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">세무조정(가산/차감) 초안</CardTitle>
+              <CardTitle className="text-sm">{t("accCompCitAdjustmentsDraftTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex gap-2">
@@ -5014,7 +5012,7 @@ export function AdminAccountingCompliance({
                   }
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  행 추가
+                  {t("accCompVatAdd")}
                 </Button>
                 <Button type="button" size="sm" onClick={() => void saveCitAdjustmentsDraft()}>
                   {t("accCompSave")}
@@ -5034,26 +5032,26 @@ export function AdminAccountingCompliance({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="add_back">Add-back</SelectItem>
-                      <SelectItem value="deduction">Deduction</SelectItem>
+                      <SelectItem value="add_back">{t("accCompCitAdjustmentTypeAddBack")}</SelectItem>
+                      <SelectItem value="deduction">{t("accCompCitAdjustmentTypeDeduction")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="항목명"
+                    placeholder={t("accCompCitAdjustmentsItem")}
                     value={row.itemName}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, itemName: e.target.value } : x)))
                     }
                   />
                   <Input
-                    placeholder="금액"
+                    placeholder={t("accCompCitAdjustmentsAmount")}
                     value={row.amount}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))
                     }
                   />
                   <Input
-                    placeholder="메모"
+                    placeholder={t("accCompCitAdjustmentsMemo")}
                     value={row.memo}
                     onChange={(e) =>
                       setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
@@ -5137,42 +5135,42 @@ export function AdminAccountingCompliance({
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                {lang === "th" ? "โครง UI และสรุปข้อมูลรายเดือนสำหรับ KT20K (MVP)" : t("accCompKt20kMvpScaffoldNote")}
+                {t("accCompKt20kMvpScaffoldNote")}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-2">
                 <Input
-                  placeholder={lang === "th" ? "เลขผู้เสียภาษีบริษัท" : t("accCompKt20kPhCompanyTaxId")}
+                  placeholder={t("accCompKt20kPhCompanyTaxId")}
                   value={kt20kEmployer.companyTaxId}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyTaxId: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
                   className="lg:col-span-2"
-                  placeholder={lang === "th" ? "ชื่อบริษัท" : t("accCompKt20kPhCompanyName")}
+                  placeholder={t("accCompKt20kPhCompanyName")}
                   value={kt20kEmployer.companyName}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyName: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "สำนักงานประกันสังคม (จังหวัด)" : t("accCompKt20kPhSsoProvince")}
+                  placeholder={t("accCompKt20kPhSsoProvince")}
                   value={kt20kEmployer.ssoProvince}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoProvince: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "เบอร์โทรสำนักงานประกันสังคม" : t("accCompKt20kPhSsoPhone")}
+                  placeholder={t("accCompKt20kPhSsoPhone")}
                   value={kt20kEmployer.ssoPhone}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoPhone: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "รหัสกิจการ 5 หลัก" : t("accCompKt20kPhBusinessCode5")}
+                  placeholder={t("accCompKt20kPhBusinessCode5")}
                   value={kt20kEmployer.businessCode5}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, businessCode5: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "อัตราเงินสมทบ %" : t("accCompKt20kPhFundRatePercent")}
+                  placeholder={t("accCompKt20kPhFundRatePercent")}
                   value={kt20kEmployer.fundRatePercent}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, fundRatePercent: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
@@ -5208,11 +5206,11 @@ export function AdminAccountingCompliance({
                   onClick={() => void saveKt20kEmployerSettings()}
                   disabled={kt20kSettingsSaving || kt20kSettingsLoading}
                 >
-                  {kt20kSettingsSaving ? t("loading") : lang === "th" ? "บันทึกการตั้งค่า" : t("accCompKt20kSaveSettings")}
+                  {kt20kSettingsSaving ? t("loading") : t("accCompKt20kSaveSettings")}
                 </Button>
                 <Button type="button" variant="outline" asChild>
                   <a href={kt20kExportUrl} target="_blank" rel="noopener noreferrer">
-                    {lang === "th" ? "ส่งออก CSV" : t("accCompVatExport")}
+                    {t("accCompVatExport")}
                   </a>
                 </Button>
               </div>
@@ -5222,7 +5220,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "สรุปรายเดือน (ม.ค.-ธ.ค.)" : t("accCompKt20kMonthlySummaryTitle")}
+                {t("accCompKt20kMonthlySummaryTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -5279,7 +5277,7 @@ export function AdminAccountingCompliance({
               ) : null}
               {!kt20kLoading && !kt20kData ? (
                 <div className="p-6 text-center text-muted-foreground text-sm">
-                  {lang === "th" ? "ยังไม่มีข้อมูล" : t("accCompKt20kNoData")}
+                  {t("accCompKt20kNoData")}
                 </div>
               ) : null}
             </CardContent>

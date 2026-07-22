@@ -8,7 +8,7 @@ export type PosSplitReceiptPaymentSnapshot = {
   paymentCash?: number
   paymentCard?: number
   paymentQr?: number
-  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD'
+  paymentQrType?: 'THAI_QR' | 'CREDIT_CARD' | 'EDC'
   paymentOther?: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
@@ -83,7 +83,7 @@ function coercePaymentSnapshot(raw: unknown): PosSplitReceiptPaymentSnapshot | u
         : null,
     paymentCashTendered: Math.max(0, Number(p.paymentCashTendered ?? 0) || 0),
   }
-  if (p.paymentQrType === 'THAI_QR' || p.paymentQrType === 'CREDIT_CARD') {
+  if (p.paymentQrType === 'THAI_QR' || p.paymentQrType === 'CREDIT_CARD' || p.paymentQrType === 'EDC') {
     out.paymentQrType = p.paymentQrType
   }
   if (p.paymentOtherBreakdown && typeof p.paymentOtherBreakdown === 'object') {

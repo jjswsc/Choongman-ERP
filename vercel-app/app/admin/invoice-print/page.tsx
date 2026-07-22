@@ -17,7 +17,12 @@ import {
   getTaxInvoiceDepositSeq,
   type InvoicePrintOverridePayload,
 } from "@/lib/api-client"
-import { buildTaxInvoiceDocNo, isOutboundReceivableInvoiceNo, isTaxInvoiceDocumentNo } from "@/lib/tax-invoice-doc-no"
+import {
+  buildTaxInvoiceDocNo,
+  isOutboundReceivableInvoiceNo,
+  isTaxInvoiceDocumentNo,
+  normalizeTaxInvoiceReferenceNo,
+} from "@/lib/tax-invoice-doc-no"
 
 const STORAGE_KEY = "invoice-print-data"
 
@@ -36,6 +41,7 @@ async function resolveTaxInvoiceDocNo(
   const refType = String(data.sourceRefType || "").trim()
   const refId = Number(data.sourceRefId || 0)
   const existingDocumentNo = String(data.documentNo || "").trim()
+  const referenceNo = String(data.referenceNo || "").trim()
 
   if (refType && refId > 0) {
     const res = await getTaxInvoiceDepositSeq({
@@ -43,7 +49,13 @@ async function resolveTaxInvoiceDocNo(
       refType,
       refId,
       existingDocumentNo,
+      referenceNo: referenceNo || undefined,
+      dueDate: String(data.dueDate || issueDate).trim().slice(0, 10) || issueDate,
+      reserve: true,
     })
+    if (res?.success && String(res.documentNo || "").trim()) {
+      return String(res.documentNo).trim()
+    }
     if (res?.success && Number(res.seq) > 0) {
       return buildTaxInvoiceDocNo(issueDate, Number(res.seq))
     }
@@ -128,11 +140,15 @@ function InvoicePrintPageInner() {
                     documentNo = ovDocNo
                   }
                 }
+                const mergedReferenceNo = ov.referenceNo || d.referenceNo
+                const referenceNo = taxDoc
+                  ? normalizeTaxInvoiceReferenceNo(mergedReferenceNo, documentNo)
+                  : mergedReferenceNo
                 return {
                   ...d,
                   issueDate: ov.issueDate || d.issueDate,
                   dueDate: ov.dueDate || d.dueDate,
-                  referenceNo: ov.referenceNo || d.referenceNo,
+                  referenceNo,
                   documentNo,
                   shipTo: ov.shipTo ?? d.shipTo,
                 }
@@ -150,30 +166,13 @@ function InvoicePrintPageInner() {
                   continue
                 }
                 const documentNo = await resolveTaxInvoiceDocNo(issueDate, d)
-                const next = documentNo === d.documentNo ? d : { ...d, documentNo }
+                const nextReferenceNo = normalizeTaxInvoiceReferenceNo(d.referenceNo, documentNo)
+                const next =
+                  documentNo === d.documentNo && nextReferenceNo === d.referenceNo
+                    ? d
+                    : { ...d, documentNo, referenceNo: nextReferenceNo }
                 fixed.push(next)
-                if (documentNo !== d.documentNo) {
-                  try {
-                    const refType = String(next.sourceRefType || "").trim()
-                    const refId = Number(next.sourceRefId || 0)
-                    if (refType && Number.isFinite(refId) && refId > 0) {
-                      await updateInvoicePrintOverrides([
-                        {
-                          refType,
-                          refId,
-                          docKind: "tax",
-                          issueDate: next.issueDate || undefined,
-                          dueDate: next.dueDate || undefined,
-                          referenceNo: next.referenceNo || undefined,
-                          documentNo: next.documentNo || undefined,
-                          shipTo: next.shipTo || undefined,
-                        },
-                      ])
-                    }
-                  } catch {
-                    // ignore reserve errors on load
-                  }
-                }
+                // resolveTaxInvoiceDocNo(reserve:true)가 이미 override 예약함 — 중복 update 생략
               }
               setEditDatas(fixed)
             })
@@ -320,16 +319,15 @@ function InvoicePrintPageInner() {
                         const nextIssueDate = e.target.value
                         const patch: Partial<InvoiceData> = { issueDate: nextIssueDate }
                         if (taxDoc) {
-                          void resolveTaxInvoiceDocNo(nextIssueDate, data).then(async (documentNo) => {
-                            const next = { ...data, ...patch, documentNo }
-                            updateField(i, { ...patch, documentNo })
-                            // Issue Date 변경 직후 순번 예약(다른 창에서 같은 -001 받지 않도록)
-                            try {
-                              const payload = buildOverridePayload([next])
-                              if (payload.length > 0) await updateInvoicePrintOverrides(payload)
-                            } catch (err) {
-                              console.error("reserve tax invoice seq failed:", err)
-                            }
+                          void resolveTaxInvoiceDocNo(nextIssueDate, {
+                            ...data,
+                            issueDate: nextIssueDate,
+                          }).then((documentNo) => {
+                            const referenceNo = normalizeTaxInvoiceReferenceNo(
+                              data.referenceNo,
+                              documentNo
+                            )
+                            updateField(i, { ...patch, documentNo, referenceNo })
                           })
                           return
                         }

@@ -8,7 +8,7 @@ import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Clock, Save, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tOr } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -624,6 +624,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                     {t("adminAttNoRecord")}
                   </div>
                 ) : (
+                <div className="space-y-1.5">
+                <p className="px-1 text-[10px] leading-snug text-muted-foreground md:hidden">
+                  {tOr(t, "adminTableScrollHint", "표를 좌우로 밀어 보세요")}
+                </p>
                 <div className={attStatusTableScrollCn}>
                 <table className={attStatusTableCn}>
                   <thead>
@@ -665,7 +669,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                             <td className="px-2 py-2.5 text-center">
                               <Button
                                 size="sm"
-                                className="h-6 px-2 text-[10px]"
+                                className="h-8 px-2 text-[10px] md:h-6"
                                 onClick={() => handleEmergencyApprove(row)}
                               >
                                 {t("att_btn_emergency_approve")}
@@ -677,12 +681,17 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                   </tbody>
                 </table>
                 </div>
+                </div>
                 )
               ) : displayList.length === 0 ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   {t("adminLeaveNoResult")}
                 </div>
               ) : (
+                <div className="space-y-1.5">
+                <p className="px-1 text-[10px] leading-snug text-muted-foreground md:hidden">
+                  {tOr(t, "adminTableScrollHint", "표를 좌우로 밀어 보세요")}
+                </p>
                 <div className={attStatusTableScrollCn}>
                 <form
                   id="att-adjust-form"
@@ -1159,6 +1168,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                   </tbody>
                 </table>
                 </form>
+                </div>
                 </div>
               )}
             </div>
