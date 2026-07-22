@@ -8620,26 +8620,31 @@ export default function PosTerminalPage() {
               }
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
               if (isAddOrder && existingOrderId > 0) {
-                try {
-                  const serverItemsForMerge = await fetchPosOrderItemsForPaymentMerge(
-                    existingOrderId,
-                    currentStoreId
-                  )
-                  if (serverItemsForMerge.length > 0) {
-                    existingOrder = {
-                      ...(existingOrder ?? {
-                        id: String(existingOrderId),
-                        type: 'dine-in' as const,
-                        items: [],
-                        total: 0,
-                        status: 'pending' as const,
-                        createdAt: new Date(),
-                      }),
-                      items: mapPosOrderItemsToTerminalOrderSnapshot(serverItemsForMerge) as OrderItem[],
+                /** Omni: 로컬 테이블 주문 줄이 있으면 추가 getPosOrders 생략 */
+                const localItemsOk =
+                  isOmniPaymentFastPath && Array.isArray(existingOrder?.items) && existingOrder.items.length > 0
+                if (!localItemsOk) {
+                  try {
+                    const serverItemsForMerge = await fetchPosOrderItemsForPaymentMerge(
+                      existingOrderId,
+                      currentStoreId
+                    )
+                    if (serverItemsForMerge.length > 0) {
+                      existingOrder = {
+                        ...(existingOrder ?? {
+                          id: String(existingOrderId),
+                          type: 'dine-in' as const,
+                          items: [],
+                          total: 0,
+                          status: 'pending' as const,
+                          createdAt: new Date(),
+                        }),
+                        items: mapPosOrderItemsToTerminalOrderSnapshot(serverItemsForMerge) as OrderItem[],
+                      }
                     }
+                  } catch (e) {
+                    console.warn('refresh existing dine-in lines before add-order merge failed:', e)
                   }
-                } catch (e) {
-                  console.warn('refresh existing dine-in lines before add-order merge failed:', e)
                 }
               }
               try {
@@ -8967,7 +8972,9 @@ export default function PosTerminalPage() {
                   ...posGuestCountSpread(payload.guestCount),
                   _autoPrintDedupeKey: hallDedupeKeyForSubmit,
                 }
-                const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
+                const storeAutoPrint = isOmniPaymentFastPath
+                  ? readStoreAutoPrintFlagsSync()
+                  : await resolveStoreAutoPrintFlags(currentStoreId)
                 const shouldAutoPrintReceipt = isAddOrder
                   ? storeAutoPrint.receiptOnAddOrder
                   : storeAutoPrint.receiptOnOrder
@@ -9237,17 +9244,32 @@ export default function PosTerminalPage() {
                 clearCartFromTerminal()
                 setSelectedTableId(null)
                 setServingTableId(submittedTableId)
-                await refreshStoreListAfterOrderSave({
-                  orderType: 'dine_in',
-                  tableName: payload.tableName,
-                  memo: payload.memo,
-                  status: 'pending',
-                  orderNo: savedOrderNo,
-                  serverOrderId: savedOrderId,
-                  total: mergeSubtotal - (payload.discountAmt ?? 0),
-                  items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
-                  queuedWithoutServerId,
-                })
+                /** Omni: optimistic+refetch를 버튼 잠금에서 분리 — 저장 성공 직후 주문 버튼 해제 */
+                if (isOmniPaymentFastPath) {
+                  void refreshStoreListAfterOrderSave({
+                    orderType: 'dine_in',
+                    tableName: payload.tableName,
+                    memo: payload.memo,
+                    status: 'pending',
+                    orderNo: savedOrderNo,
+                    serverOrderId: savedOrderId,
+                    total: mergeSubtotal - (payload.discountAmt ?? 0),
+                    items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
+                    queuedWithoutServerId,
+                  })
+                } else {
+                  await refreshStoreListAfterOrderSave({
+                    orderType: 'dine_in',
+                    tableName: payload.tableName,
+                    memo: payload.memo,
+                    status: 'pending',
+                    orderNo: savedOrderNo,
+                    serverOrderId: savedOrderId,
+                    total: mergeSubtotal - (payload.discountAmt ?? 0),
+                    items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
+                    queuedWithoutServerId,
+                  })
+                }
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
               } finally {

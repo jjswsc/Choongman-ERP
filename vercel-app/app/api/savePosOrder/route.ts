@@ -27,6 +27,7 @@ import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 import {
   parseAppliedCouponsFromBody,
   persistPosOrderCouponRedemptions,
@@ -46,6 +47,10 @@ import {
   reconcilePosOrderPaymentTenderGap,
 } from '@/lib/pos-order-payment-reconcile'
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
+import {
+  assertSaasTenantWritable,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
@@ -262,6 +267,21 @@ export async function POST(req: NextRequest) {
     if (!authGate.ok) return authGate.response
     const auth = authGate.auth
 
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode,
+    })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'pos_orders',
+      label: 'POS 주문',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json(
+        { success: false, message: tenantWriteErr, retryAfterQueue: false },
+        { status: 403, headers }
+      )
+    }
+
     const openCheck = await assertPosBusinessOpenForOrderSave(storeCode)
     if (!openCheck.ok) {
       return NextResponse.json(
@@ -467,7 +487,9 @@ export async function POST(req: NextRequest) {
     })
 
     const allocateStartMs = Date.now()
-    const orderNo = await allocateNextPosOrderNo(storeCode)
+    const orderNo = await allocateNextPosOrderNo(storeCode, {
+      tenantId: tenantScope.enforce ? tenantScope.tenantId : '',
+    })
     allocateOrderNoMs = Date.now() - allocateStartMs
     const row = enrichPosOrderRowForSaaS(
       {
@@ -532,7 +554,7 @@ export async function POST(req: NextRequest) {
       idempotency_key_hash: idempotencyKeyHash,
       ...(paidAtStamp ? { paid_at: paidAtStamp } : {}),
     },
-      { tenantId: auth?.tenantId }
+      { tenantId: tenantScope.enforce ? tenantScope.tenantId : auth?.tenantId }
     )
     let inserted: { id?: number }[] = []
     try {
@@ -688,10 +710,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    try {
-      await upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo')
-    } catch (taxErr) {
-      console.error('savePosOrder tax recipient upsert:', taxErr)
+    /** Omni 미결제 신규: 응답 전 audit/tax/회원스냅샷을 묶지 않음(주문 버튼 체감) */
+    const deferNonCriticalAck =
+      !isLegacyChoongmanErpSupabase() &&
+      !isPosCompletionStatus(orderStatus) &&
+      closeStatus == null
+
+    if (deferNonCriticalAck) {
+      void upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo').catch((taxErr) => {
+        console.error('savePosOrder tax recipient upsert:', taxErr)
+      })
+    } else {
+      try {
+        await upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo')
+      } catch (taxErr) {
+        console.error('savePosOrder tax recipient upsert:', taxErr)
+      }
     }
 
     if (isPosCompletionStatus(orderStatus) && Number(created?.id) > 0) {
@@ -715,7 +749,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (Number(created?.id) > 0) {
-      await writePosOrderAuditTrail({
+      const auditPromise = writePosOrderAuditTrail({
         orderId: Number(created?.id),
         orderNo,
         storeCode,
@@ -746,6 +780,11 @@ export async function POST(req: NextRequest) {
         },
         reason: 'new_order_created',
       })
+      if (deferNonCriticalAck) {
+        void auditPromise.catch((e) => console.error('savePosOrder audit:', e))
+      } else {
+        await auditPromise
+      }
     }
 
     if (Number(created?.id) > 0 && isPosCompletionStatus(orderStatus)) {
@@ -768,7 +807,7 @@ export async function POST(req: NextRequest) {
     let memberReceipt: Awaited<
       ReturnType<typeof import('@/lib/pos-receipt-member-snapshot-server').loadPosOrderMemberReceiptSnapshot>
     > = null
-    if (memberId > 0) {
+    if (memberId > 0 && !deferNonCriticalAck) {
       try {
         const { loadPosOrderMemberReceiptSnapshot } = await import(
           '@/lib/pos-receipt-member-snapshot-server'

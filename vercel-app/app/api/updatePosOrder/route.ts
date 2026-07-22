@@ -45,6 +45,7 @@ import {
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { settlePosOrderPaymentFast } from '@/lib/settle-pos-order-payment-fast'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 
 function isMissingServiceColumnsError(e: unknown): boolean {
   const msg = String(e ?? '').toLowerCase()
@@ -717,7 +718,10 @@ export async function POST(req: NextRequest) {
       vat,
       total,
     }
-    await writePosOrderAuditTrail({
+    const deferUnpaidSideEffects =
+      !isLegacyChoongmanErpSupabase() && paymentSum <= 0.02 && !paymentComplete
+
+    const auditPromise = writePosOrderAuditTrail({
       orderId: id,
       orderNo: current?.order_no || null,
       storeCode: current?.store_code || null,
@@ -737,6 +741,11 @@ export async function POST(req: NextRequest) {
       after: auditAfter,
       reason: fromOfflineQueueSync ? 'offline_sync_update' : 'manual_order_update',
     })
+    if (deferUnpaidSideEffects) {
+      void auditPromise.catch((e) => console.error('updatePosOrder audit:', e))
+    } else {
+      await auditPromise
+    }
 
     const prevOrderItems = (() => {
       const raw = current?.items_json
@@ -757,7 +766,7 @@ export async function POST(req: NextRequest) {
       prevOrderItems as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1],
       { formatNote: (note: string) => formatGrabLineNoteForKitchenPrint(note) }
     )
-    await enqueueKitchenPrintJob({
+    const kitchenEnqueuePromise = enqueueKitchenPrintJob({
       storeCode: String(current?.store_code || '').trim(),
       orderId: id,
       orderNo: String(current?.order_no || `POS-${id}`),
@@ -769,11 +778,16 @@ export async function POST(req: NextRequest) {
         ...(kitchenDeltaLines.length > 0 ? { kitchenLines: kitchenDeltaLines } : {}),
       },
     })
+    if (deferUnpaidSideEffects) {
+      void kitchenEnqueuePromise.catch((e) => console.error('updatePosOrder kitchen enqueue:', e))
+    } else {
+      await kitchenEnqueuePromise
+    }
 
     let memberReceipt: Awaited<
       ReturnType<typeof import('@/lib/pos-receipt-member-snapshot-server').loadPosOrderMemberReceiptSnapshot>
     > = null
-    if (memberId > 0) {
+    if (memberId > 0 && !deferUnpaidSideEffects) {
       try {
         const { loadPosOrderMemberReceiptSnapshot } = await import(
           '@/lib/pos-receipt-member-snapshot-server'
