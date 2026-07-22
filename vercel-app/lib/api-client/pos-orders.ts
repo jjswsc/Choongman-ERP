@@ -381,6 +381,12 @@ export async function updatePosOrder(params: {
   pointEarned?: number
   guestCount?: number
   linkposPayment?: LinkposPaymentSummary | null
+  /**
+   * true면 결제 완료 시 포인트 적립·LINE 알림을 건너뜀.
+   * Omni 결제 단축 경로에서만 사용(이어서 updatePosOrderStatus가 적립 후처리).
+   * 충만 클라이언트는 보내지 않음 → 기존 동기 적립 유지.
+   */
+  skipPostPaymentSideEffects?: boolean
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'

@@ -103,6 +103,7 @@ import {
 import { OfflineBanner } from '@/components/offline-banner'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { useAuth } from '@/lib/auth-context'
+import { useAppBrandConfig } from '@/components/app-brand-provider'
 import { isLangCode, useLang, type LangCode } from '@/lib/lang-context'
 import { tr, useT } from '@/lib/i18n'
 import { localizeApiMessage, translateApiMessage } from '@/lib/translate-api-message'
@@ -419,6 +420,9 @@ export default function PosTerminalPage() {
   }, [typeParam])
 
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
+  /** 결제「처리중…」단축·백그라운드 후처리 — Omni만. 충만은 기존 동기 경로 유지. */
+  const isOmniPaymentFastPath = brand.key === 'omnifoodtech'
   const { lang } = useLang()
   const t = useT(lang)
   const localizeApiPopupMessage = useCallback((msg: string | undefined, fallback: string): string => {
@@ -545,6 +549,81 @@ export default function PosTerminalPage() {
       })
     },
     [isPosDemo, t]
+  )
+
+  /**
+   * Omni: 결제 금액 저장 후 status/재고/분개를 백그라운드(버튼 잠금 해제).
+   * 충만: 기존처럼 await — 후처리 실패 시 결제 모달에서 중단.
+   */
+  const applyPaidStatusAfterPaymentSave = useCallback(
+    async (params: { id: number; status: 'paid' | 'completed' }): Promise<boolean> => {
+      if (!isOmniPaymentFastPath) {
+        return applyOrderStatusWithRetry(params)
+      }
+      void applyOrderStatusWithRetry(params).then((ok) => {
+        if (ok) void refetchStores({ scope: 'current', immediate: true })
+      })
+      return true
+    },
+    [isOmniPaymentFastPath, applyOrderStatusWithRetry, refetchStores]
+  )
+
+  /** 결제 merge용 — Omni만 로컬 목록 우선(getPosOrders 왕복 생략). 충만은 항상 서버 fetch. */
+  const resolveLocalOrderItemsForPaymentMerge = useCallback(
+    (orderId: number) => {
+      if (!isOmniPaymentFastPath) return [] as ReturnType<typeof orderUiItemsToPosOrderItems>
+      if (!Number.isFinite(orderId) || orderId <= 0) return [] as ReturnType<typeof orderUiItemsToPosOrderItems>
+      const fromOrder = (order: Order | null | undefined) => {
+        if (!order || Number(order.id) !== orderId || !order.items?.length) return null
+        return orderUiItemsToPosOrderItems(order.items)
+      }
+      for (const tbl of currentStore?.tables ?? []) {
+        const hit = fromOrder(tbl.order)
+        if (hit?.length) return hit
+      }
+      const pool = [
+        ...deliveryOrders,
+        ...packagedDeliveryOrders,
+        ...completedDeliveryOrders,
+        ...takeoutOrders,
+        ...packagedTakeoutOrders,
+        ...completedTakeoutOrders,
+      ]
+      for (const o of pool) {
+        const hit = fromOrder(o)
+        if (hit?.length) return hit
+      }
+      return []
+    },
+    [
+      isOmniPaymentFastPath,
+      currentStore?.tables,
+      deliveryOrders,
+      packagedDeliveryOrders,
+      completedDeliveryOrders,
+      takeoutOrders,
+      packagedTakeoutOrders,
+      completedTakeoutOrders,
+    ]
+  )
+
+  const mergePaymentItemsPreferLocal = useCallback(
+    async (existingOrderId: number, cartItemsForSave: ReturnType<typeof cartLinesToPosOrderItems>) => {
+      const local = resolveLocalOrderItemsForPaymentMerge(existingOrderId)
+      if (local.length > 0) {
+        return mergeDineInPaymentCartWithServerItems(local, cartItemsForSave)
+      }
+      try {
+        const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
+        if (serverItems.length > 0) {
+          return mergeDineInPaymentCartWithServerItems(serverItems, cartItemsForSave)
+        }
+      } catch (e) {
+        console.warn('payment merge with server items failed:', e)
+      }
+      return cartItemsForSave
+    },
+    [currentStoreId, resolveLocalOrderItemsForPaymentMerge]
   )
 
   const alertPaymentBackendBusy = useCallback(async () => {
@@ -4608,11 +4687,13 @@ export default function PosTerminalPage() {
       const list = []
       const chInsert = subscribePosOrdersInsert(onInsert, {
         store: code,
+        ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         onStatus: makeRealtimeStatusHandler(insertKey),
       })
       if (chInsert) list.push(chInsert)
       const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
         store: code,
+        ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         onStatus: makeRealtimeStatusHandler(updateKey),
       })
       if (chUpdate) list.push(chUpdate)
@@ -4647,6 +4728,7 @@ export default function PosTerminalPage() {
     buildDineInQtySnapshot,
     isCurrentStoreOrder,
     makeRealtimeStatusHandler,
+    auth?.tenantId,
   ])
 
   useEffect(() => {
@@ -4673,7 +4755,12 @@ export default function PosTerminalPage() {
       refetchCurrentStore()
     }
     const channels = currentStoreCodeVariants
-      .map((storeCode) => subscribePosOrdersInsert(onInsert, { store: storeCode }))
+      .map((storeCode) =>
+        subscribePosOrdersInsert(onInsert, {
+          store: storeCode,
+          ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
+        })
+      )
       .filter(Boolean)
     return () => {
       channels.forEach((channel) => channel?.unsubscribe())
@@ -4686,6 +4773,7 @@ export default function PosTerminalPage() {
     refetchCurrentStore,
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
+    auth?.tenantId,
     runGrabCancelWatchOnOrders,
     notifyGrabCustomerCancelledOrder,
   ])
@@ -4763,7 +4851,12 @@ export default function PosTerminalPage() {
     }
 
     const channels = currentStoreCodeVariants
-      .map((storeCode) => subscribePosOrdersUpdate(handleUpdate, { store: storeCode }))
+      .map((storeCode) =>
+        subscribePosOrdersUpdate(handleUpdate, {
+          store: storeCode,
+          ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
+        })
+      )
       .filter(Boolean)
 
     return () => {
@@ -4775,6 +4868,7 @@ export default function PosTerminalPage() {
     isCurrentStoreOrder,
     notifyGrabCustomerCancelledOrder,
     refetchCurrentStore,
+    auth?.tenantId,
   ])
 
   useEffect(() => {
@@ -5126,7 +5220,12 @@ export default function PosTerminalPage() {
       }
     }
     const channels = currentStoreCodeVariants
-      .map((storeCode) => subscribePosOrdersUpdate(onUpdate, { store: storeCode }))
+      .map((storeCode) =>
+        subscribePosOrdersUpdate(onUpdate, {
+          store: storeCode,
+          ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
+        })
+      )
       .filter(Boolean)
     return () => {
       channels.forEach((channel) => channel?.unsubscribe())
@@ -5138,6 +5237,7 @@ export default function PosTerminalPage() {
     autoPrintReceiptOnPayment,
     autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnOrder,
+    auth?.tenantId,
     autoPrintKitchenSlipOnOrder,
     pricingAdjustments,
     posReceiptLineOpts,
@@ -8029,14 +8129,7 @@ export default function PosTerminalPage() {
                 let kbankQrPending = false
                 let kbankPartnerTxnId = ''
                 if (existingOrderId != null && payload.payment != null) {
-                  try {
-                    const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
-                    if (serverItems.length > 0) {
-                      itemsForPaymentSave = mergeDineInPaymentCartWithServerItems(serverItems, cartItemsForSave)
-                    }
-                  } catch (e) {
-                    console.warn('delivery payment merge with server items failed:', e)
-                  }
+                  itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
@@ -8067,6 +8160,7 @@ export default function PosTerminalPage() {
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
+                    ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
@@ -8081,7 +8175,7 @@ export default function PosTerminalPage() {
                     memberTierCode: payload.memberTierCode,
                   })
                   if (!kbankQrPending) {
-                    const completedOk = await applyOrderStatusWithRetry({
+                    const completedOk = await applyPaidStatusAfterPaymentSave({
                       id: existingOrderId,
                       status: 'paid',
                     })
@@ -8093,13 +8187,13 @@ export default function PosTerminalPage() {
                 }
                 const finalizeDeliveryPaid = async (): Promise<boolean> => {
                   if (kbankQrPending && existingOrderId != null) {
-                    const completedOk = await applyOrderStatusWithRetry({
+                    const completedOk = await applyPaidStatusAfterPaymentSave({
                       id: existingOrderId,
                       status: 'paid',
                     })
                     if (!completedOk) return false
                   }
-                  await tryOpenDrawerOnOrderComplete(payload.payment, {
+                  void tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({
@@ -8208,14 +8302,7 @@ export default function PosTerminalPage() {
                 let kbankQrPending = false
                 let kbankPartnerTxnId = ''
                 if (existingOrderId != null && payload.payment != null) {
-                  try {
-                    const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
-                    if (serverItems.length > 0) {
-                      itemsForPaymentSave = mergeDineInPaymentCartWithServerItems(serverItems, cartItemsForSave)
-                    }
-                  } catch (e) {
-                    console.warn('takeout payment merge with server items failed:', e)
-                  }
+                  itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
@@ -8246,6 +8333,7 @@ export default function PosTerminalPage() {
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
+                    ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
@@ -8260,7 +8348,7 @@ export default function PosTerminalPage() {
                     memberTierCode: payload.memberTierCode,
                   })
                   if (!kbankQrPending) {
-                    const completedOk = await applyOrderStatusWithRetry({
+                    const completedOk = await applyPaidStatusAfterPaymentSave({
                       id: existingOrderId,
                       status: 'paid',
                     })
@@ -8272,13 +8360,13 @@ export default function PosTerminalPage() {
                 }
                 const finalizeTakeoutPaid = async (): Promise<boolean> => {
                   if (kbankQrPending && existingOrderId != null) {
-                    const completedOk = await applyOrderStatusWithRetry({
+                    const completedOk = await applyPaidStatusAfterPaymentSave({
                       id: existingOrderId,
                       status: 'paid',
                     })
                     if (!completedOk) return false
                   }
-                  await tryOpenDrawerOnOrderComplete(payload.payment, {
+                  void tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({
@@ -9203,14 +9291,7 @@ export default function PosTerminalPage() {
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
-                  try {
-                    const serverItems = await fetchPosOrderItemsForPaymentMerge(existingOrderId, currentStoreId)
-                    if (serverItems.length > 0) {
-                      itemsForPaymentSave = mergeDineInPaymentCartWithServerItems(serverItems, cartItemsForSave)
-                    }
-                  } catch (e) {
-                    console.warn('payment merge with server items failed:', e)
-                  }
+                  itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     terminalStoreCode: currentStoreId,
@@ -9229,6 +9310,7 @@ export default function PosTerminalPage() {
                     guestCount: payload.guestCount,
                     ...posOrderPaymentFieldsFromSnapshot(pay),
                     linkposPayment: linkpos.linkposPayment,
+                    ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
@@ -9336,11 +9418,22 @@ export default function PosTerminalPage() {
                 const finalizeDineInPaid = async (): Promise<boolean> => {
                   if (orderIdToComplete != null) {
                     const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
-                    const statusOk = await applyOrderStatusWithRetry({
-                      id: orderIdToComplete,
-                      status: targetStatus,
-                    })
-                    if (!statusOk) return false
+                    /**
+                     * Omni: 기존 주문은 status를 백그라운드. 신규+closeStatus는 저장 시 이미 마감 → 생략.
+                     * 충만: 항상 await(기존 동작).
+                     */
+                    const statusAlreadyClosedBySave =
+                      isOmniPaymentFastPath &&
+                      pay != null &&
+                      !kbankQrPending &&
+                      !(existingOrderId != null && existingOrderId > 0)
+                    if (!statusAlreadyClosedBySave) {
+                      const statusOk = await applyPaidStatusAfterPaymentSave({
+                        id: orderIdToComplete,
+                        status: targetStatus,
+                      })
+                      if (!statusOk) return false
+                    }
                     /** 후불(완료)만 즉시 테이블 비움. 선불(paid)은 테이블·내역 유지 */
                     if (!payload.isPrepaid && payload.tableName) {
                       clearTableOrder(currentStoreId, payload.tableName)
@@ -9349,7 +9442,7 @@ export default function PosTerminalPage() {
                     /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                     clearTableOrder(currentStoreId, payload.tableName)
                   }
-                  await tryOpenDrawerOnOrderComplete(payload.payment, {
+                  void tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({

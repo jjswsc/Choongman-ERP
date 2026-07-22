@@ -549,6 +549,10 @@ export async function POST(req: NextRequest) {
       appliedPreCount: appliedPre.length,
       paidAtStamp,
     })
+    /** 결제 직후 updatePosOrderStatus가 이어서 돌 때 — 적립·쿠폰·알림은 status 경로에 맡기고 응답을 빠르게 */
+    const skipPostPaymentSideEffects =
+      body.skipPostPaymentSideEffects === true ||
+      String(body.skipPostPaymentSideEffects ?? '') === '1'
     let pointEarned = pointEarnedReq
     let loyaltyReceipt: {
       memberNo?: string
@@ -557,7 +561,7 @@ export async function POST(req: NextRequest) {
       pointBalanceExcludingEarn?: number
     } | null = null
     const previousEarned = Number(current?.point_earned || 0)
-    if (memberId > 0 && paymentComplete && previousEarned <= 0) {
+    if (!skipPostPaymentSideEffects && memberId > 0 && paymentComplete && previousEarned <= 0) {
       try {
         const loyalty = await applyLoyaltyOnOrder({
           memberId,
@@ -586,7 +590,7 @@ export async function POST(req: NextRequest) {
       } catch (loyaltyErr) {
         console.error('updatePosOrder loyalty:', loyaltyErr)
       }
-    } else if (paymentComplete && previousEarned <= 0) {
+    } else if (!skipPostPaymentSideEffects && paymentComplete && previousEarned <= 0) {
       try {
         const ensured = await ensurePosOrderLoyaltyApplied(id)
         if (ensured > 0) pointEarned = ensured
@@ -598,7 +602,7 @@ export async function POST(req: NextRequest) {
     if (previousEarned > 0) {
       pointEarned = previousEarned
     }
-    if (memberId > 0 && paymentComplete) {
+    if (!skipPostPaymentSideEffects && memberId > 0 && paymentComplete) {
       try {
         const { notifyMemberPointLineForPaidOrder } = await import('@/lib/member-point-line-notify')
         await notifyMemberPointLineForPaidOrder({
