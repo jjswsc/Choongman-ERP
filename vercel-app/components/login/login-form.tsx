@@ -47,7 +47,7 @@ import {
   WINDOWS_POS_OMNI_SETUP_PATH,
   windowsPosSetupPathForBrand,
 } from "@/lib/windows-installer-copy"
-import { labelForStore } from "@/lib/store-list-keys"
+import { dedupeLoginStoreKeysByLabel, labelForStore } from "@/lib/store-list-keys"
 import {
   isBrowserOnline,
   runReachabilityProbe,
@@ -351,12 +351,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (isSaasAdminLoginPath(loginPath)) return true
     return isSaasAdminLoginPathFromBrowser()
   }, [loginPath])
-  /** Omni SaaS·ERP 관리 로그인만 회사명 직접 입력 (충만은 단일 회사·기존 목록 UX 유지) */
-  const isOmniAdminLogin = loginPath === "/admin/login" && brand.key === "omnifoodtech"
-  const useManualCompanyField = isSaasAdminLogin || isOmniAdminLogin
+  /** Omni SaaS·ERP 관리 로그인: 회사·매장·이름 직접 입력 */
+  const isOmniBrand = brand.key === "omnifoodtech"
+  const isOmniAdminLogin = loginPath === "/admin/login" && isOmniBrand
+  /** Omni 전체(POS 포함): 회사명 직접 입력 → 해당 테넌트 목록만 로드. 충만은 Select 유지 */
+  const useManualCompanyField = isSaasAdminLogin || isOmniBrand
   /**
    * Omni /admin/login·SaaS 관리: 매장·이름 직접 입력.
-   * 충만 /admin/login 은 기존 Select UX 유지.
+   * Omni POS·충만: 매장·이름 Select (Omni는 회사 입력 후 scoped getLoginData).
    */
   const useManualStoreUserFields = isSaasAdminLogin || isOmniAdminLogin
   /** SaaS 대리점 — 매장 Partner 자동. 플랫폼 본사(OmniFoodTech 등)는 매장 직접 입력 */
@@ -368,8 +370,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       return !isSaasPlatformDefaultLoginCompany(c)
     })()
   const hideSaasPartnerStoreField = saasPartnerLoginFlow
-  /** 수동 회사·매장·이름(Omni·SaaS)만 로그인 목록 API 스킵 — 충만은 기존 getLoginData 유지 */
+  /** 수동 회사·매장·이름(Omni admin·SaaS)만 로그인 목록 API 스킵 */
   const skipLoginDataFetch = useManualStoreUserFields
+  /** Omni POS 등: 회사 입력 후에만 scoped getLoginData */
+  const needsScopedLoginData = isOmniBrand && !skipLoginDataFetch
 
   useEffect(() => {
     if (!isAdminLoginRoute) return
@@ -492,97 +496,131 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
   }, [])
 
-  const fetchLoginData = useCallback(() => {
-    setLoadError(null)
-    setLoginListProbeOk(null)
-    setLoading(true)
-    /** navigator.onLine 거짓 false 대비 프로브. 조기 종료하지 않음 — getLoginDataWithCache가 API를 직접 시도해 오탐을 복구함 */
-    const run = async () => {
-      if (typeof navigator !== "undefined" && !isBrowserOnline()) {
-        await runReachabilityProbe()
-      }
-      const loginSnapshot = loadOfflineResumeAuth()
-      const bootV2 = isPosOfflinePhaseAEnabled(loginSnapshot?.store)
-      const hybridFastBoot =
-        bootV2 &&
-        typeof window !== "undefined" &&
-        isCmPosHybridShell() &&
-        loginApp === "pos" &&
-        !!loginSnapshot
+  const fetchLoginData = useCallback(
+    (companyOverride?: string) => {
+      setLoadError(null)
+      setLoginListProbeOk(null)
+      setLoading(true)
+      /** navigator.onLine 거짓 false 대비 프로브. 조기 종료하지 않음 — getLoginDataWithCache가 API를 직접 시도해 오탐을 복구함 */
+      const run = async () => {
+        const scopeCompany = String(companyOverride ?? company ?? "").trim()
+        const loginOpts =
+          needsScopedLoginData || (isOmniBrand && scopeCompany)
+            ? scopeCompany
+              ? { company: scopeCompany }
+              : null
+            : undefined
 
-      let timeoutMs = 60_000
-      if (hybridFastBoot) {
-        if (!isBrowserOnline()) {
-          timeoutMs = 3_000
-        } else {
-          const probeOk = await runReachabilityProbe()
-          if (!probeOk) timeoutMs = 3_000
+        if (loginOpts === null) {
+          setLoginData({})
+          setLoginStoreLabels({})
+          setLoginStoreCompanies({})
+          setCompanies([])
+          setLoginDataSource("fallback")
+          setLoadError(null)
+          setLoading(false)
+          return
         }
-        if (timeoutMs === 3_000) {
-          const cachedOnly = await readLoginDataFromCacheOnly()
-          if (cachedOnly._source === "cache") {
-            applyLoginDataResult(cachedOnly)
-            setLoading(false)
-            return
-          }
+
+        if (typeof navigator !== "undefined" && !isBrowserOnline()) {
+          await runReachabilityProbe()
         }
-      } else {
-        const hybridOfflineBoot =
+        const loginSnapshot = loadOfflineResumeAuth()
+        const bootV2 = isPosOfflinePhaseAEnabled(loginSnapshot?.store)
+        const hybridFastBoot =
+          bootV2 &&
           typeof window !== "undefined" &&
           isCmPosHybridShell() &&
-          !isBrowserOnline() &&
+          loginApp === "pos" &&
           !!loginSnapshot
-        if (hybridOfflineBoot) timeoutMs = 3_000
-      }
 
-      const fetchOnce = () =>
-        Promise.race([
-          getLoginData(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
-          ),
-        ])
-      /** API 실패 시 getLoginData는 throw 대신 _source:fallback 을 줄 수 있음 → 1회 재시도 */
-      const maxAttempts = hybridFastBoot && timeoutMs === 3_000 ? 1 : 2
-      const loadWithRetry = async () => {
-        let last: LoginDataResult | undefined
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          try {
-            const d = await fetchOnce()
-            last = d
-            if (d._source !== "fallback") return d
-          } catch (e) {
-            if (attempt < maxAttempts - 1) continue
-            throw e
+        let timeoutMs = 60_000
+        if (hybridFastBoot) {
+          if (!isBrowserOnline()) {
+            timeoutMs = 3_000
+          } else {
+            const probeOk = await runReachabilityProbe()
+            if (!probeOk) timeoutMs = 3_000
           }
+          if (timeoutMs === 3_000) {
+            const cachedOnly = await readLoginDataFromCacheOnly(loginOpts)
+            if (cachedOnly._source === "cache") {
+              applyLoginDataResult(cachedOnly)
+              setLoading(false)
+              return
+            }
+          }
+        } else {
+          const hybridOfflineBoot =
+            typeof window !== "undefined" &&
+            isCmPosHybridShell() &&
+            !isBrowserOnline() &&
+            !!loginSnapshot
+          if (hybridOfflineBoot) timeoutMs = 3_000
         }
-        return last!
+
+        const fetchOnce = () =>
+          Promise.race([
+            getLoginData(loginOpts),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
+            ),
+          ])
+        /** API 실패 시 getLoginData는 throw 대신 _source:fallback 을 줄 수 있음 → 1회 재시도 */
+        const maxAttempts = hybridFastBoot && timeoutMs === 3_000 ? 1 : 2
+        const loadWithRetry = async () => {
+          let last: LoginDataResult | undefined
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+              const d = await fetchOnce()
+              last = d
+              if (d._source !== "fallback") return d
+            } catch (e) {
+              if (attempt < maxAttempts - 1) continue
+              throw e
+            }
+          }
+          return last!
+        }
+        try {
+          const d = await loadWithRetry()
+          applyLoginDataResult(d)
+          setLoading(false)
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          const probeOk = await runReachabilityProbe()
+          setLoginListProbeOk(probeOk)
+          if (probeOk) setBrowserOnline(true)
+          const companyGate =
+            msg === "company_required" ||
+            msg === "company_not_found" ||
+            msg === "company_inactive" ||
+            /company_required|company_not_found|company_inactive/i.test(msg)
+          setLoadError(
+            companyGate
+              ? msg === "company_required"
+                ? "COMPANY_REQUIRED"
+                : "COMPANY_NOT_FOUND"
+              : msg.includes("연결") ||
+                  msg.includes("시간 초과") ||
+                  msg.includes("fetch") ||
+                  msg.includes("Failed")
+                ? "SERVER_ERROR"
+                : msg
+          )
+          setLoginData({})
+          setLoginStoreLabels({})
+          setLoginStoreCompanies({})
+          setCompanies([])
+          if (!needsScopedLoginData) setCompany("")
+          setLoginDataSource("fallback")
+          setLoading(false)
+        }
       }
-      try {
-        const d = await loadWithRetry()
-        applyLoginDataResult(d)
-        setLoading(false)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        const probeOk = await runReachabilityProbe()
-        setLoginListProbeOk(probeOk)
-        if (probeOk) setBrowserOnline(true)
-        setLoadError(
-          msg.includes("연결") || msg.includes("시간 초과") || msg.includes("fetch") || msg.includes("Failed")
-            ? "SERVER_ERROR"
-            : msg
-        )
-        setLoginData({})
-        setLoginStoreLabels({})
-        setLoginStoreCompanies({})
-        setCompanies([])
-        setCompany("")
-        setLoginDataSource("fallback")
-        setLoading(false)
-      }
-    }
-    void run()
-  }, [applyLoginDataResult, loginApp])
+      void run()
+    },
+    [applyLoginDataResult, company, isOmniBrand, loginApp, needsScopedLoginData]
+  )
 
   useLayoutEffect(() => {
     if (skipLoginDataFetch || resolveSaasAdminLogin()) setLoading(false)
@@ -627,6 +665,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       setLoading(false)
       return
     }
+    /** Omni POS: 회사 입력 전 전역 목록 호출 금지 — company debounce effect가 로드 */
+    if (needsScopedLoginData) {
+      setLoading(false)
+      return
+    }
     /** HMR/라우트 전환 직후 unmount 레이스를 피하려고 취소 가능한 매크로태스크로 지연 */
     const timer = window.setTimeout(() => {
       fetchLoginData()
@@ -641,12 +684,36 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     fetchLoginData,
     resolveSaasAdminLogin,
     skipLoginDataFetch,
+    needsScopedLoginData,
     forceAccountSwitch,
     queryCompany,
     queryStore,
     queryUser,
     setAuth,
   ])
+
+  /** Omni POS: 회사명 입력 후 해당 테넌트 매장·직원만 로드 */
+  useEffect(() => {
+    if (!needsScopedLoginData || auth) return
+    const scopeCompany = company.trim()
+    if (!scopeCompany) {
+      setLoginData({})
+      setLoginStoreLabels({})
+      setLoginStoreCompanies({})
+      setCompanies([])
+      setStore("")
+      setUser("")
+      setLoadError(null)
+      setLoading(false)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      fetchLoginData(scopeCompany)
+    }, 400)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [needsScopedLoginData, auth, company, fetchLoginData])
 
   useEffect(() => {
     if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
@@ -873,13 +940,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (!isOfficeStore(a) && isOfficeStore(b)) return 1
     return a.localeCompare(b)
   })
-  const filteredStores = company
+  const filteredStoresRaw = company
     ? stores.filter((s) => {
         const tagged = String(loginStoreCompanies[s] || "").trim()
         if (!tagged) return true
         return tagged.toLowerCase() === company.trim().toLowerCase()
       })
     : stores
+  /** 같은 표시명(예: 1001)이 store_name·store_code 두 키로 오면 한 줄만 표시 */
+  const filteredStores = dedupeLoginStoreKeysByLabel(filteredStoresRaw, loginStoreLabels)
   /** 목록은 왔는데 회사 태그 불일치로 매장 0개만 되는 경우 — 목록 API 실패와 구분해 선택만 해제 */
   useEffect(() => {
     if (useManualCompanyField) return
@@ -943,8 +1012,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [filteredStores, store, useManualStoreUserFields])
   const noStores = !loading && stores.length === 0
   /** 매장 목록이 비어 있어도 서버/캐시에서 정상 조회면 연결 문제로 보지 않음 */
+  const companyScopeError = loadError === "COMPANY_REQUIRED" || loadError === "COMPANY_NOT_FOUND"
   const serverListDegraded =
-    Boolean(loadError) || (noStores && loginDataSource === "fallback")
+    (Boolean(loadError) && !companyScopeError) ||
+    (noStores && loginDataSource === "fallback" && !needsScopedLoginData)
   const listLoadedOk = !loading && stores.length > 0
   /**
    * Windows Electron 등에서 navigator.onLine 만 거짓이고 /api/getLoginData 는 성공한 경우 —
@@ -1034,6 +1105,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectName: "이름 선택",
       typeCompany: "회사명 입력",
       typePartnerCompany: "대리점명(회사명) 입력",
+      companyRequired: "회사명을 입력하면 매장·이름 목록이 표시됩니다.",
+      companyNotFound: "회사를 찾을 수 없습니다. 회사명을 확인해 주세요.",
       typeStore: "매장명 입력",
       typeName: "이름 입력",
       pinPlaceholder: "비밀번호 (PIN)",
@@ -1069,6 +1142,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectName: "Select Name",
       typeCompany: "Company name",
       typePartnerCompany: "Partner / company name",
+      companyRequired: "Enter your company name to load stores and staff.",
+      companyNotFound: "Company not found. Please check the company name.",
       typeStore: "Store name",
       typeName: "Name",
       pinPlaceholder: "Password (PIN)",
@@ -1103,6 +1178,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectName: "เลือกชื่อ",
       typeCompany: "ชื่อบริษัท",
       typePartnerCompany: "ชื่อตัวแทน/บริษัท",
+      companyRequired: "กรอกชื่อบริษัทเพื่อโหลดสาขาและพนักงานครับ",
+      companyNotFound: "ไม่พบบริษัท กรุณาตรวจสอบชื่อบริษัทครับ",
       typeStore: "ชื่อสาขา",
       typeName: "ชื่อ",
       pinPlaceholder: "รหัสผ่าน (PIN)",
@@ -1137,6 +1214,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectName: "အမည်ရွေးပါ",
       typeCompany: "ကုမ္ပဏီအမည်",
       typePartnerCompany: "ကိုယ်စားလှယ်/ကုမ္ပဏီအမည်",
+      companyRequired: "Enter company name to load stores.",
+      companyNotFound: "Company not found.",
       typeStore: "ဆိုင်အမည်",
       typeName: "အမည်",
       pinPlaceholder: "လျှို့ဝှက်နံပါတ် (PIN)",
@@ -1171,6 +1250,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectName: "ເລືອກຊື່",
       typeCompany: "ຊື່ບໍລິສັດ",
       typePartnerCompany: "ຊື່ຕົວແທນ/ບໍລິສັດ",
+      companyRequired: "Enter company name to load stores.",
+      companyNotFound: "Company not found.",
       typeStore: "ຊື່ຮ້ານ",
       typeName: "ຊື່",
       pinPlaceholder: "ລະຫັດ (PIN)",
@@ -1429,6 +1510,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 </SelectContent>
               </Select>
             )}
+            {needsScopedLoginData && !company.trim() ? (
+              <p className="text-center text-[11px] leading-relaxed text-white/65">{t.companyRequired}</p>
+            ) : null}
+            {needsScopedLoginData && loadError === "COMPANY_NOT_FOUND" ? (
+              <p className="text-center text-[11px] leading-relaxed text-amber-200/95">{t.companyNotFound}</p>
+            ) : null}
 
             {hideSaasPartnerStoreField ? null : useManualStoreUserFields ? (
               <input

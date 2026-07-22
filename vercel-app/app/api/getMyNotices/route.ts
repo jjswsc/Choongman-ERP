@@ -4,6 +4,15 @@ import { NOTICE_LIST_COLS, NOTICE_LIST_COLS_LEGACY } from '@/lib/postgrest-narro
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export interface NoticeItem {
   id: number
@@ -42,21 +51,52 @@ async function getMyNoticesHandler(
     listMode: ListMode
     rangeStart?: string
     rangeEnd?: string
-  }
+  },
+  tenantScope: SaasTenantScope
 ): Promise<MyNoticesPageResult> {
-  const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as
-    | { store?: string; name?: string; job?: string; role?: string }[]
-    | null
-    | undefined
+  if (isSaasTenantQueryBlocked(tenantScope, 'notices')) {
+    return emptyResult(opts.page, opts.pageSize)
+  }
+
+  let empList: { store?: string; name?: string; job?: string; role?: string }[] = []
+  try {
+    const empFilter = appendSaasTenantFilter('id=gt.0', tenantScope, 'employees')
+    empList = ((await supabaseSelectFilter('employees', empFilter, {
+      order: 'id.asc',
+      select: 'store,name,job,role',
+    })) || []) as typeof empList
+  } catch (e) {
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('employees')
+      empList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) ||
+        []) as typeof empList
+    } else {
+      throw e
+    }
+  }
   const { myJob, myRole } = findEmployeeContextFromRoster(empList || [], store, name)
 
   const readMap: Record<number, string> = {}
   try {
-    const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const readRows = (await supabaseSelectFilter('notice_reads', filter, {
-      select: 'notice_id,status',
-      limit: 5000,
-    })) as { notice_id: number; status?: string }[] | null
+    const readsBase = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
+    const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'notice_reads')
+    let readRows: { notice_id: number; status?: string }[] | null = null
+    try {
+      readRows = (await supabaseSelectFilter('notice_reads', readsFilter, {
+        select: 'notice_id,status',
+        limit: 5000,
+      })) as typeof readRows
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('notice_reads')
+        readRows = (await supabaseSelectFilter('notice_reads', readsBase, {
+          select: 'notice_id,status',
+          limit: 5000,
+        })) as typeof readRows
+      } else {
+        throw e
+      }
+    }
     for (let i = 0; i < (readRows || []).length; i++) {
       readMap[readRows![i].notice_id] = readRows![i].status || '확인'
     }
@@ -81,22 +121,46 @@ async function getMyNoticesHandler(
     scheduled_at?: string | null
   }[] | null
 
+  const noticesBase = 'id=gte.0'
+  const noticesFilter = appendSaasTenantFilter(noticesBase, tenantScope, 'notices')
   try {
-    rows = (await supabaseSelect('notices', {
+    rows = (await supabaseSelectFilter('notices', noticesFilter, {
       order: 'created_at.desc',
       limit: DB_FETCH_LIMIT,
       select: NOTICE_LIST_COLS,
     })) as typeof rows
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (/is_urgent|expires_at|scheduled_at|column/i.test(msg)) {
-      rows = (await supabaseSelect('notices', {
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('notices')
+      rows = (await supabaseSelectFilter('notices', noticesBase, {
         order: 'created_at.desc',
         limit: DB_FETCH_LIMIT,
-        select: NOTICE_LIST_COLS_LEGACY,
+        select: NOTICE_LIST_COLS,
       })) as typeof rows
     } else {
-      throw e
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/is_urgent|expires_at|scheduled_at|column/i.test(msg)) {
+        try {
+          rows = (await supabaseSelectFilter('notices', noticesFilter, {
+            order: 'created_at.desc',
+            limit: DB_FETCH_LIMIT,
+            select: NOTICE_LIST_COLS_LEGACY,
+          })) as typeof rows
+        } catch (e2) {
+          if (isMissingSaasTenantColumnError(e2)) {
+            markSaasTenantColumnMissing('notices')
+            rows = (await supabaseSelectFilter('notices', noticesBase, {
+              order: 'created_at.desc',
+              limit: DB_FETCH_LIMIT,
+              select: NOTICE_LIST_COLS_LEGACY,
+            })) as typeof rows
+          } else {
+            throw e2
+          }
+        }
+      } else {
+        throw e
+      }
     }
   }
 
@@ -249,7 +313,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await getMyNoticesHandler(store, name, q)
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store,
+    })
+    const result = await getMyNoticesHandler(store, name, q, tenantScope)
     return NextResponse.json(result, { headers })
   } catch (e) {
     console.error('getMyNotices:', e)
@@ -273,7 +342,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(emptyResult(1, DEFAULT_LIST_PAGE_SIZE), { headers })
     }
 
-    const result = await getMyNoticesHandler(store, name, q)
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store,
+    })
+    const result = await getMyNoticesHandler(store, name, q, tenantScope)
     return NextResponse.json(result, { headers })
   } catch (e) {
     console.error('getMyNotices:', e)

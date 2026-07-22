@@ -35,6 +35,10 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Omni 등 부분 스키마: 소프트삭제 인덱스/RPC가 참조하는 선행 컬럼
+  ALTER TABLE public.stock_logs
+    ADD COLUMN IF NOT EXISTS reference_no TEXT NULL;
+
   ALTER TABLE public.stock_logs
     ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL,
@@ -42,6 +46,8 @@ BEGIN
     ADD COLUMN IF NOT EXISTS delete_reason TEXT NULL,
     ADD COLUMN IF NOT EXISTS delete_tx_id TEXT NULL;
 
+  COMMENT ON COLUMN public.stock_logs.reference_no IS
+    'Tax invoice / internal reference (e.g. 강제출고 시 일괄 입력)';
   COMMENT ON COLUMN public.stock_logs.is_deleted IS
     '소프트 삭제 여부. true면 집계/조회/정산 기본 대상에서 제외';
   COMMENT ON COLUMN public.stock_logs.deleted_at IS
@@ -56,9 +62,14 @@ BEGIN
   CREATE INDEX IF NOT EXISTS idx_stock_logs_active_log_type_date
     ON public.stock_logs(log_type, is_deleted, log_date DESC);
 
-  CREATE INDEX IF NOT EXISTS idx_stock_logs_active_order
-    ON public.stock_logs(order_id, is_deleted, log_date DESC)
-    WHERE order_id IS NOT NULL;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'stock_logs' AND column_name = 'order_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_stock_logs_active_order
+      ON public.stock_logs(order_id, is_deleted, log_date DESC)
+      WHERE order_id IS NOT NULL;
+  END IF;
 
   CREATE INDEX IF NOT EXISTS idx_stock_logs_active_reference
     ON public.stock_logs(reference_no, is_deleted, log_date DESC)

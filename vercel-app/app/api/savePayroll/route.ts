@@ -16,6 +16,15 @@ import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const CHUNK = 50
 
@@ -103,7 +112,11 @@ function normalizePayrollStoreKey(s: unknown): string {
  * payroll_records: employee_id 있으면 월+직원 id 로 기존 행 조회 후 id 기준 갱신(매장명 대소문자·공백 정규화 키 일치).
  * 없으면 month,store,name upsert.
  */
-async function savePayrollRecordsChunk(monthStr: string, chunk: Record<string, unknown>[]) {
+async function savePayrollRecordsChunk(
+  monthStr: string,
+  chunk: Record<string, unknown>[],
+  tenantScope: SaasTenantScope
+) {
   const withEid: Record<string, unknown>[] = []
   const withoutEid: Record<string, unknown>[] = []
   for (const r of chunk) {
@@ -124,11 +137,32 @@ async function savePayrollRecordsChunk(monthStr: string, chunk: Record<string, u
     }
     const rowsToSave = [...dedup.values()]
     const eidSet = [...new Set(rowsToSave.map((r) => Math.floor(Number(r.employee_id))))]
-    const filter = `month=eq.${encodeURIComponent(monthStr)}&employee_id=in.(${eidSet.join(',')})`
-    const existing = (await supabaseSelectFilter('payroll_records', filter, {
-      select: 'id,month,store,employee_id',
-      limit: Math.max(200, eidSet.length * 4),
-    })) as { id: number; month: string; store: string; employee_id: number }[] | null
+    const filter = appendSaasTenantFilter(
+      `month=eq.${encodeURIComponent(monthStr)}&employee_id=in.(${eidSet.join(',')})`,
+      tenantScope,
+      'payroll_records'
+    )
+    let existing: { id: number; month: string; store: string; employee_id: number }[] | null = null
+    try {
+      existing = (await supabaseSelectFilter('payroll_records', filter, {
+        select: 'id,month,store,employee_id',
+        limit: Math.max(200, eidSet.length * 4),
+      })) as { id: number; month: string; store: string; employee_id: number }[] | null
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('payroll_records')
+        existing = (await supabaseSelectFilter(
+          'payroll_records',
+          `month=eq.${encodeURIComponent(monthStr)}&employee_id=in.(${eidSet.join(',')})`,
+          {
+            select: 'id,month,store,employee_id',
+            limit: Math.max(200, eidSet.length * 4),
+          }
+        )) as { id: number; month: string; store: string; employee_id: number }[] | null
+      } else {
+        throw e
+      }
+    }
 
     const existingIdByKey = new Map<string, number>()
     for (const ex of existing || []) {
@@ -216,6 +250,15 @@ export async function POST(request: NextRequest) {
   }
   const { auth } = authResult
 
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+    tableHint: 'payroll_records',
+    label: '급여',
+  })
+  if (tenantWriteErr) {
+    return NextResponse.json({ success: false, msg: tenantWriteErr }, { status: 403, headers })
+  }
+
   try {
     const body = await request.json()
     const bodyForValidation = {
@@ -291,12 +334,12 @@ export async function POST(request: NextRequest) {
       other_ded: Number(r.otherDed) || 0,
       net_pay: Number(r.netPay) || 0,
       status: String(r.status || '확정').trim(),
-    }))
+    })).map((r) => stampSaasTenantId(r, tenantScope, 'payroll_records'))
 
     for (let j = 0; j < rows.length; j += CHUNK) {
       const chunk = rows.slice(j, j + CHUNK)
       try {
-        await savePayrollRecordsChunk(monthStr, chunk)
+        await savePayrollRecordsChunk(monthStr, chunk, tenantScope)
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (/employee_id|employee_code|42703|column/i.test(em)) {

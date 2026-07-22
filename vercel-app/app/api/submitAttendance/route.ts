@@ -13,6 +13,15 @@ import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch
 import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
 import { canEmployeeUseAttendanceQr, isAttendanceQrRequiredForAllStores } from '@/lib/attendance-qr-pilot'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 const TZ = 'Asia/Bangkok'
 
 function todayStr() {
@@ -105,12 +114,30 @@ export async function POST(request: NextRequest) {
     let empName = String(empNameRaw || '').trim()
     let empId = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
     let empCodeNorm = ''
+
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: storeName,
+    })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'attendance_logs',
+      label: '근태',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
+
     if (empId > 0) {
-      const empRows = (await supabaseSelectFilter(
-        'employees',
+      const empFilter = appendSaasTenantFilter(
         `id=eq.${empId}&store=ilike.${encodeURIComponent(storeName)}`,
-        { limit: 1, select: 'id,name,employee_code' }
-      )) as { id?: number; name?: string; employee_code?: string | null }[]
+        tenantScope,
+        'employees'
+      )
+      const empRows = (await supabaseSelectFilter('employees', empFilter, {
+        limit: 1,
+        select: 'id,name,employee_code',
+      })) as { id?: number; name?: string; employee_code?: string | null }[]
       const er = empRows?.[0]
       if (!er) {
         return NextResponse.json(
@@ -122,11 +149,15 @@ export async function POST(request: NextRequest) {
       empCodeNorm = normalizeEmployeeCodeForMatch(String(er.employee_code ?? ''))
     } else {
       // 하위호환: 구버전 세션에 employeeId가 없어도 저장 시점에는 id를 채워 일관성 확보
-      const matched = (await supabaseSelectFilter(
-        'employees',
+      const matchFilter = appendSaasTenantFilter(
         `store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
-        { limit: 5, select: 'id,name,employee_code' }
-      )) as { id?: number; name?: string; employee_code?: string | null }[]
+        tenantScope,
+        'employees'
+      )
+      const matched = (await supabaseSelectFilter('employees', matchFilter, {
+        limit: 5,
+        select: 'id,name,employee_code',
+      })) as { id?: number; name?: string; employee_code?: string | null }[]
       if ((matched || []).length === 1) {
         const m = matched[0]
         const inferredId = m.id != null && Number.isFinite(Number(m.id)) ? Math.floor(Number(m.id)) : 0
@@ -585,13 +616,24 @@ export async function POST(request: NextRequest) {
     }
     if (empId > 0) payload.employee_id = empId
     if (empCodeNorm) payload.employee_code = empCodeNorm
-    let toInsert: Record<string, unknown> = { ...payload }
+    let toInsert: Record<string, unknown> = stampSaasTenantId(
+      { ...payload },
+      tenantScope,
+      'attendance_logs'
+    )
     for (;;) {
       try {
         await supabaseInsert('attendance_logs', toInsert)
         break
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
+        if (isMissingSaasTenantColumnError(e) && 'tenant_id' in toInsert) {
+          markSaasTenantColumnMissing('attendance_logs')
+          const next = { ...toInsert }
+          delete next.tenant_id
+          toInsert = next
+          continue
+        }
         if (/employee_code|42703|column/i.test(em) && 'employee_code' in toInsert) {
           const next = { ...toInsert }
           delete next.employee_code

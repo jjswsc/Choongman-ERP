@@ -4,6 +4,14 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { HR_POLICY_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +49,14 @@ export async function POST(request: NextRequest) {
     return er
   }
   const auth = authRes.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+    tableHint: 'hr_policies',
+    label: '인사 규정',
+  })
+  if (tenantWriteErr) {
+    return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+  }
   const userRole = String(auth.role || '').toLowerCase()
   const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
   const userStore = String(auth.store || '').trim()
@@ -132,10 +148,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (id > 0) {
-      const existing = (await supabaseSelectFilter('hr_policies', `id=eq.${id}`, {
-        limit: 1,
-        select: HR_POLICY_LIST_COLS + ',id',
-      })) as {
+      const existingFilter = appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'hr_policies')
+      let existing: {
         id?: number
         title?: string
         content?: string
@@ -146,7 +160,23 @@ export async function POST(request: NextRequest) {
         content_version?: number
         attachments?: string
         effective_at?: string
-      }[]
+      }[] = []
+      try {
+        existing = (await supabaseSelectFilter('hr_policies', existingFilter, {
+          limit: 1,
+          select: HR_POLICY_LIST_COLS + ',id',
+        })) as typeof existing
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('hr_policies')
+          existing = (await supabaseSelectFilter('hr_policies', `id=eq.${id}`, {
+            limit: 1,
+            select: HR_POLICY_LIST_COLS + ',id',
+          })) as typeof existing
+        } else {
+          throw e
+        }
+      }
 
       const old = existing?.[0]
       if (!old) {
@@ -207,19 +237,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '저장되었습니다.', id, content_version }, { headers })
     }
 
-    const row: Record<string, unknown> = {
-      title,
-      content,
-      target_store: targetStore,
-      target_role: targetRole,
-      target_recipients: targetRecipientsStr,
-      content_version: 1,
-      effective_at: effective_at || null,
-      is_active,
-      attachments: attachmentsStr,
-      sender: sender || null,
-    }
-    if (targetPermissionGroup) row.target_permission_group = targetPermissionGroup
+    const row: Record<string, unknown> = stampSaasTenantId(
+      {
+        title,
+        content,
+        target_store: targetStore,
+        target_role: targetRole,
+        target_recipients: targetRecipientsStr,
+        content_version: 1,
+        effective_at: effective_at || null,
+        is_active,
+        attachments: attachmentsStr,
+        sender: sender || null,
+        ...(targetPermissionGroup ? { target_permission_group: targetPermissionGroup } : {}),
+      },
+      tenantScope,
+      'hr_policies'
+    )
     try {
       const ins = (await supabaseInsert('hr_policies', row)) as { id?: number }[] | { id?: number }
       const newId = Array.isArray(ins) ? ins[0]?.id : (ins as { id?: number })?.id
@@ -229,6 +263,16 @@ export async function POST(request: NextRequest) {
       )
     } catch (colErr) {
       const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
+      if (isMissingSaasTenantColumnError(colErr) && 'tenant_id' in row) {
+        markSaasTenantColumnMissing('hr_policies')
+        const { tenant_id: _t, ...withoutTenant } = row
+        const ins = (await supabaseInsert('hr_policies', withoutTenant)) as { id?: number }[] | { id?: number }
+        const newId = Array.isArray(ins) ? ins[0]?.id : (ins as { id?: number })?.id
+        return NextResponse.json(
+          { success: true, message: '등록되었습니다.', id: newId != null ? Number(newId) : undefined, content_version: 1 },
+          { headers }
+        )
+      }
       if (/target_permission_group|column.*does not exist/i.test(errMsg)) {
         delete row.target_permission_group
         const ins = (await supabaseInsert('hr_policies', row)) as { id?: number }[] | { id?: number }

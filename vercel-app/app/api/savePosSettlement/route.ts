@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  resolveSaasTenantScope,
+  saasTenantStoreConflictTarget,
+  stampSaasTenantIdForUniqueKey,
+} from '@/lib/saas-tenant-scope'
 
 const CASH_ACTUAL_DENOM_KEYS = ['1000', '500', '100', '50', '20', '10', '5', '2', '1'] as const
 
@@ -46,6 +53,22 @@ export async function POST(req: NextRequest) {
     const storeCode = String(body.storeCode ?? '').trim()
     const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
     if (!authGate.ok) return authGate.response
+    const auth = authGate.auth
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode,
+    })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'pos_settlements',
+      label: 'POS 결산',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json(
+        { success: false, message: tenantWriteErr, retryAfterQueue: false },
+        { status: 403, headers }
+      )
+    }
+
     const settleDate = String(body.settleDate ?? '').trim()
     const cashActual = body.cashActual != null ? numOrNull(body.cashActual) : null
     const cashAmt = numOrZero(body.cashAmt)
@@ -67,11 +90,15 @@ export async function POST(req: NextRequest) {
     if (!settleDate) {
       return NextResponse.json({ success: false, message: '결산일을 입력하세요.' }, { headers })
     }
-    const existing = (await supabaseSelectFilter(
-      'pos_settlements',
+    const existingFilter = appendSaasTenantFilter(
       `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${encodeURIComponent(settleDate)}`,
-      { limit: 1, select: 'closed' }
-    )) as { closed?: boolean }[] | null
+      tenantScope,
+      'pos_settlements'
+    )
+    const existing = (await supabaseSelectFilter('pos_settlements', existingFilter, {
+      limit: 1,
+      select: 'closed',
+    })) as { closed?: boolean }[] | null
     if (existing?.[0]?.closed) {
       return NextResponse.json(
         { success: false, message: '이미 마감 완료된 결산입니다. 재저장할 수 없습니다.' },
@@ -79,39 +106,56 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const row = {
-      store_code: storeCode,
-      settle_date: settleDate,
-      cash_actual: cashActual,
-      cash_amt: cashAmt,
-      card_amt: cardAmt,
-      card_breakdown: cardBreakdown,
-      qr_amt: qrAmt,
-      qr_breakdown: qrBreakdown,
-      delivery_app_amt: deliveryAppAmt,
-      delivery_app_breakdown: deliveryAppBreakdown,
-      dine_in_delivery_amt: dineInDeliveryAmt,
-      dine_in_delivery_breakdown: dineInDeliveryBreakdown,
-      other_amt: otherAmt,
-      other_breakdown: otherBreakdown,
-      memo,
-      closed,
-      cash_actual_denoms: cashActualDenoms,
-      updated_at: new Date().toISOString(),
-    }
+    const row = stampSaasTenantIdForUniqueKey(
+      {
+        store_code: storeCode,
+        settle_date: settleDate,
+        cash_actual: cashActual,
+        cash_amt: cashAmt,
+        card_amt: cardAmt,
+        card_breakdown: cardBreakdown,
+        qr_amt: qrAmt,
+        qr_breakdown: qrBreakdown,
+        delivery_app_amt: deliveryAppAmt,
+        delivery_app_breakdown: deliveryAppBreakdown,
+        dine_in_delivery_amt: dineInDeliveryAmt,
+        dine_in_delivery_breakdown: dineInDeliveryBreakdown,
+        other_amt: otherAmt,
+        other_breakdown: otherBreakdown,
+        memo,
+        closed,
+        cash_actual_denoms: cashActualDenoms,
+        updated_at: new Date().toISOString(),
+      },
+      tenantScope
+    )
 
+    const conflict = saasTenantStoreConflictTarget(tenantScope, 'store_code,settle_date')
     try {
-      await supabaseUpsert('pos_settlements', [row], 'store_code,settle_date')
+      await supabaseUpsert('pos_settlements', [row], conflict)
     } catch (firstErr) {
       const msg = firstErr instanceof Error ? firstErr.message : String(firstErr)
       const missingDenomCol =
         msg.includes('cash_actual_denoms') && (msg.includes('PGRST204') || msg.includes('Could not find'))
       if (missingDenomCol) {
         const { cash_actual_denoms: _omit, ...rowWithoutDenoms } = row
-        await supabaseUpsert('pos_settlements', [rowWithoutDenoms], 'store_code,settle_date')
+        try {
+          await supabaseUpsert('pos_settlements', [rowWithoutDenoms], conflict)
+        } catch (secondErr) {
+          const msg2 = secondErr instanceof Error ? secondErr.message : String(secondErr)
+          if (/on conflict|42P10|unique|tenant_id/i.test(msg2)) {
+            const { tenant_id: _t, ...legacy } = rowWithoutDenoms
+            await supabaseUpsert('pos_settlements', [legacy], 'store_code,settle_date')
+          } else {
+            throw secondErr
+          }
+        }
         console.warn(
           'savePosSettlement: DB에 cash_actual_denoms 없음 → 권종 제외 후 저장. sql/pos_settlements_cash_actual_denoms.sql 실행 권장'
         )
+      } else if (/on conflict|42P10|unique|tenant_id/i.test(msg)) {
+        const { tenant_id: _t, ...legacy } = row
+        await supabaseUpsert('pos_settlements', [legacy], 'store_code,settle_date')
       } else {
         throw firstErr
       }

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdate } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantContext,
+} from '@/lib/interior-tenant-guard'
 
 /** 견적 파일 메타(금액·연결 비용) 수정 */
 export async function POST(request: NextRequest) {
@@ -8,10 +12,11 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
 
-  const authResult = await requireAuth(request, 'manager')
-  if (authResult.errorResponse) {
-    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
-    return authResult.errorResponse
+  const guard = await requireInteriorTenantContext(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    guard.errorResponse.headers.set('Content-Type', 'application/json')
+    return guard.errorResponse
   }
 
   try {
@@ -24,6 +29,18 @@ export async function POST(request: NextRequest) {
     if (!id || Number.isNaN(id)) {
       return NextResponse.json({ success: false, message: 'id가 필요합니다.' }, { status: 400, headers })
     }
+
+    const existing = (await supabaseSelectFilter('interior_project_files', `id=eq.${id}`, {
+      limit: 1,
+      select: 'id,project_id',
+    })) as { id?: number; project_id?: number }[]
+    const projectId = existing?.[0]?.project_id
+    if (!projectId) {
+      return NextResponse.json({ success: false, message: '파일을 찾을 수 없습니다.' }, { status: 404, headers })
+    }
+
+    const access = await assertInteriorProjectAccess(projectId, guard.scope)
+    if (access !== 'ok') return interiorForbiddenResponse(headers)
 
     const row: Record<string, unknown> = {}
     if (body.quoteAmount != null) {

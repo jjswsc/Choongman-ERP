@@ -6,6 +6,15 @@ import {
   resolveScheduleSavePayloadFromSlot,
   type ScheduleEmployeeRowInput,
 } from '@/lib/schedule-employee-slot'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 /** 타임존 영향 없이 로컬 날짜만 사용 (toISOString 시 UTC로 밀릴 수 있음 방지) */
 function addDays(dateStr: string, days: number): string {
@@ -42,10 +51,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store,
+    })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'schedules',
+      label: '스케줄',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
+
     const startStr = monday
     const endStr = addDays(monday, 6)
 
-    const existingFilter = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}&store_name=ilike.${encodeURIComponent(store)}`
+    const existingFilter = appendSaasTenantFilter(
+      `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}&store_name=ilike.${encodeURIComponent(store)}`,
+      tenantScope,
+      'schedules'
+    )
     await supabaseDeleteByFilter('schedules', existingFilter)
 
     if (rows.length === 0) {
@@ -143,7 +169,9 @@ export async function POST(request: NextRequest) {
     if (toInsert.length > 0) {
       const CHUNK = 50
       for (let k = 0; k < toInsert.length; k += CHUNK) {
-        const chunk = toInsert.slice(k, k + CHUNK)
+        const chunk = toInsert.slice(k, k + CHUNK).map((r) =>
+          stampSaasTenantId(r, tenantScope, 'schedules')
+        )
         let payload = chunk
         for (;;) {
           try {
@@ -151,6 +179,14 @@ export async function POST(request: NextRequest) {
             break
           } catch (e) {
             const em = e instanceof Error ? e.message : String(e)
+            if (isMissingSaasTenantColumnError(e) && payload.some((r) => 'tenant_id' in r)) {
+              markSaasTenantColumnMissing('schedules')
+              payload = payload.map((r) => {
+                const { tenant_id: _t, ...rest } = r
+                return rest
+              })
+              continue
+            }
             if (/employee_code|42703|column/i.test(em) && payload.some((r) => 'employee_code' in r)) {
               payload = payload.map((r) => {
                 const { employee_code: _c, ...rest } = r

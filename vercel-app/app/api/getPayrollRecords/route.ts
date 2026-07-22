@@ -4,6 +4,13 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isOfficeStore } from '@/lib/permissions'
 import { filterPayrollRowsHidingOffice } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export interface PayrollRecordRow {
   month: string
@@ -45,6 +52,11 @@ export async function GET(request: NextRequest) {
   }
   const { auth } = authResult
 
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'payroll_records')) {
+    return NextResponse.json({ success: true, list: [] }, { headers })
+  }
+
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim().slice(0, 7)
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
@@ -72,16 +84,34 @@ export async function GET(request: NextRequest) {
 
   try {
     const isAll = !storeFilter || storeFilter === 'All' || storeFilter === '전체'
-    const filter = isAll
+    /** Omni: All 이어도 tenant 필터로 회사 범위만 */
+    if (tenantScope.enforce && isAll && !tenantScope.tenantId) {
+      return NextResponse.json({ success: true, list: [] }, { headers })
+    }
+    const baseFilter = isAll
       ? `month=eq.${encodeURIComponent(monthStr)}`
       : `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(storeFilter)}`
+    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'payroll_records')
 
-    const rows = await supabaseSelectFilter('payroll_records', filter, {
-      order: 'store.asc,name.asc',
-      limit: 1000,
-    })
+    let rows: Record<string, unknown>[] = []
+    try {
+      rows = ((await supabaseSelectFilter('payroll_records', filter, {
+        order: 'store.asc,name.asc',
+        limit: 10000,
+      })) || []) as Record<string, unknown>[]
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('payroll_records')
+        rows = ((await supabaseSelectFilter('payroll_records', baseFilter, {
+          order: 'store.asc,name.asc',
+          limit: 10000,
+        })) || []) as Record<string, unknown>[]
+      } else {
+        throw e
+      }
+    }
 
-    const list = (rows || []).map((r: Record<string, unknown>) => ({
+    const list = rows.map((r) => ({
       month: String(r.month || ''),
       store: String(r.store || ''),
       name: String(r.name || ''),

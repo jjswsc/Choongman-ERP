@@ -9,16 +9,36 @@ import {
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
-/** submitAttendance 와 동일: employee_code / employee_id 컬럼 미배포 시 순차 제거 후 재시도 */
-async function insertAttendanceLogRow(payload: Record<string, unknown>) {
-  let toInsert: Record<string, unknown> = { ...payload }
+/** submitAttendance 와 동일: employee_code / employee_id / tenant_id 컬럼 미배포 시 순차 제거 후 재시도 */
+async function insertAttendanceLogRow(payload: Record<string, unknown>, tenantScope: SaasTenantScope) {
+  let toInsert: Record<string, unknown> = stampSaasTenantId(
+    { ...payload },
+    tenantScope,
+    'attendance_logs'
+  )
   for (;;) {
     try {
       await supabaseInsert('attendance_logs', toInsert)
       return
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
+      if (isMissingSaasTenantColumnError(e) && 'tenant_id' in toInsert) {
+        markSaasTenantColumnMissing('attendance_logs')
+        const next = { ...toInsert }
+        delete next.tenant_id
+        toInsert = next
+        continue
+      }
       if (/employee_code|42703|column/i.test(em) && 'employee_code' in toInsert) {
         const next = { ...toInsert }
         delete next.employee_code
@@ -75,6 +95,14 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'attendance_logs',
+      label: '긴급 인정',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
     const body = await request.json()
     const dateStr = String(body?.date || body?.dateStr || '').trim().slice(0, 10)
     const storeName = String(body?.store || body?.storeName || '').trim()
@@ -110,10 +138,11 @@ export async function POST(request: NextRequest) {
       }
     }
     // 스케줄 조회
-    const schFilter =
+    const schBaseFilter =
       employeeId > 0
         ? `schedule_date=eq.${dateStr}&${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${employeeId}`
         : `schedule_date=eq.${dateStr}&${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+    const schFilter = appendSaasTenantFilter(schBaseFilter, tenantScope, 'schedules')
     const schRows = (await supabaseSelectFilter('schedules', schFilter, { limit: 1 })) as {
       schedule_date?: string
       store_name?: string
@@ -176,7 +205,11 @@ export async function POST(request: NextRequest) {
         try {
           return await supabaseSelectFilter(
             'leave_requests',
-            `leave_date=eq.${dateStr}&${employeeStorePostgrestFilter(storeName)}&employee_id=eq.${employeeId}&status=eq.승인`,
+            appendSaasTenantFilter(
+              `leave_date=eq.${dateStr}&${employeeStorePostgrestFilter(storeName)}&employee_id=eq.${employeeId}&status=eq.승인`,
+              tenantScope,
+              'leave_requests'
+            ),
             { limit: 5, select: 'id' }
           )
         } catch (e) {
@@ -184,7 +217,11 @@ export async function POST(request: NextRequest) {
           if (!/employee_id|42703|column/i.test(em)) throw e
         }
       }
-      const leaveFilter = `leave_date=eq.${dateStr}&${employeeStorePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`
+      const leaveFilter = appendSaasTenantFilter(
+        `leave_date=eq.${dateStr}&${employeeStorePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`,
+        tenantScope,
+        'leave_requests'
+      )
       return await supabaseSelectFilter('leave_requests', leaveFilter, { limit: 5, select: 'id' })
     })()) as { id?: number }[]
     if (leaveRows && leaveRows.length > 0) {
@@ -203,7 +240,11 @@ export async function POST(request: NextRequest) {
         try {
           const byId = (await supabaseSelectFilter(
             'attendance_logs',
-            `${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+            appendSaasTenantFilter(
+              `${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+              tenantScope,
+              'attendance_logs'
+            ),
             { limit: 10, select: 'log_type' }
           )) as { log_type?: string }[]
           const merged: { log_type?: string }[] = [...(byId || [])]
@@ -211,7 +252,11 @@ export async function POST(request: NextRequest) {
             try {
               const byCode = (await supabaseSelectFilter(
                 'attendance_logs',
-                `${attendanceStoreNamePostgrestFilter(storeName)}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+                appendSaasTenantFilter(
+                  `${attendanceStoreNamePostgrestFilter(storeName)}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+                  tenantScope,
+                  'attendance_logs'
+                ),
                 { limit: 10, select: 'log_type' }
               )) as { log_type?: string }[]
               merged.push(...(byCode || []))
@@ -227,7 +272,11 @@ export async function POST(request: NextRequest) {
           return []
         }
       }
-      const attFilter = `${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(logName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
+      const attFilter = appendSaasTenantFilter(
+        `${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(logName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+        tenantScope,
+        'attendance_logs'
+      )
       return await supabaseSelectFilter('attendance_logs', attFilter, {
         limit: 10,
         select: 'log_type',
@@ -283,7 +332,7 @@ export async function POST(request: NextRequest) {
     }
     if (employeeId > 0) inPayload.employee_id = employeeId
     if (empCodeNorm) inPayload.employee_code = empCodeNorm
-    await insertAttendanceLogRow(inPayload)
+    await insertAttendanceLogRow(inPayload, tenantScope)
 
     const outPayload: Record<string, unknown> = {
       log_at: outDate.toISOString(),
@@ -303,7 +352,7 @@ export async function POST(request: NextRequest) {
     }
     if (employeeId > 0) outPayload.employee_id = employeeId
     if (empCodeNorm) outPayload.employee_code = empCodeNorm
-    await insertAttendanceLogRow(outPayload)
+    await insertAttendanceLogRow(outPayload, tenantScope)
 
     return NextResponse.json(
       { success: true, message: '긴급 인정이 완료되었습니다.' },

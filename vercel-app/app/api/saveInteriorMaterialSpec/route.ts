@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantContext,
+} from '@/lib/interior-tenant-guard'
+import { stampSaasTenantId } from '@/lib/saas-tenant-scope'
 
 /** 자재 스펙 추가/수정 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
+
+  const guard = await requireInteriorTenantContext(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    guard.errorResponse.headers.set('Content-Type', 'application/json')
+    return guard.errorResponse
+  }
 
   try {
     const body = await request.json()
@@ -29,6 +42,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '자재명을 입력하세요.' }, { status: 400, headers })
     }
 
+    const access = await assertInteriorProjectAccess(projectId, guard.scope)
+    if (access !== 'ok') return interiorForbiddenResponse(headers)
+
     const row = {
       project_id: projectId,
       material_code: materialCode || null,
@@ -48,7 +64,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, id, message: '수정되었습니다.' }, { headers })
     }
 
-    const inserted = await supabaseInsert('interior_material_specs', row)
+    const inserted = await supabaseInsert(
+      'interior_material_specs',
+      stampSaasTenantId(row, guard.scope, 'interior_material_specs')
+    )
     const insertedRow = Array.isArray(inserted) ? inserted[0] : inserted
     const newId = (insertedRow as { id?: number })?.id
     return NextResponse.json({ success: true, id: newId, message: '등록되었습니다.' }, { headers })

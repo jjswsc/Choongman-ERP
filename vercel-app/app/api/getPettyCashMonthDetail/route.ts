@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -22,6 +29,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'petty_cash_transactions')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const scopeFilter = String(searchParams.get('scopeFilter') || searchParams.get('scope') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
@@ -92,24 +103,70 @@ export async function GET(request: NextRequest) {
     }[] = []
     if (effectiveStore) {
       if (effectiveStore === 'Office' && !departmentFilter) {
-        rows = (await supabaseSelectFilter(
-          'petty_cash_transactions',
-          'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
-          { order: 'trans_date.asc,id.asc', limit: 2000, select: PETTY_CASH_LIST_COLS }
-        )) as typeof rows
+        const baseFilter =
+          'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)'
+        const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
+        try {
+          rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
+            order: 'trans_date.asc,id.asc',
+            limit: 2000,
+            select: PETTY_CASH_LIST_COLS,
+          })) as typeof rows
+        } catch (e) {
+          if (isMissingSaasTenantColumnError(e)) {
+            markSaasTenantColumnMissing('petty_cash_transactions')
+            rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
+              order: 'trans_date.asc,id.asc',
+              limit: 2000,
+              select: PETTY_CASH_LIST_COLS,
+            })) as typeof rows
+          } else {
+            throw e
+          }
+        }
       } else {
-        rows = (await supabaseSelectFilter(
-          'petty_cash_transactions',
-          'store=eq.' + encodeURIComponent(effectiveStore),
-          { order: 'trans_date.asc,id.asc', limit: 2000, select: PETTY_CASH_LIST_COLS }
-        )) as typeof rows
+        const baseFilter = 'store=eq.' + encodeURIComponent(effectiveStore)
+        const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
+        try {
+          rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
+            order: 'trans_date.asc,id.asc',
+            limit: 2000,
+            select: PETTY_CASH_LIST_COLS,
+          })) as typeof rows
+        } catch (e) {
+          if (isMissingSaasTenantColumnError(e)) {
+            markSaasTenantColumnMissing('petty_cash_transactions')
+            rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
+              order: 'trans_date.asc,id.asc',
+              limit: 2000,
+              select: PETTY_CASH_LIST_COLS,
+            })) as typeof rows
+          } else {
+            throw e
+          }
+        }
       }
     } else {
-      rows = (await supabaseSelect('petty_cash_transactions', {
-        order: 'trans_date.asc,id.asc',
-        limit: 2000,
-        select: PETTY_CASH_LIST_COLS,
-      })) as typeof rows
+      const baseFilter = 'id=gt.0'
+      const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
+      try {
+        rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
+          order: 'trans_date.asc,id.asc',
+          limit: 2000,
+          select: PETTY_CASH_LIST_COLS,
+        })) as typeof rows
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('petty_cash_transactions')
+          rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
+            order: 'trans_date.asc,id.asc',
+            limit: 2000,
+            select: PETTY_CASH_LIST_COLS,
+          })) as typeof rows
+        } else {
+          throw e
+        }
+      }
     }
 
     const startD = new Date(startStr + 'T00:00:00')
@@ -214,6 +271,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getPettyCashMonthDetail:', e)
+    if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('petty_cash_transactions')
+    }
     return NextResponse.json([], { headers })
   }
 }

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/verify-auth'
 import {
   looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
-import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
+import { assertAuthTenantMatchesStore } from '@/lib/saas-tenant-scope'
+import { buildSaasStorageObjectPath } from '@/lib/saas-storage-path'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 const BUCKET = 'complaint-photos'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -23,15 +26,25 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authRes = await requireAuth(request, 'manager')
+    if (authRes.errorResponse) {
+      const er = authRes.errorResponse
+      er.headers.set('Access-Control-Allow-Origin', '*')
+      return er
+    }
+
     const body = (await request.json()) as {
       store?: string
       fileName?: string
       contentType?: string
       fileSize?: number
     }
-    const store = String(body.store || '').trim()
+    const store = String(body.store || authRes.auth.store || '').trim()
     if (!store) {
       return NextResponse.json({ success: false, message: '매장(store)이 필요합니다.' }, { status: 400, headers })
+    }
+    if ((await assertAuthTenantMatchesStore(authRes.auth, store)) === 'tenant_mismatch') {
+      return NextResponse.json({ success: false, message: 'tenant_mismatch' }, { status: 403, headers })
     }
 
     const fileSize = Number(body.fileSize)
@@ -49,11 +62,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '이미지는 5MB 이하여야 합니다.' }, { status: 400, headers })
     }
 
-    const storeSlug = store.replace(STORAGE_SEGMENT_SAFE, '_').slice(0, 60)
     const safeName = String(body.fileName || 'photo.jpg')
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .slice(0, 80)
-    const storagePath = `${storeSlug}/${Date.now()}-${safeName}`
+    const storagePath = buildSaasStorageObjectPath({
+      tenantId: normalizeTenantId(authRes.auth.tenantId),
+      segments: [store, `${Date.now()}-${safeName}`],
+    })
 
     const issue = async () => {
       const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })

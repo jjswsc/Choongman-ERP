@@ -43,3 +43,72 @@ export function labelForStore(storeLabels: Record<string, string>, code: string)
   if (!c) return ''
   return storeLabels[c] || c
 }
+
+/**
+ * 로그인 매장 셀렉트: 표시명이 같으면 store_code 쪽을 남긴다.
+ * (SaaS에서 store_name·store_code가 둘 다 users 키로 들어가면 "1001"이 두 줄로 보임)
+ */
+export function preferLoginStoreKey(
+  a: string,
+  b: string,
+  storeLabels: Record<string, string>
+): string {
+  const la = labelForStore(storeLabels, a) || a
+  const lb = labelForStore(storeLabels, b) || b
+  const aIsCode = a !== la
+  const bIsCode = b !== lb
+  if (aIsCode && !bIsCode) return a
+  if (bIsCode && !aIsCode) return b
+  if (a.includes('_') && !b.includes('_')) return a
+  if (b.includes('_') && !a.includes('_')) return b
+  return a.length >= b.length ? a : b
+}
+
+/** 동일 표시명 키를 하나로 합친다. users / storeLabels / storeCompanies 를 제자리 수정. */
+export function dedupeLoginUsersByDisplayLabel(
+  users: Record<string, string[]>,
+  storeLabels: Record<string, string>,
+  storeCompanies?: Record<string, string>
+): void {
+  const byLabel = new Map<string, string[]>()
+  for (const key of Object.keys(users)) {
+    const label = normStoreKey(labelForStore(storeLabels, key) || key)
+    if (!label) continue
+    const g = byLabel.get(label) || []
+    g.push(key)
+    byLabel.set(label, g)
+  }
+  for (const members of byLabel.values()) {
+    if (members.length <= 1) continue
+    let primary = members[0]!
+    for (const m of members.slice(1)) {
+      primary = preferLoginStoreKey(primary, m, storeLabels)
+    }
+    for (const m of members) {
+      if (m === primary) continue
+      users[primary] = [...new Set([...(users[primary] || []), ...(users[m] || [])])]
+      if (storeCompanies && !storeCompanies[primary] && storeCompanies[m]) {
+        storeCompanies[primary] = storeCompanies[m]!
+      }
+      delete users[m]
+      delete storeLabels[m]
+      if (storeCompanies) delete storeCompanies[m]
+    }
+  }
+}
+
+/** 드롭다운용: 같은 표시명은 한 키만 (value는 preferLoginStoreKey). */
+export function dedupeLoginStoreKeysByLabel(
+  storeKeys: string[],
+  storeLabels: Record<string, string>
+): string[] {
+  const byLabel = new Map<string, string>()
+  for (const key of storeKeys) {
+    const label = normStoreKey(labelForStore(storeLabels, key) || key)
+    if (!label) continue
+    const prev = byLabel.get(label)
+    byLabel.set(label, prev ? preferLoginStoreKey(prev, key, storeLabels) : key)
+  }
+  const keep = new Set(byLabel.values())
+  return storeKeys.filter((k) => keep.has(k))
+}

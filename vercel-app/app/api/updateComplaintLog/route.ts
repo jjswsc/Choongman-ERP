@@ -3,7 +3,7 @@ import { extractAnyMissingColumn, supabaseUpdateByFilterWithPgrst204Fallback } f
 import { supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { normalizeTenantId } from '@/lib/tenant-context'
-import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { assertAuthTenantMatchesStore } from '@/lib/saas-tenant-scope'
 
 /** 컴플레인 일지 수정 */
 export async function POST(request: NextRequest) {
@@ -17,9 +17,7 @@ export async function POST(request: NextRequest) {
     const authTenantId = String(authRes.auth?.tenantId || '').trim()
 
     const storeCode = String(data.store || '').trim()
-    const tenantFromStore = await resolveTenantIdForStoreCode(storeCode).catch(() => undefined)
-    const resolvedTenantId = tenantFromStore ? normalizeTenantId(tenantFromStore) : ''
-    if (authTenantId && resolvedTenantId && authTenantId !== resolvedTenantId) {
+    if ((await assertAuthTenantMatchesStore(authRes.auth, storeCode)) === 'tenant_mismatch') {
       return NextResponse.json({ success: false, message: 'tenant_mismatch' }, { status: 403 })
     }
 

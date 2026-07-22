@@ -20,6 +20,14 @@ import {
   memoMatchesAreaFilter,
   primaryAreaForDisplay,
 } from '@/lib/schedule-area'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -94,6 +102,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store && store.toLowerCase() !== 'all' && store !== '전체' && store !== '전체 매장' ? store : null,
+    })
+    if (isSaasTenantQueryBlocked(tenantScope, 'schedules')) {
+      return NextResponse.json([], { headers })
+    }
+
     const isAll = !store || store.toLowerCase() === 'all' || store === '전체' || store === '전체 매장'
     type SchRow = {
       schedule_date?: string
@@ -110,11 +127,25 @@ export async function GET(request: NextRequest) {
     }
     let scheduleRows: SchRow[] = []
     const dateFilter = `schedule_date=gte.${start}&schedule_date=lte.${end}`
-    if (isAll) {
-      scheduleRows = (await supabaseSelectFilter('schedules', dateFilter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
-    } else {
-      const filter = `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
-      scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
+    const scheduleBaseFilter = isAll
+      ? dateFilter
+      : `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
+    const scheduleFilter = appendSaasTenantFilter(scheduleBaseFilter, tenantScope, 'schedules')
+    try {
+      scheduleRows = (await supabaseSelectFilter('schedules', scheduleFilter, {
+        order: 'schedule_date.asc',
+        limit: 500,
+      })) as SchRow[]
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('schedules')
+        scheduleRows = (await supabaseSelectFilter('schedules', scheduleBaseFilter, {
+          order: 'schedule_date.asc',
+          limit: 500,
+        })) as SchRow[]
+      } else {
+        throw e
+      }
     }
 
     let empList: EmpRow[] = []
@@ -195,15 +226,30 @@ export async function GET(request: NextRequest) {
     }
 
     // 승인된 휴가: schedules에 없고 leave에만 있는 (date, store, name) → 휴가 행 병합
-    let leaveFilter = `leave_date=gte.${start}&leave_date=lte.${end}&status=eq.승인`
+    let leaveBaseFilter = `leave_date=gte.${start}&leave_date=lte.${end}&status=eq.승인`
     if (!isAll && store) {
-      leaveFilter += `&store=ilike.${encodeURIComponent(store)}`
+      leaveBaseFilter += `&store=ilike.${encodeURIComponent(store)}`
     }
-    const leaveRows = (await supabaseSelectFilter(
-      'leave_requests',
-      leaveFilter,
-      { order: 'leave_date.asc', limit: 200, select: 'store,name,leave_date,type' }
-    )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
+    const leaveFilter = appendSaasTenantFilter(leaveBaseFilter, tenantScope, 'leave_requests')
+    let leaveRows: { store?: string; name?: string; leave_date?: string; type?: string }[] = []
+    try {
+      leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, {
+        order: 'leave_date.asc',
+        limit: 200,
+        select: 'store,name,leave_date,type',
+      })) as typeof leaveRows
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('leave_requests')
+        leaveRows = (await supabaseSelectFilter('leave_requests', leaveBaseFilter, {
+          order: 'leave_date.asc',
+          limit: 200,
+          select: 'store,name,leave_date,type',
+        })) as typeof leaveRows
+      } else {
+        throw e
+      }
+    }
     const leaveMerged: { date: string; store: string; name: string; nick: string; pIn: string; pOut: string; pBS: string; pBE: string; area: string; plan_in_prev_day: boolean; leaveType?: string }[] = []
     for (const lr of leaveRows || []) {
       const date = toDateStr(lr.leave_date)

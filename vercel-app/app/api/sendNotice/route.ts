@@ -6,6 +6,13 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -22,6 +29,14 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'notices',
+      label: '공지',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
     const body = await request.json()
     const title = String(body?.title || '').trim()
     const content = String(body?.content || '').trim()
@@ -161,16 +176,20 @@ export async function POST(request: NextRequest) {
     const recipientList = Array.from(recipientListMap.values())
     const targetRecipientsStr = recipientList.length > 0 ? JSON.stringify(recipientList) : null
 
-    const noticeRow: Record<string, unknown> = {
-      id,
-      title,
-      content,
-      target_store: targetStore,
-      target_role: targetRole,
-      target_recipients: targetRecipientsStr,
-      sender,
-      attachments: attachmentsStr,
-    }
+    let noticeRow: Record<string, unknown> = stampSaasTenantId(
+      {
+        id,
+        title,
+        content,
+        target_store: targetStore,
+        target_role: targetRole,
+        target_recipients: targetRecipientsStr,
+        sender,
+        attachments: attachmentsStr,
+      },
+      tenantScope,
+      'notices'
+    )
     if (targetPermissionGroup != null && targetPermissionGroup !== '') noticeRow.target_permission_group = targetPermissionGroup
     if (isUrgent) noticeRow.is_urgent = true
     if (expiresAtRaw) noticeRow.expires_at = expiresAtRaw
@@ -179,7 +198,12 @@ export async function POST(request: NextRequest) {
       await supabaseInsert('notices', noticeRow)
     } catch (colErr) {
       const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
-      if (/target_permission_group|column.*does not exist/i.test(errMsg)) {
+      if (isMissingSaasTenantColumnError(colErr)) {
+        markSaasTenantColumnMissing('notices')
+        const { tenant_id: _tid, ...rest } = noticeRow
+        noticeRow = rest
+        await supabaseInsert('notices', noticeRow)
+      } else if (/target_permission_group|column.*does not exist/i.test(errMsg)) {
         delete noticeRow.target_permission_group
         await supabaseInsert('notices', noticeRow)
       } else if (/is_urgent|expires_at|scheduled_at/i.test(errMsg)) {

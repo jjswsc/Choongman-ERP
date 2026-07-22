@@ -605,8 +605,41 @@ export interface LoginDataResult {
   _source?: 'api' | 'cache' | 'fallback'
 }
 
-export async function getLoginDataWithCache(): Promise<LoginDataResult> {
-  const key = 'erp:loginData'
+export type GetLoginDataOptions = {
+  /** Omni: 회사명/테넌트 스코프. 없으면 레거시(충만) 전역 키 */
+  company?: string
+  tenantId?: string
+}
+
+function loginDataOfflineCacheKey(opts?: GetLoginDataOptions): string {
+  const tenantId = String(opts?.tenantId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  const company = String(opts?.company || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  const scope = tenantId || company
+  return scope ? `erp:loginData:${scope}` : 'erp:loginData'
+}
+
+function buildLoginDataQuery(opts?: GetLoginDataOptions): string {
+  const params = new URLSearchParams()
+  const company = String(opts?.company || '').trim()
+  const tenantId = String(opts?.tenantId || '').trim()
+  if (company) params.set('company', company)
+  if (tenantId) params.set('tenantId', tenantId)
+  const q = params.toString()
+  return q ? `/api/getLoginData?${q}` : '/api/getLoginData'
+}
+
+export async function getLoginDataWithCache(opts?: GetLoginDataOptions): Promise<LoginDataResult> {
+  const key = loginDataOfflineCacheKey(opts)
   const fallback: LoginDataResult = {
     users: {},
     vendors: [],
@@ -623,7 +656,7 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
   }
 
   try {
-    const res = await apiFetch('/api/getLoginData')
+    const res = await apiFetch(buildLoginDataQuery(opts))
     const data = (await res.json()) as {
       users?: Record<string, string[]>
       vendors?: string[]
@@ -660,7 +693,17 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       /* IndexedDB blocked/unavailable */
     })
     return result
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err || '')
+    /** Omni 회사 스코프 게이트 — 캐시/빈 fallback으로 삼키면 UI가 COMPANY_NOT_FOUND를 못 봄 */
+    if (
+      msg === 'company_required' ||
+      msg === 'company_not_found' ||
+      msg === 'company_inactive' ||
+      /company_required|company_not_found|company_inactive/i.test(msg)
+    ) {
+      throw err instanceof Error ? err : new Error(msg)
+    }
     /* API 실패 또는 navigator·프로브 오탐으로 온라인 분기에 못 들어갔던 경우 — 캐시로 폴백 */
   }
 
@@ -690,8 +733,10 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
 }
 
 /** Phase A — API 생략, IndexedDB 로그인 목록만 (하이브리드 cold start) */
-export async function readLoginDataFromCacheOnly(): Promise<LoginDataResult> {
-  const key = 'erp:loginData'
+export async function readLoginDataFromCacheOnly(
+  opts?: GetLoginDataOptions
+): Promise<LoginDataResult> {
+  const key = loginDataOfflineCacheKey(opts)
   const fallback: LoginDataResult = {
     users: {},
     vendors: [],
@@ -708,8 +753,8 @@ export async function readLoginDataFromCacheOnly(): Promise<LoginDataResult> {
     companies?: string[]
     storeCompanies?: Record<string, string>
     storeLabels?: Record<string, string>
-    legacyToCanonical?: Record<string, string>
     usedMaster?: boolean
+    legacyToCanonical?: Record<string, string>
   }>(key)
   if (cached && Object.keys(cached.users || {}).length > 0) {
     return {

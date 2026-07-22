@@ -19,6 +19,7 @@ import {
 } from '@/lib/pos-business-day'
 import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 const SELECT_LIMIT = 12000
 
@@ -33,9 +34,18 @@ export function storeCodeQueryVariants(storeCode: string): string[] {
   return [...out].filter(Boolean)
 }
 
+export type AllocatePosOrderNoOpts = {
+  /** Omni: 테넌트별 카운터 분리. 충만은 '' */
+  tenantId?: string | null
+}
+
 /** 다음 order_no (DB 저장 문자열) — 영업일(operating day) 기준 */
-export async function allocateNextPosOrderNo(storeCode: string): Promise<string> {
+export async function allocateNextPosOrderNo(
+  storeCode: string,
+  opts?: AllocatePosOrderNoOpts
+): Promise<string> {
   const slug = normalizeStoreSlugForOrderNo(storeCode)
+  const tenantId = normalizeTenantId(opts?.tenantId) || ''
   const businessHours = await loadPosBusinessHoursForServer(storeCode)
   const businessDay = getPosBusinessDateStrFromConfig(new Date(), businessHours)
   const ymd = businessDay.replace(/-/g, '')
@@ -47,22 +57,36 @@ export async function allocateNextPosOrderNo(storeCode: string): Promise<string>
     const rpcOut = await supabaseRpc<string>('allocate_pos_order_no', {
       p_store_slug: slug,
       p_business_ymd: ymd,
+      p_tenant_id: tenantId,
     })
     const orderNo = String(rpcOut ?? '').trim()
     if (orderNo) return orderNo
   } catch {
-    /* fallback below */
+    /* 3인자 RPC 미배포 → 2인자 폴백 */
+    try {
+      const rpcOut = await supabaseRpc<string>('allocate_pos_order_no', {
+        p_store_slug: slug,
+        p_business_ymd: ymd,
+      })
+      const orderNo = String(rpcOut ?? '').trim()
+      if (orderNo) return orderNo
+    } catch {
+      /* fallback below */
+    }
   }
   const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(businessDay, businessHours)
   const variants = storeCodeQueryVariants(storeCode)
   let maxSeq = 0
   for (const sc of variants) {
-    const filter = [
+    const parts = [
       `store_code=eq.${encodeURIComponent(sc)}`,
       `created_at=gte.${encodeURIComponent(startISO)}`,
       `created_at=lt.${encodeURIComponent(endISOExclusive)}`,
-    ].join('&')
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+    ]
+    if (tenantId) {
+      parts.push(`tenant_id=eq.${encodeURIComponent(tenantId)}`)
+    }
+    const rows = (await supabaseSelectFilter('pos_orders', parts.join('&'), {
       limit: SELECT_LIMIT,
       select: 'order_no',
     })) as { order_no?: string }[] | null

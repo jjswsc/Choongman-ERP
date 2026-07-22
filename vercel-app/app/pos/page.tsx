@@ -416,10 +416,10 @@ function POSMainPageInner() {
     setSwitchName('')
     setSwitchPw('')
     setSwitchUserOpen(true)
-    getLoginData()
+    getLoginData(auth?.company ? { company: auth.company } : undefined)
       .then((d) => setSwitchLoginData(d.users || {}))
       .catch(() => setSwitchLoginData({}))
-  }, [auth?.store, resolveStoreKey])
+  }, [auth?.company, auth?.store, resolveStoreKey])
 
   const handleSwitchUser = useCallback(
     async (e: React.FormEvent) => {
@@ -441,6 +441,7 @@ function POSMainPageInner() {
           name: switchName,
           pw: switchPw,
           isAdminPage: false,
+          ...(auth?.company ? { company: auth.company } : {}),
         })
         if (res.success && res.storeName && res.userName) {
           setAuth({

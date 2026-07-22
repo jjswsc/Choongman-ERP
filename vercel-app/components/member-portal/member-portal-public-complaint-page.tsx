@@ -65,7 +65,7 @@ function complaintErrorMessage(lang: Parameters<typeof memberPortalT>[0], code: 
   return memberPortalT(lang, "complaintSubmitFail")
 }
 
-async function uploadPublicComplaintPhoto(file: File) {
+async function uploadPublicComplaintPhoto(file: File, store?: string) {
   const ct = file.type || "image/jpeg"
   const pres = await fetch("/api/member-portal/public/complaints/photo/presign", {
     method: "POST",
@@ -74,6 +74,7 @@ async function uploadPublicComplaintPhoto(file: File) {
       fileName: file.name,
       contentType: ct,
       fileSize: file.size,
+      ...(store ? { store } : {}),
     }),
   })
   const pjson = (await pres.json()) as {
@@ -155,7 +156,7 @@ export function MemberPortalPublicComplaintPage() {
     setUploadLoading(true)
     setError("")
     try {
-      const res = await uploadPublicComplaintPhoto(files[0])
+      const res = await uploadPublicComplaintPhoto(files[0], store)
       if (res.success && res.url) {
         setPhotoUrl(res.url)
       } else {

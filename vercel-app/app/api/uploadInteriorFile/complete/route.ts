@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseStoragePublicUrl } from '@/lib/supabase-server'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantContext,
+} from '@/lib/interior-tenant-guard'
+import { stampSaasTenantId } from '@/lib/saas-tenant-scope'
 
 const BUCKET = 'interior-files'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Content-Type', 'application/json')
+
+  const guard = await requireInteriorTenantContext(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    guard.errorResponse.headers.set('Content-Type', 'application/json')
+    return guard.errorResponse
+  }
 
   try {
     const body = (await request.json()) as {
@@ -34,15 +48,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '파일 크기가 필요합니다.' }, { status: 400, headers })
     }
 
+    const access = await assertInteriorProjectAccess(projectId, guard.scope)
+    if (access !== 'ok') return interiorForbiddenResponse(headers)
+
     const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
 
-    await supabaseInsert('interior_project_files', {
-      project_id: Number(projectId),
-      file_type: fileType,
-      file_name: fileName,
-      file_path: publicUrl,
-      file_size: fileSize,
-    })
+    await supabaseInsert(
+      'interior_project_files',
+      stampSaasTenantId(
+        {
+          project_id: Number(projectId),
+          file_type: fileType,
+          file_name: fileName,
+          file_path: publicUrl,
+          file_size: fileSize,
+        },
+        guard.scope,
+        'interior_project_files'
+      )
+    )
 
     return NextResponse.json({ success: true, message: '업로드되었습니다.', url: publicUrl }, { headers })
   } catch (e) {

@@ -8,6 +8,14 @@ import {
   leavePersonKeyForLeaveStats,
   normalizeLeaveMatchKey,
 } from '@/lib/leave-request-utils'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -30,6 +38,19 @@ export async function POST(request: NextRequest) {
     const validated = parseOr400(requestLeaveSchema, bodyForValidation, headers)
     if (validated.errorResponse) return validated.errorResponse
     const { store, name, type, date: leaveDate, reason, employeeId } = validated.parsed
+
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store,
+    })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'leave_requests',
+      label: '휴가 신청',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
 
     let verifiedEmployeeId: number | undefined
     if (employeeId != null && employeeId > 0) {
@@ -99,22 +120,40 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const leaveRow: Record<string, unknown> = {
-      store,
-      name,
-      type: effectiveType,
-      leave_date: leaveDate,
-      reason: String(reason || '').trim(),
-      status: '대기',
-    }
-    if (verifiedEmployeeId != null && verifiedEmployeeId > 0) {
-      leaveRow.employee_id = verifiedEmployeeId
-    }
+    const leaveRow: Record<string, unknown> = stampSaasTenantId(
+      {
+        store,
+        name,
+        type: effectiveType,
+        leave_date: leaveDate,
+        reason: String(reason || '').trim(),
+        status: '대기',
+        ...(verifiedEmployeeId != null && verifiedEmployeeId > 0
+          ? { employee_id: verifiedEmployeeId }
+          : {}),
+      },
+      tenantScope,
+      'leave_requests'
+    )
     try {
       await supabaseInsert('leave_requests', leaveRow)
     } catch (insErr) {
       const em = insErr instanceof Error ? insErr.message : String(insErr)
-      if (/employee_id|42703|column/i.test(em) && 'employee_id' in leaveRow) {
+      if (isMissingSaasTenantColumnError(insErr) && 'tenant_id' in leaveRow) {
+        markSaasTenantColumnMissing('leave_requests')
+        const { tenant_id: _t, ...withoutTenant } = leaveRow
+        try {
+          await supabaseInsert('leave_requests', withoutTenant)
+        } catch (insErr2) {
+          const em2 = insErr2 instanceof Error ? insErr2.message : String(insErr2)
+          if (/employee_id|42703|column/i.test(em2) && 'employee_id' in withoutTenant) {
+            const { employee_id: _eid, ...withoutEid } = withoutTenant
+            await supabaseInsert('leave_requests', withoutEid)
+          } else {
+            throw insErr2
+          }
+        }
+      } else if (/employee_id|42703|column/i.test(em) && 'employee_id' in leaveRow) {
         const { employee_id: _eid, ...withoutEid } = leaveRow
         await supabaseInsert('leave_requests', withoutEid)
       } else {

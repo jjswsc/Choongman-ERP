@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantContext,
+} from '@/lib/interior-tenant-guard'
 
 /** 인테리어 비용 결제: bank_transactions 등록 + interior_expense_items paid/balance 갱신 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
+
+  const guard = await requireInteriorTenantContext(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    guard.errorResponse.headers.set('Content-Type', 'application/json')
+    return guard.errorResponse
+  }
 
   try {
     const body = await request.json()
@@ -31,13 +43,16 @@ export async function POST(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'interior_expense_items',
       `id=eq.${expenseId}`,
-      { limit: 1 }
-    )) as { id?: number; quote?: number; paid?: number; balance?: number }[]
+      { limit: 1, select: 'id,project_id,quote,paid,balance' }
+    )) as { id?: number; project_id?: number; quote?: number; paid?: number; balance?: number }[]
 
     const row = rows?.[0]
-    if (!row) {
+    if (!row?.id) {
       return NextResponse.json({ success: false, message: '해당 비용 항목을 찾을 수 없습니다.' }, { status: 404, headers })
     }
+
+    const access = await assertInteriorProjectAccess(row.project_id!, guard.scope)
+    if (access !== 'ok') return interiorForbiddenResponse(headers)
 
     const prevPaid = Number(row.paid) ?? 0
     const quote = Number(row.quote) ?? 0

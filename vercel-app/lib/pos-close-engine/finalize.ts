@@ -1,6 +1,14 @@
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { postPosDayClearingJournal } from '@/lib/accounting-posting'
 import { validatePosCloseRun, type PosCloseValidateResult } from '@/lib/pos-close-engine/validate'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  saasTenantStoreConflictTarget,
+  stampSaasTenantIdForUniqueKey,
+  type SaasTenantScope,
+  LEGACY_SAAS_TENANT_SCOPE,
+} from '@/lib/saas-tenant-scope'
 
 export type PosCloseFinalizeResult = PosCloseValidateResult & {
   finalized: boolean
@@ -11,23 +19,33 @@ export async function finalizePosCloseRun(params: {
   storeCode: string
   businessDate: string
   finalizedBy?: string | null
+  tenantScope?: SaasTenantScope
 }): Promise<PosCloseFinalizeResult> {
+  const tenantScope = params.tenantScope || LEGACY_SAAS_TENANT_SCOPE
+  const writeErr = assertSaasTenantWritable(tenantScope, {
+    tableHint: 'pos_close_runs',
+    label: 'POS 마감',
+  })
+  if (writeErr) throw new Error(writeErr)
+
   const validated = await validatePosCloseRun({
     storeCode: params.storeCode,
     businessDate: params.businessDate,
+    tenantScope,
   })
   if (validated.status !== 'validated') {
     throw new Error('POS_CLOSE_VALIDATION_FAILED')
   }
 
-  const settlementRows = (await supabaseSelectFilter(
-    'pos_settlements',
+  const settlementFilter = appendSaasTenantFilter(
     `store_code=eq.${encodeURIComponent(validated.storeCode)}&settle_date=eq.${encodeURIComponent(validated.businessDate)}`,
-    {
-      limit: 1,
-      select: 'id,cash_amt,card_amt,qr_amt,delivery_app_amt,dine_in_delivery_amt,other_amt',
-    }
-  )) as
+    tenantScope,
+    'pos_settlements'
+  )
+  const settlementRows = (await supabaseSelectFilter('pos_settlements', settlementFilter, {
+    limit: 1,
+    select: 'id,cash_amt,card_amt,qr_amt,delivery_app_amt,dine_in_delivery_amt,other_amt',
+  })) as
     | {
         id?: number
         cash_amt?: number
@@ -48,27 +66,39 @@ export async function finalizePosCloseRun(params: {
     diffTotal: validated.diffTotal,
   })
 
-  await supabaseUpsert(
-    'pos_close_runs',
-    [
-      {
-        store_code: validated.storeCode,
-        business_date: validated.businessDate,
-        status: postedJournalEntryId ? 'posted' : 'locked',
-        checks_json: validated.checks,
-        totals_json: {
-          systemTotal: validated.systemTotal,
-          settlementTotal: validated.settlementTotal,
-          diffTotal: validated.diffTotal,
-        },
-        settlement_ref: settlement?.id ?? null,
-        posted_journal_entry_id: postedJournalEntryId ?? null,
-        finalized_by: String(params.finalizedBy || '').trim() || null,
-        finalized_at: new Date().toISOString(),
+  const row = stampSaasTenantIdForUniqueKey(
+    {
+      store_code: validated.storeCode,
+      business_date: validated.businessDate,
+      status: postedJournalEntryId ? 'posted' : 'locked',
+      checks_json: validated.checks,
+      totals_json: {
+        systemTotal: validated.systemTotal,
+        settlementTotal: validated.settlementTotal,
+        diffTotal: validated.diffTotal,
       },
-    ],
-    'store_code,business_date'
+      settlement_ref: settlement?.id ?? null,
+      posted_journal_entry_id: postedJournalEntryId ?? null,
+      finalized_by: String(params.finalizedBy || '').trim() || null,
+      finalized_at: new Date().toISOString(),
+    },
+    tenantScope
   )
+  try {
+    await supabaseUpsert(
+      'pos_close_runs',
+      [row],
+      saasTenantStoreConflictTarget(tenantScope, 'store_code,business_date')
+    )
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/on conflict|42P10|unique|tenant_id/i.test(msg)) {
+      const { tenant_id: _t, ...legacy } = row
+      await supabaseUpsert('pos_close_runs', [legacy], 'store_code,business_date')
+    } else {
+      throw e
+    }
+  }
 
   return {
     ...validated,

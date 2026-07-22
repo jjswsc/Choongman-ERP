@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantRead,
+} from '@/lib/interior-tenant-guard'
+import { isSaasTenantQueryBlocked } from '@/lib/saas-tenant-scope'
 
 function buildUserKey(userStore: string, userName: string, employeeId?: number | null) {
   if (employeeId && Number.isFinite(employeeId) && employeeId > 0) return `eid:${Math.floor(employeeId)}`
@@ -11,13 +16,14 @@ function buildUserKey(userStore: string, userName: string, employeeId?: number |
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const authResult = await requireAuth(request, 'manager')
-  if (authResult.errorResponse) {
-    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
-    return authResult.errorResponse
-  }
-  const auth = authResult.auth
 
+  const guard = await requireInteriorTenantRead(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return guard.errorResponse
+  }
+
+  const auth = guard.auth
   const projectId = Number(request.nextUrl.searchParams.get('projectId') || 0)
   const zone = String(request.nextUrl.searchParams.get('zone') || '').trim()
   const userStore = String(auth.store || '').trim()
@@ -28,6 +34,11 @@ export async function GET(request: NextRequest) {
   if (!projectId || Number.isNaN(projectId)) return NextResponse.json({}, { headers })
   if (zone !== 'kitchen' && zone !== 'hall') return NextResponse.json({}, { headers })
   if (!userStore || !userName) return NextResponse.json({}, { headers })
+  if (isSaasTenantQueryBlocked(guard.scope, 'interior_projects')) return NextResponse.json({}, { headers })
+
+  const access = await assertInteriorProjectAccess(projectId, guard.scope)
+  if (access === 'forbidden') return interiorForbiddenResponse(headers)
+  if (access === 'not_found') return NextResponse.json({}, { headers })
 
   const userKey = buildUserKey(userStore, userName, employeeId)
   try {

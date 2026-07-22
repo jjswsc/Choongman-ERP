@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpsert } from '@/lib/supabase-server'
-import { requireAuth } from '@/lib/verify-auth'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantContext,
+} from '@/lib/interior-tenant-guard'
+import { stampSaasTenantId } from '@/lib/saas-tenant-scope'
 
 function buildUserKey(userStore: string, userName: string, employeeId?: number | null) {
   if (employeeId && Number.isFinite(employeeId) && employeeId > 0) return `eid:${Math.floor(employeeId)}`
@@ -13,14 +18,15 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
 
+  const guard = await requireInteriorTenantContext(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    guard.errorResponse.headers.set('Content-Type', 'application/json')
+    return guard.errorResponse
+  }
+
   try {
-    const authResult = await requireAuth(request, 'manager')
-    if (authResult.errorResponse) {
-      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
-      authResult.errorResponse.headers.set('Content-Type', 'application/json')
-      return authResult.errorResponse
-    }
-    const auth = authResult.auth
+    const auth = guard.auth
     const body = await request.json()
     const projectId = Number(body.projectId ?? 0)
     const zone = String(body.zone ?? '').trim()
@@ -51,26 +57,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '사용자 정보가 필요합니다.' }, { status: 400, headers })
     }
 
+    const access = await assertInteriorProjectAccess(projectId, guard.scope)
+    if (access !== 'ok') return interiorForbiddenResponse(headers)
+
     const userKey = buildUserKey(userStore, userName, employeeId)
     await supabaseUpsert(
       'interior_layout_editor_prefs',
       [
-        {
-          project_id: projectId,
-          zone,
-          user_key: userKey,
-          user_store: userStore,
-          user_name: userName,
-          employee_id: employeeId && !Number.isNaN(employeeId) ? Math.floor(employeeId) : null,
-          duplicate_offset_x: Number.isFinite(duplicateOffsetX) ? duplicateOffsetX : 0.5,
-          duplicate_offset_y: Number.isFinite(duplicateOffsetY) ? duplicateOffsetY : 0.5,
-          snap_enabled: snapEnabled,
-          snap_step: Number.isFinite(snapStep) ? Math.max(0.1, snapStep) : 0.5,
-          nudge_small: Number.isFinite(nudgeSmall) ? Math.max(0.01, nudgeSmall) : 0.1,
-          nudge_medium: Number.isFinite(nudgeMedium) ? Math.max(0.01, nudgeMedium) : 0.5,
-          nudge_large: Number.isFinite(nudgeLarge) ? Math.max(0.01, nudgeLarge) : 1.0,
-          updated_at: new Date().toISOString(),
-        },
+        stampSaasTenantId(
+          {
+            project_id: projectId,
+            zone,
+            user_key: userKey,
+            user_store: userStore,
+            user_name: userName,
+            employee_id: employeeId && !Number.isNaN(employeeId) ? Math.floor(employeeId) : null,
+            duplicate_offset_x: Number.isFinite(duplicateOffsetX) ? duplicateOffsetX : 0.5,
+            duplicate_offset_y: Number.isFinite(duplicateOffsetY) ? duplicateOffsetY : 0.5,
+            snap_enabled: snapEnabled,
+            snap_step: Number.isFinite(snapStep) ? Math.max(0.1, snapStep) : 0.5,
+            nudge_small: Number.isFinite(nudgeSmall) ? Math.max(0.01, nudgeSmall) : 0.1,
+            nudge_medium: Number.isFinite(nudgeMedium) ? Math.max(0.01, nudgeMedium) : 0.5,
+            nudge_large: Number.isFinite(nudgeLarge) ? Math.max(0.01, nudgeLarge) : 1.0,
+            updated_at: new Date().toISOString(),
+          },
+          guard.scope,
+          'interior_layout_editor_prefs'
+        ),
       ],
       'project_id,zone,user_key'
     )

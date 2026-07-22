@@ -4,6 +4,13 @@ import { assignLeaveRowToEmployeeForStats } from '@/lib/leave-request-utils'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -46,6 +53,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'leave_requests')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -98,14 +109,19 @@ export async function GET(request: NextRequest) {
     let rows: LeaveReqDb[] = []
     try {
       if (store) {
-        const filter = `store=ilike.${encodeURIComponent(store)}`
+        const filter = appendSaasTenantFilter(
+          `store=ilike.${encodeURIComponent(store)}`,
+          tenantScope,
+          'leave_requests'
+        )
         rows = (await supabaseSelectFilter('leave_requests', filter, {
           order: 'leave_date.desc',
           limit: 500,
           select: selectWithEid,
         })) as LeaveReqDb[]
       } else {
-        rows = (await supabaseSelect('leave_requests', {
+        const filter = appendSaasTenantFilter('id=gt.0', tenantScope, 'leave_requests')
+        rows = (await supabaseSelectFilter('leave_requests', filter, {
           order: 'leave_date.desc',
           limit: 500,
           select: selectWithEid,
@@ -113,19 +129,22 @@ export async function GET(request: NextRequest) {
       }
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_id|42703|column/i.test(em)) throw e
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('leave_requests')
+      }
+      if (!/employee_id|42703|column|tenant_id/i.test(em)) throw e
       if (store) {
         const filter = `store=ilike.${encodeURIComponent(store)}`
         rows = (await supabaseSelectFilter('leave_requests', filter, {
           order: 'leave_date.desc',
           limit: 500,
-          select: selectLegacy,
+          select: /employee_id/i.test(em) ? selectLegacy : selectWithEid,
         })) as LeaveReqDb[]
       } else {
         rows = (await supabaseSelect('leave_requests', {
           order: 'leave_date.desc',
           limit: 500,
-          select: selectLegacy,
+          select: /employee_id/i.test(em) ? selectLegacy : selectWithEid,
         })) as LeaveReqDb[]
       }
     }

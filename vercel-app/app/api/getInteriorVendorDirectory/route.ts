@@ -1,17 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireInteriorTenantRead } from '@/lib/interior-tenant-guard'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+} from '@/lib/saas-tenant-scope'
 
 /** 인테리어 업체 마스터 목록 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+
+  const guard = await requireInteriorTenantRead(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return guard.errorResponse
+  }
+
+  if (isSaasTenantQueryBlocked(guard.scope, 'interior_vendor_directory')) {
+    return NextResponse.json([], { headers })
+  }
+
   const includeInactive = request.nextUrl.searchParams.get('includeInactive') === '1'
 
   try {
     const opts = { order: 'sort_order.asc,name.asc', limit: 5000 }
-    const rows = (includeInactive
-      ? await supabaseSelect('interior_vendor_directory', opts)
-      : await supabaseSelectFilter('interior_vendor_directory', 'is_active=eq.true', opts)) as {
+    const baseFilter = includeInactive ? 'id=gte.0' : 'is_active=eq.true'
+    const filter = appendSaasTenantFilter(baseFilter, guard.scope, 'interior_vendor_directory')
+
+    let rows: {
       id?: number
       code?: string
       name?: string
@@ -25,7 +44,18 @@ export async function GET(request: NextRequest) {
       last_used_at?: string
       is_active?: boolean
       sort_order?: number
-    }[]
+    }[] = []
+
+    try {
+      rows = (await supabaseSelectFilter('interior_vendor_directory', filter, opts)) as typeof rows
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('interior_vendor_directory')
+        rows = (await supabaseSelectFilter('interior_vendor_directory', baseFilter, opts)) as typeof rows
+      } else {
+        throw e
+      }
+    }
 
     const list = (rows || []).map((r) => ({
       id: r.id,

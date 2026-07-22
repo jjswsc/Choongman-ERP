@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { lookupVendorNameByCode, resolveVendorCodeFromStore } from '@/lib/vendor-code-policy'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** 매장별 회사명 조회 (vendors gps_name 또는 name 일치, 없으면 본사) */
 async function getStoreCompanyName(store: string): Promise<string> {
@@ -49,6 +56,11 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'payroll_records')) {
+    return NextResponse.json({ success: true, data: null, msg: '' }, { headers })
+  }
+
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim().slice(0, 7)
   const userStore = String(auth.store || '').trim()
@@ -75,24 +87,43 @@ export async function GET(request: NextRequest) {
     let r: Record<string, unknown> | null = null
     if (employeeId > 0) {
       try {
-        const byId = await supabaseSelectFilter(
-          'payroll_records',
+        const byIdFilter = appendSaasTenantFilter(
           `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(userStore)}&employee_id=eq.${employeeId}`,
-          { order: 'month.desc', limit: 1 }
+          tenantScope,
+          'payroll_records'
         )
+        const byId = await supabaseSelectFilter('payroll_records', byIdFilter, {
+          order: 'month.desc',
+          limit: 1,
+        })
         r = Array.isArray(byId) && byId.length > 0 ? (byId[0] as Record<string, unknown>) : null
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
-        if (!/employee_id|42703|column/i.test(em)) throw e
+        if (isMissingSaasTenantColumnError(e)) markSaasTenantColumnMissing('payroll_records')
+        if (!/employee_id|42703|column|tenant_id/i.test(em)) throw e
       }
     }
     if (!r) {
-      const filter = `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(userStore)}&name=eq.${encodeURIComponent(userName)}`
-      const rows = await supabaseSelectFilter('payroll_records', filter, {
-        order: 'month.desc',
-        limit: 1,
-      })
-      r = Array.isArray(rows) && rows.length > 0 ? (rows[0] as Record<string, unknown>) : null
+      const baseFilter = `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(userStore)}&name=eq.${encodeURIComponent(userName)}`
+      const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'payroll_records')
+      try {
+        const rows = await supabaseSelectFilter('payroll_records', filter, {
+          order: 'month.desc',
+          limit: 1,
+        })
+        r = Array.isArray(rows) && rows.length > 0 ? (rows[0] as Record<string, unknown>) : null
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('payroll_records')
+          const rows = await supabaseSelectFilter('payroll_records', baseFilter, {
+            order: 'month.desc',
+            limit: 1,
+          })
+          r = Array.isArray(rows) && rows.length > 0 ? (rows[0] as Record<string, unknown>) : null
+        } else {
+          throw e
+        }
+      }
     }
     if (!r) {
       return NextResponse.json({ success: true, data: null, msg: '' }, { headers })

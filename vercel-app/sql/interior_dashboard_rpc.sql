@@ -1,117 +1,128 @@
 -- 인테리어 대시보드·프로젝트별 알림 집계 (방콕 일자 기준)
--- Supabase SQL Editor에서 실행 후 getInteriorDashboardSummary API가 RPC를 우선 사용합니다.
+-- Omni: p_tenant_id 로 회사 스코프. null이면 전체(충만/레거시).
+-- 전체 마이그레이션은 notices_worklog_interior_tenant_id.sql 에 포함.
 
-CREATE OR REPLACE FUNCTION get_interior_dashboard_summary()
-RETURNS jsonb
-LANGUAGE sql
-STABLE
-AS $$
-WITH today AS (
-  SELECT (now() AT TIME ZONE 'Asia/Bangkok')::date AS d
+drop function if exists public.get_interior_dashboard_summary();
+drop function if exists public.get_interior_dashboard_summary(text);
+
+create or replace function public.get_interior_dashboard_summary(p_tenant_id text default null)
+returns jsonb
+language sql
+stable
+as $$
+with today as (
+  select (now() at time zone 'Asia/Bangkok')::date as d
 ),
-projects AS (
-  SELECT
+projects as (
+  select
     id,
     code,
     name,
-    COALESCE(status, 'active') AS status,
-    COALESCE(budget_total, 0)::numeric AS budget_total
-  FROM interior_projects
+    coalesce(status, 'active') as status,
+    coalesce(budget_total, 0)::numeric as budget_total
+  from public.interior_projects
+  where p_tenant_id is null
+     or coalesce(trim(tenant_id), '') = ''
+     or tenant_id = p_tenant_id
 ),
-wp_projects AS (
-  SELECT DISTINCT project_id FROM interior_work_packages
+wp_projects as (
+  select distinct project_id from public.interior_work_packages
 ),
-wp_late AS (
-  SELECT wp.project_id, COUNT(*)::int AS cnt
-  FROM interior_work_packages wp
-  CROSS JOIN today t
-  WHERE COALESCE(wp.status, 'planned') NOT IN ('done', 'cancelled')
-    AND wp.end_date IS NOT NULL
-    AND wp.end_date < t.d
-  GROUP BY wp.project_id
+wp_late as (
+  select wp.project_id, count(*)::int as cnt
+  from public.interior_work_packages wp
+  cross join today t
+  where coalesce(wp.status, 'planned') not in ('done', 'cancelled')
+    and wp.end_date is not null
+    and wp.end_date < t.d
+    and exists (select 1 from projects p where p.id = wp.project_id)
+  group by wp.project_id
 ),
-legacy_late AS (
-  SELECT si.project_id, COUNT(*)::int AS cnt
-  FROM interior_schedule_items si
-  CROSS JOIN today t
-  WHERE NOT EXISTS (
-    SELECT 1 FROM wp_projects wp WHERE wp.project_id = si.project_id
+legacy_late as (
+  select si.project_id, count(*)::int as cnt
+  from public.interior_schedule_items si
+  cross join today t
+  where not exists (
+    select 1 from wp_projects wp where wp.project_id = si.project_id
   )
-    AND si.end_date IS NOT NULL
-    AND si.end_date < t.d
-  GROUP BY si.project_id
+    and si.end_date is not null
+    and si.end_date < t.d
+    and exists (select 1 from projects p where p.id = si.project_id)
+  group by si.project_id
 ),
-schedule_late AS (
-  SELECT project_id, SUM(cnt)::int AS cnt
-  FROM (
-    SELECT project_id, cnt FROM wp_late
-    UNION ALL
-    SELECT project_id, cnt FROM legacy_late
+schedule_late as (
+  select project_id, sum(cnt)::int as cnt
+  from (
+    select project_id, cnt from wp_late
+    union all
+    select project_id, cnt from legacy_late
   ) x
-  GROUP BY project_id
+  group by project_id
 ),
-vt_late AS (
-  SELECT v.project_id, COUNT(*)::int AS cnt
-  FROM interior_vendor_tracks v
-  CROSS JOIN today t
-  WHERE COALESCE(v.status, 'planned') NOT IN ('done', 'cancelled')
-    AND (
-      (v.payment_due_date IS NOT NULL AND v.payment_paid_date IS NULL AND v.payment_due_date < t.d)
-      OR (v.material_eta_date IS NOT NULL AND v.material_received_date IS NULL AND v.material_eta_date < t.d)
-      OR (
-        v.work_completed_date IS NOT NULL
-        AND COALESCE(v.status, 'planned') <> 'done'
-        AND v.work_completed_date < t.d
+vt_late as (
+  select v.project_id, count(*)::int as cnt
+  from public.interior_vendor_tracks v
+  cross join today t
+  where coalesce(v.status, 'planned') not in ('done', 'cancelled')
+    and (
+      (v.payment_due_date is not null and v.payment_paid_date is null and v.payment_due_date < t.d)
+      or (v.material_eta_date is not null and v.material_received_date is null and v.material_eta_date < t.d)
+      or (
+        v.work_completed_date is not null
+        and coalesce(v.status, 'planned') <> 'done'
+        and v.work_completed_date < t.d
       )
     )
-  GROUP BY v.project_id
+    and exists (select 1 from projects p where p.id = v.project_id)
+  group by v.project_id
 ),
-paid AS (
-  SELECT project_id, COALESCE(SUM(paid), 0)::numeric AS paid_total
-  FROM interior_expense_items
-  GROUP BY project_id
+paid as (
+  select project_id, coalesce(sum(paid), 0)::numeric as paid_total
+  from public.interior_expense_items e
+  where exists (select 1 from projects p where p.id = e.project_id)
+  group by project_id
 ),
-project_rows AS (
-  SELECT
+project_rows as (
+  select
     p.id,
-    COALESCE(paid.paid_total, 0) AS paid_total,
-    COALESCE(schedule_late.cnt, 0) AS schedule_late_count,
-    COALESCE(vt_late.cnt, 0) AS vendor_delayed_count,
+    coalesce(paid.paid_total, 0) as paid_total,
+    coalesce(schedule_late.cnt, 0) as schedule_late_count,
+    coalesce(vt_late.cnt, 0) as vendor_delayed_count,
     (
       p.budget_total > 0
-      AND COALESCE(paid.paid_total, 0) > p.budget_total
-    ) AS over_budget,
+      and coalesce(paid.paid_total, 0) > p.budget_total
+    ) as over_budget,
     (
-      COALESCE(schedule_late.cnt, 0) > 0
-      OR COALESCE(vt_late.cnt, 0) > 0
-      OR (
+      coalesce(schedule_late.cnt, 0) > 0
+      or coalesce(vt_late.cnt, 0) > 0
+      or (
         p.budget_total > 0
-        AND COALESCE(paid.paid_total, 0) > p.budget_total
+        and coalesce(paid.paid_total, 0) > p.budget_total
       )
-    ) AS has_alert
-  FROM projects p
-  LEFT JOIN paid ON paid.project_id = p.id
-  LEFT JOIN schedule_late ON schedule_late.project_id = p.id
-  LEFT JOIN vt_late ON vt_late.project_id = p.id
+    ) as has_alert
+  from projects p
+  left join paid on paid.project_id = p.id
+  left join schedule_late on schedule_late.project_id = p.id
+  left join vt_late on vt_late.project_id = p.id
 )
-SELECT jsonb_build_object(
-  'generatedAt', (SELECT d::text FROM today),
+select jsonb_build_object(
+  'generatedAt', (select d::text from today),
   'totals', jsonb_build_object(
     'activeProjectCount', (
-      SELECT COUNT(*)::int FROM projects WHERE status <> 'completed'
+      select count(*)::int from projects where status <> 'completed'
     ),
-    'scheduleOverdueCount', COALESCE((SELECT SUM(schedule_late_count) FROM project_rows), 0),
-    'vendorDelayedCount', COALESCE((SELECT SUM(vendor_delayed_count) FROM project_rows), 0),
+    'scheduleOverdueCount', coalesce((select sum(schedule_late_count) from project_rows), 0),
+    'vendorDelayedCount', coalesce((select sum(vendor_delayed_count) from project_rows), 0),
     'overBudgetProjectCount', (
-      SELECT COUNT(*)::int FROM project_rows WHERE over_budget
+      select count(*)::int from project_rows where over_budget
     ),
     'projectsWithAnyAlert', (
-      SELECT COUNT(*)::int FROM project_rows WHERE has_alert
+      select count(*)::int from project_rows where has_alert
     )
   ),
-  'projects', COALESCE(
+  'projects', coalesce(
     (
-      SELECT jsonb_agg(
+      select jsonb_agg(
         jsonb_build_object(
           'id', id,
           'paidTotal', paid_total,
@@ -120,9 +131,9 @@ SELECT jsonb_build_object(
           'overBudget', over_budget,
           'hasAlert', has_alert
         )
-        ORDER BY id
+        order by id
       )
-      FROM project_rows
+      from project_rows
     ),
     '[]'::jsonb
   )

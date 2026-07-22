@@ -3,6 +3,14 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 import { dedupeWorkLogItemsByContent } from '@/lib/work-log-dedupe'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 function toDateStr(v: string | Date | null): string {
   if (!v) return ''
@@ -28,11 +36,22 @@ function nickIsUniqueAcrossStaff(
   return hits === 1
 }
 
+const emptyWorkLogPayload = { finish: [], continueItems: [], todayItems: [] }
+
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await tryVerifyBearerFromRequest(req)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: auth?.store,
+    })
+    if (isSaasTenantQueryBlocked(tenantScope, 'work_logs')) {
+      return NextResponse.json(emptyWorkLogPayload, { headers })
+    }
+
     const { searchParams } = new URL(req.url)
     const dateStr = searchParams.get('dateStr') || searchParams.get('date') || ''
     const name = searchParams.get('name') || ''
@@ -41,7 +60,27 @@ export async function GET(req: NextRequest) {
     const hasEmployeeId =
       String(employeeIdRaw).trim() !== '' && Number.isFinite(parsedEmployeeId) && parsedEmployeeId > 0
 
-    const staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick' })) || []) as { name?: string; nick?: string }[]
+    let staffList: { name?: string; nick?: string }[] = []
+    if (tenantScope.enforce) {
+      try {
+        const empFilter = appendSaasTenantFilter('id=gt.0', tenantScope, 'employees')
+        staffList = ((await supabaseSelectFilter('employees', empFilter, {
+          order: 'id.asc',
+          select: 'name,nick',
+        })) || []) as typeof staffList
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('employees')
+          staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick' })) ||
+            []) as typeof staffList
+        } else {
+          throw e
+        }
+      }
+    } else {
+      staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick' })) ||
+        []) as typeof staffList
+    }
     let matchedFull = ''
     let matchedNick = ''
     const searchKey = String(name).toLowerCase().replace(/\s+/g, '')
@@ -78,11 +117,25 @@ export async function GET(req: NextRequest) {
       manager_comment?: string
     }
     const rowById = new Map<string, LogRowLite>()
-    const mergeRows = async (filter: string) => {
-      const rr = (await supabaseSelectFilter('work_logs', filter, {
-        order: 'log_date.desc',
-        limit: 2000,
-      })) as LogRowLite[] | null
+    const mergeRows = async (baseFilter: string) => {
+      const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'work_logs')
+      let rr: LogRowLite[] | null = null
+      try {
+        rr = (await supabaseSelectFilter('work_logs', filter, {
+          order: 'log_date.desc',
+          limit: 2000,
+        })) as LogRowLite[] | null
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('work_logs')
+          rr = (await supabaseSelectFilter('work_logs', baseFilter, {
+            order: 'log_date.desc',
+            limit: 2000,
+          })) as LogRowLite[] | null
+        } else {
+          throw e
+        }
+      }
       for (const r of rr || []) {
         const id = String((r as { id?: unknown }).id ?? '').trim()
         if (id && !rowById.has(id)) rowById.set(id, r)
@@ -190,6 +243,6 @@ export async function GET(req: NextRequest) {
     )
   } catch (e) {
     console.error('getWorkLogData:', e)
-    return NextResponse.json({ finish: [], continueItems: [], todayItems: [] }, { headers })
+    return NextResponse.json(emptyWorkLogPayload, { headers })
   }
 }

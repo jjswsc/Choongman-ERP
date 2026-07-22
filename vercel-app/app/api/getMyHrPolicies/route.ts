@@ -5,6 +5,15 @@ import { isHrPolicyReadCurrent } from '@/lib/hr-policy-read-status'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,8 +34,13 @@ const DB_FETCH_LIMIT = 200
 async function getMyHrPoliciesHandler(
   store: string,
   name: string,
-  opts: { page: number; pageSize: number; status: 'all' | 'unread' | 'read' }
+  opts: { page: number; pageSize: number; status: 'all' | 'unread' | 'read' },
+  tenantScope: SaasTenantScope
 ) {
+  if (isSaasTenantQueryBlocked(tenantScope, 'hr_policies')) {
+    return empty(opts.page, opts.pageSize)
+  }
+
   const { myJob, myRole } = findEmployeeContextFromRoster(
     ((await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) || []) as {
       store?: string
@@ -43,10 +57,26 @@ async function getMyHrPoliciesHandler(
     { status: string; v: number }
   >()
   try {
-    const sub = (await supabaseSelectFilter('hr_policy_reads', `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`, {
-      select: 'policy_id,status,acknowledged_version',
-      limit: 2000,
-    })) as { policy_id: number; status?: string; acknowledged_version?: number }[] | null
+    const readsBase = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
+    const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'hr_policy_reads')
+    type ReadDbRow = { policy_id: number; status?: string; acknowledged_version?: number }
+    let sub: ReadDbRow[] | null = null
+    try {
+      sub = (await supabaseSelectFilter('hr_policy_reads', readsFilter, {
+        select: 'policy_id,status,acknowledged_version',
+        limit: 2000,
+      })) as ReadDbRow[] | null
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('hr_policy_reads')
+        sub = (await supabaseSelectFilter('hr_policy_reads', readsBase, {
+          select: 'policy_id,status,acknowledged_version',
+          limit: 2000,
+        })) as ReadDbRow[] | null
+      } else {
+        throw e
+      }
+    }
     for (const r of sub || []) {
       readData.set(r.policy_id, {
         status: r.status || '확인',
@@ -58,11 +88,9 @@ async function getMyHrPoliciesHandler(
   }
 
   const built: HrPolicyListItem[] = []
-  const rows = (await supabaseSelectFilter('hr_policies', 'is_active=eq.true', {
-    order: 'created_at.desc',
-    limit: DB_FETCH_LIMIT,
-    select: HR_POLICY_LIST_COLS,
-  })) as {
+  const policiesBase = 'is_active=eq.true'
+  const policiesFilter = appendSaasTenantFilter(policiesBase, tenantScope, 'hr_policies')
+  let rows: {
     id: number
     title?: string
     content?: string
@@ -74,7 +102,25 @@ async function getMyHrPoliciesHandler(
     created_at?: string
     effective_at?: string
     attachments?: string
-  }[] | null
+  }[] | null = null
+  try {
+    rows = (await supabaseSelectFilter('hr_policies', policiesFilter, {
+      order: 'created_at.desc',
+      limit: DB_FETCH_LIMIT,
+      select: HR_POLICY_LIST_COLS,
+    })) as typeof rows
+  } catch (e) {
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('hr_policies')
+      rows = (await supabaseSelectFilter('hr_policies', policiesBase, {
+        order: 'created_at.desc',
+        limit: DB_FETCH_LIMIT,
+        select: HR_POLICY_LIST_COLS,
+      })) as typeof rows
+    } else {
+      throw e
+    }
+  }
 
   for (let i = 0; i < (rows || []).length; i++) {
     const row = rows![i]
@@ -171,7 +217,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(empty(1, DEFAULT_LIST_PAGE_SIZE), { headers })
   }
   try {
-    const r = await getMyHrPoliciesHandler(store, name, q)
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store,
+    })
+    const r = await getMyHrPoliciesHandler(store, name, q, tenantScope)
     return NextResponse.json(r, { headers })
   } catch (e) {
     console.error('getMyHrPolicies:', e)
@@ -191,7 +242,12 @@ export async function POST(request: NextRequest) {
     if (!store || !name) {
       return NextResponse.json(empty(1, DEFAULT_LIST_PAGE_SIZE), { headers })
     }
-    const r = await getMyHrPoliciesHandler(store, name, q)
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: store,
+    })
+    const r = await getMyHrPoliciesHandler(store, name, q, tenantScope)
     return NextResponse.json(r, { headers })
   } catch (e) {
     console.error('getMyHrPolicies:', e)

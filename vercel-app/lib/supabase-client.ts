@@ -33,10 +33,36 @@ export function getSupabaseClient() {
   return _client
 }
 
+/**
+ * Realtime filter는 단일 컬럼이 안정적.
+ * Omni: tenant_id 우선(동일 store_code 교차 테넌트 차단).
+ * 충만: store_code.
+ * 클라이언트에서 store/tenant 재검증.
+ */
 function buildPosOrdersChannelFilter(options?: PosOrdersRealtimeSubscribeOptions): string | undefined {
-  if (options?.tenantId) return `tenant_id=eq.${options.tenantId}`
-  if (options?.store) return `store_code=eq.${options.store}`
+  const tenantId = String(options?.tenantId || '').trim()
+  if (tenantId) return `tenant_id=eq.${tenantId}`
+  const store = String(options?.store || '').trim()
+  if (store) return `store_code=eq.${store}`
   return undefined
+}
+
+function rowMatchesPosRealtimeFilter(
+  row: Record<string, unknown> | null | undefined,
+  options?: PosOrdersRealtimeSubscribeOptions
+): boolean {
+  if (!row) return false
+  const tenantId = String(options?.tenantId || '').trim().toLowerCase()
+  if (tenantId) {
+    const rowTid = String(row.tenant_id ?? '').trim().toLowerCase()
+    if (rowTid && rowTid !== tenantId) return false
+  }
+  const store = String(options?.store || '').trim().toLowerCase()
+  if (store) {
+    const rowStore = String(row.store_code ?? '').trim().toLowerCase()
+    if (rowStore && rowStore !== store) return false
+  }
+  return true
 }
 
 function attachSubscribeStatus(
@@ -61,7 +87,11 @@ export function subscribePosOrdersInsert(
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) },
-      onInsert
+      (payload) => {
+        const row = (payload as { new?: Record<string, unknown> }).new
+        if (!rowMatchesPosRealtimeFilter(row, options)) return
+        onInsert({ new: row || {} })
+      }
     )
   return attachSubscribeStatus(channel, options?.onStatus)
 }
@@ -79,7 +109,14 @@ export function subscribePosOrdersUpdate(
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) },
-      onUpdate
+      (payload) => {
+        const row = (payload as { new?: Record<string, unknown>; old?: Record<string, unknown> }).new
+        if (!rowMatchesPosRealtimeFilter(row, options)) return
+        onUpdate({
+          new: row || {},
+          old: (payload as { old?: Record<string, unknown> }).old,
+        })
+      }
     )
   return attachSubscribeStatus(channel, options?.onStatus)
 }

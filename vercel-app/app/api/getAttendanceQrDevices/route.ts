@@ -3,6 +3,13 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { canManageAttendanceQrDevices } from '@/lib/permissions'
 import { canAuthManageAttendanceQrStore } from '@/lib/attendance-qr-device-server'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export type AttendanceQrDeviceItem = {
   deviceToken: string
@@ -48,17 +55,40 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const rows = (await supabaseSelectFilter(
-      'pos_connected_devices',
-      `store_code=eq.${encodeURIComponent(storeCode)}&role=eq.attendance_display`,
-      { order: 'last_seen_at.desc', limit: 50 }
-    )) as {
+    const tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: auth.tenantId, company: auth.company },
+      storeCode,
+    })
+    if (isSaasTenantQueryBlocked(tenantScope, 'pos_connected_devices')) {
+      return NextResponse.json({ success: true, devices: [] }, { headers })
+    }
+
+    const baseFilter = `store_code=eq.${encodeURIComponent(storeCode)}&role=eq.attendance_display`
+    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'pos_connected_devices')
+    type DeviceDbRow = {
       device_token: string
       last_seen_at: string
       created_at: string
       display_label?: string | null
       client_hint?: string | null
-    }[] | null
+    }
+    let rows: DeviceDbRow[] | null = null
+    try {
+      rows = (await supabaseSelectFilter('pos_connected_devices', filter, {
+        order: 'last_seen_at.desc',
+        limit: 50,
+      })) as DeviceDbRow[] | null
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('pos_connected_devices')
+        rows = (await supabaseSelectFilter('pos_connected_devices', baseFilter, {
+          order: 'last_seen_at.desc',
+          limit: 50,
+        })) as DeviceDbRow[] | null
+      } else {
+        throw e
+      }
+    }
 
     const devices: AttendanceQrDeviceItem[] = (rows || []).map((row) => ({
       deviceToken: row.device_token,

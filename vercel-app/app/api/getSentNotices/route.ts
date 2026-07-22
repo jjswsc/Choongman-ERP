@@ -7,6 +7,15 @@ import { isOrderRelatedNotice } from '@/lib/notice-read-aggregation'
 import { employeeReceivesBroadcast } from '@/lib/broadcast-notice-target'
 import { parseNoticeAttachments } from '@/lib/notice-recipient-estimate'
 import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const SENT_NOTICES_DB_LIMIT = 400
 
@@ -26,21 +35,43 @@ function toDateStr(val: string | Date | null | undefined): string {
   return `${datePart} ${timePart}`
 }
 
-async function fetchNoticeRows(filter: string) {
+async function fetchNoticeRows(filter: string, tenantScope: SaasTenantScope) {
+  const base = filter || 'id=gte.0'
+  const tenantFilter = appendSaasTenantFilter(base, tenantScope, 'notices')
   try {
-    return (await supabaseSelectFilter('notices', filter, {
+    return (await supabaseSelectFilter('notices', tenantFilter, {
       order: 'created_at.desc',
       limit: SENT_NOTICES_DB_LIMIT,
       select: NOTICE_LIST_COLS,
     })) as NoticeRow[]
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (/is_urgent|expires_at|scheduled_at|column/i.test(msg)) {
-      return (await supabaseSelectFilter('notices', filter, {
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing('notices')
+      return (await supabaseSelectFilter('notices', base, {
         order: 'created_at.desc',
         limit: SENT_NOTICES_DB_LIMIT,
-        select: NOTICE_LIST_COLS_LEGACY,
+        select: NOTICE_LIST_COLS,
       })) as NoticeRow[]
+    }
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/is_urgent|expires_at|scheduled_at|column/i.test(msg)) {
+      try {
+        return (await supabaseSelectFilter('notices', tenantFilter, {
+          order: 'created_at.desc',
+          limit: SENT_NOTICES_DB_LIMIT,
+          select: NOTICE_LIST_COLS_LEGACY,
+        })) as NoticeRow[]
+      } catch (e2) {
+        if (isMissingSaasTenantColumnError(e2)) {
+          markSaasTenantColumnMissing('notices')
+          return (await supabaseSelectFilter('notices', base, {
+            order: 'created_at.desc',
+            limit: SENT_NOTICES_DB_LIMIT,
+            select: NOTICE_LIST_COLS_LEGACY,
+          })) as NoticeRow[]
+        }
+        throw e2
+      }
     }
     throw e
   }
@@ -67,6 +98,13 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
+  const authRes = await requireAuth(request, 'manager')
+  if (authRes.errorResponse) {
+    authRes.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authRes.errorResponse
+  }
+  const auth = authRes.auth
+
   const { searchParams } = new URL(request.url)
   const sender = String(searchParams.get('sender') || '').trim()
   const startStr = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
@@ -74,6 +112,17 @@ export async function GET(request: NextRequest) {
   const searchType = String(searchParams.get('searchType') || 'all').toLowerCase() as 'all' | 'notice' | 'order'
   const keyword = String(searchParams.get('keyword') || searchParams.get('q') || '').trim().toLowerCase()
   const { page, pageSize } = parseListPagination(searchParams, null, 15)
+
+  const tenantScope = await resolveSaasTenantScope({
+    auth: { tenantId: auth.tenantId, company: auth.company },
+    storeCode: auth.store,
+  })
+  if (isSaasTenantQueryBlocked(tenantScope, 'notices')) {
+    return NextResponse.json(
+      { items: [], total: 0, page, pageSize, truncated: false },
+      { headers }
+    )
+  }
 
   const isAllSenders = sender === '' || sender.toLowerCase() === 'all' || sender === '전체'
 
@@ -92,27 +141,55 @@ export async function GET(request: NextRequest) {
     }
     const effectiveFilter = filter || 'id=gte.0'
 
-    const rows = await fetchNoticeRows(effectiveFilter)
+    const rows = await fetchNoticeRows(effectiveFilter, tenantScope)
 
-    const empList = ((await supabaseSelect('employees', {
-      order: 'id.asc',
-      select: 'store,name,job,role,resign_date',
-    })) as {
+    let empList: {
       store?: string
       name?: string
       job?: string
       role?: string
       resign_date?: string
-    }[]) || []
+    }[] = []
+    try {
+      const empFilter = appendSaasTenantFilter('id=gt.0', tenantScope, 'employees')
+      empList = ((await supabaseSelectFilter('employees', empFilter, {
+        order: 'id.asc',
+        select: 'store,name,job,role,resign_date',
+      })) || []) as typeof empList
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('employees')
+        empList = ((await supabaseSelect('employees', {
+          order: 'id.asc',
+          select: 'store,name,job,role,resign_date',
+        })) || []) as typeof empList
+      } else {
+        throw e
+      }
+    }
 
     const noticeIds = (rows || []).map((r) => r.id)
     const readCountByNotice: Record<number, number> = {}
     if (noticeIds.length > 0) {
-      const allReadRows = ((await supabaseSelectFilter(
-        'notice_reads',
-        `notice_id=in.(${noticeIds.join(',')})`,
-        { limit: 10000, select: 'notice_id,status' }
-      )) as { notice_id: number; status?: string }[]) || []
+      const readsBase = `notice_id=in.(${noticeIds.join(',')})`
+      const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'notice_reads')
+      let allReadRows: { notice_id: number; status?: string }[] = []
+      try {
+        allReadRows = ((await supabaseSelectFilter('notice_reads', readsFilter, {
+          limit: 10000,
+          select: 'notice_id,status',
+        })) || []) as typeof allReadRows
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('notice_reads')
+          allReadRows = ((await supabaseSelectFilter('notice_reads', readsBase, {
+            limit: 10000,
+            select: 'notice_id,status',
+          })) || []) as typeof allReadRows
+        } else {
+          throw e
+        }
+      }
       for (const r of allReadRows) {
         if (!isNoticeReadStatus(String(r.status || ''))) continue
         readCountByNotice[r.notice_id] = (readCountByNotice[r.notice_id] || 0) + 1

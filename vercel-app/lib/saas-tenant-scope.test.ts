@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
+  authTenantMatchesStoreTenant,
   isSaasTenantQueryBlocked,
   stampSaasTenantId,
   type SaasTenantScope,
@@ -21,5 +22,12 @@ describe('saas-tenant-scope', () => {
     expect(isSaasTenantQueryBlocked(orphan)).toBe(true)
     expect(assertSaasTenantWritable(orphan)).toMatch(/테넌트/)
     expect(isSaasTenantQueryBlocked(legacy)).toBe(false)
+  })
+
+  it('detects cross-tenant store mismatch only when both sides known', () => {
+    expect(authTenantMatchesStoreTenant('acme', 'acme')).toBe(true)
+    expect(authTenantMatchesStoreTenant('acme', 'other')).toBe(false)
+    expect(authTenantMatchesStoreTenant('acme', '')).toBe(true)
+    expect(authTenantMatchesStoreTenant('', 'other')).toBe(true)
   })
 })

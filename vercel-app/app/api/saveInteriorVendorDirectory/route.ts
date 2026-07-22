@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizeVendorCode } from '@/lib/vendor-code-policy'
+import {
+  interiorForbiddenResponse,
+  requireInteriorTenantContext,
+} from '@/lib/interior-tenant-guard'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 /** 인테리어 업체 마스터 추가/수정 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
+
+  const guard = await requireInteriorTenantContext(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    guard.errorResponse.headers.set('Content-Type', 'application/json')
+    return guard.errorResponse
+  }
 
   try {
     const body = await request.json()
@@ -44,14 +61,29 @@ export async function POST(request: NextRequest) {
     }
 
     if (id && !Number.isNaN(id)) {
+      const idBaseFilter = `id=eq.${id}`
+      const idFilter = appendSaasTenantFilter(idBaseFilter, guard.scope, 'interior_vendor_directory')
+      let existing: { id?: number }[] = []
+      try {
+        existing = (await supabaseSelectFilter('interior_vendor_directory', idFilter, { limit: 1 })) as typeof existing
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('interior_vendor_directory')
+          existing = (await supabaseSelectFilter('interior_vendor_directory', idBaseFilter, { limit: 1 })) as typeof existing
+        } else {
+          throw e
+        }
+      }
+      if (!existing?.length) return interiorForbiddenResponse(headers)
+
       await supabaseUpdate('interior_vendor_directory', id, row)
       return NextResponse.json({ success: true, id, message: '수정되었습니다.' }, { headers })
     }
 
-    const inserted = await supabaseInsert('interior_vendor_directory', {
-      ...row,
-      use_count: 0,
-    })
+    const inserted = await supabaseInsert(
+      'interior_vendor_directory',
+      stampSaasTenantId({ ...row, use_count: 0 }, guard.scope, 'interior_vendor_directory')
+    )
     const insertedRow = Array.isArray(inserted) ? inserted[0] : inserted
     const newId = (insertedRow as { id?: number })?.id
     return NextResponse.json({ success: true, id: newId, message: '등록되었습니다.' }, { headers })

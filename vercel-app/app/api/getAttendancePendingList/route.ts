@@ -10,6 +10,13 @@ import {
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 const TZ = 'Asia/Bangkok'
 
@@ -60,6 +67,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'attendance_logs')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -107,12 +118,26 @@ export async function GET(request: NextRequest) {
     }
     let rows: Row[] = []
 
-    const filter = buildAttendancePendingListFilter(store, startStr, endStr)
-    rows = (await supabaseSelectFilter('attendance_logs', filter, {
-      order: 'log_at.desc',
-      limit: 500,
-      select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
-    })) as Row[]
+    const baseFilter = buildAttendancePendingListFilter(store, startStr, endStr)
+    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'attendance_logs')
+    try {
+      rows = (await supabaseSelectFilter('attendance_logs', filter, {
+        order: 'log_at.desc',
+        limit: 500,
+        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
+      })) as Row[]
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('attendance_logs')
+        rows = (await supabaseSelectFilter('attendance_logs', baseFilter, {
+          order: 'log_at.desc',
+          limit: 500,
+          select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min,early_min',
+        })) as Row[]
+      } else {
+        throw e
+      }
+    }
 
     const nickMap: Record<string, string> = {}
     const nickById: Record<number, string> = {}

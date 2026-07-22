@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sortVendorsByDisplayName } from '@/lib/vendor-sort'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 function mapVendorType(v: string): 'purchase' | 'sales' | 'both' {
   const lower = String(v || '').toLowerCase().trim()
@@ -15,8 +23,15 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const scope = await resolveInventoryTenantScope({ auth })
+    if (isInventoryTenantQueryBlocked(scope)) {
+      return NextResponse.json([], { headers })
+    }
+
     const detail = request.nextUrl.searchParams.get('detail') === '1'
-    const rows = (await supabaseSelect('vendors', { order: 'id.asc', limit: 5000 })) as {
+    const tenantFilter = appendInventoryTenantFilter('', scope)
+    let rows: {
       code?: string
       name?: string
       type?: string
@@ -27,6 +42,22 @@ export async function GET(request: NextRequest) {
       phone?: string
       bank_account_no?: string
     }[] | null
+
+    try {
+      rows = tenantFilter
+        ? ((await supabaseSelectFilter('vendors', tenantFilter, {
+            order: 'id.asc',
+            limit: 5000,
+          })) as typeof rows)
+        : ((await supabaseSelect('vendors', { order: 'id.asc', limit: 5000 })) as typeof rows)
+    } catch (e) {
+      if (isMissingInventoryTenantIdColumnError(e)) {
+        markInventoryTenantIdColumnMissing()
+        rows = (await supabaseSelect('vendors', { order: 'id.asc', limit: 5000 })) as typeof rows
+      } else {
+        throw e
+      }
+    }
 
     const salesRows = (rows || [])
       .filter((row) => row?.code)
@@ -61,9 +92,10 @@ export async function GET(request: NextRequest) {
       return {
         code: String(row.code || '').trim(),
         name: salesOutlet || gpsName || fullName || String(row.code),
+        salesOutlet: salesOutlet || null,
+        gpsName: gpsName || null,
       }
     })
-
     return NextResponse.json(sortVendorsByDisplayName(list), { headers })
   } catch (e) {
     console.error('getVendorsForSales:', e)

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolvePettyCashEffectiveStore } from '@/lib/petty-cash-store-scope'
 import { applyPettyCashClientFilters, computePettyCashPeriodSummary } from '@/lib/petty-cash-search'
 import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import type { PettyCashItem } from '@/lib/api-client'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 type RpcRow = {
   expense_total?: number
@@ -29,6 +37,17 @@ function mapRpcRow(row: RpcRow | undefined) {
   }
 }
 
+const EMPTY_SUMMARY = {
+  expenseTotal: 0,
+  inflowTotal: 0,
+  netChange: 0,
+  vatTotal: 0,
+  vatPendingTotal: 0,
+  vatPendingCount: 0,
+  rowCount: 0,
+  source: 'rpc' as const,
+}
+
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
@@ -41,7 +60,8 @@ async function fallbackSummaryFromSelect(
   endStr: string,
   effectiveStore: string,
   departmentFilter: string,
-  filterOpts: Parameters<typeof applyPettyCashClientFilters>[1]
+  filterOpts: Parameters<typeof applyPettyCashClientFilters>[1],
+  tenantScope: SaasTenantScope
 ) {
   let rows: {
     trans_date?: string
@@ -54,26 +74,37 @@ async function fallbackSummaryFromSelect(
     vat_amount?: number | null
   }[] = []
 
+  const runSelect = async (baseFilter: string) => {
+    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
+    try {
+      return (await supabaseSelectFilter('petty_cash_transactions', filter, {
+        order: 'trans_date.asc,id.asc',
+        limit: 20000,
+        select: PETTY_CASH_LIST_COLS,
+      })) as typeof rows
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('petty_cash_transactions')
+        return (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
+          order: 'trans_date.asc,id.asc',
+          limit: 20000,
+          select: PETTY_CASH_LIST_COLS,
+        })) as typeof rows
+      }
+      throw e
+    }
+  }
+
   if (effectiveStore) {
     if (effectiveStore === 'Office' && !departmentFilter) {
-      rows = (await supabaseSelectFilter(
-        'petty_cash_transactions',
-        'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
-        { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
-      )) as typeof rows
+      rows = await runSelect(
+        'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)'
+      )
     } else {
-      rows = (await supabaseSelectFilter(
-        'petty_cash_transactions',
-        'store=eq.' + encodeURIComponent(effectiveStore),
-        { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
-      )) as typeof rows
+      rows = await runSelect('store=eq.' + encodeURIComponent(effectiveStore))
     }
   } else {
-    rows = (await supabaseSelect('petty_cash_transactions', {
-      order: 'trans_date.asc,id.asc',
-      limit: 20000,
-      select: PETTY_CASH_LIST_COLS,
-    })) as typeof rows
+    rows = await runSelect('id=gt.0')
   }
 
   const startD = new Date(startStr + 'T00:00:00')
@@ -113,6 +144,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'petty_cash_transactions')) {
+    return NextResponse.json({ ...EMPTY_SUMMARY, truncated: false }, { headers })
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
@@ -147,10 +182,7 @@ export async function GET(request: NextRequest) {
     allowedStores,
   })
   if (forbidden) {
-    return NextResponse.json(
-      { expenseTotal: 0, inflowTotal: 0, netChange: 0, vatTotal: 0, vatPendingTotal: 0, vatPendingCount: 0, rowCount: 0, source: 'rpc' },
-      { status: 403, headers }
-    )
+    return NextResponse.json({ ...EMPTY_SUMMARY }, { status: 403, headers })
   }
 
   const filterOpts = {
@@ -164,7 +196,13 @@ export async function GET(request: NextRequest) {
 
   const accountSubjectIdNum = filterAccountSubjectId ? parseInt(filterAccountSubjectId, 10) : null
 
+  // Omni: RPC에 tenant 파라미터가 없어 테넌트 스코프 select fallback 사용
+  const useTenantScopedFallback = tenantScope.enforce && !!tenantScope.tenantId
+
   try {
+    if (useTenantScopedFallback) {
+      throw new Error('saas_tenant_use_fallback')
+    }
     const rows = (await supabaseRpc<RpcRow[]>('get_petty_cash_summary', {
       p_start_date: startStr,
       p_end_date: endStr,
@@ -180,18 +218,24 @@ export async function GET(request: NextRequest) {
     const row = Array.isArray(rows) ? rows[0] : rows
     return NextResponse.json({ ...mapRpcRow(row ?? undefined), truncated: false }, { headers })
   } catch (rpcErr) {
-    console.warn('getPettyCashSummary RPC fallback:', rpcErr)
+    if (!(rpcErr instanceof Error && rpcErr.message === 'saas_tenant_use_fallback')) {
+      console.warn('getPettyCashSummary RPC fallback:', rpcErr)
+    }
     try {
       const fb = await fallbackSummaryFromSelect(
         startStr,
         endStr,
         effectiveStore,
         departmentFilter,
-        filterOpts
+        filterOpts,
+        tenantScope
       )
       return NextResponse.json(fb, { headers })
     } catch (e) {
       console.error('getPettyCashSummary:', e)
+      if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('petty_cash_transactions')
+      }
       return NextResponse.json(
         { error: e instanceof Error ? e.message : 'Failed' },
         { status: 500, headers }

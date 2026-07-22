@@ -5,7 +5,7 @@ import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore, resolveAuthRoleFromEmployeeRoleColumn } from '@/lib/permissions'
-import { deriveTenantIdFromCompany, normalizeCompanyName } from '@/lib/tenant-context'
+import { deriveTenantIdFromCompany, normalizeCompanyName, normalizeTenantId } from '@/lib/tenant-context'
 import { buildAllowedStoresForToken } from '@/lib/franchisee-multi-store'
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
@@ -13,6 +13,7 @@ import { buildSetAuthCookieHeader } from '@/lib/auth-cookie'
 import {
   employeeRowsMatchingSubmittedStore,
   fetchErpStoresMaster,
+  fetchErpStoresMasterForTenant,
   pickBestEmployeeStoreMatch,
 } from '@/lib/erp-store-master'
 import { loginCheckFailureFromError } from '@/lib/login-check-error'
@@ -20,6 +21,8 @@ import { isEmployeeOfficePayrollManagerFlag } from '@/lib/office-payroll-access'
 import { resolveSaasScope, type SaasScope } from '@/lib/saas-control-plane-scope'
 import { isSaasPartnerLoginStore } from '@/lib/saas-partner-login-defaults'
 import { loadSaasEnabledModulesForAuth } from '@/lib/saas/tenant-module-gate'
+import { isServerSaasBrand } from '@/lib/app-brand-server'
+import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -33,6 +36,21 @@ export async function POST(req: NextRequest) {
     if (validated.errorResponse) return validated.errorResponse
     const { company, store, name, pw, isAdminPage } = validated.parsed
     const companyInput = normalizeCompanyName(company)
+    const saasBrand = await isServerSaasBrand()
+    const partnerStoreHint = isSaasPartnerLoginStore(store)
+
+    /** Omni 일반 로그인: 회사명 필수 (타사 동명이인 교차 로그인 방지) */
+    if (saasBrand && !partnerStoreHint && !companyInput) {
+      return NextResponse.json(
+        { success: false, message: '회사명을 입력해 주세요.', code: 'company_required' },
+        { headers }
+      )
+    }
+
+    const resolvedTenant =
+      saasBrand && companyInput && !partnerStoreHint
+        ? await resolveSaasTenantForLogin({ company: companyInput })
+        : null
 
     type EmpLoginRow = {
       id?: number
@@ -46,16 +64,33 @@ export async function POST(req: NextRequest) {
       resign_date?: string | null
       extra_stores?: unknown
       can_manage_office_payroll?: boolean | null
+      tenant_id?: string | null
     }
     /** 직원·매장 마스터는 서로 독립 → 병렬로 왕복 1회 절감 */
     const [byName, masters] = await Promise.all([
       supabaseSelectFilterEmployeesByNameForLogin(name) as Promise<EmpLoginRow[]>,
-      fetchErpStoresMaster(),
+      resolvedTenant?.tenantId
+        ? fetchErpStoresMasterForTenant(resolvedTenant.tenantId, resolvedTenant.companyName || companyInput)
+        : fetchErpStoresMaster(),
     ])
+    const companyNeedle = companyInput.toLowerCase()
     const byCompany = companyInput
-      ? (byName || []).filter((r) => normalizeCompanyName(r.company) === companyInput)
-      : byName || []
-    const scopedRows = byCompany.length > 0 ? byCompany : byName || []
+      ? (byName || []).filter((r) => normalizeCompanyName(r.company).toLowerCase() === companyNeedle)
+      : []
+    /**
+     * 회사명을 보냈으면 반드시 회사로 좁힌다.
+     * (이전: 회사 불일치 시 전 테넌트 동명이인으로 폴백 → Omni 교차 로그인 위험)
+     */
+    let scopedRows: EmpLoginRow[] = companyInput ? byCompany : byName || []
+    if (resolvedTenant?.tenantId) {
+      const tid = normalizeTenantId(resolvedTenant.tenantId)
+      const withTenant = scopedRows.filter((r) => {
+        const rowTid = normalizeTenantId(r.tenant_id)
+        if (!rowTid) return true
+        return rowTid === tid
+      })
+      if (withTenant.length > 0) scopedRows = withTenant
+    }
     const matched = employeeRowsMatchingSubmittedStore(scopedRows, store, masters)
     const row = pickBestEmployeeStoreMatch(matched, store)
     if (!row) {
@@ -72,6 +107,18 @@ export async function POST(req: NextRequest) {
     const ok = await verifyPassword(pw, storedPw)
     if (!ok) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
+    }
+
+    /** Omni: tenants.is_active=false 이면 토큰 발급 차단 */
+    if (saasBrand && resolvedTenant && resolvedTenant.isActive === false) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '이용이 중지된 고객사입니다. 본사/SaaS 관리자에게 문의하세요.',
+          code: 'tenant_suspended',
+        },
+        { headers }
+      )
     }
 
     const storeName = String(row.store || '').trim()
@@ -103,7 +150,10 @@ export async function POST(req: NextRequest) {
     }
 
     const userName = String(row.name || '').trim()
-    const companyName = normalizeCompanyName(row.company) || companyInput
+    const companyName =
+      normalizeCompanyName(row.company) ||
+      normalizeCompanyName(resolvedTenant?.companyName) ||
+      companyInput
     const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
     /**
      * 일반 ERP/POS 매장 로그인은 SaaS 파트너 스코프 DB를 건너뜀.
@@ -127,7 +177,11 @@ export async function POST(req: NextRequest) {
       getFranchiseeMultiStoreSettings(),
     ])
     const saasPartnerLogin = partnerScope.kind === 'partner'
-    const tenantId = saasPartnerLogin ? undefined : deriveTenantIdFromCompany(companyName)
+    const tenantId = saasPartnerLogin
+      ? undefined
+      : resolvedTenant?.tenantId ||
+        normalizeTenantId(row.tenant_id) ||
+        deriveTenantIdFromCompany(companyName)
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''

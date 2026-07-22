@@ -3,6 +3,9 @@ import {
   supabaseCreateSignedUploadUrl,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { buildSaasStorageObjectPath } from '@/lib/saas-storage-path'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 const BUCKET = 'interior-files'
 /** 도면/PDF 등 — Vercel 경유 업로드 제한 완화용 상한 */
@@ -13,6 +16,13 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authRes = await requireAuth(request, 'manager')
+    if (authRes.errorResponse) {
+      const er = authRes.errorResponse
+      er.headers.set('Access-Control-Allow-Origin', '*')
+      return er
+    }
+
     const body = (await request.json()) as {
       projectId?: string | number
       fileName?: string
@@ -36,7 +46,10 @@ export async function POST(request: NextRequest) {
     }
 
     const safeName = String(body.fileName || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
-    const storagePath = `${projectId}/${Date.now()}-${safeName}`
+    const storagePath = buildSaasStorageObjectPath({
+      tenantId: normalizeTenantId(authRes.auth.tenantId),
+      segments: [projectId, `${Date.now()}-${safeName}`],
+    })
 
     const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
     const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)

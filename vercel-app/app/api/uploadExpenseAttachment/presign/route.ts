@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
-import { randomStorageObjectBasename, STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
+import { randomStorageObjectBasename } from '@/lib/storage-filename-safe'
 import {
   looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { buildSaasStorageObjectPath } from '@/lib/saas-storage-path'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 const BUCKET = 'expense-attachments'
 const MAX_FILE_BYTES = 1.5 * 1024 * 1024
@@ -33,14 +35,6 @@ function effectiveMime(fileName: string, contentType: string): string {
   if (n.endsWith('.webp')) return 'image/webp'
   if (n.endsWith('.gif')) return 'image/gif'
   return raw || 'application/octet-stream'
-}
-
-function slugifyStore(store: string) {
-  return (
-    String(store || '')
-      .replace(STORAGE_SEGMENT_SAFE, '_')
-      .slice(0, 60) || 'office'
-  )
 }
 
 export async function POST(request: NextRequest) {
@@ -80,8 +74,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const storeSlug = slugifyStore(authResult.auth.store)
-    const storagePath = `accruals/${storeSlug}/${randomStorageObjectBasename(fileName)}`
+    const storagePath = buildSaasStorageObjectPath({
+      tenantId: normalizeTenantId(authResult.auth.tenantId),
+      segments: ['accruals', authResult.auth.store || 'office', randomStorageObjectBasename(fileName)],
+    })
 
     const issue = async () => {
       const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })

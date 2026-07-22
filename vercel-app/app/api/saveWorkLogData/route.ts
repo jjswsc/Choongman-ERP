@@ -10,21 +10,34 @@ import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 import { isEphemeralWorkLogId, normalizeWorkLogContent } from '@/lib/work-log-dedupe'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { workLogActorFromAuth, writeWorkLogAudit } from '@/lib/work-log-audit'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 async function findExistingWorkLogRowId(
   date: string,
   savedName: string,
   savedEmployeeId: number | null,
   content: string,
-  explicitId?: string
+  explicitId: string | undefined,
+  tenantScope: SaasTenantScope
 ): Promise<string | null> {
   const idStr = String(explicitId || '').trim()
   if (idStr && !isEphemeralWorkLogId(idStr)) {
-    const ex = ((await supabaseSelectFilter(
-      'work_logs',
+    const idFilter = appendSaasTenantFilter(
       `id=eq.${encodeURIComponent(idStr)}`,
-      { limit: 1 }
-    )) || []) as { id?: string }[]
+      tenantScope,
+      'work_logs'
+    )
+    const ex = ((await supabaseSelectFilter('work_logs', idFilter, { limit: 1 })) || []) as {
+      id?: string
+    }[]
     if (ex.length > 0) return idStr
   }
 
@@ -41,7 +54,8 @@ async function findExistingWorkLogRowId(
     parts.push(`name=eq.${encodeURIComponent(savedName)}`)
   }
 
-  const rows = ((await supabaseSelectFilter('work_logs', parts.join('&'), {
+  const dedupeFilter = appendSaasTenantFilter(parts.join('&'), tenantScope, 'work_logs')
+  const rows = ((await supabaseSelectFilter('work_logs', dedupeFilter, {
     limit: 1,
     order: 'progress.desc',
   })) || []) as { id?: string }[]
@@ -50,11 +64,72 @@ async function findExistingWorkLogRowId(
   return found != null ? String(found) : null
 }
 
+async function upsertWorkLogRow(
+  existingId: string | null,
+  patch: Record<string, unknown>,
+  insertRow: Record<string, unknown>,
+  tenantScope: SaasTenantScope
+): Promise<string> {
+  if (existingId) {
+    const stampedPatch = stampSaasTenantId(patch, tenantScope, 'work_logs')
+    try {
+      await supabaseUpdate('work_logs', existingId, stampedPatch)
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e) && 'tenant_id' in stampedPatch) {
+        markSaasTenantColumnMissing('work_logs')
+        const { tenant_id: _t, ...withoutTenant } = stampedPatch
+        await supabaseUpdate('work_logs', existingId, withoutTenant)
+      } else {
+        throw e
+      }
+    }
+    return existingId
+  }
+
+  const stampedInsert = stampSaasTenantId(insertRow, tenantScope, 'work_logs')
+  try {
+    await supabaseInsert('work_logs', stampedInsert)
+  } catch (e) {
+    if (isMissingSaasTenantColumnError(e) && 'tenant_id' in stampedInsert) {
+      markSaasTenantColumnMissing('work_logs')
+      const { tenant_id: _t, ...withoutTenant } = stampedInsert
+      await supabaseInsert('work_logs', withoutTenant)
+    } else {
+      throw e
+    }
+  }
+  return String(insertRow.id)
+}
+
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await tryVerifyBearerFromRequest(req)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: auth?.store,
+    })
+    if (tenantScope.enforce) {
+      if (!auth) {
+        return NextResponse.json(
+          { success: false, messageKey: 'workLogSaveFail', message: '인증이 필요합니다.' },
+          { status: 403, headers }
+        )
+      }
+      const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+        tableHint: 'work_logs',
+        label: '업무일지',
+      })
+      if (tenantWriteErr) {
+        return NextResponse.json(
+          { success: false, messageKey: 'workLogSaveFail', message: tenantWriteErr },
+          { status: 403, headers }
+        )
+      }
+    }
+
     const body = (await req.json()) || {}
     const date = String(body.date || '').trim()
     const name = String(body.name || '').trim()
@@ -67,14 +142,30 @@ export async function POST(req: NextRequest) {
         ? JSON.parse(body.jsonStr)
         : []
 
-    const staffList =
-      ((await supabaseSelect('employees', { order: 'id.asc', select: 'id,name,nick,job,store' })) || []) as {
-        id?: number
-        name?: string
-        nick?: string
-        job?: string
-        store?: string
-      }[]
+    let staffList: { id?: number; name?: string; nick?: string; job?: string; store?: string }[] = []
+    if (tenantScope.enforce) {
+      try {
+        const empFilter = appendSaasTenantFilter('id=gt.0', tenantScope, 'employees')
+        staffList = ((await supabaseSelectFilter('employees', empFilter, {
+          order: 'id.asc',
+          select: 'id,name,nick,job,store',
+        })) || []) as typeof staffList
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('employees')
+          staffList = ((await supabaseSelect('employees', {
+            order: 'id.asc',
+            select: 'id,name,nick,job,store',
+          })) || []) as typeof staffList
+        } else {
+          throw e
+        }
+      }
+    } else {
+      staffList =
+        ((await supabaseSelect('employees', { order: 'id.asc', select: 'id,name,nick,job,store' })) ||
+          []) as typeof staffList
+    }
     let savedName = name
     let savedDept = '기타'
     let savedStore = ''
@@ -129,22 +220,23 @@ export async function POST(req: NextRequest) {
         savedName,
         savedEmployeeId,
         content,
-        item.id
+        item.id,
+        tenantScope
       )
 
-      if (existingId) {
-        await supabaseUpdate('work_logs', existingId, patch)
-        savedIds.push({ id: existingId, content })
-      } else {
-        const newId =
-          date +
-          '_' +
-          savedName +
-          '_' +
-          Date.now() +
-          '_' +
-          Math.floor(Math.random() * 100)
-        await supabaseInsert('work_logs', {
+      const newId =
+        date +
+        '_' +
+        savedName +
+        '_' +
+        Date.now() +
+        '_' +
+        Math.floor(Math.random() * 100)
+
+      const rowId = await upsertWorkLogRow(
+        existingId,
+        patch,
+        {
           id: newId,
           log_date: date,
           dept: savedDept,
@@ -157,12 +249,12 @@ export async function POST(req: NextRequest) {
           manager_comment: '',
           ...(savedStore ? { store: savedStore } : {}),
           ...(savedEmployeeId != null ? { employee_id: savedEmployeeId } : {}),
-        })
-        savedIds.push({ id: newId, content })
-      }
+        },
+        tenantScope
+      )
+      savedIds.push({ id: rowId, content })
     }
 
-    const auth = await tryVerifyBearerFromRequest(req)
     await writeWorkLogAudit({
       actionType: 'update',
       logDate: date,

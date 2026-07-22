@@ -8,6 +8,13 @@ import {
   type HrPolicyListQuery,
 } from '@/lib/hr-policy-access'
 import type { BroadcastTargetAudienceFilter } from '@/lib/broadcast-target-selection'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +33,10 @@ export async function GET(request: NextRequest) {
     return er
   }
   const auth = authRes.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'hr_policies')) {
+    return NextResponse.json({ success: true, items: [], total: 0, scoped: true }, { headers })
+  }
 
   const { searchParams } = new URL(request.url)
   const activeOnly = (searchParams.get('activeOnly') || '0') === '1'
@@ -43,12 +54,27 @@ export async function GET(request: NextRequest) {
   const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
 
   try {
-    const filter = activeOnly ? 'is_active=eq.true' : 'id=gte.0'
-    const rows = (await supabaseSelectFilter('hr_policies', filter, {
-      order: 'created_at.desc',
-      limit: 500,
-      select: HR_POLICY_LIST_COLS,
-    })) as Record<string, unknown>[]
+    const baseFilter = activeOnly ? 'is_active=eq.true' : 'id=gte.0'
+    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'hr_policies')
+    let rows: Record<string, unknown>[] = []
+    try {
+      rows = (await supabaseSelectFilter('hr_policies', filter, {
+        order: 'created_at.desc',
+        limit: 500,
+        select: HR_POLICY_LIST_COLS,
+      })) as Record<string, unknown>[]
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('hr_policies')
+        rows = (await supabaseSelectFilter('hr_policies', baseFilter, {
+          order: 'created_at.desc',
+          limit: 500,
+          select: HR_POLICY_LIST_COLS,
+        })) as Record<string, unknown>[]
+      } else {
+        throw e
+      }
+    }
 
     const empRows = (await supabaseSelect('employees', {
       order: 'id.asc',

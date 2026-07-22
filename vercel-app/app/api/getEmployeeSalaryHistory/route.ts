@@ -3,6 +3,13 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { filterPayrollRowsHidingOffice } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 export interface SalaryHistoryRow {
   id: number
   employee_id: number
@@ -29,6 +36,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'employee_salary_history')) {
+    return NextResponse.json({ success: true, list: [] }, { headers })
+  }
 
   const { searchParams } = new URL(request.url)
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
@@ -54,12 +65,26 @@ export async function GET(request: NextRequest) {
     if (toDate && toDate.length >= 10) {
       parts.push(`changed_at=lte.${encodeURIComponent(toDate + 'T23:59:59Z')}`)
     }
-    const filter = parts.length > 0 ? parts.join('&') : 'id=gt.0'
+    const baseFilter = parts.length > 0 ? parts.join('&') : 'id=gt.0'
+    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'employee_salary_history')
 
-    const rows = await supabaseSelectFilter('employee_salary_history', filter, {
-      order: 'changed_at.desc',
-      limit: 500,
-    })
+    let rows: Record<string, unknown>[] = []
+    try {
+      rows = (await supabaseSelectFilter('employee_salary_history', filter, {
+        order: 'changed_at.desc',
+        limit: 500,
+      })) as Record<string, unknown>[]
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('employee_salary_history')
+        rows = (await supabaseSelectFilter('employee_salary_history', baseFilter, {
+          order: 'changed_at.desc',
+          limit: 500,
+        })) as Record<string, unknown>[]
+      } else {
+        throw e
+      }
+    }
 
     const payrollAuth = await resolveCanManageOfficePayrollAuth(auth)
 

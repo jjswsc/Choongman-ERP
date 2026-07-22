@@ -6,13 +6,15 @@ import {
   MAX_NOTICE_NON_VIDEO_BYTES,
   MAX_NOTICE_VIDEO_BYTES,
 } from '@/lib/notice-attachments'
-import { randomStorageObjectBasename, STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
+import { randomStorageObjectBasename } from '@/lib/storage-filename-safe'
 import {
   looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { buildSaasStorageObjectPath } from '@/lib/saas-storage-path'
+import { normalizeTenantId } from '@/lib/tenant-context'
 
 const BUCKET = 'notice-attachments'
 
@@ -41,12 +43,6 @@ const ALL_ALLOWED_MIME: string[] = (() => {
   s.add('application/octet-stream')
   return Array.from(s)
 })()
-
-function slugifyStore(store: string) {
-  return String(store || '')
-    .replace(STORAGE_SEGMENT_SAFE, '_')
-    .slice(0, 60)
-}
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -91,8 +87,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: msg }, { status: 400, headers })
     }
 
-    const storeSlug = slugifyStore(authResult.auth.store)
-    const storagePath = `notices/${storeSlug}/${randomStorageObjectBasename(fileName)}`
+    const storagePath = buildSaasStorageObjectPath({
+      tenantId: normalizeTenantId(authResult.auth.tenantId),
+      segments: ['notices', authResult.auth.store, randomStorageObjectBasename(fileName)],
+    })
 
     const issue = async () => {
       const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })

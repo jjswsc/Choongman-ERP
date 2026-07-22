@@ -214,7 +214,15 @@ function inferTenantIdForLoginRow(
 }
 
 /** ERP 로그인 매장 셀렉트 — erp_stores(SaaS) + tenants.company_name */
-export async function loadSaasLoginStoreEntries(): Promise<SaasLoginStoreEntry[]> {
+export async function loadSaasLoginStoreEntries(opts?: {
+  tenantId?: string
+  companyName?: string
+}): Promise<SaasLoginStoreEntry[]> {
+  const scopeTenantId = String(opts?.tenantId || "")
+    .trim()
+    .toLowerCase()
+  const scopeCompany = String(opts?.companyName || "").trim()
+
   const companyByTenant = new Map<string, string>()
   try {
     const tenantRows = (await supabaseSelect("tenants", {
@@ -232,40 +240,61 @@ export async function loadSaasLoginStoreEntries(): Promise<SaasLoginStoreEntry[]
   }
 
   let storeRows: Record<string, unknown>[] = []
-  try {
-    storeRows = (await supabaseSelect("erp_stores", {
-      select: "tenant_id,store_name,store_code,is_active,display_name",
-      limit: 5000,
-      order: "store_name.asc",
-    })) as Record<string, unknown>[]
-  } catch {
+  if (scopeTenantId) {
+    try {
+      storeRows = await loadErpStoreRowsForTenant({
+        tenantId: scopeTenantId,
+        companyName: scopeCompany,
+        offset: 0,
+        limit: 500,
+      })
+    } catch {
+      storeRows = []
+    }
+  }
+
+  if (storeRows.length === 0 && !scopeTenantId) {
     try {
       storeRows = (await supabaseSelect("erp_stores", {
-        select: "tenant_id,store_name,store_code,is_active",
+        select: "tenant_id,store_name,store_code,is_active,display_name",
         limit: 5000,
         order: "store_name.asc",
       })) as Record<string, unknown>[]
     } catch {
       try {
-        storeRows = await loadAllErpStoreRows()
+        storeRows = (await supabaseSelect("erp_stores", {
+          select: "tenant_id,store_name,store_code,is_active",
+          limit: 5000,
+          order: "store_name.asc",
+        })) as Record<string, unknown>[]
       } catch {
-        return []
+        try {
+          storeRows = await loadAllErpStoreRows()
+        } catch {
+          return []
+        }
       }
     }
   }
 
   const seen = new Set<string>()
   const out: SaasLoginStoreEntry[] = []
+  const scopeCompanyLower = scopeCompany.toLowerCase()
   for (const row of storeRows) {
     if (row.is_active === false) continue
     const tenantId = inferTenantIdForLoginRow(row, companyByTenant)
     const storeName = String(row.store_name ?? row.display_name ?? "").trim()
     if (!tenantId || !storeName) continue
+    if (scopeTenantId && tenantId !== scopeTenantId) continue
+    const companyName = companyByTenant.get(tenantId) || tenantId
+    if (scopeCompanyLower && companyName.toLowerCase() !== scopeCompanyLower && tenantId !== scopeTenantId) {
+      continue
+    }
     const dedupeKey = `${tenantId}\0${storeName}`
     if (seen.has(dedupeKey)) continue
     seen.add(dedupeKey)
     out.push({
-      companyName: companyByTenant.get(tenantId) || tenantId,
+      companyName,
       storeName,
       storeCode: String(row.store_code ?? "").trim(),
     })

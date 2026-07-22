@@ -515,26 +515,47 @@ export function PosHybridPrintDiagnosticsButton() {
                 />
                 <span>{t('posShellPrintDiagnosticsSilentLabel')}</span>
               </label>
-              <datalist id="cm-pos-printer-name-options">
-                {printers.map((p) => (
-                  <option key={p.name} value={p.name} />
-                ))}
-              </datalist>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {fieldDefs.map((f) => (
-                  <label key={f.key} className="space-y-1 rounded-lg border border-border/70 bg-background p-2.5">
-                    <span className="block text-xs font-medium text-foreground">{f.label}</span>
-                    <span className="block font-mono text-[11px] text-muted-foreground">{f.code}</span>
-                    <input
-                      list="cm-pos-printer-name-options"
-                      value={draft[f.key] as string}
-                      onChange={(e) => onChangeField(f.key, e.currentTarget.value)}
-                      placeholder={f.placeholder}
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
-                    />
-                    <span className="block text-[11px] leading-relaxed text-muted-foreground">{f.hint}</span>
-                  </label>
-                ))}
+                {fieldDefs.map((f) => {
+                  const current = String(draft[f.key] || '').trim()
+                  const currentInList = !current || registeredPrinterNames.has(current)
+                  return (
+                    <label key={f.key} className="space-y-1 rounded-lg border border-border/70 bg-background p-2.5">
+                      <span className="block text-xs font-medium text-foreground">{f.label}</span>
+                      <span className="block font-mono text-[11px] text-muted-foreground">{f.code}</span>
+                      {/*
+                        datalist는 입력값이 있으면 Chromium이 그 문자열로 후보를 걸러
+                        저장 후 다른 프린터로 바꿀 때 목록에 1개만 보이는 문제가 남음 → select로 전체 목록 고정.
+                      */}
+                      <select
+                        value={current}
+                        onChange={(e) => onChangeField(f.key, e.currentTarget.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                      >
+                        <option value="">{t('posShellPrintDiagnosticsSelectEmpty')}</option>
+                        {!currentInList ? (
+                          <option value={current}>
+                            {current} {t('posShellPrintDiagnosticsSelectMissing')}
+                          </option>
+                        ) : null}
+                        {printers.map((p) => {
+                          const name = String(p.name || '').trim()
+                          if (!name) return null
+                          const label =
+                            p.isDefault
+                              ? `${t('posShellPrintDiagnosticsPrinterDefaultBadge')} ${name}`
+                              : name
+                          return (
+                            <option key={`${f.key}-${name}`} value={name}>
+                              {label}
+                            </option>
+                          )
+                        })}
+                      </select>
+                      <span className="block text-[11px] leading-relaxed text-muted-foreground">{f.hint}</span>
+                    </label>
+                  )
+                })}
               </div>
             </div>
           ) : (

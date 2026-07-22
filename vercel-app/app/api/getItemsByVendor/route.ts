@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 function normalizeOutboundKey(s: string): string {
   return String(s || '')
@@ -47,6 +55,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const scope = await resolveInventoryTenantScope({ auth })
+    if (isInventoryTenantQueryBlocked(scope)) {
+      return NextResponse.json([], { headers })
+    }
+
     type ItemRow = {
       code?: string
       name?: string
@@ -84,13 +98,26 @@ export async function GET(request: NextRequest) {
     let rowsByVendor: (ItemRow & { purchase_source?: string })[] | null = []
     const runItemsQuery = async (vendorVal: string, withHq: boolean) => {
       const enc = encodeURIComponent(vendorVal)
-      const filter = withHq ? `vendor=ilike.*${enc}*&${hqFilter}` : `vendor=ilike.*${enc}*`
+      const base = withHq ? `vendor=ilike.*${enc}*&${hqFilter}` : `vendor=ilike.*${enc}*`
+      const filter = appendInventoryTenantFilter(base, scope)
       const select = withHq ? selectCols : selectColsMinimal
-      return (await supabaseSelectFilter('items', filter, {
-        order: 'code.asc',
-        limit: 1000,
-        select,
-      })) as (ItemRow & { purchase_source?: string })[]
+      try {
+        return (await supabaseSelectFilter('items', filter, {
+          order: 'code.asc',
+          limit: 1000,
+          select,
+        })) as (ItemRow & { purchase_source?: string })[]
+      } catch (e) {
+        if (isMissingInventoryTenantIdColumnError(e)) {
+          markInventoryTenantIdColumnMissing()
+          return (await supabaseSelectFilter('items', base, {
+            order: 'code.asc',
+            limit: 1000,
+            select,
+          })) as (ItemRow & { purchase_source?: string })[]
+        }
+        throw e
+      }
     }
     if (vendorCode) {
       try {

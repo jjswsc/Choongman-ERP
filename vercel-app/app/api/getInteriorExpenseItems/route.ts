@@ -1,12 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  assertInteriorProjectAccess,
+  interiorForbiddenResponse,
+  requireInteriorTenantRead,
+} from '@/lib/interior-tenant-guard'
+import { isSaasTenantQueryBlocked } from '@/lib/saas-tenant-scope'
 
 /** 프로젝트 비용 항목 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+
+  const guard = await requireInteriorTenantRead(request)
+  if (!guard.ok) {
+    guard.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return guard.errorResponse
+  }
+
   const projectId = request.nextUrl.searchParams.get('projectId')
   if (!projectId) return NextResponse.json([], { headers })
+  if (isSaasTenantQueryBlocked(guard.scope, 'interior_projects')) return NextResponse.json([], { headers })
+
+  const access = await assertInteriorProjectAccess(projectId, guard.scope)
+  if (access === 'forbidden') return interiorForbiddenResponse(headers)
+  if (access === 'not_found') return NextResponse.json([], { headers })
 
   try {
     const rows = (await supabaseSelectFilter(

@@ -81,6 +81,27 @@ export function stampSaasTenantId<T extends Record<string, unknown>>(
   return { ...row, tenant_id: scope.tenantId }
 }
 
+/**
+ * 결산·마감 등 (tenant_id, store_code, …) unique 테이블용.
+ * Omni: 실제 tenantId. 충만/미enforce: '' (SQL DEFAULT와 맞춤).
+ */
+export function stampSaasTenantIdForUniqueKey<T extends Record<string, unknown>>(
+  row: T,
+  scope: SaasTenantScope
+): T & { tenant_id: string } {
+  const tid = scope.enforce && scope.tenantId ? scope.tenantId : ''
+  return { ...row, tenant_id: tid }
+}
+
+/** PostgREST onConflict — W0 SQL 적용 후 tenant_id 포함 */
+export function saasTenantStoreConflictTarget(
+  scope: SaasTenantScope,
+  restColumns: string
+): string {
+  void scope
+  return `tenant_id,${restColumns}`
+}
+
 export function assertSaasTenantWritable(
   scope: SaasTenantScope,
   opts?: { tableHint?: string; label?: string }
@@ -94,6 +115,34 @@ export function assertSaasTenantWritable(
     return `${label} tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.`
   }
   return null
+}
+
+/**
+ * JWT tenantId 와 매장 마스터 tenantId 가 둘 다 있을 때만 교차 접근을 차단.
+ * 한쪽만 있으면(레거시·미매핑) 통과.
+ */
+export function authTenantMatchesStoreTenant(
+  authTenantId: string | null | undefined,
+  storeTenantId: string | null | undefined
+): boolean {
+  const a = normalizeTenantId(authTenantId)
+  const s = normalizeTenantId(storeTenantId)
+  if (!a || !s) return true
+  return a === s
+}
+
+/** store_code → tenant 조회 후 JWT와 불일치면 `tenant_mismatch` */
+export async function assertAuthTenantMatchesStore(
+  auth: { tenantId?: string } | null | undefined,
+  storeCode: string
+): Promise<'ok' | 'tenant_mismatch'> {
+  const authTenantId = normalizeTenantId(auth?.tenantId)
+  if (!authTenantId) return 'ok'
+  const store = String(storeCode || '').trim()
+  if (!store) return 'ok'
+  const fromStore = normalizeTenantId((await resolveTenantIdForStoreCode(store).catch(() => '')) || '')
+  if (!authTenantMatchesStoreTenant(authTenantId, fromStore)) return 'tenant_mismatch'
+  return 'ok'
 }
 
 export const LEGACY_SAAS_TENANT_SCOPE: SaasTenantScope = { enforce: false, tenantId: '' }

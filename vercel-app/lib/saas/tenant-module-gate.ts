@@ -153,13 +153,51 @@ export function saasModuleGateJsonResponse(moduleKey: SaasModuleKey): NextRespon
   )
 }
 
-/** requireAuth 마지막 단계 — API 경로 기준 모듈 게이트 */
+const tenantActiveCache = new Map<string, { at: number; active: boolean }>()
+
+/** tenants.is_active === false 이면 정지. 조회 실패·컬럼 없음은 통과(레거시). */
+async function isSaasTenantAccountActive(tenantId: string): Promise<boolean> {
+  const key = tenantCacheKey(tenantId)
+  const hit = tenantActiveCache.get(key)
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.active
+
+  try {
+    const rows = (await supabaseSelectFilter("tenants", `id=eq.${encodeURIComponent(tenantId)}`, {
+      limit: 1,
+      select: "is_active",
+    })) as Array<{ is_active?: boolean | null }>
+    const active = rows?.[0] == null ? true : rows[0].is_active !== false
+    tenantActiveCache.set(key, { at: Date.now(), active })
+    return active
+  } catch {
+    tenantActiveCache.set(key, { at: Date.now(), active: true })
+    return true
+  }
+}
+
+export function saasTenantSuspendedJsonResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      success: false,
+      code: "tenant_suspended",
+      message: "이용이 중지된 고객사입니다. 본사/SaaS 관리자에게 문의하세요.",
+      msg: "이용이 중지된 고객사입니다. 본사/SaaS 관리자에게 문의하세요.",
+    },
+    { status: 403 }
+  )
+}
+
+/** requireAuth 마지막 단계 — 정지 계정 fail-closed + API 경로 모듈 게이트 */
 export async function resolveSaasModuleGateResponse(
   auth: JwtPayload,
   apiPathname: string
 ): Promise<NextResponse | null> {
   const tenantId = String(auth.tenantId || "").trim()
   if (!tenantId) return null
+
+  if (!(await isSaasTenantAccountActive(tenantId))) {
+    return saasTenantSuspendedJsonResponse()
+  }
 
   const moduleKey = resolveApiPathSaasModule(apiPathname)
   if (!moduleKey) return null

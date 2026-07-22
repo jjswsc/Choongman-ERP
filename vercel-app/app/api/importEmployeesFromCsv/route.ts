@@ -10,9 +10,16 @@ import {
   supabaseDeleteByFilter,
   supabaseInsertMany,
   supabaseSelect,
+  supabaseSelectFilter,
 } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+import { requireAuth } from '@/lib/verify-auth'
+import {
+  employeesDeleteFilterForImport,
+  resolveHrImportTenantScope,
+  stampEmployeeRowsForTenant,
+} from '@/lib/hr-tenant-import'
 
 /** RFC 4180: 따옴표 안의 줄바꿈, "" 처리 */
 function parseCsv(text: string): string[][] {
@@ -80,6 +87,23 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const { scope, error: tenantError } = await resolveHrImportTenantScope(authResult.auth)
+    if (tenantError) {
+      return NextResponse.json({ success: false, message: tenantError }, { status: 403, headers })
+    }
+    const deleteFilter = employeesDeleteFilterForImport(scope)
+    if (!deleteFilter) {
+      return NextResponse.json(
+        { success: false, message: '회사(테넌트) 정보가 없어 직원 CSV 가져오기를 할 수 없습니다.' },
+        { status: 403, headers }
+      )
+    }
+
     let csvText = ''
     const ct = request.headers.get('content-type') || ''
     if (ct.includes('multipart/form-data')) {
@@ -217,12 +241,16 @@ export async function POST(request: NextRequest) {
       const key = `${String(e.store)}|||${String(e.name)}`
       empMap.set(key, e)
     }
-    const uniqueEmps = Array.from(empMap.values())
+    const uniqueEmps = stampEmployeeRowsForTenant(Array.from(empMap.values()), scope)
 
-    // 기존 직원 전체 삭제
-    const existing = (await supabaseSelect('employees', { limit: 1 })) as { id?: number }[] | null
+    // Omni: 해당 테넌트만 삭제. 충만: 기존처럼 전체 교체.
+    const existing = scope.enforce
+      ? ((await supabaseSelectFilter('employees', deleteFilter, { limit: 1, select: 'id' })) as
+          | { id?: number }[]
+          | null)
+      : ((await supabaseSelect('employees', { limit: 1 })) as { id?: number }[] | null)
     if (existing && existing.length > 0) {
-      await supabaseDeleteByFilter('employees', 'id=gte.0')
+      await supabaseDeleteByFilter('employees', deleteFilter)
     }
 
     // 배치로 insert (100건씩)
@@ -233,7 +261,13 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, message: `기존 삭제 후 ${uniqueEmps.length}명 등록 완료`, count: uniqueEmps.length },
+      {
+        success: true,
+        message: scope.enforce
+          ? `회사 직원 교체 완료 (${uniqueEmps.length}명)`
+          : `기존 삭제 후 ${uniqueEmps.length}명 등록 완료`,
+        count: uniqueEmps.length,
+      },
       { headers }
     )
   } catch (e) {

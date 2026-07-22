@@ -931,11 +931,13 @@ export function usePosMainDeviceSyncHost(): void {
       const list = []
       const chInsert = subscribePosOrdersInsert(onInsert, {
         store: trimmed,
+        ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         onStatus: makeRealtimeStatusHandler(`insert:${trimmed}`),
       })
       if (chInsert) list.push(chInsert)
       const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
         store: trimmed,
+        ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         onStatus: makeRealtimeStatusHandler(`insert-items:${trimmed}`),
       })
       if (chUpdate) list.push(chUpdate)
@@ -968,6 +970,7 @@ export function usePosMainDeviceSyncHost(): void {
     handleIncomingDelivery,
     runAutoprintForNewOrder,
     dispatchPaymentReceiptFromOrder,
+    auth?.tenantId,
     printPaymentReceiptIfEnabled,
     skipLocalKitchenAutoprintForOrder,
   ])
@@ -1279,7 +1282,12 @@ export function usePosMainDeviceSyncHost(): void {
     }
 
     const channels = currentStoreCodeVariants
-      .map((code) => subscribePosOrdersUpdate(onUpdate, { store: code }))
+      .map((code) =>
+        subscribePosOrdersUpdate(onUpdate, {
+          store: code,
+          ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
+        })
+      )
       .filter(Boolean)
 
     return () => {
@@ -1300,6 +1308,7 @@ export function usePosMainDeviceSyncHost(): void {
     dispatchPaymentReceiptFromOrder,
     printPaymentReceiptIfEnabled,
     skipLocalKitchenAutoprintForOrder,
+    auth?.tenantId,
     shouldSkipDineInRemoteAddAutoprint,
     reserveKitchenAutoPrintKey,
     releaseKitchenAutoPrintKey,
@@ -1791,13 +1800,18 @@ export function usePosMainDeviceSyncHost(): void {
     }
 
     const channels = currentStoreCodeVariants
-      .map((code) => subscribePosOrdersUpdate(handleUpdate, { store: code }))
+      .map((code) =>
+        subscribePosOrdersUpdate(handleUpdate, {
+          store: code,
+          ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
+        })
+      )
       .filter(Boolean)
 
     return () => {
       channels.forEach((channel) => channel?.unsubscribe())
     }
-  }, [isMainPosDevice, storeCode, currentStoreCodeVariants, isCurrentStoreOrder, notifyGrabCancelFromHost])
+  }, [isMainPosDevice, storeCode, currentStoreCodeVariants, isCurrentStoreOrder, notifyGrabCancelFromHost, auth?.tenantId])
 
   // Resume: visibility / online → resubscribe + poll
   useEffect(() => {

@@ -9,6 +9,14 @@ import {
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -25,6 +33,14 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'attendance_logs',
+      label: '근태 승인',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
     const body = await request.json()
     const id = body?.id != null ? Number(body.id) : NaN
     const decision = String(body?.decision || body?.status || '').trim()
@@ -49,10 +65,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rows = (await supabaseSelectFilter('attendance_logs', `id=eq.${id}`, {
-      limit: 1,
-      select: 'id,store_name,log_type,late_min,early_min,ot_min',
-    })) as { id: number; store_name?: string; log_type?: string; late_min?: number; early_min?: number; ot_min?: number }[]
+    const logFilter = appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'attendance_logs')
+    let rows: {
+      id: number
+      store_name?: string
+      log_type?: string
+      late_min?: number
+      early_min?: number
+      ot_min?: number
+    }[] = []
+    try {
+      rows = (await supabaseSelectFilter('attendance_logs', logFilter, {
+        limit: 1,
+        select: 'id,store_name,log_type,late_min,early_min,ot_min',
+      })) as typeof rows
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('attendance_logs')
+        rows = (await supabaseSelectFilter('attendance_logs', `id=eq.${id}`, {
+          limit: 1,
+          select: 'id,store_name,log_type,late_min,early_min,ot_min',
+        })) as typeof rows
+      } else {
+        throw e
+      }
+    }
     if (!rows || rows.length === 0) {
       return NextResponse.json(
         { success: false, message: '해당 기록을 찾을 수 없습니다.' },
@@ -185,7 +222,8 @@ export async function POST(request: NextRequest) {
       optionalInLogId > 0 &&
       ((waiveLate && isClockOut) || hasValidMinutesInput(optLateMinutes))
     ) {
-      const inRows = (await supabaseSelectFilter('attendance_logs', `id=eq.${optionalInLogId}`, {
+      const inFilter = appendSaasTenantFilter(`id=eq.${optionalInLogId}`, tenantScope, 'attendance_logs')
+      const inRows = (await supabaseSelectFilter('attendance_logs', inFilter, {
         limit: 1,
         select: 'id,store_name,log_type,late_min',
       })) as { id: number; store_name?: string; log_type?: string; late_min?: number }[]
@@ -213,7 +251,25 @@ export async function POST(request: NextRequest) {
       }
     }
     if (adjustmentRows.length > 0) {
-      await supabaseInsertMany('attendance_log_adjustments', adjustmentRows)
+      const stamped = adjustmentRows.map((r) =>
+        stampSaasTenantId(r, tenantScope, 'attendance_log_adjustments')
+      )
+      try {
+        await supabaseInsertMany('attendance_log_adjustments', stamped)
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('attendance_log_adjustments')
+          await supabaseInsertMany(
+            'attendance_log_adjustments',
+            stamped.map((r) => {
+              const { tenant_id: _t, ...rest } = r
+              return rest
+            })
+          )
+        } else {
+          throw e
+        }
+      }
     }
 
     return NextResponse.json(

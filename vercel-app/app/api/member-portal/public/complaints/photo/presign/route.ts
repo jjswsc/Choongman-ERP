@@ -6,6 +6,9 @@ import {
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 import { PUBLIC_COMPLAINT_PHOTO_BUCKET } from '@/lib/member-portal-public-complaint'
+import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { normalizeTenantId } from '@/lib/tenant-context'
+import { buildSaasStorageObjectPath } from '@/lib/saas-storage-path'
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_TYPES = new Set([
@@ -23,6 +26,7 @@ export async function POST(request: NextRequest) {
       fileName?: string
       contentType?: string
       fileSize?: number
+      store?: string
     }
 
     const fileSize = Number(body.fileSize)
@@ -38,10 +42,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'file_too_large' }, { status: 400 })
     }
 
+    const store = String(body.store || '').trim()
+    const tenantId = store
+      ? normalizeTenantId((await resolveTenantIdForStoreCode(store).catch(() => '')) || '')
+      : ''
+
     const safeName = String(body.fileName || 'photo.jpg')
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .slice(0, 80)
-    const storagePath = `public/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${safeName}`
+    const storagePath = buildSaasStorageObjectPath({
+      tenantId,
+      segments: ['public', `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${safeName}`],
+    })
 
     const issue = async () => {
       const { signedUrl } = await supabaseCreateSignedUploadUrl(PUBLIC_COMPLAINT_PHOTO_BUCKET, storagePath, {

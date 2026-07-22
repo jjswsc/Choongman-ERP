@@ -3,6 +3,13 @@ import { supabaseSelectFilter, supabaseUpdate, supabaseDeleteByFilter } from '@/
 import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -19,6 +26,14 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
+    const tenantWriteErr = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'leave_requests',
+      label: '휴가 승인',
+    })
+    if (tenantWriteErr) {
+      return NextResponse.json({ success: false, message: tenantWriteErr }, { status: 403, headers })
+    }
     const body = await request.json()
     const id = body?.id != null ? Number(body.id) : NaN
     const decision = String(body?.decision || '').trim()
@@ -44,17 +59,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rows = (await supabaseSelectFilter('leave_requests', `id=eq.${id}`, {
-      limit: 1,
-      select: 'id,store,type,name,leave_date,employee_id',
-    })) as {
+    const leaveSelectFilter = appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'leave_requests')
+    let rows: {
       id: number
       store?: string
       type?: string
       name?: string
       leave_date?: string
       employee_id?: number | null
-    }[]
+    }[] = []
+    try {
+      rows = (await supabaseSelectFilter('leave_requests', leaveSelectFilter, {
+        limit: 1,
+        select: 'id,store,type,name,leave_date,employee_id',
+      })) as typeof rows
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('leave_requests')
+        rows = (await supabaseSelectFilter('leave_requests', `id=eq.${id}`, {
+          limit: 1,
+          select: 'id,store,type,name,leave_date,employee_id',
+        })) as typeof rows
+      } else {
+        throw e
+      }
+    }
     if (!rows || rows.length === 0) {
       return NextResponse.json(
         { success: false, message: '해당 휴가 신청을 찾을 수 없습니다.' },
@@ -80,7 +109,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (decision === '삭제') {
-      await supabaseDeleteByFilter('leave_requests', `id=eq.${id}`)
+      await supabaseDeleteByFilter(
+        'leave_requests',
+        appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'leave_requests')
+      )
       return NextResponse.json(
         { success: true, message: '삭제되었습니다.' },
         { headers }
@@ -117,17 +149,29 @@ export async function POST(request: NextRequest) {
         const dateFilter = `schedule_date=eq.${leaveDate}`
         let deleted = false
         if (leaveEmployeeId > 0) {
-          const byEmpFilter = `${dateFilter}&${storeFilter}&employee_id=eq.${leaveEmployeeId}`
+          const byEmpFilter = appendSaasTenantFilter(
+            `${dateFilter}&${storeFilter}&employee_id=eq.${leaveEmployeeId}`,
+            tenantScope,
+            'schedules'
+          )
           try {
             await supabaseDeleteByFilter('schedules', byEmpFilter)
             deleted = true
           } catch (e) {
             const em = e instanceof Error ? e.message : String(e)
-            if (!/employee_id|42703|column/i.test(em)) throw e
+            if (isMissingSaasTenantColumnError(e)) {
+              markSaasTenantColumnMissing('schedules')
+            } else if (!/employee_id|42703|column/i.test(em)) {
+              throw e
+            }
           }
         }
         if (!deleted && leaveName) {
-          const byNameFilter = `${dateFilter}&${storeFilter}&name=ilike.${encodeURIComponent(leaveName)}`
+          const byNameFilter = appendSaasTenantFilter(
+            `${dateFilter}&${storeFilter}&name=ilike.${encodeURIComponent(leaveName)}`,
+            tenantScope,
+            'schedules'
+          )
           await supabaseDeleteByFilter('schedules', byNameFilter)
         }
       }

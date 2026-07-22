@@ -5,7 +5,8 @@ import {
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
-import { requireMemberSession } from '@/lib/member-portal-session'
+import { requireMemberSessionWithTenant } from '@/lib/member-portal-session'
+import { buildSaasStorageObjectPath } from '@/lib/saas-storage-path'
 
 const BUCKET = 'complaint-photos'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -19,7 +20,7 @@ const IMAGE_TYPES = new Set([
 ])
 
 export async function POST(request: NextRequest) {
-  const session = await requireMemberSession(request)
+  const session = await requireMemberSessionWithTenant(request)
   if (session.error) return session.error
 
   const memberId = Number(session.member?.id || 0)
@@ -50,7 +51,10 @@ export async function POST(request: NextRequest) {
     const safeName = String(body.fileName || 'photo.jpg')
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .slice(0, 80)
-    const storagePath = `member/${memberId}/${Date.now()}-${safeName}`
+    const storagePath = buildSaasStorageObjectPath({
+      tenantId: session.tenantScope.tenantId,
+      segments: ['member', String(memberId), `${Date.now()}-${safeName}`],
+    })
 
     const issue = async () => {
       const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
