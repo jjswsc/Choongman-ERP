@@ -1,0 +1,19 @@
+{
+    "version":  "0.1.7",
+    "files":  [
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
+                      "name":  "cm-pos-windows-choongman-latest-setup.exe",
+                      "sha256":  "444240aa0b0eb773131fc8089f0c99f0e232ae2d867959ff1206b39ed7a09fb5"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.7-setup.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.7-setup.exe",
+                      "sha256":  "444240aa0b0eb773131fc8089f0c99f0e232ae2d867959ff1206b39ed7a09fb5"
+                  }
+              ],
+    "installerSha256":  "444240aa0b0eb773131fc8089f0c99f0e232ae2d867959ff1206b39ed7a09fb5",
+    "publishedAtUtc":  "2026-07-22T04:41:55.9864975Z",
+    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
+    "notes":  "Choongman POS Windows 0.1.7 - fix payment receipt 10s delay (strip remote logo/stamp before Electron loadFile)"
+}
