@@ -21,7 +21,7 @@ import {
   mpGlassCardSoft,
   mpGlassInset,
 } from "@/lib/member-portal-design"
-import { MP_HOME_TIER_PILL_GEM_SIZE } from "@/lib/member-portal-home-layout"
+import { MP_HOME_POPUP_ASPECT_H, MP_HOME_POPUP_ASPECT_W, MP_HOME_TIER_PILL_GEM_SIZE } from "@/lib/member-portal-home-layout"
 import { memberPortalUiThemeStyle, type MemberPortalUiTheme } from "@/lib/member-portal-theme"
 import { resolveTierFamily } from "@/lib/member-portal-tier-visual"
 import { TierFacetedGemIcon } from "@/components/member-portal/member-portal-tier-gem-icon"
@@ -233,11 +233,14 @@ export function MemberPortalContentSheet({
   item,
   closeLabel,
   onClose,
+  /** 홈 팝업(720×900)은 전체 표시, 프로모 상세는 기본 */
+  imageFit = "natural",
 }: {
   open: boolean
   item: { title: string; body: string; imageUrl: string } | null
   closeLabel: string
   onClose: () => void
+  imageFit?: "natural" | "popup"
 }) {
   if (!open || !item) return null
   return (
@@ -259,7 +262,16 @@ export function MemberPortalContentSheet({
           <img
             src={item.imageUrl}
             alt={item.title || "promo"}
-            className="mb-4 max-h-64 w-full rounded-2xl object-cover"
+            className={
+              imageFit === "popup"
+                ? "-mx-5 mb-4 w-[calc(100%+2.5rem)] max-w-none object-contain"
+                : "mb-4 h-auto w-full rounded-2xl object-contain"
+            }
+            style={
+              imageFit === "popup"
+                ? { aspectRatio: `${MP_HOME_POPUP_ASPECT_W} / ${MP_HOME_POPUP_ASPECT_H}` }
+                : undefined
+            }
           />
         ) : null}
         {item.title ? <h3 className="text-lg font-semibold text-white">{item.title}</h3> : null}

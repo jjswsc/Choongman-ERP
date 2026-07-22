@@ -44,6 +44,7 @@ type MemberPortalPrivilegeTabProps = {
   offers: PortalCouponOfferRow[]
   offersLoading?: boolean
   claimingCode?: string | null
+  redeemingPromo?: boolean
   visits: PortalVisitRow[]
   points: PortalPointRow[]
   stampStatus: MemberStampCardStatus | null
@@ -53,6 +54,7 @@ type MemberPortalPrivilegeTabProps = {
   pointRetentionYears?: number
   onOpenTierBenefits: () => void
   onClaimOffer: (couponCode: string) => void
+  onRedeemPromoCode?: (code: string) => boolean | Promise<boolean>
   onPointBalanceChange?: (balance: number) => void
   stores: Array<{ storeCode: string; displayName?: string }>
   t: (key: MemberPortalKey, vars?: Record<string, string>) => string
@@ -124,6 +126,7 @@ export function MemberPortalPrivilegeTab({
   offers,
   offersLoading = false,
   claimingCode = null,
+  redeemingPromo = false,
   visits,
   points,
   stampStatus,
@@ -133,6 +136,7 @@ export function MemberPortalPrivilegeTab({
   pointRetentionYears = 2,
   onOpenTierBenefits,
   onClaimOffer,
+  onRedeemPromoCode,
   stores,
   t,
 }: MemberPortalPrivilegeTabProps) {
@@ -140,6 +144,19 @@ export function MemberPortalPrivilegeTab({
   const [walletTab, setWalletTab] = React.useState<CouponWalletTab>("offers")
   const [couponFilter, setCouponFilter] = React.useState<CouponFilter>("active")
   const [detailVisit, setDetailVisit] = React.useState<PortalVisitRow | null>(null)
+  const [promoCodeInput, setPromoCodeInput] = React.useState("")
+
+  const submitPromoCode = () => {
+    const code = promoCodeInput.trim()
+    if (!code || redeemingPromo || !onRedeemPromoCode) return
+    void Promise.resolve(onRedeemPromoCode(code)).then((ok) => {
+      if (ok) {
+        setPromoCodeInput("")
+        setWalletTab("wallet")
+        setCouponFilter("active")
+      }
+    })
+  }
 
   const activeCoupons = React.useMemo(
     () => coupons.filter((c) => isMemberPortalCouponReady(c.status)),
@@ -229,6 +246,47 @@ export function MemberPortalPrivilegeTab({
 
       {section === "coupons" ? (
         <div className="space-y-3">
+          {onRedeemPromoCode ? (
+            <GlassCard soft className="space-y-2.5 px-4 py-3.5">
+              <div>
+                <p className={`text-sm font-semibold ${MP_CARD_TEXT_PRIMARY}`}>{t("promoCodeTitle")}</p>
+                <p className={`mt-0.5 text-[11px] leading-snug ${MP_CARD_TEXT_MUTED}`}>{t("promoCodeHint")}</p>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      submitPromoCode()
+                    }
+                  }}
+                  disabled={redeemingPromo}
+                  placeholder={t("promoCodePlaceholder")}
+                  className="min-w-0 flex-1 rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm font-semibold tracking-wide text-stone-800 outline-none ring-amber-300/60 placeholder:font-normal placeholder:tracking-normal placeholder:text-stone-400 focus:ring-2 disabled:opacity-60"
+                  aria-label={t("promoCodePlaceholder")}
+                />
+                <button
+                  type="button"
+                  onClick={submitPromoCode}
+                  disabled={redeemingPromo || !promoCodeInput.trim()}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {redeemingPromo ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : null}
+                  {t("promoCodeSubmit")}
+                </button>
+              </div>
+            </GlassCard>
+          ) : null}
+
           <div className="flex gap-1.5 rounded-xl border border-stone-200/70 bg-white/70 p-1">
             <button
               type="button"

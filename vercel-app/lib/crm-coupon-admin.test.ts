@@ -11,6 +11,7 @@ import {
 describe('crm-coupon-admin', () => {
   it('parses admin tab', () => {
     expect(parseCrmCouponAdminTab('issue')).toBe('issue')
+    expect(parseCrmCouponAdminTab('promo')).toBe('promo')
     expect(parseCrmCouponAdminTab('unknown')).toBe('definitions')
   })
 

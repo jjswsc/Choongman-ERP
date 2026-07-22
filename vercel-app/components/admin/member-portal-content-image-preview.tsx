@@ -2,6 +2,8 @@
 
 import {
   MP_HOME_HERO_HEIGHT,
+  MP_HOME_POPUP_ASPECT_H,
+  MP_HOME_POPUP_ASPECT_W,
   MP_HOME_PROMO_RADIUS,
 } from "@/lib/member-portal-home-layout"
 import type { MemberPortalContentAdminCategory } from "@/lib/member-portal-content-admin"
@@ -57,7 +59,8 @@ export function MemberPortalContentImagePreview({
           src={imageUrl}
           alt={alt || title || ""}
           referrerPolicy="no-referrer"
-          className="mb-2 max-h-40 w-full object-cover px-3"
+          className="mb-2 w-full object-contain px-3"
+          style={{ aspectRatio: `${MP_HOME_POPUP_ASPECT_W} / ${MP_HOME_POPUP_ASPECT_H}` }}
           onError={(e) => {
             e.currentTarget.classList.add("opacity-40")
           }}

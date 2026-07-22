@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Gift, Megaphone, Stamp, Ticket } from "lucide-react"
+import { Gift, KeyRound, Megaphone, Stamp, Ticket } from "lucide-react"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -17,6 +17,7 @@ import { CrmCouponIssuePanel } from "@/components/admin/crm-coupon-issue-panel"
 import { CrmCouponHistoryPanel } from "@/components/admin/crm-coupon-history-panel"
 import { CrmCouponCampaignPanel } from "@/components/admin/crm-coupon-campaign-panel"
 import { CrmCouponStampPanel } from "@/components/admin/crm-coupon-stamp-panel"
+import { CrmCouponPromoCodePanel } from "@/components/admin/crm-coupon-promo-code-panel"
 import { CrmCouponKpiStrip } from "@/components/crm/crm-coupon-kpi-strip"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -55,7 +56,7 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
               <h1 className="text-lg font-bold tracking-tight">{t("crmCouponHubTitle") || "쿠폰 관리"}</h1>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                 {t("crmCouponHubSub") ||
-                  "쿠폰 정의·지급·캠페인·스탬프 카드·POS·회원앱 연동을 한 곳에서 관리합니다."}
+                  "쿠폰 정의·지급·캠페인·시크릿 코드·스탬프 카드·POS·회원앱 연동을 한 곳에서 관리합니다."}
               </p>
             </div>
           </div>
@@ -81,6 +82,10 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
                 <Megaphone className={adminTabsIconCn} aria-hidden />
                 {t("crmCouponTabCampaigns") || t("adminCrmCampaigns") || "쿠폰 캠페인"}
               </TabsTrigger>
+              <TabsTrigger value="promo" className={adminTabsTriggerCn}>
+                <KeyRound className={adminTabsIconCn} aria-hidden />
+                {t("crmCouponTabPromo") || "프로모 코드"}
+              </TabsTrigger>
               <TabsTrigger value="stamp" className={adminTabsTriggerCn}>
                 <Stamp className={adminTabsIconCn} aria-hidden />
                 {t("crmCouponTabStamp") || "스탬프 카드"}
@@ -99,6 +104,9 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
           </TabsContent>
           <TabsContent value="campaigns" className={adminTabsContentCn}>
             <CrmCouponCampaignPanel />
+          </TabsContent>
+          <TabsContent value="promo" className={adminTabsContentCn}>
+            <CrmCouponPromoCodePanel />
           </TabsContent>
           <TabsContent value="stamp" className={adminTabsContentCn}>
             <CrmCouponStampPanel />

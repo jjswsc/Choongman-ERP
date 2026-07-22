@@ -1,12 +1,13 @@
 {
   "name": "choongman-pos-windows",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "author": "Choongman",
   "description": "Windows installed hybrid POS shell (Electron)",
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
+    "postinstall": "electron-builder install-app-deps",
     "icon:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/generate-windows-pos-icon.ps1",
     "pack": "electron-builder --dir",
     "prebuild:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/build-windows-pos.ps1 -ClearDistOnly",
@@ -20,6 +21,11 @@
     "directories": {
       "output": "dist"
     },
+    "asarUnpack": [
+      "**/node_modules/serialport/**/*",
+      "**/node_modules/@serialport/**/*",
+      "**/node_modules/node-gyp-build/**/*"
+    ],
     "extraResources": [
       {
         "from": "scripts",
@@ -34,6 +40,7 @@
       "preload.js",
       "offline.html",
       "runtime-config.json",
+      "linkpos-bridge-server.js",
       {
         "from": "../lib/deploy-public-origin.cjs",
         "to": "lib/deploy-public-origin.cjs"
@@ -59,6 +66,9 @@
     "portable": {
       "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
     }
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
   },
   "devDependencies": {
     "electron": "^31.7.7",

@@ -19,6 +19,94 @@ function requireDeployPublicOrigin() {
 const { resolveDeployPublicOrigin } = requireDeployPublicOrigin();
 const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
 
+let linkposBridgeApi = null;
+try {
+  linkposBridgeApi = require("./linkpos-bridge-server");
+} catch (e) {
+  console.warn(
+    "[cm-pos] linkpos-bridge-server not loaded:",
+    e && e.message ? e.message : e
+  );
+}
+
+let linkposBridgeStarted = false;
+
+function readLinkposBridgeOptionsFromRuntime() {
+  const cfg = readRuntimeConfig() || {};
+  const lp = cfg.linkpos && typeof cfg.linkpos === "object" ? cfg.linkpos : {};
+  const enabledRaw = lp.enabled;
+  // 기본 OFF — EDC 없는 매장에서 COM/브릿지 기동 방지. 필요 시 runtime-config linkpos.enabled=true
+  const enabled =
+    enabledRaw === true ||
+    enabledRaw === 1 ||
+    String(enabledRaw ?? "false").trim().toLowerCase() === "true" ||
+    String(enabledRaw ?? "0").trim() === "1";
+  const serialPath = String(lp.serialPath || lp.comPort || lp.path || "COM3").trim() || "COM3";
+  const baudRate = Math.max(1200, Number(lp.baudRate || 9600) || 9600);
+  const httpPort = Math.max(1, Number(lp.httpPort || 18181) || 18181);
+  const responseTimeoutMs = Math.max(3000, Number(lp.responseTimeoutMs || 120000) || 120000);
+  const verbose =
+    lp.verbose === true ||
+    String(process.env.WINDOWS_POS_LINKPOS_VERBOSE || "").trim() === "1";
+  return {
+    enabled,
+    httpPort,
+    responseTimeoutMs,
+    verbose,
+    serial: {
+      path: serialPath,
+      baudRate,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+    },
+  };
+}
+
+async function startEmbeddedLinkposBridge() {
+  if (!linkposBridgeApi || typeof linkposBridgeApi.startLinkposBridge !== "function") {
+    return { ok: false, error: "module_missing" };
+  }
+  const opts = readLinkposBridgeOptionsFromRuntime();
+  if (!opts.enabled) {
+    console.log("[cm-pos] linkpos bridge disabled in runtime-config (linkpos.enabled=false)");
+    return { ok: false, error: "disabled" };
+  }
+  try {
+    const result = await linkposBridgeApi.startLinkposBridge({
+      httpPort: opts.httpPort,
+      serial: opts.serial,
+      responseTimeoutMs: opts.responseTimeoutMs,
+      verbose: opts.verbose,
+    });
+    linkposBridgeStarted = Boolean(result && result.ok);
+    if (result && result.ok) {
+      console.log(
+        `[cm-pos] linkpos bridge on :${opts.httpPort} → ${opts.serial.path} @ ${opts.serial.baudRate}`
+      );
+    } else {
+      console.warn("[cm-pos] linkpos bridge start failed:", result && result.error);
+    }
+    return result || { ok: false, error: "unknown" };
+  } catch (e) {
+    console.warn("[cm-pos] linkpos bridge start error:", e && e.message ? e.message : e);
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+
+async function stopEmbeddedLinkposBridge() {
+  if (!linkposBridgeStarted || !linkposBridgeApi || typeof linkposBridgeApi.stopLinkposBridge !== "function") {
+    return;
+  }
+  try {
+    await linkposBridgeApi.stopLinkposBridge();
+  } catch (e) {
+    console.warn("[cm-pos] linkpos bridge stop:", e && e.message ? e.message : e);
+  } finally {
+    linkposBridgeStarted = false;
+  }
+}
+
 function readJsonFileIfExists(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -134,6 +222,13 @@ function buildDefaultUserRuntimeConfigText() {
         openDevtools: false,
         updateManifestUrl: `${origin}/downloads/windows-pos/latest.json`,
         kiosk: "1",
+        linkpos: {
+          enabled: false,
+          httpPort: 18181,
+          serialPath: "COM3",
+          baudRate: 9600,
+          responseTimeoutMs: 120000,
+        },
         print: {
           deviceName: "",
           receiptDeviceName: "",
@@ -545,7 +640,9 @@ function debugLog(hypothesisId, location, message, data) {
 }
 
 let mainWindow = null;
-let htmlPrintQueue = Promise.resolve();
+/** 주방·영수증 분리 — 결제 영수증이 주방 인쇄 뒤에 수 초 대기하지 않도록 */
+let htmlPrintQueueKitchen = Promise.resolve();
+let htmlPrintQueueReceipt = Promise.resolve();
 let htmlHiddenPrintWindow = null;
 let htmlPrintFailureStreak = 0;
 /** POS 메인 URL 로드 실패 시 재시도(did-fail-load 일시 오류·리다이렉트 완화) */
@@ -1289,10 +1386,32 @@ function printCurrentWindow(options) {
 
 function printWebContentsPromise(wc, options) {
   return new Promise((resolve) => {
-    wc.print(options, (success, failureReason) => {
-      resolve({ success: Boolean(success), failureReason: failureReason || "" });
-    });
+    try {
+      wc.print(options, (success, failureReason) => {
+        resolve({ success: Boolean(success), failureReason: failureReason || "" });
+      });
+    } catch (e) {
+      resolve({ success: false, failureReason: String(e && e.message ? e.message : e) });
+    }
   });
+}
+
+/**
+ * 일부 Windows 열전사/네트워크 프린터는 print() 콜백이 수 초~10초+ 늦게 옴.
+ * 영수증은 제출 후 짧게만 기다리고 IPC·큐를 풀어, 창은 백그라운드에서 유지하다 정리.
+ */
+function printWebContentsPromiseReceipt(wc, options, waitMs = 2200) {
+  const printJob = printWebContentsPromise(wc, options);
+  const ms = Math.max(800, Math.min(8000, Math.trunc(Number(waitMs) || 2200)));
+  return Promise.race([
+    printJob.then((r) => ({ ...r, earlyReturn: false })),
+    delayMs(ms).then(() => ({
+      success: true,
+      failureReason: "",
+      earlyReturn: true,
+      printJob,
+    })),
+  ]);
 }
 
 function delayMs(ms) {
@@ -1301,8 +1420,10 @@ function delayMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, n));
 }
 
-function queueHtmlPrintTask(runTask, gapMsOverride) {
-  const queued = htmlPrintQueue
+function queueHtmlPrintTask(runTask, gapMsOverride, queueKind) {
+  const isReceipt = queueKind === "receipt";
+  const prev = isReceipt ? htmlPrintQueueReceipt : htmlPrintQueueKitchen;
+  const queued = prev
     .catch(() => {})
     .then(async () => {
       const gapMs = Number.isFinite(Number(gapMsOverride))
@@ -1313,10 +1434,12 @@ function queueHtmlPrintTask(runTask, gapMsOverride) {
       }
       return runTask();
     });
-  htmlPrintQueue = queued.then(
+  const tail = queued.then(
     () => undefined,
     () => undefined
   );
+  if (isReceipt) htmlPrintQueueReceipt = tail;
+  else htmlPrintQueueKitchen = tail;
   return queued;
 }
 
@@ -1431,7 +1554,8 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
   const isReceiptRole = Boolean(options && options.printRole === "receipt");
   const queueGapMsForJob = isReceiptRole ? PRINT_HTML_QUEUE_GAP_MS_RECEIPT : undefined;
   const t0 = Date.now();
-  return queueHtmlPrintTask(async () => {
+  return queueHtmlPrintTask(
+    async () => {
     const preferDialog = Boolean(options && options.preferDialog);
     const silentRetryMax = resolvePrintHtmlSilentRetryMax(options);
     const tmpRoot = app.getPath("temp");
@@ -1442,6 +1566,9 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
     let printWindow = null;
     let destroyAfterRun = false;
     let wroteTmpFile = false;
+    /** 영수증: print() 콜백이 늦을 때 창을 바로 닫지 않고 백그라운드 유지 */
+    let deferWindowDestroyMs = 0;
+    let backgroundPrintJob = null;
     try {
       const warnings = [];
       let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
@@ -1564,15 +1691,28 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         defaultPrintDevice: DEFAULT_PRINT_DEVICE || "",
       });
       // #endregion
-      let r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
-      let thermalAttempts = 1;
-      while (!r.success && thermalAttempts <= silentRetryMax) {
-        thermalAttempts += 1;
-        await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
-        await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
-          printRole: isReceiptRole ? "receipt" : undefined,
-        });
+      let r;
+      if (isReceiptRole) {
+        const raced = await printWebContentsPromiseReceipt(printWindow.webContents, thermalOpts, 2200);
+        r = { success: Boolean(raced.success), failureReason: String(raced.failureReason || "") };
+        if (raced.earlyReturn && raced.printJob) {
+          deferWindowDestroyMs = 12000;
+          backgroundPrintJob = raced.printJob;
+          console.log(
+            `[cm-pos] receipt print early-return after 2200ms (driver callback still pending) totalMs=${Date.now() - t0}`
+          );
+        }
+      } else {
         r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
+        let thermalAttempts = 1;
+        while (!r.success && thermalAttempts <= silentRetryMax) {
+          thermalAttempts += 1;
+          await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
+          await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
+            printRole: undefined,
+          });
+          r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
+        }
       }
       // #region agent log
       debugLog("H3_thermal_fail", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_result", "thermal_result", {
@@ -1590,7 +1730,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
           driverAttempts += 1;
           await delayMs(120 * driverAttempts + htmlPrintFailureStreak * 80);
           await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
-            printRole: isReceiptRole ? "receipt" : undefined,
+            printRole: undefined,
           });
           r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
         }
@@ -1603,7 +1743,8 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         });
         // #endregion
       }
-      if (!r.success) {
+      /** 영수증: 대화상자 폴백 금지 — 사용자 대기·수 초 지연의 주원인 */
+      if (!r.success && !isReceiptRole) {
         printStage = "dialog";
         // #region agent log
         debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:dialog_fallback", "dialog_fallback_triggered", {
@@ -1631,7 +1772,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         const spoolFlushMs = isReceiptRole
           ? POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT
           : POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED;
-        if (spoolFlushMs > 0) {
+        if (spoolFlushMs > 0 && deferWindowDestroyMs <= 0) {
           await delayMs(spoolFlushMs);
         }
       } else {
@@ -1662,18 +1803,48 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       console.warn(`[cm-pos] printHtml error totalMs=${Date.now() - t0}`, e);
       return { ok: false, reason: String(e && e.message ? e.message : e), usedDevice: "" };
     } finally {
-      try {
-        if (destroyAfterRun && printWindow && !printWindow.isDestroyed()) printWindow.destroy();
-      } catch {
-        /* ignore */
-      }
-      try {
-        if (wroteTmpFile && fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-      } catch {
-        /* ignore */
+      const destroyWindowNow = () => {
+        try {
+          if (destroyAfterRun && printWindow && !printWindow.isDestroyed()) printWindow.destroy();
+        } catch {
+          /* ignore */
+        }
+        try {
+          if (wroteTmpFile && fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+        } catch {
+          /* ignore */
+        }
+      };
+      if (deferWindowDestroyMs > 0 && printWindow && !printWindow.isDestroyed()) {
+        const win = printWindow;
+        const job = backgroundPrintJob;
+        const delay = deferWindowDestroyMs;
+        printWindow = null;
+        destroyAfterRun = false;
+        setTimeout(() => {
+          void Promise.resolve(job)
+            .catch(() => {})
+            .finally(() => {
+              try {
+                if (win && !win.isDestroyed()) win.destroy();
+              } catch {
+                /* ignore */
+              }
+            });
+        }, delay);
+        try {
+          if (wroteTmpFile && fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        destroyWindowNow();
       }
     }
-  }, queueGapMsForJob);
+  },
+    queueGapMsForJob,
+    isReceiptRole ? "receipt" : "kitchen"
+  );
 }
 
 async function printWithDialogManual() {
@@ -2044,6 +2215,31 @@ function buildAppMenu() {
             } catch (e) {
               console.warn("[cm-pos] show runtime-config folder", e);
             }
+          },
+        },
+        {
+          label: "LinkPOS bridge status…",
+          click: () => {
+            const st =
+              linkposBridgeApi && typeof linkposBridgeApi.getStatus === "function"
+                ? linkposBridgeApi.getStatus()
+                : { running: false };
+            const opts = readLinkposBridgeOptionsFromRuntime();
+            const lines = [
+              `Enabled in config: ${opts.enabled ? "yes" : "no"}`,
+              `HTTP: ${st.running ? `127.0.0.1:${st.httpPort || opts.httpPort}` : "not running"}`,
+              `Serial: ${opts.serial.path} @ ${opts.serial.baudRate}`,
+              `Serial ready: ${st.serialReady ? "yes" : "no"}`,
+              `Mock (no serialport): ${st.mock ? "yes" : "no"}`,
+              "",
+              "Edit runtime-config.json → linkpos.serialPath (e.g. COM3)",
+            ];
+            dialog.showMessageBox({
+              type: "info",
+              title: "LinkPOS bridge",
+              message: "EDC RS232 bridge (built into POS)",
+              detail: lines.join("\n"),
+            });
           },
         },
         { type: "separator" },
@@ -2524,6 +2720,7 @@ if (!gotLock) {
     });
 
     createWindow();
+    void startEmbeddedLinkposBridge();
 
     const rebalanceCustomerDisplay = () => {
       if (!customerDisplayWindow || customerDisplayWindow.isDestroyed()) return;
@@ -2579,6 +2776,7 @@ if (!gotLock) {
 }
 
 app.on("will-quit", () => {
+  void stopEmbeddedLinkposBridge();
   globalShortcut.unregisterAll();
 });
 

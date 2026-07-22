@@ -666,6 +666,39 @@ export function MemberPortalApp() {
     [claimingCouponCode, lang, t]
   )
 
+  const [redeemingPromoCode, setRedeemingPromoCode] = React.useState(false)
+  const handleRedeemPromoCode = React.useCallback(
+    async (rawCode: string): Promise<boolean> => {
+      const code = String(rawCode || "").trim()
+      if (!code || redeemingPromoCode || claimingCouponCode) return false
+      setRedeemingPromoCode(true)
+      try {
+        const res = await postJson<{
+          success: boolean
+          message?: string
+          coupons?: PortalCouponRow[]
+        }>(`/api/member-portal/me/coupons/redeem-code?lang=${encodeURIComponent(lang)}`, { code })
+        if (res.success) {
+          if (Array.isArray(res.coupons)) setCoupons(res.coupons)
+          const offersRes = await getJson<{ success: boolean; rows?: PortalCouponOfferRow[] }>(
+            "/api/member-portal/me/coupon-offers"
+          )
+          if (offersRes.success) setCouponOffers(offersRes.rows || [])
+          window.alert(t("promoCodeSuccess"))
+          return true
+        }
+        if (res.message) window.alert(res.message)
+        return false
+      } catch {
+        window.alert(t("promoCodeFailGeneric"))
+        return false
+      } finally {
+        setRedeemingPromoCode(false)
+      }
+    },
+    [claimingCouponCode, lang, redeemingPromoCode, t]
+  )
+
   const homePopup = React.useMemo(() => pickMemberPortalHomePopup(contentItems), [contentItems])
   const homePopupContentKey = homePopup?.contentKey || ""
   const homePrivilegeCards = React.useMemo(
@@ -1317,6 +1350,7 @@ export function MemberPortalApp() {
             offers={couponOffers}
             offersLoading={couponOffersLoading}
             claimingCode={claimingCouponCode}
+            redeemingPromo={redeemingPromoCode}
             visits={visits}
             points={points}
             stampStatus={stampStatus}
@@ -1326,6 +1360,7 @@ export function MemberPortalApp() {
             pointRetentionYears={pointRetentionYears}
             onOpenTierBenefits={() => setTierBenefitsOpen(true)}
             onClaimOffer={handleClaimCouponOffer}
+            onRedeemPromoCode={handleRedeemPromoCode}
             stores={stores}
             t={t}
           />
@@ -1468,6 +1503,7 @@ export function MemberPortalApp() {
       <MemberPortalContentSheet
         open={homePopupOpen}
         item={homePopup}
+        imageFit="popup"
         closeLabel={t("contactMenuClose")}
         onClose={() => {
           setHomePopupOpen(false)

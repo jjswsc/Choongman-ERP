@@ -8,6 +8,18 @@ const BRAND_COOKIE = "__app_brand"
 function brandKeyFromHost(host: string): "omnifoodtech" | "choongman" {
   const h = host.trim().toLowerCase()
   if (h.includes("omnifoodtech")) return "omnifoodtech"
+  const isLocal =
+    h.startsWith("localhost") ||
+    h.startsWith("127.0.0.1") ||
+    h.startsWith("[::1]") ||
+    h.includes(".localhost")
+  if (isLocal) {
+    const env = String(process.env.NEXT_PUBLIC_APP_BRAND || process.env.APP_BRAND || "")
+      .trim()
+      .toLowerCase()
+    if (env === "omnifoodtech" || env === "omni" || env === "saas") return "omnifoodtech"
+    return "choongman"
+  }
   return "choongman"
 }
 

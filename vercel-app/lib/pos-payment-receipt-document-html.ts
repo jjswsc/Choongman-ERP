@@ -488,27 +488,30 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
    * fetch 타임아웃이 겹치면 인쇄 시작이 수백 ms~수 초 늦어질 수 있음.
    */
   if (isWindowsHybridPosShell()) {
-    const membershipQrSrcOverride = params.membershipQrSrcOverride
+    /** 하이브리드: 완전 동기 — QR도 캐시만 사용(미캐시면 생략, 다음 결제를 위해 백그라운드 생성) */
+    let membershipSrc = params.membershipQrSrcOverride
       ? String(params.membershipQrSrcOverride || '').trim()
-      : await resolvePaymentReceiptMembershipQrSrc({
-          receiptShowMembershipQr: d.receiptShowMembershipQr,
-          receiptMembershipQrLinkUrl: d.receiptMembershipQrLinkUrl,
-          receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
-          origin,
-        })
-    const logoSafe = isOfflineSafePrintImgSrc(logoCandidate) ? logoCandidate : ''
-    const stampSafe = isOfflineSafePrintImgSrc(stampCandidate) ? stampCandidate : ''
-    let membershipSrc = membershipQrSrcOverride
+      : ''
+    if (!membershipSrc && d.receiptShowMembershipQr) {
+      const link = resolveMembershipQrLinkUrl(
+        String(d.receiptMembershipQrLinkUrl || '').trim(),
+        origin
+      )
+      if (link) {
+        membershipSrc = peekCachedQrDataUri(link, 180)
+        if (!membershipSrc) {
+          void buildQrDataUri(link, 180)
+        }
+      }
+      if (!membershipSrc && membershipImageCandidate && isOfflineSafePrintImgSrc(membershipImageCandidate)) {
+        membershipSrc = membershipImageCandidate
+      }
+    }
     if (membershipSrc && !isOfflineSafePrintImgSrc(membershipSrc)) {
       membershipSrc = ''
-    } else if (
-      !membershipSrc &&
-      d.receiptShowMembershipQr &&
-      membershipImageCandidate &&
-      isOfflineSafePrintImgSrc(membershipImageCandidate)
-    ) {
-      membershipSrc = membershipImageCandidate
     }
+    const logoSafe = isOfflineSafePrintImgSrc(logoCandidate) ? logoCandidate : ''
+    const stampSafe = isOfflineSafePrintImgSrc(stampCandidate) ? stampCandidate : ''
     return buildPosPaymentReceiptDocumentHtml({
       ...params,
       membershipQrSrcOverride: membershipSrc,

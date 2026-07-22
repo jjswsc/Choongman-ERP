@@ -73,15 +73,29 @@ export function resolveAfterKitchenToReceiptDelayMs(): number {
   return POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS
 }
 
-/** 렌더러: 연속 주문·주방/영수증 HTML 인쇄 직렬화(웹 iframe 동시 print() 깨짐 방지) */
-let posHtmlPrintQueue = Promise.resolve()
+/** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
+export type PosPrintTargetRole = 'receipt' | 'kitchen'
 
-function enqueuePosHtmlPrint<T>(task: () => Promise<T>): Promise<T> {
-  const next = posHtmlPrintQueue.catch(() => undefined).then(task)
-  posHtmlPrintQueue = next.then(
+/** `printRole: 'receipt'`일 때만 사용 — ESC/POS 절단을 홀 주문서 vs 결제 영수증으로 나눔 */
+export type PosPrintReceiptKind = 'hall_order' | 'payment'
+
+/** 렌더러: 주방/영수증 HTML 인쇄 큐 분리(결제 영수증이 주방 뒤에 대기하지 않음) */
+let posHtmlPrintQueueReceipt = Promise.resolve()
+let posHtmlPrintQueueKitchen = Promise.resolve()
+
+function enqueuePosHtmlPrint<T>(
+  task: () => Promise<T>,
+  role?: PosPrintTargetRole
+): Promise<T> {
+  const isReceipt = role === 'receipt'
+  const prev = isReceipt ? posHtmlPrintQueueReceipt : posHtmlPrintQueueKitchen
+  const next = prev.catch(() => undefined).then(task)
+  const tail = next.then(
     () => undefined,
     () => undefined
   )
+  if (isReceipt) posHtmlPrintQueueReceipt = tail
+  else posHtmlPrintQueueKitchen = tail
   return next
 }
 
@@ -89,12 +103,6 @@ function enqueuePosHtmlPrint<T>(task: () => Promise<T>): Promise<T> {
 function shouldSkipShellIframeFallback(opts?: PrintPosHtmlDocumentOptions): boolean {
   return opts?.printReceiptKind === 'hall_order' || opts?.printReceiptKind === 'payment'
 }
-
-/** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
-export type PosPrintTargetRole = 'receipt' | 'kitchen'
-
-/** `printRole: 'receipt'`일 때만 사용 — ESC/POS 절단을 홀 주문서 vs 결제 영수증으로 나눔 */
-export type PosPrintReceiptKind = 'hall_order' | 'payment'
 
 export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   /**
@@ -276,5 +284,5 @@ export function printPosHtmlDocument(
   fullDocumentHtml: string,
   opts?: PrintPosHtmlDocumentOptions
 ): Promise<void> {
-  return enqueuePosHtmlPrint(() => printPosHtmlDocumentInner(fullDocumentHtml, opts))
+  return enqueuePosHtmlPrint(() => printPosHtmlDocumentInner(fullDocumentHtml, opts), opts?.printRole)
 }

@@ -316,6 +316,12 @@ export type MemberPortalKey =
   | 'couponOfferMaxReached'
   | 'couponOfferPointCost'
   | 'couponClaimSuccess'
+  | 'promoCodeTitle'
+  | 'promoCodeHint'
+  | 'promoCodePlaceholder'
+  | 'promoCodeSubmit'
+  | 'promoCodeSuccess'
+  | 'promoCodeFailGeneric'
   | 'couponsTitle'
   | 'couponsSub'
   | 'noCoupons'
@@ -1361,6 +1367,36 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Coupon added to My coupons.',
     th: 'เพิ่มคูปองใน「คูปองของฉัน」แล้ว',
     ko: '쿠폰이 「내 쿠폰」에 추가되었습니다.',
+  },
+  promoCodeTitle: {
+    en: 'Have a coupon code?',
+    th: 'มีรหัสคูปองพิเศษ?',
+    ko: '쿠폰 코드가 있으신가요?',
+  },
+  promoCodeHint: {
+    en: 'Enter a secret code from a campaign or store to collect a special coupon.',
+    th: 'กรอกรหัสลับจากแคมเปญหรือร้าน เพื่อรับคูปองพิเศษ',
+    ko: '캠페인·매장에서 받은 시크릿 코드를 입력하면 특별 쿠폰을 받을 수 있습니다.',
+  },
+  promoCodePlaceholder: {
+    en: 'Enter code',
+    th: 'กรอกรหัส',
+    ko: '코드 입력',
+  },
+  promoCodeSubmit: {
+    en: 'Redeem',
+    th: 'รับคูปอง',
+    ko: '수령',
+  },
+  promoCodeSuccess: {
+    en: 'Special coupon added to My coupons.',
+    th: 'เพิ่มคูปองพิเศษใน「คูปองของฉัน」แล้ว',
+    ko: '특별 쿠폰이 「내 쿠폰」에 추가되었습니다.',
+  },
+  promoCodeFailGeneric: {
+    en: 'Could not redeem the code. Please try again.',
+    th: 'ใช้รหัสไม่สำเร็จ กรุณาลองใหม่ครับ',
+    ko: '코드 수령에 실패했습니다. 다시 시도해 주세요.',
   },
   stampCardTitle: { en: 'Stamp card', th: 'บัตรสแตมป์', ko: '스탬프 카드' },
   stampHomeTitle: {

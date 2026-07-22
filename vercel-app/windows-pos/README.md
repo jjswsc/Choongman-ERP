@@ -10,6 +10,31 @@ Windows 설치형 하이브리드 POS 셸(Electron)입니다.
 
 기본 설정 파일: `runtime-config.json`
 
+## LinkPOS / EDC (RS232)
+
+Windows POS를 실행하면 **LinkPOS 브리지가 자동으로 함께 시작**됩니다. PowerShell/`npm start`를 따로 켤 필요 없습니다.
+
+`runtime-config.json` 예시:
+
+```json
+"linkpos": {
+  "enabled": true,
+  "httpPort": 18181,
+  "serialPath": "COM3",
+  "baudRate": 9600,
+  "responseTimeoutMs": 120000
+}
+```
+
+- Device Manager에서 EDC COM 포트를 확인한 뒤 `serialPath`만 매장별로 맞춥니다.
+- 메뉴 **LinkPOS bridge status…** 로 연결 상태를 확인할 수 있습니다.
+- 끄려면 `"enabled": false`.
+
+(구버전 수동 브리지 `linkpos-bridge` / PowerShell 테스터는 개발·진단용으로만 쓰면 됩니다.)
+
+---
+
+
 - **설치본(NSIS·포터블)**: `electron-builder` 가 `app.asar` 안에 이 파일을 **항상 포함**합니다(`package.json` → `build.files`). 별도로 복사할 필요 없이 설치되어 있습니다.
 - **첫 실행 시**: `userData` 아래 `runtime-config.json`이 없으면(또는 0바이트) 번들을 복사하거나 기본 JSON을 씁니다. **NSIS 설치 Windows 본(패키징)**은 기본 `userData`를 `…\Choongman POS\resources\choongman-pos-user-data\`로 잡아, 요청하신 것처럼 `resources` 안에 생성됩니다(쓰기 권한이 없으면 자동으로 AppData로 폴백). `CM_POS_USE_DEFAULT_USERDATA=1`이면 **항상** 기본 AppData를 씁니다.
 

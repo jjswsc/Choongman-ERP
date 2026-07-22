@@ -39,7 +39,14 @@ import {
   isPosOfflinePhaseAEnabled,
   persistOfflinePilotFromQuery,
 } from "@/lib/pos-offline-pilot"
-import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
+import {
+  copyWindowsInstallerUrl,
+  isLocalDevHost,
+  openWindowsInstallerDownload,
+  WINDOWS_POS_CHOONGMAN_SETUP_PATH,
+  WINDOWS_POS_OMNI_SETUP_PATH,
+  windowsPosSetupPathForBrand,
+} from "@/lib/windows-installer-copy"
 import { labelForStore } from "@/lib/store-list-keys"
 import {
   isBrowserOnline,
@@ -372,13 +379,24 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   /** ERP·모바일: 숨김. POS 웹만 윈도우 설치 안내(하이브리드 셸 안에서는 숨김) */
   const showWindowsInstallerButton = loginApp === "pos" && !hybridPosShell
-  const windowsInstallerPath = WINDOWS_POS_SETUP_PATH
+  const [localDevHost, setLocalDevHost] = useState(false)
+  useEffect(() => {
+    setLocalDevHost(isLocalDevHost())
+  }, [])
+  const windowsInstallerPath = windowsPosSetupPathForBrand(brand.key)
   const windowsInstallerLabel = tMsg("posWindowsDownload") || "윈도우 POS 설치파일 받기"
-  const handleWindowsInstallerCopy = useCallback(async () => {
-    const r = await copyWindowsInstallerUrl(windowsInstallerPath)
-    if (r.ok) await appAlert(tMsg("windowsInstallerCopyHint") || "")
-    else await appAlert((tMsg("windowsInstallerCopyFail") || "") + r.url)
-  }, [tMsg, windowsInstallerPath])
+  const windowsOmniInstallerLabel = tMsg("posWindowsDownloadOmni") || "Omni POS 받기"
+  const windowsChoongmanInstallerLabel = tMsg("posWindowsDownloadChoongman") || "충만 POS 받기"
+  const handleWindowsInstallerDownload = useCallback(
+    async (path: string) => {
+      const url = openWindowsInstallerDownload(path)
+      const copied = await copyWindowsInstallerUrl(path)
+      if (!copied.ok) {
+        await appAlert((tMsg("windowsInstallerCopyFail") || "") + url)
+      }
+    },
+    [tMsg]
+  )
 
   useEffect(() => {
     setHybridPosShell(isCmPosHybridShell())
@@ -1287,13 +1305,32 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 {t.enterOfflineMode}
               </button>
               {showWindowsInstallerButton ? (
-                <button
-                  type="button"
-                  onClick={() => void handleWindowsInstallerCopy()}
-                  className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
-                >
-                  {windowsInstallerLabel}
-                </button>
+                localDevHost ? (
+                  <div className="flex w-full flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleWindowsInstallerDownload(WINDOWS_POS_OMNI_SETUP_PATH)}
+                      className="block w-full rounded-md bg-violet-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-violet-500"
+                    >
+                      {windowsOmniInstallerLabel}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleWindowsInstallerDownload(WINDOWS_POS_CHOONGMAN_SETUP_PATH)}
+                      className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+                    >
+                      {windowsChoongmanInstallerLabel}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleWindowsInstallerDownload(windowsInstallerPath)}
+                    className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+                  >
+                    {windowsInstallerLabel}
+                  </button>
+                )
               ) : null}
             </div>
           ) : (
@@ -1541,13 +1578,32 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </button>
 
             {showWindowsInstallerButton ? (
-              <button
-                type="button"
-                onClick={() => void handleWindowsInstallerCopy()}
-                className="mt-2 block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
-              >
-                {windowsInstallerLabel}
-              </button>
+              localDevHost ? (
+                <div className="mt-2 flex w-full flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleWindowsInstallerDownload(WINDOWS_POS_OMNI_SETUP_PATH)}
+                    className="block w-full rounded-md bg-violet-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-violet-500"
+                  >
+                    {windowsOmniInstallerLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleWindowsInstallerDownload(WINDOWS_POS_CHOONGMAN_SETUP_PATH)}
+                    className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+                  >
+                    {windowsChoongmanInstallerLabel}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleWindowsInstallerDownload(windowsInstallerPath)}
+                  className="mt-2 block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+                >
+                  {windowsInstallerLabel}
+                </button>
+              )
             ) : null}
 
             <button
