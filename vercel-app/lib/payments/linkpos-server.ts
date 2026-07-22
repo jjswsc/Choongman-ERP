@@ -64,13 +64,15 @@ function successFromParsed(txCode: '20' | '26' | '50', requestHex: string, respo
 }
 
 export async function runHypercomSaleOnRelay(req: LinkposPayRequest): Promise<LinkposProviderResult> {
+  const bankId = String(req.bankId || '').trim()
   const frame = buildHypercomV1Frame({
     txCode: '20',
+    moreIndicator: '1',
     fields: [
       { type: '40', data: normalizeAmount12(req.amount) },
-      { type: 'R1', data: req.reference1.slice(0, 20) },
+      ...(req.reference1 ? [{ type: 'R1', data: req.reference1.slice(0, 20) }] : []),
       ...(req.reference2 ? [{ type: 'R2', data: req.reference2.slice(0, 20) }] : []),
-      { type: 'J6', data: String(req.bankId || '').slice(0, 3) },
+      ...(bankId ? [{ type: 'J6', data: bankId.slice(0, 3) }] : []),
     ],
   })
   const requestHex = toHex(frame)
@@ -101,11 +103,13 @@ export async function runHypercomSaleOnRelay(req: LinkposPayRequest): Promise<Li
 }
 
 export async function runHypercomVoidOnRelay(req: LinkposVoidRequest): Promise<LinkposProviderResult> {
+  const bankId = String(req.bankId || '').trim()
   const frame = buildHypercomV1Frame({
     txCode: '26',
+    moreIndicator: '1',
     fields: [
       { type: '65', data: req.traceNo.slice(0, 6) },
-      { type: 'J6', data: String(req.bankId || '').slice(0, 3) },
+      ...(bankId ? [{ type: 'J6', data: bankId.slice(0, 3) }] : []),
     ],
   })
   const requestHex = toHex(frame)
@@ -136,11 +140,13 @@ export async function runHypercomVoidOnRelay(req: LinkposVoidRequest): Promise<L
 }
 
 export async function runHypercomSettlementOnRelay(req: LinkposSettlementRequest): Promise<LinkposProviderResult> {
+  const bankId = String(req.bankId || '').trim()
   const frame = buildHypercomV1Frame({
     txCode: '50',
+    moreIndicator: '1',
     fields: [
-      { type: 'HN', data: req.nii.slice(0, 3) },
-      { type: 'J6', data: String(req.bankId || '').slice(0, 3) },
+      ...(req.nii ? [{ type: 'HN', data: req.nii.slice(0, 3) }] : []),
+      ...(bankId ? [{ type: 'J6', data: bankId.slice(0, 3) }] : []),
     ],
   })
   const requestHex = toHex(frame)

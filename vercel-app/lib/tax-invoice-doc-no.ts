@@ -1,10 +1,10 @@
-const RE_TAX_INVOICE_DOC_SUFFIX = /IV\.\d{8}-(\d{3})\b/i
+const RE_TAX_INVOICE_DOC_SUFFIX = /IV\.\d{8}-(\d+)\b/i
 
 function bangkokTodayDigits(): string {
   return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 10).replace(/\D/g, '')
 }
 
-/** Tax Invoice/Receipt 문서번호 — IV.YYYYMMDD-NNN (NNN = 당일 입금 처리 순번) */
+/** Tax Invoice/Receipt 문서번호 — IV.YYYYMMDD-NNN (NNN = issueDate 기준 발행 순번) */
 export function buildTaxInvoiceDocNo(issueDate: string, seq: number): string {
   const dateDigits = String(issueDate || '').replace(/\D/g, '')
   const safeDate = dateDigits.length >= 8 ? dateDigits.slice(0, 8) : bangkokTodayDigits()

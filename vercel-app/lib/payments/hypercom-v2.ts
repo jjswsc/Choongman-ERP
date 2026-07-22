@@ -24,11 +24,12 @@ export function calcLrc(bytes: Uint8Array): number {
   return lrc & 0xff
 }
 
+/** Pack decimal length 0–9999 as 2 BCD bytes (digits as hex nibbles). */
 function bcdLength4(n: number): Uint8Array {
-  const s = String(Math.max(0, n)).padStart(4, '0')
+  const s = String(Math.max(0, Math.min(9999, n))).padStart(4, '0')
   return new Uint8Array([
-    Number.parseInt(s.slice(0, 2), 10),
-    Number.parseInt(s.slice(2, 4), 10),
+    Number.parseInt(s.slice(0, 2), 16),
+    Number.parseInt(s.slice(2, 4), 16),
   ])
 }
 
@@ -79,14 +80,10 @@ export function buildHypercomV1Frame(opts: {
     payloadFields
   )
   const lengthBcd = bcdLength4(messageData.length)
-  const startToEtx = concatBytes(
-    new Uint8Array([STX]),
-    lengthBcd,
-    messageData,
-    new Uint8Array([ETX])
-  )
-  const lrc = calcLrc(startToEtx)
-  return concatBytes(startToEtx, new Uint8Array([lrc]))
+  // LRC: length → ETX (STX excluded) — matches KBTG v1.6.0 wire sample / EDC tester
+  const withoutStx = concatBytes(lengthBcd, messageData, new Uint8Array([ETX]))
+  const lrc = calcLrc(withoutStx)
+  return concatBytes(new Uint8Array([STX]), withoutStx, new Uint8Array([lrc]))
 }
 
 export function parseHypercomFrame(frame: Uint8Array): {
@@ -99,7 +96,7 @@ export function parseHypercomFrame(frame: Uint8Array): {
   const etxIndex = frame.lastIndexOf(ETX)
   if (etxIndex < 0 || etxIndex >= frame.length - 1) throw new Error('invalid_etx')
   const lrc = frame[etxIndex + 1]
-  const check = calcLrc(frame.slice(0, etxIndex + 1))
+  const check = calcLrc(frame.slice(1, etxIndex + 1))
   if (lrc !== check) throw new Error('invalid_lrc')
   const body = frame.slice(3, etxIndex)
   if (body.length < 16) throw new Error('invalid_body')

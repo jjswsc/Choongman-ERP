@@ -11,7 +11,7 @@ import { normalizeMarketingCollabDetail, type MarketingCollabDetail } from "@/li
 import { campaignMatchesPeriodFilter } from "@/lib/marketing-campaign-filters"
 import {
   getBangkokCurrentMonthRangeYmd,
-  getBangkokRolling30DayRangeYmd,
+  getBangkokTodayRangeYmd,
 } from "@/lib/collab-overview-period"
 
 type TFn = (key: string) => string
@@ -115,6 +115,11 @@ export function CollabManagementOverviewTab(props: {
   t: TFn
   allStoresLabel: string
   onGoToEdit: (campaignId: string) => void
+  /** 부모에서 넘기면 탭 전환 후에도 조회 기간 유지 */
+  periodFrom?: string
+  periodTo?: string
+  onPeriodFromChange?: (v: string) => void
+  onPeriodToChange?: (v: string) => void
 }) {
   const { campaigns, stores, storesLoading, loading, t, allStoresLabel, onGoToEdit } = props
   const { formatStoreLabel } = useStoreList()
@@ -122,19 +127,30 @@ export function CollabManagementOverviewTab(props: {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [partnerKeyFilter, setPartnerKeyFilter] = React.useState("")
-  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
-  const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
+  const periodControlled = props.onPeriodFromChange != null && props.onPeriodToChange != null
+  const [localPeriodFrom, setLocalPeriodFrom] = React.useState(() => getBangkokTodayRangeYmd().from)
+  const [localPeriodTo, setLocalPeriodTo] = React.useState(() => getBangkokTodayRangeYmd().to)
+  const periodFrom = periodControlled ? (props.periodFrom ?? "") : localPeriodFrom
+  const periodTo = periodControlled ? (props.periodTo ?? "") : localPeriodTo
+  const setPeriodFrom = periodControlled ? props.onPeriodFromChange! : setLocalPeriodFrom
+  const setPeriodTo = periodControlled ? props.onPeriodToChange! : setLocalPeriodTo
+
+  const resetPeriodToToday = React.useCallback(() => {
+    const r = getBangkokTodayRangeYmd()
+    setPeriodFrom(r.from)
+    setPeriodTo(r.to)
+  }, [setPeriodFrom, setPeriodTo])
 
   const resetPeriodToThisMonth = React.useCallback(() => {
     const r = getBangkokCurrentMonthRangeYmd()
     setPeriodFrom(r.from)
     setPeriodTo(r.to)
-  }, [])
+  }, [setPeriodFrom, setPeriodTo])
 
   const clearPeriod = React.useCallback(() => {
     setPeriodFrom("")
     setPeriodTo("")
-  }, [])
+  }, [setPeriodFrom, setPeriodTo])
 
   const baseFiltered = React.useMemo(() => {
     const store = storeFilter.trim()
@@ -317,6 +333,9 @@ export function CollabManagementOverviewTab(props: {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-9 text-xs" onClick={resetPeriodToToday}>
+              {t("today")}
+            </Button>
             <Button type="button" variant="outline" size="sm" className="h-9 text-xs" onClick={resetPeriodToThisMonth}>
               {t("marketingCollabOverviewPeriodResetMonth")}
             </Button>

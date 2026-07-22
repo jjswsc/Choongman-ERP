@@ -23,8 +23,36 @@ import {
 } from '@/lib/pos-sales-fetch-rows'
 import { getStockLocationPatterns, isOfficeStockSelection } from '@/lib/stock-location-patterns'
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
+import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import { supabaseRpc, supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import type { NextRequest } from 'next/server'
+
+/** items_json 줄 → menu/option (원가·마진 집계와 동일 우선순위) */
+function resolveLineMenuOption(it: {
+  id?: string
+  menuId?: string
+  menu_id?: string
+  menuId1?: string
+  menu_id1?: string
+  optionId?: string
+  option_id?: string
+  optionId1?: string
+  option_id1?: string
+}): { menuId: string; optionId: string } {
+  let menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? it.menu_id ?? '').trim()
+  let optionId = String(it.optionId1 ?? it.option_id1 ?? it.optionId ?? it.option_id ?? '').trim()
+  if (menuId) return { menuId, optionId }
+
+  let raw = String(it.id ?? '').trim()
+  if (!raw || raw.toLowerCase().startsWith('promo-')) return { menuId: '', optionId: '' }
+  if (raw.toLowerCase().startsWith('cart-')) raw = raw.slice(5).trim()
+  const parts = raw.split('-')
+  if (parts[0] && /^\d+$/.test(parts[0])) {
+    menuId = parts[0]
+    if (parts[1] && /^\d+$/.test(parts[1])) optionId = parts[1]
+  }
+  return { menuId, optionId }
+}
 
 export type IngredientUsageMenuContribution = {
   menuId: string
@@ -185,10 +213,17 @@ function aggregateTheoreticalFromOrders(
       const it = raw as {
         id?: string
         qty?: number
+        quantity?: number
         promoId?: string
         promoItems?: { menuId: string; optionId: string | null; quantity: number; name?: string }[]
+        menuId?: string
+        menu_id?: string
         menuId1?: string
+        menu_id1?: string
+        optionId?: string
+        option_id?: string
         optionId1?: string
+        option_id1?: string
         menuId2?: string
         optionId2?: string
         cancelledAt?: string
@@ -196,7 +231,7 @@ function aggregateTheoreticalFromOrders(
       }
       if (it.cancelledAt || it.cancelled_at) continue
 
-      const cartQty = Math.max(0, Number(it.qty ?? 1))
+      const cartQty = Math.max(0, resolveItemsJsonLineQty(it))
       if (cartQty <= 0) continue
 
       const { menuLabel, optionLabel } = lineLabel(raw)
@@ -226,9 +261,7 @@ function aggregateTheoreticalFromOrders(
         continue
       }
 
-      const parts = String(it.id ?? '').split('-')
-      const menuId = parts[0] ?? ''
-      const optionId = parts[1] || ''
+      const { menuId, optionId } = resolveLineMenuOption(it)
       explodeAndTrack(menuId, optionId, cartQty, menuLabel || menuId, optionLabel)
     }
   }

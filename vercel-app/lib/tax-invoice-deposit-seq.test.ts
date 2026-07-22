@@ -1,41 +1,32 @@
 import { describe, expect, it } from 'vitest'
 
-type ReceiveRow = { id?: number; ref_id?: number | null; bank_transaction_id?: number | null }
-type AccrualRow = { id?: number }
-
-function computeDepositSeqFromRows(
-  receives: ReceiveRow[],
-  accrualId: number,
-  accruals: AccrualRow[]
-): number {
-  const orderedAccrualIds: number[] = []
-  const seen = new Set<number>()
-  for (const row of receives) {
-    const refId = Number(row.ref_id || 0)
-    if (!refId || seen.has(refId)) continue
-    seen.add(refId)
-    orderedAccrualIds.push(refId)
-  }
-  const idx = orderedAccrualIds.indexOf(accrualId)
-  if (idx >= 0) return idx + 1
-  const fallbackIdx = accruals.findIndex((row) => Number(row.id) === accrualId)
-  return fallbackIdx >= 0 ? fallbackIdx + 1 : 1
+/** 순수 로직 단위 테스트 — 서버 DB 조회 없이 충돌/할당만 검증 */
+function allocateSeq(opts: {
+  selfSeq: number | null
+  usedByOthers: number[]
+}): number {
+  const used = new Set(opts.usedByOthers)
+  if (opts.selfSeq != null && !used.has(opts.selfSeq)) return opts.selfSeq
+  const maxSeq = used.size > 0 ? Math.max(...used) : 0
+  const ceiling =
+    opts.selfSeq != null && used.has(opts.selfSeq)
+      ? Math.max(maxSeq, opts.selfSeq)
+      : maxSeq
+  return ceiling + 1
 }
 
-describe('tax invoice deposit seq', () => {
-  it('orders by Receive id and dedupes accrual', () => {
-    const receives: ReceiveRow[] = [
-      { id: 10, ref_id: 100, bank_transaction_id: 501 },
-      { id: 20, ref_id: 200, bank_transaction_id: 502 },
-      { id: 25, ref_id: 100, bank_transaction_id: 503 },
-      { id: 30, ref_id: 300, bank_transaction_id: 504 },
-    ]
-    expect(computeDepositSeqFromRows(receives, 200, [])).toBe(2)
-    expect(computeDepositSeqFromRows(receives, 300, [])).toBe(3)
+describe('tax invoice deposit seq (issueDate global)', () => {
+  it('reuses own seq when unique', () => {
+    expect(allocateSeq({ selfSeq: 3, usedByOthers: [1, 2] })).toBe(3)
   })
 
-  it('falls back to accrual id order when no receive yet', () => {
-    const accruals: AccrualRow[] = [{ id: 11 }, { id: 22 }, { id: 33 }]
-    expect(computeDepositSeqFromRows([], 22, accruals)).toBe(2)
+  it('allocates max+1 when no self', () => {
+    expect(allocateSeq({ selfSeq: null, usedByOthers: [1, 2] })).toBe(3)
+    expect(allocateSeq({ selfSeq: null, usedByOthers: [] })).toBe(1)
+  })
+
+  it('reallocates when self seq collides with another source', () => {
+    // 두 건 모두 -001로 저장된 상태 → 새 순번 2
+    expect(allocateSeq({ selfSeq: 1, usedByOthers: [1] })).toBe(2)
   })
 })

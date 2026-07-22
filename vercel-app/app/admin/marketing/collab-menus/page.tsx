@@ -39,6 +39,7 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { getBangkokTodayRangeYmd } from "@/lib/collab-overview-period"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -62,6 +63,11 @@ export default function MarketingCollabMenusPage() {
   const [draftCollab, setDraftCollab] = React.useState<MarketingCollabDetail>(emptyMarketingCollabDetail())
   const [hubDesignStart, setHubDesignStart] = React.useState("")
   const [hubDesignEnd, setHubDesignEnd] = React.useState("")
+  /** 협업 조회 기간 — 페이지에 두어 상세↔조회 탭 전환 후에도 유지 */
+  const [overviewPeriodFrom, setOverviewPeriodFrom] = React.useState(
+    () => getBangkokTodayRangeYmd().from
+  )
+  const [overviewPeriodTo, setOverviewPeriodTo] = React.useState(() => getBangkokTodayRangeYmd().to)
   const todayBangkokYmd = React.useMemo(
     () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
     []
@@ -392,7 +398,11 @@ export default function MarketingCollabMenusPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="overview" className={adminTabsContentCn}>
+        <TabsContent
+          value="overview"
+          forceMount
+          className={cn(adminTabsContentCn, "data-[state=inactive]:hidden")}
+        >
           <Card>
             <CardContent className="p-4 sm:p-5">
               <CollabManagementOverviewTab
@@ -402,6 +412,10 @@ export default function MarketingCollabMenusPage() {
                 loading={loading}
                 t={t}
                 allStoresLabel={t("marketingCollabMenusAllStoresPlan")}
+                periodFrom={overviewPeriodFrom}
+                periodTo={overviewPeriodTo}
+                onPeriodFromChange={setOverviewPeriodFrom}
+                onPeriodToChange={setOverviewPeriodTo}
                 onGoToEdit={(id) => {
                   setSelectedCampaignId(id)
                   setMainTab("edit")

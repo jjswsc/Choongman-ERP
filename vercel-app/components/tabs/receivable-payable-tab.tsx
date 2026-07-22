@@ -107,6 +107,7 @@ import {
   translateTexts,
   invalidateReceivablePayableListCache,
   getTaxInvoiceDepositSeq,
+  updateInvoicePrintOverrides,
   type ReceivablePayableItem,
   type PayableTransactionItem,
   type OrderInvoiceTotals,
@@ -458,8 +459,13 @@ export function ReceivablePayableTab() {
         const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
         const accrualId = Number(row.id || 0)
         let depositSeq = 1
-        if (accrualId > 0) {
-          const seqRes = await getTaxInvoiceDepositSeq({ accrualId, issueDate: dateStr })
+        if (accrualId > 0 || (refType && refId > 0)) {
+          const seqRes = await getTaxInvoiceDepositSeq({
+            accrualId: accrualId > 0 ? accrualId : undefined,
+            issueDate: dateStr,
+            refType,
+            refId,
+          })
           if (seqRes?.success && Number(seqRes.seq) > 0) {
             depositSeq = Number(seqRes.seq)
           }
@@ -496,6 +502,24 @@ export function ReceivablePayableTab() {
               }
             : {}),
         })
+        // 순번 예약 — 인쇄 전에 다른 건이 같은 번호를 받지 않도록
+        if (refType && refId > 0) {
+          try {
+            await updateInvoicePrintOverrides([
+              {
+                refType,
+                refId,
+                docKind: "tax",
+                issueDate: dateStr,
+                dueDate: dateStr,
+                referenceNo: outboundRef || docNo,
+                documentNo: docNo,
+              },
+            ])
+          } catch (reserveErr) {
+            console.error("reserve tax invoice doc no failed:", reserveErr)
+          }
+        }
         sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
         const printWindow = window.open("/admin/invoice-print", "_blank")
         if (!printWindow) {

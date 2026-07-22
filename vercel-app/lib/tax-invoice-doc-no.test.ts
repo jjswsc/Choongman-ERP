@@ -15,6 +15,7 @@ describe('buildTaxInvoiceDocNo', () => {
 describe('parseTaxInvoiceDocNoSuffix', () => {
   it('extracts suffix from new format', () => {
     expect(parseTaxInvoiceDocNoSuffix('IV.20260713-003')).toBe(3)
+    expect(parseTaxInvoiceDocNoSuffix('IV.20260713-1001')).toBe(1001)
   })
 
   it('returns null for legacy masked format', () => {

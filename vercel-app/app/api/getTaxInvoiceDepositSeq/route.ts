@@ -14,19 +14,33 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const accrualId = Number(searchParams.get('accrualId') || searchParams.get('accrual_id') || 0)
+  const refId = Number(searchParams.get('refId') || searchParams.get('ref_id') || 0)
+  const refType = String(searchParams.get('refType') || searchParams.get('ref_type') || '').trim()
+  const existingDocumentNo = String(
+    searchParams.get('existingDocumentNo') || searchParams.get('existing_document_no') || ''
+  ).trim()
   const issueDate = String(searchParams.get('issueDate') || searchParams.get('issue_date') || '')
     .trim()
     .slice(0, 10)
 
-  if (!accrualId || !Number.isFinite(accrualId)) {
-    return NextResponse.json({ success: false, message: 'accrualId가 필요합니다.' }, { status: 400, headers })
-  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
     return NextResponse.json({ success: false, message: 'issueDate(YYYY-MM-DD)가 필요합니다.' }, { status: 400, headers })
   }
+  if (!(accrualId > 0 || (refType && refId > 0))) {
+    return NextResponse.json(
+      { success: false, message: 'accrualId 또는 refType+refId가 필요합니다.' },
+      { status: 400, headers }
+    )
+  }
 
   try {
-    const seq = await resolveTaxInvoiceDepositSeq(accrualId, issueDate)
+    const seq = await resolveTaxInvoiceDepositSeq({
+      issueDate,
+      accrualId: accrualId > 0 ? accrualId : undefined,
+      refType: refType || undefined,
+      refId: refId > 0 ? refId : undefined,
+      existingDocumentNo: existingDocumentNo || undefined,
+    })
     return NextResponse.json({ success: true, seq }, { headers })
   } catch (e) {
     console.error('getTaxInvoiceDepositSeq:', e)

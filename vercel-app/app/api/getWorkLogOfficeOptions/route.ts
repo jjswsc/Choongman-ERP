@@ -36,7 +36,13 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       {
-        staff: staff.map((s) => ({ id: s.id, name: s.name, displayName: s.displayName, store: s.store })),
+        staff: staff.map((s) => ({
+          id: s.id,
+          name: s.name,
+          displayName: s.displayName,
+          store: s.store,
+          job: s.job,
+        })),
         depts: Array.from(deptSet).sort(),
         stores,
       },

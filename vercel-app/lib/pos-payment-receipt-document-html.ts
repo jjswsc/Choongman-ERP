@@ -582,7 +582,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const showBizAddressOnReceipt = isPaymentReceipt && d.receiptShowBizAddress
   const hasBizCoreBlock =
     showBizCoreOnReceipt &&
-    Boolean(d.receiptBizName || d.receiptBizTaxId || d.receiptBizPhone || (showBizAddressOnReceipt && d.receiptBizAddress))
+    Boolean(
+      d.receiptBizName ||
+        d.receiptBizAbn ||
+        d.receiptBizTaxId ||
+        d.receiptBizPhone ||
+        (showBizAddressOnReceipt && d.receiptBizAddress)
+    )
   const voidMode = Boolean(receiptData.voidReceiptMode)
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
@@ -884,6 +890,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-line"><b>${esc(tr('posOrderType', 'Order Type'))}</b>: ${esc(orderTypeLabel)}</div>
         ${tableForPrint ? `<div class="simple-line"><b>${esc(tr('posTable', '테이블'))}</b>: ${esc(tableForPrint)}</div>` : ''}
         ${showBizCoreOnReceipt && d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
+        ${showBizCoreOnReceipt && d.receiptBizAbn ? `<div class="simple-line simple-biz">${esc(tr('posPosIdLabel', 'POS ID'))}: ${esc(d.receiptBizAbn)}</div>` : ''}
         ${showBizCoreOnReceipt && d.receiptBizTaxId ? `<div class="simple-line simple-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(d.receiptBizTaxId)}</div>` : ''}
         ${showBizAddressOnReceipt && d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${showBizCoreOnReceipt && d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
@@ -1005,6 +1012,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="receipt-divider"></div>
         ${hasBizCoreBlock ? '<div class="text-xs receipt-muted receipt-biz-wrap">' : ''}
         ${showBizCoreOnReceipt && d.receiptBizName ? `<div class="receipt-biz" style="color:#000;font-weight:600">${esc(d.receiptBizName)}</div>` : ''}
+        ${showBizCoreOnReceipt && d.receiptBizAbn ? `<div class="receipt-biz">${esc(tr('posPosIdLabel', 'POS ID'))}: ${esc(d.receiptBizAbn)}</div>` : ''}
         ${showBizCoreOnReceipt && d.receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(d.receiptBizTaxId)}</div>` : ''}
         ${showBizAddressOnReceipt && d.receiptBizAddress ? `<div class="receipt-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${showBizCoreOnReceipt && d.receiptBizPhone ? `<div class="receipt-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}

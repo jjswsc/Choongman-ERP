@@ -50,7 +50,7 @@ import {
   workLogWorkTypeSortRank,
 } from "@/lib/work-log-shared"
 
-type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string }
+type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string; job?: string }
 
 type Props = {
   onPendingChange?: (count: number) => void
@@ -90,9 +90,13 @@ export function WorklogApproval({ onPendingChange }: Props) {
   const staffOptions = React.useMemo(
     () =>
       staffList
-        .filter((s) => storeFilter === "all" || s.store === storeFilter)
+        .filter((s) => {
+          if (storeFilter !== "all" && s.store !== storeFilter) return false
+          if (deptFilter !== "all" && s.job !== deptFilter) return false
+          return true
+        })
         .map((s) => ({ ...s, label: formatWorkLogStaffSelectLabel(s) })),
-    [staffList, storeFilter]
+    [staffList, storeFilter, deptFilter]
   )
 
   const loadData = React.useCallback(async () => {
@@ -421,6 +425,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
               value={deptFilter}
               onValueChange={(v) => {
                 setDeptFilter(v)
+                setEmployeeFilter("all")
                 setHasSearched(false)
               }}
             >

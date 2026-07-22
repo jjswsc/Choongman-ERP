@@ -39,7 +39,7 @@ import {
 } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 
-type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string }
+type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string; job?: string }
 type SortKey = "avg" | "carried" | "completed" | "name"
 
 export function WorklogWeekly() {
@@ -67,9 +67,13 @@ export function WorklogWeekly() {
   const staffOptions = React.useMemo(
     () =>
       staffList
-        .filter((s) => storeFilter === "all" || s.store === storeFilter)
+        .filter((s) => {
+          if (storeFilter !== "all" && s.store !== storeFilter) return false
+          if (deptFilter !== "all" && s.job !== deptFilter) return false
+          return true
+        })
         .map((s) => ({ ...s, label: formatWorkLogStaffSelectLabel(s) })),
-    [staffList, storeFilter]
+    [staffList, storeFilter, deptFilter]
   )
 
   const dateRange = React.useMemo(() => {
@@ -238,6 +242,7 @@ export function WorklogWeekly() {
               value={deptFilter}
               onValueChange={(v) => {
                 setDeptFilter(v)
+                setEmployeeFilter("all")
                 setHasSearched(false)
               }}
             >

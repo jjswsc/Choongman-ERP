@@ -35,7 +35,9 @@ export async function getWorkLogOfficeOptions(scope?: 'all' | 'office') {
   const raw: unknown = await res.json()
   const o = jsonAsPlainObject(raw)
   return {
-    staff: jsonAsArray<{ id: number; name: string; displayName: string; store?: string }>(o.staff),
+    staff: jsonAsArray<{ id: number; name: string; displayName: string; store?: string; job?: string }>(
+      o.staff
+    ),
     depts: jsonAsStringArray(o.depts),
     stores: jsonAsStringArray(o.stores),
   }
