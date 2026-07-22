@@ -1,19 +1,19 @@
 {
-    "version":  "0.1.7",
-    "files":  [
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
-                      "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "444240aa0b0eb773131fc8089f0c99f0e232ae2d867959ff1206b39ed7a09fb5"
-                  },
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.7-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.7-setup.exe",
-                      "sha256":  "444240aa0b0eb773131fc8089f0c99f0e232ae2d867959ff1206b39ed7a09fb5"
-                  }
-              ],
-    "installerSha256":  "444240aa0b0eb773131fc8089f0c99f0e232ae2d867959ff1206b39ed7a09fb5",
-    "publishedAtUtc":  "2026-07-22T04:41:55.9864975Z",
-    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
-    "notes":  "Choongman POS Windows 0.1.7 - fix payment receipt 10s delay (strip remote logo/stamp before Electron loadFile)"
+  "version": "0.1.9",
+  "publishedAtUtc": "2026-07-22T05:35:17.7975259Z",
+  "notes": "Choongman POS Windows 0.1.9 - receipt print speed; hybrid cash drawer skips local bridge fallback and getPrintersAsync",
+  "installerUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
+  "installerSha256": "464a992a7f741de93c1eae271a99152c1f13c895d27e3608c4a6317d5468631c",
+  "files": [
+    {
+      "name": "cm-pos-windows-choongman-latest-setup.exe",
+      "url": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
+      "sha256": "464a992a7f741de93c1eae271a99152c1f13c895d27e3608c4a6317d5468631c"
+    },
+    {
+      "name": "cm-pos-windows-choongman-0.1.9-setup.exe",
+      "url": "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.9-setup.exe",
+      "sha256": "464a992a7f741de93c1eae271a99152c1f13c895d27e3608c4a6317d5468631c"
+    }
+  ]
 }

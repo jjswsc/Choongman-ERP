@@ -1,19 +1,19 @@
 {
-    "version":  "0.1.8",
+    "version":  "0.1.9",
     "files":  [
                   {
                       "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "cf16e21407f9e8e3c0dee2b24fd6fb496b83a88b9265dce76af6c092352ea6ed"
+                      "sha256":  "8d6ec343aa1720f9ecb94ac9a022f6e588086d01fd9b2858c2b9628318adc796"
                   },
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.8-setup.exe",
-                      "name":  "cm-pos-windows-0.1.8-setup.exe",
-                      "sha256":  "cf16e21407f9e8e3c0dee2b24fd6fb496b83a88b9265dce76af6c092352ea6ed"
+                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.9-setup.exe",
+                      "name":  "cm-pos-windows-0.1.9-setup.exe",
+                      "sha256":  "8d6ec343aa1720f9ecb94ac9a022f6e588086d01fd9b2858c2b9628318adc796"
                   }
               ],
-    "installerSha256":  "cf16e21407f9e8e3c0dee2b24fd6fb496b83a88b9265dce76af6c092352ea6ed",
-    "publishedAtUtc":  "2026-07-22T04:54:04.7418574Z",
+    "installerSha256":  "8d6ec343aa1720f9ecb94ac9a022f6e588086d01fd9b2858c2b9628318adc796",
+    "publishedAtUtc":  "2026-07-22T05:03:09.3461978Z",
     "installerUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "Omni POS Windows 0.1.8 - fix payment receipt delay: skip getPrintersAsync, about:blank HTML inject, deferred ESC/POS cut, drawer after print"
+    "notes":  "Omni POS Windows 0.1.9 - receipt print speed; hybrid cash drawer skips local bridge fallback and getPrintersAsync"
 }

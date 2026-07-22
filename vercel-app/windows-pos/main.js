@@ -2295,13 +2295,17 @@ if (!gotLock) {
       if (!senderAllowedOrigin(event.sender)) {
         return { ok: false, reason: "forbidden" };
       }
-      let device = String(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" }) || "").trim();
+      /**
+       * getPrintersAsync(기본 프린터 조회) 금지 — 네트워크 프린터 PC에서 수 초~10초 지연.
+       * runtime-config의 receiptDeviceName(또는 legacy deviceName)만 사용.
+       */
+      const device = String(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" }) || "").trim();
       if (!device) {
-        device = String((await resolvePrintDeviceNameForJob()) || "").trim();
+        return { ok: false, reason: "no_printer" };
       }
       const r = await sendEscPosDrawerKickForPrinter(device);
       return r.ok
-        ? { ok: true, usedDevice: device || "default" }
+        ? { ok: true, usedDevice: device }
         : { ok: false, reason: String(r.reason || "drawer_kick_failed") };
     });
 

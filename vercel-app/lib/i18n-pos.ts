@@ -293,7 +293,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posPrinterSaving: '저장 중…',
     posPrinterCopyWorking: '가져오는 중…',
     posDrawerOpenBridgeFail:
-      '돈통 열기에 실패했습니다. Windows 하이브리드(Choongman POS)는 최신 설치본인지, runtime-config에 영수증 프린터명(print.receiptDeviceName)이 맞는지 확인해 주세요. 웹 전용·별도 브리지로 쓰는 경우에는 127.0.0.1:18181 드로어 브리지가 실행 중인지 확인해 주세요.',
+      '돈통 열기에 실패했습니다. 하이브리드 POS는 프린터 점검에서 영수증 프린터명(receiptDeviceName)을 확인해 주세요. 웹 전용일 때만 별도 브리지(127.0.0.1:18181)가 필요합니다.',
     posDrawerOpenErrForbidden:
       '돈통 열기 권한이 없습니다. Windows 하이브리드 POS 앱에서 다시 시도해 주세요.',
     posDrawerOpenErrNoPrinter:
@@ -3520,7 +3520,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posPrinterSaving: 'Saving…',
     posPrinterCopyWorking: 'Importing…',
     posDrawerOpenBridgeFail:
-      'Could not open the cash drawer. On Windows hybrid (Choongman POS), use the latest shell build and set the receipt printer in runtime-config (print.receiptDeviceName). If you use the separate Node bridge instead, ensure it is listening on 127.0.0.1:18181.',
+      'Could not open the cash drawer. On hybrid POS, set the receipt printer name (receiptDeviceName) in Printer check. The local bridge (127.0.0.1:18181) is only needed for browser-only POS.',
     posDrawerOpenErrForbidden:
       'No permission to open the cash drawer. Retry from the Windows hybrid POS app.',
     posDrawerOpenErrNoPrinter:

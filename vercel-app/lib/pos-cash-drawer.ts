@@ -68,6 +68,12 @@ export function formatPosCashDrawerFailureMessage(
         'POS 하이브리드 앱 내부 통신 오류로 돈통 열기에 실패했습니다. 앱을 재시작해 주세요.'
       )
     }
+    if (shellReason === 'no_script') {
+      return tx(
+        'posDrawerOpenErrShellException',
+        'POS 하이브리드 앱 내부 통신 오류로 돈통 열기에 실패했습니다. 앱을 재시작해 주세요.'
+      )
+    }
     return tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')
   }
   if (error === 'all_local_bridge_endpoints_failed') {
@@ -93,16 +99,22 @@ export function drawerOpenOptionFromPrinterSettings(
   return 'reason_only'
 }
 
+/**
+ * 브라우저(웹 전용) POS용 로컬 브리지.
+ * localhost 중복은 빼고 127.0.0.1만 — 동일 포트 2연타는 CORS preflight만 두 배로 늘림.
+ */
 const LOCAL_DRAWER_ENDPOINTS = [
   'http://127.0.0.1:18181/pos/cash-drawer/open',
-  'http://localhost:18181/pos/cash-drawer/open',
   'http://127.0.0.1:18181/open-cash-drawer',
-  'http://localhost:18181/open-cash-drawer',
   'http://127.0.0.1:17888/pos/cash-drawer/open',
-  'http://localhost:17888/pos/cash-drawer/open',
 ]
 
-async function postJsonWithTimeout(url: string, body: Record<string, unknown>, timeoutMs = 1200) {
+function hasWindowsHybridCashDrawerShell(): boolean {
+  if (typeof window === 'undefined') return false
+  return typeof window.cmPosShell?.openCashDrawer === 'function'
+}
+
+async function postJsonWithTimeout(url: string, body: Record<string, unknown>, timeoutMs = 400) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -133,6 +145,10 @@ async function postJsonWithTimeout(url: string, body: Record<string, unknown>, t
   }
 }
 
+/**
+ * 하이브리드(cmPosShell.openCashDrawer)가 있으면 HTTP 브리지로 폴백하지 않음.
+ * 예전에는 셸 실패 후 6개 URL×1.2초 ≈ 7초+ 를 기다리며 Network에 failed/canceled만 쌓였음.
+ */
 export async function openPosCashDrawer(
   params: PosCashDrawerOpenParams
 ): Promise<PosCashDrawerOpenResult> {
@@ -145,30 +161,26 @@ export async function openPosCashDrawer(
     at: new Date().toISOString(),
   }
 
-  let shellFailReason = ''
-  if (typeof window !== 'undefined') {
-    const shell = window.cmPosShell
-    if (typeof shell?.openCashDrawer === 'function') {
-      try {
-        const r = await shell.openCashDrawer()
-        if (r && r.ok) {
-          return { success: true, endpoint: 'cm-pos-shell' }
-        }
-        shellFailReason = String(r?.reason || '').trim()
-        // no_printer 등: 로컬 브리지(별도 키트) 폴백
-      } catch {
-        shellFailReason = 'shell_exception'
-        // 로컬 HTTP 폴백
+  if (hasWindowsHybridCashDrawerShell()) {
+    try {
+      const r = await window.cmPosShell!.openCashDrawer!()
+      if (r && r.ok) {
+        return { success: true, endpoint: 'cm-pos-shell' }
       }
+      const shellFailReason = String(r?.reason || '').trim() || 'drawer_kick_failed'
+      return { success: false, error: `shell:${shellFailReason}` }
+    } catch {
+      return { success: false, error: 'shell:shell_exception' }
     }
   }
 
-  for (const endpoint of LOCAL_DRAWER_ENDPOINTS) {
-    const r = await postJsonWithTimeout(endpoint, payload)
-    if (r.ok) return { success: true, endpoint }
-  }
-  if (shellFailReason) {
-    return { success: false, error: `shell:${shellFailReason}` }
-  }
+  /** 웹 전용: 브리지를 병렬로 짧게 시도(순차 1.2초×N 금지) */
+  const settled = await Promise.all(
+    LOCAL_DRAWER_ENDPOINTS.map((endpoint) =>
+      postJsonWithTimeout(endpoint, payload, 400).then((r) => ({ endpoint, ...r }))
+    )
+  )
+  const hit = settled.find((r) => r.ok)
+  if (hit) return { success: true, endpoint: hit.endpoint }
   return { success: false, error: 'all_local_bridge_endpoints_failed' }
 }
