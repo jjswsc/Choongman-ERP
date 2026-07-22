@@ -1,19 +1,19 @@
 {
-    "version":  "0.1.7",
+    "version":  "0.1.8",
     "files":  [
                   {
                       "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "25527a2cf4ee8f65323b138cdd7e6049888809184275fe56fbe3ec543c67b60f"
+                      "sha256":  "cf16e21407f9e8e3c0dee2b24fd6fb496b83a88b9265dce76af6c092352ea6ed"
                   },
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.7-setup.exe",
-                      "name":  "cm-pos-windows-0.1.7-setup.exe",
-                      "sha256":  "25527a2cf4ee8f65323b138cdd7e6049888809184275fe56fbe3ec543c67b60f"
+                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.8-setup.exe",
+                      "name":  "cm-pos-windows-0.1.8-setup.exe",
+                      "sha256":  "cf16e21407f9e8e3c0dee2b24fd6fb496b83a88b9265dce76af6c092352ea6ed"
                   }
               ],
-    "installerSha256":  "25527a2cf4ee8f65323b138cdd7e6049888809184275fe56fbe3ec543c67b60f",
-    "publishedAtUtc":  "2026-07-22T04:36:12.5868873Z",
+    "installerSha256":  "cf16e21407f9e8e3c0dee2b24fd6fb496b83a88b9265dce76af6c092352ea6ed",
+    "publishedAtUtc":  "2026-07-22T04:54:04.7418574Z",
     "installerUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "Omni POS Windows 0.1.7 - fix payment receipt 10s delay (strip remote logo/stamp before Electron loadFile)"
+    "notes":  "Omni POS Windows 0.1.8 - fix payment receipt delay: skip getPrintersAsync, about:blank HTML inject, deferred ESC/POS cut, drawer after print"
 }

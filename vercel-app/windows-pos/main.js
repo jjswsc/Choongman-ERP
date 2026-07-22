@@ -1403,12 +1403,34 @@ function resolvePrintHtmlSilentRetryMax(options) {
   return PRINT_HTML_SILENT_RETRY_COUNT;
 }
 
-/** 영수증·주방전 HTML: 렌더러 iframe.print()는 Electron에서 무시되는 경우가 많아 메인에서 숨은 창으로 인쇄
+/**
+ * Windows getPrintersAsync()는 네트워크 프린터가 있으면 수 초~10초+ 걸릴 수 있음.
+ * 영수증 경로에서는 절대 호출하지 않음(설정 프린터명 신뢰 / deviceName 비우면 드라이버 기본).
+ */
+async function getPrintersAsyncWithTimeout(timeoutMs = 2500) {
+  if (!mainWindow || mainWindow.isDestroyed()) return [];
+  const ms = Math.max(200, Math.trunc(Number(timeoutMs) || 2500));
+  try {
+    return await Promise.race([
+      mainWindow.webContents.getPrintersAsync(),
+      delayMs(ms).then(() => {
+        throw new Error("getPrintersAsync_timeout");
+      }),
+    ]);
+  } catch (e) {
+    console.warn("[cm-pos] getPrintersAsync:", String(e && e.message ? e.message : e));
+    return [];
+  }
+}
+
+/**
+ * 영수증·주방전 HTML: 렌더러 iframe.print()는 Electron에서 무시되는 경우가 많아 메인에서 숨은 창으로 인쇄
  * @param {{ preferDialog?: boolean }} [options] preferDialog true면 무인쇄·열전사 최적화를 건너뛰고 시스템 인쇄 대화상자만 사용(프린터 선택·미리보기)
  */
 async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
   const isReceiptRole = Boolean(options && options.printRole === "receipt");
   const queueGapMsForJob = isReceiptRole ? PRINT_HTML_QUEUE_GAP_MS_RECEIPT : undefined;
+  const t0 = Date.now();
   return queueHtmlPrintTask(async () => {
     const preferDialog = Boolean(options && options.preferDialog);
     const silentRetryMax = resolvePrintHtmlSilentRetryMax(options);
@@ -1419,26 +1441,30 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
     );
     let printWindow = null;
     let destroyAfterRun = false;
+    let wroteTmpFile = false;
     try {
       const warnings = [];
       let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
-      if (!resolvedDevice) {
-        try {
-          resolvedDevice = await getWindowsDefaultPrinterName();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
-        try {
-          const printers = await mainWindow.webContents.getPrintersAsync();
-          const matched = printers.some((p) => String(p.name || "").trim() === resolvedDevice);
-          if (!matched) {
-            warnings.push(`configured device not found: ${resolvedDevice}`);
-            resolvedDevice = "";
+      /** 영수증: getPrintersAsync 스킵 — 설정명 그대로 사용(미설정이면 deviceName 없이 무인쇄) */
+      if (!isReceiptRole) {
+        if (!resolvedDevice) {
+          try {
+            resolvedDevice = await getWindowsDefaultPrinterName();
+          } catch {
+            /* ignore */
           }
-        } catch {
-          /* ignore */
+        }
+        if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
+          try {
+            const printers = await getPrintersAsyncWithTimeout(2500);
+            const matched = printers.some((p) => String(p.name || "").trim() === resolvedDevice);
+            if (!matched && printers.length > 0) {
+              warnings.push(`configured device not found: ${resolvedDevice}`);
+              resolvedDevice = "";
+            }
+          } catch {
+            /* ignore */
+          }
         }
       }
       // #region agent log
@@ -1449,13 +1475,11 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         settleMs: PRINT_HTML_SETTLE_MS,
         resolvedDevice: resolvedDevice || "",
         configuredDevice: DEFAULT_PRINT_DEVICE || "",
+        isReceiptRole,
+        prepMs: Date.now() - t0,
       });
       // #endregion
-      fs.writeFileSync(
-        tmpPath,
-        isReceiptRole ? stripRemoteImgSrcForThermalPrint(htmlString) : htmlString,
-        "utf8"
-      );
+      const htmlForPrint = isReceiptRole ? stripRemoteImgSrcForThermalPrint(htmlString) : htmlString;
       if (preferDialog) {
         printWindow = new BrowserWindow(buildHiddenPrintWindowOptions(true));
         destroyAfterRun = true;
@@ -1475,17 +1499,24 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         }
       }
 
-      const loadPromise = printWindow.loadFile(tmpPath);
+      /**
+       * 영수증: loadFile(file://) 대신 about:blank + document.write —
+       * Chromium이 잔여 https/폰트 리소스를 기다리며 did-finish-load가 지연되는 경로를 피함.
+       */
       if (isReceiptRole) {
-        await Promise.race([
-          loadPromise,
-          delayMs(1200).then(() => {
-            /* 원격 리소스 대기 중단 — DOM만 있으면 인쇄 진행 */
-          }),
-        ]);
+        await printWindow.loadURL("about:blank");
+        await printWindow.webContents.executeJavaScript(
+          `(()=>{const h=${JSON.stringify(htmlForPrint)};document.open();document.write(h);document.close();})()`,
+          true
+        );
       } else {
-        await loadPromise;
+        fs.writeFileSync(tmpPath, htmlForPrint, "utf8");
+        wroteTmpFile = true;
+        await printWindow.loadFile(tmpPath);
       }
+      console.log(
+        `[cm-pos] printHtml role=${isReceiptRole ? "receipt" : "other"} loadMs=${Date.now() - t0} device=${resolvedDevice || "(default)"}`
+      );
       const settleMsForJob = isReceiptRole ? PRINT_HTML_SETTLE_MS_RECEIPT : PRINT_HTML_SETTLE_MS;
       await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
         printRole: isReceiptRole ? "receipt" : undefined,
@@ -1607,9 +1638,18 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
       }
       let usedDeviceOut = resolvedDevice || "";
-      if (r.success && !String(usedDeviceOut).trim() && printStage !== "dialog") {
+      /** 영수증은 getPrintersAsync 금지 — 미설정이면 빈 문자열(무인쇄는 OS 기본으로 이미 성공했을 수 있음) */
+      if (
+        !isReceiptRole &&
+        r.success &&
+        !String(usedDeviceOut).trim() &&
+        printStage !== "dialog"
+      ) {
         usedDeviceOut = await getWindowsDefaultPrinterName();
       }
+      console.log(
+        `[cm-pos] printHtml done role=${isReceiptRole ? "receipt" : "other"} totalMs=${Date.now() - t0} ok=${Boolean(r.success)} stage=${printStage}`
+      );
       return {
         ok: r.success,
         reason: r.failureReason || (r.success ? "" : "print_failed"),
@@ -1619,6 +1659,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       };
     } catch (e) {
       htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
+      console.warn(`[cm-pos] printHtml error totalMs=${Date.now() - t0}`, e);
       return { ok: false, reason: String(e && e.message ? e.message : e), usedDevice: "" };
     } finally {
       try {
@@ -1627,7 +1668,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         /* ignore */
       }
       try {
-        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+        if (wroteTmpFile && fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
       } catch {
         /* ignore */
       }
@@ -1668,7 +1709,7 @@ async function quickPrintManual() {
 
 async function listPrinters() {
   if (!mainWindow || mainWindow.isDestroyed()) return [];
-  const printers = await mainWindow.webContents.getPrintersAsync();
+  const printers = await getPrintersAsyncWithTimeout(4000);
   return printers.map((p) => ({
     name: p.name,
     displayName: p.displayName || p.name,
@@ -1712,7 +1753,7 @@ function resolveThermalDeviceForHtmlPrintSync(opts) {
 async function getWindowsDefaultPrinterName() {
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return "";
-    const printers = await mainWindow.webContents.getPrintersAsync();
+    const printers = await getPrintersAsyncWithTimeout(2500);
     const def = printers.find((p) => p.isDefault);
     return def && def.name ? String(def.name).trim() : "";
   } catch {
@@ -1809,8 +1850,11 @@ function getEscPosDrawerScriptPath() {
   return path.join(__dirname, "scripts", name);
 }
 
-/** HTML 인쇄 후 RAW ESC/POS로 용지 절단 — 실패해도 인쇄 성공은 유지 */
-function sendEscPosCutForPrinter(printerName) {
+/** HTML 인쇄 후 RAW ESC/POS로 용지 절단 — 실패해도 인쇄 성공은 유지
+ * @param {string} printerName
+ * @param {{ timeoutMs?: number }} [opts]
+ */
+function sendEscPosCutForPrinter(printerName, opts = {}) {
   return new Promise((resolve) => {
     const name = String(printerName || "").trim();
     if (!name) {
@@ -1823,10 +1867,14 @@ function sendEscPosCutForPrinter(printerName) {
       resolve({ ok: false, reason: "no_script" });
       return;
     }
+    const timeoutMs = Math.max(
+      1500,
+      Math.min(30000, Math.trunc(Number(opts.timeoutMs) || 8000))
+    );
     execFile(
       "powershell.exe",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PrinterName", name],
-      { windowsHide: true, timeout: 30000, maxBuffer: 256 * 1024 },
+      { windowsHide: true, timeout: timeoutMs, maxBuffer: 256 * 1024 },
       (err, _stdout, stderr) => {
         if (err) {
           console.warn("[cm-pos] ESC/POS cut failed:", err.message, stderr ? String(stderr) : "");
@@ -1854,7 +1902,7 @@ function sendEscPosDrawerKickForPrinter(printerName) {
     execFile(
       "powershell.exe",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PrinterName", name],
-      { windowsHide: true, timeout: 30000, maxBuffer: 256 * 1024 },
+      { windowsHide: true, timeout: 5000, maxBuffer: 256 * 1024 },
       (err, _stdout, stderr) => {
         if (err) {
           console.warn("[cm-pos] ESC/POS drawer kick failed:", err.message, stderr ? String(stderr) : "");
@@ -2308,9 +2356,14 @@ if (!gotLock) {
       const ks = payload?.kitchenStation;
       const kitchenStation =
         ks === 1 || ks === 2 || ks === 3 ? ks : ks != null ? Number(ks) : undefined;
+      const printRole =
+        payload?.printRole === "kitchen" || payload?.printRole === "receipt"
+          ? payload.printRole
+          : undefined;
+      const isReceiptRole = printRole === "receipt";
       const result = await printHtmlDocumentInHiddenWindow(html, {
         preferDialog: Boolean(payload?.preferDialog),
-        printRole: payload?.printRole === "kitchen" || payload?.printRole === "receipt" ? payload.printRole : undefined,
+        printRole,
         kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
         deviceName: typeof payload?.deviceName === "string" ? payload.deviceName : "",
       });
@@ -2320,21 +2373,33 @@ if (!gotLock) {
       if (result.ok && !Boolean(payload?.preferDialog) && sendCut) {
         try {
           let device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
-            printRole: payload?.printRole,
+            printRole,
             kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
           });
-          if (!device) {
+          /** 영수증: getPrintersAsync(기본프린터 조회)로 절단을 지연시키지 않음 */
+          if (!device && !isReceiptRole) {
             device = String((await resolvePrintDeviceNameForJob()) || "").trim();
           }
           /** 무인쇄 실패 후 인쇄 대화상자로만 성공한 경우 — 사용자가 고른 기기명을 알 수 없어 RAW 절단 생략(빈 이름으로 no_printer 오탐 방지) */
           if (!device && result.printStage === "dialog") {
             console.warn("[cm-pos] skip ESC/POS cut: dialog fallback without resolved printer name");
           } else if (device) {
-            const cutRes = await sendEscPosCutForPrinter(device);
-            out.cutOk = Boolean(cutRes.ok);
-            if (cutRes.reason) out.cutReason = String(cutRes.reason);
-            if (!cutRes.ok) {
-              console.warn("[cm-pos] ESC/POS cut failed:", cutRes.reason || "");
+            if (isReceiptRole) {
+              /** 절단은 백그라운드 — IPC·다음 인쇄 큐를 붙잡지 않음 (RAW 포트 지연 시 ~10s+ 체감 방지) */
+              out.cutOk = true;
+              out.cutDeferred = true;
+              void sendEscPosCutForPrinter(device, { timeoutMs: 4000 }).then((cutRes) => {
+                if (!cutRes.ok) {
+                  console.warn("[cm-pos] ESC/POS cut (deferred) failed:", cutRes.reason || "");
+                }
+              });
+            } else {
+              const cutRes = await sendEscPosCutForPrinter(device, { timeoutMs: 8000 });
+              out.cutOk = Boolean(cutRes.ok);
+              if (cutRes.reason) out.cutReason = String(cutRes.reason);
+              if (!cutRes.ok) {
+                console.warn("[cm-pos] ESC/POS cut failed:", cutRes.reason || "");
+              }
             }
           } else {
             console.warn("[cm-pos] skip ESC/POS cut: no printer name (thermal silent used default but name unresolved)");

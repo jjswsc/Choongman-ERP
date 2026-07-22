@@ -462,6 +462,14 @@ export async function resolvePaymentReceiptMembershipQrSrc(params: {
 }
 
 /** 인쇄용: 멤버십 QR·로고·도장을 로컬 data URI로 만든 뒤 HTML 생성 (Electron loadFile 지연 방지). */
+function isWindowsHybridPosShell(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof (window as Window & { cmPosShell?: { printHtml?: unknown } }).cmPosShell?.printHtml ===
+      'function'
+  )
+}
+
 export async function buildPosPaymentReceiptDocumentHtmlAsync(
   params: BuildPosPaymentReceiptDocumentHtmlParams
 ): Promise<string> {
@@ -475,6 +483,43 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
     origin
   )
 
+  /**
+   * 하이브리드: 로고/도장 원격 fetch를 건너뜀(이미 로컬 QR·텍스트만으로 충분).
+   * fetch 타임아웃이 겹치면 인쇄 시작이 수백 ms~수 초 늦어질 수 있음.
+   */
+  if (isWindowsHybridPosShell()) {
+    const membershipQrSrcOverride = params.membershipQrSrcOverride
+      ? String(params.membershipQrSrcOverride || '').trim()
+      : await resolvePaymentReceiptMembershipQrSrc({
+          receiptShowMembershipQr: d.receiptShowMembershipQr,
+          receiptMembershipQrLinkUrl: d.receiptMembershipQrLinkUrl,
+          receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
+          origin,
+        })
+    const logoSafe = isOfflineSafePrintImgSrc(logoCandidate) ? logoCandidate : ''
+    const stampSafe = isOfflineSafePrintImgSrc(stampCandidate) ? stampCandidate : ''
+    let membershipSrc = membershipQrSrcOverride
+    if (membershipSrc && !isOfflineSafePrintImgSrc(membershipSrc)) {
+      membershipSrc = ''
+    } else if (
+      !membershipSrc &&
+      d.receiptShowMembershipQr &&
+      membershipImageCandidate &&
+      isOfflineSafePrintImgSrc(membershipImageCandidate)
+    ) {
+      membershipSrc = membershipImageCandidate
+    }
+    return buildPosPaymentReceiptDocumentHtml({
+      ...params,
+      membershipQrSrcOverride: membershipSrc,
+      designOverride: {
+        ...params.designOverride,
+        receiptLogoImageUrl: logoSafe,
+        ...(stampCandidate || stampSafe ? { receiptStampImageUrl: stampSafe } : {}),
+      },
+    })
+  }
+
   const [membershipQrSrcOverride, logoDataUri, stampDataUri] = await Promise.all([
     params.membershipQrSrcOverride
       ? Promise.resolve(String(params.membershipQrSrcOverride || '').trim())
@@ -484,21 +529,21 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
           receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
           origin,
         }),
-    fetchPrintAssetAsDataUri(logoCandidate, { timeoutMs: 700, origin }),
-    fetchPrintAssetAsDataUri(stampCandidate, { timeoutMs: 700, origin }),
+    fetchPrintAssetAsDataUri(logoCandidate, { timeoutMs: 400, origin }),
+    fetchPrintAssetAsDataUri(stampCandidate, { timeoutMs: 400, origin }),
   ])
 
   /** 링크 QR이 없고 이미지 URL만 있으면 그것도 data URI로 변환 */
   let membershipSrc = membershipQrSrcOverride
   if (membershipSrc && !isOfflineSafePrintImgSrc(membershipSrc) && /^https?:\/\//i.test(membershipSrc)) {
-    membershipSrc = await fetchPrintAssetAsDataUri(membershipSrc, { timeoutMs: 700, origin })
+    membershipSrc = await fetchPrintAssetAsDataUri(membershipSrc, { timeoutMs: 400, origin })
   } else if (
     !membershipSrc &&
     d.receiptShowMembershipQr &&
     membershipImageCandidate &&
     !isOfflineSafePrintImgSrc(membershipImageCandidate)
   ) {
-    membershipSrc = await fetchPrintAssetAsDataUri(membershipImageCandidate, { timeoutMs: 700, origin })
+    membershipSrc = await fetchPrintAssetAsDataUri(membershipImageCandidate, { timeoutMs: 400, origin })
   }
 
   return buildPosPaymentReceiptDocumentHtml({

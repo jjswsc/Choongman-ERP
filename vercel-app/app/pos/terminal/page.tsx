@@ -5728,10 +5728,23 @@ export default function PosTerminalPage() {
         splitCashDrawerStepsRef.current = 0
         return
       }
-      /** 서랍 브리지/셸 지연이 영수증 자동 인쇄를 막지 않도록 백그라운드로 연다. */
-      void tryOpenDrawerForPayment(payment).catch((e) => {
-        console.error('tryOpenDrawerForPayment:', e)
-      })
+      /**
+       * 서랍 킥과 영수증 무인쇄가 같은 프린터 RAW/스풀을 두고 경쟁하면
+       * Windows에서 인쇄가 수 초~10초 밀릴 수 있음 → 하이브리드는 영수증이 먼저 잡도록 짧게 지연.
+       */
+      void (async () => {
+        try {
+          const hybrid =
+            typeof window !== 'undefined' &&
+            typeof window.cmPosShell?.printHtml === 'function'
+          if (hybrid) {
+            await new Promise<void>((r) => setTimeout(r, 900))
+          }
+          await tryOpenDrawerForPayment(payment)
+        } catch (e) {
+          console.error('tryOpenDrawerForPayment:', e)
+        }
+      })()
     },
     [tryOpenDrawerForPayment]
   )
