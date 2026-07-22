@@ -6070,10 +6070,14 @@ export default function PosTerminalPage() {
       if (!canGenerate) {
         return { ok: false as const, message: 'kbank_generate_cooldown' }
       }
-      const requestedQrType =
-        String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase() === 'CREDIT_CARD'
-          ? 'CREDIT_CARD'
-          : 'THAI_QR'
+      const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
+      if (selectedQrType === 'EDC') {
+        clearKbankQrSession()
+        setKbankOpsLastResult(`[EDC_FALLBACK] ${JSON.stringify({ amount: qrAmount, orderId: context?.orderId ?? null })}`)
+        setCustomerDisplayPaymentMessage('')
+        return { ok: true as const, message: 'edc_fallback' }
+      }
+      const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 
       const existingQrPayload = String(liveKbankQrPayload || '').trim()
       const existingPartnerTxnId = String(kbankOpsTxnUid || '').trim()
@@ -6407,6 +6411,7 @@ export default function PosTerminalPage() {
       liveKbankQrType,
       kbankCallbackState,
       kbankOpsTxnUid,
+      clearKbankQrSession,
       lang,
     ]
   )
@@ -8153,7 +8158,8 @@ export default function PosTerminalPage() {
                   setSelectedDeliveryTargetLabel('')
                   setDeliveryApp(null)
                   setDeliveryOrderNo('')
-                  await refetchCurrentStore()
+                  /** 결제 버튼 잠금(backendBusy) 해제를 우선하기 위해 재조회는 백그라운드 처리 */
+                  void refetchCurrentStore()
                   if (payload.payment != null) schedulePostPaymentCustomerQr()
                   return true
                 }
@@ -8161,7 +8167,7 @@ export default function PosTerminalPage() {
                   registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void finalizeDeliveryPaid()
                   })
-                  await refetchCurrentStore()
+                  void refetchCurrentStore()
                   return true
                 }
                 return await finalizeDeliveryPaid()
@@ -8326,7 +8332,8 @@ export default function PosTerminalPage() {
                   setPendingTakeoutOrderId(null)
                   setSelectedTakeoutTargetId(null)
                   setSelectedTakeoutTargetLabel('')
-                  await refetchCurrentStore()
+                  /** 결제 버튼 잠금(backendBusy) 해제를 우선하기 위해 재조회는 백그라운드 처리 */
+                  void refetchCurrentStore()
                   if (payload.payment != null) schedulePostPaymentCustomerQr()
                   return true
                 }
@@ -8334,7 +8341,7 @@ export default function PosTerminalPage() {
                   registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void finalizeTakeoutPaid()
                   })
-                  await refetchCurrentStore()
+                  void refetchCurrentStore()
                   return true
                 }
                 return await finalizeTakeoutPaid()
@@ -9395,7 +9402,8 @@ export default function PosTerminalPage() {
                   pendingDineInOrderTableRef.current = ''
                   setServingTableId(null)
                   setSelectedTableId(null)
-                  await refetchCurrentStore()
+                  /** 결제 버튼 잠금(backendBusy) 해제를 우선하기 위해 재조회는 백그라운드 처리 */
+                  void refetchCurrentStore()
                   if (pay) schedulePostPaymentCustomerQr()
                   return true
                 }
@@ -9404,7 +9412,7 @@ export default function PosTerminalPage() {
                   registerPendingKbankFinalize(kbankPartnerTxnId, () => {
                     void finalizeDineInPaid()
                   })
-                  await refetchCurrentStore()
+                  void refetchCurrentStore()
                   return true
                 }
                 return await finalizeDineInPaid()
