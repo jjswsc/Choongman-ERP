@@ -21,13 +21,32 @@ export function stripRemoteImgSrcForThermalPrint(html: string): string {
 }
 
 function blobToDataUri(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error || new Error('read_failed'))
-    reader.readAsDataURL(blob)
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(reader.error || new Error('read_failed'))
+      reader.readAsDataURL(blob)
+    })
+  }
+  return blob.arrayBuffer().then((buf) => {
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    const mime = String(blob.type || 'application/octet-stream').trim() || 'application/octet-stream'
+    const b64 =
+      typeof btoa === 'function'
+        ? btoa(binary)
+        : Buffer.from(bytes).toString('base64')
+    return `data:${mime};base64,${b64}`
   })
 }
+
+/** 동일 URL 재인쇄 시 fetch 생략(하이브리드 영수증 로고 복구용) */
+const printAssetDataUriCache = new Map<string, string>()
 
 /**
  * URL → data URI. 이미 data/blob이면 그대로.
@@ -46,6 +65,9 @@ export async function fetchPrintAssetAsDataUri(
     absolute = `${String(opts.origin).replace(/\/$/, '')}${raw}`
   }
   if (!/^https?:\/\//i.test(absolute)) return ''
+
+  const cached = printAssetDataUriCache.get(absolute)
+  if (cached) return cached
 
   const timeoutMs = Math.max(100, Math.trunc(Number(opts?.timeoutMs) || 700))
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null
@@ -71,7 +93,9 @@ export async function fetchPrintAssetAsDataUri(
     const blob = await res.blob()
     if (!blob || blob.size <= 0 || blob.size > 1_500_000) return ''
     const dataUri = await blobToDataUri(blob)
-    return isOfflineSafePrintImgSrc(dataUri) ? dataUri : ''
+    if (!isOfflineSafePrintImgSrc(dataUri)) return ''
+    printAssetDataUriCache.set(absolute, dataUri)
+    return dataUri
   } catch {
     return ''
   } finally {

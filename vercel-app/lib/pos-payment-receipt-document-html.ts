@@ -484,11 +484,11 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
   )
 
   /**
-   * 하이브리드: 로고/도장 원격 fetch를 건너뜀(이미 로컬 QR·텍스트만으로 충분).
-   * fetch 타임아웃이 겹치면 인쇄 시작이 수백 ms~수 초 늦어질 수 있음.
+   * 하이브리드: 멤버십 QR은 캐시만(미캐시→백그라운드 생성).
+   * 로고/도장은 짧은 타임아웃으로 data URI 인라인 — 건너뛰면 충만 영수증 상단 로고가 통째로 빠짐.
+   * (Electron loadFile에 https img를 넣으면 ~10초 지연이므로 반드시 data URI만 전달)
    */
   if (isWindowsHybridPosShell()) {
-    /** 하이브리드: 완전 동기 — QR도 캐시만 사용(미캐시면 생략, 다음 결제를 위해 백그라운드 생성) */
     let membershipSrc = params.membershipQrSrcOverride
       ? String(params.membershipQrSrcOverride || '').trim()
       : ''
@@ -510,15 +510,25 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
     if (membershipSrc && !isOfflineSafePrintImgSrc(membershipSrc)) {
       membershipSrc = ''
     }
-    const logoSafe = isOfflineSafePrintImgSrc(logoCandidate) ? logoCandidate : ''
-    const stampSafe = isOfflineSafePrintImgSrc(stampCandidate) ? stampCandidate : ''
+    const [logoDataUri, stampDataUri] = await Promise.all([
+      isOfflineSafePrintImgSrc(logoCandidate)
+        ? Promise.resolve(logoCandidate)
+        : fetchPrintAssetAsDataUri(logoCandidate, { timeoutMs: 350, origin }),
+      stampCandidate
+        ? isOfflineSafePrintImgSrc(stampCandidate)
+          ? Promise.resolve(stampCandidate)
+          : fetchPrintAssetAsDataUri(stampCandidate, { timeoutMs: 350, origin })
+        : Promise.resolve(''),
+    ])
     return buildPosPaymentReceiptDocumentHtml({
       ...params,
       membershipQrSrcOverride: membershipSrc,
       designOverride: {
         ...params.designOverride,
-        receiptLogoImageUrl: logoSafe,
-        ...(stampCandidate || stampSafe ? { receiptStampImageUrl: stampSafe } : {}),
+        receiptLogoImageUrl: logoDataUri || '',
+        ...(stampCandidate
+          ? { receiptStampImageUrl: stampDataUri || '' }
+          : {}),
       },
     })
   }

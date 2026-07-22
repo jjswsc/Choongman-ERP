@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildPosPaymentReceiptDocumentHtml,
   buildPosPaymentReceiptDocumentHtmlAsync,
@@ -265,5 +265,75 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     const cheeseCount = (html.match(/CHEESE TORNADO/g) || []).length
     expect(snowCount).toBe(1)
     expect(cheeseCount).toBe(1)
+  })
+})
+
+describe('buildPosPaymentReceiptDocumentHtmlAsync — Windows hybrid logo', () => {
+  const originalFetch = globalThis.fetch
+  const originalWindow = globalThis.window
+
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      writable: true,
+      value: {
+        cmPosShell: {
+          printHtml: vi.fn(async () => ({ ok: true })),
+        },
+      },
+    })
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      writable: true,
+      value: originalWindow,
+    })
+  })
+
+  it('inlines https logo as data URI on hybrid (does not drop Choongman logo)', async () => {
+    const tinyPng = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+      0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+      0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0xfe, 0xd4, 0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+      0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ])
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(tinyPng, {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      })
+    }) as unknown as typeof fetch
+
+    const html = await buildPosPaymentReceiptDocumentHtmlAsync({
+      receiptData: {
+        orderNo: 'CMTEST-20260722-021',
+        storeCode: 'CM Farwell',
+        orderType: 'dine_in',
+        items: [{ id: '1', name: 'Soy Sauce Chicken', price: 99, qty: 2 }],
+        subtotal: 198,
+        discountAmt: 0,
+        total: 198,
+        paymentQr: 198,
+        receiptAutoPrintContext: 'payment',
+      },
+      menus: [],
+      orderTypeLabels: { dine_in: 'Dine-in' },
+      t: (k) => k,
+      lang: 'th',
+      origin: 'https://choongman-erp.vercel.app',
+      printerSettings: { logoPrint: true } as never,
+      designOverride: {
+        receiptLogoImageUrl: 'https://choongman-erp.vercel.app/company-stamp.png',
+      },
+    })
+
+    expect(html).toContain('receipt-brand-logo')
+    expect(html).toMatch(/src="data:image\/png;base64,/)
+    expect(html).not.toContain('https://choongman-erp.vercel.app/company-stamp.png')
+    expect(globalThis.fetch).toHaveBeenCalled()
   })
 })
