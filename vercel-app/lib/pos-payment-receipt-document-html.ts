@@ -76,6 +76,10 @@ import {
 import { resolveMembershipQrLinkUrl, resolveReceiptAssetUrl } from '@/lib/pos-membership-qr-defaults'
 import { buildCode128SvgDataUri } from '@/lib/barcode-code128-svg'
 import { buildQrDataUri, peekCachedQrDataUri } from '@/lib/qr-svg-sync'
+import {
+  fetchPrintAssetAsDataUri,
+  isOfflineSafePrintImgSrc,
+} from '@/lib/pos-receipt-print-assets'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -457,22 +461,58 @@ export async function resolvePaymentReceiptMembershipQrSrc(params: {
   return resolveReceiptAssetUrl(String(params.receiptMembershipQrImageUrl || '').trim(), params.origin)
 }
 
-/** 인쇄용: 멤버십 QR을 로컬로 만든 뒤 HTML 생성 (Electron loadFile 지연 방지). */
+/** 인쇄용: 멤버십 QR·로고·도장을 로컬 data URI로 만든 뒤 HTML 생성 (Electron loadFile 지연 방지). */
 export async function buildPosPaymentReceiptDocumentHtmlAsync(
   params: BuildPosPaymentReceiptDocumentHtmlParams
 ): Promise<string> {
   const d = resolvePaymentReceiptDesign(params.printerSettings, params.designOverride)
-  const membershipQrSrcOverride =
-    params.membershipQrSrcOverride ||
-    (await resolvePaymentReceiptMembershipQrSrc({
-      receiptShowMembershipQr: d.receiptShowMembershipQr,
-      receiptMembershipQrLinkUrl: d.receiptMembershipQrLinkUrl,
-      receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
-      origin: params.origin,
-    }))
+  const origin = params.origin
+  const logoCandidate =
+    String(d.receiptLogoImageUrl || '').trim() || (origin ? `${origin.replace(/\/$/, '')}/company-stamp.png` : '')
+  const stampCandidate = String(d.receiptStampImageUrl || '').trim()
+  const membershipImageCandidate = resolveReceiptAssetUrl(
+    String(d.receiptMembershipQrImageUrl || '').trim(),
+    origin
+  )
+
+  const [membershipQrSrcOverride, logoDataUri, stampDataUri] = await Promise.all([
+    params.membershipQrSrcOverride
+      ? Promise.resolve(String(params.membershipQrSrcOverride || '').trim())
+      : resolvePaymentReceiptMembershipQrSrc({
+          receiptShowMembershipQr: d.receiptShowMembershipQr,
+          receiptMembershipQrLinkUrl: d.receiptMembershipQrLinkUrl,
+          receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
+          origin,
+        }),
+    fetchPrintAssetAsDataUri(logoCandidate, { timeoutMs: 700, origin }),
+    fetchPrintAssetAsDataUri(stampCandidate, { timeoutMs: 700, origin }),
+  ])
+
+  /** 링크 QR이 없고 이미지 URL만 있으면 그것도 data URI로 변환 */
+  let membershipSrc = membershipQrSrcOverride
+  if (membershipSrc && !isOfflineSafePrintImgSrc(membershipSrc) && /^https?:\/\//i.test(membershipSrc)) {
+    membershipSrc = await fetchPrintAssetAsDataUri(membershipSrc, { timeoutMs: 700, origin })
+  } else if (
+    !membershipSrc &&
+    d.receiptShowMembershipQr &&
+    membershipImageCandidate &&
+    !isOfflineSafePrintImgSrc(membershipImageCandidate)
+  ) {
+    membershipSrc = await fetchPrintAssetAsDataUri(membershipImageCandidate, { timeoutMs: 700, origin })
+  }
+
   return buildPosPaymentReceiptDocumentHtml({
     ...params,
-    membershipQrSrcOverride,
+    membershipQrSrcOverride: membershipSrc,
+    designOverride: {
+      ...params.designOverride,
+      ...(logoDataUri ? { receiptLogoImageUrl: logoDataUri } : { receiptLogoImageUrl: '' }),
+      ...(stampDataUri
+        ? { receiptStampImageUrl: stampDataUri }
+        : stampCandidate
+          ? { receiptStampImageUrl: '' }
+          : {}),
+    },
   })
 }
 
@@ -575,7 +615,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const { plainMemo: plainMemoForPrint, splitBadgeLabel } = extractDutchSplitBadgeFromMemo(parsedMemo.plainMemo)
   const taxInvoice = parsedMemo.taxInvoice
   const d = resolvePaymentReceiptDesign(printerSettings ?? null, designOverride)
-  const logoUrl = d.receiptLogoImageUrl || `${origin}/company-stamp.png`
   const isPaymentReceipt =
     !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
   const showBizCoreOnReceipt = isPaymentReceipt
@@ -643,23 +682,34 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     ? buildCashTenderReceiptSimpleLinesHtml(receiptData, tr, esc)
     : ''
   const voidBannerHtml = voidMode ? buildReceiptVoidBannerHtml(tr) : ''
-  const showLogo = isPaymentReceipt && (d.receiptShowLogo || forceReceiptLogo)
+  /**
+   * 로고/도장/멤버십 이미지: Electron loadFile은 https 이미지 대기 시 ~10초 지연.
+   * data URI만 허용. (async 빌더가 미리 인라인; 동기 경로는 원격 URL 생략)
+   */
+  const logoCandidate = String(d.receiptLogoImageUrl || '').trim()
+  const logoUrl = isOfflineSafePrintImgSrc(logoCandidate) ? logoCandidate : ''
+  const showLogo = isPaymentReceipt && (d.receiptShowLogo || forceReceiptLogo) && Boolean(logoUrl)
   const footerPrimaryText =
     String(d.receiptFooterPrimaryText || '').trim() ||
     (d.receiptShowThankYou ? tr('posReceiptThankYou', '감사합니다') : '')
   const footerSecondaryText =
     String(d.receiptFooterSecondaryText || '').trim() ||
     (d.receiptShowCustomerCopy ? tr('posReceiptCustomerCopy', '고객용') : '')
-  const showStamp = Boolean(d.receiptShowStamp && d.receiptStampImageUrl && (!d.receiptStampOnlyTaxInvoice || taxInvoice))
+  const stampCandidate = String(d.receiptStampImageUrl || '').trim()
+  const stampUrl = isOfflineSafePrintImgSrc(stampCandidate) ? stampCandidate : ''
+  const showStamp = Boolean(
+    d.receiptShowStamp && stampUrl && (!d.receiptStampOnlyTaxInvoice || taxInvoice)
+  )
   const membershipQrLinkResolved = resolveMembershipQrLinkUrl(
     String(d.receiptMembershipQrLinkUrl || '').trim(),
     origin
   )
-  /** quickchart 등 외부 URL 금지 — Electron loadFile이 이미지 대기하며 ~10초 지연 */
-  const membershipQrSrc =
+  /** quickchart·원격 PNG 금지 — data URI / 캐시만 */
+  const membershipQrSrcRaw =
     String(membershipQrSrcOverride || '').trim() ||
     (membershipQrLinkResolved ? peekCachedQrDataUri(membershipQrLinkResolved, 180) : '') ||
     resolveReceiptAssetUrl(String(d.receiptMembershipQrImageUrl || ''), origin)
+  const membershipQrSrc = isOfflineSafePrintImgSrc(membershipQrSrcRaw) ? membershipQrSrcRaw : ''
   const showMembershipQr = Boolean(d.receiptShowMembershipQr && membershipQrSrc)
   const membershipQrText = String(d.receiptMembershipQrText || '').trim()
   const memberFooterHtml =
@@ -1204,7 +1254,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}
         ${d.receiptShowPaidStamp && !voidMode ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
         ${memberFooterHtml}
-        ${showStamp ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(d.receiptStampImageUrl)}" alt="Company stamp" style="width:72px;height:72px;object-fit:contain;" /></div>` : ''}
+        ${showStamp ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(stampUrl)}" alt="Company stamp" style="width:72px;height:72px;object-fit:contain;" /></div>` : ''}
         ${footerPrimaryText || footerSecondaryText ? '<div class="text-center text-xs receipt-muted">' : ''}
         ${footerPrimaryText ? `<div style="font-weight:600;color:#000">${esc(footerPrimaryText)}</div>` : ''}
         ${footerSecondaryText ? `<div>${esc(footerSecondaryText)}</div>` : ''}

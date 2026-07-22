@@ -1356,25 +1356,42 @@ function ensureReusableHiddenPrintWindow() {
   return htmlHiddenPrintWindow;
 }
 
-async function waitForHiddenWindowSettle(printWindow, baseSettleMs) {
+async function waitForHiddenWindowSettle(printWindow, baseSettleMs, options = {}) {
+  const isReceiptRole = Boolean(options && options.printRole === "receipt");
   const settle = Math.max(0, Math.trunc(Number(baseSettleMs) || 0));
-  const adaptiveExtra = Math.min(800, htmlPrintFailureStreak * 160);
+  const adaptiveExtra = isReceiptRole ? 0 : Math.min(800, htmlPrintFailureStreak * 160);
   /** 성능 롤아웃 때 220ms 상한을 두면 연속 주방 인쇄에서 본문이 깨진 채 스풀에 올라가는 경우가 있음 */
   const totalSettleMs = Math.min(settle + adaptiveExtra, 5000);
   if (totalSettleMs > 0) {
     await delayMs(totalSettleMs);
   }
+  /** 영수증: 원격 img load 대기 금지 — DOM만 안정되면 즉시 인쇄 (이전 ~10초 지연 원인) */
+  const raceCapMs = isReceiptRole
+    ? Math.max(200, Math.min(totalSettleMs + 120, 500))
+    : Math.max(600, Math.min(totalSettleMs + 400, 2500));
   try {
     await Promise.race([
       printWindow.webContents.executeJavaScript(
-        "new Promise((resolve)=>{const finish=()=>{const deadline=Date.now()+4500;let last=-1,stable=0;const tick=()=>{if(Date.now()>deadline)return resolve();const n=document.body&&document.body.innerText?document.body.innerText.length:0;if(n>0&&n===last)stable++;else{stable=0;last=n;}if(stable>=3)return resolve();requestAnimationFrame(tick);};if(document.readyState==='complete')tick();else window.addEventListener('load',tick,{once:true});};const done=()=>{try{requestAnimationFrame(()=>requestAnimationFrame(finish));}catch(_e){finish();}};if(document.fonts&&document.fonts.ready){document.fonts.ready.then(done).catch(done);}else{done();}})",
+        isReceiptRole
+          ? "new Promise((resolve)=>{const done=()=>{try{requestAnimationFrame(()=>requestAnimationFrame(resolve));}catch(_e){resolve();}};if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',done,{once:true});}else{done();}})"
+          : "new Promise((resolve)=>{const finish=()=>{const deadline=Date.now()+4500;let last=-1,stable=0;const tick=()=>{if(Date.now()>deadline)return resolve();const n=document.body&&document.body.innerText?document.body.innerText.length:0;if(n>0&&n===last)stable++;else{stable=0;last=n;}if(stable>=3)return resolve();requestAnimationFrame(tick);};if(document.readyState==='complete')tick();else window.addEventListener('load',tick,{once:true});};const done=()=>{try{requestAnimationFrame(()=>requestAnimationFrame(finish));}catch(_e){finish();}};if(document.fonts&&document.fonts.ready){document.fonts.ready.then(done).catch(done);}else{done();}})",
         true
       ),
-      delayMs(Math.max(600, Math.min(totalSettleMs + 400, 2500))),
+      delayMs(raceCapMs),
     ]);
   } catch {
     /* ignore */
   }
+}
+
+/** file:// 인쇄 HTML의 https img는 Electron did-finish-load를 수 초~10초 지연시킴 */
+function stripRemoteImgSrcForThermalPrint(html) {
+  const transparent =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  return String(html || "").replace(
+    /(<img\b[^>]*?\bsrc\s*=\s*)(["'])(https?:\/\/[^"']*)\2/gi,
+    `$1$2${transparent}$2`
+  );
 }
 
 /**
@@ -1434,7 +1451,11 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         configuredDevice: DEFAULT_PRINT_DEVICE || "",
       });
       // #endregion
-      fs.writeFileSync(tmpPath, htmlString, "utf8");
+      fs.writeFileSync(
+        tmpPath,
+        isReceiptRole ? stripRemoteImgSrcForThermalPrint(htmlString) : htmlString,
+        "utf8"
+      );
       if (preferDialog) {
         printWindow = new BrowserWindow(buildHiddenPrintWindowOptions(true));
         destroyAfterRun = true;
@@ -1454,9 +1475,21 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         }
       }
 
-      await printWindow.loadFile(tmpPath);
+      const loadPromise = printWindow.loadFile(tmpPath);
+      if (isReceiptRole) {
+        await Promise.race([
+          loadPromise,
+          delayMs(1200).then(() => {
+            /* 원격 리소스 대기 중단 — DOM만 있으면 인쇄 진행 */
+          }),
+        ]);
+      } else {
+        await loadPromise;
+      }
       const settleMsForJob = isReceiptRole ? PRINT_HTML_SETTLE_MS_RECEIPT : PRINT_HTML_SETTLE_MS;
-      await waitForHiddenWindowSettle(printWindow, settleMsForJob);
+      await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
+        printRole: isReceiptRole ? "receipt" : undefined,
+      });
 
       if (preferDialog) {
         const printStage = "dialog_only";
@@ -1505,7 +1538,9 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       while (!r.success && thermalAttempts <= silentRetryMax) {
         thermalAttempts += 1;
         await delayMs(120 * thermalAttempts + htmlPrintFailureStreak * 80);
-        await waitForHiddenWindowSettle(printWindow, settleMsForJob);
+        await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
+          printRole: isReceiptRole ? "receipt" : undefined,
+        });
         r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
       }
       // #region agent log
@@ -1523,7 +1558,9 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         while (!r.success && driverAttempts <= silentRetryMax) {
           driverAttempts += 1;
           await delayMs(120 * driverAttempts + htmlPrintFailureStreak * 80);
-          await waitForHiddenWindowSettle(printWindow, settleMsForJob);
+          await waitForHiddenWindowSettle(printWindow, settleMsForJob, {
+            printRole: isReceiptRole ? "receipt" : undefined,
+          });
           r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
         }
         // #region agent log

@@ -135,6 +135,12 @@ async function printPosHtmlDocumentInner(
   fullDocumentHtml: string,
   opts?: PrintPosHtmlDocumentOptions
 ): Promise<void> {
+  const { stripRemoteImgSrcForThermalPrint } = await import('@/lib/pos-receipt-print-assets')
+  /** Electron loadFile은 https img에서 수 초~10초 지연 — 영수증은 원격 img 제거 */
+  const documentHtml =
+    opts?.printRole === 'receipt' || opts?.printReceiptKind
+      ? stripRemoteImgSrcForThermalPrint(fullDocumentHtml)
+      : fullDocumentHtml
   const win = typeof window !== 'undefined' ? window : undefined
   const shell =
     win &&
@@ -185,7 +191,7 @@ async function printPosHtmlDocumentInner(
   if (useShell) {
     const uiLang = getClientUiLang()
     try {
-      const r = await shell.printHtml!(fullDocumentHtml, shellOpts)
+      const r = await shell.printHtml!(documentHtml, shellOpts)
       opts?.onShellPrintResult?.(r || {})
       const ok = Boolean(r?.ok)
       if (ok) {
@@ -204,7 +210,7 @@ async function printPosHtmlDocumentInner(
         void appAlert(getRuntimeUiString(uiLang, 'posPrintFailedWithReason', { reason }))
       }
       if (!shouldSkipShellIframeFallback(opts)) {
-        await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+        await printPosHtmlDocumentViaIframe(documentHtml, opts)
       }
       opts?.onAfterCleanup?.()
     } catch {
@@ -213,7 +219,7 @@ async function printPosHtmlDocumentInner(
         void appAlert(getRuntimeUiString(getClientUiLang(), 'posPrintRequestError'))
       }
       if (!shouldSkipShellIframeFallback(opts)) {
-        await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+        await printPosHtmlDocumentViaIframe(documentHtml, opts)
       }
       opts?.onAfterCleanup?.()
     }
@@ -221,7 +227,7 @@ async function printPosHtmlDocumentInner(
   }
 
   try {
-    await printPosHtmlDocumentViaIframe(fullDocumentHtml, opts)
+    await printPosHtmlDocumentViaIframe(documentHtml, opts)
   } catch {
     /* iframe print rejected (e.g. onPrintUnavailable) — fall through to onAfterCleanup
        so multi-slip chains (Kitchen 1 → Kitchen 2) are not broken by a single slip failure */

@@ -91,6 +91,26 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     expect(html).not.toMatch(/POS ID\s*:/)
   })
 
+  it('does not embed remote https logo/stamp urls (Electron loadFile hang)', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: { ...baseReceipt, receiptAutoPrintContext: 'payment' },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://example.com',
+      printerSettings: { logoPrint: true } as never,
+      designOverride: {
+        receiptLogoImageUrl: 'https://cdn.example.com/logo.png',
+        receiptStampImageUrl: 'https://cdn.example.com/stamp.png',
+        receiptShowStamp: true,
+        receiptStampOnlyTaxInvoice: false,
+      },
+    })
+    expect(html).not.toContain('https://cdn.example.com')
+    expect(html).not.toContain('company-stamp.png')
+  })
+
   it('prints digits-only order number below date and omits store name (standard layout)', () => {
     const html = buildPosPaymentReceiptDocumentHtml({
       receiptData: baseReceipt,

@@ -1,19 +1,19 @@
 {
-    "version":  "0.1.6",
+    "version":  "0.1.7",
     "files":  [
                   {
                       "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "f3d4253e985614975dff754670ae0cbc491f79b73585d2e41db32bdb6971ff6a"
+                      "sha256":  "25527a2cf4ee8f65323b138cdd7e6049888809184275fe56fbe3ec543c67b60f"
                   },
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.6-setup.exe",
-                      "name":  "cm-pos-windows-0.1.6-setup.exe",
-                      "sha256":  "f3d4253e985614975dff754670ae0cbc491f79b73585d2e41db32bdb6971ff6a"
+                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.7-setup.exe",
+                      "name":  "cm-pos-windows-0.1.7-setup.exe",
+                      "sha256":  "25527a2cf4ee8f65323b138cdd7e6049888809184275fe56fbe3ec543c67b60f"
                   }
               ],
-    "installerSha256":  "f3d4253e985614975dff754670ae0cbc491f79b73585d2e41db32bdb6971ff6a",
-    "publishedAtUtc":  "2026-07-22T04:06:14.1701145Z",
+    "installerSha256":  "25527a2cf4ee8f65323b138cdd7e6049888809184275fe56fbe3ec543c67b60f",
+    "publishedAtUtc":  "2026-07-22T04:36:12.5868873Z",
     "installerUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "Omni POS Windows 0.1.6 — receipt print: local membership QR (no quickchart), faster payment receipt"
+    "notes":  "Omni POS Windows 0.1.7 - fix payment receipt 10s delay (strip remote logo/stamp before Electron loadFile)"
 }
