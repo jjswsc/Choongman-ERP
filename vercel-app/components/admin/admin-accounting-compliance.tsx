@@ -318,7 +318,10 @@ export function AdminAccountingCompliance({
 
   const [taxLinkVendors, setTaxLinkVendors] = React.useState<VendorTaxLinkInput[]>([])
   const [taxLinkProfilesByStore, setTaxLinkProfilesByStore] = React.useState<
-    Record<string, { storeCode: string; vendorCode?: string; taxpayerName?: string; taxId?: string }>
+    Record<
+      string,
+      { storeCode: string; vendorCode?: string; taxpayerName?: string; taxId?: string; branchNo?: string }
+    >
   >({})
   const [taxLinkMetaLoading, setTaxLinkMetaLoading] = React.useState(false)
 
@@ -348,8 +351,10 @@ export function AdminAccountingCompliance({
             sales_outlet: v.sales_outlet,
           }))
         )
-        const map: Record<string, { storeCode: string; vendorCode?: string; taxpayerName?: string; taxId?: string }> =
-          {}
+        const map: Record<
+          string,
+          { storeCode: string; vendorCode?: string; taxpayerName?: string; taxId?: string; branchNo?: string }
+        > = {}
         for (const p of profRes.profiles || []) {
           const sc = String(p.storeCode || "").trim()
           if (!sc) continue
@@ -358,6 +363,7 @@ export function AdminAccountingCompliance({
             vendorCode: p.vendorCode,
             taxpayerName: p.taxpayerName,
             taxId: p.taxId,
+            branchNo: p.branchNo,
           }
         }
         setTaxLinkProfilesByStore(map)
@@ -375,11 +381,36 @@ export function AdminAccountingCompliance({
     }
   }, [canUse, needsTaxLinkMeta])
 
+  const findTaxLinkProfileForStore = React.useCallback(
+    (storeKey: string) => {
+      const key = String(storeKey || "").trim()
+      if (!key || key === "All") return null
+      const candidates = [key, ...aliasKeysForStore(key, storeLabels, legacyToCanonical)]
+      for (const c of candidates) {
+        const hit = taxLinkProfilesByStore[c]
+        if (hit) return hit
+      }
+      const want = new Set(candidates.map((c) => c.toLowerCase()).filter(Boolean))
+      for (const [code, p] of Object.entries(taxLinkProfilesByStore)) {
+        if (want.has(String(code || "").trim().toLowerCase())) return p
+      }
+      return null
+    },
+    [taxLinkProfilesByStore, storeLabels, legacyToCanonical]
+  )
+
   const pp30StoreLinkEval = React.useMemo(() => {
     if (storeFilterForLedger === "All") return null
     const extras = aliasKeysForStore(storeFilterForLedger, storeLabels, legacyToCanonical)
-    return evaluateStoreTaxLink(storeFilterForLedger, taxLinkProfilesByStore[storeFilterForLedger], taxLinkVendors, extras)
-  }, [storeFilterForLedger, taxLinkProfilesByStore, taxLinkVendors, storeLabels, legacyToCanonical])
+    const profile = findTaxLinkProfileForStore(storeFilterForLedger)
+    return evaluateStoreTaxLink(storeFilterForLedger, profile, taxLinkVendors, extras)
+  }, [
+    storeFilterForLedger,
+    findTaxLinkProfileForStore,
+    taxLinkVendors,
+    storeLabels,
+    legacyToCanonical,
+  ])
 
   const pp30VendorLinkCounts = React.useMemo(
     () =>
@@ -2171,8 +2202,102 @@ export function AdminAccountingCompliance({
   }, [canUse, tab, loadKt20k])
 
   React.useEffect(() => {
-    if (canUse && (tab === "kt20k" || tab === "cit")) void loadKt20kSettings()
+    if (canUse && (tab === "kt20k" || tab === "cit" || tab === "summary")) void loadKt20kSettings()
   }, [canUse, tab, loadKt20kSettings])
+
+  /**
+   * 매장 납세자 프로필(메모리→API) → 거래처 연동 → (본사) KT20k/E-tax 순으로 RD Prep 헤더 소스를 채움.
+   * 프로필 UI에 이미 저장된 TIN/법인명을 PP30 다운로드가 못 읽던 버그 보완.
+   */
+  const loadRdPayerFromStoreSources = React.useCallback(async (): Promise<{
+    payerName: string
+    payerTaxId: string
+    payerBranchNo: string
+  }> => {
+    let payerName = ""
+    let payerTaxId = ""
+    let payerBranchNo = "00000"
+
+    const applyGaps = (name: string, taxIdRaw: string, branch?: string) => {
+      const taxId = String(taxIdRaw || "")
+        .replace(/\D/g, "")
+        .trim()
+      if (!payerName && name) payerName = name
+      if (payerTaxId.length !== 13 && taxId.length === 13) payerTaxId = taxId
+      if (branch) payerBranchNo = branch
+    }
+
+    const storeKey =
+      storeFilterForLedger !== "All" ? storeFilterForApi || storeFilterForLedger : ""
+
+    // 1) 이미 로드된 매장 납세자 프로필 (Store taxpayer profiles와 동일 데이터)
+    if (storeKey) {
+      const cached = findTaxLinkProfileForStore(storeKey)
+      if (cached) {
+        applyGaps(
+          String(cached.taxpayerName || "").trim(),
+          String(cached.taxId || ""),
+          String(cached.branchNo || "").trim() || undefined
+        )
+      }
+    }
+
+    // 2) 거래처 연동 판정(HQ 등) — 프로필 필드가 비어 있을 때 보완
+    if ((payerTaxId.length !== 13 || !payerName) && pp30StoreLinkEval) {
+      applyGaps(
+        String(pp30StoreLinkEval.vendorName || "").trim(),
+        String(pp30StoreLinkEval.taxId || "")
+      )
+    }
+
+    // 3) API resolve (canonical store_code + vendor fallback)
+    if (storeKey && (payerTaxId.length !== 13 || !payerName)) {
+      try {
+        const { profile } = await getStoreTaxFilingProfile(storeKey)
+        if (profile) {
+          applyGaps(
+            String(profile.taxpayerName || "").trim(),
+            String(profile.taxId || ""),
+            String(profile.branchNo || "").trim() || undefined
+          )
+        }
+      } catch {
+        /* keep current */
+      }
+    }
+
+    // 4) 본사 전역 설정
+    if (isHeadOfficeLedgerStore && (payerTaxId.length !== 13 || !payerName)) {
+      applyGaps(String(kt20kEmployer.companyName || "").trim(), String(kt20kEmployer.companyTaxId || ""))
+      if (payerTaxId.length !== 13) applyGaps("", String(etaxTaxId || ""))
+    }
+
+    return { payerName, payerTaxId, payerBranchNo }
+  }, [
+    storeFilterForLedger,
+    storeFilterForApi,
+    findTaxLinkProfileForStore,
+    pp30StoreLinkEval,
+    isHeadOfficeLedgerStore,
+    kt20kEmployer.companyName,
+    kt20kEmployer.companyTaxId,
+    etaxTaxId,
+  ])
+
+  React.useEffect(() => {
+    if (!canUse || storeFilterForLedger === "All") return
+    let cancelled = false
+    void (async () => {
+      const header = await loadRdPayerFromStoreSources()
+      if (cancelled) return
+      setPnd1PayerName(header.payerName)
+      setPnd1PayerTaxId(header.payerTaxId)
+      setPnd1PayerBranchNo(header.payerBranchNo || "00000")
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [canUse, storeFilterForLedger, loadRdPayerFromStoreSources])
 
   React.useEffect(() => {
     setKt20kReasonTagFilter([])
@@ -3150,20 +3275,35 @@ export function AdminAccountingCompliance({
     ]
   )
 
-  const handleDownloadPp30RdPrepTxt = React.useCallback(() => {
+  const handleDownloadPp30RdPrepTxt = React.useCallback(async () => {
     if (!pp30Queried) {
       appAlert(t("accCompPp30ExportNeedSearch"))
       return
     }
-    const taxDigits = String(pnd1PayerTaxId || "")
+    let payerName = String(pnd1PayerName || "").trim()
+    let payerTaxId = String(pnd1PayerTaxId || "")
       .replace(/\D/g, "")
       .trim()
-    if (taxDigits.length !== 13 || !String(pnd1PayerName || "").trim()) {
+    let payerBranchNo = String(pnd1PayerBranchNo || "").trim() || "00000"
+
+    if (payerTaxId.length !== 13 || !payerName) {
+      const fromStore = await loadRdPayerFromStoreSources()
+      if (!payerName) payerName = fromStore.payerName
+      if (payerTaxId.length !== 13) payerTaxId = fromStore.payerTaxId
+      if (!payerBranchNo || payerBranchNo === "00000") {
+        payerBranchNo = fromStore.payerBranchNo || payerBranchNo
+      }
+      if (payerName) setPnd1PayerName(payerName)
+      if (payerTaxId) setPnd1PayerTaxId(payerTaxId)
+      if (payerBranchNo) setPnd1PayerBranchNo(payerBranchNo)
+    }
+
+    if (payerTaxId.length !== 13 || !payerName) {
       appAlert(
         tr(t, "accCompPp30ExportRequiredMissing", {
           fields: [
-            !String(pnd1PayerName || "").trim() ? t("accCompPp30ExportField_companyName") : "",
-            taxDigits.length !== 13 ? t("accCompPp30ExportField_companyTaxId13") : "",
+            !payerName ? t("accCompPp30ExportField_companyName") : "",
+            payerTaxId.length !== 13 ? t("accCompPp30ExportField_companyTaxId13") : "",
           ]
             .filter(Boolean)
             .join(", "),
@@ -3171,8 +3311,41 @@ export function AdminAccountingCompliance({
       )
       return
     }
-    window.open(pp30RdPrepUrl, "_blank", "noopener,noreferrer")
-  }, [pp30Queried, pnd1PayerTaxId, pnd1PayerName, pp30RdPrepUrl, t, tr])
+
+    const url = getExportPp30RdPrepTxtUrl({
+      userRole: role,
+      taxMonth,
+      yearMonth: taxMonth,
+      periodType,
+      filingStatus: ledgerStatusFilter,
+      storeFilter: storeFilterForApi,
+      payerTaxId,
+      payerBranchNo,
+      payerName,
+      outputNet: vatSettlement.outputNet,
+      outputVat: vatSettlement.outputVat,
+      inputNet: vatSettlement.inputNet,
+      inputVat: vatSettlement.inputVat,
+    })
+    window.open(url, "_blank", "noopener,noreferrer")
+  }, [
+    pp30Queried,
+    pnd1PayerTaxId,
+    pnd1PayerName,
+    pnd1PayerBranchNo,
+    loadRdPayerFromStoreSources,
+    role,
+    taxMonth,
+    periodType,
+    ledgerStatusFilter,
+    storeFilterForApi,
+    vatSettlement.outputNet,
+    vatSettlement.outputVat,
+    vatSettlement.inputNet,
+    vatSettlement.inputVat,
+    t,
+    tr,
+  ])
 
   const closingDraftPayload = React.useMemo<IncomeExpenseClosingPreview | null>(() => {
     const raw = closingDraft?.payload
@@ -3303,11 +3476,22 @@ export function AdminAccountingCompliance({
       pnd1PayerName,
     ]
   )
-  const handleDownloadPnd53RdFilingTxt = React.useCallback(() => {
-    const taxDigits = String(pnd1PayerTaxId || "")
+  const handleDownloadPnd53RdFilingTxt = React.useCallback(async () => {
+    let payerTaxId = String(pnd1PayerTaxId || "")
       .replace(/\D/g, "")
       .trim()
-    if (taxDigits.length !== 13) {
+    let payerBranchNo = String(pnd1PayerBranchNo || "").trim() || "00000"
+    if (payerTaxId.length !== 13) {
+      const fromStore = await loadRdPayerFromStoreSources()
+      if (payerTaxId.length !== 13) payerTaxId = fromStore.payerTaxId
+      if (!payerBranchNo || payerBranchNo === "00000") {
+        payerBranchNo = fromStore.payerBranchNo || payerBranchNo
+      }
+      if (fromStore.payerName) setPnd1PayerName(fromStore.payerName)
+      if (payerTaxId) setPnd1PayerTaxId(payerTaxId)
+      if (payerBranchNo) setPnd1PayerBranchNo(payerBranchNo)
+    }
+    if (payerTaxId.length !== 13) {
       appAlert(
         tr(t, "accCompPp30ExportRequiredMissing", {
           fields: t("accCompPp30ExportField_companyTaxId13"),
@@ -3315,8 +3499,31 @@ export function AdminAccountingCompliance({
       )
       return
     }
-    window.open(pnd53RdFilingUrl, "_blank", "noopener,noreferrer")
-  }, [pnd1PayerTaxId, pnd53RdFilingUrl, t, tr])
+    const url = getExportPnd53RdFilingTxtUrl({
+      userRole: role,
+      taxMonth,
+      yearMonth: taxMonth,
+      periodType,
+      filingStatus: ledgerStatusFilter,
+      storeFilter: storeFilterForApi,
+      formHint: whtSubmissionFormHint,
+      payerTaxId,
+      payerBranchNo,
+    })
+    window.open(url, "_blank", "noopener,noreferrer")
+  }, [
+    pnd1PayerTaxId,
+    pnd1PayerBranchNo,
+    loadRdPayerFromStoreSources,
+    role,
+    taxMonth,
+    periodType,
+    ledgerStatusFilter,
+    storeFilterForApi,
+    whtSubmissionFormHint,
+    t,
+    tr,
+  ])
   const pp36ExportUrl = React.useMemo(
     () =>
       getExportPp36LedgerCsvUrl({
