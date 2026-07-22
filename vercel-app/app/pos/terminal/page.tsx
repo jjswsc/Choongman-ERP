@@ -9740,7 +9740,9 @@ export default function PosTerminalPage() {
                       formatNote: formatLineNoteForPrint,
                     }
                   )
-                  const storeAutoPrint = await resolveStoreAutoPrintFlags(currentStoreId)
+                  const storeAutoPrint = isOmniPaymentFastPath
+                    ? readStoreAutoPrintFlagsSync()
+                    : await resolveStoreAutoPrintFlags(currentStoreId)
                   const shouldAutoPrintReceipt = storeAutoPrint.receiptOnAddOrder
                   const autoPrintKitchenForSubmit = storeAutoPrint.kitchenOnOrder
                   const receiptPayloadSubmit = {
@@ -10119,7 +10121,9 @@ export default function PosTerminalPage() {
                     .catch((e) => console.error('Kitchen slip print(non-dine):', e))
                 }
 
-                const storeAutoPrintNonDine = await resolveStoreAutoPrintFlags(currentStoreId)
+                const storeAutoPrintNonDine = isOmniPaymentFastPath
+                  ? readStoreAutoPrintFlagsSync()
+                  : await resolveStoreAutoPrintFlags(currentStoreId)
                 const autoPrintReceiptNonDine = storeAutoPrintNonDine.receiptOnOrder
                 const autoPrintReceiptOnPaymentNonDine = storeAutoPrintNonDine.receiptOnPayment
                 const autoPrintKitchenNonDine = storeAutoPrintNonDine.kitchenOnOrder
@@ -10189,11 +10193,11 @@ export default function PosTerminalPage() {
                     })
                   }
                 }
-                await refreshStoreListAfterOrderSave({
+                const refreshNonDineArgs = {
                   orderType: payload.orderType,
                   tableName: payload.orderLabel,
                   memo: memoWithKbank,
-                  status: hasPayment ? 'paid' : 'pending',
+                  status: hasPayment ? ('paid' as const) : ('pending' as const),
                   orderNo,
                   serverOrderId: newOrderId,
                   total: pricing.finalTotal,
@@ -10213,7 +10217,12 @@ export default function PosTerminalPage() {
                       : {}),
                   })),
                   queuedWithoutServerId,
-                })
+                }
+                if (isOmniPaymentFastPath) {
+                  void refreshStoreListAfterOrderSave(refreshNonDineArgs)
+                } else {
+                  await refreshStoreListAfterOrderSave(refreshNonDineArgs)
+                }
                 /** 배달·포장「주문」만 저장 시: 목록에서 다시 누르지 않도록 방금 저장한 건 자동 선택 */
                 if (payload.orderType === 'delivery') {
                   if (!hasPayment && newOrderId != null && newOrderId > 0) {
