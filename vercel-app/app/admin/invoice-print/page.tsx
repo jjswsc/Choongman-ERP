@@ -125,8 +125,18 @@ function InvoicePrintPageInner() {
                 const refType = String(d.sourceRefType || "").trim()
                 const refId = Number(d.sourceRefId || 0)
                 if (!refType || !Number.isFinite(refId) || refId <= 0) return d
-                const key = buildOverrideCode(refType, refId, normalizeDocKind(d))
-                const ov = res.map[key]
+                const docKind = normalizeDocKind(d)
+                let ov = res.map[buildOverrideCode(refType, refId, docKind)]
+                if (docKind === "tax" && (refType === "PO" || refType === "AccountingPO")) {
+                  const a = res.map[buildOverrideCode("PO", refId, docKind)]
+                  const b = res.map[buildOverrideCode("AccountingPO", refId, docKind)]
+                  if (a && b) {
+                    ov =
+                      String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")) > 0 ? b : a
+                  } else {
+                    ov = a || b || ov
+                  }
+                }
                 if (!ov) return d
                 const taxDoc = isTaxInvoiceDoc(d)
                 const ovDocNo = String(ov.documentNo || "").trim()
@@ -317,21 +327,19 @@ function InvoicePrintPageInner() {
                       type="date"
                       onChange={(e) => {
                         const nextIssueDate = e.target.value
-                        const patch: Partial<InvoiceData> = { issueDate: nextIssueDate }
-                        if (taxDoc) {
-                          void resolveTaxInvoiceDocNo(nextIssueDate, {
-                            ...data,
-                            issueDate: nextIssueDate,
-                          }).then((documentNo) => {
-                            const referenceNo = normalizeTaxInvoiceReferenceNo(
-                              data.referenceNo,
-                              documentNo
-                            )
-                            updateField(i, { ...patch, documentNo, referenceNo })
-                          })
-                          return
-                        }
-                        updateField(i, patch)
+                        // 즉시 state 반영 — async 순번 예약 전에 Update를 누르면 이전 날짜가 저장되던 레이스 방지
+                        updateField(i, { issueDate: nextIssueDate })
+                        if (!taxDoc) return
+                        void resolveTaxInvoiceDocNo(nextIssueDate, {
+                          ...data,
+                          issueDate: nextIssueDate,
+                        }).then((documentNo) => {
+                          const referenceNo = normalizeTaxInvoiceReferenceNo(
+                            data.referenceNo,
+                            documentNo
+                          )
+                          updateField(i, { issueDate: nextIssueDate, documentNo, referenceNo })
+                        })
                       }}
                     />
                     <Input

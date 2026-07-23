@@ -5055,8 +5055,6 @@ export const I18N_POS_EN: Record<string, string> = {
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
     posKbankCreditCardQrNotRegisteredAlert:
       'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
-    posKbankCreditCardQrHint:
-      'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankQrReturnedThaiAlert:
       'You selected Credit Card QR, but KBank returned Thai QR (PromptPay). Ask KBank to enable Credit Card QR for this merchant.',
     posKbankQrBankTypeUnknownAlert:
@@ -5378,6 +5376,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posStatusDeclined: 'Declined',
     posStatusFailed: 'Failed',
     posCardApprovalFailed: 'Card approval failed.',
+    posCardApprovalFailedSoft: 'Please check the terminal connection and try again.',
     posFilterPreparing: 'In progress',
     posFilterComplete: 'Paid',
     posFilterMemberPortal: 'Member app',
@@ -7179,6 +7178,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posStatusDeclined: 'ปฏิเสธ',
     posStatusFailed: 'ล้มเหลว',
     posCardApprovalFailed: 'การอนุมัติบัตรล้มเหลว',
+    posCardApprovalFailedSoft: 'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ',
     posFilterPreparing: 'รอดำเนินการ',
     posFilterComplete: 'ชำระแล้ว',
     posFilterMemberPortal: 'แอปสมาชิก',
@@ -16345,6 +16345,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posStatusDeclined: 'Declined',
     posStatusFailed: 'Failed',
     posCardApprovalFailed: 'Card approval failed.',
+    posCardApprovalFailedSoft: 'Please check the terminal connection and try again.',
     posFilterPreparing: 'កំពុងរៀបចំ',
     posFilterComplete: 'បានទូទាត់',
     posStoreLayoutManage: 'Store layout manage',
@@ -17017,8 +17018,6 @@ export const I18N_POS_KH: Record<string, string> = {
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
     posKbankCreditCardQrNotRegisteredAlert:
       'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
-    posKbankCreditCardQrHint:
-      'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankQrReturnedThaiAlert:
       'เลือก Credit Card QR แต่ธนาคารตอบกลับเป็น Thai QR (PromptPay) กรุณาตรวจสอบการเปิดใช้งาน QR Credit Card ที่ธนาคาร',
     posKbankQrBankTypeUnknownAlert:

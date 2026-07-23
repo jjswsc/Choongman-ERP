@@ -110,8 +110,10 @@ export async function executeLinkposPayment(params: {
   timeoutMs?: number
 }) {
   if (!isLinkposCardApiEnabled()) {
+    // 호출부가 수기 스킵을 이미 처리해야 함. disabled를 승인 성공으로 위장하지 않음.
     return {
-      success: true as const,
+      success: false as const,
+      message: 'linkpos_card_api_disabled',
       payment: null as LinkposPaymentSummary | null,
       source: 'disabled' as const,
     }

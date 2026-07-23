@@ -5,6 +5,10 @@ import {
   POS_CATEGORIES_BY_MAIN,
   mergePromotionIntoCategoriesConfig,
 } from '@/lib/pos-menu-categories'
+import {
+  ensureCodePrefixesForMains,
+  remapCodePrefixesOnMainRename,
+} from '@/lib/pos-menu-next-code'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import {
   appendPosCatalogTenantFilter,
@@ -18,6 +22,7 @@ import {
 export interface PosMenuCategoriesConfig {
   mainCategories: string[]
   categoriesByMain: Record<string, string[]>
+  codePrefixByMain?: Record<string, string>
 }
 
 const defaultConfig: PosMenuCategoriesConfig = {
@@ -25,6 +30,7 @@ const defaultConfig: PosMenuCategoriesConfig = {
   categoriesByMain: Object.fromEntries(
     Object.entries(POS_CATEGORIES_BY_MAIN).map(([k, v]) => [k, [...v]])
   ),
+  codePrefixByMain: {},
 }
 
 /** oldConfig → newConfig 기준으로 pos_menus의 category_main·category 매핑 후 업데이트 */
@@ -179,10 +185,17 @@ export async function GET(request: NextRequest) {
       const merged = mergePromotionIntoCategoriesConfig({
         mainCategories: raw.mainCategories,
         categoriesByMain: raw.categoriesByMain,
+        codePrefixByMain:
+          raw.codePrefixByMain && typeof raw.codePrefixByMain === 'object' ? raw.codePrefixByMain : {},
       })
-      return NextResponse.json(merged, { headers })
+      const { codePrefixByMain } = ensureCodePrefixesForMains(
+        merged.mainCategories,
+        merged.codePrefixByMain || raw.codePrefixByMain || {}
+      )
+      return NextResponse.json({ ...merged, codePrefixByMain }, { headers })
     }
-    return NextResponse.json(defaultConfig, { headers })
+    const { codePrefixByMain } = ensureCodePrefixesForMains(defaultConfig.mainCategories, {})
+    return NextResponse.json({ ...defaultConfig, codePrefixByMain }, { headers })
   } catch (e) {
     console.error('getPosMenuCategories:', e)
     return NextResponse.json(defaultConfig, { headers })
@@ -206,6 +219,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       mainCategories?: string[]
       categoriesByMain?: Record<string, string[]>
+      codePrefixByMain?: Record<string, string>
       applyToMenus?: boolean
     }
 
@@ -222,23 +236,61 @@ export async function POST(request: NextRequest) {
           )
         : defaultConfig.categoriesByMain
 
-    const newConfig: PosMenuCategoriesConfig = mergePromotionIntoCategoriesConfig({
+    const oldRows = (await supabaseSelectFilter(
+      'system_settings',
+      `key=eq.${encodeURIComponent(settingsKey)}`,
+      { limit: 1 }
+    )) as { key?: string; value_json?: PosMenuCategoriesConfig }[] | null
+    const rawOld = oldRows?.[0]?.value_json
+    const oldConfig: PosMenuCategoriesConfig =
+      rawOld &&
+      typeof rawOld === 'object' &&
+      Array.isArray(rawOld.mainCategories) &&
+      typeof rawOld.categoriesByMain === 'object'
+        ? {
+            mainCategories: rawOld.mainCategories,
+            categoriesByMain: rawOld.categoriesByMain,
+            codePrefixByMain:
+              rawOld.codePrefixByMain && typeof rawOld.codePrefixByMain === 'object'
+                ? rawOld.codePrefixByMain
+                : {},
+          }
+        : defaultConfig
+
+    const renames: [string, string][] = []
+    for (
+      let i = 0;
+      i < Math.max(oldConfig.mainCategories.length, mainCategories.length);
+      i++
+    ) {
+      const oldMain = oldConfig.mainCategories[i]
+      const newMain = mainCategories[i]
+      if (oldMain && newMain && oldMain !== newMain) renames.push([oldMain, newMain])
+    }
+
+    const prefixesAfterRename = remapCodePrefixesOnMainRename(
+      {
+        ...(oldConfig.codePrefixByMain || {}),
+        ...(body.codePrefixByMain && typeof body.codePrefixByMain === 'object'
+          ? body.codePrefixByMain
+          : {}),
+      },
+      renames
+    )
+
+    const newConfigBase = mergePromotionIntoCategoriesConfig({
       mainCategories,
       categoriesByMain,
+      codePrefixByMain: prefixesAfterRename,
     })
+    const { codePrefixByMain } = ensureCodePrefixesForMains(
+      newConfigBase.mainCategories,
+      newConfigBase.codePrefixByMain || prefixesAfterRename
+    )
+    const newConfig: PosMenuCategoriesConfig = { ...newConfigBase, codePrefixByMain }
     let menusUpdated = 0
 
     if (body.applyToMenus) {
-      const oldRows = (await supabaseSelectFilter(
-        'system_settings',
-        `key=eq.${encodeURIComponent(settingsKey)}`,
-        { limit: 1 }
-      )) as { key?: string; value_json?: PosMenuCategoriesConfig }[] | null
-      const raw = oldRows?.[0]?.value_json
-      const oldConfig: PosMenuCategoriesConfig =
-        raw && typeof raw === 'object' && Array.isArray(raw.mainCategories) && typeof raw.categoriesByMain === 'object'
-          ? { mainCategories: raw.mainCategories, categoriesByMain: raw.categoriesByMain }
-          : defaultConfig
       const result = await applyCategoryChangesToMenus(oldConfig, newConfig, catalogScope)
       menusUpdated = result.updated
     }
@@ -251,6 +303,7 @@ export async function POST(request: NextRequest) {
           value_json: {
             mainCategories: newConfig.mainCategories,
             categoriesByMain: newConfig.categoriesByMain,
+            codePrefixByMain: newConfig.codePrefixByMain,
           },
           updated_at: new Date().toISOString(),
         },
@@ -263,6 +316,7 @@ export async function POST(request: NextRequest) {
         success: true,
         mainCategories: newConfig.mainCategories,
         categoriesByMain: newConfig.categoriesByMain,
+        codePrefixByMain: newConfig.codePrefixByMain,
         menusUpdated,
       },
       { headers }

@@ -7,6 +7,8 @@ import { jsonAsArray } from '../safe-api-json'
 export interface PosMenuCategoriesConfig {
   mainCategories: string[]
   categoriesByMain: Record<string, string[]>
+  /** 대분류 → 메뉴 코드 접두사 (자동 발급) */
+  codePrefixByMain?: Record<string, string>
 }
 
 export type DeliveryAppCode = 'grab' | 'lineman' | 'shopee'
@@ -67,6 +69,7 @@ export async function applyPosMenuCategoryPresets() {
 export async function savePosMenuCategoriesConfig(params: {
   mainCategories: string[]
   categoriesByMain: Record<string, string[]>
+  codePrefixByMain?: Record<string, string>
   applyToMenus?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/posMenuCategories', {
@@ -78,6 +81,7 @@ export async function savePosMenuCategoriesConfig(params: {
     success: boolean
     mainCategories: string[]
     categoriesByMain: Record<string, string[]>
+    codePrefixByMain?: Record<string, string>
     menusUpdated?: number
     message?: string
   }>

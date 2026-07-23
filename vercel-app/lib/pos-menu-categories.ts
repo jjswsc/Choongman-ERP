@@ -13,6 +13,8 @@ import {
 export type PosMenuCategoriesConfigShape = {
   mainCategories: string[]
   categoriesByMain: Record<string, string[]>
+  /** 대분류 → 메뉴 코드 접두사 (자동 발급). 없으면 API가 시드·도출로 채움 */
+  codePrefixByMain?: Record<string, string>
 }
 
 /**
@@ -49,6 +51,7 @@ export function mergePromotionIntoCategoriesConfig(cfg: PosMenuCategoriesConfigS
       ...categoriesByMain,
       [main]: nextSubs,
     },
+    ...(cfg.codePrefixByMain ? { codePrefixByMain: { ...cfg.codePrefixByMain } } : {}),
   }
 }
 

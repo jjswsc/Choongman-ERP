@@ -460,9 +460,53 @@ export function ReceivablePayableTab() {
             ? resolvedClient
             : (hasResolvedMasterInfo ? resolvedClient : (memoClient ?? resolvedClient))
         }
-        const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
+        let dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
+        let dueDateStr = dateStr
+        let savedDocumentNo = ""
+        let savedReferenceNo = ""
+        let savedShipTo: string | undefined
         const accrualId = Number(row.id || 0)
         const outboundRef = resolveReceivableOrderNoDisplay(row)
+        // Update로 저장한 발행일·만기일·문서번호가 재오픈 시 row.trans_date / reserve로 덮이지 않게 우선 적용
+        if (refType && refId > 0) {
+          try {
+            const refs =
+              refType === "PO"
+                ? [
+                    { refType: "PO" as const, refId, docKind: "tax" as const },
+                    { refType: "AccountingPO", refId, docKind: "tax" as const },
+                  ]
+                : [{ refType, refId, docKind: "tax" as const }]
+            const ovRes = await getInvoicePrintOverrides(refs)
+            const map = ovRes?.success && ovRes.map ? ovRes.map : {}
+            const candidates = refs
+              .map((r) => map[`invoice_print_override:tax:${r.refType}:${r.refId}`])
+              .filter(Boolean) as {
+              issueDate?: string
+              dueDate?: string
+              documentNo?: string
+              referenceNo?: string
+              shipTo?: string
+              updatedAt?: string
+            }[]
+            candidates.sort((a, b) =>
+              String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
+            )
+            const ov = candidates[0]
+            if (ov) {
+              const ovIssue = String(ov.issueDate || "").trim().slice(0, 10)
+              const ovDue = String(ov.dueDate || "").trim().slice(0, 10)
+              if (/^\d{4}-\d{2}-\d{2}$/.test(ovIssue)) dateStr = ovIssue
+              if (/^\d{4}-\d{2}-\d{2}$/.test(ovDue)) dueDateStr = ovDue
+              savedDocumentNo = String(ov.documentNo || "").trim()
+              savedReferenceNo = String(ov.referenceNo || "").trim()
+              const st = String(ov.shipTo || "").trim()
+              if (st) savedShipTo = st
+            }
+          } catch {
+            // override 조회 실패 시 trans_date 기준으로 진행
+          }
+        }
         let docNo = ""
         if (refType && refId > 0) {
           const seqRes = await getTaxInvoiceDepositSeq({
@@ -470,8 +514,11 @@ export function ReceivablePayableTab() {
             issueDate: dateStr,
             refType,
             refId,
-            referenceNo: outboundRef !== "-" ? outboundRef : undefined,
-            dueDate: dateStr,
+            existingDocumentNo: savedDocumentNo || undefined,
+            referenceNo:
+              savedReferenceNo ||
+              (outboundRef !== "-" ? outboundRef : undefined),
+            dueDate: dueDateStr,
             reserve: true,
           })
           if (seqRes?.success && String(seqRes.documentNo || "").trim()) {
@@ -481,42 +528,45 @@ export function ReceivablePayableTab() {
           }
         }
         if (!docNo) {
-          docNo = buildTaxInvoiceDocNo(dateStr, 1)
+          docNo = savedDocumentNo || buildTaxInvoiceDocNo(dateStr, 1)
         }
         const referenceNo = normalizeTaxInvoiceReferenceNo(
-          outboundRef !== "-" ? outboundRef : "",
+          savedReferenceNo || (outboundRef !== "-" ? outboundRef : ""),
           docNo
         )
-        const data: InvoiceData = buildThaiSalesInvoiceData({
-          documentType: "Tax Invoice/Receipt",
-          documentNo: docNo,
-          issueDate: dateStr,
-          dueDate: dateStr,
-          referenceNo,
-          company,
-          client,
-          invSettings: settings,
-          sourceRefType: refType,
-          sourceRefId: refId,
-          lines: items.map((it) => ({
-            code: it.code,
-            name: it.name,
-            spec: it.spec,
-            lineRemarks: it.line_remarks?.trim() || undefined,
-            qty: Math.abs(it.qty || 0),
-            amount: roundMoney2(Math.abs(it.amount || 0)),
-          })),
-          orderInvoiceTotals,
-          ...(refType === "PO" && Number(withholdingTaxAmount) > 0
-            ? {
-                withholdingTaxAmount: Number(withholdingTaxAmount),
-                withholdingTaxRate:
-                  withholdingTaxRate != null && Number(withholdingTaxRate) > 0
-                    ? Number(withholdingTaxRate)
-                    : undefined,
-              }
-            : {}),
-        })
+        const data: InvoiceData = {
+          ...buildThaiSalesInvoiceData({
+            documentType: "Tax Invoice/Receipt",
+            documentNo: docNo,
+            issueDate: dateStr,
+            dueDate: dueDateStr,
+            referenceNo,
+            company,
+            client,
+            invSettings: settings,
+            sourceRefType: refType,
+            sourceRefId: refId,
+            lines: items.map((it) => ({
+              code: it.code,
+              name: it.name,
+              spec: it.spec,
+              lineRemarks: it.line_remarks?.trim() || undefined,
+              qty: Math.abs(it.qty || 0),
+              amount: roundMoney2(Math.abs(it.amount || 0)),
+            })),
+            orderInvoiceTotals,
+            ...(refType === "PO" && Number(withholdingTaxAmount) > 0
+              ? {
+                  withholdingTaxAmount: Number(withholdingTaxAmount),
+                  withholdingTaxRate:
+                    withholdingTaxRate != null && Number(withholdingTaxRate) > 0
+                      ? Number(withholdingTaxRate)
+                      : undefined,
+                }
+              : {}),
+          }),
+          ...(savedShipTo ? { shipTo: savedShipTo } : {}),
+        }
         sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
         const printWindow = window.open("/admin/invoice-print", "_blank")
         if (!printWindow) {
@@ -574,10 +624,16 @@ export function ReceivablePayableTab() {
         ) {
           continue
         }
-        const key = `${refType}:${refId}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        refs.push({ refType, refId, docKind: "tax" })
+        const pushRef = (rt: string) => {
+          const key = `${rt}:${refId}`
+          if (seen.has(key)) return
+          seen.add(key)
+          refs.push({ refType: rt, refId, docKind: "tax" })
+        }
+        pushRef(refType)
+        // 인쇄 화면은 AccountingPO를 sourceRefType=PO 로 저장 — 양쪽 키 모두 조회
+        if (refType === "AccountingPO") pushRef("PO")
+        if (refType === "PO") pushRef("AccountingPO")
       }
     }
     if (refs.length === 0) {

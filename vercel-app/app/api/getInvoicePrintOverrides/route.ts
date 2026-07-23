@@ -52,7 +52,15 @@ export async function POST(request: NextRequest) {
         docKind: normalizeDocKind(String(r?.docKind || "")),
       }))
       .filter((r) => r.refType && Number.isFinite(r.refId) && r.refId > 0)
-      .map((r) => buildOverrideCode(r.refType, r.refId, r.docKind))
+      .flatMap((r) => {
+        const primary = buildOverrideCode(r.refType, r.refId, r.docKind)
+        // AccountingPO ↔ PO 양쪽 키 (인쇄는 PO로 저장, 미수 행은 AccountingPO)
+        if (r.docKind === "tax" && (r.refType === "PO" || r.refType === "AccountingPO")) {
+          const altType = r.refType === "PO" ? "AccountingPO" : "PO"
+          return [primary, buildOverrideCode(altType, r.refId, r.docKind)]
+        }
+        return [primary]
+      })
 
     if (codes.length === 0) {
       return NextResponse.json({ success: true, map: {} }, { headers })

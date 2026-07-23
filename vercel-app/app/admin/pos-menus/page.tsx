@@ -153,7 +153,7 @@ import {
   POS_MENUS_EDIT_RESUME_KEY,
   menuScopeStoreCodes,
   storeScopeCodesEqual,
-  CODE_AUTO_MAINS,
+  supportsPosMenuAutoCode,
   OPTION_SIZE_VALUES,
   OPTION_PART_VALUES,
   formatPosMenuBulkPickLabel,
@@ -986,7 +986,7 @@ export default function PosMenusPage() {
       return
     }
     setFormData({ ...emptyForm, categoryMain: filter, category: "" })
-    if ((CODE_AUTO_MAINS as readonly string[]).includes(filter)) {
+    if (supportsPosMenuAutoCode(filter)) {
       void getNextPosMenuCode(filter).then(({ code: next }) => {
         if (next) setFormData((p) => ({ ...p, categoryMain: filter, category: "", code: next }))
       })
@@ -1130,12 +1130,7 @@ export default function PosMenusPage() {
     const name = formData.name.trim()
     /** 자동 코드 대분류인데 아직 code가 비어 있으면(비동기 실패·오프라인 등) 저장 직전에 한 번 더 발급 시도 */
     const mainTrim = formData.categoryMain.trim()
-    if (
-      !editingId &&
-      !code &&
-      mainTrim &&
-      (CODE_AUTO_MAINS as readonly string[]).includes(mainTrim)
-    ) {
+    if (!editingId && !code && supportsPosMenuAutoCode(mainTrim)) {
       const { code: next } = await getNextPosMenuCode(mainTrim)
       if (next) {
         code = next
@@ -4941,7 +4936,7 @@ export default function PosMenusPage() {
                             onClick={async () => {
                               setFormData((p) => ({ ...p, categoryMain: c, category: "" }))
                               setCategoryMainOpen(false)
-                              if ((CODE_AUTO_MAINS as readonly string[]).includes(c)) {
+                              if (supportsPosMenuAutoCode(c)) {
                                 const { code: next } = await getNextPosMenuCode(c)
                                 if (next) setFormData((p) => ({ ...p, categoryMain: c, category: "", code: next }))
                               }
@@ -4957,7 +4952,7 @@ export default function PosMenusPage() {
                               const trimmed = formData.categoryMain.trim()
                               setFormData((p) => ({ ...p, categoryMain: trimmed }))
                               setCategoryMainOpen(false)
-                              if ((CODE_AUTO_MAINS as readonly string[]).includes(trimmed)) {
+                              if (supportsPosMenuAutoCode(trimmed)) {
                                 const { code: next } = await getNextPosMenuCode(trimmed)
                                 if (next) setFormData((p) => ({ ...p, categoryMain: trimmed, code: next }))
                               }
@@ -4978,11 +4973,10 @@ export default function PosMenusPage() {
                       value={formData.code}
                       onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
                       disabled={
-                        (CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain) &&
-                        !!formData.code.trim()
+                        supportsPosMenuAutoCode(formData.categoryMain) && !!formData.code.trim()
                       }
                       title={
-                        (CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain)
+                        supportsPosMenuAutoCode(formData.categoryMain)
                           ? (t("posMenuCodeAuto") || "대분류 선택 시 자동 생성")
                           : undefined
                       }

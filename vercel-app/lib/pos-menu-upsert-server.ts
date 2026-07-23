@@ -1131,6 +1131,12 @@ export async function upsertPosMenuFromBody(
       }
       return result
     }
+    if (/23505|duplicate key|unique constraint.*code|idx_pos_menus_code|ux_pos_menus.*code/i.test(err)) {
+      return {
+        success: false,
+        message: '이미 존재하는 메뉴 코드입니다. 대분류를 다시 선택해 자동 코드를 받거나 다른 코드를 입력해 주세요.',
+      }
+    }
     throw saveErr
   }
 }

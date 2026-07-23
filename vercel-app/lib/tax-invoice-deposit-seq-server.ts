@@ -1,4 +1,4 @@
-import { supabaseSelectFilterAllPages, supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpsert } from '@/lib/supabase-server'
 import { buildTaxInvoiceDocNo, isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from '@/lib/tax-invoice-doc-no'
 
 type OverrideRow = { code?: string; value?: string }
@@ -191,12 +191,74 @@ export async function resolveAndReserveTaxInvoiceDepositSeq(params: {
       return { seq, documentNo }
     }
 
+    // 기존 override와 병합 — 재오픈·순번 예약 시 dueDate/shipTo/referenceNo가 기본값으로 덮이지 않게
+    // PO ↔ AccountingPO 양쪽 키를 조회해 최신(updatedAt) 우선
+    let existing: ReturnType<typeof parseOverridePayload> & { updatedAt?: string } = {}
+    try {
+      const codes = overrideCodesForRef(refType, refId)
+      const found: (ReturnType<typeof parseOverridePayload> & { updatedAt?: string })[] = []
+      for (const c of codes) {
+        const prevRows = (await supabaseSelectFilter(
+          'invoice_settings',
+          `code=eq.${encodeURIComponent(c)}`,
+          { select: 'value', limit: 1 }
+        )) as OverrideRow[] | null
+        if (!prevRows?.[0]) continue
+        try {
+          const raw = JSON.parse(String(prevRows[0].value || '{}')) as {
+            documentNo?: string
+            issueDate?: string
+            dueDate?: string
+            referenceNo?: string
+            shipTo?: string
+            updatedAt?: string
+          }
+          found.push({
+            documentNo: String(raw.documentNo || '').trim() || undefined,
+            issueDate: String(raw.issueDate || '').trim().slice(0, 10) || undefined,
+            dueDate: String(raw.dueDate || '').trim().slice(0, 10) || undefined,
+            referenceNo: String(raw.referenceNo || '').trim() || undefined,
+            shipTo: String(raw.shipTo || '').trim() || undefined,
+            updatedAt: String(raw.updatedAt || '').trim() || undefined,
+          })
+        } catch {
+          /* ignore malformed */
+        }
+      }
+      found.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+      if (found[0]) existing = found[0]
+    } catch {
+      existing = {}
+    }
+
+    const dueFromParam = String(params.dueDate || '').trim().slice(0, 10)
+    const refFromParam = String(params.referenceNo || '').trim()
+    // 재오픈 시 dueDate=issueDate 기본값만 넘기면, 예전에 따로 저장한 dueDate를 유지
+    let dueDate = issueDate
+    if (dueFromParam && /^\d{4}-\d{2}-\d{2}$/.test(dueFromParam)) {
+      if (
+        dueFromParam === issueDate &&
+        existing.dueDate &&
+        /^\d{4}-\d{2}-\d{2}$/.test(existing.dueDate) &&
+        existing.dueDate !== issueDate
+      ) {
+        dueDate = existing.dueDate
+      } else {
+        dueDate = dueFromParam
+      }
+    } else if (existing.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(existing.dueDate)) {
+      dueDate = existing.dueDate
+    }
+
     const payload = {
       issueDate,
-      dueDate: String(params.dueDate || issueDate).trim().slice(0, 10) || issueDate,
-      referenceNo: String(params.referenceNo || '').trim() || undefined,
+      dueDate,
+      referenceNo: refFromParam || existing.referenceNo || undefined,
       documentNo,
-      shipTo: String(params.shipTo || '').trim() || undefined,
+      shipTo:
+        params.shipTo !== undefined
+          ? String(params.shipTo || '').trim() || undefined
+          : existing.shipTo || undefined,
       updatedAt: new Date().toISOString(),
     }
     await supabaseUpsert(

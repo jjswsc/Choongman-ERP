@@ -72,7 +72,7 @@ import {
   type PosPaymentAttempt,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
-import { shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
+import { isLinkposCardApiEnabled, shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
@@ -563,18 +563,16 @@ export default function PosTerminalPage() {
   )
 
   /**
-   * Omni: 결제 금액 저장 후 status/재고/분개를 백그라운드(버튼 잠금 해제).
-   * 충만: 기존처럼 await — 후처리 실패 시 결제 모달에서 중단.
+   * 결제 금액 저장 후 status/재고/분개 — 반드시 await.
+   * (이전 Omni 백그라운드 처리는 실패해도 UI가 성공으로 보여 재고·분개 누락 위험이 있어 되돌림)
    */
   const applyPaidStatusAfterPaymentSave = useCallback(
     async (params: { id: number; status: 'paid' | 'completed' }): Promise<boolean> => {
-      if (!isOmniPaymentFastPath) {
-        return applyOrderStatusWithRetry(params)
+      const ok = await applyOrderStatusWithRetry(params)
+      if (ok && isOmniPaymentFastPath) {
+        void refetchStores({ scope: 'current', immediate: true })
       }
-      void applyOrderStatusWithRetry(params).then((ok) => {
-        if (ok) void refetchStores({ scope: 'current', immediate: true })
-      })
-      return true
+      return ok
     },
     [isOmniPaymentFastPath, applyOrderStatusWithRetry, refetchStores]
   )
@@ -5878,28 +5876,35 @@ export default function PosTerminalPage() {
       const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
 
-      // 로컬 브리지(EDC)가 살아 있으면 수기 생략 설정보다 단말 우선 — 매장 체감: 카드=기계
+      // API 미활성·강제 수기면 단말 호출 금지 (브리지 health만으로 승인 위장 방지)
+      const linkposApiOn = isLinkposCardApiEnabled()
       let localBridgeReady = false
-      try {
-        const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), 800)
-        const health = await fetch('http://127.0.0.1:18181/health', {
-          method: 'GET',
-          signal: ctrl.signal,
-          cache: 'no-store',
-        }).finally(() => clearTimeout(timer))
-        if (health.ok) {
-          const j = (await health.json().catch(() => null)) as { serialReady?: boolean } | null
-          localBridgeReady = Boolean(j?.serialReady)
+      if (linkposApiOn) {
+        try {
+          const ctrl = new AbortController()
+          const timer = setTimeout(() => ctrl.abort(), 800)
+          const health = await fetch('http://127.0.0.1:18181/health', {
+            method: 'GET',
+            signal: ctrl.signal,
+            cache: 'no-store',
+          }).finally(() => clearTimeout(timer))
+          if (health.ok) {
+            const j = (await health.json().catch(() => null)) as { serialReady?: boolean } | null
+            localBridgeReady = Boolean(j?.serialReady)
+          }
+        } catch {
+          localBridgeReady = false
         }
-      } catch {
-        localBridgeReady = false
       }
 
+      // 로컬 EDC 준비 + API ON 이면 매장「단말 생략」보다 단말 우선. API OFF면 항상 수기.
       if (
-        !localBridgeReady &&
+        !(linkposApiOn && localBridgeReady) &&
         shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)
       ) {
+        return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
+      }
+      if (!linkposApiOn) {
         return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       }
       if (!currentStoreId) {
@@ -5907,7 +5912,7 @@ export default function PosTerminalPage() {
       }
       const rawBank = String(payment?.deliveryPaymentChannel ?? '').trim()
       const bankIdMatch = rawBank.match(/bank[:=]\s*([0-9]{2,3})/i)
-      const bankId = bankIdMatch?.[1] || ''
+      const bankId = bankIdMatch?.[1] || '04'
       const ref1 = `POS${Date.now().toString().slice(-14)}`.slice(0, 20)
       const ref2 = String(auth?.user || '').trim().slice(0, 20)
 
@@ -5935,7 +5940,15 @@ export default function PosTerminalPage() {
         await appAlert(soft)
         return { ok: false as const, message: soft }
       }
-      return { ok: true as const, linkposPayment: result.payment as LinkposPaymentSummary | null }
+      // API disabled stub(payment null)을 카드 승인 성공으로 취급하지 않음
+      if (!result.payment) {
+        const soft =
+          t('posCardApprovalFailedSoft') ||
+          'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ'
+        await appAlert(soft)
+        return { ok: false as const, message: soft }
+      }
+      return { ok: true as const, linkposPayment: result.payment as LinkposPaymentSummary }
     },
     [isPosDemo, currentStoreId, auth?.user, t]
   )
