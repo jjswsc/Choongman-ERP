@@ -182,6 +182,11 @@ async function executeLinkposTransactionAction(
     const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
     if (!r.ok) continue
     if (r.data?.success) return { success: true, source: 'local' as const }
+    return {
+      success: false,
+      source: 'local' as const,
+      message: String(r.data?.error || r.data?.message || 'linkpos_action_failed'),
+    }
   }
   return {
     success: false,
@@ -200,7 +205,8 @@ export async function executeLinkposDisplayQr(params: {
 }): Promise<{ success: boolean; source?: 'local'; message?: string }> {
   const qrPayload = String(params.qrPayload || '').trim()
   if (!qrPayload) return { success: false, message: 'qr_payload_required' }
-  const timeoutMs = Math.max(800, Number(params.timeoutMs ?? 2000))
+  // EDC 표시는 단말 응답이 늦을 수 있음
+  const timeoutMs = Math.max(3000, Number(params.timeoutMs ?? 15000))
   return executeLinkposTransactionAction(
     'display_qr',
     {

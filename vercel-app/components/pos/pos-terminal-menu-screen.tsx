@@ -312,11 +312,17 @@ export function PosTerminalMenuScreen({
     const opts = r2.status === 'fulfilled' ? r2.value || [] : []
     const promoList = r3.status === 'fulfilled' ? r3.value || [] : []
     if (!fromParent) {
-      setMenus(list)
+      if (Array.isArray(list) && list.length > 0) {
+        setMenus(list)
+      }
       setPromos(promoList)
       setAllOptions(opts)
     }
-    applyMenuCatalogTabs(list, promoList, catRes)
+    applyMenuCatalogTabs(
+      Array.isArray(list) && list.length > 0 ? list : fromParent ? parentCatalog?.menus || [] : list,
+      promoList,
+      catRes
+    )
   }, [storeCode, useParentCatalog, parentCatalog, applyMenuCatalogTabs])
 
   React.useEffect(() => {

@@ -594,13 +594,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         return { ok: false, message: 'kbank_generate_cooldown' }
       }
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
-      if (selectedQrType === 'EDC') {
-        const msg =
-          t('posUseCardTabForEdc') ||
-          'ชำระผ่านเครื่องรูดบัตร ให้เลือกแท็บ "บัตร" แล้วกดยืนยันครับ'
-        await appAlert(msg)
-        return { ok: false, message: msg }
-      }
+      const preferEdcDisplay = Boolean(payment?.paymentQrShowOnEdc)
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 
       const existingQrPayload = String(liveKbankQrPayload || '').trim()
@@ -758,14 +752,24 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
           )
         }
       }
-      void pushKbankQrToLinkposDisplay({
-        qrPayload: generatedQrPayload,
-        amount: qrAmount,
-        reference1: String(context?.orderType || '').slice(0, 20),
-        reference2: String(context?.orderLabel || '').slice(0, 20),
-      })
+      void (async () => {
+        const out = await pushKbankQrToLinkposDisplay({
+          qrPayload: generatedQrPayload,
+          amount: qrAmount,
+          reference1: String(context?.orderType || '').slice(0, 20),
+          reference2: String(context?.orderLabel || '').slice(0, 20),
+        })
+        if (preferEdcDisplay && !out.success && out.message !== 'linkpos_card_api_disabled') {
+          await appAlert(
+            t('posQrShowOnEdcFallback') ||
+              'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'
+          )
+        }
+      })()
       setCustomerDisplayPaymentMessage(
-        (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+        preferEdcDisplay
+          ? t('posWaitingEdcQr') || 'กรุณาสแกน QR บนเครื่องรูดบัตรครับ'
+          : (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )
       let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
       let refId = String(generatedInfo.referenceId || '').trim()

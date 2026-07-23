@@ -36,6 +36,8 @@ export type CartPanelPaymentPayload = {
   paymentCard: number
   paymentQr: number
   paymentQrType?: 'THAI_QR' | 'CREDIT_CARD' | 'EDC'
+  /** true = KBank API로 QR 생성 후 EDC 단말 표시 우선 (고객 모니터 없는 매장) */
+  paymentQrShowOnEdc?: boolean
   paymentOther: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown
   paymentDeliveryApp?: number

@@ -1512,6 +1512,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentCard: parseBahtAmount(payCard) || 0,
       paymentQr: parseBahtAmount(payPromptPay) || 0,
       paymentQrType: payQrType === 'EDC' ? 'THAI_QR' : payQrType,
+      paymentQrShowOnEdc: payQrType === 'EDC',
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
@@ -6073,10 +6074,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       <p className="mb-2 text-[11px] font-medium text-muted-foreground">
                         {tr('posQrTypeLabel', 'ประเภท QR')}
                       </p>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <Button
                           type="button"
-                          variant={payQrType === 'THAI_QR' || payQrType === 'EDC' ? 'default' : 'outline'}
+                          variant={payQrType === 'THAI_QR' ? 'default' : 'outline'}
                           className="h-9 rounded-lg text-xs"
                           onClick={() => setPayQrType('THAI_QR')}
                         >
@@ -6090,15 +6091,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         >
                           {tr('posQrTypeCredit', 'QR บัตรเครดิต')}
                         </Button>
+                        <Button
+                          type="button"
+                          variant={payQrType === 'EDC' ? 'default' : 'outline'}
+                          className="h-9 rounded-lg text-xs"
+                          onClick={() => setPayQrType('EDC')}
+                        >
+                          {tr('posQrTypeShowOnEdc', 'แสดงบนเครื่อง')}
+                        </Button>
                       </div>
-                      {payQrType === 'CREDIT_CARD' ? (
-                        <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
-                          {tr(
-                            'posKbankCreditCardQrHint',
-                            'ใช้ได้เมื่อร้านลงทะเบียน QR บัตรกับธนาคารแล้ว หากยังไม่มีให้เลือก Thai QR'
-                          )}
-                        </p>
-                      ) : null}
+                      <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+                        {payQrType === 'EDC'
+                          ? tr(
+                              'posQrTypeShowOnEdcHint',
+                              'สร้าง QR จากธนาคารแล้วแสดงบนเครื่องรูดบัตร — เหมาะกับสาขาไม่มีจอลูกค้า'
+                            )
+                          : payQrType === 'CREDIT_CARD'
+                            ? tr(
+                                'posKbankCreditCardQrHint',
+                                'ใช้ได้เมื่อร้านลงทะเบียน QR บัตรกับธนาคารแล้ว หากยังไม่มีให้เลือก Thai QR'
+                              )
+                            : tr('posQrTypeThaiHint', 'สแกนด้วยแอปธนาคาร / PromptPay')}
+                      </p>
                     </div>
                   )}
                   {key === 'cash' && (

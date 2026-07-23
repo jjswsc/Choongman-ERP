@@ -1805,6 +1805,12 @@ export const I18N_POS_KO: Record<string, string> = {
     posQrTypeLabel: 'QR 타입',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: '신용카드 QR',
+    posQrTypeShowOnEdc: '단말에 표시',
+    posQrTypeShowOnEdcHint:
+      '은행 QR을 생성한 뒤 카드 단말에 표시합니다. 고객 모니터가 없는 매장에 적합합니다.',
+    posQrTypeThaiHint: '은행 앱 / PromptPay로 스캔',
+    posQrShowOnEdcFallback: '단말 표시에 실패했습니다. 캐셔 화면 QR을 보여 주세요.',
+    posWaitingEdcQr: '단말기의 QR을 스캔해 주세요.',
     posKbankCreditCardQrHint:
       '은행에서 신용카드 QR을 등록한 매장만 사용하세요. 미등록이면 Thai QR을 선택하세요.',
     posUseCardTabForEdc: '카드 단말 결제는 「카드」탭에서 확인해 주세요.',
@@ -5039,11 +5045,12 @@ export const I18N_POS_EN: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
-    posQrTypeEdcFallback: 'Card terminal',
-    posQrTypeEdcHint:
-      'Use the Card tab to pay on the terminal.',
-    posUseCardTabForEdc: 'For card terminal payment, use the Card tab and confirm.',
-    posWaitingEdcCard: 'Please swipe or insert the card on the terminal.',
+    posQrTypeShowOnEdc: 'Show on terminal',
+    posQrTypeShowOnEdcHint:
+      'Create bank QR via API, then show it on the EDC — for stores without a customer display.',
+    posQrTypeThaiHint: 'Scan with a banking app / PromptPay',
+    posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
+    posWaitingEdcQr: 'Please scan the QR on the card terminal.',
     posKbankCreditCardQrHint:
       'Use only if this store is registered for Credit Card QR. Otherwise choose Thai QR.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
@@ -6968,6 +6975,12 @@ export const I18N_POS_TH: Record<string, string> = {
     posQrTypeLabel: 'ประเภท QR',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'QR บัตรเครดิต',
+    posQrTypeShowOnEdc: 'แสดงบนเครื่อง',
+    posQrTypeShowOnEdcHint:
+      'สร้าง QR จากธนาคารแล้วแสดงบนเครื่องรูดบัตร — เหมาะกับสาขาไม่มีจอลูกค้า',
+    posQrTypeThaiHint: 'สแกนด้วยแอปธนาคาร / PromptPay',
+    posQrShowOnEdcFallback: 'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ',
+    posWaitingEdcQr: 'กรุณาสแกน QR บนเครื่องรูดบัตรครับ',
     posKbankCreditCardQrHint:
       'ใช้ได้เมื่อร้านลงทะเบียน QR บัตรกับธนาคารแล้ว หากยังไม่มีให้เลือก Thai QR',
     posUseCardTabForEdc: 'ชำระผ่านเครื่องรูดบัตร ให้เลือกแท็บ "บัตร" แล้วกดยืนยันครับ',
@@ -17002,11 +17015,12 @@ export const I18N_POS_KH: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
-    posQrTypeEdcFallback: 'Card terminal',
-    posQrTypeEdcHint:
-      'Use the Card tab to pay on the terminal.',
-    posUseCardTabForEdc: 'For card terminal payment, use the Card tab and confirm.',
-    posWaitingEdcCard: 'Please swipe or insert the card on the terminal.',
+    posQrTypeShowOnEdc: 'Show on terminal',
+    posQrTypeShowOnEdcHint:
+      'Create bank QR via API, then show it on the EDC — for stores without a customer display.',
+    posQrTypeThaiHint: 'Scan with a banking app / PromptPay',
+    posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
+    posWaitingEdcQr: 'Please scan the QR on the card terminal.',
     posKbankCreditCardQrHint:
       'Use only if this store is registered for Credit Card QR. Otherwise choose Thai QR.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',

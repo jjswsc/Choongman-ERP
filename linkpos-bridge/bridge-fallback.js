@@ -219,27 +219,43 @@ function createRuntime(userCfg) {
     }, 5000)
   }
 
-  function readEdcResponse(timeoutMs) {
+  function readEdcResponse(timeoutMs, opts = {}) {
+    const acceptAckOnly = Boolean(opts.acceptAckOnly)
     return new Promise((resolve, reject) => {
       const frame = []
       let gotAck = false
       let collecting = false
+      let ackSettleTimer = null
       const timer = setTimeout(() => {
         cleanup()
         if (frame.length) resolve({ ack: gotAck, nak: false, frame: Buffer.from(frame) })
+        else if (gotAck && acceptAckOnly) resolve({ ack: true, nak: false, frame: Buffer.alloc(0) })
         else if (gotAck) reject(new Error('ack_only_timeout'))
         else reject(new Error('serial_response_timeout'))
       }, timeoutMs)
 
       function cleanup() {
         clearTimeout(timer)
+        if (ackSettleTimer) clearTimeout(ackSettleTimer)
         if (state.port) state.port.removeListener('data', onData)
       }
 
       function onData(chunk) {
         for (const b of chunk) {
           if (!collecting) {
-            if (b === ACK) { gotAck = true; state.dbg('RX ACK'); continue }
+            if (b === ACK) {
+              gotAck = true
+              state.dbg('RX ACK')
+              if (acceptAckOnly && !ackSettleTimer) {
+                ackSettleTimer = setTimeout(() => {
+                  if (!collecting && frame.length === 0) {
+                    cleanup()
+                    resolve({ ack: true, nak: false, frame: Buffer.alloc(0) })
+                  }
+                }, 450)
+              }
+              continue
+            }
             if (b === NAK) {
               cleanup()
               reject(new Error('edc_nak'))
@@ -247,6 +263,7 @@ function createRuntime(userCfg) {
             }
             if (b !== STX) continue
             collecting = true
+            if (ackSettleTimer) { clearTimeout(ackSettleTimer); ackSettleTimer = null }
             frame.push(b)
             continue
           }
@@ -285,7 +302,7 @@ function createRuntime(userCfg) {
     }
   }
 
-  async function sendFrameAndWait(frame, timeoutMs) {
+  async function sendFrameAndWait(frame, timeoutMs, opts = {}) {
     state.dbg('TX →', frame.toString('hex').toUpperCase())
     if (!state.SerialPort) {
       return {
@@ -308,9 +325,10 @@ function createRuntime(userCfg) {
     await new Promise((resolve, reject) => {
       state.port.drain((err) => (err ? reject(err) : resolve()))
     })
-    const rx = await readEdcResponse(timeoutMs)
-    state.dbg('RX ←', rx.frame.toString('hex').toUpperCase(), 'ack=', rx.ack)
-    return { ack: rx.ack, responseHex: rx.frame.toString('hex').toUpperCase() }
+    const rx = await readEdcResponse(timeoutMs, opts)
+    const responseHex = rx.frame && rx.frame.length ? rx.frame.toString('hex').toUpperCase() : ''
+    state.dbg('RX ←', responseHex || '(ack-only)', 'ack=', rx.ack)
+    return { ack: rx.ack, responseHex }
   }
 
   async function sendTxAndParse(txCode, frame, timeoutMs) {
@@ -405,8 +423,47 @@ function createRuntime(userCfg) {
       return await sendTxAndParse('70', frame, timeoutMs)
     }
 
-    if (action === 'display_qr' || action === 'clear_qr') {
-      return { success: false, message: `${action}_use_action_qr_or_cq` }
+    if (action === 'display_qr') {
+      const qr = String(json.qrPayload || '').trim()
+      if (!qr) return { success: false, error: 'qr_payload_required' }
+      // KBank API QR 문자열을 단말에 표시 (펌웨어별 필드 지원이 다를 수 있어 순차 시도)
+      const amountField = Number(json.amount) > 0
+        ? [{ type: '40', data: normalizeAmount12(json.amount) }]
+        : []
+      const attempts = [
+        { txCode: '71', fields: [{ type: 'QR', data: qr.slice(0, 900) }, ...amountField] },
+        { txCode: '71', fields: [{ type: 'Q1', data: qr.slice(0, 900) }, ...amountField] },
+        { txCode: '70', fields: [{ type: 'QR', data: qr.slice(0, 900) }, ...amountField, { type: 'A1', data: '03' }] },
+      ]
+      let lastErr = 'display_qr_failed'
+      for (const attempt of attempts) {
+        try {
+          const frame = buildFrame({ txCode: attempt.txCode, more: '1', fields: attempt.fields })
+          const result = await enqueue(() =>
+            sendFrameAndWait(frame, Math.min(timeoutMs, 12000), { acceptAckOnly: true })
+          )
+          if (result.ack || result.responseHex) {
+            return { success: true, ack: result.ack, message: 'display_sent' }
+          }
+        } catch (e) {
+          lastErr = e.message || String(e)
+          if (lastErr === 'edc_nak' || lastErr === 'ack_only_timeout') {
+            if (lastErr === 'ack_only_timeout') return { success: true, ack: true, message: 'display_ack' }
+            continue
+          }
+        }
+      }
+      return { success: false, error: lastErr }
+    }
+
+    if (action === 'clear_qr') {
+      try {
+        const frame = buildFrame({ txCode: 'CQ', reqRes: '1', more: '0', fields: [] })
+        const result = await enqueue(() => sendFrameAndWait(frame, Math.min(timeoutMs, 8000)))
+        return { success: true, ack: result.ack, message: 'clear_qr_sent' }
+      } catch (e) {
+        return { success: false, error: e.message }
+      }
     }
 
     return { success: false, error: `unknown_action: ${action}` }

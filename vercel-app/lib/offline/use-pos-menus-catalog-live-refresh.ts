@@ -37,6 +37,8 @@ export function usePosMenusCatalogLiveRefresh(
       if (ce.detail?.cacheKey !== cacheKey) return
       const list = ce.detail.data
       if (!Array.isArray(list)) return
+      /** 백그라운드 동기화가 빈 배열을 주면(tenant 불일치 등) 화면을 비우지 않음 */
+      if (list.length === 0) return
       const menus = list as PosMenu[]
       ref.current(menus)
       setLastSyncedAtMs(Date.now())

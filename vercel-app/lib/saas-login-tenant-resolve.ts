@@ -103,9 +103,52 @@ async function lookupTenantByCompanyName(company: string): Promise<SaasLoginTena
   return null
 }
 
+/** company_name 을 슬러그화한 값이 slug 인 tenants 행 (abc-company ← ABC Company) */
+async function lookupTenantByCompanyNameSlug(slug: string): Promise<SaasLoginTenantResolve | null> {
+  const needle = normalizeTenantId(slug)
+  if (!needle) return null
+  try {
+    const rows = (await supabaseSelect('tenants', {
+      select: 'id,company_name,is_active',
+      limit: 500,
+      order: 'company_name.asc',
+    })) as { id?: string; company_name?: string; is_active?: boolean | null }[]
+    const hit = (rows || []).find((r) => normalizeTenantId(r.company_name) === needle)
+    if (hit?.id) {
+      return {
+        tenantId: normalizeTenantId(hit.id),
+        companyName: normalizeCompanyName(hit.company_name) || normalizeTenantId(hit.id),
+        isActive: hit.is_active !== false,
+      }
+    }
+  } catch {
+    try {
+      const rows = (await supabaseSelect('tenants', {
+        select: 'id,company_name',
+        limit: 500,
+        order: 'company_name.asc',
+      })) as { id?: string; company_name?: string }[]
+      const hit = (rows || []).find((r) => normalizeTenantId(r.company_name) === needle)
+      if (hit?.id) {
+        return {
+          tenantId: normalizeTenantId(hit.id),
+          companyName: normalizeCompanyName(hit.company_name) || normalizeTenantId(hit.id),
+          isActive: true,
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null
+}
+
 /**
  * Omni 로그인용 테넌트 확정.
- * 1) tenantId 쿼리 2) company → tenants.id(slug) 3) company_name 매칭 4) slug 유도(폴백)
+ * 1) tenantId → tenants.id
+ * 2) orphan 슬러그(abc-company) → company_name 슬러그 매칭 → 실제 id(malatang01)
+ * 3) company → tenants.id(slug) / company_name
+ * 4) slug 유도 폴백
  */
 export async function resolveSaasTenantForLogin(params: {
   company?: string | null
@@ -115,6 +158,8 @@ export async function resolveSaasTenantForLogin(params: {
   if (fromParam) {
     const byId = await lookupTenantById(fromParam)
     if (byId) return byId
+    const byOrphanSlug = await lookupTenantByCompanyNameSlug(fromParam)
+    if (byOrphanSlug) return byOrphanSlug
   }
 
   const company = normalizeCompanyName(params.company)
@@ -124,6 +169,8 @@ export async function resolveSaasTenantForLogin(params: {
   if (slug) {
     const bySlug = await lookupTenantById(slug)
     if (bySlug) return bySlug
+    const byCompanySlug = await lookupTenantByCompanyNameSlug(slug)
+    if (byCompanySlug) return byCompanySlug
   }
 
   const byName = await lookupTenantByCompanyName(company)
