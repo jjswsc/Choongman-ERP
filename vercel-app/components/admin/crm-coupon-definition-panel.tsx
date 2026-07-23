@@ -19,7 +19,7 @@ import {
   type PosCoupon,
   type PosMenu,
 } from "@/lib/api-client"
-import { formatCouponBenefit, redemptionModeLabel, sortCouponsForAdmin } from "@/lib/crm-coupon-admin"
+import { formatCouponBenefit, redemptionModeLabel, sortCouponsForAdmin, type CrmPromoCodePrefill } from "@/lib/crm-coupon-admin"
 import {
   buildItemScopePayload,
   emptyCouponItemScope,
@@ -161,7 +161,11 @@ function CouponFormField({
   )
 }
 
-export function CrmCouponDefinitionPanel() {
+export function CrmCouponDefinitionPanel({
+  onOfferSecretPromo,
+}: {
+  onOfferSecretPromo?: (prefill: CrmPromoCodePrefill) => void
+} = {}) {
   const { lang } = useLang()
   const t = useT(lang)
   const [coupons, setCoupons] = React.useState<PosCoupon[]>([])
@@ -301,6 +305,31 @@ export function CrmCouponDefinitionPanel() {
       await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
       setSheetOpen(false)
       await loadData()
+
+      // 카탈로그 셀프클레임이 아닌 회원발급 → 앱 코드 입력용 시크릿 프로모 등록 유도 (RPKM 누락 방지)
+      const claimMode = String(form.portalClaimMode || "none").toLowerCase()
+      const wantsTypedSecret =
+        form.redemptionMode === "member_issue" &&
+        claimMode === "none" &&
+        typeof onOfferSecretPromo === "function"
+      if (wantsTypedSecret) {
+        const go = await appConfirm(
+          (t("crmCouponOfferSecretPromo") || "").replace("{code}", code),
+          {
+            confirmLabel: t("crmCouponOfferSecretPromoConfirm") || "프로모 코드 등록",
+            cancelLabel: t("crmCouponOfferSecretPromoCancel") || "나중에",
+          }
+        )
+        if (go) {
+          onOfferSecretPromo({
+            code,
+            couponCode: code,
+            label: form.name.trim() || code,
+            validFrom: form.validFrom.trim(),
+            validTo: form.validTo.trim(),
+          })
+        }
+      }
     } catch (e) {
       await appAlert(String(e))
     } finally {

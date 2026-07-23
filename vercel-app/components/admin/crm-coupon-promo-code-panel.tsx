@@ -13,7 +13,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { apiFetch } from "@/lib/api/fetch"
 import { getPosCoupons, type PosCoupon } from "@/lib/api-client"
-import { couponsForMemberIssue, formatCouponBenefit } from "@/lib/crm-coupon-admin"
+import { couponsForMemberIssue, formatCouponBenefit, type CrmPromoCodePrefill } from "@/lib/crm-coupon-admin"
 import type { MemberCouponPromoCodeRow } from "@/lib/member-portal-promo-code"
 
 type FormState = {
@@ -42,7 +42,13 @@ const EMPTY_FORM: FormState = {
   maxPerMember: "1",
 }
 
-export function CrmCouponPromoCodePanel() {
+export function CrmCouponPromoCodePanel({
+  prefill,
+  onPrefillConsumed,
+}: {
+  prefill?: CrmPromoCodePrefill | null
+  onPrefillConsumed?: () => void
+} = {}) {
   const { lang } = useLang()
   const t = useT(lang)
   const [rows, setRows] = React.useState<MemberCouponPromoCodeRow[]>([])
@@ -77,6 +83,29 @@ export function CrmCouponPromoCodePanel() {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    if (!prefill?.code && !prefill?.couponCode) return
+    const code = String(prefill.code || prefill.couponCode || "")
+      .trim()
+      .toUpperCase()
+    const couponCode = String(prefill.couponCode || prefill.code || "")
+      .trim()
+      .toUpperCase()
+    setForm({
+      id: null,
+      code,
+      couponCode,
+      label: String(prefill.label || "").trim() || code,
+      note: "",
+      isActive: true,
+      validFrom: String(prefill.validFrom || "").trim(),
+      validTo: String(prefill.validTo || "").trim(),
+      maxRedemptions: "",
+      maxPerMember: "1",
+    })
+    onPrefillConsumed?.()
+  }, [prefill, onPrefillConsumed])
 
   const startEdit = (row: MemberCouponPromoCodeRow) => {
     setForm({

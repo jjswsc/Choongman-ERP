@@ -2,6 +2,15 @@ import type { PosCoupon } from '@/lib/api-client'
 
 export type CrmCouponAdminTab = 'definitions' | 'issue' | 'history' | 'campaigns' | 'stamp' | 'promo'
 
+/** 쿠폰 정의 저장 후 시크릿 프로모 탭으로 넘길 때 프리필 */
+export type CrmPromoCodePrefill = {
+  code: string
+  couponCode: string
+  label: string
+  validFrom: string
+  validTo: string
+}
+
 export type MemberCouponIssueRow = {
   id: number
   memberId: number

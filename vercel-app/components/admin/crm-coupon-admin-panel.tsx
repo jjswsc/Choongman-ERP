@@ -21,7 +21,7 @@ import { CrmCouponPromoCodePanel } from "@/components/admin/crm-coupon-promo-cod
 import { CrmCouponKpiStrip } from "@/components/crm/crm-coupon-kpi-strip"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { parseCrmCouponAdminTab, type CrmCouponAdminTab } from "@/lib/crm-coupon-admin"
+import { parseCrmCouponAdminTab, type CrmCouponAdminTab, type CrmPromoCodePrefill } from "@/lib/crm-coupon-admin"
 
 type CrmCouponAdminPanelProps = {
   initialTab?: string
@@ -32,6 +32,7 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
   const { lang } = useLang()
   const t = useT(lang)
   const [tab, setTab] = React.useState<CrmCouponAdminTab>(parseCrmCouponAdminTab(initialTab))
+  const [promoPrefill, setPromoPrefill] = React.useState<CrmPromoCodePrefill | null>(null)
 
   React.useEffect(() => {
     setTab(parseCrmCouponAdminTab(initialTab))
@@ -41,6 +42,11 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
     const parsed = parseCrmCouponAdminTab(next)
     setTab(parsed)
     onTabChange?.(parsed)
+  }
+
+  const offerSecretPromo = (prefill: CrmPromoCodePrefill) => {
+    setPromoPrefill(prefill)
+    handleTab("promo")
   }
 
   return (
@@ -94,7 +100,7 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
           </AdminTabsBarWithHelp>
 
           <TabsContent value="definitions" className={adminTabsContentCn}>
-            <CrmCouponDefinitionPanel />
+            <CrmCouponDefinitionPanel onOfferSecretPromo={offerSecretPromo} />
           </TabsContent>
           <TabsContent value="issue" className={adminTabsContentCn}>
             <CrmCouponIssuePanel />
@@ -106,7 +112,10 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
             <CrmCouponCampaignPanel />
           </TabsContent>
           <TabsContent value="promo" className={adminTabsContentCn}>
-            <CrmCouponPromoCodePanel />
+            <CrmCouponPromoCodePanel
+              prefill={promoPrefill}
+              onPrefillConsumed={() => setPromoPrefill(null)}
+            />
           </TabsContent>
           <TabsContent value="stamp" className={adminTabsContentCn}>
             <CrmCouponStampPanel />

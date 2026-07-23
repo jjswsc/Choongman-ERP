@@ -188,10 +188,16 @@ export const I18N_CRM_KO: Record<string, string> = {
   crmPromoCodeCodeRequired: '프로모 코드를 입력해 주세요.',
   crmPromoCodeCouponRequired: '연결할 쿠폰을 선택해 주세요.',
   crmPromoCodeDeleteConfirm: '프로모 코드「{code}」를 삭제할까요?',
+  crmCouponOfferSecretPromo:
+    '「회원 발급」 쿠폰을 저장했습니다.\n회원앱에서 코드를 입력해 받게 하려면 「프로모 코드」 탭에 시크릿 코드를 따로 등록해야 합니다.\n지금 등록 화면으로 이동할까요?',
+  crmCouponOfferSecretPromoConfirm: '프로모 코드 등록',
+  crmCouponOfferSecretPromoCancel: '나중에',
+  crmCouponPosAppDesc:
+    '「회원 발급」 쿠폰은 CRM 지급·시크릿 코드·스탬프 등으로 지갑에 들어간 뒤, 회원앱 「내 혜택」·POS에서 사용합니다. 앱에서 코드 입력으로 받게 하려면 쿠폰 정의 저장 후 「프로모 코드」 탭에도 등록하세요.',
   helpSum_admin_crm_coupons:
     '쿠폰 정의·단건/조건 일괄 지급·캠페인·시크릿 프로모 코드·스탬프 카드를 한 화면에서 관리하고 POS·회원앱과 연동합니다.',
   helpHow_admin_crm_coupons:
-    '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다.\n② 「회원 지급」: 단건 검색 또는 성별·나이·가입일·매장·등급 조건으로 일괄 지급합니다.\n③ 「발급·이력」: 발급·사용·주문 번호를 조회합니다.\n④ 「쿠폰 캠페인」: 전체·휴면·최근방문·생일월·조건검색 등 대량 발급을 저장·재실행합니다.\n⑤ 「프로모 코드」: 회원앱 시크릿 코드(예: 1234) → 지갑 쿠폰 발급. 카탈로그 비노출로 비밀 운영 가능.\n⑥ 「스탬프 카드」: 방문 스탬프·완성 보상(쿠폰/포인트)을 설정합니다.',
+    '① 「쿠폰 정의」: 할인 유형·유효기간·「회원 발급」 사용 방식을 설정합니다. 앱 코드 입력용은 저장 후 「프로모 코드」 등록을 안내합니다.\n② 「회원 지급」: 단건 검색 또는 성별·나이·가입일·매장·등급 조건으로 일괄 지급합니다.\n③ 「발급·이력」: 발급·사용·주문 번호를 조회합니다.\n④ 「쿠폰 캠페인」: 전체·휴면·최근방문·생일월·조건검색 등 대량 발급을 저장·재실행합니다.\n⑤ 「프로모 코드」: 회원앱 시크릿 코드(예: RPKM2026) → 지갑 쿠폰 발급. 카탈로그 비노출로 비밀 운영 가능. POS 쿠폰만 만들면 앱 입력은 안 됩니다.\n⑥ 「스탬프 카드」: 방문 스탬프·완성 보상(쿠폰/포인트)을 설정합니다. 마일스톤 쿠폰은 POS에 존재하는 「회원 발급」 코드여야 합니다.',
   helpSum_admin_crm_campaigns: '쿠폰 메뉴 「쿠폰 캠페인」 탭으로 이동합니다.',
   helpHow_admin_crm_campaigns:
     '조건별 쿠폰 자동 발급은 쿠폰 → 「쿠폰 캠페인」 탭에서 설정·실행합니다.',
@@ -387,10 +393,16 @@ export const I18N_CRM_EN: Record<string, string> = {
   crmPromoCodeCodeRequired: 'Enter a promo code.',
   crmPromoCodeCouponRequired: 'Select a linked coupon.',
   crmPromoCodeDeleteConfirm: 'Delete promo code “{code}”?',
+  crmCouponOfferSecretPromo:
+    'Member-issue coupon saved.\nFor members to redeem by typing a code in the app, you must also register a secret code under the Promo codes tab.\nGo there now?',
+  crmCouponOfferSecretPromoConfirm: 'Register promo code',
+  crmCouponOfferSecretPromoCancel: 'Later',
+  crmCouponPosAppDesc:
+    'Member-issue coupons reach the wallet via CRM issue, secret promo codes, or stamps, then appear in Benefits and at POS. To let members type a code in the app, also register it under Promo codes after saving the definition.',
   helpSum_admin_crm_coupons:
     'Manage coupon definitions, single/bulk issue, campaigns, secret promo codes, and stamp cards with POS/member app sync.',
   helpHow_admin_crm_coupons:
-    '① Definitions: discount type, validity, member-issue mode.\n② Issue: single search or bulk by gender/age/join date/store/tier.\n③ History: issued, used, and order links.\n④ Campaigns: all, dormant, birthday, profile filters — save and re-run.\n⑤ Promo codes: member-app secret codes (e.g. 1234) → wallet issue; can stay hidden from catalog.\n⑥ Stamp card: visit stamps and completion rewards.',
+    '① Definitions: discount type, validity, member-issue mode. App code entry needs a separate Promo codes row after save.\n② Issue: single search or bulk by gender/age/join date/store/tier.\n③ History: issued, used, and order links.\n④ Campaigns: all, dormant, birthday, profile filters — save and re-run.\n⑤ Promo codes: member-app secret codes (e.g. RPKM2026) → wallet; POS coupon alone is not enough for typed codes.\n⑥ Stamp card: visit stamps and completion rewards; milestone coupons must exist as member-issue in POS.',
   helpSum_admin_crm_campaigns: 'Redirects to Coupons → Campaigns tab.',
   helpHow_admin_crm_campaigns: 'Configure and run campaigns under Coupons → Campaigns.',
 }
@@ -584,10 +596,16 @@ export const I18N_CRM_TH: Record<string, string> = {
   crmPromoCodeCodeRequired: 'กรุณากรอกรหัสโปรโมครับ',
   crmPromoCodeCouponRequired: 'กรุณาเลือกคูปองที่เชื่อมครับ',
   crmPromoCodeDeleteConfirm: 'ลบรหัสโปรโม「{code}」ไหมครับ?',
+  crmCouponOfferSecretPromo:
+    'บันทึกคูปองประเภทออกให้สมาชิกแล้วครับ\nถ้าต้องการให้สมาชิกกรอกรหัสในแอป ต้องไปลงทะเบียนรหัสลับที่แท็บ「รหัสโปรโม」ด้วยครับ\nไปหน้าลงทะเบียนเลยไหมครับ?',
+  crmCouponOfferSecretPromoConfirm: 'ลงทะเบียนรหัสโปรโม',
+  crmCouponOfferSecretPromoCancel: 'ไว้ทีหลัง',
+  crmCouponPosAppDesc:
+    'คูปองออกให้สมาชิกเข้ากระเป๋าผ่านการจ่ายจาก CRM / รหัสลับ / สแตมป์ แล้วใช้ในสิทธิ์และ POS — ถ้าจะให้กรอกรหัสในแอป ต้องลงทะเบียนที่แท็บรหัสโปรโมหลังบันทึกนิยามคูปองด้วยครับ',
   helpSum_admin_crm_coupons:
     'จัดการคูปอง ออกทีละคน/กลุ่มตามเงื่อนไข แคมเปญ รหัสโปรโมลับ และสแตมป์ พร้อมเชื่อม POS/แอป',
   helpHow_admin_crm_coupons:
-    '① นิยามคูปอง ② ออกทีละคนหรือกลุ่ม ③ ประวัติ ④ แคมเปญ ⑤ รหัสโปรโม (รหัสลับในแอป → ออกคูปองเข้ากระเป๋า) ⑥ บัตรสแตมป์',
+    '① นิยามคูปอง — ถ้าให้กรอกรหัสในแอป ต้องลงทะเบียนแท็บรหัสโปรโมด้วย ② ออกทีละคนหรือกลุ่ม ③ ประวัติ ④ แคมเปญ ⑤ รหัสโปรโม (รหัสลับ → กระเป๋า; มีแค่คูปอง POS ไม่พอ) ⑥ บัตรสแตมป์ (คูปองไมล์สโตนต้องเป็น member_issue ใน POS)',
   helpSum_admin_crm_campaigns: 'ไปที่คูปอง → แท็บแคมเปญ',
   helpHow_admin_crm_campaigns: 'ตั้งค่าและรันแคมเปญที่คูปอง → แคมเปญ',
 }

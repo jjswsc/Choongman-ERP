@@ -435,7 +435,15 @@ export function MemberPortalStampCard({
           </div>
         </StampHomeShell>
 
-        {status.lastCompletion ? (
+        {status.rewardPending ? (
+          <div
+            className={`rounded-[17px] border border-rose-200/90 bg-gradient-to-r from-[#fff5f5] to-[#fff8eb] px-4 py-3 ${MP_HOME_STAMP_CARD_RADIUS}`}
+            role="status"
+          >
+            <p className="text-[11px] font-bold leading-relaxed text-[#9f1239]">{t("stampRewardPendingTitle")}</p>
+            <p className="mt-1 text-[10px] leading-relaxed text-[#7f1d1d]/90">{t("stampRewardPendingBody")}</p>
+          </div>
+        ) : status.lastCompletion ? (
           <p className={`rounded-[17px] border border-amber-200/90 bg-gradient-to-r from-[#fff8eb] to-[#f2faeb] px-4 py-3 text-[11px] font-semibold leading-relaxed text-[#5c3d12] ${MP_HOME_STAMP_CARD_RADIUS}`}>
             {status.lastCompletion.reason === "expired"
               ? t("stampCelebrateExpired")

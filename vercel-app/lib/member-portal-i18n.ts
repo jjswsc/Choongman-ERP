@@ -296,6 +296,8 @@ export type MemberPortalKey =
   | 'stampCompleteRewardHint'
   | 'stampNewCardTitle'
   | 'stampResetHint'
+  | 'stampRewardPendingTitle'
+  | 'stampRewardPendingBody'
   | 'stampViewCoupons'
   | 'stampViewCard'
   | 'stampHistoryBtn'
@@ -1493,9 +1495,19 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '새 스탬프 카드가 시작됐어요!',
   },
   stampResetHint: {
-    en: 'When the card is full, it resets and a new card starts automatically.',
-    th: 'เมื่อสแตมป์ครบการ์ด ระบบจะรีเซ็ตและเริ่มการ์ดใหม่อัตโนมัติครับ',
-    ko: '스탬프가 가득 차면 자동으로 리셋되고 새 카드가 시작됩니다.',
+    en: 'When rewards are issued for a full card, it resets and a new card starts.',
+    th: 'เมื่อครบการ์ดและได้รับรางวัลแล้ว ระบบจะรีเซ็ตและเริ่มการ์ดใหม่ครับ',
+    ko: '카드가 가득 차고 보상이 지급되면 리셋되고 새 카드가 시작됩니다.',
+  },
+  stampRewardPendingTitle: {
+    en: 'Reward pending',
+    th: 'รางวัลรอจัดส่ง',
+    ko: '보상 지급 대기',
+  },
+  stampRewardPendingBody: {
+    en: 'Your stamp card is full, but the reward is not in your wallet yet. Please open this screen again later, or contact the store if it does not appear.',
+    th: 'สแตมป์ครบแล้ว แต่คูปอง/รางวัลยังไม่เข้ากระเป๋า ลองเปิดหน้านี้อีกครั้ง หรือติดต่อร้านหากยังไม่ได้รับครับ',
+    ko: '스탬프는 다 모았지만 보상이 아직 쿠폰함에 없습니다. 이 화면을 다시 열어 보시거나, 계속 안 되면 매장에 문의해 주세요.',
   },
   stampViewCoupons: {
     en: 'View my coupons',

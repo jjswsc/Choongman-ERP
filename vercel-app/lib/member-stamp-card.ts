@@ -100,6 +100,11 @@ export type MemberStampCardStatus = {
   nextMilestone: (MemberStampMilestone & { label: string; stampsRemaining: number }) | null
   /** 직전 카드가 완성·만료로 리셋된 직후(새 카드 스탬프 0일 때) 안내용 */
   lastCompletion?: MemberStampLastCompletion | null
+  /**
+   * 스탬프는 마일스톤에 도달했는데 쿠폰/포인트 지급이 아직 안 된 상태
+   * (쿠폰 마스터 오류 등으로 리셋이 보류된 10/10 고착 등)
+   */
+  rewardPending?: boolean
 }
 
 export type MemberStampRecordResult = {
@@ -1268,6 +1273,7 @@ export function buildMemberStampPreparingStatus(): MemberStampCardStatus {
     milestones: [],
     nextMilestone: null,
     lastCompletion: null,
+    rewardPending: false,
   }
 }
 
@@ -1403,6 +1409,10 @@ export async function getMemberStampCardStatus(
       cardSequence,
       currentStamps,
     })
+    // 칸 수는 찼는데 보상이 안 나간 경우(쿠폰 코드 오류 등) — 회원앱에 대기 안내
+    const rewardPending = enriched.some(
+      (m) => m.stampCount > 0 && balance >= m.stampCount && !m.rewardIssued
+    )
 
     return {
       enabled: true,
@@ -1419,6 +1429,7 @@ export async function getMemberStampCardStatus(
       milestones: enriched,
       nextMilestone: next,
       lastCompletion,
+      rewardPending,
     }
   } catch (e) {
     if (isMissingTableError(e)) return buildMemberStampPreparingStatus()
