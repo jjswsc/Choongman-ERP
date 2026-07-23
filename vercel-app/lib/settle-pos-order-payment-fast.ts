@@ -4,10 +4,10 @@
  * 재고·분개·적립·쿠폰 소진은 이어지는 updatePosOrderStatus 에 맡긴다.
  */
 import { NextResponse } from 'next/server'
-import { supabaseInsert } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
+  extractAnyMissingColumn,
   supabaseSelectFilterStrippingUnknownColumns,
-  supabaseUpdateByFilterWithPgrst204Fallback,
 } from '@/lib/supabase-pgrst204-retry'
 import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
@@ -40,6 +40,29 @@ import type { JwtPayload } from '@/lib/jwt-auth'
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
 
+/** 워커 수명 동안 없는 컬럼 재시도 RTT 제거 (첫 결제만 학습) */
+const settleFastOmittedColumns = new Set<string>()
+
+async function updatePosOrderSettleFastPatch(id: number, patch: Record<string, unknown>): Promise<void> {
+  const working: Record<string, unknown> = { ...patch }
+  for (const col of settleFastOmittedColumns) {
+    delete working[col]
+  }
+  for (let i = 0; i < 40; i++) {
+    try {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, working)
+      return
+    } catch (e) {
+      const missingCol = extractAnyMissingColumn(e)
+      if (!missingCol || !(missingCol in working)) throw e
+      settleFastOmittedColumns.add(missingCol)
+      delete working[missingCol]
+      console.warn(`settlePosOrderPaymentFast: skip missing column '${missingCol}'`)
+    }
+  }
+  throw new Error('settlePosOrderPaymentFast: too many missing-column retries')
+}
+
 export async function settlePosOrderPaymentFast(params: {
   auth: JwtPayload
   body: Record<string, unknown>
@@ -70,7 +93,7 @@ export async function settlePosOrderPaymentFast(params: {
     {
       limit: 1,
       select:
-        'id,order_no,store_code,status,order_type,table_name,memo,total,subtotal,vat,service_amt,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,paid_at,created_by',
+        'id,order_no,store_code,status,order_type,table_name,memo,total,service_amt,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,paid_at',
     },
     'settlePosOrderPaymentFast'
   )) as {
@@ -82,8 +105,6 @@ export async function settlePosOrderPaymentFast(params: {
     table_name?: string
     memo?: string
     total?: number
-    subtotal?: number
-    vat?: number
     service_amt?: number
     payment_cash?: number
     payment_card?: number
@@ -102,7 +123,6 @@ export async function settlePosOrderPaymentFast(params: {
     point_earned?: number
     guest_count?: number
     paid_at?: string | null
-    created_by?: string | null
   }[] | null
 
   if (!existing?.length) {
@@ -285,22 +305,25 @@ export async function settlePosOrderPaymentFast(params: {
     table_name: tableName,
     memo,
     payment_cash: paymentCash,
-    ...(paymentCashTendered > 0.005
-      ? { payment_cash_tendered: paymentCashTendered }
-      : { payment_cash_tendered: 0 }),
     payment_card: paymentCard,
     payment_qr: paymentQr,
     payment_other: paymentOther,
-    ...(paymentOther <= 0.005
-      ? { payment_other_breakdown: null }
-      : paymentOtherBreakdownDb
-        ? { payment_other_breakdown: paymentOtherBreakdownDb }
-        : { payment_other_breakdown: null }),
     payment_delivery_app: paymentDeliveryAppFinal,
-    delivery_payment_channel: deliveryPaymentChannel,
     member_id: memberId || null,
     member_no: memberNo || null,
     point_used: pointUsed,
+  }
+  /** tendered·breakdown·delivery channel 은 값 있을 때만 — 없는 컬럼 재시도 RTT 예방 */
+  if (paymentCashTendered > 0.005) {
+    patch.payment_cash_tendered = paymentCashTendered
+  }
+  if (paymentOther > 0.005 && paymentOtherBreakdownDb) {
+    patch.payment_other_breakdown = paymentOtherBreakdownDb
+  } else if (paymentOther <= 0.005) {
+    patch.payment_other_breakdown = null
+  }
+  if (deliveryPaymentChannel) {
+    patch.delivery_payment_channel = deliveryPaymentChannel
   }
 
   if (paidAtStamp) {
@@ -339,7 +362,7 @@ export async function settlePosOrderPaymentFast(params: {
    * 결제액/재고와 불일치가 난다. 품목은 주문·추가주문 저장 시점에 이미 DB에 있어야 한다.
    */
 
-  await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'settlePosOrderPaymentFast')
+  await updatePosOrderSettleFastPatch(id, patch)
 
   if (linkposPayment) {
     void supabaseInsert('pos_payment_attempts', {

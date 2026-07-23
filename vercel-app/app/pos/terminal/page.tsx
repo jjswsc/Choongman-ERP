@@ -8191,7 +8191,9 @@ export default function PosTerminalPage() {
                 let kbankQrPending = false
                 let kbankPartnerTxnId = ''
                 if (existingOrderId != null && payload.payment != null) {
-                  itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
+                  if (!isOmniPaymentFastPath) {
+                    itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
+                  }
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
@@ -8208,7 +8210,7 @@ export default function PosTerminalPage() {
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     terminalStoreCode: currentStoreId,
-                    items: itemsForPaymentSave,
+                    ...(isOmniPaymentFastPath ? {} : { items: itemsForPaymentSave }),
                     tableName: payload.orderLabel,
                     memo: memoWithKbank,
                     discountAmt: payload.discountAmt ?? 0,
@@ -8223,7 +8225,7 @@ export default function PosTerminalPage() {
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
-                    pricingAdjustments,
+                    ...(isOmniPaymentFastPath ? {} : { pricingAdjustments }),
                   })
                   if (!updateRes.success) {
                     await appAlert(
@@ -8326,6 +8328,10 @@ export default function PosTerminalPage() {
                   void refetchCurrentStore()
                   return true
                 }
+                if (isOmniPaymentFastPath) {
+                  void finalizeDeliveryPaid()
+                  return true
+                }
                 return await finalizeDeliveryPaid()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
@@ -8364,7 +8370,9 @@ export default function PosTerminalPage() {
                 let kbankQrPending = false
                 let kbankPartnerTxnId = ''
                 if (existingOrderId != null && payload.payment != null) {
-                  itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
+                  if (!isOmniPaymentFastPath) {
+                    itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
+                  }
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
@@ -8381,7 +8389,7 @@ export default function PosTerminalPage() {
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     terminalStoreCode: currentStoreId,
-                    items: itemsForPaymentSave,
+                    ...(isOmniPaymentFastPath ? {} : { items: itemsForPaymentSave }),
                     tableName: payload.orderLabel,
                     memo: memoWithKbank,
                     discountAmt: payload.discountAmt ?? 0,
@@ -8396,7 +8404,7 @@ export default function PosTerminalPage() {
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
-                    pricingAdjustments,
+                    ...(isOmniPaymentFastPath ? {} : { pricingAdjustments }),
                   })
                   if (!updateRes.success) {
                     await appAlert(
@@ -8492,6 +8500,10 @@ export default function PosTerminalPage() {
                     void finalizeTakeoutPaid()
                   })
                   void refetchCurrentStore()
+                  return true
+                }
+                if (isOmniPaymentFastPath) {
+                  void finalizeTakeoutPaid()
                   return true
                 }
                 return await finalizeTakeoutPaid()
@@ -9375,11 +9387,14 @@ export default function PosTerminalPage() {
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
-                  itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
+                  /** Omni settleFast 는 items 무시 — merge/fetch 왕복 생략 */
+                  if (!isOmniPaymentFastPath) {
+                    itemsForPaymentSave = await mergePaymentItemsPreferLocal(existingOrderId, cartItemsForSave)
+                  }
                   const updateRes = await updatePosOrder({
                     id: existingOrderId,
                     terminalStoreCode: currentStoreId,
-                    items: itemsForPaymentSave,
+                    ...(isOmniPaymentFastPath ? {} : { items: itemsForPaymentSave }),
                     tableName: payload.tableName,
                     memo: memoWithKbank,
                     discountAmt: payload.discountAmt ?? 0,
@@ -9395,7 +9410,7 @@ export default function PosTerminalPage() {
                     ...posOrderPaymentFieldsFromSnapshot(pay),
                     linkposPayment: linkpos.linkposPayment,
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
-                    pricingAdjustments,
+                    ...(isOmniPaymentFastPath ? {} : { pricingAdjustments }),
                   })
                   if (!updateRes.success) {
                     await appAlert(
@@ -9590,6 +9605,14 @@ export default function PosTerminalPage() {
                     void finalizeDineInPaid()
                   })
                   void refetchCurrentStore()
+                  return true
+                }
+                /**
+                 * Omni: 결제 저장 성공 직후 「처리중」해제.
+                 * 영수증·테이블 정리는 다음 틱(동기 작업도 잠금 밖).
+                 */
+                if (isOmniPaymentFastPath) {
+                  void finalizeDineInPaid()
                   return true
                 }
                 return await finalizeDineInPaid()

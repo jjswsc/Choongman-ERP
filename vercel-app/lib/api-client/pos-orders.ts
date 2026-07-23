@@ -352,7 +352,11 @@ export async function savePosBusinessDaySettings(params: {
 }
 export async function updatePosOrder(params: {
   id: number
-  items: PosOrderItem[]
+  /**
+   * Omni 결제 단축(skipPostPaymentSideEffects)에서는 생략 가능 — settleFast 가 items 를 무시한다.
+   * 충만·일반 수정은 필수.
+   */
+  items?: PosOrderItem[]
   /** 결제 단말 매장 — 주문 store_code와 시재 store_code 불일치 시 영업 시작 폴백 */
   terminalStoreCode?: string
   tableName?: string
@@ -401,10 +405,15 @@ export async function updatePosOrder(params: {
     feeStackOrder?: Array<'vat' | 'service' | 'other'>
   }
 }) {
+  const body: Record<string, unknown> = { ...params }
+  if (params.skipPostPaymentSideEffects) {
+    delete body.items
+    delete body.pricingAdjustments
+  }
   const res = await apiFetchWithOffline('/api/updatePosOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   })
   return res.json() as Promise<{
     success: boolean
