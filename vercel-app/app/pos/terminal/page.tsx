@@ -5917,7 +5917,8 @@ export default function PosTerminalPage() {
       }
       const rawBank = String(payment?.deliveryPaymentChannel ?? '').trim()
       const bankIdMatch = rawBank.match(/bank[:=]\s*([0-9]{2,3})/i)
-      const bankId = bankIdMatch?.[1] || '04'
+      /** J6는 선택 필드 — 미지정이면 단말 기본값 사용 (하드코딩 '04' 금지) */
+      const bankId = bankIdMatch?.[1] || ''
       const ref1 = `POS${Date.now().toString().slice(-14)}`.slice(0, 20)
       const ref2 = String(auth?.user || '').trim().slice(0, 20)
 

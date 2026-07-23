@@ -50,6 +50,7 @@ export async function resolvePosCatalogTenantScope(params: {
   const fromLogin = await resolveSaasTenantForLogin({
     tenantId: params.auth?.tenantId,
     company: params.auth?.company,
+    requireExistingRow: true,
   })
   let tenantId = normalizeTenantId(fromLogin?.tenantId) || ''
 

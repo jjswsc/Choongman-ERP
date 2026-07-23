@@ -148,11 +148,13 @@ async function lookupTenantByCompanyNameSlug(slug: string): Promise<SaasLoginTen
  * 1) tenantId → tenants.id
  * 2) orphan 슬러그(abc-company) → company_name 슬러그 매칭 → 실제 id(malatang01)
  * 3) company → tenants.id(slug) / company_name
- * 4) slug 유도 폴백
+ * 4) slug 유도 폴백 (requireExistingRow 가 아닐 때만 — JWT에는 쓰지 말 것)
  */
 export async function resolveSaasTenantForLogin(params: {
   company?: string | null
   tenantId?: string | null
+  /** true 이면 tenants 실행만 반환. 회사명 슬러그(abc-company) 합성 폴백 금지 — 로그인 JWT용 */
+  requireExistingRow?: boolean
 }): Promise<SaasLoginTenantResolve | null> {
   const fromParam = normalizeTenantId(params.tenantId)
   if (fromParam) {
@@ -177,7 +179,7 @@ export async function resolveSaasTenantForLogin(params: {
   if (byName) return byName
 
   /** tenants 행이 아직 없어도 직원 company 문자열로 로그인 목록은 좁힐 수 있게 slug 폴백 */
-  if (slug) {
+  if (slug && !params.requireExistingRow) {
     return { tenantId: slug, companyName: company, isActive: true }
   }
   return null

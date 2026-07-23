@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const resolvedTenant =
       saasBrand && companyInput && !partnerStoreHint
-        ? await resolveSaasTenantForLogin({ company: companyInput })
+        ? await resolveSaasTenantForLogin({ company: companyInput, requireExistingRow: true })
         : null
 
     type EmpLoginRow = {
@@ -177,6 +177,10 @@ export async function POST(req: NextRequest) {
       getFranchiseeMultiStoreSettings(),
     ])
     const saasPartnerLogin = partnerScope.kind === 'partner'
+    /**
+     * JWT tenantId 는 tenants.id 만. employee.tenant_id 슬러그(abc-company)나
+     * deriveTenantIdFromCompany 폴백을 그대로 넣으면 getPosMenus 가 0건이 된다.
+     */
     const tenantId = saasPartnerLogin
       ? undefined
       : (
@@ -185,12 +189,11 @@ export async function POST(req: NextRequest) {
             await resolveSaasTenantForLogin({
               tenantId: row.tenant_id,
               company: companyName || companyInput,
+              requireExistingRow: true,
             })
           )?.tenantId ||
-          normalizeTenantId(row.tenant_id) ||
           ''
         ) || undefined
-    /** 슬러그 폴백(abc-company)은 JWT에 넣지 않음 — tenants.id 만 사용 */
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
