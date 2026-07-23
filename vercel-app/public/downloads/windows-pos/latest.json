@@ -1,19 +1,29 @@
 ﻿{
-    "version":  "0.1.10",
+    "version":  "0.1.12",
     "files":  [
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "e3e470fcf88056020cdd452c629ffa57760e0316c0a2d712354380d373cc01aa"
+                      "sha256":  "3b2d171bb6aabd028cee497d75945508b87915959655bf1655428021d568ff08"
                   },
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.10-setup.exe",
-                      "name":  "cm-pos-windows-0.1.10-setup.exe",
-                      "sha256":  "e3e470fcf88056020cdd452c629ffa57760e0316c0a2d712354380d373cc01aa"
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.12-setup.exe",
+                      "name":  "cm-pos-windows-0.1.12-setup.exe",
+                      "sha256":  "3b2d171bb6aabd028cee497d75945508b87915959655bf1655428021d568ff08"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-portable.exe",
+                      "name":  "cm-pos-windows-latest-portable.exe",
+                      "sha256":  "750195bacf60c2f975a7397848a1001e7e965031063f463132022b3753406755"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.12-portable.exe",
+                      "name":  "cm-pos-windows-0.1.12-portable.exe",
+                      "sha256":  "750195bacf60c2f975a7397848a1001e7e965031063f463132022b3753406755"
                   }
               ],
-    "installerSha256":  "e3e470fcf88056020cdd452c629ffa57760e0316c0a2d712354380d373cc01aa",
-    "publishedAtUtc":  "2026-07-22T07:48:27.3143162Z",
-    "installerUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "Omni POS Windows 0.1.10 - payment receipt: separate from kitchen queue; cap print() wait 2.2s; no dialog fallback"
+    "installerSha256":  "3b2d171bb6aabd028cee497d75945508b87915959655bf1655428021d568ff08",
+    "publishedAtUtc":  "2026-07-23T04:39:49.4587151Z",
+    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+    "notes":  "Show bank QR on EDC for stores without customer display"
 }
