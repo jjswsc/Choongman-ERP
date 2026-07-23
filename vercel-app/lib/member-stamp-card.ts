@@ -63,6 +63,14 @@ export type MemberStampMilestone = {
 
 export type MemberStampMilestoneInput = Omit<MemberStampMilestone, 'id'> & { id?: number }
 
+export type MemberStampLastCompletion = {
+  reason: 'complete' | 'expired'
+  completedCardSequence: number
+  rewards: string[]
+  pointsAwarded: number
+  at: string
+}
+
 export type MemberStampCardStatus = {
   enabled: boolean
   /** 정책 OFF·DB 미적용 등으로 아직 운영 전일 때 true (회원앱 안내용) */
@@ -79,6 +87,8 @@ export type MemberStampCardStatus = {
   progressPercent: number
   milestones: Array<MemberStampMilestone & { achieved: boolean; label: string; isMilestoneSlot: boolean }>
   nextMilestone: (MemberStampMilestone & { label: string; stampsRemaining: number }) | null
+  /** 직전 카드가 완성·만료로 리셋된 직후(새 카드 스탬프 0일 때) 안내용 */
+  lastCompletion?: MemberStampLastCompletion | null
 }
 
 export type MemberStampRecordResult = {
@@ -833,6 +843,10 @@ export async function recordMemberStampOnVisit(params: {
 
       finalBalance = 0
       finalSequence = cardSequence + 1
+      const noteParts = [`card_complete_${policy.cardSlots}`]
+      const uniqueCoupons = Array.from(new Set(rewardsIssued.filter(Boolean)))
+      if (uniqueCoupons.length) noteParts.push(`coupons:${uniqueCoupons.join(',')}`)
+      if (pointsAwarded > 0) noteParts.push(`points:${pointsAwarded}`)
       await supabaseInsert(
         'member_stamp_ledger',
         stampStampRow(
@@ -844,7 +858,7 @@ export async function recordMemberStampOnVisit(params: {
             card_sequence: finalSequence,
             kind: 'reset',
             balance_after: 0,
-            note: `card_complete_${policy.cardSlots}`,
+            note: noteParts.join('|'),
             created_at: getBangkokDateTimeString(),
           },
           tenantScope
@@ -1015,6 +1029,70 @@ export function buildMemberStampPreparingStatus(): MemberStampCardStatus {
     progressPercent: 0,
     milestones: [],
     nextMilestone: null,
+    lastCompletion: null,
+  }
+}
+
+async function loadLastStampCardCompletion(params: {
+  memberId: number
+  cardSequence: number
+  currentStamps: number
+}): Promise<MemberStampLastCompletion | null> {
+  const { memberId, cardSequence, currentStamps } = params
+  // 새 카드에서 아직 스탬프가 없을 때만 "직전 완성" 안내를 노출
+  if (cardSequence <= 1 || currentStamps > 0) return null
+  try {
+    const resets = (await supabaseSelectFilter(
+      'member_stamp_ledger',
+      `member_id=eq.${memberId}&kind=eq.reset`,
+      { limit: 1, order: 'created_at.desc', select: 'note,created_at,card_sequence' }
+    )) as Array<{ note?: string; created_at?: string; card_sequence?: number }>
+    const reset = resets?.[0]
+    if (!reset) return null
+    const note = toText(reset.note)
+    const reason: MemberStampLastCompletion['reason'] = note.startsWith('card_expired')
+      ? 'expired'
+      : 'complete'
+    const completedCardSequence = Math.max(1, cardSequence - 1)
+    const rewardSet = new Set<string>()
+    let pointsAwarded = 0
+
+    for (const part of note.split('|').slice(1)) {
+      if (part.startsWith('coupons:')) {
+        for (const code of part.slice('coupons:'.length).split(',')) {
+          const c = toText(code)
+          if (c) rewardSet.add(c)
+        }
+      } else if (part.startsWith('points:')) {
+        pointsAwarded += Math.max(0, Math.trunc(Number(part.slice('points:'.length) || 0)))
+      }
+    }
+
+    if (reason === 'complete') {
+      const issues = (await supabaseSelectFilter(
+        'member_stamp_reward_issues',
+        `member_id=eq.${memberId}&card_sequence=eq.${completedCardSequence}`,
+        { limit: 20, select: 'coupon_code' }
+      )) as Array<{ coupon_code?: string }>
+      for (const row of issues || []) {
+        const code = toText(row.coupon_code)
+        if (!code) continue
+        if (code.startsWith('POINTS_')) {
+          pointsAwarded += Math.max(0, Math.trunc(Number(code.slice('POINTS_'.length) || 0)))
+        } else {
+          rewardSet.add(code)
+        }
+      }
+    }
+    return {
+      reason,
+      completedCardSequence,
+      rewards: Array.from(rewardSet),
+      pointsAwarded,
+      at: toText(reset.created_at),
+    }
+  } catch {
+    return null
   }
 }
 
@@ -1065,6 +1143,11 @@ export async function getMemberStampCardStatus(
       ? { ...pending[0], label: pending[0].label, stampsRemaining: Math.max(0, pending[0].stampCount - balance) }
       : null
     const cardExpiresAt = computeCardExpiresAt(cardStartedAt, policy.cardExpiryDays)
+    const lastCompletion = await loadLastStampCardCompletion({
+      memberId: id,
+      cardSequence,
+      currentStamps,
+    })
 
     return {
       enabled: true,
@@ -1080,6 +1163,7 @@ export async function getMemberStampCardStatus(
       progressPercent: Math.min(100, Math.round((currentStamps / Math.max(1, policy.cardSlots)) * 100)),
       milestones: enriched,
       nextMilestone: next,
+      lastCompletion,
     }
   } catch (e) {
     if (isMissingTableError(e)) return buildMemberStampPreparingStatus()

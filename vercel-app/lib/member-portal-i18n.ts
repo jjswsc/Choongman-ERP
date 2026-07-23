@@ -290,12 +290,20 @@ export type MemberPortalKey =
   | 'stampMilestoneAchieved'
   | 'stampCelebrateEarn'
   | 'stampCelebrateMilestone'
+  | 'stampCelebrateComplete'
+  | 'stampCelebrateExpired'
+  | 'stampCompleteBanner'
+  | 'stampCompleteRewardHint'
+  | 'stampNewCardTitle'
+  | 'stampResetHint'
   | 'stampViewCoupons'
   | 'stampViewCard'
   | 'stampHistoryBtn'
   | 'stampHistoryTitle'
   | 'stampHistoryRevoke'
   | 'stampHistoryAdjust'
+  | 'stampHistoryReset'
+  | 'stampHistoryExpired'
   | 'stampExpiresAt'
   | 'stampCardSequence'
   | 'privilegeDesc'
@@ -1459,6 +1467,36 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'ปลดล็อกรางวัล milestone!',
     ko: '마일스톤 혜택을 받았습니다!',
   },
+  stampCelebrateComplete: {
+    en: 'Stamp card complete!',
+    th: 'สะสมสแตมป์ครบการ์ดแล้ว!',
+    ko: '스탬프 카드를 완성했습니다!',
+  },
+  stampCelebrateExpired: {
+    en: 'This stamp card expired. A new card has started.',
+    th: 'การ์ดสแตมป์หมดอายุแล้ว เริ่มการ์ดใหม่ให้แล้วครับ',
+    ko: '스탬프 카드가 만료되어 새 카드가 시작되었습니다.',
+  },
+  stampCompleteBanner: {
+    en: 'Card #{n} complete — a new card has started. Your stamps were not lost; rewards (if any) are in Coupons / Points.',
+    th: 'การ์ด #{n} ครบแล้ว — เริ่มการ์ดใหม่ สแตมป์ไม่ได้หาย รางวัล (ถ้ามี) อยู่ในคูปอง/แต้มครับ',
+    ko: '카드 #{n} 완성 — 새 카드가 시작되었습니다. 스탬프가 사라진 것이 아니라 리셋이며, 보상은 쿠폰/포인트에 있습니다.',
+  },
+  stampCompleteRewardHint: {
+    en: 'Rewards issued: {rewards}',
+    th: 'รางวัลที่ได้รับ: {rewards}',
+    ko: '지급된 보상: {rewards}',
+  },
+  stampNewCardTitle: {
+    en: 'New stamp card started!',
+    th: 'เริ่มการ์ดสแตมป์ใหม่แล้ว!',
+    ko: '새 스탬프 카드가 시작됐어요!',
+  },
+  stampResetHint: {
+    en: 'When the card is full, it resets and a new card starts automatically.',
+    th: 'เมื่อสแตมป์ครบการ์ด ระบบจะรีเซ็ตและเริ่มการ์ดใหม่อัตโนมัติครับ',
+    ko: '스탬프가 가득 차면 자동으로 리셋되고 새 카드가 시작됩니다.',
+  },
   stampViewCoupons: {
     en: 'View my coupons',
     th: 'ดูคูปองของฉัน',
@@ -1488,6 +1526,16 @@ const MS: Record<MemberPortalKey, Dict> = {
     en: 'Adjusted',
     th: 'ปรับ',
     ko: '조정',
+  },
+  stampHistoryReset: {
+    en: 'Card complete → new card',
+    th: 'ครบการ์ด → เริ่มใหม่',
+    ko: '카드 완성 → 새 카드',
+  },
+  stampHistoryExpired: {
+    en: 'Card expired → new card',
+    th: 'หมดอายุ → เริ่มใหม่',
+    ko: '만료 → 새 카드',
   },
   stampExpiresAt: {
     en: 'Card valid until {date}',

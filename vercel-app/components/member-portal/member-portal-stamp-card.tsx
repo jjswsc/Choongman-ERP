@@ -103,6 +103,14 @@ function StampCelebrationSheet({
   )
 }
 
+function resolveStampHomeTitle(lang: LangCode, status: MemberStampCardStatus): string {
+  const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
+  if (status.lastCompletion && status.currentStamps === 0) {
+    return t("stampNewCardTitle")
+  }
+  return t("stampHomeTitle")
+}
+
 function resolveStampHomeSubtitle(
   lang: LangCode,
   status: MemberStampCardStatus
@@ -121,6 +129,22 @@ function resolveStampHomeSubtitle(
       .replace("{reward}", reward)
   }
   return t("stampCardDesc")
+}
+
+function formatStampHistoryKind(
+  lang: LangCode,
+  row: MemberStampHistoryRow
+): string {
+  const t = (key: Parameters<typeof memberPortalT>[1]) => memberPortalT(lang, key)
+  if (row.kind === "earn") return "+1"
+  if (row.kind === "revoke") return t("stampHistoryRevoke")
+  if (row.kind === "adjust") return t("stampHistoryAdjust")
+  if (row.kind === "reset") {
+    return row.note?.startsWith("card_expired")
+      ? t("stampHistoryExpired")
+      : t("stampHistoryReset")
+  }
+  return row.kind
 }
 
 function StampHomeShell({
@@ -237,7 +261,9 @@ export function MemberPortalStampHomeWidget({
 
   return (
     <StampHomeShell onClick={onOpenPrivilege} foodImageUrl={foodImageUrl}>
-      <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampHomeTitle")}</h3>
+      <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">
+        {resolveStampHomeTitle(lang, status)}
+      </h3>
       <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">
         {resolveStampHomeSubtitle(lang, status)}
       </p>
@@ -295,21 +321,47 @@ export function MemberPortalStampCard({
     const seen = readSeenFingerprint(memberId)
     if (seen && seen !== fp) {
       const lines: string[] = []
-      if (status.nextMilestone && status.currentStamps >= 1) {
+      let title = t("stampCelebrateEarn")
+
+      if (status.lastCompletion?.reason === "expired") {
+        title = t("stampCelebrateExpired")
         lines.push(
-          t("stampProgress").replace("{current}", String(status.currentStamps)).replace("{total}", String(status.cardSlots))
+          t("stampCompleteBanner").replace("{n}", String(status.lastCompletion.completedCardSequence))
         )
+      } else if (status.lastCompletion?.reason === "complete") {
+        title = t("stampCelebrateComplete")
+        lines.push(
+          t("stampCompleteBanner").replace("{n}", String(status.lastCompletion.completedCardSequence))
+        )
+        const rewardBits: string[] = [...status.lastCompletion.rewards]
+        if (status.lastCompletion.pointsAwarded > 0) {
+          rewardBits.push(`${status.lastCompletion.pointsAwarded}P`)
+        }
+        if (rewardBits.length) {
+          lines.push(t("stampCompleteRewardHint").replace("{rewards}", rewardBits.join(", ")))
+        }
+      } else {
+        if (status.nextMilestone && status.currentStamps >= 1) {
+          lines.push(
+            t("stampProgress")
+              .replace("{current}", String(status.currentStamps))
+              .replace("{total}", String(status.cardSlots))
+          )
+        }
+        const achieved = status.milestones.filter((m) => m.achieved)
+        const latest = achieved[achieved.length - 1]
+        if (latest) {
+          title = t("stampCelebrateMilestone")
+          lines.push(
+            t("stampMilestoneAchieved")
+              .replace("{count}", String(latest.stampCount))
+              .replace("{label}", latest.label)
+          )
+        }
       }
-      const achieved = status.milestones.filter((m) => m.achieved)
-      const latest = achieved[achieved.length - 1]
-      if (latest) {
-        lines.push(t("stampMilestoneAchieved").replace("{count}", String(latest.stampCount)).replace("{label}", latest.label))
-      }
+
       if (lines.length) {
-        setCelebration({
-          title: latest ? t("stampCelebrateMilestone") : t("stampCelebrateEarn"),
-          lines,
-        })
+        setCelebration({ title, lines })
         setCelebrationOpen(true)
       }
       setAnimateSlots(true)
@@ -342,7 +394,9 @@ export function MemberPortalStampCard({
         <StampHomeShell foodImageUrl={foodImageUrl}>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">{t("stampHomeTitle")}</h3>
+              <h3 className="m-0 text-[13px] font-black leading-[1.2] text-[#161616]">
+                {resolveStampHomeTitle(lang, status)}
+              </h3>
               <p className="m-0 text-[10.5px] font-extrabold leading-[1.35] text-[#161616]">
                 {resolveStampHomeSubtitle(lang, status)}
               </p>
@@ -381,6 +435,33 @@ export function MemberPortalStampCard({
           </div>
         </StampHomeShell>
 
+        {status.lastCompletion ? (
+          <p className={`rounded-[17px] border border-amber-200/90 bg-gradient-to-r from-[#fff8eb] to-[#f2faeb] px-4 py-3 text-[11px] font-semibold leading-relaxed text-[#5c3d12] ${MP_HOME_STAMP_CARD_RADIUS}`}>
+            {status.lastCompletion.reason === "expired"
+              ? t("stampCelebrateExpired")
+              : t("stampCompleteBanner").replace("{n}", String(status.lastCompletion.completedCardSequence))}
+            {status.lastCompletion.reason === "complete" &&
+            (status.lastCompletion.rewards.length > 0 || status.lastCompletion.pointsAwarded > 0) ? (
+              <>
+                {" "}
+                {t("stampCompleteRewardHint").replace(
+                  "{rewards}",
+                  [
+                    ...status.lastCompletion.rewards,
+                    status.lastCompletion.pointsAwarded > 0
+                      ? `${status.lastCompletion.pointsAwarded}P`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(", ")
+                )}
+              </>
+            ) : null}
+          </p>
+        ) : status.resetAfterComplete ? (
+          <p className={`px-1 text-[10px] leading-relaxed ${MP_CARD_TEXT_SUBTLE}`}>{t("stampResetHint")}</p>
+        ) : null}
+
         {status.nextMilestone ? (
           <p className={`rounded-[17px] border border-emerald-200/80 bg-gradient-to-r from-[#f2faeb] to-[#fff8eb] px-4 py-3 text-[11px] font-semibold leading-relaxed text-[#2d5016] ${MP_HOME_STAMP_CARD_RADIUS}`}>
             {t("stampNextReward")
@@ -400,13 +481,7 @@ export function MemberPortalStampCard({
                     {row.storeCode ? ` · ${row.storeCode}` : ""}
                   </span>
                   <span className={row.kind === "earn" ? "font-medium text-emerald-700" : MP_CARD_TEXT_SUBTLE}>
-                    {row.kind === "earn"
-                      ? "+1"
-                      : row.kind === "revoke"
-                        ? t("stampHistoryRevoke")
-                        : row.kind === "adjust"
-                          ? t("stampHistoryAdjust")
-                          : row.kind}
+                    {formatStampHistoryKind(lang, row)}
                   </span>
                 </div>
               ))}
