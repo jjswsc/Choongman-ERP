@@ -3,9 +3,10 @@
  * 충만 레거시 DB: enforce=false. Omni: JWT/매장으로 tenantId 강제.
  */
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
-import { deriveTenantIdFromCompany, normalizeTenantId } from '@/lib/tenant-context'
+import { normalizeTenantId } from '@/lib/tenant-context'
 import { appendTenantFilter, buildTenantFilter } from '@/lib/supabase-server'
 import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
 
 export type SaasTenantScope = {
   enforce: boolean
@@ -35,10 +36,16 @@ export async function resolveSaasTenantScope(params: {
     return { enforce: false, tenantId: '' }
   }
 
-  let tenantId =
-    normalizeTenantId(params.auth?.tenantId) ||
-    deriveTenantIdFromCompany(params.auth?.company) ||
-    ''
+  /** JWT tenants.id 는 DB 없이 신뢰(로그인 시 이미 검증). 합성 슬러그(abc-company) 폴백 금지 */
+  let tenantId = normalizeTenantId(params.auth?.tenantId) || ''
+
+  if (!tenantId && params.auth?.company) {
+    const fromCompany = await resolveSaasTenantForLogin({
+      company: params.auth.company,
+      requireExistingRow: true,
+    })
+    tenantId = normalizeTenantId(fromCompany?.tenantId) || ''
+  }
 
   if (!tenantId) {
     const storeCode = String(params.storeCode || '').trim()

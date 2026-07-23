@@ -10,37 +10,73 @@ export type SaasLoginTenantResolve = {
   isActive: boolean
 }
 
+type TenantRow = { id?: string; company_name?: string; is_active?: boolean | null }
+
+/** 로그인 폼·loginCheck 연속 호출에서 tenants 전량 스캔 반복 방지 (격리 로직은 동일) */
+const TENANTS_LIST_TTL_MS = 60_000
+const TENANT_ID_TTL_MS = 60_000
+let tenantsListCache: { at: number; withActive: boolean; rows: TenantRow[] } | null = null
+const tenantIdCache = new Map<string, { at: number; value: SaasLoginTenantResolve | null }>()
+
+function toResolve(row: TenantRow, fallbackName?: string): SaasLoginTenantResolve {
+  const id = normalizeTenantId(row.id)
+  return {
+    tenantId: id,
+    companyName: normalizeCompanyName(row.company_name) || fallbackName || id,
+    isActive: row.is_active !== false,
+  }
+}
+
+async function loadTenantsListCached(withActive: boolean): Promise<TenantRow[]> {
+  const now = Date.now()
+  if (
+    tenantsListCache &&
+    now - tenantsListCache.at < TENANTS_LIST_TTL_MS &&
+    tenantsListCache.withActive === withActive
+  ) {
+    return tenantsListCache.rows
+  }
+  const select = withActive ? 'id,company_name,is_active' : 'id,company_name'
+  const rows = (await supabaseSelect('tenants', {
+    select,
+    limit: 500,
+    order: 'company_name.asc',
+  })) as TenantRow[]
+  tenantsListCache = { at: now, withActive, rows: rows || [] }
+  return tenantsListCache.rows
+}
+
 async function lookupTenantById(tenantId: string): Promise<SaasLoginTenantResolve | null> {
   const tid = normalizeTenantId(tenantId)
   if (!tid) return null
+  const cached = tenantIdCache.get(tid)
+  if (cached && Date.now() - cached.at < TENANT_ID_TTL_MS) return cached.value
+
+  const store = (value: SaasLoginTenantResolve | null) => {
+    tenantIdCache.set(tid, { at: Date.now(), value })
+    return value
+  }
+
   try {
     const rows = (await supabaseSelectFilter('tenants', `id=eq.${encodeURIComponent(tid)}`, {
       select: 'id,company_name,is_active',
       limit: 1,
-    })) as { id?: string; company_name?: string; is_active?: boolean | null }[]
+    })) as TenantRow[]
     const row = rows?.[0]
-    if (!row?.id) return null
-    return {
-      tenantId: normalizeTenantId(row.id),
-      companyName: normalizeCompanyName(row.company_name) || normalizeTenantId(row.id),
-      isActive: row.is_active !== false,
-    }
+    if (!row?.id) return store(null)
+    return store(toResolve(row))
   } catch {
     /** is_active 컬럼 없으면 활성으로 간주 */
     try {
       const rows = (await supabaseSelectFilter('tenants', `id=eq.${encodeURIComponent(tid)}`, {
         select: 'id,company_name',
         limit: 1,
-      })) as { id?: string; company_name?: string }[]
+      })) as TenantRow[]
       const row = rows?.[0]
-      if (!row?.id) return null
-      return {
-        tenantId: normalizeTenantId(row.id),
-        companyName: normalizeCompanyName(row.company_name) || normalizeTenantId(row.id),
-        isActive: true,
-      }
+      if (!row?.id) return store(null)
+      return store(toResolve(row))
     } catch {
-      return null
+      return store(null)
     }
   }
 }
@@ -53,49 +89,23 @@ async function lookupTenantByCompanyName(company: string): Promise<SaasLoginTena
       'tenants',
       `company_name=eq.${encodeURIComponent(name)}`,
       { select: 'id,company_name,is_active', limit: 3 }
-    )) as { id?: string; company_name?: string; is_active?: boolean | null }[]
-    if (exact?.[0]?.id) {
-      return {
-        tenantId: normalizeTenantId(exact[0].id),
-        companyName: normalizeCompanyName(exact[0].company_name) || name,
-        isActive: exact[0].is_active !== false,
-      }
-    }
+    )) as TenantRow[]
+    if (exact?.[0]?.id) return toResolve(exact[0], name)
   } catch {
     /* company_name/is_active 없으면 아래 폴백 */
   }
 
   try {
-    const rows = (await supabaseSelect('tenants', {
-      select: 'id,company_name,is_active',
-      limit: 500,
-      order: 'company_name.asc',
-    })) as { id?: string; company_name?: string; is_active?: boolean | null }[]
+    const rows = await loadTenantsListCached(true)
     const needle = name.toLowerCase()
-    const hit = (rows || []).find((r) => normalizeCompanyName(r.company_name).toLowerCase() === needle)
-    if (hit?.id) {
-      return {
-        tenantId: normalizeTenantId(hit.id),
-        companyName: normalizeCompanyName(hit.company_name) || name,
-        isActive: hit.is_active !== false,
-      }
-    }
+    const hit = rows.find((r) => normalizeCompanyName(r.company_name).toLowerCase() === needle)
+    if (hit?.id) return toResolve(hit, name)
   } catch {
     try {
-      const rows = (await supabaseSelect('tenants', {
-        select: 'id,company_name',
-        limit: 500,
-        order: 'company_name.asc',
-      })) as { id?: string; company_name?: string }[]
+      const rows = await loadTenantsListCached(false)
       const needle = name.toLowerCase()
-      const hit = (rows || []).find((r) => normalizeCompanyName(r.company_name).toLowerCase() === needle)
-      if (hit?.id) {
-        return {
-          tenantId: normalizeTenantId(hit.id),
-          companyName: normalizeCompanyName(hit.company_name) || name,
-          isActive: true,
-        }
-      }
+      const hit = rows.find((r) => normalizeCompanyName(r.company_name).toLowerCase() === needle)
+      if (hit?.id) return toResolve(hit, name)
     } catch {
       /* ignore */
     }
@@ -108,34 +118,14 @@ async function lookupTenantByCompanyNameSlug(slug: string): Promise<SaasLoginTen
   const needle = normalizeTenantId(slug)
   if (!needle) return null
   try {
-    const rows = (await supabaseSelect('tenants', {
-      select: 'id,company_name,is_active',
-      limit: 500,
-      order: 'company_name.asc',
-    })) as { id?: string; company_name?: string; is_active?: boolean | null }[]
-    const hit = (rows || []).find((r) => normalizeTenantId(r.company_name) === needle)
-    if (hit?.id) {
-      return {
-        tenantId: normalizeTenantId(hit.id),
-        companyName: normalizeCompanyName(hit.company_name) || normalizeTenantId(hit.id),
-        isActive: hit.is_active !== false,
-      }
-    }
+    const rows = await loadTenantsListCached(true)
+    const hit = rows.find((r) => normalizeTenantId(r.company_name) === needle)
+    if (hit?.id) return toResolve(hit)
   } catch {
     try {
-      const rows = (await supabaseSelect('tenants', {
-        select: 'id,company_name',
-        limit: 500,
-        order: 'company_name.asc',
-      })) as { id?: string; company_name?: string }[]
-      const hit = (rows || []).find((r) => normalizeTenantId(r.company_name) === needle)
-      if (hit?.id) {
-        return {
-          tenantId: normalizeTenantId(hit.id),
-          companyName: normalizeCompanyName(hit.company_name) || normalizeTenantId(hit.id),
-          isActive: true,
-        }
-      }
+      const rows = await loadTenantsListCached(false)
+      const hit = rows.find((r) => normalizeTenantId(r.company_name) === needle)
+      if (hit?.id) return toResolve(hit)
     } catch {
       /* ignore */
     }

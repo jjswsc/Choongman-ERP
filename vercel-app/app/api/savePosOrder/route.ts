@@ -263,8 +263,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'store_required' }, { headers })
     }
 
-    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    /** 인증·영업게이트는 독립 → 병렬 (둘 다 실패해도 인증 오류를 우선 반환) */
+    const [authGate, openCheck] = await Promise.all([
+      requirePosStoreWriteAuth(req, storeCode, headers),
+      assertPosBusinessOpenForOrderSave(storeCode),
+    ])
     if (!authGate.ok) return authGate.response
+    if (!openCheck.ok) {
+      return NextResponse.json(
+        { success: false, message: openCheck.message, retryAfterQueue: false },
+        { headers }
+      )
+    }
     const auth = authGate.auth
 
     const tenantScope = await resolveSaasTenantScope({
@@ -279,14 +289,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, message: tenantWriteErr, retryAfterQueue: false },
         { status: 403, headers }
-      )
-    }
-
-    const openCheck = await assertPosBusinessOpenForOrderSave(storeCode)
-    if (!openCheck.ok) {
-      return NextResponse.json(
-        { success: false, message: openCheck.message, retryAfterQueue: false },
-        { headers }
       )
     }
 

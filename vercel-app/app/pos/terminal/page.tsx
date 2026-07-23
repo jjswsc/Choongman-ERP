@@ -8871,7 +8871,9 @@ export default function PosTerminalPage() {
                   savedOrderId = res.orderId ?? null
                   savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
                   const queued = Boolean((res as { queued?: boolean }).queued)
-                  await notifyQueuedSave(savedOrderNo, queued)
+                  if (queued) {
+                    await notifyQueuedSave(savedOrderNo, queued)
+                  }
                   if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
                   queuedWithoutServerId = queued && !(savedOrderId != null && savedOrderId > 0)
                   if (queuedWithoutServerId) {
@@ -9895,27 +9897,42 @@ export default function PosTerminalPage() {
                   setSelectedTakeoutTargetId(`takeout-order-${existingTakeoutId}`)
                   setSelectedTakeoutTargetLabel(barLabel)
                   clearCartFromTerminal()
-                  await refetchCurrentStore()
+                  /** Omni: 목록 재조회는 버튼 잠금 밖(홀 주문과 동일). 저장 성공은 이미 확인됨 */
+                  if (isOmniPaymentFastPath) {
+                    void refetchCurrentStore()
+                  } else {
+                    await refetchCurrentStore()
+                  }
                   return true
                 }
-                const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
-                if (!linkpos.ok) return false
-                const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
-                  orderType: payload.orderType,
-                  orderLabel: payload.orderLabel,
-                })
-                const kbankQrPending = !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
-                if (!kbankQr.ok && !kbankQrPending) return false
-                const kbankPartnerTxnId = String(
-                  (kbankQr as { partnerTransactionId?: string }).partnerTransactionId || ''
-                ).trim()
-                const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 const paymentSumBeforeSave =
                   Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
+                /** 미결제「주문」은 단말/QR 승인 경로를 타지 않음 — 잠금 시간만 줄임 */
+                let linkpos: Awaited<ReturnType<typeof runLinkposPaymentIfNeeded>> = {
+                  ok: true as const,
+                  linkposPayment: null,
+                }
+                let kbankQr: Awaited<ReturnType<typeof runKbankQrPaymentIfNeeded>> = { ok: true as const }
+                if (paymentSumBeforeSave > 0.0001) {
+                  linkpos = await runLinkposPaymentIfNeeded(payload.payment)
+                  if (!linkpos.ok) return false
+                  kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
+                    orderType: payload.orderType,
+                    orderLabel: payload.orderLabel,
+                  })
+                  if (!kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending !== true) return false
+                }
+                const kbankQrPending =
+                  !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
+                if (!kbankQr.ok && !kbankQrPending) return false
+                const kbankPartnerTxnId = String(
+                  (kbankQr as { partnerTransactionId?: string }).partnerTransactionId || ''
+                ).trim()
+                const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 /** QR 대기 중에는 아직 미결제 → '주문 접수(미결제)'로 저장하고 승인 시 마감 */
                 const hasPayment = paymentSumBeforeSave > 0.0001 && !kbankQrPending
                 const res = await savePosOrderWithOffline({

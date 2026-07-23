@@ -48,20 +48,32 @@ export async function assertPosBusinessOpenForOrderSave(storeCode: string): Prom
       code: 'store_required',
     }
   }
-  const candidates = await resolvePosStoreFilterCandidates(store).catch(() => [] as string[])
-  const lookupCodes = candidates.length > 0 ? candidates : [store]
 
-  let businessDateYmd = ''
-  for (const candidate of lookupCodes) {
-    const status = await loadPosBusinessOpenStatus(candidate)
-    if (status.businessDateYmd) businessDateYmd = status.businessDateYmd
-    if (status.isOpen) {
-      return { ok: true, businessDateYmd: status.businessDateYmd }
+  /** 가장 흔한 경우: 요청 store_code 가 시재 키와 일치 → 후보 전개 전에 1회만 조회 */
+  const primary = await loadPosBusinessOpenStatus(store)
+  if (primary.isOpen) {
+    return { ok: true, businessDateYmd: primary.businessDateYmd }
+  }
+
+  const candidates = await resolvePosStoreFilterCandidates(store).catch(() => [] as string[])
+  const storeKey = normStoreKey(store)
+  const others = candidates.filter((c) => {
+    const k = normStoreKey(String(c || '').trim())
+    return Boolean(k) && k !== storeKey
+  })
+
+  let businessDateYmd = primary.businessDateYmd
+  if (others.length > 0) {
+    const statuses = await Promise.all(others.map((c) => loadPosBusinessOpenStatus(c)))
+    for (const status of statuses) {
+      if (status.businessDateYmd) businessDateYmd = status.businessDateYmd
+      if (status.isOpen) {
+        return { ok: true, businessDateYmd: status.businessDateYmd }
+      }
     }
   }
 
   if (!businessDateYmd) {
-    const primary = await loadPosBusinessOpenStatus(store)
     businessDateYmd = primary.businessDateYmd
   }
 

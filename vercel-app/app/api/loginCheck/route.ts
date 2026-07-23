@@ -180,20 +180,20 @@ export async function POST(req: NextRequest) {
     /**
      * JWT tenantId 는 tenants.id 만. employee.tenant_id 슬러그(abc-company)나
      * deriveTenantIdFromCompany 폴백을 그대로 넣으면 getPosMenus 가 0건이 된다.
+     * 회사명으로 이미 확정됐으면(resolvedTenant) 재조회하지 않는다 — 교차로그인 방지 유지.
      */
-    const tenantId = saasPartnerLogin
-      ? undefined
-      : (
-          resolvedTenant?.tenantId ||
-          (
-            await resolveSaasTenantForLogin({
-              tenantId: row.tenant_id,
-              company: companyName || companyInput,
-              requireExistingRow: true,
-            })
-          )?.tenantId ||
-          ''
-        ) || undefined
+    let tenantId: string | undefined
+    if (!saasPartnerLogin) {
+      tenantId = resolvedTenant?.tenantId || undefined
+      if (!tenantId) {
+        const fromEmpOrCompany = await resolveSaasTenantForLogin({
+          tenantId: row.tenant_id,
+          company: companyName || companyInput,
+          requireExistingRow: true,
+        })
+        tenantId = fromEmpOrCompany?.tenantId || undefined
+      }
+    }
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
