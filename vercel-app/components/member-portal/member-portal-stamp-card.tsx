@@ -348,8 +348,8 @@ export function MemberPortalStampCard({
               .replace("{total}", String(status.cardSlots))
           )
         }
-        const achieved = status.milestones.filter((m) => m.achieved)
-        const latest = achieved[achieved.length - 1]
+        const awarded = status.milestones.filter((m) => m.rewardIssued)
+        const latest = awarded[awarded.length - 1]
         if (latest) {
           title = t("stampCelebrateMilestone")
           lines.push(

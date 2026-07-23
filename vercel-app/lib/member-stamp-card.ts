@@ -87,7 +87,15 @@ export type MemberStampCardStatus = {
   cardSequence: number
   totalEarned: number
   progressPercent: number
-  milestones: Array<MemberStampMilestone & { achieved: boolean; label: string; isMilestoneSlot: boolean }>
+  milestones: Array<
+    MemberStampMilestone & {
+      achieved: boolean
+      /** 실제 쿠폰/포인트 지급(또는 이미 지급 기록) 여부 — 축하 팝업용 */
+      rewardIssued: boolean
+      label: string
+      isMilestoneSlot: boolean
+    }
+  >
   nextMilestone: (MemberStampMilestone & { label: string; stampsRemaining: number }) | null
   /** 직전 카드가 완성·만료로 리셋된 직후(새 카드 스탬프 0일 때) 안내용 */
   lastCompletion?: MemberStampLastCompletion | null
@@ -567,15 +575,170 @@ async function issueStampMilestoneReward(params: {
     })
     return { couponCode: milestone.couponCode, points: 0, label }
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // 이미 보유 중이면 마일스톤은 달성 처리(재시도·가짜 축하 방지)
+    if (/이미 사용 가능한 동일 쿠폰/.test(msg) || /already/i.test(msg)) {
+      const issueRows = (await supabaseSelectFilter(
+        'member_coupon_issues',
+        `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(milestone.couponCode)}&status=eq.issued`,
+        { order: 'id.desc', limit: 1, select: 'id' }
+      )) as Array<{ id?: number }>
+      try {
+        await supabaseInsert('member_stamp_reward_issues', {
+          member_id: memberId,
+          milestone_id: milestone.id,
+          card_sequence: cardSequence,
+          coupon_code: milestone.couponCode,
+          coupon_issue_id: issueRows?.[0]?.id || null,
+          created_at: getBangkokDateTimeString(),
+        })
+      } catch {
+        /* unique 충돌 등 — 이미 기록된 경우 무시 */
+      }
+      return { couponCode: milestone.couponCode, points: 0, label }
+    }
     await logStampIssueFailure({
       memberId,
       milestoneId: milestone.id,
       orderId: params.orderId,
       couponCode: milestone.couponCode,
-      errorMessage: e instanceof Error ? e.message : String(e),
+      errorMessage: msg,
       context: { rewardType: 'coupon', stampCount: milestone.stampCount },
     })
     return null
+  }
+}
+
+type StampThresholdResult = {
+  rewardsIssued: string[]
+  pointsAwarded: number
+  milestonesReached: MemberStampRecordResult['milestonesReached']
+  cardCompleted: boolean
+  finalBalance: number
+  finalSequence: number
+}
+
+/** 잔액이 마일스톤/카드 칸 수를 넘긴 경우 보상 지급 + (설정 시) 카드 리셋 */
+async function applyStampThresholdEffects(params: {
+  memberId: number
+  balance: number
+  cardSequence: number
+  policy: MemberStampPolicyBase
+  tenantScope: MembersTenantScope
+  orderId?: number | null
+  storeCode?: string | null
+  stampYmd?: string
+  lang?: 'ko' | 'en' | 'th'
+}): Promise<StampThresholdResult> {
+  const rewardsIssued: string[] = []
+  const milestonesReached: MemberStampRecordResult['milestonesReached'] = []
+  let pointsAwarded = 0
+  let finalBalance = Math.max(0, Math.trunc(params.balance))
+  let finalSequence = Math.max(1, Math.trunc(params.cardSequence))
+  let cardCompleted = false
+
+  const milestones = (await listMemberStampMilestones(false)).sort(
+    (a, b) => a.stampCount - b.stampCount || a.sortOrder - b.sortOrder
+  )
+  const rewardSequence = params.policy.resetAfterComplete ? finalSequence : 1
+  for (const milestone of milestones) {
+    if (finalBalance < milestone.stampCount) continue
+    const reward = await issueStampMilestoneReward({
+      memberId: params.memberId,
+      milestone,
+      cardSequence: rewardSequence,
+      orderId: params.orderId || undefined,
+      lang: params.lang,
+    })
+    if (!reward) continue
+    milestonesReached.push({
+      stampCount: milestone.stampCount,
+      label: reward.label,
+      rewardType: milestone.rewardType,
+    })
+    if (reward.couponCode) rewardsIssued.push(reward.couponCode)
+    pointsAwarded += reward.points
+  }
+
+  if (params.policy.resetAfterComplete && finalBalance >= params.policy.cardSlots) {
+    const dueMilestones = milestones.filter(
+      (m) => m.stampCount > 0 && m.stampCount <= params.policy.cardSlots && finalBalance >= m.stampCount
+    )
+    let allDueIssued = true
+    for (const m of dueMilestones) {
+      if (
+        !(await hasStampRewardIssued({
+          memberId: params.memberId,
+          milestoneId: m.id,
+          cardSequence: rewardSequence,
+        }))
+      ) {
+        allDueIssued = false
+        break
+      }
+    }
+
+    // 마일스톤 쿠폰 미지급이면 리셋하지 않음 → 설정 수정 후 앱 재진입/재적립 시 재시도
+    if (dueMilestones.length > 0 && !allDueIssued) {
+      return {
+        rewardsIssued,
+        pointsAwarded,
+        milestonesReached,
+        cardCompleted: false,
+        finalBalance,
+        finalSequence,
+      }
+    }
+
+    cardCompleted = true
+    const bonus = await issueCompleteBonus({
+      memberId: params.memberId,
+      policy: params.policy,
+      orderId: params.orderId || undefined,
+    })
+    rewardsIssued.push(...bonus.coupons)
+    pointsAwarded += bonus.points
+
+    const stampYmd = toText(params.stampYmd).slice(0, 10) || getBangkokTodayDateString()
+    const noteParts = [`card_complete_${params.policy.cardSlots}`]
+    const uniqueCoupons = Array.from(new Set(rewardsIssued.filter(Boolean)))
+    if (uniqueCoupons.length) noteParts.push(`coupons:${uniqueCoupons.join(',')}`)
+    if (pointsAwarded > 0) noteParts.push(`points:${pointsAwarded}`)
+
+    finalBalance = 0
+    finalSequence = finalSequence + 1
+    await supabaseInsert(
+      'member_stamp_ledger',
+      stampStampRow(
+        {
+          member_id: params.memberId,
+          order_id: params.orderId || null,
+          store_code: toText(params.storeCode) || null,
+          stamp_ymd: stampYmd,
+          card_sequence: finalSequence,
+          kind: 'reset',
+          balance_after: 0,
+          note: noteParts.join('|'),
+          created_at: getBangkokDateTimeString(),
+        },
+        params.tenantScope
+      )
+    )
+    await supabaseUpdateByFilter('members', `id=eq.${params.memberId}`, {
+      stamp_card_balance: 0,
+      stamp_card_sequence: finalSequence,
+      stamp_card_started_at: getBangkokDateTimeString(),
+      updated_at: getBangkokDateTimeString(),
+    })
+  }
+
+  return {
+    rewardsIssued,
+    pointsAwarded,
+    milestonesReached,
+    cardCompleted,
+    finalBalance,
+    finalSequence,
   }
 }
 
@@ -778,9 +941,6 @@ export async function recordMemberStampOnVisit(params: {
 
     const { balance, cardSequence, cardStartedAt } = await loadMemberStampBalance(memberId)
     const newBalance = balance + 1
-    const rewardsIssued: string[] = []
-    const milestonesReached: MemberStampRecordResult['milestonesReached'] = []
-    let pointsAwarded = 0
 
     const inserted = (await supabaseInsert(
       'member_stamp_ledger',
@@ -812,78 +972,31 @@ export async function recordMemberStampOnVisit(params: {
     }
     await supabaseUpdateByFilter('members', `id=eq.${memberId}`, memberPatch)
 
-    const milestones = (await listMemberStampMilestones(false)).sort(
-      (a, b) => a.stampCount - b.stampCount || a.sortOrder - b.sortOrder
-    )
-    const rewardSequence = policy.resetAfterComplete ? cardSequence : 1
-    for (const milestone of milestones) {
-      if (newBalance < milestone.stampCount) continue
-      const reward = await issueStampMilestoneReward({
-        memberId,
-        milestone,
-        cardSequence: rewardSequence,
-        orderId,
-      })
-      if (!reward) continue
-      milestonesReached.push({
-        stampCount: milestone.stampCount,
-        label: reward.label,
-        rewardType: milestone.rewardType,
-      })
-      if (reward.couponCode) rewardsIssued.push(reward.couponCode)
-      pointsAwarded += reward.points
-    }
-
-    let finalBalance = newBalance
-    let finalSequence = cardSequence
-    let cardCompleted = false
-    if (policy.resetAfterComplete && newBalance >= policy.cardSlots) {
-      cardCompleted = true
-      const bonus = await issueCompleteBonus({ memberId, policy, orderId })
-      rewardsIssued.push(...bonus.coupons)
-      pointsAwarded += bonus.points
-
-      finalBalance = 0
-      finalSequence = cardSequence + 1
-      const noteParts = [`card_complete_${policy.cardSlots}`]
-      const uniqueCoupons = Array.from(new Set(rewardsIssued.filter(Boolean)))
-      if (uniqueCoupons.length) noteParts.push(`coupons:${uniqueCoupons.join(',')}`)
-      if (pointsAwarded > 0) noteParts.push(`points:${pointsAwarded}`)
-      await supabaseInsert(
-        'member_stamp_ledger',
-        stampStampRow(
-          {
-            member_id: memberId,
-            order_id: orderId,
-            store_code: storeCode || null,
-            stamp_ymd: stampYmd,
-            card_sequence: finalSequence,
-            kind: 'reset',
-            balance_after: 0,
-            note: noteParts.join('|'),
-            created_at: getBangkokDateTimeString(),
-          },
-          tenantScope
-        )
-      )
-      await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
-        stamp_card_balance: 0,
-        stamp_card_sequence: finalSequence,
-        stamp_card_started_at: getBangkokDateTimeString(),
-        updated_at: getBangkokDateTimeString(),
-      })
-    }
+    const threshold = await applyStampThresholdEffects({
+      memberId,
+      balance: newBalance,
+      cardSequence,
+      policy,
+      tenantScope,
+      orderId,
+      storeCode,
+      stampYmd,
+    })
 
     const result: MemberStampRecordResult = {
       stamped: true,
-      newBalance: finalBalance,
-      cardSequence: finalSequence,
-      displayStamps: displayMemberStampCount(finalBalance, policy.cardSlots, policy.resetAfterComplete),
+      newBalance: threshold.finalBalance,
+      cardSequence: threshold.finalSequence,
+      displayStamps: displayMemberStampCount(
+        threshold.finalBalance,
+        policy.cardSlots,
+        policy.resetAfterComplete
+      ),
       cardSlots: policy.cardSlots,
-      rewardsIssued,
-      pointsAwarded,
-      milestonesReached,
-      cardCompleted,
+      rewardsIssued: threshold.rewardsIssued,
+      pointsAwarded: threshold.pointsAwarded,
+      milestonesReached: threshold.milestonesReached,
+      cardCompleted: threshold.cardCompleted,
       ledgerId: ledgerId || null,
     }
     void sendStampEarnNotifications({ memberId, policy, result, storeCode })
@@ -1018,7 +1131,23 @@ export async function adjustMemberStampBalance(params: {
   }
   if (!cardStartedAt && nextBalance > 0) patch.stamp_card_started_at = getBangkokDateTimeString()
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, patch)
-  return { newBalance: nextBalance, memberId }
+
+  // 수동으로 칸을 채운 경우에도 POS 적립과 동일하게 마일스톤·카드 완성 처리
+  let finalBalance = nextBalance
+  if (delta > 0 && nextBalance > 0) {
+    const globalPolicy = await loadMemberStampPolicy({ tenantScope })
+    const threshold = await applyStampThresholdEffects({
+      memberId,
+      balance: nextBalance,
+      cardSequence,
+      policy: globalPolicy,
+      tenantScope,
+      stampYmd: getBangkokTodayDateString(),
+    })
+    finalBalance = threshold.finalBalance
+  }
+
+  return { newBalance: finalBalance, memberId }
 }
 
 export async function listMemberStampHistory(memberId: number, limit = 20): Promise<MemberStampHistoryRow[]> {
@@ -1147,6 +1276,23 @@ export async function getMemberStampCardStatus(
   try {
     const policy = globalPolicy
     await expireMemberStampCardIfNeeded({ memberId: id, policy, tenantScope })
+
+    // 수동 조정 등으로 10/10에 고착된 카드: 열 때 보상 지급 + 리셋 보정
+    {
+      const before = await loadMemberStampBalance(id)
+      if (before.balance > 0) {
+        await applyStampThresholdEffects({
+          memberId: id,
+          balance: before.balance,
+          cardSequence: before.cardSequence,
+          policy,
+          tenantScope,
+          stampYmd: getBangkokTodayDateString(),
+          lang,
+        })
+      }
+    }
+
     const [{ balance, cardSequence, cardStartedAt }, milestones, totalEarned] = await Promise.all([
       loadMemberStampBalance(memberId),
       listMemberStampMilestones(false),
@@ -1165,6 +1311,7 @@ export async function getMemberStampCardStatus(
         return {
           ...m,
           achieved,
+          rewardIssued: issued,
           label: milestoneLabel(m, lang),
           isMilestoneSlot: true,
         }
