@@ -23,7 +23,7 @@ import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-ser
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
-import { resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
+import { nullableTimestamptz, resolvePosOrderPaidAtStampIso } from '@/lib/pos-order-paid-at'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
@@ -551,8 +551,8 @@ export async function POST(req: NextRequest) {
       linkpos_reference1: linkposPayment ? String(linkposPayment.reference1 ?? '') : null,
       linkpos_requested_amount: linkposPayment ? Number(linkposPayment.requestedAmount ?? 0) : null,
       linkpos_approved_amount: linkposPayment ? Number(linkposPayment.approvedAmount ?? 0) : null,
-      linkpos_requested_at: linkposPayment ? String(linkposPayment.requestedAt ?? '') : null,
-      linkpos_responded_at: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
+      linkpos_requested_at: linkposPayment ? nullableTimestamptz(linkposPayment.requestedAt) : null,
+      linkpos_responded_at: linkposPayment ? nullableTimestamptz(linkposPayment.respondedAt) : null,
       idempotency_key_hash: idempotencyKeyHash,
       ...(paidAtStamp ? { paid_at: paidAtStamp } : {}),
     },

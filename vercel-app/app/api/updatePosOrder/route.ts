@@ -10,7 +10,11 @@ import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
 import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
-import { resolvePosOrderPaidAtStampIso, posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
+import {
+  nullableTimestamptz,
+  resolvePosOrderPaidAtStampIso,
+  posOrderPaymentSumFromAmounts,
+} from '@/lib/pos-order-paid-at'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import {
@@ -24,7 +28,7 @@ import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-de
 import { formatGrabLineNoteForKitchenPrint } from '@/lib/grab-pos-order-enrich'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobUpdateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
-import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { releaseRequestIdempotencyKey, reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   parseAppliedCouponsFromBody,
   persistPosOrderCouponRedemptions,
@@ -60,6 +64,9 @@ const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', '
 /** POS 주문 수정 (항목·메모·할인·주문번호 등) - completed 전까지 수정 가능 */
 export async function POST(req: NextRequest) {
   const headers = posApiCorsHeaders()
+  let idempotencyReserved = false
+  let idempotencyKey = ''
+  let idempotencyScope = ''
 
   try {
     const authResult = await requireAuth(req, 'any')
@@ -77,7 +84,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
     const id = Number(body?.id)
-    const idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
+    idempotencyKey = String(req.headers.get('x-idempotency-key') ?? '').trim()
     /**
      * Omni 결제 단축: 클라이언트 skipPostPaymentSideEffects=true.
      * items enrich·재계산·주방·동기 적립 없이 결제 필드만 저장.
@@ -130,15 +137,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    idempotencyScope = `update_pos_order:${id}`
     if (idempotencyKey) {
       const duplicated = await reserveRequestIdempotencyKey({
-        scope: `update_pos_order:${id}`,
+        scope: idempotencyScope,
         key: idempotencyKey,
         payload: { id, source: fromOfflineQueueSync ? 'offline_queue' : 'api' },
       })
       if (duplicated) {
         return NextResponse.json({ success: true, noop: true, duplicate: true }, { headers })
       }
+      idempotencyReserved = true
     }
 
     const existing = (await supabaseSelectFilterStrippingUnknownColumns(
@@ -525,8 +534,8 @@ export async function POST(req: NextRequest) {
       patch.linkpos_reference1 = String(linkposPayment.reference1 ?? '')
       patch.linkpos_requested_amount = Number(linkposPayment.requestedAmount ?? 0)
       patch.linkpos_approved_amount = Number(linkposPayment.approvedAmount ?? 0)
-      patch.linkpos_requested_at = String(linkposPayment.requestedAt ?? '')
-      patch.linkpos_responded_at = String(linkposPayment.respondedAt ?? '')
+      patch.linkpos_requested_at = nullableTimestamptz(linkposPayment.requestedAt)
+      patch.linkpos_responded_at = nullableTimestamptz(linkposPayment.respondedAt)
     }
 
     if (guestCountBody !== undefined && guestCountBody !== null) {
@@ -854,6 +863,9 @@ export async function POST(req: NextRequest) {
     )
   } catch (e) {
     console.error('updatePosOrder:', e)
+    if (idempotencyReserved && idempotencyKey) {
+      await releaseRequestIdempotencyKey({ scope: idempotencyScope, key: idempotencyKey })
+    }
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json(
       {

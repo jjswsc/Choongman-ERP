@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  nullableTimestamptz,
   resolvePosOrderPaidAt,
   resolvePosOrderPaidAtStampIso,
 } from '@/lib/pos-order-paid-at'
@@ -77,6 +78,20 @@ describe('resolvePosOrderPaidAt', () => {
         updatedAt: '2026-06-01T05:03:02.000Z',
       })
     ).toBe('')
+  })
+})
+
+describe('nullableTimestamptz', () => {
+  it('maps empty string and invalid to null', () => {
+    expect(nullableTimestamptz('')).toBeNull()
+    expect(nullableTimestamptz('   ')).toBeNull()
+    expect(nullableTimestamptz(null)).toBeNull()
+    expect(nullableTimestamptz(undefined)).toBeNull()
+    expect(nullableTimestamptz('not-a-date')).toBeNull()
+  })
+
+  it('keeps valid ISO strings', () => {
+    expect(nullableTimestamptz('2026-07-23T08:07:57.000Z')).toBe('2026-07-23T08:07:57.000Z')
   })
 })
 

@@ -60,6 +60,15 @@ function parseValidIso(raw: string | undefined | null): string | null {
   return s
 }
 
+/**
+ * PostgREST timestamptz 컬럼용.
+ * `""` 를 넣으면 Postgres 22007 (`invalid input syntax for type timestamp`) 발생 → null 사용.
+ */
+export function nullableTimestamptz(raw: unknown): string | null {
+  if (raw == null) return null
+  return parseValidIso(String(raw))
+}
+
 /** 결제·완료 영수증·목록 정렬용 시각 — 접수(created_at)가 아닌 결제 완료에 가까운 시각 */
 export function resolvePosOrderPaidAt(order: PosOrderPaidAtSource): string {
   const createdAt = parseValidIso(order.createdAt)

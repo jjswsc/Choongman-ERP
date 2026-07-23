@@ -13,7 +13,11 @@ import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
 import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
 import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
-import { resolvePosOrderPaidAtStampIso, posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
+import {
+  nullableTimestamptz,
+  resolvePosOrderPaidAtStampIso,
+  posOrderPaymentSumFromAmounts,
+} from '@/lib/pos-order-paid-at'
 import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import {
   coercePaymentOtherBreakdownForSave,
@@ -35,7 +39,7 @@ import {
   shouldPreserveExistingPosOrderPayment,
 } from '@/lib/pos-order-payment-reconcile'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
-import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { releaseRequestIdempotencyKey, reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import type { JwtPayload } from '@/lib/jwt-auth'
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
@@ -76,16 +80,59 @@ export async function settlePosOrderPaymentFast(params: {
     return NextResponse.json({ success: false, message: 'id required' }, { headers })
   }
 
+  const idempotencyScope = `update_pos_order:${id}`
+  let idempotencyReserved = false
   if (idempotencyKey) {
     const duplicated = await reserveRequestIdempotencyKey({
-      scope: `update_pos_order:${id}`,
+      scope: idempotencyScope,
       key: idempotencyKey,
       payload: { id, source: fromOfflineQueueSync ? 'offline_queue' : 'api', settleFast: true },
     })
     if (duplicated) {
       return NextResponse.json({ success: true, noop: true, duplicate: true }, { headers })
     }
+    idempotencyReserved = true
   }
+
+  const releaseIdempotencyOnFailure = async () => {
+    if (!idempotencyReserved || !idempotencyKey) return
+    await releaseRequestIdempotencyKey({ scope: idempotencyScope, key: idempotencyKey })
+    idempotencyReserved = false
+  }
+
+  try {
+    return await settlePosOrderPaymentFastBody({
+      auth,
+      body,
+      fromOfflineQueueSync,
+      id,
+      headers,
+      releaseIdempotencyOnFailure,
+    })
+  } catch (e) {
+    await releaseIdempotencyOnFailure()
+    console.error('settlePosOrderPaymentFast:', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json(
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
+  }
+}
+
+async function settlePosOrderPaymentFastBody(params: {
+  auth: JwtPayload
+  body: Record<string, unknown>
+  fromOfflineQueueSync: boolean
+  id: number
+  headers: HeadersInit
+  releaseIdempotencyOnFailure: () => Promise<void>
+}): Promise<NextResponse> {
+  const { auth, body, fromOfflineQueueSync, id, headers, releaseIdempotencyOnFailure } = params
 
   const existing = (await supabaseSelectFilterStrippingUnknownColumns(
     'pos_orders',
@@ -126,6 +173,7 @@ export async function settlePosOrderPaymentFast(params: {
   }[] | null
 
   if (!existing?.length) {
+    await releaseIdempotencyOnFailure()
     return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
   }
   const current = existing[0]
@@ -173,6 +221,7 @@ export async function settlePosOrderPaymentFast(params: {
   }
 
   if (!(await authCanAccessPosStoreWrite(auth, String(current?.store_code ?? '')))) {
+    await releaseIdempotencyOnFailure()
     return NextResponse.json(
       { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
       { status: 403, headers }
@@ -192,6 +241,7 @@ export async function settlePosOrderPaymentFast(params: {
       status === 'cancelled' || status === 'canceled' || status === 'refunded'
         ? '이미 취소·환불된 주문입니다. 목록을 새로고침해 주세요.'
         : '대기/결제완료 상태만 수정할 수 있습니다.'
+    await releaseIdempotencyOnFailure()
     return NextResponse.json({ success: false, message: closedMsg }, { headers })
   }
 
@@ -259,6 +309,7 @@ export async function settlePosOrderPaymentFast(params: {
   }
 
   if (total > 0.02 && nextPaymentSum > total + 0.02) {
+    await releaseIdempotencyOnFailure()
     return NextResponse.json(
       { success: false, message: 'payment_exceeds_total' },
       { headers }
@@ -351,8 +402,8 @@ export async function settlePosOrderPaymentFast(params: {
     patch.linkpos_reference1 = String(linkposPayment.reference1 ?? '')
     patch.linkpos_requested_amount = Number(linkposPayment.requestedAmount ?? 0)
     patch.linkpos_approved_amount = Number(linkposPayment.approvedAmount ?? 0)
-    patch.linkpos_requested_at = String(linkposPayment.requestedAt ?? '')
-    patch.linkpos_responded_at = String(linkposPayment.respondedAt ?? '')
+    patch.linkpos_requested_at = nullableTimestamptz(linkposPayment.requestedAt)
+    patch.linkpos_responded_at = nullableTimestamptz(linkposPayment.respondedAt)
   }
 
   const guestCountBody = body?.guestCount ?? body?.guest_count
