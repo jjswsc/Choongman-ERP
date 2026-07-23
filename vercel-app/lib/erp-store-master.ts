@@ -244,13 +244,20 @@ async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
             const tenant = String(r.tenant_id || '').trim()
             const storeName = String(r.store_name || '').trim()
             const rawCode = String(r.store_code || '').trim()
-            const fallbackCode = `${tenant || 'tenant'}:${storeName || `store_${idx + 1}`}`
-            const uniqueLabel = `${tenant || 'tenant'} / ${storeName || rawCode || fallbackCode}`
+            /**
+             * store_code 가 비면 tenant:name 합성키를 쓰지 않는다.
+             * (malatang01:1001 이면 POS 스코프 store_code=1001 과 불일치 → 메뉴 0건)
+             */
+            const storeCode = rawCode || storeName || `${tenant || 'tenant'}:store_${idx + 1}`
+            const uniqueLabel =
+              tenant && storeName
+                ? `${tenant} / ${storeName}`
+                : storeName || storeCode
             const aliases: string[] = []
-            if (storeName) aliases.push(storeName)
-            if (rawCode && rawCode !== storeName) aliases.push(rawCode)
+            if (storeName && storeName !== storeCode) aliases.push(storeName)
+            if (rawCode && rawCode !== storeCode) aliases.push(rawCode)
             return {
-              store_code: rawCode || fallbackCode,
+              store_code: storeCode,
               display_name: uniqueLabel,
               aliases,
               sort_order: idx,
