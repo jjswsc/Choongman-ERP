@@ -348,11 +348,19 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      const data = (await res.json()) as { success: boolean; message?: string }
+      const data = (await res.json()) as {
+        success: boolean
+        message?: string
+        validations?: StampCouponValidationRow[]
+      }
       if (!res.ok || !data.success) {
+        if (Array.isArray(data.validations) && data.validations.length > 0) {
+          setValidations(data.validations)
+        }
         onError(data.message || t("mpAdmin_errStampSave"))
         return
       }
+      if (Array.isArray(data.validations)) setValidations(data.validations)
       onNotice(t("mpAdmin_stampSaved"))
       await load()
       await loadStats()

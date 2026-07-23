@@ -146,6 +146,14 @@ export type StampCouponValidationRow = {
   message: string
 }
 
+/** 마일스톤 쿠폰 검증 입력 (저장 payload 일부만 있어도 됨) */
+export type MemberStampCouponCheckInput = {
+  stampCount: number
+  rewardType?: MemberStampRewardType | string
+  rewardPoints?: number
+  couponCode?: string
+}
+
 export const DEFAULT_MEMBER_STAMP_POLICY: MemberStampPolicy = {
   enabled: false,
   cardSlots: 10,
@@ -1419,7 +1427,7 @@ export async function getMemberStampCardStatus(
 }
 
 export async function validateStampMilestoneCoupons(
-  milestones: MemberStampMilestoneInput[]
+  milestones: MemberStampCouponCheckInput[]
 ): Promise<StampCouponValidationRow[]> {
   const rows: StampCouponValidationRow[] = []
   for (const m of milestones) {
@@ -1466,6 +1474,35 @@ export async function validateStampMilestoneCoupons(
     }
   }
   return rows
+}
+
+/** 관리자 저장·검증 UI용 한 줄 설명 */
+export function describeStampCouponValidationFailure(row: StampCouponValidationRow): string {
+  const code = toText(row.couponCode)
+  const where =
+    row.stampCount <= 0 ? '완성 보너스' : `${row.stampCount}스탬프`
+  switch (row.message) {
+    case 'coupon_required':
+      return `${where}: 쿠폰 코드가 필요합니다.`
+    case 'coupon_not_found':
+      return `${where}: POS 쿠폰 마스터에 ${code || '(빈 코드)'} 가 없습니다.`
+    case 'coupon_inactive':
+      return `${where}: 쿠폰 ${code} 가 비활성입니다.`
+    case 'coupon_not_member_issue':
+      return `${where}: 쿠폰 ${code} 는 「회원 발급」 유형이 아닙니다.`
+    case 'points_required':
+      return `${where}: 포인트 보상이 0보다 커야 합니다.`
+    case 'lookup_failed':
+      return `${where}: 쿠폰 ${code || ''} 조회에 실패했습니다.`
+    default:
+      return `${where}: ${row.message || 'invalid'}`
+  }
+}
+
+export function formatStampCouponValidationErrors(rows: StampCouponValidationRow[]): string {
+  const bad = rows.filter((r) => !r.ok)
+  if (!bad.length) return ''
+  return `마일스톤 쿠폰이 유효하지 않아 저장할 수 없습니다. ${bad.map(describeStampCouponValidationFailure).join(' ')}`
 }
 
 export async function getMemberStampAdminStats(params?: {

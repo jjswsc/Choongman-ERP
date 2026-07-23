@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  formatStampCouponValidationErrors,
   listMemberStampMilestones,
   loadMemberStampPolicy,
   normalizeMemberStampPolicy,
   saveMemberStampMilestones,
   saveMemberStampPolicy,
+  validateStampMilestoneCoupons,
   type MemberStampMilestoneInput,
   type MemberStampPolicy,
 } from '@/lib/member-stamp-card'
@@ -71,12 +73,45 @@ export async function POST(req: NextRequest) {
       policy?: Partial<MemberStampPolicy>
       milestones?: unknown[]
     }
-    const policy = await saveMemberStampPolicy(normalizeMemberStampPolicy(body.policy || {}), { tenantScope })
+    const policyInput = normalizeMemberStampPolicy(body.policy || {})
     const milestoneInputs = (Array.isArray(body.milestones) ? body.milestones : [])
       .map((row, idx) => normalizeMilestoneInput(row, idx))
       .filter((row): row is MemberStampMilestoneInput => Boolean(row))
+
+    // 존재하지 않거나 member_issue 가 아닌 쿠폰 코드는 저장 차단 (10/10 고착 방지)
+    const validations = await validateStampMilestoneCoupons(milestoneInputs)
+    if (policyInput.completeBonusCouponCode) {
+      const [bonusRow] = await validateStampMilestoneCoupons([
+        {
+          stampCount: Math.max(1, policyInput.cardSlots),
+          rewardType: 'coupon',
+          rewardPoints: 0,
+          couponCode: policyInput.completeBonusCouponCode,
+        },
+      ])
+      if (bonusRow && !bonusRow.ok) {
+        validations.push({
+          ...bonusRow,
+          stampCount: 0,
+          message: bonusRow.message,
+        })
+      }
+    }
+    const invalid = validations.filter((row) => !row.ok)
+    if (invalid.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: formatStampCouponValidationErrors(invalid),
+          validations: invalid,
+        },
+        { status: 400 }
+      )
+    }
+
+    const policy = await saveMemberStampPolicy(policyInput, { tenantScope })
     const milestones = await saveMemberStampMilestones(milestoneInputs)
-    return NextResponse.json({ success: true, policy, milestones })
+    return NextResponse.json({ success: true, policy, milestones, validations })
   } catch (e) {
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '설정을 저장하지 못했습니다.' },
