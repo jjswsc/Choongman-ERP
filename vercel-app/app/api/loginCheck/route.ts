@@ -5,7 +5,7 @@ import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore, resolveAuthRoleFromEmployeeRoleColumn } from '@/lib/permissions'
-import { deriveTenantIdFromCompany, normalizeCompanyName, normalizeTenantId } from '@/lib/tenant-context'
+import { normalizeCompanyName, normalizeTenantId } from '@/lib/tenant-context'
 import { buildAllowedStoresForToken } from '@/lib/franchisee-multi-store'
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
@@ -179,9 +179,18 @@ export async function POST(req: NextRequest) {
     const saasPartnerLogin = partnerScope.kind === 'partner'
     const tenantId = saasPartnerLogin
       ? undefined
-      : resolvedTenant?.tenantId ||
-        normalizeTenantId(row.tenant_id) ||
-        deriveTenantIdFromCompany(companyName)
+      : (
+          resolvedTenant?.tenantId ||
+          (
+            await resolveSaasTenantForLogin({
+              tenantId: row.tenant_id,
+              company: companyName || companyInput,
+            })
+          )?.tenantId ||
+          normalizeTenantId(row.tenant_id) ||
+          ''
+        ) || undefined
+    /** 슬러그 폴백(abc-company)은 JWT에 넣지 않음 — tenants.id 만 사용 */
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
     const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''

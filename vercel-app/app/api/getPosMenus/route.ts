@@ -317,8 +317,6 @@ export async function GET(request: NextRequest) {
       }]
     })
 
-    // 매장 코드 표기 차이로 필터 결과가 0건이면 POS 빈 화면 방지용 1회 폴백
-    // — Omni 테넌트 격리 중에는 절대 전체(타사) 메뉴로 폴백하지 않음
     if (
       !catalogScope.enforce &&
       !strictStoreScope &&
@@ -418,9 +416,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(fallbackList, { headers })
     }
 
+    if (list.length === 0) {
+      headers.set('Cache-Control', 'private, no-store')
+    }
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getPosMenus:', e)
+    headers.set('Cache-Control', 'private, no-store')
     return NextResponse.json([], { headers })
   }
 }
