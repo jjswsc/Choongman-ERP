@@ -45,6 +45,7 @@ import {
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr, tOr } from '@/lib/i18n'
+import { translateApiMessage } from '@/lib/translate-api-message'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
 import { isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
@@ -1282,6 +1283,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         memo: nextMemo,
         discountAmt: Number(taxInvoiceOrder.discountAmt || 0),
         discountReason: String(taxInvoiceOrder.discountReason || ''),
+        serviceAmt: Number(taxInvoiceOrder.serviceAmt || 0),
+        serviceReason: String(taxInvoiceOrder.serviceReason || ''),
         paymentCash: Number(taxInvoiceOrder.paymentCash || 0),
         paymentCard: Number(taxInvoiceOrder.paymentCard || 0),
         paymentQr: Number(taxInvoiceOrder.paymentQr || 0),
@@ -1301,7 +1304,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         guestCount: Number(taxInvoiceOrder.guestCount || 0),
       })
       if (!res.success) {
-        await appAlert(String(res.message || t('processFail') || '실패'))
+        await appAlert(
+          translateApiMessage(String(res.message || ''), t) || t('processFail') || '실패'
+        )
         return
       }
       await handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo })

@@ -410,17 +410,17 @@ function createRuntime(userCfg) {
     }
 
     if (action === 'qr') {
-      const a1 = String(json.paymentIndicator || json.qrType || '03').slice(0, 2)
-      const frame = buildFrame({
-        txCode: '70',
-        more: '1',
-        fields: [
-          { type: '40', data: normalizeAmount12(json.amount) },
-          { type: 'A1', data: a1 },
-          ...optionalBankField(json.bankId),
-        ],
-      })
-      return await sendTxAndParse('70', frame, timeoutMs)
+      const a1 = String(json.paymentIndicator || json.qrType || '03').replace(/\D/g, '').padStart(2, '0').slice(-2) || '03'
+      const fields = [
+        { type: '40', data: normalizeAmount12(json.amount) },
+        { type: 'A1', data: a1 },
+        ...optionalBankField(json.bankId),
+      ]
+      const ref1 = String(json.reference1 || '').trim()
+      const ref2 = String(json.reference2 || '').trim()
+      if (ref1) fields.splice(1, 0, { type: 'R1', data: ref1.slice(0, 20) })
+      if (ref2) fields.push({ type: 'R2', data: ref2.slice(0, 20) })
+      return await sendTxAndParse('70', buildFrame({ txCode: '70', more: '1', fields }), timeoutMs)
     }
 
     if (action === 'display_qr') {

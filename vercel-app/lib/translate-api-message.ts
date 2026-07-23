@@ -71,6 +71,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   pos_drawer_pin_invalid_format: "posDrawerPinInvalidFormat",
   pos_drawer_pin_wrong: "posDrawerPinWrong",
   pos_drawer_pin_current_required: "posDrawerPinCurrentRequired",
+  payment_exceeds_total: "posPaymentExceedsTotal",
 
   // POS 단말 역할 제한
   "단말 대수 설정은 본사(OFFICE) 직원만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",

@@ -429,33 +429,61 @@ export async function POST(req: NextRequest) {
           paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
       }
     }
-    if (total > 0.02 && nextPaymentSum > total + 0.02) {
+    const dbTotal = Math.max(0, Number(current?.total ?? 0) || 0)
+    const paymentsUnchanged = Math.abs(nextPaymentSum - previousPaymentSum) <= 0.02
+    /**
+     * 세금계산서(memo) 등 결제 불변 저장: client가 pricingAdjustments/serviceAmt 없이
+     * total을 다시 계산하면 결제액 > 재계산 total 로 오탐할 수 있음.
+     * 결제액이 DB와 같고 DB total이 결제액을 덮으면 통과하고, 재무 필드는 DB 값을 유지한다.
+     */
+    const settledPaymentCoversDbTotal =
+      paymentsUnchanged &&
+      dbTotal > 0.02 &&
+      nextPaymentSum >= dbTotal - 0.02 &&
+      nextPaymentSum <= dbTotal + 0.02
+    if (total > 0.02 && nextPaymentSum > total + 0.02 && !settledPaymentCoversDbTotal) {
       return NextResponse.json(
         { success: false, message: 'payment_exceeds_total' },
         { headers }
       )
     }
+    const preserveDbFinancials =
+      settledPaymentCoversDbTotal && Math.abs(total - dbTotal) > 0.02
+    const totalForPaidAt = preserveDbFinancials ? dbTotal : total
     const paidAtStamp = resolvePosOrderPaidAtStampIso({
       existingPaidAt: String(current?.paid_at ?? '').trim() || null,
-      total,
+      total: totalForPaidAt,
       previousPaymentSum,
       nextPaymentSum,
       linkposRespondedAt: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
     })
 
+    const bodyHasCashTendered =
+      body?.paymentCashTendered != null || body?.payment_cash_tendered != null
+
     const patch: Record<string, unknown> = {
       table_name: tableName,
       memo,
-      discount_amt: discountAmtNetFinal,
-      discount_reason: discountReason,
+      discount_amt: preserveDbFinancials
+        ? Math.max(0, Number(current?.discount_amt ?? 0) || 0)
+        : discountAmtNetFinal,
+      discount_reason: preserveDbFinancials
+        ? (current?.discount_reason ?? null)
+        : discountReason,
       tier_discount_amt: tierDiscountAmt,
       member_tier_code: memberTierCode,
-      service_amt: serviceAmt,
-      service_reason: serviceReason || null,
+      service_amt: preserveDbFinancials
+        ? Math.max(0, Number(current?.service_amt ?? 0) || 0)
+        : serviceAmt,
+      service_reason: preserveDbFinancials
+        ? (current?.service_reason ?? null)
+        : serviceReason || null,
       payment_cash: paymentCash,
-      ...(paymentCashTendered > 0.005
-        ? { payment_cash_tendered: paymentCashTendered }
-        : { payment_cash_tendered: 0 }),
+      ...(bodyHasCashTendered
+        ? paymentCashTendered > 0.005
+          ? { payment_cash_tendered: paymentCashTendered }
+          : { payment_cash_tendered: 0 }
+        : {}),
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
@@ -474,9 +502,9 @@ export async function POST(req: NextRequest) {
       point_used: pointUsed,
       point_earned: pointEarnedReq,
       items_json: JSON.stringify(items),
-      subtotal,
-      vat,
-      total,
+      subtotal: preserveDbFinancials ? Math.max(0, Number(current?.subtotal ?? 0) || 0) : subtotal,
+      vat: preserveDbFinancials ? Math.max(0, Number(current?.vat ?? 0) || 0) : vat,
+      total: preserveDbFinancials ? dbTotal : total,
     }
 
     if (paidAtStamp) {

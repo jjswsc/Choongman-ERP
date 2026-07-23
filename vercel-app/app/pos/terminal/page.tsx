@@ -56,6 +56,7 @@ import {
   executeLinkposDisplayQr,
   executeLinkposClearQr,
   executeLinkposPayment,
+  executeLinkposQrPayment,
   probeLinkposLocalReady,
   grabCancelOrderByStoreApi,
   upsertPosTaxInvoiceRecipient,
@@ -6217,6 +6218,62 @@ export default function PosTerminalPage() {
       kbankManualCancelPendingRef.current = false
       const qrAmount = Math.max(0, Number(payment?.paymentQr || 0))
       if (qrAmount <= 0) return { ok: true as const }
+
+      const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
+      const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
+      // 「แสดงบนเครื่อง」명시 선택 + Thai QR 만 LinkPOS tx70. 실패 시 KBank/캐셔 QR로 폴백(결제 중단 금지).
+      const preferEdcNativeQr =
+        Boolean(payment?.paymentQrShowOnEdc) &&
+        requestedQrType !== 'CREDIT_CARD' &&
+        isLinkposCardApiEnabled()
+
+      if (preferEdcNativeQr) {
+        if (!currentStoreId) {
+          const msg = t('posStoreRequired') || '매장 정보가 필요합니다.'
+          await appAlert(msg)
+          return { ok: false as const, message: msg }
+        }
+        const localReady = await probeLinkposLocalReady()
+        if (localReady) {
+          setCustomerDisplayPaymentMessage(
+            t('posWaitingEdcQr') || 'กรุณาสแกน QR บนเครื่องรูดบัตรครับ'
+          )
+          setLinkposQrBridgeStatus('idle')
+          const ref1 = `POSQR${Date.now().toString().slice(-14)}`.slice(0, 20)
+          const ref2 = String(context?.orderLabel || auth?.user || '').trim().slice(0, 20)
+          const edcQr = await executeLinkposQrPayment({
+            amount: qrAmount,
+            paymentIndicator: '03',
+            reference1: ref1,
+            reference2: ref2,
+            storeCode: currentStoreId,
+            timeoutMs: 120000,
+          })
+          setCustomerDisplayPaymentMessage('')
+          if (edcQr.success && edcQr.payment) {
+            setLinkposQrBridgeStatus('ok')
+            return {
+              ok: true as const,
+              partnerTransactionId: ref1,
+              qrAmount,
+              qrType: 'THAI_QR' as const,
+              linkposPayment: edcQr.payment,
+            }
+          }
+          setLinkposQrBridgeStatus('failed')
+          await appAlert(
+            t('posQrShowOnEdcFallback') ||
+              'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'
+          )
+          // fall through → KBank / 수동 QR
+        } else {
+          await appAlert(
+            t('posQrShowOnEdcFallback') ||
+              'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'
+          )
+        }
+      }
+
       if (!isKbankPilotStore) return { ok: true as const }
       if (!currentStoreId) {
         const msg = t('posStoreRequired') || '매장 정보가 필요합니다.'
@@ -6227,12 +6284,6 @@ export default function PosTerminalPage() {
       if (!canGenerate) {
         return { ok: false as const, message: 'kbank_generate_cooldown' }
       }
-      const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
-      // 고객 모니터 없으면 QR API 생성 후 EDC 표시를 기본 선호 (Jayle 등)
-      const preferEdcDisplay =
-        Boolean(payment?.paymentQrShowOnEdc) ||
-        (!dualMonitorEnabled && isLinkposCardApiEnabled())
-      const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 
       const existingQrPayload = String(liveKbankQrPayload || '').trim()
       const existingPartnerTxnId = String(kbankOpsTxnUid || '').trim()
@@ -6397,17 +6448,13 @@ export default function PosTerminalPage() {
           reference1: String(context?.orderType || '').slice(0, 20),
           reference2: String(context?.orderLabel || '').slice(0, 20),
         })
-        if (preferEdcDisplay && !out.success && out.message !== 'linkpos_card_api_disabled') {
-          await appAlert(
-            t('posQrShowOnEdcFallback') ||
-              'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'
-          )
+        // API QR → EDC 표시는 펌웨어 의존(best-effort). 실패해도 캐셔 QR 유지.
+        if (!out.success && out.message !== 'linkpos_card_api_disabled') {
+          setLinkposQrBridgeStatus('failed')
         }
       })()
       setCustomerDisplayPaymentMessage(
-        preferEdcDisplay
-          ? t('posWaitingEdcQr') || 'กรุณาสแกน QR บนเครื่องรูดบัตรครับ'
-          : (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+        (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )
       let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
       let refId = String(generatedInfo.referenceId || '').trim()
@@ -6579,6 +6626,7 @@ export default function PosTerminalPage() {
       clearKbankQrSession,
       lang,
       dualMonitorEnabled,
+      auth?.user,
     ]
   )
 
@@ -7247,6 +7295,8 @@ export default function PosTerminalPage() {
         memo: nextMemo,
         discountAmt: Number(taxInvoiceTargetOrder.discountAmt || 0),
         discountReason: String(taxInvoiceTargetOrder.discountReason || ''),
+        serviceAmt: Number(taxInvoiceTargetOrder.serviceAmt || 0),
+        serviceReason: String(taxInvoiceTargetOrder.serviceReason || ''),
         paymentCash: Number(taxInvoiceTargetOrder.paymentCash || 0),
         paymentCard: Number(taxInvoiceTargetOrder.paymentCard || 0),
         paymentQr: Number(taxInvoiceTargetOrder.paymentQr || 0),

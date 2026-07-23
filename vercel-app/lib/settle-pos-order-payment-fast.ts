@@ -258,6 +258,13 @@ export async function settlePosOrderPaymentFast(params: {
     }
   }
 
+  if (total > 0.02 && nextPaymentSum > total + 0.02) {
+    return NextResponse.json(
+      { success: false, message: 'payment_exceeds_total' },
+      { headers }
+    )
+  }
+
   const linkposPayment =
     body?.linkposPayment && typeof body.linkposPayment === 'object'
       ? (body.linkposPayment as Record<string, unknown>)

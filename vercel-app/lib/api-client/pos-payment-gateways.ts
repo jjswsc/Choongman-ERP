@@ -13,7 +13,7 @@ import type { PosPaymentOtherBreakdown } from '../pos-payment-other-breakdown'
 export type LinkposPaymentSummary = {
   provider: 'kbtg_linkpos'
   mode: 'hypercom'
-  txCode: '20' | '26' | '50'
+  txCode: '20' | '26' | '50' | '70'
   bankId: string
   responseCode: string
   approvalCode?: string
@@ -232,6 +232,120 @@ export async function executeLinkposPayment(params: {
     success: true,
     payment: (data.payment || null) as LinkposPaymentSummary | null,
     source: 'server' as const,
+  }
+}
+
+/**
+ * LinkPOS native QR (Hypercom tx 70) — EDC가 금액 받아 단말 QR 표시·승인.
+ * KBank Partner API 문자열을 단말에 “그려 넣는” display_qr 과 다름 (펌웨어 미지원인 경우 많음).
+ */
+export async function executeLinkposQrPayment(params: {
+  amount: number
+  bankId?: string
+  /** LinkPOS A1 — 보통 03=Thai QR/PromptPay */
+  paymentIndicator?: string
+  reference1?: string
+  reference2?: string
+  storeCode?: string
+  timeoutMs?: number
+}) {
+  if (!isLinkposCardApiEnabled()) {
+    return {
+      success: false as const,
+      message: 'linkpos_card_api_disabled',
+      payment: null as LinkposPaymentSummary | null,
+      source: 'disabled' as const,
+    }
+  }
+
+  const timeoutMs = Math.max(2000, Number(params.timeoutMs ?? 120000))
+  const a1 = String(params.paymentIndicator || '03').replace(/\D/g, '').padStart(2, '0').slice(-2) || '03'
+  const payload = {
+    action: 'qr',
+    amount: Number(params.amount),
+    bankId: String(params.bankId || ''),
+    paymentIndicator: a1,
+    reference1: String(params.reference1 || '').slice(0, 20),
+    reference2: String(params.reference2 || '').slice(0, 20),
+    storeCode: String(params.storeCode || ''),
+    protocol: 'hypercom_v2',
+    timeoutMs,
+  }
+
+  const viaShell = await postLinkposViaHybridShell(payload, timeoutMs)
+  if (viaShell.ok && viaShell.data) {
+    if (viaShell.data.success) {
+      return {
+        success: true,
+        payment: normalizeLinkposQrPaymentSummary(viaShell.data, params),
+        source: 'local' as const,
+      }
+    }
+    return {
+      success: false,
+      message: String(viaShell.data.error || viaShell.data.message || 'declined'),
+      payment: null as LinkposPaymentSummary | null,
+      source: 'local' as const,
+    }
+  }
+
+  for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
+    const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
+    if (!r.ok) continue
+    if (r.data?.success) {
+      return {
+        success: true,
+        payment: normalizeLinkposQrPaymentSummary(r.data, params),
+        source: 'local' as const,
+      }
+    }
+    return {
+      success: false,
+      message: String(r.data?.error || r.data?.message || 'declined'),
+      payment: null as LinkposPaymentSummary | null,
+      source: 'local' as const,
+    }
+  }
+
+  return {
+    success: false,
+    message: 'linkpos_qr_bridge_unreachable',
+    payment: null as LinkposPaymentSummary | null,
+    source: 'local' as const,
+  }
+}
+
+function normalizeLinkposQrPaymentSummary(
+  data: Record<string, unknown>,
+  params: { amount: number; bankId?: string; reference1?: string }
+): LinkposPaymentSummary | null {
+  const p = (data.payment && typeof data.payment === 'object' ? data.payment : null) as Record<
+    string,
+    unknown
+  > | null
+  if (!p) return null
+  const responseCode = String(p.responseCode ?? '').trim()
+  if (!responseCode || responseCode === 'ND') return null
+  const approvedRaw = Number(p.approvedAmount ?? p.amount ?? params.amount)
+  const approvedAmount =
+    Number.isFinite(approvedRaw) && approvedRaw > 0.005 ? approvedRaw : Number(params.amount)
+  const now = new Date().toISOString()
+  return {
+    provider: 'kbtg_linkpos',
+    mode: 'hypercom',
+    txCode: '70',
+    bankId: String(params.bankId || ''),
+    responseCode,
+    approvalCode: p.approvalCode != null ? String(p.approvalCode) : undefined,
+    traceNo: p.traceNo != null ? String(p.traceNo) : undefined,
+    refNo: p.refNo != null ? String(p.refNo) : undefined,
+    terminalId: p.terminalId != null ? String(p.terminalId) : undefined,
+    merchantId: p.merchantId != null ? String(p.merchantId) : undefined,
+    reference1: String(params.reference1 || ''),
+    requestedAmount: Number(params.amount),
+    approvedAmount,
+    requestedAt: now,
+    respondedAt: now,
   }
 }
 

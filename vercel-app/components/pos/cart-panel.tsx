@@ -6110,7 +6110,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         {payQrType === 'EDC'
                           ? tr(
                               'posQrTypeShowOnEdcHint',
-                              'สร้าง QR จากธนาคารแล้วแสดงบนเครื่องรูดบัตร — เหมาะกับสาขาไม่มีจอลูกค้า'
+                              'ส่งยอดเข้าเครื่องรูดบัตร ให้ลูกค้าสแกน QR บนเครื่อง — เหมาะกับสาขาไม่มีจอลูกค้า'
                             )
                           : payQrType === 'CREDIT_CARD'
                             ? tr(
