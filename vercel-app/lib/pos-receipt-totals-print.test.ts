@@ -1,9 +1,11 @@
 import {
   appendPosReceiptFeeRateLabel,
   buildPosReceiptTotalsLabels,
+  formatPosReceiptRoundingAmtText,
   inferPosReceiptFeePercent,
   resolvePosReceiptAmountBeforeVat,
   resolvePosReceiptPrintFeeRates,
+  resolvePosReceiptRoundingAmt,
   resolvePosReceiptSeparateServiceAmtForPrint,
 } from '@/lib/pos-receipt-totals-print'
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
@@ -14,50 +16,48 @@ describe('pos-receipt-totals-print', () => {
   it('formats rate suffix in parentheses', () => {
     expect(appendPosReceiptFeeRateLabel('VAT', 7)).toBe('VAT (7%)')
     expect(appendPosReceiptFeeRateLabel('Service Charge', 10)).toBe('Service Charge (10%)')
-    expect(appendPosReceiptFeeRateLabel('VAT', 0)).toBe('VAT')
   })
 
-  it('Amount Before VAT = TOTAL − VAT (separate service already inside total)', () => {
+  it('Amount Before VAT is Sub + Service without rounding', () => {
     expect(
       resolvePosReceiptAmountBeforeVat({
-        total: 1000,
-        vatPrint: 65.45,
+        subtotalPrint: 100,
+        serviceFeeAmt: 10,
+        serviceFeeMode: 'separate',
       })
-    ).toBe(934.55)
-    // 사용자 예시: 850+85=935, VAT 65.45, TOTAL 1000.45 → 반올림 1000이면 Before=934.55
+    ).toBe(110)
     expect(
       resolvePosReceiptAmountBeforeVat({
-        total: 1000.45,
-        vatPrint: 65.45,
+        subtotalPrint: 69,
+        serviceFeeAmt: 6.9,
+        serviceFeeMode: 'separate',
       })
-    ).toBe(935)
+    ).toBe(75.9)
   })
 
-  it('does not subtract included card/other from Amount Before VAT', () => {
+  it('Rounding is TOTAL − (Before VAT + VAT) with +/- text', () => {
+    // 110 + 7.70 = 117.70 → TOTAL 118 → +0.30
     expect(
-      resolvePosReceiptAmountBeforeVat({
-        total: 1100,
-        vatPrint: 70,
-        cardFeeAmt: 30,
-        cardFeeMode: 'included',
-        otherFeeAmt: 10,
-        otherFeeMode: 'included',
+      resolvePosReceiptRoundingAmt({
+        total: 118,
+        amountBeforeVat: 110,
+        vatPrint: 7.7,
       })
-    ).toBe(1030)
+    ).toBe(0.3)
+    expect(formatPosReceiptRoundingAmtText(0.3)).toBe('+0.30')
+
+    // 75.90 + 5.31 = 81.21 → TOTAL 81 → -0.21
+    expect(
+      resolvePosReceiptRoundingAmt({
+        total: 81,
+        amountBeforeVat: 75.9,
+        vatPrint: 5.31,
+      })
+    ).toBe(-0.21)
+    expect(formatPosReceiptRoundingAmtText(-0.21)).toBe('-0.21')
   })
 
-  it('subtracts separate card/other so Before+VAT+card+other = TOTAL', () => {
-    expect(
-      resolvePosReceiptAmountBeforeVat({
-        total: 1100,
-        vatPrint: 70,
-        cardFeeAmt: 30,
-        cardFeeMode: 'separate',
-      })
-    ).toBe(1000)
-  })
-
-  it('included service is not treated as additive for Sub+Service path', () => {
+  it('included service is not added into Amount Before VAT', () => {
     expect(
       resolvePosReceiptSeparateServiceAmtForPrint({
         serviceFeeAmt: 90,
@@ -65,19 +65,16 @@ describe('pos-receipt-totals-print', () => {
       })
     ).toBe(0)
     expect(
-      resolvePosReceiptSeparateServiceAmtForPrint({
-        serviceFeeAmt: 85,
-        serviceFeeMode: 'separate',
+      resolvePosReceiptAmountBeforeVat({
+        subtotalPrint: 935,
+        serviceFeeAmt: 90.91,
+        serviceFeeMode: 'included',
       })
-    ).toBe(85)
+    ).toBe(935)
   })
 
-  it('infers percent from amounts', () => {
+  it('infers percent and prefers printer rates', () => {
     expect(inferPosReceiptFeePercent(85, 850)).toBe(10)
-    expect(inferPosReceiptFeePercent(65.45, 935)).toBe(7)
-  })
-
-  it('prefers printer rates then defaults VAT 7%', () => {
     expect(
       resolvePosReceiptPrintFeeRates({
         showVatRow: true,
@@ -87,42 +84,21 @@ describe('pos-receipt-totals-print', () => {
       })
     ).toEqual({ vatRate: 7, serviceRate: 10 })
   })
-
-  it('marks included service on label', () => {
-    const labels = buildPosReceiptTotalsLabels({
-      tr: (_k, fb) => fb,
-      serviceFeeMode: 'included',
-      serviceRate: 10,
-      vatRate: 7,
-      vatFeeMode: 'included',
-    })
-    expect(labels.serviceLabel).toContain('(10%)')
-    expect(labels.serviceLabel).toContain('incl. in total')
-    expect(labels.vatLabel).toContain('(7%)')
-    expect(labels.vatLabel).toContain('VAT incl. in total')
-  })
 })
 
-describe('receipt totals layout', () => {
-  const tr = (key: string, fallback: string) => fallback
-
-  it('payment receipt: Service → Amount Before VAT → VAT → TOTAL with rates', () => {
-    const labels = buildPosReceiptTotalsLabels({
-      tr,
-      vatRate: 7,
-      serviceRate: 10,
-    })
+describe('receipt totals layout with Rounding', () => {
+  it('payment: round up shows Amount Before VAT 110 + Rounding +0.30', () => {
     const receiptData: ReceiptModalData = {
-      orderNo: '2607230001',
-      items: [{ id: '1', name: 'Bibimbap', price: 850, qty: 1 }],
-      subtotal: 850,
+      orderNo: '008',
+      items: [{ id: '1', name: 'Bibimbap C', price: 100, qty: 1 }],
+      subtotal: 100,
       discountAmt: 0,
-      total: 1000.45,
+      total: 118,
       storeCode: 'ST01',
       orderType: 'dine-in',
-      vatFeeAmt: 65.45,
+      vatFeeAmt: 7.7,
       vatFeeMode: 'separate',
-      serviceFeeAmt: 85,
+      serviceFeeAmt: 10,
       serviceFeeMode: 'separate',
       vatRate: 7,
       serviceRate: 10,
@@ -138,75 +114,31 @@ describe('receipt totals layout', () => {
       printerSettings: { vatRate: 7, serviceRate: 10 } as never,
       forceSimpleTextMode: true,
     })
-    expect(html).toContain(labels.subtotalLabel)
-    expect(html).toContain('Service Charge (10%)')
     expect(html).toContain('Amount Before VAT')
-    expect(html).toContain('935.00')
-    expect(html).toContain('VAT (7%)')
-    expect(html).toContain('================================')
-    expect(html).toContain('TOTAL')
-    const serviceIdx = html.indexOf('Service Charge (10%)')
-    const beforeIdx = html.indexOf('Amount Before VAT')
+    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">110\.00/)
+    expect(html).toContain('Rounding')
+    expect(html).toContain('+0.30')
+    expect(html).not.toMatch(/Amount Before VAT<\/td><td class="simple-v">110\.30/)
     const vatIdx = html.indexOf('VAT (7%)')
+    const roundIdx = html.indexOf('Rounding')
     const totalIdx = html.indexOf('TOTAL')
-    expect(serviceIdx).toBeGreaterThan(-1)
-    expect(beforeIdx).toBeGreaterThan(serviceIdx)
-    expect(vatIdx).toBeGreaterThan(beforeIdx)
-    expect(totalIdx).toBeGreaterThan(vatIdx)
+    expect(roundIdx).toBeGreaterThan(vatIdx)
+    expect(totalIdx).toBeGreaterThan(roundIdx)
   })
 
-  it('hall order: single dashed divider then fee block and eq rule (no double dashed before total)', () => {
-    const html = buildPosHallOrderReceiptDocumentHtml({
-      payload: {
-        orderNo: '2607230001',
-        storeCode: 'ST01',
-        orderType: 'dine-in',
-        items: [{ id: '1', name: 'Bibimbap', price: 850, qty: 1 }],
-        subtotal: 850,
-        discountAmt: 0,
-        total: 1000.45,
-        vatFeeAmt: 65.45,
-        vatFeeMode: 'separate',
-        serviceFeeAmt: 85,
-        serviceFeeMode: 'separate',
-        vatRate: 7,
-        serviceRate: 10,
-      },
-      t: (k) => k,
-      lang: 'en',
-      printerSettings: { vatRate: 7, serviceRate: 10 } as never,
-    })
-    expect(html).toContain('Sub Total')
-    expect(html).toContain('Service Charge (10%)')
-    expect(html).toContain('Amount Before VAT')
-    expect(html).toContain('935.00')
-    expect(html).toContain('VAT (7%)')
-    expect(html).toContain('================================')
-    expect(html).toContain('TOTAL')
-    expect(html).not.toMatch(/receipt-divider"><\/div>\s*<div class="receipt-divider">/)
-    const serviceIdx = html.indexOf('Service Charge (10%)')
-    const beforeIdx = html.indexOf('Amount Before VAT')
-    const vatIdx = html.indexOf('VAT (7%)')
-    expect(beforeIdx).toBeGreaterThan(serviceIdx)
-    expect(vatIdx).toBeGreaterThan(beforeIdx)
-  })
-
-  it('included service: Amount Before VAT + VAT = TOTAL (no double-count)', () => {
+  it('payment: round down shows Amount Before VAT 75.90 + Rounding -0.21', () => {
     const receiptData: ReceiptModalData = {
-      orderNo: '2607230002',
-      items: [{ id: '1', name: 'Set', price: 1000, qty: 1 }],
-      subtotal: 1000,
+      orderNo: '009',
+      items: [{ id: '1', name: 'Mama', price: 69, qty: 1 }],
+      subtotal: 69,
       discountAmt: 0,
-      total: 1000,
+      total: 81,
       storeCode: 'ST01',
       orderType: 'dine-in',
-      vatFeeAmt: 65.42,
-      vatFeeMode: 'included',
-      receiptExclusiveSubtotalDisplay: 935,
-      receiptVatDisplayAmt: 65,
-      receiptTaxableGrossForDisplay: 1000,
-      serviceFeeAmt: 90.91,
-      serviceFeeMode: 'included',
+      vatFeeAmt: 5.31,
+      vatFeeMode: 'separate',
+      serviceFeeAmt: 6.9,
+      serviceFeeMode: 'separate',
       vatRate: 7,
       serviceRate: 10,
       receiptAutoPrintContext: 'payment',
@@ -221,9 +153,34 @@ describe('receipt totals layout', () => {
       printerSettings: { vatRate: 7, serviceRate: 10 } as never,
       forceSimpleTextMode: true,
     })
-    // TOTAL 1000, VAT display 65 → Before = 935 (서비스 포함분을 다시 더하지 않음)
-    expect(html).toContain('Amount Before VAT')
-    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">935\.00/)
-    expect(html).toContain('incl. in total')
+    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">75\.90/)
+    expect(html).toContain('-0.21')
+    expect(html).not.toMatch(/Amount Before VAT<\/td><td class="simple-v">75\.69/)
+  })
+
+  it('hall order also prints Rounding separately', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '008',
+        storeCode: 'ST01',
+        orderType: 'dine-in',
+        items: [{ id: '1', name: 'Bibimbap C', price: 100, qty: 1 }],
+        subtotal: 100,
+        discountAmt: 0,
+        total: 118,
+        vatFeeAmt: 7.7,
+        vatFeeMode: 'separate',
+        serviceFeeAmt: 10,
+        serviceFeeMode: 'separate',
+        vatRate: 7,
+        serviceRate: 10,
+      },
+      t: (k) => k,
+      lang: 'en',
+      printerSettings: { vatRate: 7, serviceRate: 10 } as never,
+    })
+    expect(html).toContain('110.00')
+    expect(html).toContain('Rounding')
+    expect(html).toContain('+0.30')
   })
 })

@@ -1,9 +1,12 @@
 /**
- * 결제·홀 주문서 공통 — 소계/서비스/부가세 전 금액/VAT/합계 표시 모델
+ * 결제·홀 주문서 공통 — 소계/서비스/부가세 전 금액/VAT/Rounding/합계 표시 모델
  *
- * Amount Before VAT 항등식(인쇄 합계가 맞도록):
- *   Amount Before VAT + VAT + (별도 카드비) + (별도 기타) = TOTAL
- * 포함(included) 서비스/VAT는 합계에 더해지지 않으므로 Before VAT에 가산하지 않는다.
+ * 인쇄 항등식:
+ *   Amount Before VAT + VAT + Rounding + (별도 카드) + (별도 기타) = TOTAL
+ *
+ * Amount Before VAT = Sub Total − 할인 + 배달/포장 + (별도 서비스만)
+ *   → 정수 바트 반올림(Rounding)은 여기에 넣지 않는다.
+ * Rounding = TOTAL − (Before VAT + VAT + 별도 카드/기타)
  */
 
 import type { PosFeeMode } from '@/lib/pos-pricing'
@@ -52,9 +55,7 @@ export function resolvePosReceiptPrintFeeRates(params: {
   showServiceRow: boolean
   vatPrint?: number
   serviceAmt?: number
-  /** 서비스 % 추정 분모(보통 소계) */
   serviceBaseAmt?: number
-  /** VAT % 추정 분모(보통 Amount Before VAT) */
   vatBaseAmt?: number
 }): { vatRate?: number; serviceRate?: number } {
   const pick = (raw: number | null | undefined): number | undefined => {
@@ -119,12 +120,52 @@ export function resolvePosReceiptSubtotalAndVatPrint(params: {
   return { subtotalPrint, vatPrint, showVatRow: vatPrint > 0.0001 }
 }
 
+/** 별도(service)일 때만 Sub Total 가산에 사용. 포함이면 0. */
+export function resolvePosReceiptSeparateServiceAmtForPrint(params: {
+  serviceFeeAmt?: number
+  serviceFeeMode?: PosFeeMode
+}): number {
+  if (String(params.serviceFeeMode ?? 'separate') === 'included') return 0
+  return Math.max(0, Number(params.serviceFeeAmt ?? 0) || 0)
+}
+
+function separateFeeAmt(amt: number | undefined, mode: PosFeeMode | undefined): number {
+  if (String(mode ?? 'separate') === 'included') return 0
+  return Math.max(0, Number(amt ?? 0) || 0)
+}
+
 /**
- * Amount Before VAT = TOTAL − VAT − (별도 카드) − (별도 기타)
- * → 어떤 포함/별도·병렬/순차 조합이든 Before VAT + VAT (+별도 카드/기타) = TOTAL
+ * Amount Before VAT — 반올림 제외.
+ * 세금계산서(간이) 분해 시 subtotalPrint가 이미 합계−VAT 이면 그대로 사용.
  */
 export function resolvePosReceiptAmountBeforeVat(params: {
+  subtotalPrint: number
+  discountAmtForPrint?: number
+  deliveryFee?: number
+  packagingFee?: number
+  serviceFeeAmt?: number
+  serviceFeeMode?: PosFeeMode
+  isTaxInvoice?: boolean
+}): number {
+  const sub = Math.max(0, Number(params.subtotalPrint) || 0)
+  if (params.isTaxInvoice) return round2(sub)
+  const discount = Math.max(0, Number(params.discountAmtForPrint ?? 0) || 0)
+  const delivery = Math.max(0, Number(params.deliveryFee ?? 0) || 0)
+  const packaging = Math.max(0, Number(params.packagingFee ?? 0) || 0)
+  const service = resolvePosReceiptSeparateServiceAmtForPrint({
+    serviceFeeAmt: params.serviceFeeAmt,
+    serviceFeeMode: params.serviceFeeMode,
+  })
+  return round2(sub - discount + delivery + packaging + service)
+}
+
+/**
+ * 정수 바트 등 TOTAL 맞추기 차액.
+ * Rounding +0.30 = 올림, Rounding -0.21 = 내림.
+ */
+export function resolvePosReceiptRoundingAmt(params: {
   total: number
+  amountBeforeVat: number
   vatPrint: number
   cardFeeAmt?: number
   cardFeeMode?: PosFeeMode
@@ -132,25 +173,22 @@ export function resolvePosReceiptAmountBeforeVat(params: {
   otherFeeMode?: PosFeeMode
 }): number {
   const total = Number(params.total)
-  const vat = Math.max(0, Number(params.vatPrint) || 0)
-  const card =
-    params.cardFeeMode === 'separate' ? Math.max(0, Number(params.cardFeeAmt ?? 0) || 0) : 0
-  const other =
-    params.otherFeeMode === 'separate' ? Math.max(0, Number(params.otherFeeAmt ?? 0) || 0) : 0
   if (!Number.isFinite(total)) return 0
-  // void 등 음수 합계도 부호 유지
-  const sign = total < 0 ? -1 : 1
-  const absBefore = Math.max(0, Math.abs(total) - vat - card - other)
-  return round2(sign * absBefore)
+  const before = Number(params.amountBeforeVat) || 0
+  const vat = Math.max(0, Number(params.vatPrint) || 0)
+  const card = separateFeeAmt(params.cardFeeAmt, params.cardFeeMode)
+  const other = separateFeeAmt(params.otherFeeAmt, params.otherFeeMode)
+  return round2(total - before - vat - card - other)
 }
 
-/** 별도(service)일 때만 Sub Total 가산에 사용. 포함이면 0(이미 소계·합계에 녹아 있음). */
-export function resolvePosReceiptSeparateServiceAmtForPrint(params: {
-  serviceFeeAmt?: number
-  serviceFeeMode?: PosFeeMode
-}): number {
-  if (String(params.serviceFeeMode ?? 'separate') === 'included') return 0
-  return Math.max(0, Number(params.serviceFeeAmt ?? 0) || 0)
+export function formatPosReceiptRoundingAmtText(rounding: number): string {
+  const r = round2(rounding)
+  if (Math.abs(r) < 0.005) return '0.00'
+  const abs = Math.abs(r).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return r > 0 ? `+${abs}` : `-${abs}`
 }
 
 export function buildPosReceiptTotalsLabels(params: {
@@ -164,6 +202,7 @@ export function buildPosReceiptTotalsLabels(params: {
   serviceLabel: string
   amountBeforeVatLabel: string
   vatLabel: string
+  roundingLabel: string
   totalLabel: string
 } {
   const { tr, vatFeeMode, serviceFeeMode, vatRate, serviceRate } = params
@@ -182,7 +221,15 @@ export function buildPosReceiptTotalsLabels(params: {
     vatFeeMode === 'included'
       ? `${vatWithRate}${tr('posVatIncludedInTotalReceiptHint', ' (VAT incl. in total)')}`
       : vatWithRate
+  const roundingLabel = tr('posReceiptRounding', 'Rounding')
   const totalRaw = tr('posTotal', 'TOTAL')
   const totalLabel = /^[A-Za-z]/.test(totalRaw.trim()) ? totalRaw.trim().toUpperCase() : totalRaw
-  return { subtotalLabel, serviceLabel, amountBeforeVatLabel, vatLabel, totalLabel }
+  return {
+    subtotalLabel,
+    serviceLabel,
+    amountBeforeVatLabel,
+    vatLabel,
+    roundingLabel,
+    totalLabel,
+  }
 }

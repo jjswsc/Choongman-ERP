@@ -40,9 +40,11 @@ import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import {
   buildPosReceiptTotalsLabels,
+  formatPosReceiptRoundingAmtText,
   POS_RECEIPT_TOTAL_EQ_RULE,
   resolvePosReceiptAmountBeforeVat,
   resolvePosReceiptPrintFeeRates,
+  resolvePosReceiptRoundingAmt,
   resolvePosReceiptSubtotalAndVatPrint,
 } from '@/lib/pos-receipt-totals-print'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
@@ -852,7 +854,16 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     vatRatePercent: Number(printerSettings?.vatRate ?? payload.vatRate ?? 0) || undefined,
   })
   const amountBeforeVatPrint = resolvePosReceiptAmountBeforeVat({
-    total: payload.total,
+    subtotalPrint,
+    discountAmtForPrint: grabInbound ? 0 : effectiveDiscountAmt,
+    deliveryFee: payload.deliveryFee,
+    packagingFee: payload.packagingFee,
+    serviceFeeAmt: serviceFeeAmtPrint,
+    serviceFeeMode: payload.serviceFeeMode,
+  })
+  const roundingPrint = resolvePosReceiptRoundingAmt({
+    total: voidMode ? Math.abs(Number(payload.total) || 0) : payload.total,
+    amountBeforeVat: amountBeforeVatPrint,
     vatPrint,
     cardFeeAmt: payload.cardFeeAmt,
     cardFeeMode: payload.cardFeeMode,
@@ -860,6 +871,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     otherFeeMode: payload.otherFeeMode,
   })
   const showAmountBeforeVatRow = showVatRow
+  const showRoundingRow = Math.abs(roundingPrint) > 0.005
   const { vatRate: vatRatePrint, serviceRate: serviceRatePrint } = resolvePosReceiptPrintFeeRates({
     vatRate: payload.vatRate,
     serviceRate: payload.serviceRate,
@@ -879,6 +891,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     vatRate: vatRatePrint,
     serviceRate: serviceRatePrint,
   })
+  const roundingAmtText = formatPosReceiptRoundingAmtText(roundingPrint)
   const subtotalRow =
     '<div class="receipt-row"><span>' +
     esc(totalsLabels.subtotalLabel) +
@@ -911,6 +924,15 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       c('span') +
       '<span>' +
       formatBahtNum(vatPrint) +
+      c('span') +
+      c('div')
+    : ''
+  const roundingRow = showRoundingRow
+    ? '<div class="receipt-row"><span>' +
+      esc(totalsLabels.roundingLabel) +
+      c('span') +
+      '<span>' +
+      roundingAmtText +
       c('span') +
       c('div')
     : ''
@@ -968,6 +990,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     serviceFeeRow +
     amountBeforeVatRow +
     vatRow +
+    roundingRow +
     cardFeeRow +
     otherFeeRow +
     '<div class="receipt-total-eq-rule">' +

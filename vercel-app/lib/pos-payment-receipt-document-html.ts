@@ -7,9 +7,11 @@ import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import {
   buildPosReceiptTotalsLabels,
+  formatPosReceiptRoundingAmtText,
   POS_RECEIPT_TOTAL_EQ_RULE,
   resolvePosReceiptAmountBeforeVat,
   resolvePosReceiptPrintFeeRates,
+  resolvePosReceiptRoundingAmt,
   resolvePosReceiptSubtotalAndVatPrint,
 } from '@/lib/pos-receipt-totals-print'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
@@ -794,6 +796,16 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const isTaxInvoice = !!taxInvoice
   const serviceFeeAmtPrint = Math.max(0, Number(receiptData.serviceFeeAmt ?? 0) || 0)
   const showServiceFeeRow = serviceFeeAmtPrint > 0.0001
+  const discountAmtForBeforeVat = Math.max(
+    0,
+    Number(
+      !grabInboundReceipt
+        ? showCouponDiscountRows
+          ? nonCouponDiscountAmt
+          : receiptData.discountAmt
+        : 0
+    ) || 0
+  )
   const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(
     receiptData,
     isTaxInvoice,
@@ -801,7 +813,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   )
   const showVatRow = vatPrint > 0.0001
   const amountBeforeVatPrint = resolvePosReceiptAmountBeforeVat({
+    subtotalPrint,
+    discountAmtForPrint: discountAmtForBeforeVat,
+    deliveryFee: receiptData.deliveryFee,
+    packagingFee: receiptData.packagingFee,
+    serviceFeeAmt: serviceFeeAmtPrint,
+    serviceFeeMode: receiptData.serviceFeeMode,
+    isTaxInvoice,
+  })
+  const roundingPrint = resolvePosReceiptRoundingAmt({
     total: receiptData.total,
+    amountBeforeVat: amountBeforeVatPrint,
     vatPrint,
     cardFeeAmt: receiptData.cardFeeAmt,
     cardFeeMode: receiptData.cardFeeMode,
@@ -809,6 +831,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     otherFeeMode: receiptData.otherFeeMode,
   })
   const showAmountBeforeVatRow = showVatRow
+  const showRoundingRow = Math.abs(roundingPrint) > 0.005
   const { vatRate: vatRatePrint, serviceRate: serviceRatePrint } = resolvePosReceiptPrintFeeRates({
     vatRate: (receiptData as { vatRate?: number }).vatRate,
     serviceRate: (receiptData as { serviceRate?: number }).serviceRate,
@@ -829,6 +852,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     serviceRate: serviceRatePrint,
   })
   const vatPrintLabelEscaped = esc(totalsLabels.vatLabel)
+  const roundingAmtText = formatPosReceiptRoundingAmtText(roundingPrint)
   const receiptTotalsEqRuleHtml = `<div class="receipt-total-eq-rule">${POS_RECEIPT_TOTAL_EQ_RULE}</div>`
   if (forceSimple) {
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
@@ -999,6 +1023,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         : '',
       showVatRow
         ? `<tr><td class="simple-k">${vatPrintLabelEscaped}</td><td class="simple-v">${formatBahtNum(vatPrint)}</td></tr>`
+        : '',
+      showRoundingRow
+        ? `<tr><td class="simple-k">${esc(totalsLabels.roundingLabel)}</td><td class="simple-v">${roundingAmtText}</td></tr>`
         : '',
       (receiptData.cardFeeAmt ?? 0) > 0
         ? `<tr><td class="simple-k">${esc(t('posCardFee') || '카드비')}</td><td class="simple-v">${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}</td></tr>`
@@ -1334,6 +1361,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${showServiceFeeRow ? paymentRowHtml(esc(totalsLabels.serviceLabel), formatBahtNum(serviceFeeAmtPrint)) : ''}
         ${showAmountBeforeVatRow ? paymentRowHtml(esc(totalsLabels.amountBeforeVatLabel), formatBahtNum(amountBeforeVatPrint)) : ''}
         ${showVatRow ? paymentRowHtml(vatPrintLabelEscaped, formatBahtNum(vatPrint)) : ''}
+        ${showRoundingRow ? paymentRowHtml(esc(totalsLabels.roundingLabel), roundingAmtText) : ''}
         ${(receiptData.cardFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posCardFee') || '카드비'), `${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}`) : ''}
         ${(receiptData.otherFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posOtherFee') || '기타'), `${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}`) : ''}
         ${plainMemoForPrint ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(plainMemoForPrint)}</div>` : ''}

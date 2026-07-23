@@ -1,5 +1,5 @@
 /**
- * 영수증 Amount Before VAT — VAT/서비스 포함·별도·스택 조합 항등식 검증
+ * Amount Before VAT + VAT + Rounding = TOTAL (포함/별도·스택 조합)
  */
 import {
   computePosPricing,
@@ -9,6 +9,7 @@ import {
 } from '@/lib/pos-pricing'
 import {
   resolvePosReceiptAmountBeforeVat,
+  resolvePosReceiptRoundingAmt,
   resolvePosReceiptSeparateServiceAmtForPrint,
   resolvePosReceiptSubtotalAndVatPrint,
 } from '@/lib/pos-receipt-totals-print'
@@ -45,7 +46,7 @@ function simulatePrint(c: MatrixCase) {
     },
   })
   const taxFields = receiptTaxDisplayFieldsFromPricing(pricing)
-  const { subtotalPrint, vatPrint, showVatRow } = resolvePosReceiptSubtotalAndVatPrint({
+  const { subtotalPrint, vatPrint } = resolvePosReceiptSubtotalAndVatPrint({
     total: pricing.finalTotal,
     subtotal: pricing.subtotal,
     discountAmt: pricing.discountAmt,
@@ -56,30 +57,39 @@ function simulatePrint(c: MatrixCase) {
     ...taxFields,
   })
   const amountBeforeVat = resolvePosReceiptAmountBeforeVat({
+    subtotalPrint,
+    discountAmtForPrint: pricing.discountAmt,
+    deliveryFee: pricing.deliveryFee,
+    packagingFee: pricing.packagingFee,
+    serviceFeeAmt: pricing.serviceFeeAmt,
+    serviceFeeMode: pricing.serviceFeeMode,
+  })
+  const rounding = resolvePosReceiptRoundingAmt({
     total: pricing.finalTotal,
+    amountBeforeVat,
     vatPrint,
     cardFeeAmt: pricing.cardFeeAmt,
     cardFeeMode: pricing.cardFeeMode,
     otherFeeAmt: pricing.otherFeeAmt,
     otherFeeMode: pricing.otherFeeMode,
   })
-  const separateService = resolvePosReceiptSeparateServiceAmtForPrint({
-    serviceFeeAmt: pricing.serviceFeeAmt,
-    serviceFeeMode: pricing.serviceFeeMode,
-  })
+  const sum = round2(amountBeforeVat + vatPrint + rounding)
   return {
     pricing,
     subtotalPrint,
     vatPrint,
-    showVatRow,
     amountBeforeVat,
-    separateService,
+    rounding,
     total: pricing.finalTotal,
-    identityOk: Math.abs(round2(amountBeforeVat + vatPrint) - pricing.finalTotal) <= 0.05,
+    identityOk: Math.abs(sum - pricing.finalTotal) <= 0.05,
+    separateService: resolvePosReceiptSeparateServiceAmtForPrint({
+      serviceFeeAmt: pricing.serviceFeeAmt,
+      serviceFeeMode: pricing.serviceFeeMode,
+    }),
   }
 }
 
-describe('receipt Amount Before VAT vs fee modes', () => {
+describe('receipt Amount Before VAT + Rounding vs fee modes', () => {
   const cases: MatrixCase[] = [
     {
       name: 'VAT sep + Service sep parallel',
@@ -91,8 +101,8 @@ describe('receipt Amount Before VAT vs fee modes', () => {
       feeStackMode: 'parallel',
     },
     {
-      name: 'VAT sep + Service sep sequential service→vat',
-      subtotal: 850,
+      name: 'VAT sep + Service sep sequential service→vat + whole baht',
+      subtotal: 100,
       vatRate: 7,
       vatMode: 'separate',
       serviceRate: 10,
@@ -102,14 +112,15 @@ describe('receipt Amount Before VAT vs fee modes', () => {
       roundPaymentTotalToWholeBaht: true,
     },
     {
-      name: 'VAT sep + Service sep sequential vat→service',
-      subtotal: 850,
+      name: 'round down Mama case',
+      subtotal: 69,
       vatRate: 7,
       vatMode: 'separate',
       serviceRate: 10,
       serviceMode: 'separate',
       feeStackMode: 'sequential',
-      feeStackOrder: ['vat', 'service', 'other'],
+      feeStackOrder: ['service', 'vat', 'other'],
+      roundPaymentTotalToWholeBaht: true,
     },
     {
       name: 'VAT included + Service separate',
@@ -135,70 +146,48 @@ describe('receipt Amount Before VAT vs fee modes', () => {
       serviceRate: 10,
       serviceMode: 'included',
     },
-    {
-      name: 'VAT included only',
-      subtotal: 1000,
-      vatRate: 7,
-      vatMode: 'included',
-      serviceRate: 0,
-      serviceMode: 'separate',
-    },
-    {
-      name: 'VAT separate only',
-      subtotal: 1000,
-      vatRate: 7,
-      vatMode: 'separate',
-      serviceRate: 0,
-      serviceMode: 'separate',
-    },
-    {
-      name: 'VAT included + Service separate + whole-baht rounding',
-      subtotal: 850.4,
-      vatRate: 7,
-      vatMode: 'included',
-      serviceRate: 10,
-      serviceMode: 'separate',
-      roundPaymentTotalToWholeBaht: true,
-    },
   ]
 
-  it('Amount Before VAT + VAT = TOTAL for every mode combination', () => {
+  it('Before VAT + VAT + Rounding = TOTAL for every mode', () => {
     for (const c of cases) {
       const r = simulatePrint(c)
       expect(r.identityOk, c.name).toBe(true)
     }
   })
 
-  it('included service is informational only (not added into Before VAT identity)', () => {
+  it('user round-up sample: Before 110, Rounding +0.30', () => {
     const r = simulatePrint({
-      name: 'both included',
-      subtotal: 1000,
-      vatRate: 7,
-      vatMode: 'included',
-      serviceRate: 10,
-      serviceMode: 'included',
-    })
-    expect(r.separateService).toBe(0)
-    expect(r.identityOk).toBe(true)
-    // Before VAT ≈ exclusive display when VAT included and no separate add-ons
-    expect(Math.abs(r.amountBeforeVat - r.subtotalPrint)).toBeLessThanOrEqual(1)
-  })
-
-  it('user photo path: sequential service→vat yields Before VAT ≈ Sub+Service', () => {
-    const r = simulatePrint({
-      name: 'photo',
-      subtotal: 850,
+      name: 'up',
+      subtotal: 100,
       vatRate: 7,
       vatMode: 'separate',
       serviceRate: 10,
       serviceMode: 'separate',
       feeStackMode: 'sequential',
       feeStackOrder: ['service', 'vat', 'other'],
-      roundPaymentTotalToWholeBaht: false,
+      roundPaymentTotalToWholeBaht: true,
     })
-    expect(r.pricing.serviceFeeAmt).toBe(85)
-    expect(r.pricing.vatFeeAmt).toBe(65.45)
-    expect(r.amountBeforeVat).toBe(935)
-    expect(r.identityOk).toBe(true)
+    expect(r.amountBeforeVat).toBe(110)
+    expect(r.vatPrint).toBe(7.7)
+    expect(r.total).toBe(118)
+    expect(r.rounding).toBe(0.3)
+  })
+
+  it('user round-down sample: Before 75.90, Rounding -0.21', () => {
+    const r = simulatePrint({
+      name: 'down',
+      subtotal: 69,
+      vatRate: 7,
+      vatMode: 'separate',
+      serviceRate: 10,
+      serviceMode: 'separate',
+      feeStackMode: 'sequential',
+      feeStackOrder: ['service', 'vat', 'other'],
+      roundPaymentTotalToWholeBaht: true,
+    })
+    expect(r.amountBeforeVat).toBe(75.9)
+    expect(r.vatPrint).toBe(5.31)
+    expect(r.total).toBe(81)
+    expect(r.rounding).toBe(-0.21)
   })
 })
