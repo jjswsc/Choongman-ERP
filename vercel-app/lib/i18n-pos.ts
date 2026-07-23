@@ -5051,8 +5051,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posQrTypeThaiHint: 'Scan with a banking app / PromptPay',
     posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
     posWaitingEdcQr: 'Please scan the QR on the card terminal.',
+    posWaitingEdcCard: 'Please tap or insert the card on the terminal.',
     posKbankCreditCardQrHint:
       'Use only if this store is registered for Credit Card QR. Otherwise choose Thai QR.',
+    posUseCardTabForEdc: 'For card-terminal payment, use the Card tab.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
     posKbankOrigTxnUidHint: 'QR Request TxnUid',
     posKbankTxnNoHint: 'Payment txnNo (numeric, e.g. 26440008 — not Generate APIC*)',
@@ -9542,6 +9544,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posCostActualBaseFallbackBadge: 'base BOM fallback',
     posCostActualOptionFallbackWarn: 'Lines with an option but no option BOM used the base BOM: qty {qty} · sales ฿{sales}. If option cost > base, actual cost% can look lower than the list. Expand a category row to see per-menu cost%.',
     posCostActualTopMenusHint: 'Click a row to see top menus (options) by sales for that category.',
+    posShellPrintDiagnosticsSelectEmpty: 'Not set (empty)',
+    posShellPrintDiagnosticsSelectMissing: '(not in list — pick again)',
 }
 export const I18N_POS_MM: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -12432,6 +12436,12 @@ export const I18N_POS_MM: Record<string, string> = {
     posKitchenAutoprintFailOther: 'Kitchen slip failed to print. Please reprint the order shortly.',
     posKitchenAutoprintFailPrint: 'Kitchen slip failed to print. Check the printer connection.',
     posMenuVisibleStoresUnscopedStrictHint: 'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
+    posCardApprovalFailedSoft: 'Please check the terminal connection and try again.',
+    posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
+    posShellPrintDiagnosticsSelectEmpty: 'Not set (empty)',
+    posShellPrintDiagnosticsSelectMissing: '(not in list — pick again)',
+    posWaitingEdcQr: 'Please scan the QR on the card terminal.',
+    posWaitingEdcCard: 'Please tap or insert the card on the terminal.',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -15307,6 +15317,12 @@ export const I18N_POS_LA: Record<string, string> = {
     posKitchenAutoprintFailOther: 'Kitchen slip failed to print. Please reprint the order shortly.',
     posKitchenAutoprintFailPrint: 'Kitchen slip failed to print. Check the printer connection.',
     posMenuVisibleStoresUnscopedStrictHint: 'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
+    posCardApprovalFailedSoft: 'Please check the terminal connection and try again.',
+    posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
+    posShellPrintDiagnosticsSelectEmpty: 'Not set (empty)',
+    posShellPrintDiagnosticsSelectMissing: '(not in list — pick again)',
+    posWaitingEdcQr: 'Please scan the QR on the card terminal.',
+    posWaitingEdcCard: 'Please tap or insert the card on the terminal.',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -17021,8 +17037,10 @@ export const I18N_POS_KH: Record<string, string> = {
     posQrTypeThaiHint: 'Scan with a banking app / PromptPay',
     posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
     posWaitingEdcQr: 'Please scan the QR on the card terminal.',
+    posWaitingEdcCard: 'Please tap or insert the card on the terminal.',
     posKbankCreditCardQrHint:
       'Use only if this store is registered for Credit Card QR. Otherwise choose Thai QR.',
+    posUseCardTabForEdc: 'For card-terminal payment, use the Card tab.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
     posKbankOrigTxnUidHint: 'QR Request TxnUid',
     posKbankTxnNoHint: 'Payment txnNo (numeric, e.g. 26440008 — not Generate APIC*)',
@@ -18219,6 +18237,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posKitchenAutoprintFailOther: 'Kitchen slip failed to print. Please reprint the order shortly.',
     posKitchenAutoprintFailPrint: 'Kitchen slip failed to print. Check the printer connection.',
     posMenuVisibleStoresUnscopedStrictHint: 'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
+    posShellPrintDiagnosticsSelectEmpty: 'Not set (empty)',
+    posShellPrintDiagnosticsSelectMissing: '(not in list — pick again)',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -21098,6 +21118,12 @@ export const I18N_POS_VI: Record<string, string> = {
     posKitchenAutoprintFailOther: 'Kitchen slip failed to print. Please reprint the order shortly.',
     posKitchenAutoprintFailPrint: 'Kitchen slip failed to print. Check the printer connection.',
     posMenuVisibleStoresUnscopedStrictHint: 'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
+    posCardApprovalFailedSoft: 'Please check the terminal connection and try again.',
+    posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
+    posShellPrintDiagnosticsSelectEmpty: 'Not set (empty)',
+    posShellPrintDiagnosticsSelectMissing: '(not in list — pick again)',
+    posWaitingEdcQr: 'Please scan the QR on the card terminal.',
+    posWaitingEdcCard: 'Please tap or insert the card on the terminal.',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -23981,4 +24007,10 @@ export const I18N_POS_MS: Record<string, string> = {
     posKitchenAutoprintFailOther: 'Kitchen slip failed to print. Please reprint the order shortly.',
     posKitchenAutoprintFailPrint: 'Kitchen slip failed to print. Check the printer connection.',
     posMenuVisibleStoresUnscopedStrictHint: 'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
+    posCardApprovalFailedSoft: 'Please check the terminal connection and try again.',
+    posQrShowOnEdcFallback: 'Could not show on the terminal. Please use the cashier-screen QR.',
+    posShellPrintDiagnosticsSelectEmpty: 'Not set (empty)',
+    posShellPrintDiagnosticsSelectMissing: '(not in list — pick again)',
+    posWaitingEdcQr: 'Please scan the QR on the card terminal.',
+    posWaitingEdcCard: 'Please tap or insert the card on the terminal.',
 }
