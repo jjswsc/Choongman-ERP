@@ -5894,20 +5894,23 @@ export default function PosTerminalPage() {
       const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
 
-      // API 미활성·강제 수기면 단말 호출 금지 (브리지 health만으로 승인 위장 방지)
-      // HTTPS POS → localhost health는 혼합콘텐츠로 막히므로 IPC(probeLinkposLocalReady) 우선
-      const linkposApiOn = isLinkposCardApiEnabled()
-      const localBridgeReady = linkposApiOn ? await probeLinkposLocalReady() : false
-
-      // 로컬 EDC 준비 + API ON 이면 매장「단말 생략」보다 단말 우선. API OFF면 항상 수기.
-      if (
-        !(linkposApiOn && localBridgeReady) &&
-        shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)
-      ) {
+      // 매장「단말 생략(수기)」이 true면 EDC 호출 금지.
+      // (이전: 로컬 브리지 serialReady면 skip를 무시 → 시콘 등 수기 매장에서 카드만 멈춤)
+      if (shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)) {
         return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       }
+      const linkposApiOn = isLinkposCardApiEnabled()
       if (!linkposApiOn) {
         return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
+      }
+      // HTTPS POS → localhost health는 혼합콘텐츠로 막히므로 IPC(probeLinkposLocalReady) 우선
+      const localBridgeReady = await probeLinkposLocalReady()
+      if (!localBridgeReady) {
+        const soft =
+          t('posCardApprovalFailedSoft') ||
+          'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ'
+        await appAlert(soft)
+        return { ok: false as const, message: soft }
       }
       if (!currentStoreId) {
         return { ok: false as const, message: 'store_required' }
