@@ -319,10 +319,12 @@ function normalizeLinkposQrPaymentSummary(
   data: Record<string, unknown>,
   params: { amount: number; bankId?: string; reference1?: string }
 ): LinkposPaymentSummary | null {
-  const p = (data.payment && typeof data.payment === 'object' ? data.payment : null) as Record<
+  const nested = (data.payment && typeof data.payment === 'object' ? data.payment : null) as Record<
     string,
     unknown
   > | null
+  // bridge가 payment 없이 top-level 필드를 주는 경우도 허용
+  const p = nested || (data.responseCode != null || data.approvalCode != null ? data : null)
   if (!p) return null
   const responseCode = String(p.responseCode ?? '').trim()
   if (!responseCode || responseCode === 'ND') return null

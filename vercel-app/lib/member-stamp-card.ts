@@ -20,6 +20,7 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
+  supabaseUpdateByFilterReturning,
   supabaseUpsert,
 } from '@/lib/supabase-server'
 import { getMemberSummaryById } from '@/lib/members-server-core'
@@ -531,18 +532,26 @@ async function issueStampMilestoneReward(params: {
 
   if (milestone.rewardType === 'points' && milestone.rewardPoints > 0) {
     try {
+      // 선 insert로 동시 요청 중복 포인트 지급 방지 (unique 충돌 시 패스)
+      try {
+        await supabaseInsert('member_stamp_reward_issues', {
+          member_id: memberId,
+          milestone_id: milestone.id,
+          card_sequence: cardSequence,
+          coupon_code: `POINTS_${milestone.rewardPoints}`,
+          coupon_issue_id: null,
+          created_at: getBangkokDateTimeString(),
+        })
+      } catch (insertErr) {
+        if (await hasStampRewardIssued({ memberId, milestoneId: milestone.id, cardSequence })) {
+          return null
+        }
+        throw insertErr
+      }
       await adjustMemberPoints({
         memberId,
         points: milestone.rewardPoints,
         note: `stamp_milestone_${milestone.stampCount}`,
-      })
-      await supabaseInsert('member_stamp_reward_issues', {
-        member_id: memberId,
-        milestone_id: milestone.id,
-        card_sequence: cardSequence,
-        coupon_code: `POINTS_${milestone.rewardPoints}`,
-        coupon_issue_id: null,
-        created_at: getBangkokDateTimeString(),
       })
       return { couponCode: null, points: milestone.rewardPoints, label }
     } catch (e) {
@@ -577,7 +586,7 @@ async function issueStampMilestoneReward(params: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     // 이미 보유 중이면 마일스톤은 달성 처리(재시도·가짜 축하 방지)
-    if (/이미 사용 가능한 동일 쿠폰/.test(msg) || /already/i.test(msg)) {
+    if (/이미 사용 가능한 동일 쿠폰/.test(msg)) {
       const issueRows = (await supabaseSelectFilter(
         'member_coupon_issues',
         `member_id=eq.${memberId}&coupon_code=eq.${encodeURIComponent(milestone.couponCode)}&status=eq.issued`,
@@ -690,6 +699,48 @@ async function applyStampThresholdEffects(params: {
       }
     }
 
+    const nextSequence = finalSequence + 1
+    // 이미 이 카드가 리셋됐으면(동시 요청) 보너스·리셋 스킵
+    const existingReset = (await supabaseSelectFilter(
+      'member_stamp_ledger',
+      `member_id=eq.${params.memberId}&kind=eq.reset&card_sequence=eq.${nextSequence}`,
+      { limit: 1, select: 'id' }
+    )) as Array<{ id?: number }>
+    if (existingReset?.length) {
+      const latest = await loadMemberStampBalance(params.memberId)
+      return {
+        rewardsIssued,
+        pointsAwarded,
+        milestonesReached,
+        cardCompleted: true,
+        finalBalance: latest.balance,
+        finalSequence: latest.cardSequence,
+      }
+    }
+
+    // 낙관적 락: 잔액·시퀀스가 그대로일 때만 0으로 전환
+    const claimed = (await supabaseUpdateByFilterReturning(
+      'members',
+      `id=eq.${params.memberId}&stamp_card_balance=eq.${finalBalance}&stamp_card_sequence=eq.${finalSequence}`,
+      {
+        stamp_card_balance: 0,
+        stamp_card_sequence: nextSequence,
+        stamp_card_started_at: getBangkokDateTimeString(),
+        updated_at: getBangkokDateTimeString(),
+      }
+    )) as Array<{ id?: number }>
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      const latest = await loadMemberStampBalance(params.memberId)
+      return {
+        rewardsIssued,
+        pointsAwarded,
+        milestonesReached,
+        cardCompleted: latest.cardSequence > finalSequence || latest.balance < finalBalance,
+        finalBalance: latest.balance,
+        finalSequence: latest.cardSequence,
+      }
+    }
+
     cardCompleted = true
     const bonus = await issueCompleteBonus({
       memberId: params.memberId,
@@ -706,7 +757,7 @@ async function applyStampThresholdEffects(params: {
     if (pointsAwarded > 0) noteParts.push(`points:${pointsAwarded}`)
 
     finalBalance = 0
-    finalSequence = finalSequence + 1
+    finalSequence = nextSequence
     await supabaseInsert(
       'member_stamp_ledger',
       stampStampRow(
@@ -724,12 +775,6 @@ async function applyStampThresholdEffects(params: {
         params.tenantScope
       )
     )
-    await supabaseUpdateByFilter('members', `id=eq.${params.memberId}`, {
-      stamp_card_balance: 0,
-      stamp_card_sequence: finalSequence,
-      stamp_card_started_at: getBangkokDateTimeString(),
-      updated_at: getBangkokDateTimeString(),
-    })
   }
 
   return {
@@ -1060,18 +1105,39 @@ export async function resolveStampAdjustMemberId(refRaw: string | number): Promi
   const ref = toText(refRaw)
   if (!ref) throw new Error('회원 ID·회원번호·전화번호가 필요합니다.')
 
+  const digitsOnly = ref.replace(/[^\d]/g, '')
+  // 태국 휴대폰(9~11자리)은 ID로 오인하지 않도록 전화 조회 우선
+  const looksLikePhone =
+    digitsOnly.length >= 9 &&
+    digitsOnly.length <= 11 &&
+    !/^M/i.test(ref) &&
+    (ref.includes('+') || /^0?\d{9,10}$/.test(digitsOnly) || /^66\d{8,9}$/.test(digitsOnly))
+
+  if (looksLikePhone) {
+    for (const phone of memberPhoneLookupVariants(ref)) {
+      const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(phone)}`, {
+        limit: 1,
+        select: 'id',
+        order: 'id.desc',
+      })) as Array<{ id?: number }>
+      const id = Number(rows?.[0]?.id || 0)
+      if (id) return id
+    }
+  }
+
   const byRef = await resolveMemberRef(ref)
   if (byRef?.id) return Number(byRef.id)
 
-  const phoneVariants = memberPhoneLookupVariants(ref)
-  for (const phone of phoneVariants) {
-    const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(phone)}`, {
-      limit: 1,
-      select: 'id',
-      order: 'id.desc',
-    })) as Array<{ id?: number }>
-    const id = Number(rows?.[0]?.id || 0)
-    if (id) return id
+  if (!looksLikePhone) {
+    for (const phone of memberPhoneLookupVariants(ref)) {
+      const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(phone)}`, {
+        limit: 1,
+        select: 'id',
+        order: 'id.desc',
+      })) as Array<{ id?: number }>
+      const id = Number(rows?.[0]?.id || 0)
+      if (id) return id
+    }
   }
 
   throw new Error(
@@ -1277,10 +1343,10 @@ export async function getMemberStampCardStatus(
     const policy = globalPolicy
     await expireMemberStampCardIfNeeded({ memberId: id, policy, tenantScope })
 
-    // 수동 조정 등으로 10/10에 고착된 카드: 열 때 보상 지급 + 리셋 보정
+    // 10/10 고착만 보정(매 조회·잔액 1칸마다 threshold 금지 → 레이스·부하 완화)
     {
       const before = await loadMemberStampBalance(id)
-      if (before.balance > 0) {
+      if (policy.resetAfterComplete && before.balance >= policy.cardSlots) {
         await applyStampThresholdEffects({
           memberId: id,
           balance: before.balance,

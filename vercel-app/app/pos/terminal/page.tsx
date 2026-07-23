@@ -6250,14 +6250,29 @@ export default function PosTerminalPage() {
             timeoutMs: 120000,
           })
           setCustomerDisplayPaymentMessage('')
-          if (edcQr.success && edcQr.payment) {
+          if (edcQr.success) {
+            // EDC 승인 성공인데 payment 파싱만 실패해도 KBank/캐셔 QR 폴백 금지(이중결제)
+            const linkposPayment =
+              edcQr.payment ||
+              ({
+                provider: 'kbtg_linkpos',
+                mode: 'hypercom',
+                txCode: '70',
+                bankId: '',
+                responseCode: '00',
+                reference1: ref1,
+                requestedAmount: qrAmount,
+                approvedAmount: qrAmount,
+                requestedAt: new Date().toISOString(),
+                respondedAt: new Date().toISOString(),
+              } as const)
             setLinkposQrBridgeStatus('ok')
             return {
               ok: true as const,
               partnerTransactionId: ref1,
               qrAmount,
               qrType: 'THAI_QR' as const,
-              linkposPayment: edcQr.payment,
+              linkposPayment,
             }
           }
           setLinkposQrBridgeStatus('failed')
@@ -6265,7 +6280,7 @@ export default function PosTerminalPage() {
             t('posQrShowOnEdcFallback') ||
               'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'
           )
-          // fall through → KBank / 수동 QR
+          // fall through → KBank / 수동 QR (EDC 실패·미승인일 때만)
         } else {
           await appAlert(
             t('posQrShowOnEdcFallback') ||
