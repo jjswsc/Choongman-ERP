@@ -1804,10 +1804,11 @@ export const I18N_POS_KO: Record<string, string> = {
     posPaymentQrCode: 'QR 코드',
     posQrTypeLabel: 'QR 타입',
     posQrTypeThai: 'Thai QR',
-    posQrTypeCredit: 'Credit Card QR',
-    posQrTypeEdcFallback: 'EDC 전송',
-    posQrTypeEdcHint:
-      '예비 모드: KBank QR API를 건너뛰고 금액을 EDC 단말로 보내 결제합니다.',
+    posQrTypeCredit: '신용카드 QR',
+    posKbankCreditCardQrHint:
+      '은행에서 신용카드 QR을 등록한 매장만 사용하세요. 미등록이면 Thai QR을 선택하세요.',
+    posUseCardTabForEdc: '카드 단말 결제는 「카드」탭에서 확인해 주세요.',
+    posWaitingEdcCard: '단말기에 카드를 읽혀 주세요.',
     posKbankFollowupTitle: 'KBank 후속 처리 (현재 POS)',
     posKbankOrigTxnUidHint: 'QR 요청 TxnUid',
     posKbankTxnNoHint: '결제 txnNo (숫자, 예: 26440008 — Generate APIC* 아님)',
@@ -1817,8 +1818,6 @@ export const I18N_POS_KO: Record<string, string> = {
       'terminalId is required for Credit Card QR. Enter terminalId in the KBank panel or set KBANK_TERMINAL_ID on the server.',
     posKbankCreditCardQrNotRegisteredAlert:
       'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.',
-    posKbankCreditCardQrHint:
-      'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.',
     posKbankQrReturnedThaiAlert:
       'Credit Card QR를 선택했지만 KBank가 Thai QR(PromptPay)을 반환했습니다. 가맹점 Credit Card QR 등록을 KBank에 확인하세요.',
     posKbankQrBankTypeUnknownAlert:
@@ -2138,6 +2137,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posStatusDeclined: '거절',
     posStatusFailed: '실패',
     posCardApprovalFailed: '카드 승인에 실패했습니다.',
+    posCardApprovalFailedSoft: '단말기 연결을 확인한 뒤 다시 시도해 주세요.',
     posFilterPreparing: '준비중',
     posFilterComplete: '결제 완료',
     posFilterMemberPortal: '회원앱',
@@ -5039,9 +5039,13 @@ export const I18N_POS_EN: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
-    posQrTypeEdcFallback: 'Send to EDC',
+    posQrTypeEdcFallback: 'Card terminal',
     posQrTypeEdcHint:
-      'Fallback: skip KBank QR API and send the amount to the EDC terminal for payment.',
+      'Use the Card tab to pay on the terminal.',
+    posUseCardTabForEdc: 'For card terminal payment, use the Card tab and confirm.',
+    posWaitingEdcCard: 'Please swipe or insert the card on the terminal.',
+    posKbankCreditCardQrHint:
+      'Use only if this store is registered for Credit Card QR. Otherwise choose Thai QR.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
     posKbankOrigTxnUidHint: 'QR Request TxnUid',
     posKbankTxnNoHint: 'Payment txnNo (numeric, e.g. 26440008 — not Generate APIC*)',
@@ -6964,10 +6968,11 @@ export const I18N_POS_TH: Record<string, string> = {
     posPaymentQrCode: 'QR Code',
     posQrTypeLabel: 'ประเภท QR',
     posQrTypeThai: 'Thai QR',
-    posQrTypeCredit: 'Credit Card QR',
-    posQrTypeEdcFallback: 'ส่ง EDC',
-    posQrTypeEdcHint:
-      'โหมดสำรอง: ข้าม KBank QR API แล้วส่งยอดไปที่เครื่อง EDC เพื่อรับชำระแทนครับ',
+    posQrTypeCredit: 'QR บัตรเครดิต',
+    posKbankCreditCardQrHint:
+      'ใช้ได้เมื่อร้านลงทะเบียน QR บัตรกับธนาคารแล้ว หากยังไม่มีให้เลือก Thai QR',
+    posUseCardTabForEdc: 'ชำระผ่านเครื่องรูดบัตร ให้เลือกแท็บ "บัตร" แล้วกดยืนยันครับ',
+    posWaitingEdcCard: 'กรุณารูดหรือเสียบบัตรที่เครื่องครับ',
     posKbankFollowupTitle: 'KBank ดำเนินการต่อ (POS ปัจจุบัน)',
     posKbankOrigTxnUidHint: 'TxnUid ของ QR ที่ขอ',
     posKbankTxnNoHint: 'txnNo หลังชำระ (เช่น 26440008 — ไม่ใช่ APIC ตอน Generate)',
@@ -16996,9 +17001,13 @@ export const I18N_POS_KH: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
-    posQrTypeEdcFallback: 'Send to EDC',
+    posQrTypeEdcFallback: 'Card terminal',
     posQrTypeEdcHint:
-      'Fallback: skip KBank QR API and send the amount to the EDC terminal for payment.',
+      'Use the Card tab to pay on the terminal.',
+    posUseCardTabForEdc: 'For card terminal payment, use the Card tab and confirm.',
+    posWaitingEdcCard: 'Please swipe or insert the card on the terminal.',
+    posKbankCreditCardQrHint:
+      'Use only if this store is registered for Credit Card QR. Otherwise choose Thai QR.',
     posKbankFollowupTitle: 'KBank Follow-up Actions (Current POS)',
     posKbankOrigTxnUidHint: 'QR Request TxnUid',
     posKbankTxnNoHint: 'Payment txnNo (numeric, e.g. 26440008 — not Generate APIC*)',

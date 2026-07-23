@@ -595,10 +595,11 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       }
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
       if (selectedQrType === 'EDC') {
-        clearKbankQrSession()
-        setKbankOpsLastResult(`[EDC_FALLBACK] ${JSON.stringify({ amount: qrAmount, orderId: context?.orderId ?? null })}`)
-        setCustomerDisplayPaymentMessage('')
-        return { ok: true, message: 'edc_fallback' }
+        const msg =
+          t('posUseCardTabForEdc') ||
+          'ชำระผ่านเครื่องรูดบัตร ให้เลือกแท็บ "บัตร" แล้วกดยืนยันครับ'
+        await appAlert(msg)
+        return { ok: false, message: msg }
       }
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 

@@ -117,7 +117,7 @@ export async function executeLinkposPayment(params: {
     }
   }
 
-  const timeoutMs = Math.max(2000, Number(params.timeoutMs ?? 12000))
+  const timeoutMs = Math.max(2000, Number(params.timeoutMs ?? 120000))
   const payload = {
     action: 'sale',
     amount: Number(params.amount),
@@ -138,6 +138,11 @@ export async function executeLinkposPayment(params: {
         payment: (r.data.payment || null) as LinkposPaymentSummary | null,
         source: 'local' as const,
       }
+    }
+    return {
+      success: false,
+      message: String(r.data?.error || r.data?.message || 'declined'),
+      source: 'local' as const,
     }
   }
 

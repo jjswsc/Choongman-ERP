@@ -5877,8 +5877,29 @@ export default function PosTerminalPage() {
       if (isPosDemo) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
-      // 전 매장 수기 강제 또는 매장 설정(미설정=수기). 단말 연동 시 shouldSkip… / FORCE 플래그 해제
-      if (shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)) {
+
+      // 로컬 브리지(EDC)가 살아 있으면 수기 생략 설정보다 단말 우선 — 매장 체감: 카드=기계
+      let localBridgeReady = false
+      try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 800)
+        const health = await fetch('http://127.0.0.1:18181/health', {
+          method: 'GET',
+          signal: ctrl.signal,
+          cache: 'no-store',
+        }).finally(() => clearTimeout(timer))
+        if (health.ok) {
+          const j = (await health.json().catch(() => null)) as { serialReady?: boolean } | null
+          localBridgeReady = Boolean(j?.serialReady)
+        }
+      } catch {
+        localBridgeReady = false
+      }
+
+      if (
+        !localBridgeReady &&
+        shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)
+      ) {
         return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       }
       if (!currentStoreId) {
@@ -5886,9 +5907,13 @@ export default function PosTerminalPage() {
       }
       const rawBank = String(payment?.deliveryPaymentChannel ?? '').trim()
       const bankIdMatch = rawBank.match(/bank[:=]\s*([0-9]{2,3})/i)
-      const bankId = bankIdMatch?.[1] || '04'
+      const bankId = bankIdMatch?.[1] || ''
       const ref1 = `POS${Date.now().toString().slice(-14)}`.slice(0, 20)
       const ref2 = String(auth?.user || '').trim().slice(0, 20)
+
+      setCustomerDisplayPaymentMessage(
+        t('posWaitingEdcCard') || 'กรุณารูดหรือเสียบบัตรที่เครื่องครับ'
+      )
 
       const result = await executeLinkposPayment({
         amount: cardAmount,
@@ -5896,13 +5921,19 @@ export default function PosTerminalPage() {
         reference1: ref1,
         reference2: ref2,
         storeCode: currentStoreId,
+        timeoutMs: 120000,
       })
+      setCustomerDisplayPaymentMessage('')
       if (!result.success) {
-        const msg =
-          (t('posCardApprovalFailed') || '카드 승인에 실패했습니다.') +
-          ` (${String(result.message || 'LINKPOS_ERROR')})`
-        await appAlert(msg)
-        return { ok: false as const, message: msg }
+        const raw = String(result.message || '').trim()
+        const soft =
+          raw === 'edc_nak' || raw === 'serial_not_ready' || raw === 'serial_response_timeout'
+            ? t('posCardApprovalFailedSoft') ||
+              'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ'
+            : (t('posCardApprovalFailed') || '카드 승인에 실패했습니다.') +
+              (raw ? ` (${raw})` : '')
+        await appAlert(soft)
+        return { ok: false as const, message: soft }
       }
       return { ok: true as const, linkposPayment: result.payment as LinkposPaymentSummary | null }
     },
@@ -6182,11 +6213,13 @@ export default function PosTerminalPage() {
         return { ok: false as const, message: 'kbank_generate_cooldown' }
       }
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
+      // 레거시 'EDC' QR 옵션 제거됨 — 카드 탭(단말) / QR(KBank)로만 진행
       if (selectedQrType === 'EDC') {
-        clearKbankQrSession()
-        setKbankOpsLastResult(`[EDC_FALLBACK] ${JSON.stringify({ amount: qrAmount, orderId: context?.orderId ?? null })}`)
-        setCustomerDisplayPaymentMessage('')
-        return { ok: true as const, message: 'edc_fallback' }
+        const msg =
+          t('posUseCardTabForEdc') ||
+          'ชำระผ่านเครื่องรูดบัตร ให้เลือกแท็บ "บัตร" แล้วกดยืนยันครับ'
+        await appAlert(msg)
+        return { ok: false as const, message: msg }
       }
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 

@@ -150,31 +150,28 @@ async function listLinkposSerialPorts() {
   }
 }
 
-/** 매장용: COM 포트 선택 → runtime-config 저장 → 브리지 재시작 (JSON 수동 편집 불필요) */
 async function configureLinkposEdcFromMenu() {
   const ports = await listLinkposSerialPorts();
   const current = readLinkposBridgeOptionsFromRuntime();
   if (!ports.length) {
     await dialog.showMessageBox({
       type: "warning",
-      title: "EDC / LinkPOS",
-      message: "No COM port found",
-      detail:
-        "Connect the EDC RS232/USB cable, check Device Manager → Ports (COM & LPT), then try again.\n\nไม่พบพอร์ต COM — เช็คสาย EDC และ Device Manager แล้วลองใหม่ครับ",
+      title: "เครื่องรูดบัตร",
+      message: "ยังไม่พบพอร์ต COM",
+      detail: "เสียบสายเครื่อง EDC แล้วเปิด Device Manager → Ports (COM & LPT) จากนั้นลองใหม่ครับ",
     });
     return;
   }
 
   const buttons = ports.map((p) => p.path);
-  buttons.push("Disable EDC", "Cancel");
+  buttons.push("ปิดการเชื่อมต่อ", "ยกเลิก");
   const { response } = await dialog.showMessageBox({
     type: "question",
-    title: "EDC / LinkPOS setup",
-    message: "Select EDC COM port",
+    title: "ตั้งค่าเครื่องรูดบัตร",
+    message: "เลือกพอร์ต COM ของเครื่อง",
     detail:
-      `Current: ${current.serial.path} (enabled=${current.enabled})\n\n` +
-      ports.map((p) => `• ${p.label}`).join("\n") +
-      "\n\nเลือกพอร์ต COM ของเครื่อง EDC แล้วกดปุ่มด้านล่างครับ",
+      `ตอนนี้ใช้: ${current.serial.path}\n\n` +
+      ports.map((p) => `• ${p.label}`).join("\n"),
     buttons,
     defaultId: Math.max(
       0,
@@ -190,9 +187,9 @@ async function configureLinkposEdcFromMenu() {
     await stopEmbeddedLinkposBridge();
     await dialog.showMessageBox({
       type: "info",
-      title: "EDC / LinkPOS",
-      message: "EDC bridge disabled",
-      detail: "linkpos.enabled=false saved. Card payments will not call the terminal.",
+      title: "เครื่องรูดบัตร",
+      message: "ปิดการเชื่อมต่อแล้ว",
+      detail: "การชำระบัตรจะไม่ส่งไปที่เครื่องจนกว่าจะเปิดอีกครั้งครับ",
     });
     return;
   }
@@ -213,18 +210,11 @@ async function configureLinkposEdcFromMenu() {
       : {};
   await dialog.showMessageBox({
     type: started && started.ok ? "info" : "warning",
-    title: "EDC / LinkPOS",
-    message: started && started.ok ? `Saved: ${selected.path}` : `Saved ${selected.path}, but bridge start failed`,
-    detail: [
-      `HTTP: 127.0.0.1:${st.httpPort || 18181}`,
-      `Serial ready: ${st.serialReady ? "yes" : "no (cable/driver/port?)"}`,
-      started && started.error ? `Error: ${started.error}` : "",
-      "",
-      "Restart POS if Serial ready stays no. Then try card payment.",
-      "ถ้า Serial ready=no ให้เช็คสาย/ไดรเวอร์ แล้วเปิด POS ใหม่ครับ",
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    title: "เครื่องรูดบัตร",
+    message: started && started.ok ? `บันทึกแล้ว: ${selected.path}` : `บันทึก ${selected.path} แล้ว แต่ยังเชื่อมไม่สำเร็จ`,
+    detail: st.serialReady
+      ? "เครื่องพร้อมใช้งานแล้ว ลองชำระด้วยแท็บ「บัตร」ได้เลยครับ"
+      : "ยังไม่พร้อม — เช็คสาย/พอร์ต แล้วเปิด POS ใหม่ครับ",
   });
 }
 
@@ -2366,13 +2356,13 @@ function buildAppMenu() {
           },
         },
         {
-          label: "EDC / LinkPOS setup…",
+          label: "ตั้งค่าเครื่องรูดบัตร…",
           click: () => {
             void configureLinkposEdcFromMenu();
           },
         },
         {
-          label: "LinkPOS bridge status…",
+          label: "สถานะเครื่องรูดบัตร…",
           click: () => {
             const st =
               linkposBridgeApi && typeof linkposBridgeApi.getStatus === "function"
@@ -2380,18 +2370,19 @@ function buildAppMenu() {
                 : { running: false };
             const opts = readLinkposBridgeOptionsFromRuntime();
             const lines = [
-              `Enabled in config: ${opts.enabled ? "yes" : "no"}`,
-              `HTTP: ${st.running ? `127.0.0.1:${st.httpPort || opts.httpPort}` : "not running"}`,
-              `Serial: ${opts.serial.path} @ ${opts.serial.baudRate}`,
-              `Serial ready: ${st.serialReady ? "yes" : "no"}`,
-              `Mock (no serialport): ${st.mock ? "yes" : "no"}`,
+              opts.enabled ? "เปิดใช้งาน: ใช่" : "เปิดใช้งาน: ไม่",
+              st.running
+                ? `เชื่อมต่อภายใน: พร้อม`
+                : "เชื่อมต่อภายใน: ยังไม่พร้อม",
+              `พอร์ต: ${opts.serial.path}`,
+              st.serialReady ? "เครื่องพร้อม: ใช่" : "เครื่องพร้อม: ไม่ — เช็คสาย/พอร์ต",
               "",
-              "Use menu → EDC / LinkPOS setup… to pick COM port (no JSON edit).",
+              "เลือกพอร์ตได้ที่เมนู 「ตั้งค่าเครื่องรูดบัตร」",
             ];
             dialog.showMessageBox({
               type: "info",
-              title: "LinkPOS bridge",
-              message: "EDC RS232 bridge (built into POS)",
+              title: "เครื่องรูดบัตร",
+              message: "สถานะการเชื่อมต่อ",
               detail: lines.join("\n"),
             });
           },

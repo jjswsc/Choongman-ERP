@@ -1511,7 +1511,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentCash: cashPay,
       paymentCard: parseBahtAmount(payCard) || 0,
       paymentQr: parseBahtAmount(payPromptPay) || 0,
-      paymentQrType: payQrType,
+      paymentQrType: payQrType === 'EDC' ? 'THAI_QR' : payQrType,
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
@@ -6069,14 +6069,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </div>
                   </div>
                   {key === 'qr' && (
-                    <div className="mt-3 rounded-xl border border-sky-200/70 bg-sky-50/60 p-2 dark:border-sky-700/50 dark:bg-sky-950/25">
-                      <p className="mb-2 text-[11px] font-semibold text-sky-800 dark:text-sky-300">
-                        {tr('posQrTypeLabel', 'QR 타입')}
+                    <div className="mt-3 rounded-xl border border-border/70 bg-muted/30 p-2.5">
+                      <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+                        {tr('posQrTypeLabel', 'ประเภท QR')}
                       </p>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <Button
                           type="button"
-                          variant={payQrType === 'THAI_QR' ? 'default' : 'outline'}
+                          variant={payQrType === 'THAI_QR' || payQrType === 'EDC' ? 'default' : 'outline'}
                           className="h-9 rounded-lg text-xs"
                           onClick={() => setPayQrType('THAI_QR')}
                         >
@@ -6088,28 +6088,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           className="h-9 rounded-lg text-xs"
                           onClick={() => setPayQrType('CREDIT_CARD')}
                         >
-                          {tr('posQrTypeCredit', 'Credit Card QR')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={payQrType === 'EDC' ? 'default' : 'outline'}
-                          className="h-9 rounded-lg text-xs"
-                          onClick={() => setPayQrType('EDC')}
-                        >
-                          {tr('posQrTypeEdcFallback', 'ส่ง EDC')}
+                          {tr('posQrTypeCredit', 'QR บัตรเครดิต')}
                         </Button>
                       </div>
-                      <p className="mt-2 text-[10px] leading-snug text-sky-700/90 dark:text-sky-300/90">
-                        {payQrType === 'EDC'
-                          ? tr(
-                              'posQrTypeEdcHint',
-                              'โหมดสำรอง: ข้าม KBank QR API แล้วส่งยอดไปที่เครื่อง EDC เพื่อรับชำระแทน'
-                            )
-                          : tr(
-                              'posKbankCreditCardQrHint',
-                              'Requires KBank merchant registration. Stores without Credit Card QR should use Thai QR only.'
-                            )}
-                      </p>
+                      {payQrType === 'CREDIT_CARD' ? (
+                        <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+                          {tr(
+                            'posKbankCreditCardQrHint',
+                            'ใช้ได้เมื่อร้านลงทะเบียน QR บัตรกับธนาคารแล้ว หากยังไม่มีให้เลือก Thai QR'
+                          )}
+                        </p>
+                      ) : null}
                     </div>
                   )}
                   {key === 'cash' && (
