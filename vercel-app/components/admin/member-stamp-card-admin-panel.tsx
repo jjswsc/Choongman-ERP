@@ -400,7 +400,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          memberId: Number(adjustMemberId || 0),
+          memberRef: adjustMemberId.trim(),
           delta: Number(adjustDelta || 0),
           note: adjustNote.trim(),
         }),
@@ -929,10 +929,9 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
               <div className="space-y-1.5">
                 <Label>{t("mpAdmin_stampAdjustMemberId")}</Label>
                 <Input
-                  type="number"
-                  min={1}
                   value={adjustMemberId}
                   onChange={(e) => setAdjustMemberId(e.target.value)}
+                  placeholder="ID / M… / 0xxxxxxxxx"
                 />
               </div>
               <div className="space-y-1.5">

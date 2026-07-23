@@ -23,6 +23,8 @@ import {
   supabaseUpsert,
 } from '@/lib/supabase-server'
 import { getMemberSummaryById } from '@/lib/members-server-core'
+import { resolveMemberRef } from '@/lib/member-merge-server'
+import { memberPhoneLookupVariants } from '@/lib/member-phone-lookup'
 
 export const MEMBER_STAMP_POLICY_KEY = 'member_stamp_policy'
 
@@ -940,22 +942,55 @@ export async function revokeMemberStampForOrder(params: {
   }
 }
 
+/** CS 수동 조정: 숫자 ID · 회원번호(M…) · 전화번호로 회원 찾기 */
+export async function resolveStampAdjustMemberId(refRaw: string | number): Promise<number> {
+  const ref = toText(refRaw)
+  if (!ref) throw new Error('회원 ID·회원번호·전화번호가 필요합니다.')
+
+  const byRef = await resolveMemberRef(ref)
+  if (byRef?.id) return Number(byRef.id)
+
+  const phoneVariants = memberPhoneLookupVariants(ref)
+  for (const phone of phoneVariants) {
+    const rows = (await supabaseSelectFilter('members', `phone=eq.${encodeURIComponent(phone)}`, {
+      limit: 1,
+      select: 'id',
+      order: 'id.desc',
+    })) as Array<{ id?: number }>
+    const id = Number(rows?.[0]?.id || 0)
+    if (id) return id
+  }
+
+  throw new Error(
+    `회원을 찾을 수 없습니다. 입력값 "${ref}"은(는) members에 없는 ID이거나, 전화번호/회원번호가 아닙니다. 회원 관리에서 숫자 ID(또는 전화번호)를 확인하세요.`
+  )
+}
+
 export async function adjustMemberStampBalance(params: {
-  memberId: number
+  memberId?: number
+  /** 숫자 ID · M회원번호 · 전화번호 */
+  memberRef?: string
   delta: number
   note: string
   actor?: string
-}): Promise<{ newBalance: number }> {
-  const memberId = Number(params.memberId || 0)
+}): Promise<{ newBalance: number; memberId: number }> {
   const delta = Math.trunc(Number(params.delta || 0))
-  if (!memberId || !delta) throw new Error('memberId와 delta가 필요합니다.')
+  if (!delta) throw new Error('delta가 필요합니다.')
   const note = toText(params.note)
   if (!note) throw new Error('조정 사유가 필요합니다.')
 
+  const memberId = toText(params.memberRef)
+    ? await resolveStampAdjustMemberId(params.memberRef!)
+    : await resolveStampAdjustMemberId(Number(params.memberId || 0))
+
   const tenantScope = await resolveStampTenantScope(memberId)
-  if (tenantScope.enforce) {
-    const owned = await getMemberSummaryById(memberId, tenantScope)
-    if (!owned) throw new Error('tenant_mismatch')
+  const owned = await getMemberSummaryById(memberId, tenantScope)
+  if (!owned) {
+    throw new Error(
+      tenantScope.enforce
+        ? 'tenant_mismatch'
+        : `회원을 찾을 수 없습니다. (id=${memberId})`
+    )
   }
 
   const { balance, cardSequence, cardStartedAt } = await loadMemberStampBalance(memberId)
@@ -983,7 +1018,7 @@ export async function adjustMemberStampBalance(params: {
   }
   if (!cardStartedAt && nextBalance > 0) patch.stamp_card_started_at = getBangkokDateTimeString()
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, patch)
-  return { newBalance: nextBalance }
+  return { newBalance: nextBalance, memberId }
 }
 
 export async function listMemberStampHistory(memberId: number, limit = 20): Promise<MemberStampHistoryRow[]> {
@@ -1119,7 +1154,6 @@ export async function getMemberStampCardStatus(
     ])
 
     const rewardSequence = policy.resetAfterComplete ? cardSequence : 1
-    const milestoneCounts = new Set(milestones.map((m) => m.stampCount))
     const enriched = await Promise.all(
       milestones.map(async (m) => {
         const issued = await hasStampRewardIssued({
