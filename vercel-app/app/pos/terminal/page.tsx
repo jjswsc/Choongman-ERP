@@ -115,6 +115,7 @@ import {
   computePosPricing,
   normalizeFeeStackMode,
   normalizeFeeStackOrder,
+  normalizePaymentTotalRoundingMode,
   receiptTaxDisplayFieldsFromPricing,
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
@@ -854,6 +855,7 @@ export default function PosTerminalPage() {
   const [otherMode, setOtherMode] = useState<'included' | 'separate'>('separate')
   const [feeStackMode, setFeeStackMode] = useState<'parallel' | 'sequential'>('parallel')
   const [feeStackOrder, setFeeStackOrder] = useState<Array<'vat' | 'service' | 'other'>>(['service', 'vat', 'other'])
+  const [paymentTotalRoundingMode, setPaymentTotalRoundingMode] = useState<'round' | 'floor' | 'none'>('round')
   const [dualMonitorEnabled, setDualMonitorEnabled] = useState(false)
   const [requireGuestCount, setRequireGuestCount] = useState(true)
   const [customerDisplayAutoOpen, setCustomerDisplayAutoOpen] = useState(true)
@@ -1709,6 +1711,7 @@ export default function PosTerminalPage() {
         setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
         setFeeStackMode(normalizeFeeStackMode(s.feeStackMode))
         setFeeStackOrder(normalizeFeeStackOrder(s.feeStackOrder))
+        setPaymentTotalRoundingMode(normalizePaymentTotalRoundingMode(s.paymentTotalRoundingMode))
         setDualMonitorEnabled(Boolean(s.dualMonitorEnabled))
         setRequireGuestCount(s.requireGuestCount !== false)
         setCustomerDisplayAutoOpen(s.customerDisplayAutoOpen !== false)
@@ -2125,7 +2128,8 @@ export default function PosTerminalPage() {
     otherMode,
     feeStackMode,
     feeStackOrder,
-  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode, feeStackMode, feeStackOrder])
+    paymentTotalRoundingMode,
+  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode, feeStackMode, feeStackOrder, paymentTotalRoundingMode])
 
   const customerDisplayBreakdown = useMemo(() => {
     const subtotal = customerDisplayOrderTotal

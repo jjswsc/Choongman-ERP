@@ -102,6 +102,55 @@ describe('computePosPricing payment total rounding', () => {
     })
     expect(pricing.finalTotal).toBe(969.99)
   })
+
+  it('floor mode rounds down to whole baht', () => {
+    const pricing = computePosPricing({
+      subtotal: 100,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'sequential',
+        feeStackOrder: ['service', 'vat', 'other'],
+        paymentTotalRoundingMode: 'floor',
+      },
+    })
+    // 100+10+7.7 = 117.7 → floor 117
+    expect(pricing.finalTotal).toBe(117)
+  })
+
+  it('none mode keeps decimals', () => {
+    const pricing = computePosPricing({
+      subtotal: 100,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'sequential',
+        feeStackOrder: ['service', 'vat', 'other'],
+        paymentTotalRoundingMode: 'none',
+      },
+    })
+    expect(pricing.finalTotal).toBe(117.7)
+  })
+
+  it('round mode matches Math.round (default)', () => {
+    const pricing = computePosPricing({
+      subtotal: 100,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'sequential',
+        feeStackOrder: ['service', 'vat', 'other'],
+        paymentTotalRoundingMode: 'round',
+      },
+    })
+    expect(pricing.finalTotal).toBe(118)
+  })
 })
 
 describe('computePosPricing fee stack order', () => {

@@ -42,6 +42,7 @@ import {
   computePosPricing,
   normalizeFeeStackMode,
   normalizeFeeStackOrder,
+  normalizePaymentTotalRoundingMode,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
   type PosPricingAdjustments,
@@ -353,6 +354,7 @@ export default function PosOrderPage() {
   const [otherMode, setOtherMode] = React.useState<'included' | 'separate'>('separate')
   const [feeStackMode, setFeeStackMode] = React.useState<'parallel' | 'sequential'>('parallel')
   const [feeStackOrder, setFeeStackOrder] = React.useState<Array<'vat' | 'service' | 'other'>>(['service', 'vat', 'other'])
+  const [paymentTotalRoundingMode, setPaymentTotalRoundingMode] = React.useState<'round' | 'floor' | 'none'>('round')
   const [showPaymentModal, setShowPaymentModal] = React.useState(false)
   const [payCash, setPayCash] = React.useState("")
   const [payCard, setPayCard] = React.useState("")
@@ -455,6 +457,7 @@ export default function PosOrderPage() {
         setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
         setFeeStackMode(normalizeFeeStackMode(s.feeStackMode))
         setFeeStackOrder(normalizeFeeStackOrder(s.feeStackOrder))
+        setPaymentTotalRoundingMode(normalizePaymentTotalRoundingMode(s.paymentTotalRoundingMode))
       })
       .catch(() => {
         posPrinterSettingsRef.current = null
@@ -473,6 +476,7 @@ export default function PosOrderPage() {
         setOtherMode('separate')
         setFeeStackMode('parallel')
         setFeeStackOrder(['service', 'vat', 'other'])
+        setPaymentTotalRoundingMode('round')
       })
   }, [storeCode])
 
@@ -1304,6 +1308,7 @@ export default function PosOrderPage() {
     otherMode,
     feeStackMode,
     feeStackOrder,
+    paymentTotalRoundingMode,
   }
   const pricing = computePosPricing({
     subtotal,

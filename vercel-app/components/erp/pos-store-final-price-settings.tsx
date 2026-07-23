@@ -14,8 +14,10 @@ import {
   computePosPricing,
   normalizeFeeStackMode,
   normalizeFeeStackOrder,
+  normalizePaymentTotalRoundingMode,
   type PosFeeStackKey,
   type PosFeeStackMode,
+  type PosPaymentTotalRoundingMode,
 } from "@/lib/pos-pricing"
 
 type FeeStackPreset = "parallel" | "service_vat" | "vat_service" | "custom"
@@ -53,6 +55,8 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
   const [otherMode, setOtherMode] = React.useState<"included" | "separate">("separate")
   const [feeStackMode, setFeeStackMode] = React.useState<PosFeeStackMode>("parallel")
   const [feeStackOrder, setFeeStackOrder] = React.useState<PosFeeStackKey[]>(["service", "vat", "other"])
+  const [paymentTotalRoundingMode, setPaymentTotalRoundingMode] =
+    React.useState<PosPaymentTotalRoundingMode>("round")
   const [deliveryFee, setDeliveryFee] = React.useState("0")
   const [packagingFee, setPackagingFee] = React.useState("0")
   const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
@@ -81,6 +85,9 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         setOtherMode(settings.otherMode === "included" ? "included" : "separate")
         setFeeStackMode(normalizeFeeStackMode(settings.feeStackMode))
         setFeeStackOrder(normalizeFeeStackOrder(settings.feeStackOrder))
+        setPaymentTotalRoundingMode(
+          normalizePaymentTotalRoundingMode(settings.paymentTotalRoundingMode)
+        )
         setDeliveryFee(String(settings.deliveryFee ?? 0))
         setPackagingFee(String(settings.packagingFee ?? 0))
         setAutoStockDeduction(Boolean(settings.autoStockDeduction))
@@ -153,7 +160,7 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         otherMode,
         feeStackMode,
         feeStackOrder,
-        roundPaymentTotalToWholeBaht: false,
+        paymentTotalRoundingMode,
       },
     })
   }, [
@@ -166,6 +173,7 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
     otherMode,
     feeStackMode,
     feeStackOrder,
+    paymentTotalRoundingMode,
   ])
 
   const previewSteps = React.useMemo(() => {
@@ -196,10 +204,27 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         steps.push(`+ ${feeLabel("other")} ${formatBaht(previewPricing.otherFeeAmt)}฿`)
       }
     }
+    if (paymentTotalRoundingMode === "round") {
+      steps.push(t("posPaymentTotalRoundingPreviewRound") || "합계 처리: 반올림(정수 ฿)")
+    } else if (paymentTotalRoundingMode === "floor") {
+      steps.push(t("posPaymentTotalRoundingPreviewFloor") || "합계 처리: 반내림(정수 ฿)")
+    } else {
+      steps.push(t("posPaymentTotalRoundingPreviewNone") || "합계 처리: 그대로(소수 유지)")
+    }
     steps.push(`${t("posFeeStackPreviewFinal") || "최종"} ${formatBaht(previewPricing.finalTotal)}฿`)
     return steps
     // eslint-disable-next-line react-hooks/exhaustive-deps -- labels via t/feeLabel are stable enough for preview
-  }, [previewPricing, feeStackMode, feeStackOrder, serviceMode, vatMode, otherMode, t, lang])
+  }, [
+    previewPricing,
+    feeStackMode,
+    feeStackOrder,
+    serviceMode,
+    vatMode,
+    otherMode,
+    paymentTotalRoundingMode,
+    t,
+    lang,
+  ])
 
   const handleSave = async () => {
     const s = String(storeCode || "").trim()
@@ -223,6 +248,7 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         otherMode,
         feeStackMode,
         feeStackOrder,
+        paymentTotalRoundingMode,
         deliveryFee: Math.max(0, Number(deliveryFee) || 0),
         packagingFee: Math.max(0, Number(packagingFee) || 0),
         autoStockDeduction,
@@ -493,6 +519,41 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
                   </li>
                 ))}
               </ol>
+            </div>
+
+            <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+              <div>
+                <label className="text-sm font-medium">
+                  {t("posPaymentTotalRoundingTitle") || "결제 합계 반올림"}
+                </label>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {t("posPaymentTotalRoundingHint") ||
+                    "VAT·서비스비 반영 후 최종 합계를 정수 바트로 맞출지 선택합니다. 영수증 Rounding 행에 차액이 표시됩니다."}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["round", t("posPaymentTotalRoundingRound") || "반올림"],
+                    ["floor", t("posPaymentTotalRoundingFloor") || "반내림"],
+                    ["none", t("posPaymentTotalRoundingNone") || "그대로"],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    type="button"
+                    key={mode}
+                    onClick={() => setPaymentTotalRoundingMode(mode)}
+                    className={cn(
+                      "rounded-md border px-3 py-1.5 text-sm",
+                      paymentTotalRoundingMode === mode
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-muted bg-muted/30"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

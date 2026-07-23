@@ -1,7 +1,7 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
 import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
 import { normalizeKitchenOptionGroupKey } from "@/lib/pos-kitchen-slip-option-group-choices"
-import { normalizeFeeStackMode, normalizeFeeStackOrder } from "@/lib/pos-pricing"
+import { normalizeFeeStackMode, normalizeFeeStackOrder, normalizePaymentTotalRoundingMode } from "@/lib/pos-pricing"
 
 function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, boolean> {
   if (!raw || typeof raw !== "object") return {}
@@ -182,6 +182,7 @@ export function posPrinterSettingsToSaveParams(
     otherMode: (String(s.otherMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",
     feeStackMode,
     feeStackOrder,
+    paymentTotalRoundingMode: normalizePaymentTotalRoundingMode(s.paymentTotalRoundingMode),
     requireGuestCount: s.requireGuestCount !== false,
     dualMonitorEnabled: Boolean(s.dualMonitorEnabled),
     customerDisplayAutoOpen: s.customerDisplayAutoOpen !== false,

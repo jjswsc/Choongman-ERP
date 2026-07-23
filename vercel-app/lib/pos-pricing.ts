@@ -4,6 +4,13 @@ export type PosCardFeeBaseMode = 'card_only' | 'card_plus_vat' | 'card_plus_vat_
 export type PosFeeStackKey = 'vat' | 'service' | 'other'
 /** parallel=각각 기준금액에 독립, sequential=순서로 누적 */
 export type PosFeeStackMode = 'parallel' | 'sequential'
+/**
+ * 결제·영수증 최종 합계 정수 바트 처리.
+ * - round: 반올림 (기본, 기존 Math.round)
+ * - floor: 반내림 (소수 버림)
+ * - none: 그대로 (소수 2자리 유지)
+ */
+export type PosPaymentTotalRoundingMode = 'round' | 'floor' | 'none'
 
 export const DEFAULT_FEE_STACK_ORDER: readonly PosFeeStackKey[] = ['service', 'vat', 'other'] as const
 
@@ -22,9 +29,12 @@ export interface PosPricingAdjustments {
   /** sequential일 때 위에서 아래 적용 순서. 미설정 시 service→vat→other */
   feeStackOrder?: PosFeeStackKey[]
   /**
-   * 결제·영수증·EDC 합계를 정수 바트(Math.round)로 맞춤.
-   * 미설정 시 true(태국 현장·카드 단말기 정수 승인과 일치).
-   * 플랫폼 웹훅 합계 등 소수 유지가 필요하면 false.
+   * 결제·영수증·EDC 합계 정수 바트 처리 방식.
+   * 미설정 시 round(반올림). `roundPaymentTotalToWholeBaht: false`면 none.
+   */
+  paymentTotalRoundingMode?: PosPaymentTotalRoundingMode
+  /**
+   * @deprecated `paymentTotalRoundingMode` 사용. false면 none, true/미설정은 round.
    */
   roundPaymentTotalToWholeBaht?: boolean
 }
@@ -59,15 +69,57 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-/** POS 결제·영수증 최종 합계 — 정수 바트(태국 1฿ 단위) */
+/** POS 결제·영수증 최종 합계 — 정수 바트(태국 1฿ 단위) 반올림 */
 export function roundPosPaymentTotalBaht(n: number): number {
   const v = Number(n)
   if (!Number.isFinite(v) || v <= 0) return 0
   return Math.round(v)
 }
 
-function shouldRoundPaymentTotalToWholeBaht(adjustments?: PosPricingAdjustments): boolean {
-  return adjustments?.roundPaymentTotalToWholeBaht !== false
+/** POS 결제·영수증 최종 합계 — 정수 바트 반내림 */
+export function floorPosPaymentTotalBaht(n: number): number {
+  const v = Number(n)
+  if (!Number.isFinite(v) || v <= 0) return 0
+  // 81.999999 → 82로 보이는 부동소수 오차 완화 후 버림
+  const cents = Math.round(v * 100)
+  return Math.floor(cents / 100)
+}
+
+export function normalizePaymentTotalRoundingMode(
+  raw: unknown,
+  legacyRoundWholeBaht?: boolean
+): PosPaymentTotalRoundingMode {
+  const s = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+  if (s === 'floor' || s === 'down' || s === 'trunc') return 'floor'
+  if (s === 'none' || s === 'off' || s === 'keep' || s === 'as_is' || s === 'asis') return 'none'
+  if (s === 'round' || s === 'nearest' || s === 'half_up') return 'round'
+  if (legacyRoundWholeBaht === false) return 'none'
+  return 'round'
+}
+
+export function resolvePaymentTotalRoundingMode(
+  adjustments?: PosPricingAdjustments
+): PosPaymentTotalRoundingMode {
+  if (adjustments?.paymentTotalRoundingMode != null) {
+    return normalizePaymentTotalRoundingMode(adjustments.paymentTotalRoundingMode)
+  }
+  return normalizePaymentTotalRoundingMode(undefined, adjustments?.roundPaymentTotalToWholeBaht)
+}
+
+/** 결제 합계에 매장 반올림 모드 적용 */
+export function applyPosPaymentTotalRounding(
+  n: number,
+  mode: PosPaymentTotalRoundingMode
+): number {
+  if (mode === 'none') return round2(Math.max(0, Number(n) || 0))
+  if (mode === 'floor') return floorPosPaymentTotalBaht(n)
+  return roundPosPaymentTotalBaht(n)
+}
+
+function shouldApplyPaymentTotalRounding(adjustments?: PosPricingAdjustments): boolean {
+  return resolvePaymentTotalRoundingMode(adjustments) !== 'none'
 }
 
 function toNonNegative(n: unknown): number {
@@ -373,8 +425,9 @@ export function computePosPricing(params: {
   }
   vatDisplayAnchor(baseTotal)
 
-  if (shouldRoundPaymentTotalToWholeBaht(params.adjustments)) {
-    const roundedTotal = roundPosPaymentTotalBaht(finalTotal)
+  const roundingMode = resolvePaymentTotalRoundingMode(params.adjustments)
+  if (shouldApplyPaymentTotalRounding(params.adjustments)) {
+    const roundedTotal = applyPosPaymentTotalRounding(finalTotal, roundingMode)
     if (Math.abs(roundedTotal - finalTotal) > 0.0001) {
       finalTotal = roundedTotal
       vatDisplayAnchor(finalTotal)

@@ -158,6 +158,11 @@ export interface PosPrinterSettings {
   feeStackMode?: 'parallel' | 'sequential'
   feeStackOrder?: Array<'vat' | 'service' | 'other'>
   /**
+   * 결제 합계 정수 바트: round(반올림) | floor(반내림) | none(그대로).
+   * 기본 round.
+   */
+  paymentTotalRoundingMode?: 'round' | 'floor' | 'none'
+  /**
    * 카운터(프론트) 포스 — 여러 대 가능. 해당 토큰을 가진 기기에서 주문 수신·자동 인쇄.
    * mainDeviceToken 은 하위 호환용(목록의 첫 토큰과 동일).
    */
@@ -345,6 +350,7 @@ export async function savePosPrinterSettings(params: {
   otherMode?: 'included' | 'separate'
   feeStackMode?: 'parallel' | 'sequential'
   feeStackOrder?: Array<'vat' | 'service' | 'other'>
+  paymentTotalRoundingMode?: 'round' | 'floor' | 'none'
   /**
    * 홀(테이블) 주문 시 손님 수 필수. 기본 true(충만 기존).
    * false면 손님 수 0이어도 주문 가능.

@@ -124,7 +124,7 @@ import {
 import { buildGrabPosCatalog, formatGrabLineNoteForKitchenPrint } from '@/lib/grab-pos-order-enrich'
 import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { computePosPricing, receiptTaxDisplayFieldsFromPricing, normalizeFeeStackMode, normalizeFeeStackOrder, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import { computePosPricing, receiptTaxDisplayFieldsFromPricing, normalizeFeeStackMode, normalizeFeeStackOrder, normalizePaymentTotalRoundingMode, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import {
   buildDineInAddKitchenAutoPrintDedupeKey,
   buildDineInAddKitchenPrintDedupeSuffix,
@@ -260,6 +260,7 @@ export function usePosMainDeviceSyncHost(): void {
     otherMode: 'separate',
     feeStackMode: 'parallel',
     feeStackOrder: ['service', 'vat', 'other'],
+    paymentTotalRoundingMode: 'round',
   })
   const [receiptPrintLang, setReceiptPrintLang] = useState('')
   const [realtimeResubscribeTick, setRealtimeResubscribeTick] = useState(0)
@@ -724,6 +725,7 @@ export function usePosMainDeviceSyncHost(): void {
           otherMode: settings.otherMode === 'included' ? 'included' : 'separate',
           feeStackMode: normalizeFeeStackMode(settings.feeStackMode),
           feeStackOrder: normalizeFeeStackOrder(settings.feeStackOrder),
+          paymentTotalRoundingMode: normalizePaymentTotalRoundingMode(settings.paymentTotalRoundingMode),
         })
       })
       .catch(() => {

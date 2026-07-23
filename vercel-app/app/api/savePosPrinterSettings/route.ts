@@ -12,7 +12,7 @@ import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, canSavePosCustomerDisplayFields, hasOfficeStaffScope } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
-import { normalizeFeeStackMode, normalizeFeeStackOrder } from '@/lib/pos-pricing'
+import { normalizeFeeStackMode, normalizeFeeStackOrder, normalizePaymentTotalRoundingMode } from '@/lib/pos-pricing'
 import {
   normalizeMembershipQrImageUrlForStorage,
   normalizeMembershipQrLinkUrlForStorage,
@@ -313,6 +313,10 @@ export async function POST(req: NextRequest) {
     const otherMode = String(body?.otherMode || 'separate') === 'included' ? 'included' : 'separate'
     const feeStackMode = normalizeFeeStackMode(body?.feeStackMode)
     const feeStackOrder = normalizeFeeStackOrder(body?.feeStackOrder)
+    const paymentTotalRoundingMode = normalizePaymentTotalRoundingMode(
+      body?.paymentTotalRoundingMode,
+      body?.roundPaymentTotalToWholeBaht
+    )
     const dualMonitorEnabled = Boolean(body?.dualMonitorEnabled)
     const customerDisplayAutoOpen = body?.customerDisplayAutoOpen !== false
     const rawDisplayMonitorPreference = String(body?.customerDisplayMonitorPreference || 'secondary-first')
@@ -502,6 +506,7 @@ export async function POST(req: NextRequest) {
       other_mode: otherMode,
       fee_stack_mode: feeStackMode,
       fee_stack_order: feeStackOrder,
+      payment_total_rounding_mode: paymentTotalRoundingMode,
       require_guest_count: requireGuestCount,
       dual_monitor_enabled: dualMonitorEnabled,
       customer_display_auto_open: customerDisplayAutoOpen,

@@ -4,7 +4,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parsePosDeviceRoleLimitsRow } from '@/lib/pos-device-role-limits'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
-import { normalizeFeeStackMode, normalizeFeeStackOrder } from '@/lib/pos-pricing'
+import { normalizeFeeStackMode, normalizeFeeStackOrder, normalizePaymentTotalRoundingMode } from '@/lib/pos-pricing'
 import { requireAuth } from '@/lib/verify-auth'
 import { canPickPosTerminalStore } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
@@ -187,6 +187,7 @@ export async function GET(request: NextRequest) {
     otherMode: 'separate' as const,
     feeStackMode: 'parallel' as const,
     feeStackOrder: ['service', 'vat', 'other'] as ('vat' | 'service' | 'other')[],
+    paymentTotalRoundingMode: 'round' as const,
     receiptPrintLang: '' as string,
     kitchenSlipPrintLang: '' as string,
     mainDeviceToken: null as string | null,
@@ -310,6 +311,8 @@ export async function GET(request: NextRequest) {
       other_mode?: string
       fee_stack_mode?: string
       fee_stack_order?: unknown
+      payment_total_rounding_mode?: string
+      round_payment_total_to_whole_baht?: boolean
       main_device_token?: string | null
       main_device_max_count?: unknown
       order_device_max_count?: unknown
@@ -508,6 +511,10 @@ export async function GET(request: NextRequest) {
       otherMode: String(raw?.other_mode || 'separate') === 'included' ? 'included' : 'separate',
       feeStackMode: normalizeFeeStackMode(raw?.fee_stack_mode),
       feeStackOrder: normalizeFeeStackOrder(raw?.fee_stack_order),
+      paymentTotalRoundingMode: normalizePaymentTotalRoundingMode(
+        raw?.payment_total_rounding_mode,
+        raw?.round_payment_total_to_whole_baht
+      ),
       mainDeviceTokens,
       mainDeviceToken: mainDeviceTokenResolved,
       mainDeviceMaxCount: deviceRoleLimits.mainDeviceMaxCount,
