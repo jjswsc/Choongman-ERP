@@ -3,9 +3,10 @@
  * 충만 레거시 DB: 필터 생략(단일 회사 DB).
  */
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
-import { deriveTenantIdFromCompany, normalizeTenantId } from '@/lib/tenant-context'
+import { normalizeTenantId } from '@/lib/tenant-context'
 import { appendTenantFilter, buildTenantFilter } from '@/lib/supabase-server'
 import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
 
 export type PosCatalogTenantScope = {
   /** true 이면 조회·저장에 tenant_id 를 강제한다 (Omni). */
@@ -34,6 +35,9 @@ export function isMissingTenantIdColumnError(err: unknown): boolean {
  * Omni + tenant 알 수 있음 → enforce.
  * Omni + tenant 없음 → enforce + 빈 tenantId (조회 0건·쓰기 거부 — 타사 유출 방지).
  * 충만 레거시 → enforce false.
+ *
+ * 회사명 슬러그(ABC Company → abc-company)와 tenants.id(malatang01)가 다를 수 있으므로
+ * 반드시 tenants 테이블 매칭(resolveSaasTenantForLogin)으로 확정한다.
  */
 export async function resolvePosCatalogTenantScope(params: {
   auth?: { tenantId?: string; company?: string } | null
@@ -43,10 +47,11 @@ export async function resolvePosCatalogTenantScope(params: {
     return { enforce: false, tenantId: '' }
   }
 
-  let tenantId =
-    normalizeTenantId(params.auth?.tenantId) ||
-    deriveTenantIdFromCompany(params.auth?.company) ||
-    ''
+  const fromLogin = await resolveSaasTenantForLogin({
+    tenantId: params.auth?.tenantId,
+    company: params.auth?.company,
+  })
+  let tenantId = normalizeTenantId(fromLogin?.tenantId) || ''
 
   if (!tenantId) {
     const storeCode = String(params.storeCode || '').trim()
