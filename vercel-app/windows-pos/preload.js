@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   savePrintConfig: (payload) => ipcRenderer.invoke("cm-pos-save-print-config", payload || {}),
   /** 영수증 프린터( runtime-config `print.receiptDeviceName` 등과 동일 해석)로 ESC/POS 드로어 킥 */
   openCashDrawer: () => ipcRenderer.invoke("cm-pos-open-cash-drawer"),
+  /** LinkPOS / EDC — HTTPS 페이지에서 localhost 혼합콘텐츠 차단을 피하기 위해 메인 프로세스 경유 */
+  linkposHealth: () => ipcRenderer.invoke("cm-pos-linkpos-health"),
+  linkposTransaction: (payload) => ipcRenderer.invoke("cm-pos-linkpos-transaction", payload || {}),
   printWithDialog: () => ipcRenderer.invoke("cm-pos-print-dialog"),
   quickPrint: () => ipcRenderer.invoke("cm-pos-quick-print"),
   printHtml: (html, opts) => {

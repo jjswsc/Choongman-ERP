@@ -17,6 +17,7 @@ import { invalidateLoginDataCache } from "@/lib/login-data-cache-server"
 import { invalidateErpStoresMasterCache } from "@/lib/erp-store-master"
 import { loadErpStoreRowsForTenant, tenantHasErpStoreName } from "@/lib/saas-tenant-stores-server"
 import { supabaseInsertWithPgrst204Fallback } from "@/lib/supabase-pgrst204-retry"
+import { resolveErpStoreCodeForWrite } from "@/lib/pos-operating-store-code"
 
 function bustStoreListCaches(): void {
   invalidateLoginDataCache()
@@ -39,25 +40,38 @@ type CreateBody = {
   storeCode?: string
 }
 
-function normalizeStoreCode(raw: string, tenantId: string, storeName: string): string {
-  const code = String(raw || "")
-    .trim()
+/**
+ * 운영 매장 코드만 저장. tenant:name / tenant_name 합성키는 쓰지 않는다.
+ * (합성키면 POS storeCode 와 메뉴 스코프가 어긋나 메뉴 0건)
+ */
+function normalizeStoreCode(
+  raw: string,
+  tenantId: string,
+  storeName: string
+): { ok: true; storeCode: string } | { ok: false; message: string } {
+  const resolved = resolveErpStoreCodeForWrite({
+    storeCode: raw,
+    storeName,
+    tenantId,
+  })
+  if (!resolved.ok) return resolved
+  const code = resolved.storeCode.trim()
+  // 숫자·영문 운영코드(1001)는 그대로, 그 외만 slug 정리
+  if (/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(code)) {
+    return { ok: true, storeCode: code.slice(0, 64) }
+  }
+  const slug = code
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "")
-  if (code) return code.slice(0, 64)
-  const baseTenant = String(tenantId || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-  const baseStore = String(storeName || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-  const fallback = `${baseTenant || "tenant"}_${baseStore || "store"}`
-  return fallback.slice(0, 64)
+    .slice(0, 64)
+  if (!slug) {
+    return {
+      ok: false,
+      message: '매장 코드(store_code)가 필요합니다. 예: 1001. tenant:매장명 형식은 사용할 수 없습니다.',
+    }
+  }
+  return { ok: true, storeCode: slug }
 }
 
 function partnerTenantIdInFilter(allowed: Set<string>): string | null {
@@ -314,10 +328,14 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as CreateBody
     const tenantId = String(body.tenantId || "").trim().toLowerCase()
     const storeName = String(body.storeName || "").trim()
-    const storeCode = normalizeStoreCode(String(body.storeCode || ""), tenantId, storeName)
     if (!tenantId || !storeName) {
       return NextResponse.json({ success: false, message: "tenantId와 storeName은 필수입니다." }, { status: 400, headers })
     }
+    const storeCodeResolved = normalizeStoreCode(String(body.storeCode || ""), tenantId, storeName)
+    if (!storeCodeResolved.ok) {
+      return NextResponse.json({ success: false, message: storeCodeResolved.message }, { status: 400, headers })
+    }
+    const storeCode = storeCodeResolved.storeCode
 
     const inScope = await assertTenantInScope(cp.scope, tenantId)
     if (!inScope) {

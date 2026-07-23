@@ -648,10 +648,19 @@ function stopLinkposBridge() {
   })
 }
 
+/** Electron IPC — HTTP/혼합콘텐츠 없이 동일 런타임 트랜잭션 */
+function runLinkposTransaction(json) {
+  if (!runtime || typeof runtime.handleTransaction !== 'function') {
+    return Promise.resolve({ success: false, error: 'bridge_not_running' })
+  }
+  return runtime.handleTransaction(json || {})
+}
+
 module.exports = {
   startLinkposBridge,
   stopLinkposBridge,
   getStatus,
+  runLinkposTransaction,
   buildFrame,
   selfTestProtocol,
   defaultConfig,

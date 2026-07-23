@@ -2650,6 +2650,48 @@ if (!gotLock) {
         : { ok: false, reason: String(r.reason || "drawer_kick_failed") };
     });
 
+    ipcMain.handle("cm-pos-linkpos-health", async (event) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, running: false, serialReady: false, reason: "forbidden" };
+      }
+      try {
+        if (!linkposBridgeApi || typeof linkposBridgeApi.getStatus !== "function") {
+          return { ok: false, running: false, serialReady: false, reason: "module_missing" };
+        }
+        const st = linkposBridgeApi.getStatus() || {};
+        return {
+          ok: true,
+          running: Boolean(st.running),
+          serialReady: Boolean(st.serialReady),
+          mock: Boolean(st.mock),
+          httpPort: st.httpPort || null,
+          serialPort: st.serialPort || null,
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          running: false,
+          serialReady: false,
+          reason: String(e && e.message ? e.message : e),
+        };
+      }
+    });
+
+    ipcMain.handle("cm-pos-linkpos-transaction", async (event, payload) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { success: false, error: "forbidden" };
+      }
+      try {
+        if (!linkposBridgeApi || typeof linkposBridgeApi.runLinkposTransaction !== "function") {
+          return { success: false, error: "module_missing" };
+        }
+        const body = payload && typeof payload === "object" ? payload : {};
+        return await linkposBridgeApi.runLinkposTransaction(body);
+      } catch (e) {
+        return { success: false, error: String(e && e.message ? e.message : e) };
+      }
+    });
+
     ipcMain.handle("cm-pos-print-dialog", async (event) => {
       if (!senderAllowedOrigin(event.sender)) return { ok: false, reason: "forbidden" };
       return printWithDialogManual();

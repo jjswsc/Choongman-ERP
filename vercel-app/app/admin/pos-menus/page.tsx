@@ -144,6 +144,7 @@ import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-stora
 import {
   isPosMenuStoreScopeCompatibilityModeForBrand,
   menuHasPersistedStoreScope,
+  normalizeMenuScopeStoreCodes,
   resolveEffectiveMenuScopeStoreCodes,
 } from "@/lib/pos-menu-store-scope"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
@@ -1163,11 +1164,13 @@ export default function PosMenusPage() {
       /** Omni 등 엄격 모드: 미저장 스코프 메뉴도 저장 시 체크된 매장을 DB에 남김 */
       (storeScopeStrictPersist && !!editingId)
     const scopeForSave = shouldPersistStoreScope
-      ? (() => {
-          if (!editingMenu || storeScopeDirty) return selectedStoreCodes
-          if (selectedStoreCodes.length > 0) return selectedStoreCodes
-          return persistedScope.length > 0 ? persistedScope : selectedStoreCodes
-        })()
+      ? normalizeMenuScopeStoreCodes(
+          (() => {
+            if (!editingMenu || storeScopeDirty) return selectedStoreCodes
+            if (selectedStoreCodes.length > 0) return selectedStoreCodes
+            return persistedScope.length > 0 ? persistedScope : selectedStoreCodes
+          })()
+        )
       : []
     /** 프로모션 연동 메뉴: 설명·이미지만 메뉴 화면에서 저장 (이름·가격 등은 프로모션 관리) */
     if (isPromoLinkedMenuEdit && editingId) {

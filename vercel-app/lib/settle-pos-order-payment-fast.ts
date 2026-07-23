@@ -333,6 +333,12 @@ export async function settlePosOrderPaymentFast(params: {
     }
   }
 
+  /**
+   * body.items 는 무시한다.
+   * 결제 UI는 항상 items 를 보내지만, enrich·total 재계산 없이 items_json 만 덮으면
+   * 결제액/재고와 불일치가 난다. 품목은 주문·추가주문 저장 시점에 이미 DB에 있어야 한다.
+   */
+
   await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'settlePosOrderPaymentFast')
 
   if (linkposPayment) {

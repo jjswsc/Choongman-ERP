@@ -2,15 +2,23 @@
  * LINKPOS/카드 단말 승인 API 사용 여부.
  *
  * - `LINKPOS_FORCE_MANUAL_CARD=true` → 전 매장 수기만
+ * - Windows 하이브리드(cmPosShell)면 로컬 브리지 사용 가능 → ON
  * - 그 외 `NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true` 이면 단말 호출
- * - 매장 「단말 생략」이 true면 수기, false/미설정(연동 ON일 때)이면 단말
  */
 
 /** true면 전 매장 수기 카드(단말/릴레이 호출 안 함). EDC 연동 시 false. */
 export const LINKPOS_FORCE_MANUAL_CARD = false
 
+/** 브라우저에서 Windows POS 셸(로컬 EDC 브리지) 여부 */
+export function hasLinkposHybridShell(): boolean {
+  if (typeof window === 'undefined') return false
+  const shell = window.cmPosShell
+  return Boolean(shell && (typeof shell.linkposTransaction === 'function' || shell.platform === 'windows-electron'))
+}
+
 export function isLinkposCardApiEnabled(): boolean {
   if (LINKPOS_FORCE_MANUAL_CARD) return false
+  if (hasLinkposHybridShell()) return true
   return String(process.env.NEXT_PUBLIC_LINKPOS_CARD_ENABLED || '').trim().toLowerCase() === 'true'
 }
 

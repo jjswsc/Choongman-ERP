@@ -17,6 +17,7 @@ import {
   syncOptionSelectionConfigToGroupKeys,
 } from '@/lib/pos-option-selection-groups'
 import { normalizeMenuScopeStoreCodes, shouldMenuBeVisibleForStore } from '@/lib/pos-menu-store-scope'
+import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
 import {
   appendPosCatalogTenantFilter,
   isMissingTenantIdColumnError,
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const requestedStoreCode = String(searchParams.get('storeCode') ?? '').trim()
+    const requestedStoreCode = stripTenantPrefixedStoreCode(searchParams.get('storeCode') ?? '')
     const strictStoreScope =
       searchParams.get('strictStoreScope') === '1' || searchParams.get('memberPortal') === '1'
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
@@ -209,7 +210,7 @@ export async function GET(request: NextRequest) {
       for (const row of scopeRows || []) {
         if (row.enabled === false) continue
         const menuId = Number(row.menu_id || 0)
-        const storeCode = String(row.store_code || '').trim()
+        const storeCode = stripTenantPrefixedStoreCode(row.store_code || '')
         if (!menuId || !storeCode) continue
         const list = storeCodesByMenuId.get(menuId) || []
         if (!list.some((x) => x.toLowerCase() === storeCode.toLowerCase())) list.push(storeCode)

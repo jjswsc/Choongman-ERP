@@ -22,6 +22,12 @@ describe('pos-menu-store-scope', () => {
     expect(menuScopeIncludesStore(['Ekkamai'], 'Asoke')).toBe(false)
   })
 
+  it('matches tenant-prefixed synthetic store codes against operating codes', () => {
+    expect(menuScopeIncludesStore(['1001'], 'malatang01:1001')).toBe(true)
+    expect(menuScopeIncludesStore(['malatang01:1001'], '1001')).toBe(true)
+    expect(normalizeMenuScopeStoreCodes(['malatang01:1001', '1001', 'A'])).toEqual(['1001', 'A'])
+  })
+
   it('resolves effective scope for admin display in compatibility mode', () => {
     expect(menuHasPersistedStoreScope([])).toBe(false)
     expect(menuHasPersistedStoreScope(['A'])).toBe(true)

@@ -101,6 +101,54 @@ async function postJsonWithTimeout(
   }
 }
 
+/** Windows POS IPC → 메인 프로세스 브리지 (HTTPS→localhost 혼합콘텐츠 회피) */
+async function postLinkposViaHybridShell(
+  body: Record<string, unknown>,
+  timeoutMs: number
+): Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }> {
+  const shell = typeof window !== 'undefined' ? window.cmPosShell : undefined
+  if (!shell || typeof shell.linkposTransaction !== 'function') {
+    return { ok: false, error: 'no_hybrid_shell' }
+  }
+  try {
+    const result = (await Promise.race([
+      shell.linkposTransaction(body),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('linkpos_ipc_timeout')), Math.max(3000, timeoutMs))
+      ),
+    ])) as Record<string, unknown>
+    return { ok: true, data: result }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
+export async function probeLinkposLocalReady(): Promise<boolean> {
+  const shell = typeof window !== 'undefined' ? window.cmPosShell : undefined
+  if (shell && typeof shell.linkposHealth === 'function') {
+    try {
+      const st = await shell.linkposHealth()
+      return Boolean(st && (st as { serialReady?: boolean }).serialReady)
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 800)
+    const health = await fetch('http://127.0.0.1:18181/health', {
+      method: 'GET',
+      signal: ctrl.signal,
+      cache: 'no-store',
+    }).finally(() => clearTimeout(timer))
+    if (!health.ok) return false
+    const j = (await health.json().catch(() => null)) as { serialReady?: boolean } | null
+    return Boolean(j?.serialReady)
+  } catch {
+    return false
+  }
+}
+
 export async function executeLinkposPayment(params: {
   amount: number
   bankId: string
@@ -110,7 +158,6 @@ export async function executeLinkposPayment(params: {
   timeoutMs?: number
 }) {
   if (!isLinkposCardApiEnabled()) {
-    // 호출부가 수기 스킵을 이미 처리해야 함. disabled를 승인 성공으로 위장하지 않음.
     return {
       success: false as const,
       message: 'linkpos_card_api_disabled',
@@ -130,7 +177,26 @@ export async function executeLinkposPayment(params: {
     protocol: 'hypercom_v2',
   }
 
-  // Hybrid #1: POS 로컬 브리지 우선
+  // Hybrid #0: Electron IPC (권장)
+  {
+    const r = await postLinkposViaHybridShell(payload, timeoutMs)
+    if (r.ok && r.data) {
+      if (r.data.success) {
+        return {
+          success: true,
+          payment: (r.data.payment || null) as LinkposPaymentSummary | null,
+          source: 'local' as const,
+        }
+      }
+      return {
+        success: false,
+        message: String(r.data.error || r.data.message || 'declined'),
+        source: 'local' as const,
+      }
+    }
+  }
+
+  // Hybrid #1: POS 로컬 HTTP 브리지
   for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
     const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
     if (!r.ok) continue
@@ -178,6 +244,17 @@ async function executeLinkposTransactionAction(
     return { success: false, message: 'linkpos_card_api_disabled' }
   }
   const payload = { action, protocol: 'hypercom_v2', ...fields }
+
+  const viaShell = await postLinkposViaHybridShell(payload, timeoutMs)
+  if (viaShell.ok && viaShell.data) {
+    if (viaShell.data.success) return { success: true, source: 'local' as const }
+    return {
+      success: false,
+      source: 'local' as const,
+      message: String(viaShell.data.error || viaShell.data.message || 'linkpos_action_failed'),
+    }
+  }
+
   for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
     const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
     if (!r.ok) continue

@@ -785,7 +785,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payAlipay, setPayAlipay] = useState('')
   const [payUnionPay, setPayUnionPay] = useState('')
   const [payPromptPay, setPayPromptPay] = useState('')
-  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD' | 'EDC'>('THAI_QR')
+  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD' | 'EDC'>(() =>
+    typeof window !== 'undefined' && window.cmPosShell?.platform === 'windows-electron'
+      ? 'EDC'
+      : 'THAI_QR'
+  )
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')

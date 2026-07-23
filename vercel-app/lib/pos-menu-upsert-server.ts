@@ -32,6 +32,7 @@ import {
   stampPosCatalogTenantId,
   type PosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import { sanitizeMenuScopeStoreCodes } from '@/lib/pos-operating-store-code'
 
 export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
@@ -356,14 +357,25 @@ export async function upsertPosMenuFromBody(
   }
   const hasStoreCodesPayload = Array.isArray(body.storeCodes)
   const normalizedStoreCodes = hasStoreCodesPayload
-    ? Array.from(
-        new Set(
-          body.storeCodes!
-            .map((x) => String(x ?? '').trim())
-            .filter(Boolean)
-        )
-      )
+    ? sanitizeMenuScopeStoreCodes(body.storeCodes)
     : []
+  /** Omni: 신규 메뉴·스코프 저장 요청은 노출 매장 1개 이상 필수 (POS 0건 예방) */
+  if (catalogScope.enforce && !isPartialMenuEdit) {
+    if (!isEdit && (!hasStoreCodesPayload || normalizedStoreCodes.length === 0)) {
+      return {
+        success: false,
+        message:
+          '노출 매장(Store)을 1개 이상 선택해 저장해 주세요. 매장을 지정하지 않으면 POS에 메뉴가 표시되지 않습니다.',
+      }
+    }
+    if (hasStoreCodesPayload && normalizedStoreCodes.length === 0) {
+      return {
+        success: false,
+        message:
+          '노출 매장을 모두 해제할 수 없습니다. POS에 메뉴가 사라집니다. 최소 1개 매장을 남겨 주세요.',
+      }
+    }
+  }
   const hasBanbanFlavorMenuIdsPayload = Array.isArray(body.banbanFlavorMenuIds)
   const normalizedBanbanFlavorMenuIds = hasBanbanFlavorMenuIdsPayload
     ? Array.from(
@@ -391,7 +403,7 @@ export async function upsertPosMenuFromBody(
       }
     }
   }
-  if (hasStoreCodesPayload && normalizedStoreCodes.length === 0) {
+  if (hasStoreCodesPayload && normalizedStoreCodes.length === 0 && !isPartialMenuEdit) {
     return { success: false, message: '노출 매장을 1개 이상 선택해 주세요.' }
   }
 

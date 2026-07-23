@@ -72,6 +72,17 @@ declare global {
        * 별도 `local-cash-drawer-bridge` 없이 동작.
        */
       openCashDrawer?: () => Promise<{ ok: boolean; reason?: string; usedDevice?: string }>
+      /** LinkPOS/EDC — 메인 프로세스 브리지 (HTTPS→localhost 혼합콘텐츠 회피) */
+      linkposHealth?: () => Promise<{
+        ok: boolean
+        running?: boolean
+        serialReady?: boolean
+        mock?: boolean
+        httpPort?: number | null
+        serialPort?: string | null
+        reason?: string
+      }>
+      linkposTransaction?: (payload: Record<string, unknown>) => Promise<Record<string, unknown>>
       /** SW·Cache Storage 비우고 캐시 무시 새로고침 (로그인 유지). 확인 대화상자는 셸에서 표시 */
       resetCacheAndReload?: () => Promise<{
         ok: boolean

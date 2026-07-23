@@ -56,6 +56,7 @@ import {
   executeLinkposDisplayQr,
   executeLinkposClearQr,
   executeLinkposPayment,
+  probeLinkposLocalReady,
   grabCancelOrderByStoreApi,
   upsertPosTaxInvoiceRecipient,
   updatePosOrder,
@@ -563,16 +564,23 @@ export default function PosTerminalPage() {
   )
 
   /**
-   * 결제 금액 저장 후 status/재고/분개 — 반드시 await.
-   * (이전 Omni 백그라운드 처리는 실패해도 UI가 성공으로 보여 재고·분개 누락 위험이 있어 되돌림)
+   * Omni: 결제 금액 저장 후 status/재고/분개를 백그라운드(버튼 잠금 해제).
+   * 충만: 기존처럼 await — 후처리 실패 시 결제 모달에서 중단.
+   * 실패 시 applyPosOrderStatusWithRetry 가 알림·재시도 confirm 을 띄운다.
    */
   const applyPaidStatusAfterPaymentSave = useCallback(
     async (params: { id: number; status: 'paid' | 'completed' }): Promise<boolean> => {
-      const ok = await applyOrderStatusWithRetry(params)
-      if (ok && isOmniPaymentFastPath) {
-        void refetchStores({ scope: 'current', immediate: true })
+      if (!isOmniPaymentFastPath) {
+        return applyOrderStatusWithRetry(params)
       }
-      return ok
+      void applyOrderStatusWithRetry(params)
+        .then((ok) => {
+          if (ok) void refetchStores({ scope: 'current', immediate: true })
+        })
+        .catch((e) => {
+          console.error('Omni post-payment status background failed:', e)
+        })
+      return true
     },
     [isOmniPaymentFastPath, applyOrderStatusWithRetry, refetchStores]
   )
@@ -5882,25 +5890,9 @@ export default function PosTerminalPage() {
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
 
       // API 미활성·강제 수기면 단말 호출 금지 (브리지 health만으로 승인 위장 방지)
+      // HTTPS POS → localhost health는 혼합콘텐츠로 막히므로 IPC(probeLinkposLocalReady) 우선
       const linkposApiOn = isLinkposCardApiEnabled()
-      let localBridgeReady = false
-      if (linkposApiOn) {
-        try {
-          const ctrl = new AbortController()
-          const timer = setTimeout(() => ctrl.abort(), 800)
-          const health = await fetch('http://127.0.0.1:18181/health', {
-            method: 'GET',
-            signal: ctrl.signal,
-            cache: 'no-store',
-          }).finally(() => clearTimeout(timer))
-          if (health.ok) {
-            const j = (await health.json().catch(() => null)) as { serialReady?: boolean } | null
-            localBridgeReady = Boolean(j?.serialReady)
-          }
-        } catch {
-          localBridgeReady = false
-        }
-      }
+      const localBridgeReady = linkposApiOn ? await probeLinkposLocalReady() : false
 
       // 로컬 EDC 준비 + API ON 이면 매장「단말 생략」보다 단말 우선. API OFF면 항상 수기.
       if (
@@ -6232,7 +6224,10 @@ export default function PosTerminalPage() {
         return { ok: false as const, message: 'kbank_generate_cooldown' }
       }
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
-      const preferEdcDisplay = Boolean(payment?.paymentQrShowOnEdc)
+      // 고객 모니터 없으면 QR API 생성 후 EDC 표시를 기본 선호 (Jayle 등)
+      const preferEdcDisplay =
+        Boolean(payment?.paymentQrShowOnEdc) ||
+        (!dualMonitorEnabled && isLinkposCardApiEnabled())
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
 
       const existingQrPayload = String(liveKbankQrPayload || '').trim()
@@ -6579,6 +6574,7 @@ export default function PosTerminalPage() {
       kbankOpsTxnUid,
       clearKbankQrSession,
       lang,
+      dualMonitorEnabled,
     ]
   )
 

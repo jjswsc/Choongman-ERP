@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { assertTenantInScope, requireSaasControlPlane } from "@/lib/saas-control-plane-scope"
 import { hashPassword } from "@/lib/password"
 import { supabaseInsert, supabaseSelectFilter, supabaseCountFilter } from "@/lib/supabase-server"
+import { resolveErpStoreCodeForWrite } from "@/lib/pos-operating-store-code"
 
 type Body = {
   tenantId?: string
@@ -13,18 +14,15 @@ type Body = {
   allowDuplicate?: boolean
 }
 
-function slugStoreCode(raw: string, tenantId: string): string {
-  const s = String(raw || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-  if (s.length >= 2) return s.slice(0, 32)
-  const t = String(tenantId || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 8)
-  return (t || "hq") + "_store"
+/** store_code 미입력이면 store_name 사용. tenant 접두 합성키 금지. */
+function resolveBootstrapStoreCode(storeCodeInput: string, storeName: string, tenantId: string): string {
+  const resolved = resolveErpStoreCodeForWrite({
+    storeCode: storeCodeInput,
+    storeName,
+    tenantId,
+  })
+  if (resolved.ok) return resolved.storeCode.slice(0, 64)
+  return String(storeName || "store").trim().slice(0, 64)
 }
 
 export async function POST(req: NextRequest) {
@@ -110,7 +108,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const storeCode = storeCodeInput || slugStoreCode(storeName, tenantId)
+    const storeCode = resolveBootstrapStoreCode(storeCodeInput, storeName, tenantId)
 
     try {
       await supabaseInsert("erp_stores", {

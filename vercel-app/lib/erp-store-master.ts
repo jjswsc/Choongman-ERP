@@ -15,6 +15,7 @@ import {
   type ErpStoreMasterRow,
   type StoreListBuildResult,
 } from '@/lib/erp-store-master-shared'
+import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
 
 export type { ErpStoreMasterRow, StoreListBuildResult }
 export {
@@ -245,10 +246,13 @@ async function fetchErpStoresMasterFromDb(): Promise<ErpStoreMasterRow[]> {
             const storeName = String(r.store_name || '').trim()
             const rawCode = String(r.store_code || '').trim()
             /**
-             * store_code 가 비면 tenant:name 합성키를 쓰지 않는다.
+             * store_code 가 비거나 tenant:name 합성키면 운영 코드만 쓴다.
              * (malatang01:1001 이면 POS 스코프 store_code=1001 과 불일치 → 메뉴 0건)
              */
-            const storeCode = rawCode || storeName || `${tenant || 'tenant'}:store_${idx + 1}`
+            const storeCode =
+              stripTenantPrefixedStoreCode(rawCode) ||
+              storeName ||
+              `store_${idx + 1}`
             const uniqueLabel =
               tenant && storeName
                 ? `${tenant} / ${storeName}`

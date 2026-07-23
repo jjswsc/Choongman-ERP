@@ -81,19 +81,13 @@ export async function POST(req: NextRequest) {
     /**
      * Omni 결제 단축: 클라이언트 skipPostPaymentSideEffects=true.
      * items enrich·재계산·주방·동기 적립 없이 결제 필드만 저장.
-     * items가 있으면 단축 금지 — 결제 직전 카트 변경이 DB에 누락되는 것 방지.
-     * (주방 등은 아래 skipPostPaymentSideEffects 분기로 생략)
+     * body.items 가 있어도 단축 유지(결제 UI는 항상 items 전송) — 품목 JSON은 무시하고
+     * 주문·추가주문 시 저장된 DB 품목을 유지한다.
      */
     const skipPostPaymentSideEffectsEarly =
       body.skipPostPaymentSideEffects === true ||
       String(body.skipPostPaymentSideEffects ?? '') === '1'
-    const settleFastItems = Array.isArray(body?.items) ? body.items : []
-    if (
-      skipPostPaymentSideEffectsEarly &&
-      id &&
-      !Number.isNaN(id) &&
-      settleFastItems.length === 0
-    ) {
+    if (skipPostPaymentSideEffectsEarly && id && !Number.isNaN(id)) {
       return await settlePosOrderPaymentFast({
         auth,
         body,
