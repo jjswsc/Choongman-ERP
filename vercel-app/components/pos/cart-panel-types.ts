@@ -24,6 +24,8 @@ export type CartPanelBeforePaymentReceiptPayload = {
   receiptTaxableGrossForDisplay?: number
   serviceFeeAmt?: number
   serviceFeeMode?: 'included' | 'separate'
+  vatRate?: number
+  serviceRate?: number
   cardFeeAmt?: number
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number

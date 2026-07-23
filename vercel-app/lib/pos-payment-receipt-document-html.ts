@@ -6,11 +6,12 @@ import type { PosMenu, PosMenuOption, PosPrinterSettings } from '@/lib/api-clien
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import {
-  resolveReceiptSubtotalPrintAmount,
-  resolveReceiptVatPrintAmount,
-  resolveTaxInvoiceReceiptVatBreakdown,
-} from '@/lib/pos-pricing'
-import { buildPosReceiptVatPrintLabelEscaped } from '@/lib/pos-receipt-vat-print-label'
+  buildPosReceiptTotalsLabels,
+  POS_RECEIPT_TOTAL_EQ_RULE,
+  resolvePosReceiptAmountBeforeVat,
+  resolvePosReceiptPrintFeeRates,
+  resolvePosReceiptSubtotalAndVatPrint,
+} from '@/lib/pos-receipt-totals-print'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import {
   expandBanbanComposeLineForPrint,
@@ -89,33 +90,24 @@ function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass 
 
 function receiptSubtotalAndVatForPrint(
   receiptData: ReceiptModalData,
-  isTaxInvoice: boolean
+  isTaxInvoice: boolean,
+  vatRatePercent?: number
 ): { subtotalPrint: number; vatPrint: number } {
-  if (isTaxInvoice) {
-    const breakdown = resolveTaxInvoiceReceiptVatBreakdown({
-      total: receiptData.total,
-      vatFeeAmt: receiptData.vatFeeAmt,
-      receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
-    })
-    if (breakdown) {
-      return { subtotalPrint: breakdown.subtotalBeforeVat, vatPrint: breakdown.vat }
-    }
-  }
-
-  const vatPrint = resolveReceiptVatPrintAmount({
-    vatFeeAmt: receiptData.vatFeeAmt,
-    receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
-  })
-  const subtotalPrint = resolveReceiptSubtotalPrintAmount({
+  const resolved = resolvePosReceiptSubtotalAndVatPrint({
+    isTaxInvoice,
+    total: receiptData.total,
     subtotal: receiptData.subtotal,
     discountAmt: receiptData.discountAmt,
     deliveryFee: receiptData.deliveryFee,
     packagingFee: receiptData.packagingFee,
+    vatFeeAmt: receiptData.vatFeeAmt,
     vatFeeMode: receiptData.vatFeeMode,
     receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
+    receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
     receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
+    vatRatePercent,
   })
-  return { subtotalPrint, vatPrint }
+  return { subtotalPrint: resolved.subtotalPrint, vatPrint: resolved.vatPrint }
 }
 
 function extractDutchSplitBadgeFromMemo(rawMemo: string): {
@@ -800,14 +792,44 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     hour12: false,
   }).format(at)
   const isTaxInvoice = !!taxInvoice
-  const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(receiptData, isTaxInvoice)
+  const serviceFeeAmtPrint = Math.max(0, Number(receiptData.serviceFeeAmt ?? 0) || 0)
+  const showServiceFeeRow = serviceFeeAmtPrint > 0.0001
+  const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(
+    receiptData,
+    isTaxInvoice,
+    Number(printerSettings?.vatRate ?? 0) || undefined
+  )
   const showVatRow = vatPrint > 0.0001
-  const vatPrintLabelEscaped = buildPosReceiptVatPrintLabelEscaped({
-    vatFeeMode: receiptData.vatFeeMode,
-    t,
-    tr,
-    esc,
+  const amountBeforeVatPrint = resolvePosReceiptAmountBeforeVat({
+    total: receiptData.total,
+    vatPrint,
+    cardFeeAmt: receiptData.cardFeeAmt,
+    cardFeeMode: receiptData.cardFeeMode,
+    otherFeeAmt: receiptData.otherFeeAmt,
+    otherFeeMode: receiptData.otherFeeMode,
   })
+  const showAmountBeforeVatRow = showVatRow
+  const { vatRate: vatRatePrint, serviceRate: serviceRatePrint } = resolvePosReceiptPrintFeeRates({
+    vatRate: (receiptData as { vatRate?: number }).vatRate,
+    serviceRate: (receiptData as { serviceRate?: number }).serviceRate,
+    printerVatRate: printerSettings?.vatRate,
+    printerServiceRate: printerSettings?.serviceRate,
+    showVatRow,
+    showServiceRow: showServiceFeeRow,
+    vatPrint,
+    serviceAmt: serviceFeeAmtPrint,
+    serviceBaseAmt: subtotalPrint,
+    vatBaseAmt: amountBeforeVatPrint,
+  })
+  const totalsLabels = buildPosReceiptTotalsLabels({
+    tr,
+    vatFeeMode: receiptData.vatFeeMode,
+    serviceFeeMode: receiptData.serviceFeeMode,
+    vatRate: vatRatePrint,
+    serviceRate: serviceRatePrint,
+  })
+  const vatPrintLabelEscaped = esc(totalsLabels.vatLabel)
+  const receiptTotalsEqRuleHtml = `<div class="receipt-total-eq-rule">${POS_RECEIPT_TOTAL_EQ_RULE}</div>`
   if (forceSimple) {
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
       receiptData.items || [],
@@ -948,7 +970,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           )
         : ''
     const summaryRows = [
-      `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(subtotalPrint)}</td></tr>`,
+      `<tr><td class="simple-k">${esc(totalsLabels.subtotalLabel)}</td><td class="simple-v">${formatBahtNum(subtotalPrint)}</td></tr>`,
       receiptData.discountAmt > 0
         ? `${
             showCouponDiscountRows
@@ -969,8 +991,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       (receiptData.packagingFee ?? 0) > 0
         ? `<tr><td class="simple-k">${esc(t('posPackagingFee') || '포장 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.packagingFee)}</td></tr>`
         : '',
+      showServiceFeeRow
+        ? `<tr><td class="simple-k">${esc(totalsLabels.serviceLabel)}</td><td class="simple-v">${formatBahtNum(serviceFeeAmtPrint)}</td></tr>`
+        : '',
+      showAmountBeforeVatRow
+        ? `<tr><td class="simple-k">${esc(totalsLabels.amountBeforeVatLabel)}</td><td class="simple-v">${formatBahtNum(amountBeforeVatPrint)}</td></tr>`
+        : '',
       showVatRow
         ? `<tr><td class="simple-k">${vatPrintLabelEscaped}</td><td class="simple-v">${formatBahtNum(vatPrint)}</td></tr>`
+        : '',
+      (receiptData.cardFeeAmt ?? 0) > 0
+        ? `<tr><td class="simple-k">${esc(t('posCardFee') || '카드비')}</td><td class="simple-v">${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}</td></tr>`
+        : '',
+      (receiptData.otherFeeAmt ?? 0) > 0
+        ? `<tr><td class="simple-k">${esc(t('posOtherFee') || '기타')}</td><td class="simple-v">${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}</td></tr>`
         : '',
     ]
       .filter(Boolean)
@@ -1008,7 +1042,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <table class="simple-table">${grabBundleDiscountSimple}${itemRows}${grabCutleryChecklistRow}</table>
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
-        <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
+        <div class="simple-total-eq-rule">${POS_RECEIPT_TOTAL_EQ_RULE}</div>
+        <div class="simple-total">${esc(totalsLabels.totalLabel)}: ${formatBahtNum(receiptData.total)}</div>
         ${
           voidMode
             ? `<div class="simple-total">${esc(tr('posReceiptVoidAmount', 'Void Amount'))}: ${formatBahtNum(receiptData.total)}</div>`
@@ -1066,9 +1101,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-item-sub { font-weight: 700; color: #000; }
         ${GRAB_ECO_CUTLERY_RECEIPT_SIMPLE_CSS}
         ${GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS}
-        .simple-k { width: 72%; }
+        .simple-k { width: 72%; white-space: nowrap; }
         .simple-v { width: 28%; text-align: right; white-space: nowrap; }
-        .simple-total { font-size: 12px; font-weight: 800; margin-top: 4px; color: #000; }
+        .simple-total-eq-rule {
+          margin: 4px 0 2px 0;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0;
+          line-height: 1.1;
+          color: #000;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .simple-total { font-size: 12px; font-weight: 800; margin-top: 2px; color: #000; }
         .receipt-order-no-print { color: #000 !important; font-weight: 800 !important; font-size: 22px !important; line-height: 1.2 !important; }
         ${voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''}
       `,
@@ -1281,18 +1326,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           return grabBundleDiscountLegacy + itemsHtml + cutleryHtml
         })()}
         <div class="receipt-divider"></div>
-        ${paymentRowHtml(`<span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span>`, formatBahtNum(subtotalPrint))}
+        ${paymentRowHtml(`<span class="receipt-muted">${esc(totalsLabels.subtotalLabel)}</span>`, formatBahtNum(subtotalPrint))}
         ${showCouponDiscountRows ? buildAppliedCouponDiscountRowsHtml(receiptData, tr, paymentRowHtml) : ''}
         ${!grabInboundReceipt && (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}`) : ''}
         ${(receiptData.deliveryFee ?? 0) > 0 ? paymentRowHtml(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`) : ''}
         ${(receiptData.packagingFee ?? 0) > 0 ? paymentRowHtml(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`) : ''}
+        ${showServiceFeeRow ? paymentRowHtml(esc(totalsLabels.serviceLabel), formatBahtNum(serviceFeeAmtPrint)) : ''}
+        ${showAmountBeforeVatRow ? paymentRowHtml(esc(totalsLabels.amountBeforeVatLabel), formatBahtNum(amountBeforeVatPrint)) : ''}
         ${showVatRow ? paymentRowHtml(vatPrintLabelEscaped, formatBahtNum(vatPrint)) : ''}
-        ${(receiptData.serviceFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posServiceFee') || '서비스비'), `${receiptData.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.serviceFeeAmt)}`) : ''}
         ${(receiptData.cardFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posCardFee') || '카드비'), `${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}`) : ''}
         ${(receiptData.otherFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posOtherFee') || '기타'), `${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}`) : ''}
         ${plainMemoForPrint ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(plainMemoForPrint)}</div>` : ''}
+        ${receiptTotalsEqRuleHtml}
         ${paymentRowHtml(
-          esc(tr('posTotal', '합계')),
+          esc(totalsLabels.totalLabel),
           formatBahtNum(receiptData.total),
           useLegacyAligned ? 'receipt-total' : 'receipt-pay-line--total'
         )}
@@ -1374,7 +1421,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment--legacy-safe .receipt-item-head > span:last-child { display: table-cell !important; width: ${RECEIPT_AMOUNT_COL_MM}mm !important; min-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; vertical-align: top !important; white-space: nowrap !important; font-weight: 700; color: #000; }
         .receipt-payment--legacy-safe .receipt-item-head { margin-top: 2px; font-weight: 800; color: #000; }
         .receipt-payment--legacy-safe .receipt-row { margin: 5px 0; }
-        .receipt-payment--legacy-safe .receipt-total { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; font-weight: 800; }
+        .receipt-payment--legacy-safe .receipt-total { margin-top: 4px; padding-top: 2px; border-top: none; font-weight: 800; }
+        .receipt-payment .receipt-total-eq-rule {
+          margin: 6px 0 2px 0;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0;
+          line-height: 1.1;
+          color: #000;
+          white-space: nowrap;
+          overflow: hidden;
+        }
         .receipt-payment--legacy-safe .receipt-meta-row { display: table !important; width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; margin: 5px 0; }
         .receipt-payment--legacy-safe .receipt-meta-label { display: table-cell !important; width: 22mm !important; vertical-align: top !important; white-space: nowrap !important; padding-right: 3mm !important; font-size: 10px; font-weight: 700; line-height: 1.3; color: #000; }
         .receipt-payment--legacy-safe .receipt-meta-value { display: table-cell !important; width: auto !important; vertical-align: top !important; font-size: 11px; font-weight: 800; line-height: 1.38; color: #000; word-break: break-word; }

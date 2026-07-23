@@ -86,6 +86,9 @@ export type ReceiptModalData = {
   receiptTaxableGrossForDisplay?: number
   serviceFeeAmt?: number
   serviceFeeMode?: 'included' | 'separate'
+  /** 영수증 라벨용 요율(%). 없으면 프린터 설정에서 보완 */
+  vatRate?: number
+  serviceRate?: number
   cardFeeAmt?: number
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number
@@ -262,6 +265,9 @@ export function PosReceiptModal({
     })
     const isHallOrderPrint =
       receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'
+    const printerSettingsForPrint =
+      printerSettingsRef?.current ??
+      (await getPosPrinterSettings({ storeCode: receiptData.storeCode }))
     const fullHtml = isHallOrderPrint
       ? buildPosHallOrderReceiptDocumentHtml({
           payload: {
@@ -303,6 +309,8 @@ export function PosReceiptModal({
             receiptTaxableGrossForDisplay: Number(receiptData.receiptTaxableGrossForDisplay ?? 0) || 0,
             serviceFeeAmt: Number(receiptData.serviceFeeAmt ?? 0) || 0,
             serviceFeeMode: receiptData.serviceFeeMode,
+            vatRate: Number(receiptData.vatRate ?? 0) || undefined,
+            serviceRate: Number(receiptData.serviceRate ?? 0) || undefined,
             cardFeeAmt: Number(receiptData.cardFeeAmt ?? 0) || 0,
             cardFeeMode: receiptData.cardFeeMode,
             otherFeeAmt: Number(receiptData.otherFeeAmt ?? 0) || 0,
@@ -316,6 +324,7 @@ export function PosReceiptModal({
             menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
           ),
           optionNameByCode,
+          printerSettings: printerSettingsForPrint,
         })
       : await buildPosPaymentReceiptDocumentHtmlAsync({
           receiptData: { ...receiptData, items: itemsForReceipt },
@@ -325,6 +334,7 @@ export function PosReceiptModal({
           t,
           lang,
           origin: typeof window !== 'undefined' ? window.location.origin : '',
+          printerSettings: printerSettingsForPrint,
           printedAt: (() => {
             const raw = receiptData.receiptPrintedAt?.trim()
             if (raw) {
@@ -367,9 +377,7 @@ export function PosReceiptModal({
         receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'
           ? 'hall_order'
           : 'payment'
-      const hw =
-        printerSettingsRef?.current ??
-        (await getPosPrinterSettings({ storeCode: receiptData.storeCode }))
+      const hw = printerSettingsForPrint
       await printInIframe(fullHtml, t('posReceipt') || '영수증', preferSystemPrintDialog, {
         printRole: 'receipt',
         printReceiptKind,

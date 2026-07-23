@@ -38,6 +38,13 @@ import {
 } from '@/lib/pos-receipt-line-discount'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+import {
+  buildPosReceiptTotalsLabels,
+  POS_RECEIPT_TOTAL_EQ_RULE,
+  resolvePosReceiptAmountBeforeVat,
+  resolvePosReceiptPrintFeeRates,
+  resolvePosReceiptSubtotalAndVatPrint,
+} from '@/lib/pos-receipt-totals-print'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import {
   expandBanbanComposeLineForPrint,
@@ -128,6 +135,9 @@ export type HallOrderPayload = {
   receiptExclusiveSubtotalDisplay?: number
   receiptVatDisplayAmt?: number
   receiptTaxableGrossForDisplay?: number
+  /** 인쇄 라벨용 요율(%). 없으면 프린터 설정·금액 비율로 추정 */
+  vatRate?: number
+  serviceRate?: number
   serviceFeeAmt?: number
   serviceFeeMode?: 'included' | 'separate'
   cardFeeAmt?: number
@@ -826,6 +836,92 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     (payload.packagingFee ?? 0) > 0
       ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${formatBahtNum(payload.packagingFee ?? 0)}</span></div>`
       : ''
+  const serviceFeeAmtPrint = Math.max(0, Number(payload.serviceFeeAmt ?? 0) || 0)
+  const showServiceFeeRow = serviceFeeAmtPrint > 0.0001
+  const { subtotalPrint, vatPrint, showVatRow } = resolvePosReceiptSubtotalAndVatPrint({
+    total: payload.total,
+    subtotal: payload.subtotal,
+    discountAmt: effectiveDiscountAmt,
+    deliveryFee: payload.deliveryFee,
+    packagingFee: payload.packagingFee,
+    vatFeeAmt: payload.vatFeeAmt,
+    vatFeeMode: payload.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: payload.receiptExclusiveSubtotalDisplay,
+    receiptVatDisplayAmt: payload.receiptVatDisplayAmt,
+    receiptTaxableGrossForDisplay: payload.receiptTaxableGrossForDisplay,
+    vatRatePercent: Number(printerSettings?.vatRate ?? payload.vatRate ?? 0) || undefined,
+  })
+  const amountBeforeVatPrint = resolvePosReceiptAmountBeforeVat({
+    total: payload.total,
+    vatPrint,
+    cardFeeAmt: payload.cardFeeAmt,
+    cardFeeMode: payload.cardFeeMode,
+    otherFeeAmt: payload.otherFeeAmt,
+    otherFeeMode: payload.otherFeeMode,
+  })
+  const showAmountBeforeVatRow = showVatRow
+  const { vatRate: vatRatePrint, serviceRate: serviceRatePrint } = resolvePosReceiptPrintFeeRates({
+    vatRate: payload.vatRate,
+    serviceRate: payload.serviceRate,
+    printerVatRate: printerSettings?.vatRate,
+    printerServiceRate: printerSettings?.serviceRate,
+    showVatRow,
+    showServiceRow: showServiceFeeRow,
+    vatPrint,
+    serviceAmt: serviceFeeAmtPrint,
+    serviceBaseAmt: subtotalPrint,
+    vatBaseAmt: amountBeforeVatPrint,
+  })
+  const totalsLabels = buildPosReceiptTotalsLabels({
+    tr,
+    vatFeeMode: payload.vatFeeMode,
+    serviceFeeMode: payload.serviceFeeMode,
+    vatRate: vatRatePrint,
+    serviceRate: serviceRatePrint,
+  })
+  const subtotalRow =
+    '<div class="receipt-row"><span>' +
+    esc(totalsLabels.subtotalLabel) +
+    c('span') +
+    '<span>' +
+    formatBahtNum(subtotalPrint) +
+    c('span') +
+    c('div')
+  const serviceFeeRow = showServiceFeeRow
+    ? '<div class="receipt-row"><span>' +
+      esc(totalsLabels.serviceLabel) +
+      c('span') +
+      '<span>' +
+      formatBahtNum(serviceFeeAmtPrint) +
+      c('span') +
+      c('div')
+    : ''
+  const amountBeforeVatRow = showAmountBeforeVatRow
+    ? '<div class="receipt-row"><span>' +
+      esc(totalsLabels.amountBeforeVatLabel) +
+      c('span') +
+      '<span>' +
+      formatBahtNum(amountBeforeVatPrint) +
+      c('span') +
+      c('div')
+    : ''
+  const vatRow = showVatRow
+    ? '<div class="receipt-row"><span>' +
+      esc(totalsLabels.vatLabel) +
+      c('span') +
+      '<span>' +
+      formatBahtNum(vatPrint) +
+      c('span') +
+      c('div')
+    : ''
+  const cardFeeRow =
+    (payload.cardFeeAmt ?? 0) > 0
+      ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${payload.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.cardFeeAmt ?? 0)}</span></div>`
+      : ''
+  const otherFeeRow =
+    (payload.otherFeeAmt ?? 0) > 0
+      ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${payload.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.otherFeeAmt ?? 0)}</span></div>`
+      : ''
   const orderNoHeaderHtml = buildReceiptChannelOrderNoHeaderHtml({
     posOrderNo: payload.orderNo,
     tableName: payload.tableName,
@@ -865,13 +961,20 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     memoRow +
     '<div class="receipt-divider">' +
     c('div') +
+    subtotalRow +
     discountRow +
     deliveryFeeRow +
     packagingFeeRow +
-    '<div class="receipt-divider">' +
+    serviceFeeRow +
+    amountBeforeVatRow +
+    vatRow +
+    cardFeeRow +
+    otherFeeRow +
+    '<div class="receipt-total-eq-rule">' +
+    POS_RECEIPT_TOTAL_EQ_RULE +
     c('div') +
     '<div class="receipt-row receipt-total"><span>' +
-    esc(t('posTotal') || '합계') +
+    esc(totalsLabels.totalLabel) +
     c('span') +
     '<span>' +
     formatBahtNum(voidMode ? negatePosReceiptMoney(payload.total) : payload.total) +
@@ -900,7 +1003,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       String(RECEIPT_GRID_COL_GAP_PX) +
       'px;vertical-align:top}.receipt-order-simple .receipt-row>span:last-child,.receipt-order-simple .receipt-item-head>span:last-child{display:table-cell;width:' +
       String(RECEIPT_AMOUNT_COL_MM) +
-      'mm;text-align:right;vertical-align:top;white-space:normal}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}' +
+      'mm;text-align:right;vertical-align:top;white-space:nowrap}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}.receipt-order-simple .receipt-total-eq-rule{margin:6px 0 2px 0;font-size:11px;font-weight:800;letter-spacing:0;line-height:1.1;color:#000;white-space:nowrap;overflow:hidden}.receipt-order-simple .receipt-total{margin-top:2px;padding-top:0;border-top:none}' +
       GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS +
       (voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''),
   })

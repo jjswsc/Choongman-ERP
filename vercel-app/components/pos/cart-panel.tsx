@@ -3389,6 +3389,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           ...receiptTaxDisplayFieldsFromPricing(pricingSnapshot),
           serviceFeeAmt: pricingSnapshot.serviceFeeAmt,
           serviceFeeMode: pricingSnapshot.serviceFeeMode,
+          vatRate: Number(pricingAdjustments?.vatRate ?? 0) || undefined,
+          serviceRate: Number(pricingAdjustments?.serviceRate ?? 0) || undefined,
           cardFeeAmt: pricingSnapshot.cardFeeAmt,
           cardFeeMode: pricingSnapshot.cardFeeMode,
           otherFeeAmt: pricingSnapshot.otherFeeAmt,
