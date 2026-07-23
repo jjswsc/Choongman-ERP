@@ -2,8 +2,10 @@ import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import type { PosOrder } from '@/lib/api-client'
 import {
   enrichReceiptModalItemsForPromoDisplay,
+  receiptModalDataFromPosOrderReprint,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { receiptPaymentFieldsFromSnapshot } from '@/lib/pos-receipt-cash-tender'
 import { parsePosOrderMemo, upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
@@ -15,22 +17,22 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-function allocateVatBySplitTotals(
+function allocateAmountBySplitTotals(
   splits: PosSplitReceiptSnapshot[],
-  orderVat: number,
+  amount: number,
   orderTotal: number
 ): number[] {
-  const vat = Math.max(0, Number(orderVat) || 0)
+  const amt = Math.max(0, Number(amount) || 0)
   const total = Math.max(0, Number(orderTotal) || 0)
-  if (vat <= 0.001 || total <= 0.001) return splits.map(() => 0)
+  if (amt <= 0.001 || total <= 0.001) return splits.map(() => 0)
   const out: number[] = []
   let used = 0
   for (let i = 0; i < splits.length; i += 1) {
     if (i === splits.length - 1) {
-      out.push(round2(Math.max(0, vat - used)))
+      out.push(round2(Math.max(0, amt - used)))
       break
     }
-    const share = round2((vat * Math.max(0, Number(splits[i].total) || 0)) / total)
+    const share = round2((amt * Math.max(0, Number(splits[i].total) || 0)) / total)
     out.push(share)
     used = round2(used + share)
   }
@@ -45,6 +47,9 @@ export type SplitPaymentReceiptBatchBase = {
   memo?: string
   discountReason?: string
   vatFeeMode?: 'included' | 'separate'
+  serviceFeeMode?: 'included' | 'separate'
+  cardFeeMode?: 'included' | 'separate'
+  otherFeeMode?: 'included' | 'separate'
 }
 
 /** 결제 직후·사후 세금계산서 공통 — 분할 영수증 `ReceiptModalData` 배열 */
@@ -54,6 +59,9 @@ export function buildSplitPaymentReceiptBatch(
   opts?: {
     suppressReceiptModalAutoPrint?: boolean
     orderVat?: number
+    orderServiceFee?: number
+    orderCardFee?: number
+    orderOtherFee?: number
     orderTotal?: number
     taxInvoiceMemo?: string
     serverOrderId?: number
@@ -62,9 +70,18 @@ export function buildSplitPaymentReceiptBatch(
   if (!splits || splits.length <= 1) return []
   const parsedMemo = parsePosOrderMemo(opts?.taxInvoiceMemo ?? base.memo ?? '')
   const orderVat = Math.max(0, Number(opts?.orderVat ?? 0) || 0)
+  const orderService = Math.max(0, Number(opts?.orderServiceFee ?? 0) || 0)
+  const orderCard = Math.max(0, Number(opts?.orderCardFee ?? 0) || 0)
+  const orderOther = Math.max(0, Number(opts?.orderOtherFee ?? 0) || 0)
   const orderTotal = Math.max(0, Number(opts?.orderTotal ?? 0) || 0)
-  const vatAlloc = allocateVatBySplitTotals(splits, orderVat, orderTotal)
+  const vatAlloc = allocateAmountBySplitTotals(splits, orderVat, orderTotal)
+  const serviceAlloc = allocateAmountBySplitTotals(splits, orderService, orderTotal)
+  const cardAlloc = allocateAmountBySplitTotals(splits, orderCard, orderTotal)
+  const otherAlloc = allocateAmountBySplitTotals(splits, orderOther, orderTotal)
   const vatFeeMode = base.vatFeeMode ?? (orderVat > 0.001 ? ('separate' as const) : undefined)
+  const serviceFeeMode = base.serviceFeeMode ?? (orderService > 0.001 ? ('separate' as const) : undefined)
+  const cardFeeMode = base.cardFeeMode ?? (orderCard > 0.001 ? ('separate' as const) : undefined)
+  const otherFeeMode = base.otherFeeMode ?? (orderOther > 0.001 ? ('separate' as const) : undefined)
 
   return splits.flatMap((split, idx) => {
     const items = (split.items || [])
@@ -87,6 +104,10 @@ export function buildSplitPaymentReceiptBatch(
       ? upsertPosOrderTaxInvoiceMemo(memoCombined, parsedMemo.taxInvoice)
       : memoCombined
     const vatAmt = vatAlloc[idx] ?? 0
+    const serviceAmt = serviceAlloc[idx] ?? 0
+    const cardAmt = cardAlloc[idx] ?? 0
+    const otherAmt = otherAlloc[idx] ?? 0
+    const serverOrderId = Number(opts?.serverOrderId ?? 0)
 
     return [
       {
@@ -101,11 +122,14 @@ export function buildSplitPaymentReceiptBatch(
         discountAmt: Math.max(0, Number(split.discountAmt ?? 0) || 0),
         total: total > 0 ? total : subtotal,
         ...(vatAmt > 0.001 ? { vatFeeAmt: vatAmt, vatFeeMode } : {}),
+        ...(serviceAmt > 0.001 ? { serviceFeeAmt: serviceAmt, serviceFeeMode } : {}),
+        ...(cardAmt > 0.001 ? { cardFeeAmt: cardAmt, cardFeeMode } : {}),
+        ...(otherAmt > 0.001 ? { otherFeeAmt: otherAmt, otherFeeMode } : {}),
         ...(split.payment ? receiptPaymentFieldsFromSnapshot(split.payment) : {}),
         receiptAutoPrintContext: 'payment' as const,
         suppressReceiptModalAutoPrint: opts?.suppressReceiptModalAutoPrint ?? false,
         printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
-        ...(Number(opts?.serverOrderId) > 0 ? { serverOrderId: Number(opts?.serverOrderId) } : {}),
+        ...(serverOrderId > 0 ? { serverOrderId } : {}),
       },
     ]
   })
@@ -114,10 +138,34 @@ export function buildSplitPaymentReceiptBatch(
 /** 영수증 관리 재인쇄·사후 세금계산서 — memo 스냅샷 기준 분할 영수증 */
 export function buildSplitPaymentReceiptBatchFromOrder(
   order: PosOrder,
-  opts?: PosOrderReceiptLineOptions & { suppressReceiptModalAutoPrint?: boolean }
+  opts?: PosOrderReceiptLineOptions & {
+    suppressReceiptModalAutoPrint?: boolean
+    pricingAdjustments?: PosPricingAdjustments
+  }
 ): ReceiptModalData[] | null {
   const splits = parsePosSplitReceiptsFromMemo(order.memo ?? '')
   if (!splits) return null
+
+  const adjustments = opts?.pricingAdjustments
+  const fullReceipt = receiptModalDataFromPosOrderReprint(order, opts, adjustments)
+  const pricing = adjustments
+    ? computePosPricing({
+        subtotal: order.subtotal ?? 0,
+        discountAmt: Number(fullReceipt.discountAmt ?? 0) || 0,
+        deliveryFee: order.deliveryFee ?? 0,
+        packagingFee: order.packagingFee ?? 0,
+        cardPaymentAmount: order.paymentCard ?? 0,
+        adjustments,
+      })
+    : null
+
+  const orderVat = pricing
+    ? Math.max(0, Number(pricing.vatFeeAmt ?? 0) || 0)
+    : Math.max(0, Number(order.vat ?? 0) || 0)
+  const orderService = Math.max(0, Number(fullReceipt.serviceFeeAmt ?? pricing?.serviceFeeAmt ?? 0) || 0)
+  const orderCard = Math.max(0, Number(fullReceipt.cardFeeAmt ?? pricing?.cardFeeAmt ?? 0) || 0)
+  const orderOther = Math.max(0, Number(fullReceipt.otherFeeAmt ?? pricing?.otherFeeAmt ?? 0) || 0)
+
   const batch = buildSplitPaymentReceiptBatch(
     {
       orderNo: order.orderNo ?? '',
@@ -126,12 +174,18 @@ export function buildSplitPaymentReceiptBatchFromOrder(
       tableName: order.tableName,
       memo: order.memo,
       discountReason: order.discountReason,
-      vatFeeMode: Number(order.vat ?? 0) > 0.001 ? 'separate' : undefined,
+      vatFeeMode: fullReceipt.vatFeeMode ?? (orderVat > 0.001 ? 'separate' : undefined),
+      serviceFeeMode: fullReceipt.serviceFeeMode,
+      cardFeeMode: fullReceipt.cardFeeMode,
+      otherFeeMode: fullReceipt.otherFeeMode,
     },
     splits,
     {
       suppressReceiptModalAutoPrint: opts?.suppressReceiptModalAutoPrint ?? true,
-      orderVat: Number(order.vat ?? 0) || 0,
+      orderVat,
+      orderServiceFee: orderService,
+      orderCardFee: orderCard,
+      orderOtherFee: orderOther,
       orderTotal: Number(order.total ?? 0) || 0,
       taxInvoiceMemo: order.memo,
       serverOrderId: Number(order.id) > 0 ? Number(order.id) : undefined,

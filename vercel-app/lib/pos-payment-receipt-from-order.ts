@@ -707,61 +707,6 @@ function effectivePosOrderDiscountForReceipt(
   })
 }
 
-/** 영수증 관리 등: DB에 저장된 합계·부가세로 재인쇄 (당시 요금 재계산 없음) */
-export function receiptModalDataFromPosOrderReprint(
-  order: PosOrder,
-  opts?: PosOrderReceiptLineOptions,
-  adjustments?: PosPricingAdjustments
-): ReceiptModalData {
-  const v = Number(order.vat ?? 0) || 0
-  const effectiveDiscountAmt = adjustments
-    ? effectivePosOrderDiscountForReceipt(order, adjustments, opts)
-    : resolveEffectivePosOrderDiscountAmt({
-        snapshot: posOrderToCheckoutDiscountSnapshot(order),
-        items: posOrderItemsToReceiptLines(order, opts).map((it) => ({
-          price: it.price,
-          qty: it.qty,
-          lineDiscountAmt: it.lineDiscountAmt,
-        })),
-      })
-  return {
-    orderNo: order.orderNo ?? '',
-    items: posOrderItemsToReceiptLines(order, opts),
-    subtotal: order.subtotal ?? 0,
-    discountAmt: effectiveDiscountAmt,
-    deliveryFee: order.deliveryFee,
-    packagingFee: order.packagingFee,
-    total: order.total ?? 0,
-    storeCode: order.storeCode,
-    orderType: order.orderType,
-    tableName: order.tableName,
-    memo: order.memo,
-    discountReason: order.discountReason,
-    appliedCoupons: parseAppliedCouponsFromOrderRow(
-      (order as { appliedCoupons?: unknown; applied_coupons?: unknown }).appliedCoupons ??
-        (order as { applied_coupons?: unknown }).applied_coupons
-    ),
-    paymentCash: order.paymentCash,
-    ...(Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) > 0.005
-      ? { paymentCashTendered: Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) }
-      : {}),
-    paymentCard: order.paymentCard,
-    paymentQr: order.paymentQr,
-    paymentOther: order.paymentOther,
-    ...(order.paymentOtherBreakdown ? { paymentOtherBreakdown: order.paymentOtherBreakdown } : {}),
-    paymentDeliveryApp: order.paymentDeliveryApp,
-    deliveryPaymentChannel: order.deliveryPaymentChannel ?? null,
-    ...(String(order.deliveryAppCode ?? '').trim()
-      ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
-      : {}),
-    ...(v > 0.001 ? { vatFeeAmt: v, vatFeeMode: 'separate' as const } : {}),
-    receiptAutoPrintContext: 'payment',
-    suppressReceiptModalAutoPrint: true,
-    receiptPrintedAt: resolvePosOrderPaidAt(order),
-    ...memberReceiptFieldsFromPosOrder(order),
-  }
-}
-
 function memberReceiptFieldsFromPosOrder(order: {
   memberId?: number | null
   memberNo?: string | null
@@ -843,6 +788,23 @@ export function receiptModalDataFromPosOrderForPayment(
     receiptPrintedAt: resolvePosOrderPaidAt(order),
     ...(Number(order.id) > 0 ? { serverOrderId: Number(order.id) } : {}),
     ...memberReceiptFieldsFromPosOrder(order),
+  }
+}
+
+/**
+ * 영수증 관리·취소 영수증 등 재인쇄.
+ * 결제 직후(`…ForPayment`)와 동일하게 매장 요율로 서비스비·VAT·카드/기타 수수료를 채운다.
+ * (DB `vat`만 쓰면 Service Charge가 빠지고 Rounding이 잔차를 흡수함)
+ */
+export function receiptModalDataFromPosOrderReprint(
+  order: PosOrder,
+  opts?: PosOrderReceiptLineOptions,
+  adjustments?: PosPricingAdjustments
+): ReceiptModalData {
+  const data = receiptModalDataFromPosOrderForPayment(order, adjustments ?? {}, opts)
+  return {
+    ...data,
+    suppressReceiptModalAutoPrint: true,
   }
 }
 

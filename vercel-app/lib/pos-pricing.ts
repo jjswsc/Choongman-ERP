@@ -141,6 +141,53 @@ export function normalizeFeeStackMode(v: unknown): PosFeeStackMode {
   return String(v || 'parallel') === 'sequential' ? 'sequential' : 'parallel'
 }
 
+/** 프린터/매장 설정 → 결제·영수증 재인쇄용 요금 조정 (터미널·메인기기와 동일 규칙) */
+export function posPricingAdjustmentsFromPrinterSettings(
+  settings:
+    | {
+        vatRate?: number | null
+        vatMode?: string | null
+        serviceRate?: number | null
+        serviceMode?: string | null
+        cardRate?: number | null
+        cardMode?: string | null
+        cardBaseMode?: string | null
+        otherRate?: number | null
+        otherMode?: string | null
+        feeStackMode?: string | null
+        feeStackOrder?: unknown
+        paymentTotalRoundingMode?: string | null
+        roundPaymentTotalToWholeBaht?: boolean | null
+      }
+    | null
+    | undefined
+): PosPricingAdjustments {
+  const s = settings ?? {}
+  const cardBase = String(s.cardBaseMode ?? '').trim().toLowerCase()
+  return {
+    vatRate: Math.max(0, Number(s.vatRate ?? 7)),
+    vatMode: s.vatMode === 'separate' ? 'separate' : 'included',
+    serviceRate: Math.max(0, Number(s.serviceRate ?? 0)),
+    serviceMode: s.serviceMode === 'included' ? 'included' : 'separate',
+    cardRate: Math.max(0, Number(s.cardRate ?? 0)),
+    cardMode: s.cardMode === 'included' ? 'included' : 'separate',
+    cardBaseMode:
+      cardBase === 'card_plus_vat'
+        ? 'card_plus_vat'
+        : cardBase === 'card_plus_vat_service'
+          ? 'card_plus_vat_service'
+          : 'card_only',
+    otherRate: Math.max(0, Number(s.otherRate ?? 0)),
+    otherMode: s.otherMode === 'included' ? 'included' : 'separate',
+    feeStackMode: normalizeFeeStackMode(s.feeStackMode),
+    feeStackOrder: normalizeFeeStackOrder(s.feeStackOrder),
+    paymentTotalRoundingMode: normalizePaymentTotalRoundingMode(
+      s.paymentTotalRoundingMode,
+      s.roundPaymentTotalToWholeBaht === false ? false : undefined
+    ),
+  }
+}
+
 export function normalizeFeeStackOrder(v: unknown): PosFeeStackKey[] {
   const allowed = new Set<PosFeeStackKey>(['vat', 'service', 'other'])
   let raw: unknown[] = []

@@ -158,10 +158,14 @@ export async function printPosVoidReceiptForOrder(params: PrintPosVoidReceiptPar
   }
 
   if (paymentSum > 0.005) {
-    const splitBatch = buildSplitPaymentReceiptBatchFromOrder(order, lineOpts)
+    const pricingAdjustments = params.pricingAdjustments
+    const splitBatch = buildSplitPaymentReceiptBatchFromOrder(order, {
+      ...lineOpts,
+      ...(pricingAdjustments ? { pricingAdjustments } : {}),
+    })
     const receiptRows = splitBatch?.length
       ? splitBatch.map((row) => voidReceiptModalData(row))
-      : [receiptModalDataForVoidReceipt(order, lineOpts)]
+      : [receiptModalDataForVoidReceipt(order, lineOpts, pricingAdjustments)]
 
     let allPrinted = true
     for (let idx = 0; idx < receiptRows.length; idx += 1) {

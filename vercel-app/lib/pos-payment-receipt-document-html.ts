@@ -795,7 +795,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   }).format(at)
   const isTaxInvoice = !!taxInvoice
   const serviceFeeAmtPrint = Math.max(0, Number(receiptData.serviceFeeAmt ?? 0) || 0)
-  const showServiceFeeRow = serviceFeeAmtPrint > 0.0001
+  /** 세금계산서: Sub Total이 이미 (합계−VAT)로 서비스비 포함 → Service Charge 행 중복 표시 방지 */
+  const showServiceFeeRow = !isTaxInvoice && serviceFeeAmtPrint > 0.0001
   const discountAmtForBeforeVat = Math.max(
     0,
     Number(

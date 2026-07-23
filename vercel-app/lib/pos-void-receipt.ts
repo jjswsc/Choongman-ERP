@@ -4,6 +4,7 @@ import {
   receiptModalDataFromPosOrderReprint,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import type { PosPricingAdjustments } from '@/lib/pos-pricing'
 
 /** 취소·void 영수증에 표시할 금액(음수) */
 export function negatePosReceiptMoney(n: number | null | undefined): number {
@@ -106,7 +107,8 @@ export function voidReceiptModalData(base: ReceiptModalData): ReceiptModalData {
 
 export function receiptModalDataForVoidReceipt(
   order: PosOrder,
-  opts?: PosOrderReceiptLineOptions
+  opts?: PosOrderReceiptLineOptions,
+  adjustments?: PosPricingAdjustments
 ): ReceiptModalData {
-  return voidReceiptModalData(receiptModalDataFromPosOrderReprint(order, opts))
+  return voidReceiptModalData(receiptModalDataFromPosOrderReprint(order, opts, adjustments))
 }

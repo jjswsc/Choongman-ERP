@@ -92,6 +92,7 @@ import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-recei
 import { resolvePosOrderPaidAt, resolvePosOrderPaidAtDate } from '@/lib/pos-order-paid-at'
 import { buildOptionNameByCodeFromMenus } from '@/lib/grab-pos-order-enrich'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
+import { posPricingAdjustmentsFromPrinterSettings } from '@/lib/pos-pricing'
 import {
   POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
@@ -672,7 +673,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
-      const receiptData = receiptModalDataFromPosOrderReprint(o, { promoCatalogById, menus })
+      const pricingAdjustments = posPricingAdjustmentsFromPrinterSettings(settings)
+      const receiptData = receiptModalDataFromPosOrderReprint(o, { promoCatalogById, menus }, pricingAdjustments)
       const optionNameByCode = buildOptionNameByCodeFromMenus(menus, [])
       const itemsForReceipt = enrichReceiptModalItemsForPromoDisplay(receiptData.items, {
         ...posReceiptLineOptsKitchen,
@@ -766,6 +768,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
+      const pricingAdjustments = posPricingAdjustmentsFromPrinterSettings(settings)
       const printed = await printPosVoidReceiptForOrder({
         order: o,
         menus,
@@ -774,6 +777,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         t,
         lang,
         printerSettings: settings,
+        pricingAdjustments,
         printedAt: new Date(),
       })
       if (!printed) {
@@ -792,10 +796,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
+      const pricingAdjustments = posPricingAdjustmentsFromPrinterSettings(settings)
       const paidAt = resolvePosOrderPaidAtDate(o)
       const lineOpts: PosOrderReceiptLineOptions = { promoCatalogById, menus }
-      const splitBatch = buildSplitPaymentReceiptBatchFromOrder(o, lineOpts)
-      const receiptRows = splitBatch ?? [receiptModalDataFromPosOrderReprint(o, lineOpts)]
+      const splitBatch = buildSplitPaymentReceiptBatchFromOrder(o, {
+        ...lineOpts,
+        pricingAdjustments,
+      })
+      const receiptRows = splitBatch ?? [
+        receiptModalDataFromPosOrderReprint(o, lineOpts, pricingAdjustments),
+      ]
       const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
       for (let idx = 0; idx < receiptRows.length; idx += 1) {
         const receiptData = await enrichReceiptModalDataWithMember(receiptRows[idx], o)
@@ -1997,7 +2007,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                         openTaxInvoiceEditor(o)
                                       }}
                                     >
-                                      <PencilLine className="h-3 w-3" />
+                                      {parsePosOrderMemo(o.memo).taxInvoice ? (
+                                        <Printer className="h-3 w-3" />
+                                      ) : (
+                                        <PencilLine className="h-3 w-3" />
+                                      )}
                                       {t('posReceiptTaxInvoice') || '세금계산서'}
                                     </Button>
                                     {isPayCorrectableOrder(o) && (
@@ -2187,8 +2201,34 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             <Button type="button" variant="outline" onClick={() => setTaxInvoiceOrder(null)} disabled={taxInvoiceSaving}>
               {t('btnClose') || '닫기'}
             </Button>
+            {taxInvoiceOrder && parsePosOrderMemo(taxInvoiceOrder.memo).taxInvoice ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={taxInvoiceSaving || taxFormErrors.length > 0}
+                onClick={() => {
+                  if (!taxInvoiceOrder) return
+                  const nextTaxInvoice: PosTaxInvoiceData = {
+                    memberNo: normalizedTiMemberNo,
+                    customerType: tiCustomerType,
+                    name: normalizedTiName,
+                    taxId: normalizedTiTaxId,
+                    branchNo: effectiveTiBranchNo,
+                    phone: normalizedTiPhone,
+                    email: normalizedTiEmail,
+                    address: normalizedTiAddress,
+                    member: Boolean(normalizedTiMemberNo),
+                  }
+                  const nextMemo = upsertPosOrderTaxInvoiceMemo(taxInvoiceOrder.memo, nextTaxInvoice)
+                  void handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo })
+                }}
+              >
+                <Printer className="mr-1 h-3.5 w-3.5" />
+                {t('posCustomerReceiptPrint') || '인쇄'}
+              </Button>
+            ) : null}
             <Button type="button" onClick={() => void handleSaveTaxInvoice()} disabled={taxInvoiceSaving || taxFormErrors.length > 0}>
-              {t('save') || '저장'}
+              {tOr(t, 'posTaxInvoiceSaveAndPrint', t('save') || '저장 후 인쇄')}
             </Button>
           </DialogFooter>
         </DialogContent>

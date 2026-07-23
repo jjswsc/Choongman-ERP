@@ -3,8 +3,13 @@ import {
   buildCheckoutPaymentReceiptModalData,
   enrichPosOrderLikeItemsWithPromoSnapshot,
   mergePartialPromoSnapshotWithCatalog,
+  receiptModalDataFromPosOrderForPayment,
+  receiptModalDataFromPosOrderReprint,
 } from '@/lib/pos-payment-receipt-from-order'
-import type { PosPromoWithItems } from '@/lib/api-client'
+import type { PosOrder, PosPromoWithItems } from '@/lib/api-client'
+import { posPricingAdjustmentsFromPrinterSettings } from '@/lib/pos-pricing'
+import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 
 describe('buildCheckoutPaymentReceiptModalData', () => {
   it('includes coupon line discounts in summary discount and total', () => {
@@ -31,6 +36,107 @@ describe('buildCheckoutPaymentReceiptModalData', () => {
     expect(receipt.total).toBe(255)
     expect(receipt.appliedCoupons).toHaveLength(2)
     expect(receipt.items?.[0]?.lineDiscountAmt).toBe(172.06)
+  })
+})
+
+describe('receiptModalDataFromPosOrderReprint', () => {
+  it('matches payment receipt fees (service + VAT) so reprint is not rounding-only', () => {
+    const order = {
+      id: 1,
+      orderNo: '1001-20260723-013',
+      storeCode: 'ST01',
+      orderType: 'dine_in',
+      tableName: '3',
+      status: 'paid',
+      items: [{ id: '1', name: 'Mama', price: 69, quantity: 1 }],
+      subtotal: 69,
+      discountAmt: 0,
+      total: 81,
+      vat: 5.31,
+      paymentCash: 81,
+      paymentCard: 0,
+      paymentQr: 0,
+      paymentOther: 0,
+      paymentDeliveryApp: 0,
+    } as unknown as PosOrder
+
+    const adjustments = posPricingAdjustmentsFromPrinterSettings({
+      vatRate: 7,
+      vatMode: 'separate',
+      serviceRate: 10,
+      serviceMode: 'separate',
+      paymentTotalRoundingMode: 'round',
+    })
+
+    const payment = receiptModalDataFromPosOrderForPayment(order, adjustments)
+    const reprint = receiptModalDataFromPosOrderReprint(order, undefined, adjustments)
+
+    expect(reprint.serviceFeeAmt).toBe(payment.serviceFeeAmt)
+    expect(reprint.serviceFeeAmt).toBeGreaterThan(0.01)
+    expect(reprint.vatFeeAmt).toBe(payment.vatFeeAmt)
+    expect(reprint.vatFeeMode).toBe(payment.vatFeeMode)
+    expect(reprint.total).toBe(payment.total)
+    expect(reprint.suppressReceiptModalAutoPrint).toBe(true)
+  })
+
+  it('prints tax invoice box and hides service charge row on tax invoice reprint', () => {
+    const memo = upsertPosOrderTaxInvoiceMemo('', {
+      memberNo: '',
+      customerType: 'company',
+      name: 'Test Co',
+      taxId: '0123456789222',
+      branchNo: '00000',
+      phone: '0147782510',
+      email: 'mail@mail.com',
+      address: 'Test',
+      member: false,
+    })
+    const order = {
+      id: 2,
+      orderNo: '1001-20260723-013',
+      storeCode: 'ST01',
+      orderType: 'dine_in',
+      tableName: '3',
+      status: 'paid',
+      items: [{ id: '1', name: 'Mama', price: 69, quantity: 1 }],
+      subtotal: 69,
+      discountAmt: 0,
+      total: 81,
+      vat: 5.31,
+      paymentCash: 81,
+      memo,
+    } as unknown as PosOrder
+
+    const adjustments = posPricingAdjustmentsFromPrinterSettings({
+      vatRate: 7,
+      vatMode: 'separate',
+      serviceRate: 10,
+      serviceMode: 'separate',
+    })
+    const reprint = receiptModalDataFromPosOrderReprint(order, undefined, adjustments)
+    expect(reprint.serviceFeeAmt).toBeGreaterThan(0.01)
+
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: reprint,
+      menus: [],
+      orderTypeLabels: { dine_in: 'Dine-in', takeout: 'Takeout', delivery: 'Delivery' },
+      t: (k: string) => k,
+      lang: 'en',
+      origin: '',
+      printedAt: new Date('2026-07-23T08:58:00Z'),
+      printerSettings: {
+        vatRate: 7,
+        serviceRate: 10,
+        receiptBizName: 'XIONG LAO HAN',
+        receiptBizTaxId: '0105562142456',
+      },
+      forceSimpleTextMode: false,
+    })
+
+    expect(html).toContain('Test Co')
+    expect(html).toContain('0123456789222')
+    expect(html).not.toMatch(/Service Charge/i)
+    expect(html).not.toContain('posReceiptServiceCharge')
   })
 })
 
