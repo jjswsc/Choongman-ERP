@@ -4,6 +4,7 @@ import {
   type OrderCartLine,
 } from '@/lib/outbound-order-line-match'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { isOfficeStoreVariant } from '@/lib/office-store-canonical'
 
 export type HqStockLogLite = {
   id?: number
@@ -61,7 +62,7 @@ export function buildHqOutboundIndexes(logs: HqStockLogLite[]): {
     const logType = String(log.log_type || '').trim()
     if (logType !== 'Outbound' && logType !== 'ForceOutbound') continue
     const hqLoc = String(log.location || '').trim()
-    if (!(hqLoc === '본사' || isHeadOfficeLikeStoreName(hqLoc))) continue
+    if (!(hqLoc === '본사' || isHeadOfficeLikeStoreName(hqLoc) || isOfficeStoreVariant(hqLoc))) continue
     const storeName = String(log.vendor_target || '').trim()
     const itemCode = String(log.item_code || '').trim()
     if (!storeName || !itemCode) continue

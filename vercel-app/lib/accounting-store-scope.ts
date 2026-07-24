@@ -14,6 +14,12 @@ import {
   isFinancialStatementStoreNone,
 } from '@/lib/financial-statement-store-options'
 import { addStoreNameAliasVariants, normStoreKey } from '@/lib/store-list-keys'
+import {
+  CANONICAL_OFFICE_STORE,
+  isOfficeStoreVariant,
+  OFFICE_INBOUND_LOCATION_VALUES,
+} from '@/lib/office-store-canonical'
+import { listHeadOfficeCounterpartyLabels } from '@/lib/head-office-counterparty-labels'
 
 export { findErpStoreMasterForScopeKey } from '@/lib/erp-store-identity'
 
@@ -272,11 +278,23 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
         .filter(Boolean)
     )
   )
+  // 본사 선택 시 창고 location「입고등록」등으로 저장된 매입 원장도 조회에 포함
+  if (isOfficeStoreVariant(requested) || isOfficeStoreVariant(scopeIdentity.displayName) || isOfficeStore(requested)) {
+    dbStoreNameValues.push(CANONICAL_OFFICE_STORE)
+    for (const v of OFFICE_INBOUND_LOCATION_VALUES) {
+      const t = String(v || '').trim()
+      if (t) dbStoreNameValues.push(t)
+    }
+    for (const v of listHeadOfficeCounterpartyLabels()) {
+      const t = String(v || '').trim()
+      if (t) dbStoreNameValues.push(t)
+    }
+  }
 
   return {
     requested,
     requestedCanonical: scopeStoreCode,
-    dbStoreNameValues,
+    dbStoreNameValues: Array.from(new Set(dbStoreNameValues)),
     matches: (storeName: string): boolean =>
       matchesAccountingStoreScopeRow(storeName, requested, masters, legacyToCanonical),
   }

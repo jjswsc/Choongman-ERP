@@ -16,6 +16,7 @@ import { syncCardAllocationInputVatLedgers } from '@/lib/card-input-vat-ledger'
 import { backfillVatLedgerStoreNames, resolveStoreDisplayNameForVatLedger, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
 import { syncInvoiceBackedBankInputVatLedgers } from '@/lib/invoice-backed-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { CANONICAL_OFFICE_STORE, canonicalOfficeStore, isOfficeStoreVariant } from '@/lib/office-store-canonical'
 import { normalizeItemTaxType } from '@/lib/income-statement-item-vat'
 import {
   isAccountingPurchaseOrderByCartJson,
@@ -612,7 +613,12 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
         filing_status: 'draft',
         submitted_at: null,
         submitted_by: null,
-        store_name: scopedStore || scopedStoreRaw || null,
+        store_name: (() => {
+          const raw = String(scopedStore || scopedStoreRaw || '').trim()
+          if (!raw) return null
+          const office = canonicalOfficeStore(raw)
+          return office === CANONICAL_OFFICE_STORE ? CANONICAL_OFFICE_STORE : raw
+        })(),
         updated_at: new Date().toISOString(),
       },
       evidenceStatus,

@@ -1004,6 +1004,8 @@ export function AdminAccountingCompliance({
       } else if (opts?.forceSync) {
         if (data.syncWarning === "POS_SYNC_FAILED") {
           appAlert(t("accCompVatSyncPosFail"))
+        } else if (isHeadOfficeLedgerStore) {
+          appAlert(t("accCompVatSyncHqOk"))
         } else {
           appAlert(tr(t, "accCompVatSyncOk", { n: String(data.posSynced || 0) }))
         }
@@ -1035,6 +1037,7 @@ export function AdminAccountingCompliance({
     mapVat,
     loadVatStoreNameGaps,
     t,
+    isHeadOfficeLedgerStore,
   ])
 
   React.useEffect(() => {

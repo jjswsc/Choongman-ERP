@@ -22,6 +22,7 @@ import {
   enrichVatLedgerRowsStoreNames,
   syncPosOrdersOutputVatLedger,
 } from '@/lib/pos-ledger-drafts'
+import { isOfficeStoreVariant } from '@/lib/office-store-canonical'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -235,24 +236,35 @@ export async function GET(request: NextRequest) {
     let posSynced = 0
 
     if (didSync) {
-      // POS 매출 원장 (매출 관리 영업일 기준). 실패해도 조회는 계속.
-      try {
-        const pos = await syncPosOrdersOutputVatLedger({
-          months: period.months,
-          storeFilter: syncStoreFilter,
-        })
-        posSynced = Number(pos.upserted || 0)
-      } catch (e) {
-        console.warn('vatLedger GET POS sync failed:', e)
-        syncWarning = 'POS_SYNC_FAILED'
+      const officeForceSync =
+        forceSync &&
+        (isOfficeStoreVariant(storeFilter) ||
+          isOfficeStoreVariant(syncStoreFilter) ||
+          isHeadOfficeLikeStoreName(storeFilter) ||
+          isHeadOfficeLikeStoreName(syncStoreFilter))
+
+      // POS 매출 원장 (가맹 대조용). 본사 forceSync는 POS 스킵(매출=출고).
+      if (!officeForceSync) {
+        try {
+          const pos = await syncPosOrdersOutputVatLedger({
+            months: period.months,
+            storeFilter: syncStoreFilter,
+          })
+          posSynced = Number(pos.upserted || 0)
+        } catch (e) {
+          console.warn('vatLedger GET POS sync failed:', e)
+          syncWarning = 'POS_SYNC_FAILED'
+        }
       }
-      // 「원장 동기화」버튼(forceSync): POS만 — 입고·지출 전체는 타임아웃 유발
+
+      // 본사 「원장 동기화」: 입고·지출 매입 VAT 필수. 가맹 forceSync는 POS만(타임아웃 방지).
       // 빈 원장 최초 조회: 입고·지출까지 1회
-      if (!forceSync && !hasAnyRows) {
+      if (officeForceSync || (!forceSync && !hasAnyRows)) {
         try {
           await runVatAutoSync()
         } catch (e) {
           console.warn('vatLedger GET auto-sync skipped:', e)
+          if (officeForceSync && !syncWarning) syncWarning = 'FULL_SYNC_PARTIAL'
         }
         try {
           await syncIncrementalVatLedgersFromExpenseAndBank({

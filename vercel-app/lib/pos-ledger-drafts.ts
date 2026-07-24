@@ -1,6 +1,7 @@
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpdate } from '@/lib/supabase-server'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { canonicalLedgerStoreName } from '@/lib/erp-store-identity'
+import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from '@/lib/office-store-canonical'
 import {
   filterCompletedPosSalesRows,
   type PeriodOrderRow,
@@ -69,6 +70,8 @@ function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): 
 
 /** POS·입고·직원 등任意 키 → erp_stores.display_name (VAT 원장 store_name 단일 표기) */
 export async function resolveStoreDisplayNameForVatLedger(storeKey: string): Promise<string> {
+  const office = canonicalOfficeStore(storeKey)
+  if (office === CANONICAL_OFFICE_STORE) return CANONICAL_OFFICE_STORE
   return canonicalLedgerStoreName(storeKey)
 }
 
