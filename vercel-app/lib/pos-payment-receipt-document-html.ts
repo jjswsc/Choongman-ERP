@@ -14,6 +14,7 @@ import {
   resolvePosReceiptRoundingAmt,
   resolvePosReceiptSubtotalAndVatPrint,
 } from '@/lib/pos-receipt-totals-print'
+import { resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import {
   expandBanbanComposeLineForPrint,
@@ -795,8 +796,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   }).format(at)
   const isTaxInvoice = !!taxInvoice
   const serviceFeeAmtPrint = Math.max(0, Number(receiptData.serviceFeeAmt ?? 0) || 0)
-  /** 세금계산서: Sub Total이 이미 (합계−VAT)로 서비스비 포함 → Service Charge 행 중복 표시 방지 */
-  const showServiceFeeRow = !isTaxInvoice && serviceFeeAmtPrint > 0.0001
   const discountAmtForBeforeVat = Math.max(
     0,
     Number(
@@ -813,6 +812,18 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     Number(printerSettings?.vatRate ?? 0) || undefined
   )
   const showVatRow = vatPrint > 0.0001
+  /**
+   * 수수료 스냅샷이 있으면 Tax Invoice도 일반 결제 영수증과 동일 분해.
+   * VAT 스냅샷이 없어 `total − VAT` fallback일 때만 Sub Total이 서비스 포함 → Service Charge 중복 방지.
+   */
+  const taxInvoiceUsesGrossSplitFallback =
+    isTaxInvoice &&
+    resolveReceiptVatPrintAmount({
+      vatFeeAmt: receiptData.vatFeeAmt,
+      receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
+    }) <= 0.0001 &&
+    showVatRow
+  const showServiceFeeRow = !taxInvoiceUsesGrossSplitFallback && serviceFeeAmtPrint > 0.0001
   const amountBeforeVatPrint = resolvePosReceiptAmountBeforeVat({
     subtotalPrint,
     discountAmtForPrint: discountAmtForBeforeVat,
@@ -820,7 +831,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     packagingFee: receiptData.packagingFee,
     serviceFeeAmt: serviceFeeAmtPrint,
     serviceFeeMode: receiptData.serviceFeeMode,
-    isTaxInvoice,
+    isTaxInvoice: taxInvoiceUsesGrossSplitFallback,
   })
   const roundingPrint = resolvePosReceiptRoundingAmt({
     total: receiptData.total,

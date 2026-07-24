@@ -79,31 +79,31 @@ describe('receiptModalDataFromPosOrderReprint', () => {
     expect(reprint.suppressReceiptModalAutoPrint).toBe(true)
   })
 
-  it('prints tax invoice box and hides service charge row on tax invoice reprint', () => {
+  it('prints tax invoice box with same fee rows as first payment print (service + VAT + rounding)', () => {
     const memo = upsertPosOrderTaxInvoiceMemo('', {
       memberNo: '',
       customerType: 'company',
-      name: 'Test Co',
-      taxId: '0123456789222',
+      name: 'TT Company',
+      taxId: '0123456789878',
       branchNo: '00000',
-      phone: '0147782510',
-      email: 'mail@mail.com',
-      address: 'Test',
+      phone: '000000000',
+      email: '00@mail.com',
+      address: '0000',
       member: false,
     })
     const order = {
       id: 2,
-      orderNo: '1001-20260723-013',
+      orderNo: '100120260724001',
       storeCode: 'ST01',
       orderType: 'dine_in',
-      tableName: '3',
+      tableName: '1',
       status: 'paid',
-      items: [{ id: '1', name: 'Mama', price: 69, quantity: 1 }],
-      subtotal: 69,
+      items: [{ id: '1', name: 'Bibimbap C', price: 100, quantity: 1 }],
+      subtotal: 100,
       discountAmt: 0,
-      total: 81,
-      vat: 5.31,
-      paymentCash: 81,
+      total: 118,
+      vat: 7.7,
+      paymentCash: 118,
       memo,
     } as unknown as PosOrder
 
@@ -112,9 +112,14 @@ describe('receiptModalDataFromPosOrderReprint', () => {
       vatMode: 'separate',
       serviceRate: 10,
       serviceMode: 'separate',
+      feeStackMode: 'sequential',
+      feeStackOrder: ['service', 'vat'],
+      paymentTotalRoundingMode: 'round',
     })
     const reprint = receiptModalDataFromPosOrderReprint(order, undefined, adjustments)
-    expect(reprint.serviceFeeAmt).toBeGreaterThan(0.01)
+    expect(reprint.serviceFeeAmt).toBe(10)
+    expect(reprint.vatFeeAmt).toBe(7.7)
+    expect(reprint.total).toBe(118)
 
     const html = buildPosPaymentReceiptDocumentHtml({
       receiptData: reprint,
@@ -123,7 +128,7 @@ describe('receiptModalDataFromPosOrderReprint', () => {
       t: (k: string) => k,
       lang: 'en',
       origin: '',
-      printedAt: new Date('2026-07-23T08:58:00Z'),
+      printedAt: new Date('2026-07-24T04:06:13Z'),
       printerSettings: {
         vatRate: 7,
         serviceRate: 10,
@@ -133,10 +138,17 @@ describe('receiptModalDataFromPosOrderReprint', () => {
       forceSimpleTextMode: false,
     })
 
-    expect(html).toContain('Test Co')
-    expect(html).toContain('0123456789222')
-    expect(html).not.toMatch(/Service Charge/i)
-    expect(html).not.toContain('posReceiptServiceCharge')
+    expect(html).toContain('TT Company')
+    expect(html).toContain('0123456789878')
+    expect(html).toMatch(/Service Charge/i)
+    expect(html).toContain('Amount Before VAT')
+    expect(html).toMatch(/Amount Before VAT[\s\S]{0,120}?110\.00/)
+    expect(html).not.toMatch(/Amount Before VAT[\s\S]{0,120}?110\.30/)
+    expect(html).toMatch(/VAT \(7%\)/)
+    expect(html).toMatch(/7\.70/)
+    expect(html).toContain('Rounding')
+    expect(html).toMatch(/\+0\.30/)
+    expect(html).not.toMatch(/\+8\.00/)
   })
 })
 

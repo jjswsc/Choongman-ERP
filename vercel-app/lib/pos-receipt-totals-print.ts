@@ -89,7 +89,25 @@ export function resolvePosReceiptSubtotalAndVatPrint(params: {
   receiptTaxableGrossForDisplay?: number
   vatRatePercent?: number
 }): { subtotalPrint: number; vatPrint: number; showVatRow: boolean } {
-  if (params.isTaxInvoice) {
+  const vatPrintFromFees = resolveReceiptVatPrintAmount({
+    vatFeeAmt: params.vatFeeAmt,
+    receiptVatDisplayAmt: params.receiptVatDisplayAmt,
+  })
+  const subtotalPrint = resolveReceiptSubtotalPrintAmount({
+    subtotal: params.subtotal,
+    discountAmt: params.discountAmt,
+    deliveryFee: params.deliveryFee,
+    packagingFee: params.packagingFee,
+    vatFeeMode: params.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: params.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: params.receiptTaxableGrossForDisplay,
+  })
+  /**
+   * Tax Invoice도 결제 영수증과 동일하게 품목 Sub Total + 수수료 스냅샷을 쓴다.
+   * `total − VAT` 분해는 정수 바트 Rounding을 Before VAT에 섞어
+   * (예: 110.00 → 110.30) VAT/Rounding 행이 빠지거나 왜곡된다.
+   */
+  if (params.isTaxInvoice && vatPrintFromFees <= 0.0001) {
     const breakdown = resolveTaxInvoiceReceiptVatBreakdown({
       total: params.total,
       vatFeeAmt: params.vatFeeAmt,
@@ -104,19 +122,7 @@ export function resolvePosReceiptSubtotalAndVatPrint(params: {
       }
     }
   }
-  const vatPrint = resolveReceiptVatPrintAmount({
-    vatFeeAmt: params.vatFeeAmt,
-    receiptVatDisplayAmt: params.receiptVatDisplayAmt,
-  })
-  const subtotalPrint = resolveReceiptSubtotalPrintAmount({
-    subtotal: params.subtotal,
-    discountAmt: params.discountAmt,
-    deliveryFee: params.deliveryFee,
-    packagingFee: params.packagingFee,
-    vatFeeMode: params.vatFeeMode,
-    receiptExclusiveSubtotalDisplay: params.receiptExclusiveSubtotalDisplay,
-    receiptTaxableGrossForDisplay: params.receiptTaxableGrossForDisplay,
-  })
+  const vatPrint = vatPrintFromFees
   return { subtotalPrint, vatPrint, showVatRow: vatPrint > 0.0001 }
 }
 
@@ -136,7 +142,7 @@ function separateFeeAmt(amt: number | undefined, mode: PosFeeMode | undefined): 
 
 /**
  * Amount Before VAT — 반올림 제외.
- * 세금계산서(간이) 분해 시 subtotalPrint가 이미 합계−VAT 이면 그대로 사용.
+ * Tax Invoice fallback(`total − VAT`)일 때만 subtotalPrint가 이미 세전 합계이므로 그대로 사용.
  */
 export function resolvePosReceiptAmountBeforeVat(params: {
   subtotalPrint: number
@@ -145,6 +151,7 @@ export function resolvePosReceiptAmountBeforeVat(params: {
   packagingFee?: number
   serviceFeeAmt?: number
   serviceFeeMode?: PosFeeMode
+  /** true: subtotalPrint가 이미 세전 합계(서비스 포함, Rounding 제외 실패 시 Rounding 포함 가능) */
   isTaxInvoice?: boolean
 }): number {
   const sub = Math.max(0, Number(params.subtotalPrint) || 0)

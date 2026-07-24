@@ -1,6 +1,5 @@
 import {
   appendPosReceiptFeeRateLabel,
-  buildPosReceiptTotalsLabels,
   formatPosReceiptRoundingAmtText,
   inferPosReceiptFeePercent,
   resolvePosReceiptAmountBeforeVat,
@@ -11,6 +10,7 @@ import {
 import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
+import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 
 describe('pos-receipt-totals-print', () => {
   it('formats rate suffix in parentheses', () => {
@@ -124,6 +124,55 @@ describe('receipt totals layout with Rounding', () => {
     const totalIdx = html.indexOf('TOTAL')
     expect(roundIdx).toBeGreaterThan(vatIdx)
     expect(totalIdx).toBeGreaterThan(roundIdx)
+  })
+
+  it('tax invoice: keeps Amount Before VAT 110 + Rounding +0.30 (not 110.30)', () => {
+    const memo = upsertPosOrderTaxInvoiceMemo('', {
+      memberNo: '',
+      customerType: 'company',
+      name: 'TT Company',
+      taxId: '0123456789878',
+      branchNo: '00000',
+      phone: '000000000',
+      email: '00@mail.com',
+      address: '0000',
+      member: false,
+    })
+    const receiptData: ReceiptModalData = {
+      orderNo: '100120260724001',
+      items: [{ id: '1', name: 'Bibimbap C', price: 100, qty: 1 }],
+      subtotal: 100,
+      discountAmt: 0,
+      total: 118,
+      storeCode: 'ST01',
+      orderType: 'dine-in',
+      memo,
+      vatFeeAmt: 7.7,
+      vatFeeMode: 'separate',
+      serviceFeeAmt: 10,
+      serviceFeeMode: 'separate',
+      vatRate: 7,
+      serviceRate: 10,
+      receiptAutoPrintContext: 'payment',
+    }
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData,
+      menus: [],
+      orderTypeLabels: {},
+      t: (k) => k,
+      lang: 'en',
+      origin: '',
+      printerSettings: { vatRate: 7, serviceRate: 10 } as never,
+      forceSimpleTextMode: true,
+    })
+    expect(html).toContain('TT Company')
+    expect(html).toMatch(/Service Charge/)
+    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">110\.00/)
+    expect(html).not.toMatch(/Amount Before VAT<\/td><td class="simple-v">110\.30/)
+    expect(html).toContain('VAT (7%)')
+    expect(html).toContain('7.70')
+    expect(html).toContain('Rounding')
+    expect(html).toContain('+0.30')
   })
 
   it('payment: round down shows Amount Before VAT 75.90 + Rounding -0.21', () => {
