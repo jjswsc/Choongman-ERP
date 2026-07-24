@@ -289,10 +289,13 @@ export async function syncPosOrdersOutputVatLedger(params: {
   const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
   const startYmd = monthStartYmd(validMonths[0]!)
   const endYmd = monthEndYmd(validMonths[validMonths.length - 1]!)
+  // 방콕(UTC+7) 월 경계 — naive UTC 필터면 자정 전후 주문이 월을 벗어남
+  const startIso = `${startYmd}T00:00:00+07:00`
+  const endIso = `${endYmd}T23:59:59.999+07:00`
 
   const orders = (await supabaseSelectFilterAllPages(
     'pos_orders',
-    `created_at=gte.${encodeURIComponent(`${startYmd}T00:00:00`)}&created_at=lte.${encodeURIComponent(`${endYmd}T23:59:59.999`)}`,
+    `created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}`,
     {
       select: 'id,order_no,store_code,created_at,subtotal,vat,total,status,created_by',
       order: 'id.asc',

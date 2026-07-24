@@ -869,7 +869,7 @@ export function AdminAccountingCompliance({
         id: r.id != null ? Number(r.id) : undefined,
         doc_date: String(r.doc_date || "").slice(0, 10),
         tax_month: String(r.tax_month || taxMonth).slice(0, 7),
-        direction: r.direction === "input" ? "input" : "output",
+        direction: String(r.direction || "").trim().toLowerCase() === "input" ? "input" : "output",
         counterparty_name: String(r.counterparty_name || ""),
         counterparty_tax_id: String(r.counterparty_tax_id || ""),
         invoice_number: String(r.invoice_number || ""),
@@ -2962,10 +2962,12 @@ export function AdminAccountingCompliance({
     )
     const pendingRows = vatInputRowsFiltered.filter((r) => r.invoice_evidence_status === "required_pending")
     const unobtainableRows = vatInputRowsFiltered.filter((r) => r.invoice_evidence_status === "unobtainable")
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
     return {
-      claimableVat: claimableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0),
-      pendingVat: pendingRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0),
-      unobtainableVat: unobtainableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0),
+      claimableVat: round2(claimableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
+      claimableNet: round2(claimableRows.reduce((sum, r) => sum + (Number(r.net_amount) || 0), 0)),
+      pendingVat: round2(pendingRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
+      unobtainableVat: round2(unobtainableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
       claimableCount: claimableRows.length,
       pendingCount: pendingRows.length,
       unobtainableCount: unobtainableRows.length,
@@ -3053,13 +3055,16 @@ export function AdminAccountingCompliance({
     [vatInputVendorSummaries]
   )
   const vatSettlement = React.useMemo(() => {
-    const outputNet = vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0)
-    const outputVat = vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0)
-    const outputTotal = vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0)
-    const inputNet = vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0)
-    const inputVat = vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0)
-    const inputTotal = vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0)
-    const payableVat = outputVat - inputVat
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+    const outputNet = round2(vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
+    const outputVat = round2(vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
+    const outputTotal = round2(vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
+    const inputNet = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
+    const inputVat = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
+    const inputTotal = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
+    // 신고 예상액: 증빙 공제 가능한 매입 VAT만 차감 (대기·불가 제외)
+    const claimableInputVat = vatInputClaimable.claimableVat
+    const payableVat = round2(outputVat - claimableInputVat)
     return {
       outputNet,
       outputVat,
@@ -3067,6 +3072,9 @@ export function AdminAccountingCompliance({
       inputNet,
       inputVat,
       inputTotal,
+      claimableInputVat,
+      claimableInputNet: vatInputClaimable.claimableNet,
+      claimableInputCount: vatInputClaimable.claimableCount,
       payableVat,
       dueVat: payableVat > 0 ? payableVat : 0,
       creditVat: payableVat < 0 ? Math.abs(payableVat) : 0,
@@ -3074,7 +3082,7 @@ export function AdminAccountingCompliance({
       inputCount: vatInputRowsFiltered.length,
       summaryPayableVat: Number(taxSummary?.vat?.payableVat || 0),
     }
-  }, [vatOutputRowsFiltered, vatInputRowsFiltered, taxSummary?.vat?.payableVat])
+  }, [vatOutputRowsFiltered, vatInputRowsFiltered, vatInputClaimable, taxSummary?.vat?.payableVat])
   const vatFilteredStats = React.useMemo(() => {
     const all = [...vatOutputRowsFiltered, ...vatInputRowsFiltered]
     let missingTaxIdCount = 0
@@ -3283,8 +3291,8 @@ export function AdminAccountingCompliance({
         payerName: pnd1PayerName,
         outputNet: vatSettlement.outputNet,
         outputVat: vatSettlement.outputVat,
-        inputNet: vatSettlement.inputNet,
-        inputVat: vatSettlement.inputVat,
+        inputNet: vatSettlement.claimableInputNet,
+        inputVat: vatSettlement.claimableInputVat,
       }),
     [
       role,
@@ -3297,8 +3305,8 @@ export function AdminAccountingCompliance({
       pnd1PayerName,
       vatSettlement.outputNet,
       vatSettlement.outputVat,
-      vatSettlement.inputNet,
-      vatSettlement.inputVat,
+      vatSettlement.claimableInputNet,
+      vatSettlement.claimableInputVat,
     ]
   )
 
@@ -3351,8 +3359,8 @@ export function AdminAccountingCompliance({
       payerName,
       outputNet: vatSettlement.outputNet,
       outputVat: vatSettlement.outputVat,
-      inputNet: vatSettlement.inputNet,
-      inputVat: vatSettlement.inputVat,
+      inputNet: vatSettlement.claimableInputNet,
+      inputVat: vatSettlement.claimableInputVat,
     })
     window.open(url, "_blank", "noopener,noreferrer")
   }, [
@@ -3368,8 +3376,8 @@ export function AdminAccountingCompliance({
     storeFilterForApi,
     vatSettlement.outputNet,
     vatSettlement.outputVat,
-    vatSettlement.inputNet,
-    vatSettlement.inputVat,
+    vatSettlement.claimableInputNet,
+    vatSettlement.claimableInputVat,
     t,
     tr,
   ])

@@ -249,15 +249,17 @@ export async function GET(request: NextRequest) {
     }
     for (const row of vatRowsEnriched || []) {
       if (!storeScope.matches(String(row.store_name || ''))) continue
-      const dir = String(row.direction || '').toLowerCase()
+      const dir = String(row.direction || '').trim().toLowerCase()
       const net = Number(row.net_amount) || 0
       const amt = Number(row.vat_amount) || 0
       if (dir === 'output') {
         vat.outputNet += net
         vat.outputVat += amt
-      } else {
+      } else if (dir === 'input') {
         vat.inputNet += net
         vat.inputVat += amt
+      } else {
+        continue
       }
       if (!String(row.counterparty_tax_id || '').trim()) vat.missingTaxIdCount += 1
       if (!String(row.invoice_number || '').trim()) vat.missingInvoiceCount += 1

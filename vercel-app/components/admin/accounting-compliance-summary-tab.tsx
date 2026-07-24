@@ -173,6 +173,10 @@ export interface AccountingComplianceSummaryTabProps {
   vatSettlement: {
     inputNet: number
     inputVat: number
+    /** 공제 가능(증빙 수령·불필요) 매입 VAT — 납부액 계산에 사용 */
+    claimableInputVat: number
+    claimableInputNet: number
+    claimableInputCount: number
     outputNet: number
     outputVat: number
     payableVat: number
@@ -183,6 +187,7 @@ export interface AccountingComplianceSummaryTabProps {
   vatInputRowsFiltered: VatDraft[]
   vatInputClaimable: {
     claimableVat: number
+    claimableNet: number
     pendingVat: number
     unobtainableVat: number
     claimableCount: number
@@ -556,14 +561,14 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               {t("search")}
             </Button>
           </div>
-          <div className="shrink-0 max-w-[min(100%,28rem)]">
+          <div className="shrink-0 flex items-end gap-1">
             {pp30Mode !== "wht_only" ? (
               <>
                 <Button
                   type="button"
                   variant="outline"
                   className={cn(
-                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "h-9 font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
                     "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
                     "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
                     "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
@@ -574,10 +579,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
                   {t("accCompPp30RdPrepTxt")}
                 </Button>
-                <p className="text-xs text-muted-foreground w-full basis-full leading-snug mt-1 whitespace-pre-line">
-                  {t("accCompRdFilingWorkflowNote")}
-                </p>
-                <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPp30")} />
+                <RdPrepFilingHelper
+                  t={t}
+                  variant="compact"
+                  mappingGuideBody={t("accCompRdPrepMappingGuideBodyPp30")}
+                />
               </>
             ) : showPnd1Area ? (
               <>
@@ -585,7 +591,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   type="button"
                   variant="outline"
                   className={cn(
-                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "h-9 font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
                     "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
                     "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
                     "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
@@ -602,13 +608,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
                   {pnd1RdPrepBtnLabel}
                 </Button>
-                <p className="text-xs text-muted-foreground w-full basis-full leading-snug mt-1 whitespace-pre-line">
-                  {t("accCompRdFilingWorkflowNote")}
-                </p>
-                {!pp30Queried ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{t("accCompPp30ExportNeedSearch")}</p>
-                ) : null}
-                <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")} />
+                <RdPrepFilingHelper
+                  t={t}
+                  variant="compact"
+                  mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")}
+                />
               </>
             ) : isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
               <>
@@ -616,7 +620,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   type="button"
                   variant="outline"
                   className={cn(
-                    "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "h-9 font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
                     "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
                     "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
                     "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
@@ -627,13 +631,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
                   {t("accCompPnd53RdFilingTxt")}
                 </Button>
-                <p className="text-xs text-muted-foreground w-full basis-full leading-snug mt-1 whitespace-pre-line">
-                  {t("accCompRdFilingWorkflowNote")}
-                </p>
-                {!pp30Queried ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{t("accCompPp30ExportNeedSearch")}</p>
-                ) : null}
-                <RdPrepFilingHelper t={t} className="mt-2" mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd53")} />
+                <RdPrepFilingHelper
+                  t={t}
+                  variant="compact"
+                  mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd53")}
+                />
               </>
             ) : null}
           </div>
@@ -1650,14 +1652,25 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 </div>
               </div>
               <div className="rounded-md border border-sky-300/40 bg-sky-50/40 dark:bg-sky-950/20 p-3">
-                <div className="text-xs text-muted-foreground">{t("accCompVatInputVatSumLabel")}</div>
-                <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.inputVat).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">{t("accCompVatClaimableInputVatSumLabel")}</div>
+                <div className="text-lg font-semibold tabular-nums">
+                  {Math.round(vatSettlement.claimableInputVat).toLocaleString()}
+                </div>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {tr(t, "accCompVatNetAndRows", {
-                    net: Math.round(vatSettlement.inputNet).toLocaleString(),
-                    count: vatSettlement.inputCount.toLocaleString(),
+                    net: Math.round(vatSettlement.claimableInputNet).toLocaleString(),
+                    count: vatSettlement.claimableInputCount.toLocaleString(),
                   })}
                 </div>
+                {vatSettlement.inputVat !== vatSettlement.claimableInputVat ? (
+                  <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                    {tr(t, "accCompVatInputTotalVsClaimableNote", {
+                      total: Math.round(vatSettlement.inputVat).toLocaleString(),
+                      pending: Math.round(vatInputClaimable.pendingVat).toLocaleString(),
+                      excluded: Math.round(vatInputClaimable.unobtainableVat).toLocaleString(),
+                    })}
+                  </div>
+                ) : null}
               </div>
               <div
                 className={cn(
@@ -1680,21 +1693,14 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-2">
               <div className="font-medium text-foreground">{t("accCompVatCalcFormulaTitle")}</div>
               <div className="tabular-nums">
-                {tr(t, "accCompVatCalcFormulaDetail", {
+                {tr(t, "accCompVatCalcFormulaDetailClaimable", {
                   out: Math.round(vatSettlement.outputVat).toLocaleString(),
-                  inp: Math.round(vatSettlement.inputVat).toLocaleString(),
+                  inp: Math.round(vatSettlement.claimableInputVat).toLocaleString(),
                   payable: Math.round(vatSettlement.payableVat).toLocaleString(),
                 })}
               </div>
               <div className="text-muted-foreground">{t("accCompVatCalcDisclaimer")}</div>
             </div>
-
-            {taxSummary ? (
-              <div className="rounded-md border border-dashed border-border/70 bg-background p-3 text-xs">
-                <span className="text-muted-foreground">{t("accCompVatSummaryApiNote")}</span>{" "}
-                <span className="font-medium tabular-nums">{Math.round(vatSettlement.summaryPayableVat).toLocaleString()}</span>
-              </div>
-            ) : null}
           </div>
         )}
 

@@ -41,8 +41,8 @@ vat_agg AS (
   SELECT
     COALESCE(SUM(CASE WHEN lower(direction) = 'output' THEN net_amount ELSE 0 END), 0) AS output_net,
     COALESCE(SUM(CASE WHEN lower(direction) = 'output' THEN vat_amount ELSE 0 END), 0) AS output_vat,
-    COALESCE(SUM(CASE WHEN lower(direction) <> 'output' THEN net_amount ELSE 0 END), 0) AS input_net,
-    COALESCE(SUM(CASE WHEN lower(direction) <> 'output' THEN vat_amount ELSE 0 END), 0) AS input_vat,
+    COALESCE(SUM(CASE WHEN lower(direction) = 'input' THEN net_amount ELSE 0 END), 0) AS input_net,
+    COALESCE(SUM(CASE WHEN lower(direction) = 'input' THEN vat_amount ELSE 0 END), 0) AS input_vat,
     COUNT(*) FILTER (WHERE trim(counterparty_tax_id) = '')::BIGINT AS missing_tax_id_count,
     COUNT(*) FILTER (WHERE trim(invoice_number) = '')::BIGINT AS missing_invoice_count,
     COUNT(*)::BIGINT AS row_count
