@@ -72,6 +72,11 @@ export interface OutboundHistoryItem {
   billPlaced?: boolean
   /** 인보이스 인쇄(=วางบิล) 처리 시각 (방콕 문자열) */
   billPlacedAt?: string
+  /**
+   * 주문 전체 보강으로 조회 기간 밖 stock_log가 포함된 줄.
+   * 행 상세·ลูกหนี้ 맞춤용이며 기간 총액/요약에서는 제외한다.
+   */
+  outsidePeriodRange?: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -220,25 +225,34 @@ export async function GET(request: NextRequest) {
       const seenLogIds = new Set(
         allLogs.map((r) => Number(r.id)).filter((id) => Number.isFinite(id) && id > 0)
       )
-      const orderIn = seedOrderIds.join(',')
-      const extraOutbound = (await supabaseSelectFilterAllPages(
-        'stock_logs',
-        appendInventoryTenantFilter(
-          `log_type=eq.Outbound&order_id=in.(${orderIn})&is_deleted=is.false`,
-          tenantScope
-        ),
-        {
-          order: 'log_date.desc',
-          select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
-          pageSize: 8000,
-          maxRows: 100000,
+      const ORDER_ID_CHUNK = 200
+      try {
+        for (let i = 0; i < seedOrderIds.length; i += ORDER_ID_CHUNK) {
+          const chunk = seedOrderIds.slice(i, i + ORDER_ID_CHUNK)
+          const orderIn = chunk.join(',')
+          const extraOutbound = (await supabaseSelectFilterAllPages(
+            'stock_logs',
+            appendInventoryTenantFilter(
+              `log_type=eq.Outbound&order_id=in.(${orderIn})&is_deleted=is.false`,
+              tenantScope
+            ),
+            {
+              order: 'log_date.desc',
+              select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
+              pageSize: 8000,
+              maxRows: 100000,
+            }
+          )) as typeof allLogs
+          for (const row of extraOutbound || []) {
+            const sid = Number(row.id)
+            if (Number.isFinite(sid) && sid > 0 && seenLogIds.has(sid)) continue
+            if (sid > 0) seenLogIds.add(sid)
+            allLogs.push(row)
+          }
         }
-      )) as typeof allLogs
-      for (const row of extraOutbound || []) {
-        const sid = Number(row.id)
-        if (Number.isFinite(sid) && sid > 0 && seenLogIds.has(sid)) continue
-        if (sid > 0) seenLogIds.add(sid)
-        allLogs.push(row)
+      } catch (backfillErr) {
+        // 보강 실패해도 기간 내 로그는 유지 (전체 [] 방지)
+        console.warn('getCombinedOutboundHistory: order outbound backfill skipped', backfillErr)
       }
     }
 
@@ -363,9 +377,14 @@ export async function GET(request: NextRequest) {
       if (type !== 'Outbound' && type !== 'ForceOutbound') continue
 
       const oidNum = Number(row.order_id)
+      const inPeriod = isOutboundLogDateInBangkokYmdRange(row.log_date, startStr, endStr)
       const allowOutsideRange =
-        type === 'Outbound' && Number.isFinite(oidNum) && oidNum > 0 && seedOrderIdSet.has(oidNum)
-      if (!allowOutsideRange && !isOutboundLogDateInBangkokYmdRange(row.log_date, startStr, endStr)) continue
+        !inPeriod &&
+        type === 'Outbound' &&
+        Number.isFinite(oidNum) &&
+        oidNum > 0 &&
+        seedOrderIdSet.has(oidNum)
+      if (!inPeriod && !allowOutsideRange) continue
       const rowDate = new Date(row.log_date || '')
       if (Number.isNaN(rowDate.getTime())) continue
 
@@ -432,6 +451,7 @@ export async function GET(request: NextRequest) {
         outboundLocation: info.outboundLocation,
         stockLogId: Number.isFinite(sid) && sid > 0 ? sid : undefined,
         frozenUnitPrice: frozen,
+        ...(allowOutsideRange ? { outsidePeriodRange: true } : {}),
         ...(fromCartLr ? { lineRemarks: fromCartLr } : {}),
       })
     }

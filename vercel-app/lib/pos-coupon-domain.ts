@@ -617,3 +617,49 @@ export function parseAppliedCouponsFromOrderRow(raw: unknown): PosAppliedCouponL
   }
   return []
 }
+
+/** 저장·감사 표시용 — 적용 쿠폰의 discount_reason 조각 (레거시 KO 포맷) */
+export function formatAppliedCouponsDiscountReason(
+  applied: Array<{ code?: string | null; quantity?: number | null }>
+): string {
+  return applied
+    .map((row) => {
+      const code = normalizeCode(String(row.code ?? ''))
+      if (!code) return ''
+      const qty = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
+      return qty > 1 ? `쿠폰: ${code}×${qty}` : `쿠폰: ${code}`
+    })
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/**
+ * QR·쿠폰 적용 시 직원이 사유를 안 적어도 discount_reason에 쿠폰 코드가 남도록 보정.
+ * 이미 동일 코드가 있으면 중복 추가하지 않는다.
+ */
+export function ensureAppliedCouponsInDiscountReason(
+  discountReason: string,
+  applied: Array<{ code?: string | null; quantity?: number | null }>,
+  legacyCouponCode?: string | null
+): string {
+  const base = String(discountReason ?? '').trim()
+  const rows =
+    applied.length > 0
+      ? applied
+      : (() => {
+          const code = normalizeCode(String(legacyCouponCode ?? ''))
+          return code ? [{ code, quantity: 1 }] : []
+        })()
+  if (!rows.length) return base
+
+  const baseUpper = base.toUpperCase()
+  const missing = rows.filter((row) => {
+    const code = normalizeCode(String(row.code ?? ''))
+    if (!code) return false
+    return !baseUpper.includes(code)
+  })
+  if (!missing.length) return base
+
+  const couponPart = formatAppliedCouponsDiscountReason(missing)
+  return [base, couponPart].filter(Boolean).join(' · ')
+}

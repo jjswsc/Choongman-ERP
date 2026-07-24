@@ -333,6 +333,8 @@ export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
 export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   months: string[]
   storeFilter?: string
+  /** true면 POS 매출 동기화 생략(이미 별도 수행한 경우) */
+  skipPos?: boolean
 }): Promise<{
   stockUpserted: number
   stockDeleted: number
@@ -356,14 +358,16 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     console.warn('syncTaxVatLedgersFromStockAndExpenses vat store_name backfill:', e)
   }
 
-  try {
-    const posSync = await syncPosOrdersOutputVatLedger({
-      months: validMonths,
-      storeFilter: params.storeFilter,
-    })
-    posUpserted = posSync.upserted
-  } catch (e) {
-    console.warn('syncTaxVatLedgersFromStockAndExpenses pos output sync:', e)
+  if (!params.skipPos) {
+    try {
+      const posSync = await syncPosOrdersOutputVatLedger({
+        months: validMonths,
+        storeFilter: params.storeFilter,
+      })
+      posUpserted = posSync.upserted
+    } catch (e) {
+      console.warn('syncTaxVatLedgersFromStockAndExpenses pos output sync:', e)
+    }
   }
 
   try {

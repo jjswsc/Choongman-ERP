@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_POS_LOYALTY_SETTINGS,
   buildCouponDiscountLineAllocations,
+  ensureAppliedCouponsInDiscountReason,
   resolveOrderDiscountAmt,
   resolvePosSalesDiscountAmount,
   summarizeLegacyCouponFields,
@@ -185,5 +186,26 @@ describe('resolvePosSalesDiscountAmount', () => {
 
   it('adds coupon when legacy rows only stored coupon separately', () => {
     expect(resolvePosSalesDiscountAmount(0, 100)).toBe(100)
+  })
+})
+
+describe('ensureAppliedCouponsInDiscountReason', () => {
+  it('appends coupon reason when empty', () => {
+    expect(
+      ensureAppliedCouponsInDiscountReason('', [{ code: 'CMHBDCOUPON', quantity: 1 }])
+    ).toBe('쿠폰: CMHBDCOUPON')
+  })
+
+  it('appends quantity and skips codes already present', () => {
+    expect(
+      ensureAppliedCouponsInDiscountReason('VIP', [
+        { code: 'SAVE10', quantity: 2 },
+        { code: 'VIP', quantity: 1 },
+      ])
+    ).toBe('VIP · 쿠폰: SAVE10×2')
+  })
+
+  it('uses legacy coupon code when applied list is empty', () => {
+    expect(ensureAppliedCouponsInDiscountReason('', [], 'WELCOME10')).toBe('쿠폰: WELCOME10')
   })
 })

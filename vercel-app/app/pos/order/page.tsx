@@ -25,7 +25,7 @@ import {
 } from "@/lib/api-client"
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { buildMixedCartLineDiscountAllocations, collabDiscountAmountForCart, collabSupportsQuantityEntry } from "@/lib/pos-collab-discount"
-import { summarizeLegacyCouponFields } from "@/lib/pos-coupon-domain"
+import { formatAppliedCouponsDiscountReason, summarizeLegacyCouponFields } from "@/lib/pos-coupon-domain"
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
 import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
@@ -1289,10 +1289,21 @@ export default function PosOrderPage() {
           : ""
       }`
     : ""
+  const couponReasonPart = appliedCoupons.length
+    ? appliedCoupons
+        .map((row) => {
+          const code = String(row.code || "").trim().toUpperCase()
+          if (!code) return ""
+          const qty = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
+          const codeLabel = qty > 1 ? `${code}×${qty}` : code
+          return i18nTr(t, "posCouponDiscountReason", { code: codeLabel }) || `쿠폰: ${codeLabel}`
+        })
+        .filter(Boolean)
+        .join(" · ") || formatAppliedCouponsDiscountReason(appliedCoupons)
+    : ""
   const effectiveDiscountReason = (() => {
     const base = discountReason.trim()
-    if (base && collabReasonPart) return `${base} · ${collabReasonPart}`
-    return base || collabReasonPart
+    return [base, couponReasonPart, collabReasonPart].filter(Boolean).join(" · ")
   })()
   const deliveryFeeAmt = orderType === "delivery" ? storeFees.deliveryFee : 0
   const packagingFeeAmt = orderType === "takeout" ? storeFees.packagingFee : 0

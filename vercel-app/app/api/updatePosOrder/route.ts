@@ -36,6 +36,7 @@ import {
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
 import { mergePosOrderAppliedCouponsFromRequest, resolveAppliedCouponsForOrderDbSave, isPosOrderCouponPaymentSettled } from '@/lib/pos-order-coupon-fields'
+import { ensureAppliedCouponsInDiscountReason } from '@/lib/pos-coupon-domain'
 import { assertPosBusinessOpenForExistingOrderSave } from '@/lib/pos-business-open-gate-server'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
@@ -356,6 +357,11 @@ export async function POST(req: NextRequest) {
       validatedCouponCode: couponCode,
       validatedCouponDiscountAmt: couponDiscountAmt,
     })
+    const discountReasonForSave = ensureAppliedCouponsInDiscountReason(
+      discountReason,
+      couponDbSave.appliedCoupons,
+      couponDbSave.couponCode
+    )
     const discountAmtForPricing = Math.min(
       subtotal,
       Math.max(0, manualDiscountForCoupons + couponDiscountAmt)
@@ -478,7 +484,7 @@ export async function POST(req: NextRequest) {
         : discountAmtNetFinal,
       discount_reason: preserveDbFinancials
         ? (current?.discount_reason ?? null)
-        : discountReason,
+        : discountReasonForSave,
       tier_discount_amt: tierDiscountAmt,
       member_tier_code: memberTierCode,
       service_amt: preserveDbFinancials
@@ -734,7 +740,7 @@ export async function POST(req: NextRequest) {
       table_name: tableName ?? null,
       memo,
       discount_amt: discountAmtNetFinal,
-      discount_reason: discountReason || null,
+      discount_reason: discountReasonForSave || null,
       service_amt: serviceAmt,
       service_reason: serviceReason || null,
       payment_cash: paymentCash,

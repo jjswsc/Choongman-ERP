@@ -34,6 +34,7 @@ import {
   redeemMemberCouponIssuesForPaidOrder,
   resolvePosOrderCouponsForSave,
 } from '@/lib/pos-coupon-server'
+import { ensureAppliedCouponsInDiscountReason } from '@/lib/pos-coupon-domain'
 import {
   resolveAppliedCouponsForOrderDbSave,
   isPosOrderCouponPaymentSettled,
@@ -339,6 +340,11 @@ export async function POST(req: NextRequest) {
       validatedCouponCode: couponCode,
       validatedCouponDiscountAmt: couponDiscountAmt,
     })
+    const discountReasonForSave = ensureAppliedCouponsInDiscountReason(
+      discountReason,
+      couponDbSave.appliedCoupons,
+      couponDbSave.couponCode
+    )
     const discountAmtForPricing = Math.min(
       subtotal,
       Math.max(0, manualDiscountForCoupons + couponDiscountAmt)
@@ -501,7 +507,7 @@ export async function POST(req: NextRequest) {
       table_name: tableName,
       memo,
       discount_amt: discountAmtNetFinal,
-      discount_reason: discountReason,
+      discount_reason: discountReasonForSave,
       tier_discount_amt: tierDiscountAmt,
       member_tier_code: memberTierCode,
       service_amt: serviceAmt,

@@ -3513,11 +3513,15 @@ export const i18n = {
       'POS 자동 {posVat} ({posCount}건) · 기타 매출 {otherVat} ({otherCount}건)',
     accCompVatForceSync: '원장 동기화',
     accCompVatForceSyncHint:
-      '가맹: POS 매출 원장 맞춤. 본사(CM Office): 입고·지출 매입 VAT까지 재동기화합니다.',
-    accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 검색으로 다시 확인하세요.',
+      '선택 매장·월의 POS 매출 + 입고·지출 매입 VAT를 원장에 맞춥니다. 매장 지정 후 실행하세요.',
+    accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 매입 탭도 함께 확인해 주세요.',
     accCompVatSyncPosFail: 'POS 동기화 중 오류가 있었습니다. 잠시 후 다시 시도하세요.',
     accCompVatSyncTimeout: '원장 동기화 시간이 초과되었습니다. 매장을 지정한 뒤 다시 눌러 주세요.',
     accCompVatSyncHqOk: '본사 원장 동기화 완료(입고·지출 매입 포함). 검색으로 매입을 다시 확인하세요.',
+    accCompVatSyncPartial:
+      '원장 동기화가 일부만 완료되었습니다. 매장을 지정한 뒤 다시 시도하거나 매입·매출 탭을 확인하세요.',
+    accCompVatStorePurchaseHint:
+      '매장 매입: ①본사→매장 입고(출고 인보이스 짝 있는 건만 자동, 공제가능) ②외부 거래처 입고·지출(증빙 수령 시 공제가능). 짝 없는 From HQ 입고는 원장에 안 잡힙니다.',
     accCompHqPosOutputExcludedNote:
       '본사 뷰: POS 시연 매출은 제외하고, 물류 출고(가맹 공급) VAT만 매출로 집계합니다. 매출 관리 POS 합계와 비교하지 마세요.',
     accCompVatOutputVatSumLabel: '매출 VAT 합계',
@@ -11027,11 +11031,15 @@ Only matters the employee must handle personally on a working day:
       'POS auto {posVat} ({posCount} rows) · Other output {otherVat} ({otherCount} rows)',
     accCompVatForceSync: 'Sync ledger',
     accCompVatForceSyncHint:
-      'Franchise: resync POS sales ledger. HQ (CM Office): also resync inbound/expense input VAT.',
-    accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Run Search again to review.',
+      'Resyncs POS sales plus inbound/expense purchase VAT for the selected store and month. Pick a store first.',
+    accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Also check the purchase tab.',
     accCompVatSyncPosFail: 'POS sync failed. Please try again shortly.',
     accCompVatSyncTimeout: 'Ledger sync timed out. Pick a single store and try again.',
     accCompVatSyncHqOk: 'HQ ledger sync done (inbound/expense purchases included). Run Search to review input VAT.',
+    accCompVatSyncPartial:
+      'Ledger sync completed only partially. Pick a store and retry, or review the purchase/sales tabs.',
+    accCompVatStorePurchaseHint:
+      'Store purchases: (1) HQ→store inbound only when matched to an issued outbound invoice (claimable); (2) external inbound/expense claimable after invoice evidence is received. Unmatched From HQ inbound is not auto-posted.',
     accCompHqPosOutputExcludedNote:
       'HQ view: excludes POS demo sales; sales VAT is logistics outbound (supply to stores). Do not compare with Sales Management POS totals.',
     accCompVatOutputVatSumLabel: 'Output VAT total',

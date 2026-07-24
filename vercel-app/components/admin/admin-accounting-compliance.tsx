@@ -1004,6 +1004,8 @@ export function AdminAccountingCompliance({
       } else if (opts?.forceSync) {
         if (data.syncWarning === "POS_SYNC_FAILED") {
           appAlert(t("accCompVatSyncPosFail"))
+        } else if (data.syncWarning === "FULL_SYNC_PARTIAL") {
+          appAlert(t("accCompVatSyncPartial") || t("accCompVatSyncPosFail"))
         } else if (isHeadOfficeLedgerStore) {
           appAlert(t("accCompVatSyncHqOk"))
         } else {
@@ -4688,6 +4690,7 @@ export function AdminAccountingCompliance({
             canApproveCompliance={canApproveCompliance}
             storeFilterForApi={storeFilterForApi}
             storeFilterForLedger={storeFilterForLedger}
+            isHeadOfficeLedgerStore={isHeadOfficeLedgerStore}
             summaryCardTitle={summaryCardTitle}
             summaryPeriodLabel={summaryPeriodLabel}
             summaryLoading={summaryLoading}

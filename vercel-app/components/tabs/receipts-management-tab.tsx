@@ -1898,7 +1898,14 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                   {o.discountAmt && o.discountAmt > 0 && (
                                     <div className="text-green-600 mt-0.5">
                                       {t('posDiscount') || '할인'}: -{formatBahtNum(o.discountAmt)} ฿
-                                      {o.discountReason && ` (${o.discountReason})`}
+                                      {(o.discountReason || o.couponCode) &&
+                                        ` (${
+                                          o.discountReason ||
+                                          i18nTr(t, 'posCouponDiscountReason', {
+                                            code: String(o.couponCode).trim().toUpperCase(),
+                                          }) ||
+                                          `쿠폰: ${String(o.couponCode).trim().toUpperCase()}`
+                                        })`}
                                     </div>
                                   )}
                                 </div>

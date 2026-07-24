@@ -99,6 +99,7 @@ export interface AccountingComplianceSummaryTabProps {
   canApproveCompliance: boolean
   storeFilterForApi: string
   storeFilterForLedger: string
+  isHeadOfficeLedgerStore: boolean
 
   // Summary card
   summaryCardTitle: string
@@ -331,6 +332,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     canApproveCompliance,
     storeFilterForApi,
     storeFilterForLedger,
+    isHeadOfficeLedgerStore,
     summaryCardTitle,
     summaryPeriodLabel,
     summaryLoading,
@@ -1670,6 +1672,9 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     otherCount: vatSettlement.otherOutputCount.toLocaleString(),
                   })}
                 </div>
+              ) : null}
+              {!isHeadOfficeLedgerStore ? (
+                <div className="mt-1.5 text-foreground/80">{t("accCompVatStorePurchaseHint")}</div>
               ) : null}
             </div>
 

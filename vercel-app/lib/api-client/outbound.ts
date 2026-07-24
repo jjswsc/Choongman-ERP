@@ -36,6 +36,8 @@ export interface OutboundHistoryItem {
   billPlaced?: boolean
   /** 인보이스 인쇄(=วางบิล) 처리 시각 (방콕 문자열) */
   billPlacedAt?: string
+  /** 주문 보강으로 조회 기간 밖 출고가 포함된 줄 — 기간 총액/요약 제외 */
+  outsidePeriodRange?: boolean
 }
 
 export type DeleteOutboundPreview = {

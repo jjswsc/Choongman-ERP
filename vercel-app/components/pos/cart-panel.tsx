@@ -105,7 +105,11 @@ import {
   computeMemberTierDiscountEligibleSubtotal,
   resolveMemberTierDiscountAmount,
 } from '@/lib/pos-member-tier-discount'
-import { buildCouponDiscountLineAllocations, summarizeLegacyCouponFields } from '@/lib/pos-coupon-domain'
+import {
+  buildCouponDiscountLineAllocations,
+  formatAppliedCouponsDiscountReason,
+  summarizeLegacyCouponFields,
+} from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   isLikelyIncompleteCouponQrScan,
@@ -1285,6 +1289,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       tierDiscountAmt > 0
         ? `${tr('posTierDiscount', '등급 할인')} (${normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')} ${(selectedMemberTierDiscountRate * 100).toFixed(1)}%)`
         : ''
+    const couponPart = appliedCoupons.length
+      ? appliedCoupons
+          .map((row) => {
+            const code = String(row.code || '').trim().toUpperCase()
+            if (!code) return ''
+            const qty = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
+            const codeLabel = qty > 1 ? `${code}×${qty}` : code
+            return i18nTr(t, 'posCouponDiscountReason', { code: codeLabel }) || `쿠폰: ${codeLabel}`
+          })
+          .filter(Boolean)
+          .join(' · ') || formatAppliedCouponsDiscountReason(appliedCoupons)
+      : ''
     const lineDiscountCount = cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
     const linePart = [
       lineDiscountCount > 0 ? `${tr('posDiscount', '할인')} ${lineDiscountCount}${tr('posMenuLineUnit', '건')}` : '',
@@ -1295,9 +1311,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       selectedCancelledLineCount > 0
         ? `${tr('posLineCancelledShort', '취소처리')} ${selectedCancelledLineCount}${tr('posMenuLineUnit', '건')}`
         : ''
-    const parts = [base, collabPart, tierPart, linePart, cancelPart].filter(Boolean)
+    const parts = [base, couponPart, collabPart, tierPart, linePart, cancelPart].filter(Boolean)
     return parts.join(' · ')
-  }, [appliedCollab, cartItems, collabQuantity, discountReason, lineDiscountModeByItemId, memberMap, selectedCancelledLineCount, selectedMemberId, selectedMemberTierDiscountRate, t, tierDiscountAmt])
+  }, [
+    appliedCollab,
+    appliedCoupons,
+    cartItems,
+    collabQuantity,
+    discountReason,
+    lineDiscountModeByItemId,
+    memberMap,
+    selectedCancelledLineCount,
+    selectedMemberId,
+    selectedMemberTierDiscountRate,
+    t,
+    tierDiscountAmt,
+  ])
   const paymentServiceReason = useMemo(() => {
     if (selectedServiceLineCount <= 0) return ''
     return `${tr('posServiceHandled', '서비스처리')} ${selectedServiceLineCount}${tr('posMenuLineUnit', '건')}`

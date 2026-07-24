@@ -209,10 +209,11 @@ export async function GET(request: NextRequest) {
         : ''
     const monthAndStoreFilter = [monthFilter, storeNameDbFilter].filter(Boolean).join('&')
 
-    const runVatAutoSync = async () => {
+    const runVatAutoSync = async (opts?: { skipPos?: boolean }) => {
       await syncTaxVatLedgersFromStockAndExpenses({
         months: period.months,
         storeFilter: syncStoreFilter,
+        skipPos: !!opts?.skipPos,
       })
     }
 
@@ -243,7 +244,7 @@ export async function GET(request: NextRequest) {
           isHeadOfficeLikeStoreName(storeFilter) ||
           isHeadOfficeLikeStoreName(syncStoreFilter))
 
-      // POS 매출 원장 (가맹 대조용). 본사 forceSync는 POS 스킵(매출=출고).
+      // 가맹 forceSync: POS → 입고·지출 매입(POS 중복 생략). 본사: 입고·지출만.
       if (!officeForceSync) {
         try {
           const pos = await syncPosOrdersOutputVatLedger({
@@ -257,22 +258,23 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 본사 「원장 동기화」: 입고·지출 매입 VAT 필수. 가맹 forceSync는 POS만(타임아웃 방지).
-      // 빈 원장 최초 조회: 입고·지출까지 1회
-      if (officeForceSync || (!forceSync && !hasAnyRows)) {
+      if (forceSync || !hasAnyRows) {
         try {
-          await runVatAutoSync()
+          await runVatAutoSync({ skipPos: !officeForceSync && forceSync })
         } catch (e) {
           console.warn('vatLedger GET auto-sync skipped:', e)
-          if (officeForceSync && !syncWarning) syncWarning = 'FULL_SYNC_PARTIAL'
+          if (forceSync && !syncWarning) syncWarning = 'FULL_SYNC_PARTIAL'
         }
-        try {
-          await syncIncrementalVatLedgersFromExpenseAndBank({
-            months: period.months,
-            storeFilter: syncStoreFilter,
-          })
-        } catch (e) {
-          console.warn('vatLedger GET incremental sync skipped:', e)
+        // 증분 지출 루프는 타임아웃 유발 — full sync에 이미 지출 반영됨. 빈 원장 최초만 보조.
+        if (!forceSync && !hasAnyRows) {
+          try {
+            await syncIncrementalVatLedgersFromExpenseAndBank({
+              months: period.months,
+              storeFilter: syncStoreFilter,
+            })
+          } catch (e) {
+            console.warn('vatLedger GET incremental sync skipped:', e)
+          }
         }
       }
       try {

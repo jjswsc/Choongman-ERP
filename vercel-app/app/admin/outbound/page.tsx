@@ -1375,7 +1375,8 @@ export default function OutboundPage() {
   }, [items])
 
   const summarySourceRows = React.useMemo(() => {
-    let rows = historyList
+    // 기간 요약은 조회 기간 안 stock_log만 (주문 보강 outsidePeriodRange 제외)
+    let rows = historyList.filter((row) => !row.outsidePeriodRange)
     if (summaryStoreFilter) {
       rows = rows.filter((row) => String(row.target || "").trim() === summaryStoreFilter)
     }
@@ -1741,23 +1742,38 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     group: (typeof displayGroupedHistory)[0],
     company: InvoiceDataCompany | null,
     client: InvoiceDataClient | { companyName: string },
-    invSettings: Record<string, string>
+    invSettings: Record<string, string>,
+    opts?: { invoiceNo?: string; items?: typeof group.items; issueDate?: string }
   ): InvoiceData => {
-    const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
-    const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
+    const printItems = (opts?.items || group.items || []).filter((it) => !it.isUnreceived)
+    const rawAmt = printItems.reduce((s, it) => s + Math.abs(Number(it.amount) || 0), 0)
+    const docNo = (
+      opts?.invoiceNo ||
+      group.invoiceNo ||
+      `IV-${(group.date || "").replace(/\D/g, "")}`
+    ).trim()
+    const dateFromIv = (() => {
+      const m = /^IV(\d{8})-/i.exec(docNo)
+      if (!m) return ""
+      const d = m[1]
+      return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+    })()
+    const dateStr =
+      (opts?.issueDate || dateFromIv || group.date || "").split(" ")[0] ||
+      new Date().toISOString().slice(0, 10)
     const maybeOrderId = Number((group.items || [])[0]?.orderRowId || 0)
     return buildThaiSalesInvoiceData({
       documentType: "Invoice",
       documentNo: docNo,
       issueDate: dateStr,
       dueDate: dateStr,
-      referenceNo: group.invoiceNo || "-",
+      referenceNo: docNo || "-",
       company,
       client,
       invSettings,
       sourceRefType: Number.isFinite(maybeOrderId) && maybeOrderId > 0 ? "Order" : undefined,
       sourceRefId: Number.isFinite(maybeOrderId) && maybeOrderId > 0 ? maybeOrderId : undefined,
-      lines: (group.items || []).map((it) => ({
+      lines: printItems.map((it) => ({
         code: it.code,
         name: it.name,
         spec: it.spec,
@@ -1765,7 +1781,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         qty: Math.abs(it.qty || 0),
         amount: Math.abs(it.amount || 0),
       })),
-      orderInvoiceTotals: thaiInvoiceTotalsFromRawSubtotal(group.totalAmt || 0),
+      orderInvoiceTotals: thaiInvoiceTotalsFromRawSubtotal(rawAmt),
     })
   }
 
@@ -1795,7 +1811,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         billToCandRes?.taxInvoiceClientMap && typeof billToCandRes.taxInvoiceClientMap === "object"
           ? billToCandRes.taxInvoiceClientMap
           : {}
-      const invoiceDatas: InvoiceData[] = checked.map((g) => {
+      const invoiceDatas: InvoiceData[] = []
+      for (const g of checked) {
         const oid = Math.floor(Number((g.items || [])[0]?.orderRowId || 0))
         const memoClient =
           Number.isFinite(oid) && oid > 0 ? taxInvoiceClientMap[String(oid)] : undefined
@@ -1817,8 +1834,34 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         const client = strictStoreTarget
           ? resolvedClient
           : (hasResolvedMasterInfo ? resolvedClient : (memoClient ?? resolvedClient))
-        return buildInvoiceData(g, company, client, settings)
-      })
+
+        // 주문 행은 화면에서 1줄로 합쳐도, 인쇄는 출고일별 IV 번호별로 분리 (세금계산서 혼선 방지)
+        const printable = (g.items || []).filter((it) => !it.isUnreceived)
+        const byIv = new Map<string, typeof printable>()
+        for (const it of printable) {
+          const inv =
+            String(it.invoiceNo || "").trim() ||
+            String(g.invoiceNo || "").trim() ||
+            `IV-${(it.date || g.date || "").replace(/\D/g, "").slice(0, 8)}`
+          if (!byIv.has(inv)) byIv.set(inv, [])
+          byIv.get(inv)!.push(it)
+        }
+        const ivKeys = [...byIv.keys()].sort()
+        if (ivKeys.length === 0) {
+          invoiceDatas.push(buildInvoiceData(g, company, client, settings))
+        } else {
+          for (const inv of ivKeys) {
+            const items = byIv.get(inv) || []
+            invoiceDatas.push(
+              buildInvoiceData(g, company, client, settings, {
+                invoiceNo: inv,
+                items,
+                issueDate: items[0]?.date,
+              })
+            )
+          }
+        }
+      }
       sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))
       const printWindow = window.open("/admin/invoice-print", "_blank")
       if (!printWindow) {
@@ -1832,11 +1875,11 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     }
   }
 
-  /** 기간 총액: 실제 stock_logs 출고만(미수령 발주 가상 줄 제외) — 손익 본사 출고 매입과 맞춤 */
+  /** 기간 총액: 실제 stock_logs 출고만(미수령 발주 가상 줄·기간 밖 보강 제외) — 손익 본사 출고와 맞춤 */
   const periodTotal = React.useMemo(() => {
     const sumOutboundLogs = (rows: typeof historyList) =>
       rows
-        .filter((i) => i.stockLogId != null && i.stockLogId > 0)
+        .filter((i) => i.stockLogId != null && i.stockLogId > 0 && !i.outsidePeriodRange)
         .reduce((sum, i) => sum + (i.amount || 0), 0)
     if (isOffice) return sumOutboundLogs(historyList)
     return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
