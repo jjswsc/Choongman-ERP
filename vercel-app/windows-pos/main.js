@@ -240,10 +240,18 @@ if (process.platform === "win32") {
 }
 
 /**
- * `userData` 루트(캐시·세션·runtime-config.json) — App **ready** 전, 첫 `getPath("userData")` 전에만.
- * 순서: (1) `WINDOWS_POS_USER_DATA` / `CM_POS_USER_DATA` (2) 설치 본(Windows) 기본: `…\resources\choongman-pos-user-data` (3) 그 외: Electron 기본(보통 AppData)
- * (2)는 `Program Files\…\resources`에 쓰기 권한이 없는 PC에선 자동으로 (3)으로 폴백.
- * AppData로 고정하려면 `CM_POS_USE_DEFAULT_USERDATA=1` 또는 (2) 대신) `WINDOWS_POS_USER_DATA`에 원하는 경로.
+ * `userData` 루트(캐시·세션·runtime-config.json·메인 단말 localStorage) — App **ready** 전.
+ *
+ * **기본(권장): Electron AppData** (`%APPDATA%\<app-name>\`)
+ * — NSIS 업데이트 시 Program Files\resources 가 통째로 교체되어도 프린터·메인 설정이 유지됨.
+ *
+ * 순서:
+ * (1) `WINDOWS_POS_USER_DATA` / `CM_POS_USER_DATA`
+ *     - 절대/상대 경로, 또는 `portable`/`next-to-exe`/`beside-exe`(실행 파일 옆)
+ *     - `resources` = 예전처럼 `…\resources\choongman-pos-user-data` (업데이트 시 초기화됨 — 비권장)
+ * (2) 그 외: Electron 기본 AppData (설치 폴더 밖)
+ *
+ * 레거시 resources / 다른 브랜드 AppData 폴더에 남은 설정은 `migrateLegacyPosSettingsIntoUserData` 가 복구.
  */
 function applyUserDataPathEarly() {
   if (!app || typeof app.setPath !== "function") return;
@@ -252,19 +260,25 @@ function applyUserDataPathEarly() {
   if (s) {
     let d = s;
     const portables = new Set(["portable", "next-to-exe", "beside-exe"]);
-    if (portables.has(s.toLowerCase())) {
+    const key = s.toLowerCase();
+    if (portables.has(key)) {
       d = path.join(path.dirname(process.execPath), "choongman-pos-user-data");
+    } else if (key === "resources") {
+      // 구 기본값 호환 — 업데이트마다 날아갈 수 있음
+      const res = process.resourcesPath;
+      if (!res || !String(res).trim()) return;
+      d = path.join(res, "choongman-pos-user-data");
     } else {
       d = path.isAbsolute(s) ? s : path.resolve(s);
     }
     try {
       if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
       app.setPath("userData", d);
-      if (portables.has(String(raw).trim().toLowerCase()) && process.platform === "win32") {
+      if ((portables.has(key) || key === "resources") && process.platform === "win32") {
         try {
           if (d.toLowerCase().includes("program files")) {
             console.warn(
-              "[cm-pos] userData is next to exe but under Program Files — if writes fail, set WINDOWS_POS_USER_DATA to D:\\... or use a portable build outside Program Files"
+              "[cm-pos] userData under Program Files may be wiped on NSIS update — prefer default AppData or D:\\..."
             );
           }
         } catch {
@@ -274,34 +288,221 @@ function applyUserDataPathEarly() {
     } catch (e) {
       console.warn("[cm-pos] WINDOWS_POS_USER_DATA ignored (use default AppData):", e && e.message ? e.message : e);
     }
-    return;
   }
-  if (String(process.env.CM_POS_USE_DEFAULT_USERDATA ?? process.env.WINDOWS_POS_USE_DEFAULT_USERDATA ?? "").trim() === "1") {
-    return;
-  }
-  if (process.platform === "win32" && app.isPackaged) {
-    const res = process.resourcesPath;
-    if (!res || !String(res).trim()) return;
-    const d = path.join(res, "choongman-pos-user-data");
-    try {
-      if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-      const test = path.join(d, ".cm-pos-write-test");
-      fs.writeFileSync(test, "1", "utf8");
-      try {
-        fs.unlinkSync(test);
-      } catch {
-        /* ignore */
-      }
-      app.setPath("userData", d);
-    } catch (e) {
-      console.warn(
-        "[cm-pos] could not use resources\\choongman-pos-user-data; using default AppData:",
-        e && e.message ? e.message : e
-      );
-    }
+  // 기본: AppData — CM_POS_USE_DEFAULT_USERDATA 는 이제 no-op(하위 호환)
+}
+
+/** 충만·Omni 공통 프린터 설정 백업 (브랜드 AppData 폴더가 달라도 복구) */
+function getSharedPosSettingsBackupPath() {
+  try {
+    const roaming =
+      process.env.APPDATA ||
+      (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, "AppData", "Roaming") : "");
+    if (!roaming) return "";
+    return path.join(roaming, "cm-erp-pos-settings", "runtime-config-backup.json");
+  } catch {
+    return "";
   }
 }
+
+function readJsonObjectFromFile(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    let raw = fs.readFileSync(filePath, "utf8");
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function printConfigHasDevice(printObj) {
+  if (!printObj || typeof printObj !== "object") return false;
+  const keys = [
+    "deviceName",
+    "receiptDeviceName",
+    "kitchenDeviceName",
+    "kitchen1DeviceName",
+    "kitchen2DeviceName",
+    "kitchen3DeviceName",
+  ];
+  return keys.some((k) => {
+    const v = String(printObj[k] || "").trim();
+    return Boolean(v) && v !== "-" && v !== "—";
+  });
+}
+
+function copyDirRecursiveIfMissing(srcDir, destDir) {
+  if (!srcDir || !destDir || !fs.existsSync(srcDir)) return false;
+  if (fs.existsSync(destDir)) {
+    try {
+      const entries = fs.readdirSync(destDir);
+      if (entries && entries.length > 0) return false;
+    } catch {
+      return false;
+    }
+  }
+  const copyRecursive = (from, to) => {
+    fs.mkdirSync(to, { recursive: true });
+    for (const name of fs.readdirSync(from)) {
+      const a = path.join(from, name);
+      const b = path.join(to, name);
+      const st = fs.statSync(a);
+      if (st.isDirectory()) copyRecursive(a, b);
+      else fs.copyFileSync(a, b);
+    }
+  };
+  try {
+    copyRecursive(srcDir, destDir);
+    return true;
+  } catch (e) {
+    console.warn("[cm-pos] copyDirRecursiveIfMissing failed:", e && e.message ? e.message : e);
+    return false;
+  }
+}
+
+function listLegacyPosUserDataDirs(currentUserData) {
+  const out = [];
+  const push = (d) => {
+    const n = String(d || "").trim();
+    if (!n) return;
+    try {
+      if (!fs.existsSync(n)) return;
+      const resolved = path.resolve(n);
+      if (currentUserData && path.resolve(currentUserData) === resolved) return;
+      if (out.includes(resolved)) return;
+      out.push(resolved);
+    } catch {
+      /* ignore */
+    }
+  };
+  try {
+    const roaming =
+      process.env.APPDATA ||
+      (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, "AppData", "Roaming") : "");
+    if (roaming) {
+      push(path.join(roaming, "choongman-pos-windows"));
+      push(path.join(roaming, "omnifoodtech-pos-windows"));
+      push(path.join(roaming, "cm-erp-pos-settings"));
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (process.resourcesPath) {
+      push(path.join(process.resourcesPath, "choongman-pos-user-data"));
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    push(path.join(path.dirname(process.execPath), "choongman-pos-user-data"));
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
+/**
+ * 업데이트·브랜드 전환 후에도 프린터/메인(세션) 설정을 살린다.
+ * - runtime-config.json
+ * - Partitions (persist:choongman-pos → 메인 단말 deviceToken localStorage)
+ * - 공유 백업(%APPDATA%\cm-erp-pos-settings)
+ */
+function migrateLegacyPosSettingsIntoUserData() {
+  try {
+    const userData = app.getPath("userData");
+    if (!userData) return;
+    fs.mkdirSync(userData, { recursive: true });
+    const targetCfgPath = path.join(userData, "runtime-config.json");
+    let targetCfg = readJsonObjectFromFile(targetCfgPath);
+    const targetPrintOk = printConfigHasDevice(targetCfg && targetCfg.print);
+
+    const legacyDirs = listLegacyPosUserDataDirs(userData);
+    const backupPath = getSharedPosSettingsBackupPath();
+
+    // 1) runtime-config 복구
+    if (!targetCfg || !targetPrintOk) {
+      let donor = null;
+      let donorPath = "";
+      for (const dir of legacyDirs) {
+        const p = path.join(dir, "runtime-config.json");
+        const cfg = readJsonObjectFromFile(p);
+        if (cfg && printConfigHasDevice(cfg.print)) {
+          donor = cfg;
+          donorPath = p;
+          break;
+        }
+        if (!donor && cfg && Object.keys(cfg).length > 0) {
+          donor = cfg;
+          donorPath = p;
+        }
+      }
+      if ((!donor || !printConfigHasDevice(donor.print)) && backupPath) {
+        const bak = readJsonObjectFromFile(backupPath);
+        if (bak && (!donor || printConfigHasDevice(bak.print))) {
+          donor = bak;
+          donorPath = backupPath;
+        }
+      }
+      if (donor) {
+        let next = targetCfg ? { ...targetCfg } : { ...donor };
+        if (!targetCfg) {
+          next = { ...donor };
+        } else if (donor.print) {
+          const mergedPrint = { ...(donor.print || {}), ...(targetCfg.print || {}) };
+          for (const [k, v] of Object.entries(donor.print || {})) {
+            const cur = String((targetCfg.print && targetCfg.print[k]) || "").trim();
+            if (!cur || cur === "-" || cur === "—") mergedPrint[k] = v;
+          }
+          next.print = mergedPrint;
+        }
+        fs.writeFileSync(targetCfgPath, JSON.stringify(next, null, 4) + "\n", "utf8");
+        console.log("[cm-pos] restored runtime-config from", donorPath);
+      }
+    }
+
+    // 2) 메인 단말(localStorage) — Partitions 복구
+    const targetPartitions = path.join(userData, "Partitions");
+    let partitionsRestored = false;
+    for (const dir of legacyDirs) {
+      const src = path.join(dir, "Partitions");
+      if (copyDirRecursiveIfMissing(src, targetPartitions)) {
+        console.log("[cm-pos] restored Partitions (Main device session) from", src);
+        partitionsRestored = true;
+        break;
+      }
+    }
+    if (!partitionsRestored) {
+      // 일부 Electron 빌드는 Local Storage 를 userData 루트에 둠
+      for (const dir of legacyDirs) {
+        const src = path.join(dir, "Local Storage");
+        const dest = path.join(userData, "Local Storage");
+        if (copyDirRecursiveIfMissing(src, dest)) {
+          console.log("[cm-pos] restored Local Storage from", src);
+          break;
+        }
+      }
+    }
+
+    // 3) 현재 설정을 공유 백업에도 반영(다음 브랜드/업데이트 대비)
+    try {
+      const cfgNow = readJsonObjectFromFile(targetCfgPath);
+      if (cfgNow && printConfigHasDevice(cfgNow.print) && backupPath) {
+        fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+        fs.writeFileSync(backupPath, JSON.stringify(cfgNow, null, 4) + "\n", "utf8");
+      }
+    } catch {
+      /* ignore */
+    }
+  } catch (e) {
+    console.warn("[cm-pos] migrateLegacyPosSettingsIntoUserData:", e && e.message ? e.message : e);
+  }
+}
+
 applyUserDataPathEarly();
+migrateLegacyPosSettingsIntoUserData();
 
 const DEFAULT_POS_URL = `${DEPLOY_ORIGIN}/pos/login`;
 
@@ -320,7 +521,8 @@ function toOrigin(urlText) {
 
 /**
  * 번들에 runtime-config.json 이 없거나 asar 복사에 실패해도 userData 쪽에 **항상** 기본본을 씀.
- * - 설치 직후: Windows 설치 본이면 `…\Program Files\…\resources\choongman-pos-user-data\runtime-config.json` (권한 실패 시 AppData)
+ * - 설치 직후: 기본은 `%APPDATA%\<app-name>\runtime-config.json` (NSIS 업데이트에도 유지)
+ * - 레거시 `resources\choongman-pos-user-data` / 다른 브랜드 폴더 / 공유 백업에서 자동 복구
  * - 0바이트 파일: 덮어써서 다시 씀
  * - 이후 정상 JSON이 있으면 건드리지 않음(사용자 편집 보존)
  */
@@ -2155,7 +2357,18 @@ function savePrintConfigSnapshotFromIpc(payload) {
   };
   const userPath = path.join(app.getPath("userData"), "runtime-config.json");
   fs.mkdirSync(path.dirname(userPath), { recursive: true });
-  fs.writeFileSync(userPath, JSON.stringify(nextCfg, null, 4) + "\n", "utf8");
+  const text = JSON.stringify(nextCfg, null, 4) + "\n";
+  fs.writeFileSync(userPath, text, "utf8");
+  // 업데이트·브랜드 전환 대비 공유 백업 (충만/Omni AppData 폴더가 달라도 복구)
+  try {
+    const backupPath = getSharedPosSettingsBackupPath();
+    if (backupPath) {
+      fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+      fs.writeFileSync(backupPath, text, "utf8");
+    }
+  } catch (e) {
+    console.warn("[cm-pos] shared print backup failed:", e && e.message ? e.message : e);
+  }
   return getPrintConfigSnapshotForIpc();
 }
 
@@ -2536,6 +2749,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    migrateLegacyPosSettingsIntoUserData();
     ensureUserRuntimeConfigSeeded();
     Menu.setApplicationMenu(buildAppMenu());
     // #region agent log
