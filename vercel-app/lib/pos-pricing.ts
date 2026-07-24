@@ -359,7 +359,17 @@ export function resolveTaxInvoiceReceiptVatBreakdown(params: {
 
 /** 결제 영수증: 부가세 금액 */
 export function resolveReceiptVatPrintAmount(r: { vatFeeAmt?: number; receiptVatDisplayAmt?: number }): number {
-  return typeof r.receiptVatDisplayAmt === 'number' ? r.receiptVatDisplayAmt : Math.max(0, Number(r.vatFeeAmt ?? 0) || 0)
+  const fromFee = Math.max(0, Number(r.vatFeeAmt ?? 0) || 0)
+  /**
+   * `receiptVatDisplayAmt: 0`을 넘기면(undefined→0 강제 등) 별도 VAT(vatFeeAmt)가 가려져
+   * Amount Before VAT/VAT 행이 사라지고 Rounding이 잔차를 흡수한다.
+   * 포함가 분해 금액이 있을 때만 display를 우선한다.
+   */
+  if (typeof r.receiptVatDisplayAmt === 'number' && Number.isFinite(r.receiptVatDisplayAmt)) {
+    const fromDisplay = Math.max(0, r.receiptVatDisplayAmt)
+    if (fromDisplay > 0.0001 || fromFee <= 0.0001) return fromDisplay
+  }
+  return fromFee
 }
 
 /** `ReceiptModalData` 등에 그대로 펼쳐 넣을 VAT 표시용 필드 */

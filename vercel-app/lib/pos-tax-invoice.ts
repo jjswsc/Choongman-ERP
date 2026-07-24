@@ -216,6 +216,11 @@ function stripTaxInvoiceSectionFromMemoRaw(memo: string | undefined | null): str
   return raw.slice(0, markerIndex).trim()
 }
 
+/** 홀 주문서·일반 손님 영수증 등 — memo에서 `[TAX_INVOICE]` 블록만 제거(표시용) */
+export function stripPosOrderTaxInvoiceFromMemo(memo: string | undefined | null): string {
+  return stripTaxInvoiceSectionFromMemoRaw(memo)
+}
+
 /** 기존 memo의 `[TAX_INVOICE]` 블록을 교체(또는 신규 추가)한다. */
 /** 결제 영수증 세금계산서 재인쇄 dedupe·변경 감지용 */
 export function posTaxInvoiceReceiptFingerprint(

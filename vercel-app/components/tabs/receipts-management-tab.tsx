@@ -68,6 +68,7 @@ import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import {
   parsePosOrderMemo,
+  stripPosOrderTaxInvoiceFromMemo,
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
@@ -682,13 +683,15 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         memo: receiptData.memo,
         deliveryAppCode: receiptData.deliveryAppCode,
       })
+      /** 홀 주문서(check bill): Tax Invoice 박스 제외 — 손님 세금계산서와 혼동 방지 */
+      const hallMemo = stripPosOrderTaxInvoiceFromMemo(receiptData.memo)
       const fullHtml = buildPosHallOrderReceiptDocumentHtml({
         payload: {
           orderNo: String(receiptData.orderNo ?? ''),
           storeCode: String(receiptData.storeCode ?? ''),
           orderType: String(receiptData.orderType ?? ''),
           tableName: receiptData.tableName ? String(receiptData.tableName) : undefined,
-          memo: receiptData.memo ? String(receiptData.memo) : '',
+          memo: hallMemo,
           guestCount: o.guestCount,
           items: itemsForReceipt.map((it) => ({
             id: String(it.id ?? ''),
@@ -721,8 +724,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           packagingFee: Number(receiptData.packagingFee ?? 0) || 0,
           vatFeeAmt: Number(receiptData.vatFeeAmt ?? 0) || 0,
           vatFeeMode: receiptData.vatFeeMode,
-          receiptExclusiveSubtotalDisplay: Number(receiptData.receiptExclusiveSubtotalDisplay ?? 0) || 0,
-          receiptVatDisplayAmt: Number(receiptData.receiptVatDisplayAmt ?? 0) || 0,
+          ...(typeof receiptData.receiptExclusiveSubtotalDisplay === 'number'
+            ? { receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay }
+            : {}),
+          ...(typeof receiptData.receiptVatDisplayAmt === 'number'
+            ? { receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt }
+            : {}),
           receiptTaxableGrossForDisplay: Number(receiptData.receiptTaxableGrossForDisplay ?? 0) || 0,
           serviceFeeAmt: Number(receiptData.serviceFeeAmt ?? 0) || 0,
           serviceFeeMode: receiptData.serviceFeeMode,
@@ -739,6 +746,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           menus.map((m) => [String(m.id), String(m.code ?? '')]).filter(([id, code]) => id && code)
         ),
         optionNameByCode,
+        printerSettings: settings,
       })
       await printPosHtmlDocument(fullHtml, {
         title: t('posHallOrder') || '홀 주문서',
@@ -788,7 +796,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
   }
 
-  const handlePrintCustomerReceipt = async (o: PosOrder) => {
+  const handlePrintCustomerReceipt = async (
+    o: PosOrder,
+    opts?: { includeTaxInvoice?: boolean }
+  ) => {
     const store = (o.storeCode ?? '').trim()
     if (!store || !o.items?.length) {
       await appAlert(t('posPrintUnavailable'))
@@ -799,16 +810,20 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const pricingAdjustments = posPricingAdjustmentsFromPrinterSettings(settings)
       const paidAt = resolvePosOrderPaidAtDate(o)
       const lineOpts: PosOrderReceiptLineOptions = { promoCatalogById, menus }
-      const splitBatch = buildSplitPaymentReceiptBatchFromOrder(o, {
+      const includeTaxInvoice = opts?.includeTaxInvoice === true
+      const orderForPrint = includeTaxInvoice
+        ? o
+        : { ...o, memo: stripPosOrderTaxInvoiceFromMemo(o.memo) }
+      const splitBatch = buildSplitPaymentReceiptBatchFromOrder(orderForPrint, {
         ...lineOpts,
         pricingAdjustments,
       })
       const receiptRows = splitBatch ?? [
-        receiptModalDataFromPosOrderReprint(o, lineOpts, pricingAdjustments),
+        receiptModalDataFromPosOrderReprint(orderForPrint, lineOpts, pricingAdjustments),
       ]
       const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
       for (let idx = 0; idx < receiptRows.length; idx += 1) {
-        const receiptData = await enrichReceiptModalDataWithMember(receiptRows[idx], o)
+        const receiptData = await enrichReceiptModalDataWithMember(receiptRows[idx], orderForPrint)
         const fullHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
           receiptData,
           menus,
@@ -1319,7 +1334,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         )
         return
       }
-      await handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo })
+      await handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo }, { includeTaxInvoice: true })
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
           userStore: auth.store,
@@ -2220,7 +2235,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                     member: Boolean(normalizedTiMemberNo),
                   }
                   const nextMemo = upsertPosOrderTaxInvoiceMemo(taxInvoiceOrder.memo, nextTaxInvoice)
-                  void handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo })
+                  void handlePrintCustomerReceipt(
+                    { ...taxInvoiceOrder, memo: nextMemo },
+                    { includeTaxInvoice: true }
+                  )
                 }}
               >
                 <Printer className="mr-1 h-3.5 w-3.5" />

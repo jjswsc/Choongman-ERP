@@ -3,6 +3,7 @@ import {
   appendPosInternalMemoStamp,
   parsePosOrderMemo,
   shouldReprintPaymentReceiptForTaxInvoiceMemoChange,
+  stripPosOrderTaxInvoiceFromMemo,
   TAX_INVOICE_MARKER,
   upsertPosOrderTaxInvoiceMemo,
 } from '@/lib/pos-tax-invoice'
@@ -97,5 +98,23 @@ describe('parsePosOrderMemo', () => {
     expect(shouldReprintPaymentReceiptForTaxInvoiceMemoChange(memoWithTax, memoWithTax)).toBe(false)
     const updated = upsertPosOrderTaxInvoiceMemo('', { ...tax, name: 'DEF' })
     expect(shouldReprintPaymentReceiptForTaxInvoiceMemoChange(memoWithTax, updated)).toBe(true)
+  })
+
+  it('stripPosOrderTaxInvoiceFromMemo removes tax block for hall/customer receipt print', () => {
+    const tax = {
+      memberNo: '',
+      customerType: 'company' as const,
+      name: 'TT Company',
+      taxId: '0123456789878',
+      branchNo: '00000',
+      phone: '000000000',
+      email: '00@mail.com',
+      address: '0000',
+      member: false,
+    }
+    const memo = upsertPosOrderTaxInvoiceMemo('note for kitchen', tax)
+    expect(memo).toContain(TAX_INVOICE_MARKER)
+    expect(stripPosOrderTaxInvoiceFromMemo(memo)).toBe('note for kitchen')
+    expect(stripPosOrderTaxInvoiceFromMemo(memo)).not.toContain(TAX_INVOICE_MARKER)
   })
 })

@@ -867,4 +867,35 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('คำสั่งซื้อสมาชิก')
     expect(html).not.toContain('회원 주문입니다')
   })
+
+  it('shows Amount Before VAT + VAT when receiptVatDisplayAmt is coerced 0 (separate VAT)', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '100120260724001',
+        storeCode: '1001',
+        orderType: 'dine_in',
+        tableName: '1',
+        memo: '',
+        items: [{ id: '1', name: 'Bibimbap C', price: 100, qty: 1 }],
+        subtotal: 100,
+        discountAmt: 0,
+        total: 118,
+        vatFeeAmt: 7.7,
+        vatFeeMode: 'separate',
+        receiptVatDisplayAmt: 0,
+        serviceFeeAmt: 10,
+        serviceFeeMode: 'separate',
+      },
+      t: (k) => k,
+      lang: 'en',
+      printerSettings: { vatRate: 7, serviceRate: 10 } as never,
+    })
+    expect(html).not.toMatch(/Tax Invoice/i)
+    expect(html).toContain('Amount Before VAT')
+    expect(html).toContain('110.00')
+    expect(html).toContain('VAT (7%)')
+    expect(html).toContain('7.70')
+    expect(html).toContain('+0.30')
+    expect(html).not.toContain('+8.00')
+  })
 })

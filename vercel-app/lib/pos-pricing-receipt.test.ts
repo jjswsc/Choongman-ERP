@@ -2,10 +2,31 @@ import { describe, expect, it } from 'vitest'
 import {
   computePosPricing,
   resolveReceiptSubtotalPrintAmount,
+  resolveReceiptVatPrintAmount,
   resolveTaxInvoiceReceiptVatBreakdown,
   resolveTaxInvoiceSubtotalBeforeVatForPrint,
   splitThaiVatInclusiveGrossForReceipt,
 } from '@/lib/pos-pricing'
+
+describe('resolveReceiptVatPrintAmount', () => {
+  it('uses vatFeeAmt when receiptVatDisplayAmt is coerced zero', () => {
+    expect(
+      resolveReceiptVatPrintAmount({
+        vatFeeAmt: 7.7,
+        receiptVatDisplayAmt: 0,
+      })
+    ).toBe(7.7)
+  })
+
+  it('prefers positive receiptVatDisplayAmt for included VAT', () => {
+    expect(
+      resolveReceiptVatPrintAmount({
+        vatFeeAmt: 7,
+        receiptVatDisplayAmt: 6.54,
+      })
+    ).toBe(6.54)
+  })
+})
 
 describe('resolveTaxInvoiceSubtotalBeforeVatForPrint', () => {
   it('returns total minus VAT for VAT-inclusive totals', () => {
