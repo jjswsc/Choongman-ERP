@@ -950,6 +950,8 @@ export default function OutboundPage() {
       totalAmt: number
       items: OutboundHistoryItem[]
       invoiceNo?: string
+      /** 주문 그룹에 포함된 모든 IV(출고일별) — 검색·표시용 */
+      invoiceNos?: string[]
       receiveImageUrl?: string
       receiveImageUrls?: string[]
       billPlaced?: boolean
@@ -960,10 +962,10 @@ export default function OutboundPage() {
       const type = String(i.type || "")
       const orderRowId = String(i.orderRowId || "").trim()
       const invoiceNo = String(i.invoiceNo || "").trim()
-      // 주문 출고: IV 번호가 같으면 한 행으로 합침 (출고처 표기 차이·창고별 분할로 같은 IV가 여러 줄이 되던 문제)
+      // 주문 출고: 주문당 1행(ลูกหนี้와 동일). 출고일마다 IV 문자열이 달라도 합쳐 전 품목·합계가 맞도록 함.
       const k =
-        orderRowId && invoiceNo
-          ? `${invoiceNo}_${type}_${orderRowId}`
+        orderRowId && type !== "Force"
+          ? `order_${type}_${orderRowId}`
           : i.stockLogId
             ? `force_${i.stockLogId}_${target}_${type}`
             : `${i.date}_${target}_${type}_${orderRowId}`
@@ -975,13 +977,20 @@ export default function OutboundPage() {
           totalQty: 0,
           totalAmt: 0,
           items: [],
+          invoiceNos: [],
         }
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
       g[k].totalAmt += (i.amount || 0)
       if (i.date && i.date < g[k].date) g[k].date = i.date
-      if (i.invoiceNo) g[k].invoiceNo = i.invoiceNo
+      if (invoiceNo) {
+        if (!g[k].invoiceNos) g[k].invoiceNos = []
+        if (!g[k].invoiceNos.includes(invoiceNo)) g[k].invoiceNos.push(invoiceNo)
+        // 표시 IV: 날짜 부분이 가장 늦은 것(미수금 trans_date·최근 출고와 맞추기 쉬움)
+        const prev = g[k].invoiceNo || ""
+        if (!prev || invoiceNo > prev) g[k].invoiceNo = invoiceNo
+      }
       if (i.receiveImageUrls?.length) g[k].receiveImageUrls = i.receiveImageUrls
       else if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
       if (i.billPlaced) {
@@ -1016,7 +1025,11 @@ export default function OutboundPage() {
     }
     if (invoiceSearch.trim()) {
       const qInv = invoiceSearch.trim().toLowerCase()
-      result = result.filter((g) => (g.invoiceNo || "").toLowerCase().includes(qInv))
+      result = result.filter((g) => {
+        if ((g.invoiceNo || "").toLowerCase().includes(qInv)) return true
+        if ((g.invoiceNos || []).some((n) => n.toLowerCase().includes(qInv))) return true
+        return (g.items || []).some((it) => String(it.invoiceNo || "").toLowerCase().includes(qInv))
+      })
     }
     if (itemSearch.trim()) {
       const qItem = itemSearch.trim().toLowerCase()

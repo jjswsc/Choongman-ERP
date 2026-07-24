@@ -237,7 +237,7 @@ async function buildFilteredOutboundRowsForOrder(
     const matchIdx = findReceivedCartLineIndex(cartFor, o.received_indices, code, name)
     let cartItem: OrderCartLine | undefined
     if (matchIdx >= 0) {
-      // 출고 화면은 동일 cart 줄 중복 표시를 줄이지만, 미수금 합계는 **모든 출고 로그 줄**을 합산해야 함 (continue 제거)
+      // 출고 화면과 동일하게 모든 출고 로그 줄을 합산 (분할·다회 출고 포함)
       cartItem = cartFor[matchIdx]
     }
     const finalQty = r.qty

@@ -204,7 +204,45 @@ export async function GET(request: NextRequest) {
         delivery_status?: string
         invoice_unit_price?: number | string | null
       }[]),
-    ].sort((a, b) => new Date(b.log_date || 0).getTime() - new Date(a.log_date || 0).getTime())
+    ]
+
+    // 기간·품목 검색에 걸린 주문이 있으면, 해당 주문의 출고 로그 전체를 보강(ลูกหนี้=주문 전체 합과 맞춤).
+    // 예: 7/9 로그만 기간에 있어도 6월 분할 출고 품목이 ▶ 상세·합계에 포함됨.
+    const seedOrderIds = [
+      ...new Set(
+        allLogs
+          .filter((r) => String(r.log_type || '') === 'Outbound' && Number(r.order_id) > 0)
+          .map((r) => Number(r.order_id))
+      ),
+    ]
+    const seedOrderIdSet = new Set(seedOrderIds)
+    if (seedOrderIds.length > 0) {
+      const seenLogIds = new Set(
+        allLogs.map((r) => Number(r.id)).filter((id) => Number.isFinite(id) && id > 0)
+      )
+      const orderIn = seedOrderIds.join(',')
+      const extraOutbound = (await supabaseSelectFilterAllPages(
+        'stock_logs',
+        appendInventoryTenantFilter(
+          `log_type=eq.Outbound&order_id=in.(${orderIn})&is_deleted=is.false`,
+          tenantScope
+        ),
+        {
+          order: 'log_date.desc',
+          select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
+          pageSize: 8000,
+          maxRows: 100000,
+        }
+      )) as typeof allLogs
+      for (const row of extraOutbound || []) {
+        const sid = Number(row.id)
+        if (Number.isFinite(sid) && sid > 0 && seenLogIds.has(sid)) continue
+        if (sid > 0) seenLogIds.add(sid)
+        allLogs.push(row)
+      }
+    }
+
+    allLogs.sort((a, b) => new Date(b.log_date || 0).getTime() - new Date(a.log_date || 0).getTime())
 
     /** 주문 출고(stock_logs) 줄 금액 = cart 단가×수량 (회계 미수금과 일치) */
     const orderCartByOrderId: Record<string, OrderCartLine[]> = {}
@@ -324,7 +362,10 @@ export async function GET(request: NextRequest) {
       const type = String(row.log_type || '')
       if (type !== 'Outbound' && type !== 'ForceOutbound') continue
 
-      if (!isOutboundLogDateInBangkokYmdRange(row.log_date, startStr, endStr)) continue
+      const oidNum = Number(row.order_id)
+      const allowOutsideRange =
+        type === 'Outbound' && Number.isFinite(oidNum) && oidNum > 0 && seedOrderIdSet.has(oidNum)
+      if (!allowOutsideRange && !isOutboundLogDateInBangkokYmdRange(row.log_date, startStr, endStr)) continue
       const rowDate = new Date(row.log_date || '')
       if (Number.isNaN(rowDate.getTime())) continue
 
@@ -523,7 +564,8 @@ export async function GET(request: NextRequest) {
       }
 
       const filteredList: OutboundHistoryItem[] = []
-      const usedByOrder: Record<string, boolean> = {}
+      // 동일 cart 줄에 stock_log가 여러 건(분할·다회 출고)이어도 모두 유지.
+      // 예전 usedByOrder continue 는 출고 화면 품목·합계를 줄여 ลูกหนี้(전 로그 합산)와 어긋남.
       for (const r of list) {
         const key = r.orderRowId
         if (!key || !orderMap[key]) {
@@ -541,9 +583,6 @@ export async function GET(request: NextRequest) {
         const matchIdx = findReceivedCartLineIndex(cart, o.received_indices!, code, name)
         let cartItem: OrderCartLine | undefined
         if (matchIdx >= 0) {
-          const uk = key + '_' + matchIdx
-          if (usedByOrder[uk]) continue
-          usedByOrder[uk] = true
           cartItem = cart[matchIdx]
         }
         const finalQty = r.qty
