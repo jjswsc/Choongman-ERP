@@ -13,6 +13,11 @@ export function isPosAutoVatOutputRow(row: {
   return cp === 'POS SALES' && String(row.vat_status || '') === 'draft_auto'
 }
 
+/** 입고/출고 자동 반영 행 (본사 공급·물류) */
+export function isStockAutoVatRow(row: { memo?: string | null }): boolean {
+  return /\[AUTO:STOCK_LOG:/i.test(String(row.memo || ''))
+}
+
 function num(v: unknown): number {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0

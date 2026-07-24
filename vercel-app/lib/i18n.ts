@@ -3497,7 +3497,6 @@ export const i18n = {
     accCompColVendorName: '거래처',
     accCompColCount: '건수',
     accCompTotalsFooter: '합계',
-    accCompHqPosOutputExcludedNote: '본사 조회에서는 POS 자동 매출을 제외한 값만 표시합니다.',
     accCompPosAutoFilingLinesNote: 'POS 자동(과세월 합계 {n}줄)',
     accCompInputVatFromExpenseHint:
       '지출 발생에 부가세(VAT)를 입력한 건은 등록·수정·승인 시 매입 쪽에 자동 반영됩니다. 거래처 마스터에 세금 ID가 있으면 TIN이 채워집니다. 과거 데이터는 아래 버튼으로 현재 신고월 기준 백필할 수 있습니다.',
@@ -3508,6 +3507,15 @@ export const i18n = {
     accCompInputVatBackfillButton: '매입 백필 ({month})',
     accCompVatExpectedForMonth: '이번 신고월 예상 부가세',
     accCompVatSettlementFormulaLine: '{tone} · 계산식: 매출 VAT − 공제가능 매입 VAT',
+    accCompVatSalesBasisNote:
+      '매출 VAT 기준: 가맹=POS 영업일(매출 관리와 동일) 완료·paid·ready 주문. 본사=물류 출고(본사→매장 공급). vat=0 주문은 합계에서 7% 역산합니다. 대조 전 「원장 동기화」를 한 번 실행하세요.',
+    accCompVatSalesBasisBreakdown:
+      'POS 자동 {posVat} ({posCount}건) · 기타 매출 {otherVat} ({otherCount}건)',
+    accCompVatForceSync: '원장 동기화',
+    accCompVatForceSyncHint:
+      'POS·입고·지출을 원장에 다시 맞춥니다. 가맹은 매출 관리 월합과 맞추려면 동기화가 필요합니다.',
+    accCompHqPosOutputExcludedNote:
+      '본사 뷰: POS 시연 매출은 제외하고, 물류 출고(가맹 공급) VAT만 매출로 집계합니다. 매출 관리 POS 합계와 비교하지 마세요.',
     accCompVatOutputVatSumLabel: '매출 VAT 합계',
     accCompVatInputVatSumLabel: '매입 VAT 합계(전체)',
     accCompVatClaimableInputVatSumLabel: '공제가능 매입 VAT',
@@ -10999,7 +11007,6 @@ Only matters the employee must handle personally on a working day:
     accCompColVendorName: 'Vendor',
     accCompColCount: 'Rows',
     accCompTotalsFooter: 'Total',
-    accCompHqPosOutputExcludedNote: 'HQ view excludes POS auto output rows.',
     accCompPosAutoFilingLinesNote: 'POS auto (tax-month summary {n} line(s))',
     accCompInputVatFromExpenseHint:
       'Expense lines with VAT flow into purchases on save/approve. Vendor master TIN fills when present. Use backfill for past months.',
@@ -11010,6 +11017,15 @@ Only matters the employee must handle personally on a working day:
     accCompInputVatBackfillButton: 'Backfill purchases ({month})',
     accCompVatExpectedForMonth: 'Estimated VAT for this filing month',
     accCompVatSettlementFormulaLine: '{tone} · Formula: output VAT − claimable input VAT',
+    accCompVatSalesBasisNote:
+      'Sales VAT: franchise = POS business-day completed/paid/ready (same as Sales Management). HQ = logistics outbound to stores. If order.vat is 0, reverse-calculate 7% from total. Run “Sync ledger” before comparing.',
+    accCompVatSalesBasisBreakdown:
+      'POS auto {posVat} ({posCount} rows) · Other output {otherVat} ({otherCount} rows)',
+    accCompVatForceSync: 'Sync ledger',
+    accCompVatForceSyncHint:
+      'Re-sync POS/stock/expenses into the ledger. Needed once so franchise totals match Sales Management.',
+    accCompHqPosOutputExcludedNote:
+      'HQ view: excludes POS demo sales; sales VAT is logistics outbound (supply to stores). Do not compare with Sales Management POS totals.',
     accCompVatOutputVatSumLabel: 'Output VAT total',
     accCompVatInputVatSumLabel: 'Input VAT total (all)',
     accCompVatClaimableInputVatSumLabel: 'Claimable input VAT',

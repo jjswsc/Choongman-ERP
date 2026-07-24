@@ -338,6 +338,14 @@ export type MemberPortalKey =
   | 'issuedAt'
   | 'historyTitle'
   | 'historySub'
+  | 'notifTitle'
+  | 'notifSub'
+  | 'notifEmpty'
+  | 'notifClose'
+  | 'notifPointTitle'
+  | 'notifStampTitle'
+  | 'notifStampBalance'
+  | 'notifBellAria'
   | 'recentOrders'
   | 'noOrders'
   | 'store'
@@ -1568,6 +1576,22 @@ const MS: Record<MemberPortalKey, Dict> = {
   noCoupons: { en: 'No coupons yet', th: 'ยังไม่มีคูปอง', ko: '쿠폰 없음' },
   issuedAt: { en: 'Issued', th: 'ออกให้', ko: '발급' },
   historyTitle: { en: 'Activity history', th: 'ประวัติการใช้บริการ', ko: '이용 내역' },
+  notifTitle: { en: 'Notifications', th: 'การแจ้งเตือน', ko: '알림' },
+  notifSub: {
+    en: 'Points and stamp activity',
+    th: 'พอยท์และสแตมป์ล่าสุด',
+    ko: '포인트·스탬프 활동',
+  },
+  notifEmpty: {
+    en: 'No notifications yet',
+    th: 'ยังไม่มีการแจ้งเตือน',
+    ko: '알림이 없습니다',
+  },
+  notifClose: { en: 'Close', th: 'ปิด', ko: '닫기' },
+  notifPointTitle: { en: 'Points', th: 'พอยท์', ko: '포인트' },
+  notifStampTitle: { en: 'Stamp', th: 'สแตมป์', ko: '스탬프' },
+  notifStampBalance: { en: 'Balance {n}', th: 'คงเหลือ {n}', ko: '잔여 {n}' },
+  notifBellAria: { en: 'Notifications', th: 'การแจ้งเตือน', ko: '알림' },
   historySub: { en: 'Orders and points', th: 'คำสั่งซื้อและการสะสมแต้ม', ko: '주문 및 포인트 적립' },
   recentOrders: { en: 'Recent orders', th: 'การสั่งซื้อล่าสุด', ko: '최근 주문' },
   noOrders: { en: 'No orders yet', th: 'ยังไม่มีประวัติการสั่งซื้อ', ko: '주문 내역 없음' },

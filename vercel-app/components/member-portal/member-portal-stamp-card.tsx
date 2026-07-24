@@ -131,7 +131,7 @@ function resolveStampHomeSubtitle(
   return t("stampCardDesc")
 }
 
-function formatStampHistoryKind(
+export function formatStampHistoryKind(
   lang: LangCode,
   row: MemberStampHistoryRow
 ): string {

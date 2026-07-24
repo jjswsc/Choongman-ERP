@@ -5,6 +5,7 @@ import {
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
   supabaseUpdate,
+  supabaseCountFilter,
 } from '@/lib/supabase-server'
 import {
   assertCanApproveAccountingCompliance,
@@ -196,6 +197,12 @@ export async function GET(request: NextRequest) {
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
+    const dbStoreNames = scopedStoreFilter ? storeScope.dbStoreNameValues || [] : []
+    const storeNameDbFilter =
+      dbStoreNames.length > 0
+        ? `store_name=in.(${dbStoreNames.map((v) => `"${String(v).replace(/"/g, '')}"`).join(',')})`
+        : ''
+    const monthAndStoreFilter = [monthFilter, storeNameDbFilter].filter(Boolean).join('&')
 
     const runVatAutoSync = async () => {
       await syncTaxVatLedgersFromStockAndExpenses({
@@ -208,47 +215,34 @@ export async function GET(request: NextRequest) {
       await backfillVatLedgerStoreNames(period.months)
     }
 
-    // POS 매출은 주문 저장·상태변경(savePosOrder/updatePosOrderStatus) 시 이미 VAT 원장에 반영되고,
-    // 입고·지출 매입도 각 발생 시점에 동기화된다. 따라서 조회 때마다 전체 재동기화는 불필요하고,
-    // 매장 거래량(주문 수)에 비례해 수천 건을 순차 upsert 하느라 함수 타임아웃을 유발한다
-    // (거래량 적은 본사는 통과, 거래량 많은 매장은 빈 결과로 보였던 원인).
-    // → 전 매장(All)과 동일하게, 해당 기간·매장에 행이 없거나 매입 행이 없을 때만 동기화한다.
-    const probeRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
-      select: 'direction,store_name',
-      order: 'id.asc',
-      pageSize: 4000,
-      maxRows: 100000,
-    })) as { direction?: string | null; store_name?: string | null }[] | null
-    const scopedProbeRows = (probeRows || []).filter(
-      (row) => !scopedStoreFilter || storeScope.matches(String(row.store_name || ''))
-    )
-    const hasAnyRows = scopedProbeRows.length > 0
-    const hasInputEntries = scopedProbeRows.some(
-      (row) => String(row.direction || '').trim().toLowerCase() === 'input'
-    )
-    const hasBlankStoreRows = (probeRows || []).some((row) => !String(row.store_name || '').trim())
-    const didSync = forceSync || !hasAnyRows || !hasInputEntries
-
-    // 지출 발생·통장 인보이스 확인 건은 조회마다 증분 동기화(PP30 누락 방지).
+    // 조회 성능: 매 검색마다 지출 건별 upsert·POS 전체 재동기화·원장 10만행 probe를 하지 않는다.
+    // - 평소: DB에서 해당 월(·매장) 원장만 읽기
+    // - forceSync=1 또는 해당 범위에 행이 0건일 때만 동기화
+    // - 「매입 행 없음」만으로 full sync 하지 않음(매출만 있는 달이 매번 POS 재동기화되던 원인)
+    let hasAnyRows = true
     try {
-      await syncIncrementalVatLedgersFromExpenseAndBank({
-        months: period.months,
-        storeFilter: syncStoreFilter,
-      })
+      const scopedCount = await supabaseCountFilter('vat_ledger_entries', monthAndStoreFilter)
+      hasAnyRows = scopedCount > 0
     } catch (e) {
-      console.warn('vatLedger GET incremental sync skipped:', e)
+      console.warn('vatLedger GET probe count skipped:', e)
+      hasAnyRows = true
     }
+    const didSync = forceSync || !hasAnyRows
 
     if (didSync) {
+      try {
+        await syncIncrementalVatLedgersFromExpenseAndBank({
+          months: period.months,
+          storeFilter: syncStoreFilter,
+        })
+      } catch (e) {
+        console.warn('vatLedger GET incremental sync skipped:', e)
+      }
       try {
         await runVatAutoSync()
       } catch (e) {
         console.warn('vatLedger GET auto-sync skipped:', e)
       }
-    }
-    // 백필은 store_name 공란 행을 표준화하기 위한 것. 동기화했거나 공란 행이 있을 때만 실행
-    // (이미 표준화된 데이터에서 매 조회마다 전월 행을 다시 읽고 도는 비용 제거).
-    if (didSync || hasBlankStoreRows) {
       try {
         await runBackfill()
       } catch (e) {
@@ -256,7 +250,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+    const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthAndStoreFilter, {
       select: '*',
       order: 'doc_date.asc,id.asc',
       pageSize: 4000,
@@ -267,8 +261,10 @@ export async function GET(request: NextRequest) {
       if (!storeScope.matches(String(row.store_name || ''))) return false
       return matchesFilingStatus(row.filing_status, filingStatus)
     })
-    return NextResponse.json({ entries: enrichVatLedgerEntries(entries), period }, { headers })
-  } catch (e) {
+    return NextResponse.json(
+      { entries: enrichVatLedgerEntries(entries), period, synced: didSync },
+      { headers }
+    )  } catch (e) {
     console.error('vatLedger GET:', e)
     return NextResponse.json({ entries: [], error: 'QUERY_FAILED' }, { headers })
   }

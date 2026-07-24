@@ -222,7 +222,7 @@ import {
   writePnd91ChecklistEntry,
   type Pnd91ChecklistStatus,
 } from "@/lib/pnd91-checklist-storage"
-import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
+import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow, isStockAutoVatRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 import {
   buildCorporateTaxPdfHtml,
@@ -977,7 +977,7 @@ export function AdminAccountingCompliance({
     else if (hqSupplyReconcileApplicable === false) setIntercompanyVatRecon(null)
   }, [pp30Queried, tab, hqSupplyReconcileApplicable, loadIntercompanyVatRecon])
 
-  const loadVat = React.useCallback(async () => {
+  const loadVat = React.useCallback(async (opts?: { forceSync?: boolean }) => {
     if (!canUse) return
     const seq = ++vatLoadSeqRef.current
     setLoading(true)
@@ -990,6 +990,7 @@ export function AdminAccountingCompliance({
         periodType,
         filingStatus: ledgerStatusFilter,
         storeFilter: storeFilterForApi,
+        forceSync: !!opts?.forceSync,
         }),
         PP30_FETCH_TIMEOUT_MS
       )
@@ -2947,7 +2948,10 @@ export function AdminAccountingCompliance({
     () =>
       vatOutputRows.filter((r) => {
         if (ledgerStatusFilter !== "all" && r.filing_status !== ledgerStatusFilter) return false
+        // 본사: POS 시연 매출 제외 → 물류 출고가 매출 VAT
         if (isHeadOfficeLedgerStore && isPosAutoVatOutputRow(r)) return false
+        // 가맹 매장: 물류 출고 output은 본사 공급 성격 → 매장 PP.30 매출에서 제외 (POS만)
+        if (!isHeadOfficeLedgerStore && isStockAutoVatRow(r)) return false
         return true
       }),
     [vatOutputRows, ledgerStatusFilter, isHeadOfficeLedgerStore]
@@ -3062,6 +3066,25 @@ export function AdminAccountingCompliance({
     const inputNet = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
     const inputVat = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
     const inputTotal = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
+    let posOutputVat = 0
+    let posOutputNet = 0
+    let posOutputCount = 0
+    let otherOutputVat = 0
+    let otherOutputNet = 0
+    let otherOutputCount = 0
+    for (const row of vatOutputRowsFiltered) {
+      const vat = Number(row.vat_amount || 0)
+      const net = Number(row.net_amount || 0)
+      if (isPosAutoVatOutputRow(row)) {
+        posOutputVat += vat
+        posOutputNet += net
+        posOutputCount += 1
+      } else {
+        otherOutputVat += vat
+        otherOutputNet += net
+        otherOutputCount += 1
+      }
+    }
     // 신고 예상액: 증빙 공제 가능한 매입 VAT만 차감 (대기·불가 제외)
     const claimableInputVat = vatInputClaimable.claimableVat
     const payableVat = round2(outputVat - claimableInputVat)
@@ -3080,6 +3103,12 @@ export function AdminAccountingCompliance({
       creditVat: payableVat < 0 ? Math.abs(payableVat) : 0,
       outputCount: vatOutputRowsFiltered.length,
       inputCount: vatInputRowsFiltered.length,
+      posOutputVat: round2(posOutputVat),
+      posOutputNet: round2(posOutputNet),
+      posOutputCount,
+      otherOutputVat: round2(otherOutputVat),
+      otherOutputNet: round2(otherOutputNet),
+      otherOutputCount,
       summaryPayableVat: Number(taxSummary?.vat?.payableVat || 0),
     }
   }, [vatOutputRowsFiltered, vatInputRowsFiltered, vatInputClaimable, taxSummary?.vat?.payableVat])

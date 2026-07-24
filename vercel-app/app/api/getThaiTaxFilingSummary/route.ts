@@ -114,42 +114,19 @@ export async function GET(request: NextRequest) {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
-    const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
-    // vatLedger 조회와 동일: 지출·통장 인보이스 건은 조회마다 증분 동기화(PP30 누락 방지).
-    try {
-      await syncIncrementalVatLedgersFromExpenseAndBank({
-        months: period.months,
-        storeFilter: syncStoreFilter,
-      })
-    } catch (e) {
-      console.warn('getThaiTaxFilingSummary incremental sync skipped:', e)
-    }
-    // vatLedger 조회와 동일: 원천 데이터는 발생 시점에 동기화되므로, 매장 거래량에 비례한
-    // 조회 시 전체 재동기화(수천 건 순차 upsert)는 타임아웃을 유발한다. 해당 기간·매장에
-    // 행이 없거나 매입이 없을 때만 동기화한다(거래량 많은 매장 빈 요약 방지).
-    let needSync = true
-    if (scopedStoreFilter) {
+    const forceSync = ['1', 'true', 'yes'].includes(
+      String(searchParams.get('forceSync') || '').trim().toLowerCase()
+    )
+    // 검색 속도: 요약 API는 집계만. 동기화는 vatLedger(forceSync 또는 빈 원장)에서만 수행.
+    if (forceSync) {
       try {
-        const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-        const probeRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
-          select: 'direction,store_name',
-          order: 'id.asc',
-          pageSize: 4000,
-          maxRows: 100000,
-        })) as { direction?: string | null; store_name?: string | null }[] | null
-        const scopedProbeRows = (probeRows || []).filter((row) =>
-          storeScope.matches(String(row.store_name || ''))
-        )
-        const hasAnyRows = scopedProbeRows.length > 0
-        const hasInputEntries = scopedProbeRows.some(
-          (row) => String(row.direction || '').trim().toLowerCase() === 'input'
-        )
-        needSync = !hasAnyRows || !hasInputEntries
-      } catch {
-        needSync = true
+        await syncIncrementalVatLedgersFromExpenseAndBank({
+          months: period.months,
+          storeFilter: syncStoreFilter,
+        })
+      } catch (e) {
+        console.warn('getThaiTaxFilingSummary incremental sync skipped:', e)
       }
-    }
-    if (needSync) {
       try {
         await syncTaxVatLedgersFromStockAndExpenses({
           months: period.months,
@@ -171,12 +148,14 @@ export async function GET(request: NextRequest) {
         console.warn('getThaiTaxFilingSummary auto-sync skipped:', e)
       }
     }
+    // RPC는 store_name 단일 exact match만 지원. 매장 지정 시 코드/표시명 불일치로
+    // 0원 성공 응답이 나와 JS fallback을 건너뛰므로 All 일 때만 RPC 사용.
     const useRpcSummary = !storeFilter || storeFilter === 'All' || storeFilter === '*'
     if (useRpcSummary) {
       try {
       const rpcRows = await supabaseRpc<RpcSummaryRow[]>('get_thai_tax_filing_summary_agg', {
         p_tax_months: period.months,
-        p_store_name: storeFilter || 'All',
+        p_store_name: 'All',
       })
       const one = rpcRows?.[0] || {}
       const byForm = one.wht_by_form && typeof one.wht_by_form === 'object' ? one.wht_by_form : {}
@@ -220,19 +199,29 @@ export async function GET(request: NextRequest) {
     }
 
     const monthBase = buildTaxMonthPostgrestFilter(period.months)
+    const dbStoreNames = storeScope.dbStoreNameValues || []
+    const storeNameDbFilter =
+      storeFilter && storeFilter !== 'All' && storeFilter !== '*' && dbStoreNames.length > 0
+        ? `store_name=in.(${dbStoreNames.map((v) => `"${String(v).replace(/"/g, '')}"`).join(',')})`
+        : ''
+    const vatMonthFilter = [monthBase, storeNameDbFilter].filter(Boolean).join('&')
     const [vatRowsRaw, whtRows] = await Promise.all([
-      supabaseSelectFilterAllPages('vat_ledger_entries', monthBase, {
+      supabaseSelectFilterAllPages('vat_ledger_entries', vatMonthFilter, {
         select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number,store_name,memo',
         order: 'id.asc',
         pageSize: 4000,
         maxRows: 100000,
       }) as Promise<(VatRow & { memo?: string | null })[] | null>,
-      supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthBase, {
-        select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name',
-        order: 'id.asc',
-        pageSize: 4000,
-        maxRows: 100000,
-      }) as Promise<WhtRow[] | null>,
+      supabaseSelectFilterAllPages(
+        'withholding_tax_ledger_entries',
+        [monthBase, storeNameDbFilter].filter(Boolean).join('&'),
+        {
+          select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name',
+          order: 'id.asc',
+          pageSize: 4000,
+          maxRows: 100000,
+        }
+      ) as Promise<WhtRow[] | null>,
     ])
 
     const vatRowsEnriched = await enrichVatLedgerRowsStoreNames((vatRowsRaw || []) as Record<string, unknown>[])

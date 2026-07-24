@@ -17,6 +17,8 @@ export type PosSalesAnalyticsAggMode =
   | 'payment'
   | 'delivery_platform'
   | 'delivery_payment'
+  /** channel + delivery_platform 한 스캔 (bucket_key2=channel|platform) */
+  | 'delivery_app'
   | 'menu'
 
 export type PosSalesAnalyticsAggRow = {

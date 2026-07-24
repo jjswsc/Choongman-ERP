@@ -33,6 +33,16 @@ import type { MemberPortalContentItem } from "@/lib/member-portal-content"
 import { pickMemberPortalHomePopup } from "@/lib/member-portal-content"
 import { MemberPortalOrderTab } from "@/components/member-portal/member-portal-order-tab"
 import { MemberPortalHomeTopBar } from "@/components/member-portal/member-portal-home-top-bar"
+import { MemberPortalNotificationsSheet } from "@/components/member-portal/member-portal-notifications-sheet"
+import {
+  bangkokNowDateTimeString,
+  hasUnreadMemberPortalNotifications,
+  mergeMemberPortalNotificationItems,
+  readMemberPortalNotifSeenAt,
+  writeMemberPortalNotifSeenAt,
+} from "@/lib/member-portal-notifications"
+import type { MemberStampHistoryRow } from "@/lib/member-stamp-card"
+import { formatStampHistoryKind } from "@/components/member-portal/member-portal-stamp-card"
 import { MemberPortalHomeHeroBanner, MemberPortalHomeNewMenuHeroes } from "@/components/member-portal/member-portal-home-hero-banner"
 import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
 import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
@@ -217,6 +227,32 @@ export function MemberPortalApp() {
   )
   const [stampFoodImageUrl, setStampFoodImageUrl] = React.useState(DEFAULT_MEMBER_PORTAL_STAMP_FOOD_IMAGE_URL)
   const [points, setPoints] = React.useState<PortalPointRow[]>([])
+  const [stampHistory, setStampHistory] = React.useState<MemberStampHistoryRow[]>([])
+  const [notifOpen, setNotifOpen] = React.useState(false)
+  const [notifSeenAt, setNotifSeenAt] = React.useState<string | null>(null)
+
+  const notifItems = React.useMemo(
+    () => mergeMemberPortalNotificationItems({ points, stamps: stampHistory, limit: 40 }),
+    [points, stampHistory]
+  )
+  const hasNotification = React.useMemo(
+    () => hasUnreadMemberPortalNotifications(notifItems, notifSeenAt),
+    [notifItems, notifSeenAt]
+  )
+  React.useEffect(() => {
+    if (!member?.id) {
+      setNotifSeenAt(null)
+      return
+    }
+    setNotifSeenAt(readMemberPortalNotifSeenAt(member.id))
+  }, [member?.id])
+  const openNotifications = React.useCallback(() => {
+    setNotifOpen(true)
+    if (!member?.id) return
+    const now = bangkokNowDateTimeString()
+    writeMemberPortalNotifSeenAt(member.id, now)
+    setNotifSeenAt(now)
+  }, [member?.id])
   const [coupons, setCoupons] = React.useState<PortalCouponRow[]>([])
   const [couponOffers, setCouponOffers] = React.useState<PortalCouponOfferRow[]>([])
   const [couponOffersLoading, setCouponOffersLoading] = React.useState(false)
@@ -325,6 +361,11 @@ export function MemberPortalApp() {
     setCoupons(couponsRes.rows || [])
     setVisits(visitsRes.rows || [])
     void reloadStampStatus()
+    void getJson<{ success: boolean; rows?: MemberStampHistoryRow[] }>(
+      "/api/member-portal/me/stamps/history?limit=30"
+    )
+      .then((stampHistRes) => setStampHistory(stampHistRes.rows || []))
+      .catch(() => setStampHistory([]))
     return true
   }, [loadFavoriteStorePreference, loadMemberContent, loadMemberStores, reloadStampStatus])
 
@@ -743,6 +784,9 @@ export function MemberPortalApp() {
     setMember(null)
     setDashboard(null)
     setPoints([])
+    setStampHistory([])
+    setNotifOpen(false)
+    setNotifSeenAt(null)
     setCoupons([])
     setVisits([])
     setStores([])
@@ -1167,6 +1211,9 @@ export function MemberPortalApp() {
             langSelect={<MemberPortalLangSelect />}
             onLogout={logout}
             logoutLabel={t("logout")}
+            hasNotification={hasNotification}
+            notificationLabel={t("notifBellAria")}
+            onOpenNotifications={openNotifications}
           />
         ) : (
           <PremiumAppHeader
@@ -1523,6 +1570,25 @@ export function MemberPortalApp() {
         pointRetentionYears={pointRetentionYears}
         closeLabel={t("contactMenuClose")}
         onClose={() => setTierBenefitsOpen(false)}
+      />
+      <MemberPortalNotificationsSheet
+        open={notifOpen}
+        items={notifItems}
+        locale={dateLocale}
+        lang={lang}
+        t={t}
+        formatStampItem={(item) =>
+          formatStampHistoryKind(lang, {
+            id: 0,
+            kind: item.stampKind || "earn",
+            storeCode: item.storeCode || "",
+            stampYmd: "",
+            balanceAfter: item.stampBalanceAfter || 0,
+            note: item.note || "",
+            createdAt: item.createdAt,
+          })
+        }
+        onClose={() => setNotifOpen(false)}
       />
     </MemberPortalAmbienceBackground>
   )

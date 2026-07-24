@@ -1,12 +1,21 @@
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpdate } from '@/lib/supabase-server'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { canonicalLedgerStoreName } from '@/lib/erp-store-identity'
-import { POS_SALES_COMPLETED_STATUSES } from '@/lib/pos-sales-period-aggregate'
+import {
+  filterCompletedPosSalesRows,
+  type PeriodOrderRow,
+} from '@/lib/pos-sales-period-aggregate'
 import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import {
   applyEvidenceToVatLedgerRow,
   vatLedgerRowForSchemaError,
 } from '@/lib/vat-ledger-invoice-evidence'
+import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
+import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
+import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
+import { isPosSalesBusinessYmdInInclusiveRange } from '@/lib/pos-sales-business-day-range'
+import { splitThaiVatInclusiveGrossForReceipt } from '@/lib/pos-pricing'
+import { isPosSalesTestOfficeStoreCode } from '@/lib/pos-sales-test-office'
 
 function toBangkokYmd(inputIso?: string): string {
   const src = String(inputIso || '').trim()
@@ -15,6 +24,30 @@ function toBangkokYmd(inputIso?: string): string {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
   }
   return base.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+}
+
+/** POS 주문 → 원장 net/vat (vat=0이면 합계에서 7% 역산 — 매출관리·영수증과 동일) */
+function resolvePosLedgerAmounts(params: {
+  total: number
+  subtotal?: number | null
+  vatAmount?: number | null
+}): { net: number; vat: number; total: number } {
+  const total = Math.max(0, Number(params.total) || 0)
+  let vat = Math.max(0, Number(params.vatAmount) || 0)
+  let net = Math.max(0, Number(params.subtotal) || 0)
+  if (total <= 0) return { net: 0, vat: 0, total: 0 }
+  if (vat < 0.0001) {
+    const split = splitThaiVatInclusiveGrossForReceipt(total, 7)
+    if (split) {
+      vat = split.vat
+      net = split.exclusive
+    } else {
+      net = total
+    }
+  } else if (net <= 0) {
+    net = Math.max(0, total - vat)
+  }
+  return { net, vat, total }
 }
 
 function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
@@ -273,104 +306,137 @@ async function deletePosVatLedgerDraft(posOrderId: number): Promise<void> {
 }
 
 /**
- * POS 완료·결제·ready 주문 → 매출 부가세 원장 일괄 동기화 (매출 관리 posSalesByStore와 동일 상태 기준).
- * 과거 누락·paid/ready만 있는 주문을 세무 신고월 기준으로 백필한다.
+ * POS 완료·결제·ready 주문 → 매출 부가세 원장 일괄 동기화.
+ * 기간·금액은 매출 관리(posSalesByStore)와 동일: **매장 POS 영업일** + completed/paid/ready.
  */
 export async function syncPosOrdersOutputVatLedger(params: {
   months: string[]
   storeFilter?: string
 }): Promise<{ upserted: number; deleted: number; skipped: number }> {
   const validMonths = (params.months || [])
-    .map((m) => String(m || '').slice(0, 7))
+    .map((m) => String(m || '').trim().slice(0, 7))
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (!validMonths.length) return { upserted: 0, deleted: 0, skipped: 0 }
 
   const storeFilter = String(params.storeFilter || '').trim()
-  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
-  const startYmd = monthStartYmd(validMonths[0]!)
-  const endYmd = monthEndYmd(validMonths[validMonths.length - 1]!)
-  // 방콕(UTC+7) 월 경계 — naive UTC 필터면 자정 전후 주문이 월을 벗어남
-  const startIso = `${startYmd}T00:00:00+07:00`
-  const endIso = `${endYmd}T23:59:59.999+07:00`
-
-  const orders = (await supabaseSelectFilterAllPages(
-    'pos_orders',
-    `created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}`,
-    {
-      select: 'id,order_no,store_code,created_at,subtotal,vat,total,status,created_by',
-      order: 'id.asc',
-      pageSize: 8000,
-      maxRows: 500000,
-    }
-  )) as {
-    id?: number
-    order_no?: string | null
-    store_code?: string | null
-    created_at?: string | null
-    subtotal?: number | null
-    vat?: number | null
-    total?: number | null
-    status?: string | null
-    created_by?: string | null
-  }[]
+  const storeCodes =
+    storeFilter && storeFilter !== 'All' && storeFilter !== '*' ? [storeFilter] : undefined
 
   let upserted = 0
   let deleted = 0
   let skipped = 0
 
-  for (const order of orders || []) {
-    const orderId = Math.floor(Number(order.id) || 0)
-    if (orderId <= 0) continue
-    const status = String(order.status || '').trim().toLowerCase()
-    const storeCode = String(order.store_code || '').trim()
-    const storeName = storeCode ? await resolveStoreDisplayNameForVatLedger(storeCode) : ''
-    if (storeFilter) {
-      const inScope =
-        (storeCode && storeScope.matches(storeCode)) || (storeName && storeScope.matches(storeName))
-      if (!inScope) {
+  type SyncOrderRow = PeriodOrderRow & {
+    id?: number
+    order_no?: string | null
+    created_by?: string | null
+  }
+
+  for (const ym of validMonths) {
+    const startYmd = `${ym}-01`
+    const endYmd = monthEndYmd(ym)
+    const { rows, bizCtx } = await fetchPosSalesOrdersForBusinessRange({
+      startStr: startYmd,
+      endStr: endYmd,
+      storeCodes,
+      select: 'id,order_no,created_at,store_code,subtotal,vat,total,status,created_by,order_type',
+      queryLabel: 'vatLedgerPosSync',
+      /** 매출 관리와 동일 — 본사·test POS 제외 */
+      excludeTestOfficePos: true,
+    })
+
+    const completed = filterCompletedPosSalesRows(rows as PeriodOrderRow[], null) as SyncOrderRow[]
+    for (const order of completed) {
+      const orderId = Math.floor(Number(order.id) || 0)
+      if (orderId <= 0) {
         skipped += 1
         continue
       }
-    }
+      const storeCode = String(order.store_code || '').trim()
+      if (isPosSalesTestOfficeStoreCode(storeCode)) {
+        skipped += 1
+        continue
+      }
+      const hours = resolvePosBusinessHoursFromContext(bizCtx, storeCode)
+      const created = String(order.created_at || '').trim()
+      const createdDate = created ? new Date(created) : new Date()
+      if (Number.isNaN(createdDate.getTime())) {
+        skipped += 1
+        continue
+      }
+      const bizYmd = getPosBusinessDateStrFromConfig(createdDate, hours)
+      if (!isPosSalesBusinessYmdInInclusiveRange(bizYmd, startYmd, endYmd)) {
+        skipped += 1
+        continue
+      }
+      const taxMonth = bizYmd.slice(0, 7)
+      if (!validMonths.includes(taxMonth)) {
+        skipped += 1
+        continue
+      }
 
-    const docDate = toBangkokYmd(String(order.created_at || ''))
-    const taxMonth = docDate.slice(0, 7)
-    if (!validMonths.includes(taxMonth)) {
-      skipped += 1
-      continue
-    }
+      const total = Math.max(0, Number(order.total) || 0)
+      if (total <= 0) {
+        skipped += 1
+        continue
+      }
 
-    if (status === 'cancelled' || status === 'refunded') {
+      await upsertPosVatLedgerDraft({
+        posOrderId: orderId,
+        orderNo: String(order.order_no || `POS-${orderId}`),
+        storeCode,
+        createdAtIso: created,
+        businessDateYmd: bizYmd,
+        subtotal: Number(order.subtotal ?? 0),
+        total,
+        vatAmount: Number(order.vat ?? 0),
+        createdBy: String(order.created_by || 'system'),
+      })
+      upserted += 1
+    }
+  }
+
+  // 취소·환불 건: 신고월 달력 창에서 draft 제거 (영업일 밖 취소도 원장에 남을 수 있음)
+  const startYmdAll = monthStartYmd(validMonths[0]!)
+  const endYmdAll = monthEndYmd(validMonths[validMonths.length - 1]!)
+  const cancelStartIso = `${startYmdAll}T00:00:00+07:00`
+  const cancelEndIso = `${addOneDayYmd(endYmdAll)}T08:00:00+07:00`
+  try {
+    const cancelled = (await supabaseSelectFilterAllPages(
+      'pos_orders',
+      `created_at=gte.${encodeURIComponent(cancelStartIso)}&created_at=lt.${encodeURIComponent(cancelEndIso)}&status=in.(cancelled,refunded)`,
+      {
+        select: 'id,store_code',
+        order: 'id.asc',
+        pageSize: 4000,
+        maxRows: 100000,
+      }
+    )) as { id?: number; store_code?: string | null }[] | null
+    const storeScope = storeCodes?.length
+      ? await createAccountingStoreScopeMatcher(storeCodes[0])
+      : null
+    for (const order of cancelled || []) {
+      const orderId = Math.floor(Number(order.id) || 0)
+      if (orderId <= 0) continue
+      if (storeScope) {
+        const sc = String(order.store_code || '').trim()
+        const sn = sc ? await resolveStoreDisplayNameForVatLedger(sc) : ''
+        if (!(storeScope.matches(sc) || storeScope.matches(sn))) continue
+      }
       await deletePosVatLedgerDraft(orderId)
       deleted += 1
-      continue
     }
-
-    if (!POS_SALES_COMPLETED_STATUSES.includes(status as (typeof POS_SALES_COMPLETED_STATUSES)[number])) {
-      skipped += 1
-      continue
-    }
-
-    const total = Math.max(0, Number(order.total) || 0)
-    if (total <= 0) {
-      skipped += 1
-      continue
-    }
-
-    await upsertPosVatLedgerDraft({
-      posOrderId: orderId,
-      orderNo: String(order.order_no || `POS-${orderId}`),
-      storeCode,
-      createdAtIso: String(order.created_at || ''),
-      subtotal: Number(order.subtotal ?? 0),
-      total,
-      vatAmount: Number(order.vat ?? 0),
-      createdBy: String(order.created_by || 'system'),
-    })
-    upserted += 1
+  } catch (e) {
+    console.warn('syncPosOrdersOutputVatLedger cancel cleanup skipped:', e)
   }
 
   return { upserted, deleted, skipped }
+}
+
+function addOneDayYmd(ymd: string): string {
+  const d = new Date(`${ymd}T12:00:00+07:00`)
+  d.setTime(d.getTime() + 24 * 60 * 60 * 1000)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 }
 
 export async function upsertPosVatLedgerDraft(params: {
@@ -378,6 +444,8 @@ export async function upsertPosVatLedgerDraft(params: {
   orderNo?: string
   storeCode?: string
   createdAtIso?: string
+  /** POS 영업일(YYYY-MM-DD). 없으면 created_at 방콕 달력일 */
+  businessDateYmd?: string
   subtotal?: number
   total?: number
   vatAmount?: number
@@ -387,11 +455,34 @@ export async function upsertPosVatLedgerDraft(params: {
   if (orderId <= 0) return
   const total = Math.max(0, Number(params.total) || 0)
   if (total <= 0) return
-  const vatAmount = Math.max(0, Number(params.vatAmount) || 0)
-  const netAmount = Math.max(0, Number(params.subtotal ?? total - vatAmount) || 0)
-  if (netAmount <= 0 && total <= 0) return
+  if (isPosSalesTestOfficeStoreCode(params.storeCode)) return
 
-  const docDate = toBangkokYmd(params.createdAtIso)
+  const amounts = resolvePosLedgerAmounts({
+    total,
+    subtotal: params.subtotal,
+    vatAmount: params.vatAmount,
+  })
+  if (amounts.net <= 0 && amounts.total <= 0) return
+
+  let docDate = String(params.businessDateYmd || '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) {
+    // 실시간 저장 경로: 매장 영업일 설정이 있으면 영업일, 없으면 방콕 달력
+    try {
+      const { loadPosBusinessDaySettingsContext } = await import('@/lib/pos-business-day-server')
+      const bizCtx = await loadPosBusinessDaySettingsContext()
+      const hours = resolvePosBusinessHoursFromContext(bizCtx, String(params.storeCode || ''))
+      const created = String(params.createdAtIso || '').trim()
+      const createdDate = created ? new Date(created) : new Date()
+      if (!Number.isNaN(createdDate.getTime())) {
+        docDate = getPosBusinessDateStrFromConfig(createdDate, hours)
+      }
+    } catch {
+      docDate = ''
+    }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) {
+    docDate = toBangkokYmd(params.createdAtIso)
+  }
   const taxMonth = docDate.slice(0, 7)
   const invoiceNo = String(params.orderNo || `POS-${orderId}`).trim() || `POS-${orderId}`
   const memoTag = `[AUTO:POS_ORDER:${orderId}]`
@@ -404,9 +495,9 @@ export async function upsertPosVatLedgerDraft(params: {
       counterparty_name: 'POS SALES',
       counterparty_tax_id: null,
       invoice_number: invoiceNo.slice(0, 128),
-      net_amount: Math.max(0, Number(params.subtotal ?? total - vatAmount) || 0),
-      vat_amount: vatAmount,
-      total_amount: total,
+      net_amount: amounts.net,
+      vat_amount: amounts.vat,
+      total_amount: amounts.total,
       vat_status: 'draft_auto',
       memo: `${memoTag} POS 완료 자동 생성`.slice(0, 2000),
       filing_status: 'draft',

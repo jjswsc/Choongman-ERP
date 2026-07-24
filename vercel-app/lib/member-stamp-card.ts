@@ -878,26 +878,33 @@ async function sendStampEarnNotifications(params: {
   policy: MemberStampPolicyBase
   result: MemberStampRecordResult
   storeCode: string
+  orderId: number
 }): Promise<void> {
   if (!params.policy.lineNotifyEnabled || !params.result.stamped) return
   const lines: string[] = []
   if (params.result.cardCompleted) {
-    lines.push('스탬프 카드를 완성했습니다!')
+    lines.push('ครบแสตมป์การ์ดแล้ว!')
   } else {
-    lines.push('스탬프 1개가 적립되었습니다.')
+    lines.push('ได้รับแสตมป์ 1 ดวง')
   }
-  lines.push(`현재 ${displayMemberStampCount(params.result.newBalance, params.policy.cardSlots, params.policy.resetAfterComplete)}/${params.policy.cardSlots}`)
-  if (params.storeCode) lines.push(`매장: ${params.storeCode}`)
+  lines.push(
+    `ตอนนี้ ${displayMemberStampCount(params.result.newBalance, params.policy.cardSlots, params.policy.resetAfterComplete)}/${params.policy.cardSlots}`
+  )
+  if (params.storeCode) lines.push(`สาขา: ${params.storeCode}`)
   for (const m of params.result.milestonesReached) {
-    lines.push(`🎁 ${m.stampCount}회 달성: ${m.label}`)
+    lines.push(`🎁 ครบ ${m.stampCount} ครั้ง: ${m.label}`)
   }
   for (const code of params.result.rewardsIssued) {
-    lines.push(`쿠폰 발급: ${code}`)
+    lines.push(`ออกคูปอง: ${code}`)
   }
   if (params.result.pointsAwarded > 0) {
-    lines.push(`포인트 ${params.result.pointsAwarded}P 지급`)
+    lines.push(`ได้พอยท์ ${params.result.pointsAwarded}P`)
   }
-  await notifyMemberStampLineMessage({ memberId: params.memberId, lines })
+  await notifyMemberStampLineMessage({
+    memberId: params.memberId,
+    lines,
+    orderId: params.orderId,
+  })
 }
 
 export async function recordMemberStampOnVisit(params: {
@@ -1057,7 +1064,7 @@ export async function recordMemberStampOnVisit(params: {
       cardCompleted: threshold.cardCompleted,
       ledgerId: ledgerId || null,
     }
-    void sendStampEarnNotifications({ memberId, policy, result, storeCode })
+    void sendStampEarnNotifications({ memberId, policy, result, storeCode, orderId })
     return result
   } catch (e) {
     if (isMissingTableError(e)) return { ...baseEmpty(), skippedReason: 'missing_table' }

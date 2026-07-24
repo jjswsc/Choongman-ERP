@@ -245,6 +245,7 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
     return {
       requested,
       requestedCanonical: '',
+      dbStoreNameValues: [] as string[],
       matches: (_storeName: string) => true,
     }
   }
@@ -262,10 +263,20 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
 
   const scopeIdentity = resolveErpStoreIdentitySync(requested, masters, legacyToCanonical)
   const scopeStoreCode = scopeIdentity.storeCode
+  const aliasKeys = buildStoreScopeAliasKeys(scopeStoreCode || requested, masters, legacyToCanonical)
+  /** PostgREST store_name=in.(...) 용 — 표시명·코드·별칭 */
+  const dbStoreNameValues = Array.from(
+    new Set(
+      [requested, scopeStoreCode, scopeIdentity.displayName, ...aliasKeys]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean)
+    )
+  )
 
   return {
     requested,
     requestedCanonical: scopeStoreCode,
+    dbStoreNameValues,
     matches: (storeName: string): boolean =>
       matchesAccountingStoreScopeRow(storeName, requested, masters, legacyToCanonical),
   }

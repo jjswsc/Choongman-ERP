@@ -20,6 +20,8 @@ type MemberPortalHomeTopBarProps = {
   onLogout: () => void
   logoutLabel: string
   hasNotification?: boolean
+  notificationLabel?: string
+  onOpenNotifications?: () => void
 }
 
 /** choongman_member_home_only.html — header (로고·이름·tier-pill·벨) */
@@ -34,6 +36,8 @@ export function MemberPortalHomeTopBar({
   onLogout,
   logoutLabel,
   hasNotification = false,
+  notificationLabel = "Notifications",
+  onOpenNotifications,
 }: MemberPortalHomeTopBarProps) {
   return (
     <header className="mb-2.5 flex items-center justify-between gap-3">
@@ -74,9 +78,9 @@ export function MemberPortalHomeTopBar({
         </div>
         <button
           type="button"
-          className="relative grid h-[38px] w-[38px] place-items-center rounded-full bg-[#fff4e7] text-stone-800"
-          aria-label="Notifications"
-          disabled
+          onClick={onOpenNotifications}
+          className="relative grid h-[38px] w-[38px] place-items-center rounded-full bg-[#fff4e7] text-stone-800 transition active:scale-95"
+          aria-label={notificationLabel}
         >
           <Bell className="h-5 w-5" strokeWidth={1.9} />
           {hasNotification ? (

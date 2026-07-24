@@ -182,6 +182,12 @@ export interface AccountingComplianceSummaryTabProps {
     payableVat: number
     inputCount: number
     outputCount: number
+    posOutputVat: number
+    posOutputNet: number
+    posOutputCount: number
+    otherOutputVat: number
+    otherOutputNet: number
+    otherOutputCount: number
     summaryPayableVat: number
   }
   vatInputRowsFiltered: VatDraft[]
@@ -198,7 +204,7 @@ export interface AccountingComplianceSummaryTabProps {
   setVatInputViewMode: (v: "vendor" | "detail") => void
   vatInputVendorSummaries: { name: string; count: number; net: number; vat: number; total: number }[]
   vatInputVendorTotals: { count: number; net: number; vat: number; total: number }
-  loadVat: () => Promise<void>
+  loadVat: (opts?: { forceSync?: boolean }) => Promise<void>
 
   // VAT settlement
   vatSettlementHeadline: { className: string; tone: string }
@@ -542,7 +548,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               </SelectContent>
             </Select>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-end gap-1">
             <Button
               type="button"
               variant="default"
@@ -559,6 +565,19 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               }}
             >
               {t("search")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              disabled={loading || summaryLoading}
+              title={t("accCompVatForceSyncHint")}
+              onClick={() => {
+                setPp30Queried(true)
+                void loadVat({ forceSync: true })
+              }}
+            >
+              {t("accCompVatForceSync")}
             </Button>
           </div>
           <div className="shrink-0 flex items-end gap-1">
@@ -1638,6 +1657,20 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               <div className="text-xs mt-1">
                 {tr(t, "accCompVatSettlementFormulaLine", { tone: vatSettlementHeadline.tone })}
               </div>
+            </div>
+
+            <div className="rounded-md border border-border/70 bg-muted/10 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+              {t("accCompVatSalesBasisNote")}
+              {vatSettlement.posOutputCount > 0 || vatSettlement.otherOutputCount > 0 ? (
+                <div className="mt-1 tabular-nums text-foreground/80">
+                  {tr(t, "accCompVatSalesBasisBreakdown", {
+                    posVat: Math.round(vatSettlement.posOutputVat).toLocaleString(),
+                    posCount: vatSettlement.posOutputCount.toLocaleString(),
+                    otherVat: Math.round(vatSettlement.otherOutputVat).toLocaleString(),
+                    otherCount: vatSettlement.otherOutputCount.toLocaleString(),
+                  })}
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -139,13 +139,12 @@ export async function getMemberPointLineNotifyReadiness(memberId: number): Promi
   }
   const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, {
     limit: 1,
-    select: 'name,full_name,point_balance,tier_code,line_oa_friend',
+    select: 'name,full_name,point_balance,tier_code',
   })) as Array<{
     name?: string
     full_name?: string
     point_balance?: number | null
     tier_code?: string | null
-    line_oa_friend?: boolean | null
   }>
   const member = rows?.[0]
   const lineUserId = await resolveMemberLineUserId(id)
@@ -154,7 +153,7 @@ export async function getMemberPointLineNotifyReadiness(memberId: number): Promi
     lineTokenConfigured,
     lineUserId,
     lineLinked: Boolean(lineUserId),
-    lineOaFriend: Boolean(member?.line_oa_friend),
+    lineOaFriend: false,
     memberName: String(member?.full_name || member?.name || '').trim(),
     pointBalance: roundMemberPointsEarn(member?.point_balance),
     tierCode: String(member?.tier_code || '').trim(),
@@ -229,6 +228,18 @@ export async function notifyMemberPointLineForPaidOrder(params: {
       memberId,
       message: result.message || 'push_failed',
     })
+    try {
+      await createMemberEvent({
+        eventId: `point_line_notify_fail:order:${orderId}:${Date.now()}`,
+        eventType: 'point_line_notify_fail',
+        memberId,
+        payload: { orderId, message: result.message || 'push_failed' },
+        status: 'failed',
+        errorMessage: result.message || 'push_failed',
+      })
+    } catch {
+      /* ignore */
+    }
     return { sent: false, reason: result.message || 'push_failed' }
   }
   await markPointLineNotifySent(orderId, memberId)

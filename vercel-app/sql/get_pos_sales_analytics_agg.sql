@@ -2,7 +2,9 @@
 -- Supabase SQL Editor에서 실행 후 /api/posSalesBy* 가 RPC 우선 사용.
 --
 -- p_agg_mode:
---   store | store_channel | period | period_by_store | channel | payment | delivery_platform | delivery_payment | menu
+--   store | store_channel | period | period_by_store | channel | payment
+--   | delivery_platform | delivery_payment | delivery_app | menu
+--   delivery_app = channel + delivery_platform 을 한 번 스캔(bucket_key2=channel|platform)
 -- p_period_group (period*): day | month | year | week | dow | hour
 
 CREATE OR REPLACE FUNCTION public.pos_sales_norm_store_key(p_raw text)
@@ -549,6 +551,65 @@ BEGIN
         f.norm_order_type = 'dine_in'
         OR lower(btrim(coalesce(f.delivery_payment_channel, ''))) = 'dine_in'
       )
+    GROUP BY 1
+
+    UNION ALL
+
+    -- delivery_app: channel rows (bucket_key2=channel) — posSalesByDeliveryApp 단일 RPC용
+    SELECT
+      CASE
+        WHEN f.norm_order_type IN ('dine_in', '') THEN 'dine_in'
+        WHEN f.norm_order_type IN ('takeout', 'delivery') THEN f.norm_order_type
+        ELSE 'unknown'
+      END AS bucket_key,
+      'channel'::text AS bucket_key2,
+      count(*)::bigint,
+      sum(f.subtotal),
+      sum(f.vat),
+      sum(f.discount),
+      sum(f.service_amt),
+      sum(f.total),
+      coalesce(sum(f.guest_count), 0)::bigint,
+      0::bigint,
+      0::numeric,
+      0::bigint,
+      0::numeric,
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
+    FROM in_range f
+    WHERE lower(coalesce(p_agg_mode, '')) = 'delivery_app'
+    GROUP BY 1
+
+    UNION ALL
+
+    -- delivery_app: platform rows (bucket_key2=platform)
+    SELECT
+      CASE WHEN btrim(f.delivery_app_code) = '' THEN '_unspecified' ELSE btrim(f.delivery_app_code) END,
+      'platform'::text,
+      count(*)::bigint,
+      sum(f.subtotal),
+      sum(f.vat),
+      sum(f.discount),
+      sum(f.service_amt),
+      sum(f.total),
+      0::bigint,
+      0::bigint,
+      0::numeric,
+      0::bigint,
+      0::numeric,
+      NULL::text,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric,
+      0::numeric
+    FROM in_range f
+    WHERE lower(coalesce(p_agg_mode, '')) = 'delivery_app'
+      AND f.norm_order_type = 'delivery'
     GROUP BY 1
 
     UNION ALL

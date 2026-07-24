@@ -12,12 +12,15 @@ export async function getVatLedger(params: {
   periodType?: 'monthly' | 'half_year' | 'annual'
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
+  /** true면 POS·입고·지출 원장 재동기화 후 조회 (느림) */
+  forceSync?: boolean
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   q.set('storeFilter', params.storeFilter || 'All')
+  if (params.forceSync) q.set('forceSync', '1')
   const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
   const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
   if (!res.ok) {

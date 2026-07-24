@@ -423,6 +423,16 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
     const ledgerPts = roundMemberPointsEarn(ledger?.[0]?.points)
     if (ledgerPts > 0) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: ledgerPts })
+      try {
+        await notifyMemberPointLineForPaidOrder({
+          orderId: id,
+          memberId,
+          storeCode: String(order.store_code || '').trim(),
+          orderNo: String(order.order_no || ''),
+        })
+      } catch (notifyErr) {
+        console.warn('ensurePosOrderLoyaltyApplied point notify:', notifyErr)
+      }
       return ledgerPts
     }
   } catch {

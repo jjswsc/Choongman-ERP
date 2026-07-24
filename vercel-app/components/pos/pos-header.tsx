@@ -9,13 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Home, ArrowLeft, Settings, RefreshCw, Monitor, Smartphone, LayoutDashboard } from "lucide-react"
+import { Home, ArrowLeft, Settings, RefreshCw, Monitor, Smartphone, LayoutDashboard, Lock } from "lucide-react"
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { appAlert } from "@/lib/app-message"
 
 interface PosHeaderProps {
   /** V0: 매장 목록 (있으면 매장 선택기 표시) */
@@ -191,19 +192,28 @@ export function POSHeader({
 
         {typeof isMainPosDevice === 'boolean' &&
           (mainDeviceRoleLocked ? (
-            <span
+            <button
+              type="button"
               className={cn(
-                'inline-flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs sm:gap-1.5 sm:px-3',
+                'inline-flex h-8 shrink-0 cursor-default items-center gap-1 rounded-md border px-2 text-xs sm:gap-1.5 sm:px-3',
                 isMainPosDevice
                   ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'border-border bg-muted/40 text-muted-foreground'
               )}
               title={
-                isMainPosDevice
+                t('posTerminalRoleLimitsLockedHint') ||
+                (isMainPosDevice
                   ? t('posMainDeviceOn') || '메인 포스 (프린터 연결)'
-                  : t('posOrderTerminal') || '주문 단말'
+                  : t('posOrderTerminal') || '주문 단말')
               }
+              onClick={() => {
+                void appAlert(
+                  t('posTerminalRoleLimitsLockedHint') ||
+                    '현장 POS에서 메인/주문 변경이 잠겨 있습니다. 관리자 → POS 단말 설정 → 기기 목록에서 메인을 지정하거나 잠금을 해제하세요.'
+                )
+              }}
             >
+              <Lock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
               {isMainPosDevice ? (
                 <Monitor className="h-3.5 w-3.5" />
               ) : (
@@ -214,7 +224,7 @@ export function POSHeader({
                   ? t('posMainDevice') || '메인'
                   : t('posOrderTerminal') || '주문'}
               </span>
-            </span>
+            </button>
           ) : (
             onMainPosDeviceChange && (
               <Button
