@@ -355,6 +355,7 @@ export async function syncPosOrdersOutputVatLedger(params: {
     })
 
     const completed = filterCompletedPosSalesRows(rows as PeriodOrderRow[], null) as SyncOrderRow[]
+    const jobs: Array<() => Promise<void>> = []
     for (const order of completed) {
       const orderId = Math.floor(Number(order.id) || 0)
       if (orderId <= 0) {
@@ -390,18 +391,28 @@ export async function syncPosOrdersOutputVatLedger(params: {
         continue
       }
 
-      await upsertPosVatLedgerDraft({
-        posOrderId: orderId,
-        orderNo: String(order.order_no || `POS-${orderId}`),
-        storeCode,
-        createdAtIso: created,
-        businessDateYmd: bizYmd,
-        subtotal: Number(order.subtotal ?? 0),
-        total,
-        vatAmount: Number(order.vat ?? 0),
-        createdBy: String(order.created_by || 'system'),
+      jobs.push(async () => {
+        await upsertPosVatLedgerDraft({
+          posOrderId: orderId,
+          orderNo: String(order.order_no || `POS-${orderId}`),
+          storeCode,
+          createdAtIso: created,
+          businessDateYmd: bizYmd,
+          subtotal: Number(order.subtotal ?? 0),
+          total,
+          vatAmount: Number(order.vat ?? 0),
+          createdBy: String(order.created_by || 'system'),
+        })
       })
-      upserted += 1
+    }
+    const concurrency = 8
+    for (let i = 0; i < jobs.length; i += concurrency) {
+      const chunk = jobs.slice(i, i + concurrency)
+      const results = await Promise.allSettled(chunk.map((fn) => fn()))
+      for (const r of results) {
+        if (r.status === 'fulfilled') upserted += 1
+        else skipped += 1
+      }
     }
   }
 

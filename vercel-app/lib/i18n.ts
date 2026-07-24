@@ -3513,7 +3513,10 @@ export const i18n = {
       'POS 자동 {posVat} ({posCount}건) · 기타 매출 {otherVat} ({otherCount}건)',
     accCompVatForceSync: '원장 동기화',
     accCompVatForceSyncHint:
-      'POS·입고·지출을 원장에 다시 맞춥니다. 가맹은 매출 관리 월합과 맞추려면 동기화가 필요합니다.',
+      '선택 매장·월의 POS 매출을 세무 원장에 맞춥니다(매출 관리 영업일과 동일). 평소 검색보다 조금 더 걸릴 수 있습니다.',
+    accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 검색으로 다시 확인하세요.',
+    accCompVatSyncPosFail: 'POS 동기화 중 오류가 있었습니다. 잠시 후 다시 시도하세요.',
+    accCompVatSyncTimeout: '원장 동기화 시간이 초과되었습니다. 매장을 지정한 뒤 다시 눌러 주세요.',
     accCompHqPosOutputExcludedNote:
       '본사 뷰: POS 시연 매출은 제외하고, 물류 출고(가맹 공급) VAT만 매출로 집계합니다. 매출 관리 POS 합계와 비교하지 마세요.',
     accCompVatOutputVatSumLabel: '매출 VAT 합계',
@@ -11023,7 +11026,10 @@ Only matters the employee must handle personally on a working day:
       'POS auto {posVat} ({posCount} rows) · Other output {otherVat} ({otherCount} rows)',
     accCompVatForceSync: 'Sync ledger',
     accCompVatForceSyncHint:
-      'Re-sync POS/stock/expenses into the ledger. Needed once so franchise totals match Sales Management.',
+      'Re-sync this store/month POS sales into the tax ledger (same business-day rules as Sales Management). May take a bit longer than Search.',
+    accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Run Search again to review.',
+    accCompVatSyncPosFail: 'POS sync failed. Please try again shortly.',
+    accCompVatSyncTimeout: 'Ledger sync timed out. Pick a single store and try again.',
     accCompHqPosOutputExcludedNote:
       'HQ view: excludes POS demo sales; sales VAT is logistics outbound (supply to stores). Do not compare with Sales Management POS totals.',
     accCompVatOutputVatSumLabel: 'Output VAT total',

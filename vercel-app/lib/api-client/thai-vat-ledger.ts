@@ -12,7 +12,7 @@ export async function getVatLedger(params: {
   periodType?: 'monthly' | 'half_year' | 'annual'
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
-  /** true면 POS·입고·지출 원장 재동기화 후 조회 (느림) */
+  /** true면 POS 매출 원장 재동기화 후 조회 */
   forceSync?: boolean
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
@@ -22,11 +22,27 @@ export async function getVatLedger(params: {
   q.set('storeFilter', params.storeFilter || 'All')
   if (params.forceSync) q.set('forceSync', '1')
   const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
-  const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
-  if (!res.ok) {
-    return { entries: [], error: data?.error || `HTTP_${res.status}` }
+  const data = (await res.json()) as {
+    entries?: Record<string, unknown>[]
+    error?: string
+    syncWarning?: string | null
+    posSynced?: number
+    synced?: boolean
   }
-  return { entries: data.entries || [], error: data.error }
+  if (!res.ok) {
+    return {
+      entries: [] as Record<string, unknown>[],
+      error: data?.error || `HTTP_${res.status}`,
+      syncWarning: data?.syncWarning || null,
+      posSynced: 0,
+    }
+  }
+  return {
+    entries: data.entries || [],
+    error: data.error,
+    syncWarning: data.syncWarning || null,
+    posSynced: Number(data.posSynced || 0),
+  }
 }
 
 export type StoreTaxFilingProfileDto = {

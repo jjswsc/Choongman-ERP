@@ -984,30 +984,44 @@ export function AdminAccountingCompliance({
     try {
       const data = await withClientTimeout(
         getVatLedger({
-        userRole: role,
-        taxMonth,
-        yearMonth: taxMonth,
-        periodType,
-        filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForApi,
-        forceSync: !!opts?.forceSync,
+          userRole: role,
+          taxMonth,
+          yearMonth: taxMonth,
+          periodType,
+          filingStatus: ledgerStatusFilter,
+          storeFilter: storeFilterForApi,
+          forceSync: !!opts?.forceSync,
         }),
-        PP30_FETCH_TIMEOUT_MS
+        opts?.forceSync ? Math.max(PP30_FETCH_TIMEOUT_MS, 180000) : PP30_FETCH_TIMEOUT_MS
       )
       if (seq !== vatLoadSeqRef.current) {
         return
       }
-      if (data.error) appAlert(t("accCompLoadFail"))
-      setVatRows(mapVat(data.entries || []))
+      const rows = data.entries || []
+      setVatRows(mapVat(rows))
+      if (data.error && rows.length === 0) {
+        appAlert(t("accCompLoadFail"))
+      } else if (opts?.forceSync) {
+        if (data.syncWarning === "POS_SYNC_FAILED") {
+          appAlert(t("accCompVatSyncPosFail"))
+        } else {
+          appAlert(tr(t, "accCompVatSyncOk", { n: String(data.posSynced || 0) }))
+        }
+      }
       if (seq === vatLoadSeqRef.current) {
         void loadVatStoreNameGaps()
       }
-    } catch {
+    } catch (e) {
       if (seq !== vatLoadSeqRef.current) {
         return
       }
-      setVatRows([])
-      appAlert(t("accCompLoadFail"))
+      const msg = e instanceof Error ? e.message : String(e || "")
+      if (msg === "CLIENT_TIMEOUT") {
+        appAlert(t("accCompVatSyncTimeout"))
+      } else {
+        setVatRows([])
+        appAlert(t("accCompLoadFail"))
+      }
     } finally {
       if (seq === vatLoadSeqRef.current) setLoading(false)
     }

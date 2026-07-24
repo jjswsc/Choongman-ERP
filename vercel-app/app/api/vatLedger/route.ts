@@ -17,7 +17,11 @@ import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { syncIncrementalVatLedgersFromExpenseAndBank, syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
-import { backfillVatLedgerStoreNames, enrichVatLedgerRowsStoreNames } from '@/lib/pos-ledger-drafts'
+import {
+  backfillVatLedgerStoreNames,
+  enrichVatLedgerRowsStoreNames,
+  syncPosOrdersOutputVatLedger,
+} from '@/lib/pos-ledger-drafts'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -218,7 +222,6 @@ export async function GET(request: NextRequest) {
     // 조회 성능: 매 검색마다 지출 건별 upsert·POS 전체 재동기화·원장 10만행 probe를 하지 않는다.
     // - 평소: DB에서 해당 월(·매장) 원장만 읽기
     // - forceSync=1 또는 해당 범위에 행이 0건일 때만 동기화
-    // - 「매입 행 없음」만으로 full sync 하지 않음(매출만 있는 달이 매번 POS 재동기화되던 원인)
     let hasAnyRows = true
     try {
       const scopedCount = await supabaseCountFilter('vat_ledger_entries', monthAndStoreFilter)
@@ -228,20 +231,37 @@ export async function GET(request: NextRequest) {
       hasAnyRows = true
     }
     const didSync = forceSync || !hasAnyRows
+    let syncWarning: string | null = null
+    let posSynced = 0
 
     if (didSync) {
+      // POS 매출 원장 (매출 관리 영업일 기준). 실패해도 조회는 계속.
       try {
-        await syncIncrementalVatLedgersFromExpenseAndBank({
+        const pos = await syncPosOrdersOutputVatLedger({
           months: period.months,
           storeFilter: syncStoreFilter,
         })
+        posSynced = Number(pos.upserted || 0)
       } catch (e) {
-        console.warn('vatLedger GET incremental sync skipped:', e)
+        console.warn('vatLedger GET POS sync failed:', e)
+        syncWarning = 'POS_SYNC_FAILED'
       }
-      try {
-        await runVatAutoSync()
-      } catch (e) {
-        console.warn('vatLedger GET auto-sync skipped:', e)
+      // 「원장 동기화」버튼(forceSync): POS만 — 입고·지출 전체는 타임아웃 유발
+      // 빈 원장 최초 조회: 입고·지출까지 1회
+      if (!forceSync && !hasAnyRows) {
+        try {
+          await runVatAutoSync()
+        } catch (e) {
+          console.warn('vatLedger GET auto-sync skipped:', e)
+        }
+        try {
+          await syncIncrementalVatLedgersFromExpenseAndBank({
+            months: period.months,
+            storeFilter: syncStoreFilter,
+          })
+        } catch (e) {
+          console.warn('vatLedger GET incremental sync skipped:', e)
+        }
       }
       try {
         await runBackfill()
@@ -250,21 +270,45 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthAndStoreFilter, {
-      select: '*',
-      order: 'doc_date.asc,id.asc',
-      pageSize: 4000,
-      maxRows: 100000,
-    })) as Record<string, unknown>[] | null
-    const enrichedRows = await enrichVatLedgerRowsStoreNames(rows || [])
-    const entries = enrichedRows.filter((row) => {
-      if (!storeScope.matches(String(row.store_name || ''))) return false
-      return matchesFilingStatus(row.filing_status, filingStatus)
-    })
+    // 동기화 실패와 무관하게 원장 조회는 항상 시도 (빈 화면·「불러오지 못했습니다」 방지)
+    let entries: Record<string, unknown>[] = []
+    try {
+      const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthAndStoreFilter, {
+        select: '*',
+        order: 'doc_date.asc,id.asc',
+        pageSize: 4000,
+        maxRows: 100000,
+      })) as Record<string, unknown>[] | null
+      const enrichedRows = await enrichVatLedgerRowsStoreNames(rows || [])
+      entries = enrichedRows.filter((row) => {
+        if (!storeScope.matches(String(row.store_name || ''))) return false
+        return matchesFilingStatus(row.filing_status, filingStatus)
+      })
+    } catch (loadErr) {
+      console.error('vatLedger GET load rows:', loadErr)
+      return NextResponse.json(
+        {
+          entries: [],
+          error: 'QUERY_FAILED',
+          syncWarning,
+          synced: didSync,
+          posSynced,
+        },
+        { headers }
+      )
+    }
+
     return NextResponse.json(
-      { entries: enrichVatLedgerEntries(entries), period, synced: didSync },
+      {
+        entries: enrichVatLedgerEntries(entries),
+        period,
+        synced: didSync,
+        posSynced,
+        syncWarning,
+      },
       { headers }
-    )  } catch (e) {
+    )
+  } catch (e) {
     console.error('vatLedger GET:', e)
     return NextResponse.json({ entries: [], error: 'QUERY_FAILED' }, { headers })
   }
