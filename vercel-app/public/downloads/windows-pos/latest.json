@@ -1,29 +1,20 @@
-﻿{
-    "version":  "0.1.13",
-    "files":  [
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-                      "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "ed30125743eb94295336c4c64384c8fbbfa27f59e0928f6762d6e73266f40f5b"
-                  },
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.13-setup.exe",
-                      "name":  "cm-pos-windows-0.1.13-setup.exe",
-                      "sha256":  "ed30125743eb94295336c4c64384c8fbbfa27f59e0928f6762d6e73266f40f5b"
-                  },
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-portable.exe",
-                      "name":  "cm-pos-windows-latest-portable.exe",
-                      "sha256":  "86f438adb61d1a9946477434e59384a50406fa1e10b7bf604a61dcc44c0c7d73"
-                  },
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.13-portable.exe",
-                      "name":  "cm-pos-windows-0.1.13-portable.exe",
-                      "sha256":  "86f438adb61d1a9946477434e59384a50406fa1e10b7bf604a61dcc44c0c7d73"
-                  }
-              ],
-    "installerSha256":  "ed30125743eb94295336c4c64384c8fbbfa27f59e0928f6762d6e73266f40f5b",
-    "publishedAtUtc":  "2026-07-23T05:51:08.3066902Z",
-    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "LinkPOS IPC: Card/QR EDC via Electron (HTTPS mixed-content fix) 0.1.13"
+{
+  "version": "0.1.13",
+  "publishedAtUtc": "2026-07-24T05:19:08.7027049Z",
+  "notes": "LinkPOS IPC: Card/QR EDC via Electron (HTTPS mixed-content fix) 0.1.13 — OmniFoodTech",
+  "brand": "omnifoodtech",
+  "installerUrl": "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+  "installerSha256": "de15c68b3ea5b403f13eda030d5f30854d43aa945d1b0dd6ad5fc92a41124c58",
+  "files": [
+    {
+      "name": "cm-pos-windows-latest-setup.exe",
+      "url": "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+      "sha256": "de15c68b3ea5b403f13eda030d5f30854d43aa945d1b0dd6ad5fc92a41124c58"
+    },
+    {
+      "name": "cm-pos-windows-0.1.13-setup.exe",
+      "url": "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.13-setup.exe",
+      "sha256": "de15c68b3ea5b403f13eda030d5f30854d43aa945d1b0dd6ad5fc92a41124c58"
+    }
+  ]
 }

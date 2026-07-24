@@ -26,8 +26,46 @@ function brandKeyFromHost(host: string): "omnifoodtech" | "choongman" {
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") || ""
   const brand = brandKeyFromHost(host)
+  const pathname = request.nextUrl.pathname
+
+  /**
+   * Windows POS: 공유 public/ 에 Omni용 latest.json·cm-pos-windows-latest-* 가 있어도
+   * 충만 호스트에서는 충만 피드/설치본으로 rewrite (브랜드 혼선·잘못된 업데이트 방지).
+   * Set-Cookie 없이 반환해 CDN 캐시·대용량 exe 전송 비용을 유지한다.
+   */
+  if (brand === "choongman" && pathname.startsWith("/downloads/windows-pos/")) {
+    if (pathname === "/downloads/windows-pos/latest.json") {
+      return NextResponse.rewrite(new URL("/downloads/windows-pos/latest-choongman.json", request.url))
+    }
+    if (pathname === "/downloads/windows-pos/cm-pos-windows-latest-setup.exe") {
+      return NextResponse.rewrite(
+        new URL("/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe", request.url)
+      )
+    }
+    if (pathname === "/downloads/windows-pos/cm-pos-windows-latest-portable.exe") {
+      return NextResponse.rewrite(
+        new URL("/downloads/windows-pos/cm-pos-windows-choongman-latest-portable.exe", request.url)
+      )
+    }
+    const versioned = pathname.match(
+      /^\/downloads\/windows-pos\/cm-pos-windows-(\d+\.\d+\.\d+)-(setup|portable)\.exe$/
+    )
+    if (versioned) {
+      const [, ver, kind] = versioned
+      return NextResponse.rewrite(
+        new URL(`/downloads/windows-pos/cm-pos-windows-choongman-${ver}-${kind}.exe`, request.url)
+      )
+    }
+  }
+
   const reqHeaders = new Headers(request.headers)
   reqHeaders.set(BRAND_HEADER, brand)
+
+  // 다운로드는 브랜드 쿠키 불필요 — Set-Cookie 시 CDN 캐시 무효화
+  if (pathname.startsWith("/downloads/")) {
+    return NextResponse.next({ request: { headers: reqHeaders } })
+  }
+
   const res = NextResponse.next({ request: { headers: reqHeaders } })
   /**
    * 이미 같은 값의 쿠키가 있으면 Set-Cookie 를 다시 붙이지 않는다.

@@ -324,6 +324,22 @@ function toOrigin(urlText) {
  * - 0바이트 파일: 덮어써서 다시 씀
  * - 이후 정상 JSON이 있으면 건드리지 않음(사용자 편집 보존)
  */
+/** Omni 빌드(appId·origin)면 latest.json, 그 외(충만)는 latest-choongman.json */
+function resolveDefaultUpdateManifestUrl(origin) {
+  const o = String(origin || "").replace(/\/+$/, "");
+  let manifest = "latest-choongman.json";
+  try {
+    const pkg = readJsonFileIfExists(path.join(__dirname, "package.json"));
+    const appId = String((pkg && pkg.build && pkg.build.appId) || (pkg && pkg.name) || "");
+    if (/omnifoodtech/i.test(appId) || /omnifoodtech/i.test(o)) {
+      manifest = "latest.json";
+    }
+  } catch {
+    /* keep choongman default */
+  }
+  return `${o}/downloads/windows-pos/${manifest}`;
+}
+
 function buildDefaultUserRuntimeConfigText() {
   const origin = String(DEPLOY_ORIGIN || "https://choongman-erp.vercel.app").replace(/\/+$/, "");
   return (
@@ -332,7 +348,7 @@ function buildDefaultUserRuntimeConfigText() {
         posUrl: `${origin}/pos/login`,
         allowedOrigin: origin,
         openDevtools: false,
-        updateManifestUrl: `${origin}/downloads/windows-pos/latest.json`,
+        updateManifestUrl: resolveDefaultUpdateManifestUrl(origin),
         kiosk: "1",
         linkpos: {
           enabled: false,
@@ -512,7 +528,7 @@ const isKiosk = String(process.env.WINDOWS_POS_KIOSK || runtimeConfig.kiosk || "
 const updateManifestUrl =
   process.env.WINDOWS_UPDATE_MANIFEST_URL ||
   runtimeConfig.updateManifestUrl ||
-  `${ALLOWED_ORIGIN}/downloads/windows-pos/latest.json`;
+  resolveDefaultUpdateManifestUrl(ALLOWED_ORIGIN);
 
 /** 디버그: Network 탭 등 — `runtime-config.json` 의 openDevtools 또는 환경 변수 WINDOWS_POS_DEVTOOLS=1 */
 const OPEN_DEVTOOLS_ON_START = readConfigBool(

@@ -1,26 +1,19 @@
 {
-    "print":  {
-                  "receiptDeviceName":  "",
-                  "escPosCutAfterPaymentReceiptHtml":  true,
-                  "escPosCutAfterKitchenHtml":  true,
-                  "kitchen1DeviceName":  "",
-                  "deviceName":  "",
-                  "kitchen3DeviceName":  "",
-                  "kitchenDeviceName":  "",
-                  "silent":  true,
-                  "escPosCutAfterHallOrderHtml":  true,
-                  "kitchen2DeviceName":  ""
-              },
-    "allowedOrigin":  "https://choongman-erp.vercel.app",
-    "openDevtools":  false,
-    "updateManifestUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/latest-choongman.json",
-    "kiosk":  "1",
-    "linkpos":  {
-                    "enabled":  true,
-                    "httpPort":  18181,
-                    "serialPath":  "COM3",
-                    "baudRate":  9600,
-                    "responseTimeoutMs":  120000
-                },
-    "posUrl":  "https://choongman-erp.vercel.app/pos/login"
+  "posUrl": "https://choongman-erp.vercel.app/pos/login",
+  "allowedOrigin": "https://choongman-erp.vercel.app",
+  "openDevtools": false,
+  "kiosk": "1",
+  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest-choongman.json",
+  "print": {
+    "silent": true,
+    "deviceName": "",
+    "receiptDeviceName": "",
+    "kitchenDeviceName": "",
+    "kitchen1DeviceName": "",
+    "kitchen2DeviceName": "",
+    "kitchen3DeviceName": "",
+    "escPosCutAfterKitchenHtml": true,
+    "escPosCutAfterHallOrderHtml": true,
+    "escPosCutAfterPaymentReceiptHtml": true
+  }
 }

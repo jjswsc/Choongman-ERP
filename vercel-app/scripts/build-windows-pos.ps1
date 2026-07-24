@@ -168,7 +168,9 @@ if ([string]::IsNullOrWhiteSpace($AllowedOrigin)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($UpdateManifestUrl)) {
-  $UpdateManifestUrl = "$AllowedOrigin/downloads/windows-pos/latest.json"
+  # 충만·Omni 업데이트 피드 분리 — 충만 배포가 Omni latest.json 을 덮지 않도록
+  $manifestName = if ($Brand -eq "choongman") { "latest-choongman.json" } else { "latest.json" }
+  $UpdateManifestUrl = "$AllowedOrigin/downloads/windows-pos/$manifestName"
 }
 
 $runtimeConfigPath = Join-Path $windowsPosDir "runtime-config.json"

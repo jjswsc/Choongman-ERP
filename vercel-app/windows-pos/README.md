@@ -72,7 +72,7 @@ explorer $env:APPDATA\choongman-pos-windows
 - `posUrl`: POS 접속 URL
 - `allowedOrigin`: 허용 오리진(외부 이동 차단 기준)
 - `kiosk`: `1`(기본) 키오스크 / `0` 일반창
-- `updateManifestUrl`: 업데이트 매니페스트 URL (`latest.json`)
+- `updateManifestUrl`: 업데이트 매니페스트 URL (`latest-choongman.json` 충만 / `latest.json` Omni)
 - `printHtmlSettleMs`: HTML을 숨김 창에 `loadFile`한 뒤 `print` 전 대기(ms). 기본 **260**, 범위 **80~5000**(`main.js`의 `readConfigInt`). 너무 짧으면 무인쇄 실패·대화상자 폴백이 늘 수 있어 실패 시 내부 백오프로 보완.
 - `postHtmlPrintSpoolFlushMs`: HTML 인쇄 후 ESC/POS 절단 전 스풀 안정화 대기(ms). 기본 **350**.
 - `printHtmlQueueGapMs`: 하이브리드 셸 인쇄 큐의 작업 간 최소 간격(ms). 기본 **80**.
@@ -224,10 +224,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-pos.ps
   -CertPassword "your-password"
 ```
 
-이후 배포 파일 게시:
+이후 배포 파일 게시 (**브랜드 필수** — 서로 덮어쓰지 않음):
 
 ```powershell
+# 충만 내부 → cm-pos-windows-choongman-* + latest-choongman.json
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-windows-pos.ps1 `
-  -BaseUrl "https://your-domain.com" `
+  -Brand choongman `
+  -BaseUrl "https://choongman-erp.vercel.app" `
   -ReleaseNotes "파일럿 안정화 릴리스"
+
+# Omni 판매 → cm-pos-windows-latest-* + latest.json
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-windows-pos.ps1 `
+  -Brand omnifoodtech `
+  -BaseUrl "https://app.omnifoodtech.com" `
+  -ReleaseNotes "Omni POS Windows release"
 ```
+
+또는 `npm run windows:pos:publish:internal` / `npm run windows:pos:publish:external`

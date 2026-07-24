@@ -74,16 +74,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/use-windows-pos-stor
 
 ```powershell
 cd vercel-app
+# Omni 판매용 (latest.json + cm-pos-windows-latest-*)
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-windows-pos.ps1 `
-  -BaseUrl "https://your-domain.com" `
+  -Brand omnifoodtech `
+  -BaseUrl "https://app.omnifoodtech.com" `
+  -ReleaseNotes "파일럿 안정화 릴리스"
+
+# 충만 내부용 (latest-choongman.json + cm-pos-windows-choongman-*) — Omni 경로를 덮어쓰지 않음
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-windows-pos.ps1 `
+  -Brand choongman `
+  -BaseUrl "https://choongman-erp.vercel.app" `
   -ReleaseNotes "파일럿 안정화 릴리스"
 ```
 
 게시 결과:
 
-- `/downloads/windows-pos/cm-pos-windows-latest-setup.exe`
-- `/downloads/windows-pos/cm-pos-windows-latest-portable.exe` (생성 시)
-- `/downloads/windows-pos/latest.json`  ← 앱 자동업데이트 체크용
+- Omni: `/downloads/windows-pos/cm-pos-windows-latest-setup.exe` + `latest.json`
+- 충만: `/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe` + `latest-choongman.json`
+- (생성 시) 각 브랜드 portable 도 동일 접두사로 게시
 
 ## 3) Android 다운로드 경로(매장 안내용)
 

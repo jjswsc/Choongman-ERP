@@ -1,6 +1,12 @@
 Param(
+  # choongman: 충만 전용 파일명 + latest-choongman.json (Omni 경로 덮어쓰지 않음)
+  # omnifoodtech: Omni 판매용 cm-pos-windows-latest-* + latest.json
   [Parameter(Mandatory = $false)]
-  [string]$BaseUrl = "https://choongman-erp.vercel.app",
+  [ValidateSet("choongman", "omnifoodtech")]
+  [string]$Brand = "choongman",
+
+  [Parameter(Mandatory = $false)]
+  [string]$BaseUrl = "",
 
   [Parameter(Mandatory = $false)]
   [string]$ReleaseNotes = "Stability improvements and latest features.",
@@ -19,6 +25,15 @@ function Get-Sha256($path) {
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $windowsPosDir = Join-Path $projectRoot "windows-pos"
 $publishDir = Join-Path $projectRoot "public\downloads\windows-pos"
+
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+  if ($Brand -eq "omnifoodtech") {
+    $BaseUrl = "https://app.omnifoodtech.com"
+  } else {
+    $BaseUrl = "https://choongman-erp.vercel.app"
+  }
+}
+$BaseUrl = $BaseUrl.TrimEnd("/")
 
 function Test-DistHasPublishableExe {
   Param([string]$Dir)
@@ -77,8 +92,20 @@ if (-not $installer) {
 
 $portable = $exeCandidates | Where-Object { $_.Name -match "portable|Portable" } | Select-Object -First 1
 
-$installerLatestName = "cm-pos-windows-latest-setup.exe"
-$installerVersionedName = "cm-pos-windows-$version-setup.exe"
+# 브랜드별 아티팩트·매니페스트 — 서로 덮어쓰지 않음
+if ($Brand -eq "choongman") {
+  $installerLatestName = "cm-pos-windows-choongman-latest-setup.exe"
+  $installerVersionedName = "cm-pos-windows-choongman-$version-setup.exe"
+  $portableLatestNameTemplate = "cm-pos-windows-choongman-latest-portable.exe"
+  $portableVersionedNameTemplate = "cm-pos-windows-choongman-$version-portable.exe"
+  $manifestFileName = "latest-choongman.json"
+} else {
+  $installerLatestName = "cm-pos-windows-latest-setup.exe"
+  $installerVersionedName = "cm-pos-windows-$version-setup.exe"
+  $portableLatestNameTemplate = "cm-pos-windows-latest-portable.exe"
+  $portableVersionedNameTemplate = "cm-pos-windows-$version-portable.exe"
+  $manifestFileName = "latest.json"
+}
 
 Copy-Item -Path $installer.FullName -Destination (Join-Path $publishDir $installerLatestName) -Force
 Copy-Item -Path $installer.FullName -Destination (Join-Path $publishDir $installerVersionedName) -Force
@@ -86,8 +113,8 @@ Copy-Item -Path $installer.FullName -Destination (Join-Path $publishDir $install
 $portableLatestName = ""
 $portableVersionedName = ""
 if ($portable) {
-  $portableLatestName = "cm-pos-windows-latest-portable.exe"
-  $portableVersionedName = "cm-pos-windows-$version-portable.exe"
+  $portableLatestName = $portableLatestNameTemplate
+  $portableVersionedName = $portableVersionedNameTemplate
   Copy-Item -Path $portable.FullName -Destination (Join-Path $publishDir $portableLatestName) -Force
   Copy-Item -Path $portable.FullName -Destination (Join-Path $publishDir $portableVersionedName) -Force
 }
@@ -97,6 +124,7 @@ $manifest = @{
   version = $version
   publishedAtUtc = [DateTime]::UtcNow.ToString("o")
   notes = $ReleaseNotes
+  brand = $Brand
   installerUrl = "$BaseUrl/downloads/windows-pos/$installerLatestName"
   installerSha256 = Get-Sha256 $installerLatestPath
   files = @(
@@ -129,9 +157,21 @@ if ($portableLatestName -ne "") {
 }
 
 $manifestJson = $manifest | ConvertTo-Json -Depth 6
-Set-Content -Path (Join-Path $publishDir "latest.json") -Value $manifestJson -Encoding UTF8
+# BOM 없이 저장 — Electron JSON.parse 호환
+[System.IO.File]::WriteAllText(
+  (Join-Path $publishDir $manifestFileName),
+  $manifestJson,
+  [System.Text.UTF8Encoding]::new($false)
+)
 
 Write-Host "Windows POS publish done."
+Write-Host "- Brand: $Brand"
+Write-Host "- BaseUrl: $BaseUrl"
 Write-Host "- latest: /downloads/windows-pos/$installerLatestName"
 Write-Host "- versioned: /downloads/windows-pos/$installerVersionedName"
-Write-Host "- manifest: /downloads/windows-pos/latest.json"
+Write-Host "- manifest: /downloads/windows-pos/$manifestFileName"
+if ($Brand -eq "choongman") {
+  Write-Host "- NOTE: Omni files (cm-pos-windows-latest-* / latest.json) were NOT modified."
+} else {
+  Write-Host "- NOTE: Choongman files (cm-pos-windows-choongman-* / latest-choongman.json) were NOT modified."
+}

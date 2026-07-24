@@ -2,7 +2,7 @@
   "posUrl": "https://choongman-erp.vercel.app/pos/login",
   "allowedOrigin": "https://choongman-erp.vercel.app",
   "kiosk": "1",
-  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
+  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest-choongman.json",
   "printHtmlSettleMs": 180,
   "postHtmlPrintSpoolFlushMs": 220,
   "printHtmlQueueGapMs": 40,

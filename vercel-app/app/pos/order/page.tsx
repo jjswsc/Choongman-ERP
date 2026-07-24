@@ -1615,8 +1615,12 @@ export default function PosOrderPage() {
         packagingFee: Number(receiptData.packagingFee ?? 0) || 0,
         vatFeeAmt: Number(receiptData.vatFeeAmt ?? 0) || 0,
         vatFeeMode: receiptData.vatFeeMode,
-        receiptExclusiveSubtotalDisplay: Number(receiptData.receiptExclusiveSubtotalDisplay ?? 0) || 0,
-        receiptVatDisplayAmt: Number(receiptData.receiptVatDisplayAmt ?? 0) || 0,
+        ...(typeof receiptData.receiptExclusiveSubtotalDisplay === "number"
+          ? { receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay }
+          : {}),
+        ...(typeof receiptData.receiptVatDisplayAmt === "number"
+          ? { receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt }
+          : {}),
         receiptTaxableGrossForDisplay: Number(receiptData.receiptTaxableGrossForDisplay ?? 0) || 0,
         serviceFeeAmt: Number(receiptData.serviceFeeAmt ?? 0) || 0,
         serviceFeeMode: receiptData.serviceFeeMode,

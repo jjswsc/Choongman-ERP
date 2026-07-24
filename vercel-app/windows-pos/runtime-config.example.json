@@ -8,8 +8,8 @@
   "printHtmlSettleMs": 360,
   "postHtmlPrintSpoolFlushMs": 600,
   "printHtmlQueueGapMs": 120,
-  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
-  "_comment_offlinePilot": "Office 오프라인 Phase B 파일럿 — cold start 시 ?offlinePhaseB=1 전달. 값: office",
+  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest-choongman.json",
+  "_comment_offlinePilot": "Office ì˜¤í”„ë¼ì¸ Phase B íŒŒì¼ëŸ¿ â€” cold start ì‹œ ?offlinePhaseB=1 ì „ë‹¬. ê°’: office",
   "offlinePilot": "",
   "linkpos": {
     "_comment": "EDC RS232 bridge. Keep enabled=false unless store has LinkPOS on serialPath (Device Manager COM port).",

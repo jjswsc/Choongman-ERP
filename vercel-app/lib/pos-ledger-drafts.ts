@@ -26,7 +26,11 @@ function toBangkokYmd(inputIso?: string): string {
   return base.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 }
 
-/** POS 주문 → 원장 net/vat (vat=0이면 합계에서 7% 역산 — 매출관리·영수증과 동일) */
+/**
+ * POS 주문 → 원장 net/vat.
+ * vat≈0일 때: 기록된 공급가(subtotal)가 있으면 total−net로 추론(VAT 0%·미적용 매장 보호).
+ * subtotal도 없을 때만 포함가 7% 역산(레거시 스냅샷 누락 폴백).
+ */
 function resolvePosLedgerAmounts(params: {
   total: number
   subtotal?: number | null
@@ -37,12 +41,17 @@ function resolvePosLedgerAmounts(params: {
   let net = Math.max(0, Number(params.subtotal) || 0)
   if (total <= 0) return { net: 0, vat: 0, total: 0 }
   if (vat < 0.0001) {
-    const split = splitThaiVatInclusiveGrossForReceipt(total, 7)
-    if (split) {
-      vat = split.vat
-      net = split.exclusive
+    if (net > 0.0001) {
+      vat = Math.max(0, total - net)
+      if (vat < 0.0001) vat = 0
     } else {
-      net = total
+      const split = splitThaiVatInclusiveGrossForReceipt(total, 7)
+      if (split) {
+        vat = split.vat
+        net = split.exclusive
+      } else {
+        net = total
+      }
     }
   } else if (net <= 0) {
     net = Math.max(0, total - vat)
