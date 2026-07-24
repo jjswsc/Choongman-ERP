@@ -38,8 +38,11 @@ function itemOutboundMatchesSelection(itemOutboundRaw: string, selectedParts: st
   return false
 }
 
-/** 본사 발주용: vendor 코드 또는 이름으로 품목 목록 조회
+/**
+ * vendor 코드 또는 이름으로 품목 목록 조회
  * - items.vendor = code/name (기존) + item_vendors 매핑 (다대다)
+ * - purpose=hq(기본): 본사 발주용 — purchase_source=store / 매장 전용 제외
+ * - purpose=inbound: 입고용 — 매장 전용·store 품목 포함 (M2M 동일 적용)
  */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -49,6 +52,10 @@ export async function GET(request: NextRequest) {
   const vendorName = String(searchParams.get('vendorName') || '').trim()
   const outboundLocation = String(searchParams.get('outboundLocation') || '').trim()
   const outboundLocationName = String(searchParams.get('outboundLocationName') || '').trim()
+  const purpose = String(searchParams.get('purpose') || 'hq').trim().toLowerCase()
+  const forInbound = purpose === 'inbound'
+  /** 본사 발주만 HQ 필터 적용. 입고는 매장 전용·M2M 전 품목 포함 */
+  const applyHqFilter = !forInbound
 
   if (!vendorCode && !vendorName) {
     return NextResponse.json([], { headers })
@@ -88,6 +95,7 @@ export async function GET(request: NextRequest) {
     const hqFilter = `or=(purchase_source.eq.hq,purchase_source.is.null,purchase_source.eq.)`
     /** 본사 발주: purchase_source=store 또는 category=매장 전용/Store Only 제외 */
     const isHqItem = (r: ItemRow & { purchase_source?: string }) => {
+      if (!applyHqFilter) return true
       const ps = String(r.purchase_source || '').trim().toLowerCase()
       if (ps === 'store') return false
       const cat = String(r.category || '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -98,9 +106,10 @@ export async function GET(request: NextRequest) {
     let rowsByVendor: (ItemRow & { purchase_source?: string })[] | null = []
     const runItemsQuery = async (vendorVal: string, withHq: boolean) => {
       const enc = encodeURIComponent(vendorVal)
-      const base = withHq ? `vendor=ilike.*${enc}*&${hqFilter}` : `vendor=ilike.*${enc}*`
+      const useHq = applyHqFilter && withHq
+      const base = useHq ? `vendor=ilike.*${enc}*&${hqFilter}` : `vendor=ilike.*${enc}*`
       const filter = appendInventoryTenantFilter(base, scope)
-      const select = withHq ? selectCols : selectColsMinimal
+      const select = useHq ? selectCols : selectColsMinimal
       try {
         return (await supabaseSelectFilter('items', filter, {
           order: 'code.asc',
@@ -155,6 +164,37 @@ export async function GET(request: NextRequest) {
     }
     for (const r of rowsByVendor || []) addRow(r)
 
+    const fetchItemByCodeForVendorMap = async (ic: string) => {
+      try {
+        if (applyHqFilter) {
+          let itemRows = (await supabaseSelectFilter(
+            'items',
+            `code=eq.${encodeURIComponent(ic)}&${hqFilter}`,
+            { limit: 1, select: selectCols }
+          )) as (ItemRow & { purchase_source?: string })[] | null
+          if (itemRows?.length && !isHqItem(itemRows[0])) itemRows = []
+          if (!itemRows || itemRows.length === 0) {
+            itemRows = (await supabaseSelectFilter(
+              'items',
+              `code=eq.${encodeURIComponent(ic)}`,
+              { limit: 1, select: selectCols }
+            )) as ItemRow[] | null
+            if (itemRows?.length && !isHqItem(itemRows[0] as ItemRow & { purchase_source?: string })) itemRows = []
+          }
+          for (const r of itemRows || []) addRow(r)
+        } else {
+          const itemRows = (await supabaseSelectFilter(
+            'items',
+            `code=eq.${encodeURIComponent(ic)}`,
+            { limit: 1, select: selectCols }
+          )) as ItemRow[] | null
+          for (const r of itemRows || []) addRow(r)
+        }
+      } catch {
+        /* skip item */
+      }
+    }
+
     try {
       if (vendorCode) {
         const encVc = encodeURIComponent(vendorCode)
@@ -164,29 +204,9 @@ export async function GET(request: NextRequest) {
           { select: 'item_code', limit: 1000 }
         )) as { item_code?: string }[] | null
         const itemCodesFromMap = (ivRows || []).map((x) => String(x.item_code || '').trim()).filter(Boolean)
-        if (itemCodesFromMap.length > 0) {
-          for (const ic of itemCodesFromMap) {
-            if (codeSet.has(ic)) continue
-            try {
-              let itemRows = (await supabaseSelectFilter(
-                'items',
-                `code=eq.${encodeURIComponent(ic)}&${hqFilter}`,
-                { limit: 1, select: selectCols }
-              )) as (ItemRow & { purchase_source?: string })[] | null
-              if (itemRows?.length && !isHqItem(itemRows[0])) itemRows = []
-              if ((!itemRows || itemRows.length === 0) && hqFilter) {
-                itemRows = (await supabaseSelectFilter(
-                  'items',
-                  `code=eq.${encodeURIComponent(ic)}`,
-                  { limit: 1, select: selectCols }
-                )) as ItemRow[] | null
-                if (itemRows?.length && !isHqItem(itemRows[0] as ItemRow & { purchase_source?: string })) itemRows = []
-              }
-              for (const r of itemRows || []) addRow(r)
-            } catch {
-              /* skip item */
-            }
-          }
+        for (const ic of itemCodesFromMap) {
+          if (codeSet.has(ic)) continue
+          await fetchItemByCodeForVendorMap(ic)
         }
       }
       if (vendorName && vendorName.trim()) {
@@ -199,25 +219,7 @@ export async function GET(request: NextRequest) {
         const codesByName = (ivRowsByName || []).map((x) => String(x.item_code || '').trim()).filter(Boolean)
         for (const ic of codesByName) {
           if (codeSet.has(ic)) continue
-          try {
-            let itemRows = (await supabaseSelectFilter(
-              'items',
-              `code=eq.${encodeURIComponent(ic)}&${hqFilter}`,
-              { limit: 1, select: selectCols }
-            )) as (ItemRow & { purchase_source?: string })[] | null
-            if (itemRows?.length && !isHqItem(itemRows[0])) itemRows = []
-            if ((!itemRows || itemRows.length === 0) && hqFilter) {
-              itemRows = (await supabaseSelectFilter(
-                'items',
-                `code=eq.${encodeURIComponent(ic)}`,
-                { limit: 1, select: selectCols }
-              )) as ItemRow[] | null
-              if (itemRows?.length && !isHqItem(itemRows[0] as ItemRow & { purchase_source?: string })) itemRows = []
-            }
-            for (const r of itemRows || []) addRow(r)
-          } catch {
-            /* skip item */
-          }
+          await fetchItemByCodeForVendorMap(ic)
         }
       }
     } catch (_) {

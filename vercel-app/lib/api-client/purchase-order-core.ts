@@ -63,12 +63,15 @@ export async function getItemsByVendor(
   vendorName?: string,
   outboundLocation?: string,
   /** 출고지 표시명 — 품목에 code 대신 name이 저장된 경우 매칭용 */
-  outboundLocationName?: string
+  outboundLocationName?: string,
+  /** hq(기본)=본사 발주(매장 전용 제외), inbound=입고(매장 전용·M2M 포함) */
+  opts?: { purpose?: 'hq' | 'inbound' }
 ) {
   const q = new URLSearchParams({ vendorCode })
   if (vendorName?.trim()) q.set('vendorName', vendorName.trim())
   if (outboundLocation?.trim()) q.set('outboundLocation', outboundLocation.trim())
   if (outboundLocationName?.trim()) q.set('outboundLocationName', outboundLocationName.trim())
+  if (opts?.purpose === 'inbound') q.set('purpose', 'inbound')
   const res = await apiFetchWithOffline(`/api/getItemsByVendor?${q}`)
   return jsonAsArray<ItemByVendor>(await res.json())
 }

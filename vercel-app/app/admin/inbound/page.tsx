@@ -264,7 +264,7 @@ export default function InboundPage() {
     return [...new Set(items.map((it) => String(it.category || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   }, [items])
 
-  /** 거래처 선택 시 해당 거래처에 등록된 품목 (items.vendor + item_vendors 매핑) */
+  /** 거래처 선택 시 해당 거래처 품목 (items.vendor + item_vendors, 입고 purpose=inbound로 매장 전용 포함) */
   const itemsForPicker = React.useMemo(() => {
     if (!inVendor?.trim()) return items
     return itemsForVendor.length > 0 ? itemsForVendor : items.filter((i) => {
@@ -283,12 +283,12 @@ export default function InboundPage() {
       return
     }
     const v = purchaseVendors.find((x) => x.name.trim().toLowerCase() === inVendor.trim().toLowerCase())
-    if (!v?.code) {
-      setItemsForVendor([])
-      return
-    }
-    getItemsByVendor(v.code, v.name)
+    const vendorCode = (v?.code || inVendor).trim()
+    const vendorName = (v?.name || inVendor).trim()
+    let cancelled = false
+    getItemsByVendor(vendorCode, vendorName, undefined, undefined, { purpose: "inbound" })
       .then((list) => {
+        if (cancelled) return
         const mapped: AdminItem[] = (list || []).map((it) => ({
           code: it.code,
           name: it.name,
@@ -306,7 +306,12 @@ export default function InboundPage() {
         }))
         setItemsForVendor(mapped)
       })
-      .catch(() => setItemsForVendor([]))
+      .catch(() => {
+        if (!cancelled) setItemsForVendor([])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [inVendor, purchaseVendors])
 
   React.useEffect(() => {
