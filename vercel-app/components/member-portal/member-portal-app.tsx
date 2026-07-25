@@ -1160,6 +1160,10 @@ export function MemberPortalApp() {
 
   const activeDashboard = dashboard ?? buildFallbackDashboard(member)
   const tier = tierVisual(activeDashboard.tierProgress.currentTierCode)
+  const needsPhoneLink =
+    Boolean(member.lineUserId) && (!member.phone || !member.birthDate) && !phoneLinkSkipped
+  const needsJoinStore = !needsPhoneLink && !member.joinStoreCode
+  const hideBottomNavForOnboarding = needsPhoneLink || needsJoinStore
   const navItems = [
     { id: "home" as const, label: t("tabHome"), icon: Home },
     { id: "order" as const, label: t("tabOrder"), icon: ShoppingCart },
@@ -1176,7 +1180,7 @@ export function MemberPortalApp() {
       className={embedPreview ? "h-[100dvh] overflow-hidden" : undefined}
     >
       <MemberPortalShell embedPreview={embedPreview}>
-        {member.lineUserId && (!member.phone || !member.birthDate) && !phoneLinkSkipped ? (
+        {needsPhoneLink ? (
           <MemberPortalLinePhoneLinkDialog
             onComplete={(updated, merged) => {
               applyLoggedInMember(updated)
@@ -1193,7 +1197,7 @@ export function MemberPortalApp() {
               setPhoneLinkSkipped(true)
             }}
           />
-        ) : !member.joinStoreCode ? (
+        ) : needsJoinStore ? (
           <MemberPortalJoinStoreDialog
             officeStoreCode={signupOfficeStoreCode}
             storeOptions={signupStoreOptions}
@@ -1535,7 +1539,7 @@ export function MemberPortalApp() {
         onChange={changeTab}
         items={navItems}
         embedPreview={embedPreview}
-        hidden={orderBottomNavSuppressed}
+        hidden={orderBottomNavSuppressed || hideBottomNavForOnboarding}
       />
 
       <MemberPortalContentSheet

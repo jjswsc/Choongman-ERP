@@ -55,11 +55,11 @@ export function MemberPortalJoinStoreDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-4 sm:items-center">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-md rounded-[28px] border border-stone-200/80 bg-white p-5 shadow-[0_20px_60px_rgba(28,21,16,0.18)]"
+        className="max-h-[min(90dvh,40rem)] w-full max-w-md overflow-y-auto rounded-[28px] border border-stone-200/80 bg-white p-5 shadow-[0_20px_60px_rgba(28,21,16,0.18)]"
       >
         <p className={`text-lg font-bold ${MP_CARD_TEXT_PRIMARY}`}>{t("joinStoreCompleteTitle")}</p>
         <p className={`mt-2 text-sm leading-relaxed ${MP_CARD_TEXT_SECONDARY}`}>{t("joinStoreCompleteDesc")}</p>

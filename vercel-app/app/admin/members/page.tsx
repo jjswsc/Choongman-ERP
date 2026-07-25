@@ -563,8 +563,9 @@ export default function MembersPage() {
           />
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[min(390px,100%)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-4 lg:sticky lg:top-0 lg:self-start">
+        {/* xl 미만(POS·태블릿)은 1열로 회원목록·검색이 전체 폭을 쓰게 함 */}
+        <div className="grid gap-6 xl:grid-cols-[min(390px,100%)_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start">
             <Tabs value={detailTab} onValueChange={(v) => setDetailTab(v === "points" ? "points" : "profile")}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="profile">{t("memberProfileTab")}</TabsTrigger>

@@ -109,14 +109,15 @@ const MemberSearchPanel = React.memo(function MemberSearchPanel({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="min-w-0 flex-1 space-y-1.5">
+      {/* POS·좁은 열에서도 입력란이 찌그러지지 않도록 항상 전체 폭 + 버튼은 아래 줄 */}
+      <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">{t("search")}</Label>
           <Input
             placeholder={keywordPh}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            className="bg-background"
+            className="h-10 w-full bg-background text-base sm:text-sm"
             autoComplete="off"
           />
         </div>
