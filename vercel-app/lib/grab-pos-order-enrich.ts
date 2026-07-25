@@ -442,6 +442,61 @@ export function isGrabInboundPosOrder(params: {
   return false
 }
 
+function normalizeGrabOptionJoinKey(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+}
+
+/**
+ * 합친 옵션 줄이 다른 개별 칩들의 `" - "` / `", "` 조합과 같으면 true.
+ * 예: "Size S - Pickled Radish" ← ["Size S", "Pickled Radish"]
+ *     "M - Boneless - Kimchi" ← ["M - Boneless", "Kimchi"]
+ * 단일 칩 `M - Boneless`는 다른 칩이 없으면 유지한다.
+ */
+export function isGrabCompositeOptionCoveredByOthers(
+  candidate: string,
+  others: string[]
+): boolean {
+  const target = normalizeGrabOptionJoinKey(candidate)
+  if (!target) return false
+  const parts = others
+    .map((o) => String(o ?? '').trim())
+    .filter((o) => o && normalizeGrabOptionJoinKey(o) !== target)
+  if (parts.length < 2) return false
+
+  const cover = (remaining: string, available: string[], used: number): boolean => {
+    const r = normalizeGrabOptionJoinKey(remaining)
+    if (!r) return used >= 2
+    for (let i = 0; i < available.length; i++) {
+      const p = normalizeGrabOptionJoinKey(available[i])
+      if (!p) continue
+      const next = available.filter((_, j) => j !== i)
+      if (r === p) return used + 1 >= 2
+      for (const sep of [' - ', ', ']) {
+        const prefix = p + sep
+        if (r.startsWith(prefix)) {
+          if (cover(r.slice(prefix.length), next, used + 1)) return true
+        }
+      }
+    }
+    return false
+  }
+
+  return cover(target, parts, 0)
+}
+
+/** 이름 괄호 합친 줄 + mods 개별 칩이 함께 있을 때 합친 줄만 제거 */
+export function dropCompositeGrabPrintOptionLines(lines: string[]): string[] {
+  const cleaned = lines.map((s) => String(s ?? '').trim()).filter(Boolean)
+  return cleaned.filter((line, idx) => {
+    const others = cleaned.filter((_, j) => j !== idx)
+    return !isGrabCompositeOptionCoveredByOthers(line, others)
+  })
+}
+
 /**
  * Grab 인쇄 전용: 옵션을 한 줄씩(캐셔 Item / 주방 - 줄).
  * 홀·수동 배달은 이 함수를 쓰지 않는다.
@@ -481,7 +536,7 @@ export function collectGrabPrintOptionLines(input: {
     push(banbanPair.flavor1)
     push(banbanPair.flavor2)
   }
-  return out
+  return dropCompositeGrabPrintOptionLines(out)
 }
 
 /** Grab 세트·치킨 부가 옵션(김치·단무지 등) — 사이즈·파트 제외 */

@@ -12,6 +12,7 @@ import {
 } from '@/lib/pos-banban-utils'
 import {
   formatGrabOptionFragmentForPrint,
+  isGrabCompositeOptionCoveredByOthers,
   isGrabEcoCutleryNoteChunk,
   omitGrabEcoFromJoinedNote,
 } from '@/lib/grab-pos-order-enrich'
@@ -606,10 +607,16 @@ export function formatKitchenSlipItemRowHtml(
     escapeHtml(baseDisplayName) +
     close('span') +
     close('div')
+  // Grab 등: 이름 괄호 합친 줄(`Size S - Pickled Radish`)과 note 개별 칩이 함께 있으면
+  // 합친 줄만 숨긴다. exact match 외에 " - "/ ", " 조합 중복도 잡는다.
   const optionDupWithNote =
     optionLines.length > 0 &&
     noteLines.length > 0 &&
-    optionLines.every((line) => noteLines.some((n) => simplify(n) === simplify(line)))
+    optionLines.every(
+      (line) =>
+        noteLines.some((n) => simplify(n) === simplify(line)) ||
+        isGrabCompositeOptionCoveredByOthers(line, noteLines)
+    )
   const optionHtml =
     optionLines.length > 0 && !optionDupWithNote
       ? '<div class="k-line-note">' + optionLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') + close('div')

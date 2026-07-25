@@ -114,6 +114,32 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).not.toContain('<br/>- Drumette')
     })
 
+    it('이름 합친 옵션과 note 개별 칩이 같으면 합친 줄을 숨긴다 (Grab The Street)', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'SNOW ONION (Size S - Pickled Radish)',
+          qty: 1,
+          note: 'Size S\nPickled Radish',
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('SNOW ONION')
+      expect(html).toContain('- Size S')
+      expect(html).toContain('- Pickled Radish')
+      expect(html).not.toContain('- Size S - Pickled Radish')
+    })
+
+    it('고객 요청 note만 있으면 사이즈-부위 옵션 줄을 유지한다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        { name: 'SPICY YANGNYEOM (M - Drumette)', qty: 1, note: 'less spicy' },
+        noEsc,
+        close
+      )
+      expect(html).toContain('- M - Drumette')
+      expect(html).toContain('less spicy')
+    })
+
     it('세트 구성품은 홀 주문서처럼 들여쓴 줄로 표시한다', () => {
       const html = formatKitchenSlipItemRowHtml(
         {

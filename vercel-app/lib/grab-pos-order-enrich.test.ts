@@ -5,6 +5,8 @@ import {
   grabItemNameImpliesAllInPrice,
   parseGrabPartnerItemMenuRef,
   collectGrabPrintOptionLines,
+  dropCompositeGrabPrintOptionLines,
+  isGrabCompositeOptionCoveredByOthers,
   formatGrabLineNoteForKitchenPrint,
   formatGrabOrderLineNoteForPrint,
   formatGrabPromoComposeLinesForPrint,
@@ -391,6 +393,56 @@ describe('grab-pos-order-enrich', () => {
         optionNameByCode: catalog.optionNameByCode,
       })
     ).toEqual(['SOY SAUCE AND SPRING ONION CHICKEN', 'CURRYCANE', 'Kimchi'])
+  })
+
+  it('collectGrabPrintOptionLines drops name composite when mods already list atoms (The Street)', () => {
+    expect(
+      collectGrabPrintOptionLines({
+        optionFragment: 'Size S - Pickled Radish',
+        note: 'mods:Size S,Pickled Radish · optc:C008-1,C008-5',
+      })
+    ).toEqual(['Size S', 'Pickled Radish'])
+    expect(
+      collectGrabPrintOptionLines({
+        optionFragment: 'M - Boneless - Kimchi',
+        note: 'mods:M - Boneless,Kimchi',
+      })
+    ).toEqual(['M - Boneless', 'Kimchi'])
+  })
+
+  it('dropCompositeGrabPrintOptionLines keeps atomic size-part label and fragment-only', () => {
+    expect(dropCompositeGrabPrintOptionLines(['M - Boneless', 'Kimchi'])).toEqual([
+      'M - Boneless',
+      'Kimchi',
+    ])
+    expect(dropCompositeGrabPrintOptionLines(['Size S - Pickled Radish'])).toEqual([
+      'Size S - Pickled Radish',
+    ])
+  })
+
+  it('composite dedupe does not drop banban flavors or fragment-only size-part', () => {
+    expect(
+      collectGrabPrintOptionLines({
+        note: 'mods:Kimchi · banbanFlavors:SNOW ONION,GUCHUJANG Bar.B.Q FRIED CHICKEN',
+      })
+    ).toEqual(['Kimchi', 'SNOW ONION', 'GUCHUJANG Bar.B.Q FRIED CHICKEN'])
+    expect(collectGrabPrintOptionLines({ optionFragment: 'Size S - Drumette' })).toEqual([
+      'Size S - Drumette',
+    ])
+    expect(
+      collectGrabPrintOptionLines({
+        note: 'mods:M - Boneless,Kimchi,Pickled Radish',
+      })
+    ).toEqual(['M - Boneless', 'Kimchi', 'Pickled Radish'])
+    // 부분 칩 1개만으로는 합친 줄을 지우지 않음 (note 유실 대비)
+    expect(isGrabCompositeOptionCoveredByOthers('Size S - Pickled Radish', ['Size S'])).toBe(false)
+    // 공백 없는 맛 이름 조각은 " - "/" , " 조합이 아니므로 오탐 없음
+    expect(
+      isGrabCompositeOptionCoveredByOthers('GARLIC Bar.B.Q FRIED CHICKEN', [
+        'GARLIC',
+        'Bar.B.Q FRIED CHICKEN',
+      ])
+    ).toBe(false)
   })
 
   it('formatGrabPromoComposeLinesForPrint splits multi-option compose when grab', () => {
