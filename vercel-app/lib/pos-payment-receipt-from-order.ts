@@ -21,6 +21,7 @@ import {
 } from '@/lib/pos-existing-order-checkout-discount'
 import { resolvePosOrderReceiptPrintTotal } from '@/lib/pos-order-save-discount'
 import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import {
   buildKitchenMenuNameLookup,
   resolveKitchenMenuNameFromLookup,
@@ -714,7 +715,7 @@ function memberReceiptFieldsFromPosOrder(order: {
 }): Partial<ReceiptModalData> {
   const memberId = Math.max(0, Math.trunc(Number(order.memberId || 0) || 0))
   const memberNo = String(order.memberNo ?? '').trim()
-  const memberPointEarned = Math.max(0, Number(order.pointEarned ?? 0) || 0)
+  const memberPointEarned = roundMemberPointsEarn(order.pointEarned)
   if (!memberId && !memberNo && memberPointEarned <= 0) return {}
   return {
     ...(memberId > 0 ? { memberId } : {}),

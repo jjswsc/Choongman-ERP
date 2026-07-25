@@ -533,10 +533,18 @@ export async function applyLoyaltyOnOrder(params: {
     ? ((await supabaseSelectFilter(
         'member_points_ledger',
         `member_id=eq.${memberId}&order_id=eq.${orderIdForLedger}`,
-        { select: 'kind', limit: 20 }
-      )) as Array<{ kind?: string }>)
+        { select: 'kind,points', limit: 20 }
+      )) as Array<{ kind?: string; points?: number | null }>)
     : []
-  const existingKinds = new Set((existingByOrder || []).map((x) => toText(x.kind)))
+  const existingKinds = new Set(
+    (existingByOrder || []).map((x) => toText(x.kind).toLowerCase()).filter(Boolean)
+  )
+  let existingLedgerEarn = 0
+  for (const row of existingByOrder || []) {
+    if (toText(row.kind).toLowerCase() !== 'earn') continue
+    const pts = roundMemberPointsEarn(row.points)
+    if (pts > 0) existingLedgerEarn = pts
+  }
   const balanceBefore = roundMemberPointsEarn(member.point_balance)
   const shouldInsertUse = pointUsed > 0 && !existingKinds.has('use')
   const shouldInsertEarn = pointEarned > 0 && !existingKinds.has('earn')
@@ -593,13 +601,17 @@ export async function applyLoyaltyOnOrder(params: {
   )
 
   if (!shouldInsertUse && !shouldInsertEarn) {
+    /** 이미 원장에 적립된 주문 — 영수증/주문 point_earned 동기화용으로 기존 적립분을 반환 */
     return {
-      pointEarned: 0,
+      pointEarned: existingLedgerEarn,
       tierCode: currentTierCode,
       stamp,
       memberNo: toText(member.member_no) || undefined,
       phone: toText(member.phone) || undefined,
-      pointBalanceExcludingEarn: balanceBefore,
+      pointBalanceExcludingEarn: Math.max(
+        0,
+        roundMemberPointsEarn(balanceBefore - existingLedgerEarn)
+      ),
     }
   }
 

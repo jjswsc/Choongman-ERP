@@ -1094,7 +1094,10 @@ export async function registerLineMember(input: {
 
   const displayName = toText(input.displayName)
 
-  // 이미 전화번호로 가입된 회원이면 LINE만 연결 (중복 신규 방지)
+  // 이미 전화번호로 가입된 회원이면 LINE만 연결 (중복 신규 방지).
+  // 표시명/이름만으로는 절대 자동 연결하지 않음 — 흔한 LINE 닉·동명이인으로
+  // 타인 phone/birth가 노출되는 사고 방지. 기존 CRM 병합은 포털의
+  // 전화+생년월일 확인(linkLineMemberToPhoneBirth)으로만 한다.
   const phoneForLookup = normalizePhone(input.phone || '')
   if (phoneForLookup) {
     const byPhoneId = await findActiveMemberIdByPhoneLookup(phoneForLookup)
@@ -1115,54 +1118,6 @@ export async function registerLineMember(input: {
       const rows = (await supabaseSelectFilter('members', `id=eq.${byPhoneId}`, { limit: 1 })) as MemberRow[]
       const lineMap = await getLineIdentities([byPhoneId])
       return toMemberSummary(rows[0], lineMap.get(byPhoneId))
-    }
-  }
-
-  if (displayName) {
-    // LINE display name 우선, 그다음 name. 동명이인/흔한 이름 오연결 방지: 미연결 후보가 1명일 때만.
-    const byLineDisplay = (await supabaseSelectFilter(
-      'members',
-      `line_display_name=eq.${encodeURIComponent(displayName)}&status=eq.active`,
-      { order: 'id.asc', limit: 5 }
-    )) as MemberRow[]
-    const byName =
-      byLineDisplay.length > 0
-        ? []
-        : ((await supabaseSelectFilter(
-            'members',
-            `name=eq.${encodeURIComponent(displayName)}&status=eq.active`,
-            { order: 'id.asc', limit: 5 }
-          )) as MemberRow[])
-    const crmMatches = [...(byLineDisplay || []), ...(byName || [])]
-    const unlinked: MemberRow[] = []
-    for (const row of crmMatches) {
-      const memberId = Number(row.id || 0)
-      if (!memberId) continue
-      const linked = (await supabaseSelectFilter(
-        'member_identities',
-        `member_id=eq.${memberId}&provider=eq.line`,
-        { limit: 1 }
-      )) as MemberIdentityRow[]
-      if (linked?.length) continue
-      unlinked.push(row)
-    }
-    if (unlinked.length === 1) {
-      const memberId = Number(unlinked[0]!.id || 0)
-      const now = getBangkokDateTimeString()
-      await ensureLineIdentity({
-        memberId,
-        lineUserId,
-        lineDisplayName: displayName,
-        linePictureUrl: toText(input.pictureUrl),
-      })
-      await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
-        join_channel: 'line',
-        line_display_name: displayName,
-        updated_at: now,
-      })
-      const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
-      const lineMap = await getLineIdentities([memberId])
-      return toMemberSummary(rows[0], lineMap.get(memberId))
     }
   }
 

@@ -3,6 +3,7 @@ import {
   buildPaymentReceiptMemberFooterHtml,
   formatMemberTierForReceipt,
   maskMemberPhoneForReceipt,
+  memberReceiptFieldsFromMemberRow,
   pickMemberReceiptFieldsFromApi,
 } from '@/lib/pos-receipt-member-block'
 
@@ -65,5 +66,17 @@ describe('pos-receipt-member-block', () => {
     expect(html).toContain('ข้อมูลสมาชิก')
     expect(html).toContain('รหัสสมาชิก')
     expect(html).toContain('เช็คสิทธิพิเศษที่นี่')
+  })
+
+  it('subtracts this-bill earn from member balance for receipt', () => {
+    const fields = memberReceiptFieldsFromMemberRow(
+      { id: 1, memberNo: 'M012848', tierCode: 'BRONZE', pointBalance: 43.3 },
+      1.3
+    )
+    expect(fields).toMatchObject({
+      memberNo: 'M012848',
+      memberPointEarned: 1.3,
+      memberPointBalance: 42,
+    })
   })
 })

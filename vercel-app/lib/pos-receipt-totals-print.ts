@@ -226,7 +226,7 @@ export function buildPosReceiptTotalsLabels(params: {
   const vatWithRate = appendPosReceiptFeeRateLabel(vatBase, vatRate)
   const vatLabel =
     vatFeeMode === 'included'
-      ? `${vatWithRate}${tr('posVatIncludedInTotalReceiptHint', ' (VAT incl. in total)')}`
+      ? `${vatWithRate}${tr('posVatIncludedInTotalReceiptHint', ' (VAT included)')}`
       : vatWithRate
   const roundingLabel = tr('posReceiptRounding', 'Rounding')
   const totalRaw = tr('posTotal', 'TOTAL')

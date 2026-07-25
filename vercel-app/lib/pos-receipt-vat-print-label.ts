@@ -13,7 +13,7 @@ export function buildPosReceiptVatPrintLabelEscaped(params: {
   const base = appendPosReceiptFeeRateLabel(tr('posVatReceiptShortLabel', 'VAT'), vatRate)
   const label =
     vatFeeMode === 'included'
-      ? `${base}${tr('posVatIncludedInTotalReceiptHint', ' (VAT incl. in total)')}`
+      ? `${base}${tr('posVatIncludedInTotalReceiptHint', ' (VAT included)')}`
       : base
   return esc(label)
 }

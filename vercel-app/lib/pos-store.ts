@@ -44,6 +44,7 @@ import {
   shouldKeepPrevOrderMissingFromFetched,
 } from '@/lib/pos-order-local-reconcile'
 import { isPosOfflineOnlyOrder } from '@/lib/pos-order-server-id'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
 const GRID_SIZE = 24
@@ -267,8 +268,8 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     appliedCoupons: Array.isArray((po as { appliedCoupons?: unknown }).appliedCoupons)
       ? ((po as { appliedCoupons: PosAppliedCouponLine[] }).appliedCoupons)
       : undefined,
-    pointUsed: Math.max(0, Math.trunc(Number(po.pointUsed ?? 0) || 0)) || undefined,
-    pointEarned: Math.max(0, Math.trunc(Number(po.pointEarned ?? 0) || 0)) || undefined,
+    pointUsed: roundMemberPointsEarn(po.pointUsed) || undefined,
+    pointEarned: roundMemberPointsEarn(po.pointEarned) || undefined,
   }
 }
 
