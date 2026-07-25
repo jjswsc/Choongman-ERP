@@ -26,14 +26,31 @@ export function hasUnclosedClockWorkSession(logs: AttendanceLogLite[] | null | u
   return maxIn > maxOut
 }
 
-/** 미종료 휴식이면 최신 휴식시작 시각(ms), 없으면 null */
+/**
+ * 미종료 휴식이면 최신 휴식시작 시각(ms), 없으면 null.
+ * 퇴근으로 닫힌 이전 근무의 고아 휴식시작은 무시하고,
+ * 현재 미종료 출근 세션(최신 출근 이후)의 휴식만 본다.
+ * getTodayAttendanceTypes · submitAttendance 가드가 동일 함수를 써야 버튼/저장이 어긋나지 않음.
+ */
 export function getOpenBreakStartMs(logs: AttendanceLogLite[] | null | undefined): number | null {
+  let maxIn = 0
+  let maxOut = 0
+  for (const r of logs || []) {
+    const t = String(r.log_type || '').trim()
+    const tm = r.log_at ? new Date(r.log_at).getTime() : NaN
+    if (!Number.isFinite(tm)) continue
+    if (t === '출근') maxIn = Math.max(maxIn, tm)
+    else if (t === '퇴근') maxOut = Math.max(maxOut, tm)
+  }
+  // 미종료 근무가 없으면 휴식 중일 수 없음
+  if (maxIn <= maxOut) return null
+
   let maxBs = 0
   let maxBe = 0
   for (const r of logs || []) {
     const t = String(r.log_type || '').trim()
     const tm = r.log_at ? new Date(r.log_at).getTime() : NaN
-    if (!Number.isFinite(tm)) continue
+    if (!Number.isFinite(tm) || tm < maxIn) continue
     if (t === '휴식시작') maxBs = Math.max(maxBs, tm)
     else if (t === '휴식종료') maxBe = Math.max(maxBe, tm)
   }

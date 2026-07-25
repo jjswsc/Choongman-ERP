@@ -250,15 +250,8 @@ export async function POST(request: NextRequest) {
           )
         }
         if (logType === '휴식시작' || logType === '휴식종료') {
-          const sessionLogs = (logs || []).filter((r) => {
-            const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
-            return validDates.includes(rowDate)
-          })
-          const latestBoundary = sessionLogs.find((r) => {
-            const t = String(r.log_type || '').trim()
-            return t === '출근' || t === '퇴근'
-          })
-          if (String(latestBoundary?.log_type || '').trim() !== '출근') {
+          // 버튼 상태(getTodayAttendanceTypes)와 동일: 미종료 근무 + getOpenBreakStartMs
+          if (!hasUnclosedClockWorkSession(logs)) {
             return NextResponse.json(
               {
                 success: false,
@@ -267,11 +260,7 @@ export async function POST(request: NextRequest) {
               { headers }
             )
           }
-          const latestBreakEvent = sessionLogs.find((r) => {
-            const t = String(r.log_type || '').trim()
-            return t === '휴식시작' || t === '휴식종료'
-          })
-          const isOnBreak = String(latestBreakEvent?.log_type || '').trim() === '휴식시작'
+          const isOnBreak = getOpenBreakStartMs(logs) != null
           if (logType === '휴식시작' && isOnBreak) {
             return NextResponse.json(
               {
