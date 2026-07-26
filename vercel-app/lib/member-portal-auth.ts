@@ -621,10 +621,16 @@ export async function linkLineMemberToPhoneBirth(params: {
   if (!phone) throw new LinkLinePhoneBirthError('missing_phone', '전화번호를 입력해 주세요.')
   if (!birthDate) throw new LinkLinePhoneBirthError('missing_birth', '생년월일을 입력해 주세요.')
 
-  const lineMember = await getMemberSummaryById(lineMemberId)
+  let lineMember = await getMemberSummaryById(lineMemberId)
   if (!lineMember) throw new LinkLinePhoneBirthError('not_found', '회원 정보를 찾을 수 없습니다.')
+  // LINE 전용 셸(전화/생일 미연결)이 LINE 리셋 등으로 inactive여도, 기존 매장 회원과
+  // 병합할 수 있게 복구한다. 전화·생일이 이미 있는 정지 계정은 그대로 차단.
   if (toText(lineMember.status) === 'inactive') {
-    throw new LinkLinePhoneBirthError('inactive', '비활성화된 회원입니다.')
+    const isUnlinkedShell = !toText(lineMember.phone) || !toText(lineMember.birthDate)
+    if (!isUnlinkedShell) {
+      throw new LinkLinePhoneBirthError('inactive', '비활성화된 회원입니다.')
+    }
+    lineMember = await updateMember({ id: lineMemberId, status: 'active' })
   }
   if (!toText(lineMember.lineUserId)) {
     throw new LinkLinePhoneBirthError('no_line_identity', 'LINE 계정 연결이 없습니다.')

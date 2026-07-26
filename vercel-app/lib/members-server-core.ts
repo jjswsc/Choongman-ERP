@@ -1071,6 +1071,9 @@ export async function registerLineMember(input: {
 
     const now = getBangkokDateTimeString()
     const patch: Record<string, unknown> = {
+      // LINE 재로그인 시 identity만 active로 두고 members는 inactive로 남는 경우
+      // (LINE 목록 리셋 등) → 전화+생일 연결이 "ถูกระงับ"으로 실패함. 재로그인 시 복구.
+      status: 'active',
       updated_at: now,
     }
     if (toText(input.phone)) patch.phone = normalizePhone(input.phone || '') || null
