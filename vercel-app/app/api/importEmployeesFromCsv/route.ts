@@ -20,6 +20,11 @@ import {
   resolveHrImportTenantScope,
   stampEmployeeRowsForTenant,
 } from '@/lib/hr-tenant-import'
+import { assertSaasStaffRegistrationAllowed } from '@/lib/saas/saas-staff-limit-server'
+import {
+  assertSaasManagerRegistrationAllowed,
+  roleCountsAsManagerSeat,
+} from '@/lib/saas/saas-manager-limit-server'
 
 /** RFC 4180: 따옴표 안의 줄바꿈, "" 처리 */
 function parseCsv(text: string): string[][] {
@@ -242,6 +247,32 @@ export async function POST(request: NextRequest) {
       empMap.set(key, e)
     }
     const uniqueEmps = stampEmployeeRowsForTenant(Array.from(empMap.values()), scope)
+
+    if (scope.enforce) {
+      const staffLimit = await assertSaasStaffRegistrationAllowed({
+        tenantId: scope.tenantId,
+        proposedTotalAfterReplace: uniqueEmps.length,
+      })
+      if (!staffLimit.ok) {
+        return NextResponse.json(
+          { success: false, code: staffLimit.code, message: staffLimit.message },
+          { status: 403, headers }
+        )
+      }
+      const mgrTotal = uniqueEmps.filter((e) =>
+        roleCountsAsManagerSeat(String(e.role || ''))
+      ).length
+      const mgrLimit = await assertSaasManagerRegistrationAllowed({
+        tenantId: scope.tenantId,
+        proposedManagerTotalAfterReplace: mgrTotal,
+      })
+      if (!mgrLimit.ok) {
+        return NextResponse.json(
+          { success: false, code: mgrLimit.code, message: mgrLimit.message },
+          { status: 403, headers }
+        )
+      }
+    }
 
     // Omni: 해당 테넌트만 삭제. 충만: 기존처럼 전체 교체.
     const existing = scope.enforce

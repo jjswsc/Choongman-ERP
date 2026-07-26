@@ -318,13 +318,16 @@ export async function POST(req: NextRequest) {
         support_tier: normalizeSupport(tenant.policy.supportTier),
         require_2fa_admin: tenant.policy.require2faAdmin,
         require_ip_allowlist: tenant.policy.requireIpAllowlist,
+        allowed_ips: Array.isArray(tenant.policy.allowedIps)
+          ? tenant.policy.allowedIps.map((x) => String(x || "").trim()).filter(Boolean)
+          : [],
         force_weekly_backup: tenant.policy.forceWeeklyBackup,
         data_retention_days: Math.max(30, Math.floor(Number(tenant.policy.dataRetentionDays || 365))),
         timezone: tenant.timezone || "Asia/Bangkok",
         updated_at: nowIso,
       })
     } catch (policyError) {
-      // 구 스키마 호환: sales_stage 컬럼이 아직 없으면 기존 컬럼만 저장
+      // 구 스키마 호환: sales_stage / allowed_ips 컬럼이 아직 없으면 기존 컬럼만 저장
       await supabaseUpsertMerge("tenant_policy_settings", "tenant_id", {
         tenant_id: tenantId,
         support_tier: normalizeSupport(tenant.policy.supportTier),
@@ -335,7 +338,7 @@ export async function POST(req: NextRequest) {
         timezone: tenant.timezone || "Asia/Bangkok",
         updated_at: nowIso,
       })
-      console.warn("saveSaasTenantSettings: sales_stage column not ready, fallback used", policyError)
+      console.warn("saveSaasTenantSettings: policy column not ready, fallback used", policyError)
     }
 
     const stagedFeatures = applySalesStageFeatures(tenant.features, salesStage)

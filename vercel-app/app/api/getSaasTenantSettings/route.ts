@@ -106,6 +106,7 @@ type TenantPolicyRow = {
   support_tier?: "standard" | "priority" | "dedicated" | null
   require_2fa_admin?: boolean | null
   require_ip_allowlist?: boolean | null
+  allowed_ips?: unknown
   force_weekly_backup?: boolean | null
   data_retention_days?: number | null
 }
@@ -484,6 +485,9 @@ export async function GET(req: NextRequest) {
         allowOverage: policyLimit?.allow_overage ?? DEFAULT_POLICY.allowOverage,
         require2faAdmin: policyRow?.require_2fa_admin ?? DEFAULT_POLICY.require2faAdmin,
         requireIpAllowlist: policyRow?.require_ip_allowlist ?? DEFAULT_POLICY.requireIpAllowlist,
+        allowedIps: Array.isArray(policyRow?.allowed_ips)
+          ? (policyRow!.allowed_ips as unknown[]).map((x) => String(x || "").trim()).filter(Boolean)
+          : DEFAULT_POLICY.allowedIps,
         forceWeeklyBackup: policyRow?.force_weekly_backup ?? DEFAULT_POLICY.forceWeeklyBackup,
         dataRetentionDays: policyRow?.data_retention_days ?? DEFAULT_POLICY.dataRetentionDays,
         overdueGraceDays: sub?.overdue_grace_days ?? DEFAULT_POLICY.overdueGraceDays,

@@ -13,6 +13,11 @@ import {
 } from "@/lib/saas-control-plane-scope"
 import { isSaasPlatformInternalTenantId } from "@/lib/saas-platform-internal-tenant"
 import { hashPassword } from "@/lib/password"
+import { assertSaasStaffRegistrationAllowed } from "@/lib/saas/saas-staff-limit-server"
+import {
+  assertSaasManagerRegistrationAllowed,
+  roleCountsAsManagerSeat,
+} from "@/lib/saas/saas-manager-limit-server"
 import {
   supabaseInsert,
   supabaseSelect,
@@ -337,6 +342,22 @@ export async function PATCH(req: NextRequest) {
           { status: 403, headers }
         )
       }
+      if (
+        prevTenantId &&
+        roleCountsAsManagerSeat(role) &&
+        !roleCountsAsManagerSeat(prevRole)
+      ) {
+        const mgrLimit = await assertSaasManagerRegistrationAllowed({
+          tenantId: prevTenantId,
+          addingManagerSeats: 1,
+        })
+        if (!mgrLimit.ok) {
+          return NextResponse.json(
+            { success: false, code: mgrLimit.code, message: mgrLimit.message },
+            { status: 403, headers }
+          )
+        }
+      }
       patch.role = role
     }
     if (hasJob) {
@@ -456,6 +477,29 @@ export async function POST(req: NextRequest) {
     )) as { id?: number }[]
     if ((dup || []).length > 0) {
       return NextResponse.json({ success: false, message: "같은 매장·이름의 계정이 이미 존재합니다." }, { status: 409, headers })
+    }
+
+    const staffLimit = await assertSaasStaffRegistrationAllowed({
+      tenantId,
+      addingCount: 1,
+    })
+    if (!staffLimit.ok) {
+      return NextResponse.json(
+        { success: false, code: staffLimit.code, message: staffLimit.message },
+        { status: 403, headers }
+      )
+    }
+    if (roleCountsAsManagerSeat(role)) {
+      const mgrLimit = await assertSaasManagerRegistrationAllowed({
+        tenantId,
+        addingManagerSeats: 1,
+      })
+      if (!mgrLimit.ok) {
+        return NextResponse.json(
+          { success: false, code: mgrLimit.code, message: mgrLimit.message },
+          { status: 403, headers }
+        )
+      }
     }
 
     const password = await hashPassword(rawPassword)

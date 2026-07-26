@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
+import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 
 /**
  * 메인(프론트) 포스 해제.
@@ -8,8 +9,7 @@ import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
  * - deviceToken 있음: 해당 기기만 주문 단말로
  */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     const body = await req.json().catch(() => ({}))
@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
     }
+
+    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!authGate.ok) return authGate.response
 
     if (deviceToken) {
       await supabaseUpdateByFilter(

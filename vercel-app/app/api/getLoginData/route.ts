@@ -23,6 +23,7 @@ import { isServerSaasBrand } from '@/lib/app-brand-server'
 import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
 import { normalizeCompanyName, normalizeTenantId } from '@/lib/tenant-context'
 import { dedupeLoginUsersByDisplayLabel } from '@/lib/store-list-keys'
+import { simpleRateLimit } from '@/lib/simple-rate-limit'
 
 type LoginDataPayload = {
   users: Record<string, string[]>
@@ -37,6 +38,19 @@ type LoginDataPayload = {
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 const EDGE_CACHE_SEC = 300
+/** SaaS: IP당 분당 요청 (회사명 스캔·직원목록 남용 완화) */
+const SAAS_LOGIN_DATA_RATE_MAX = 30
+const SAAS_LOGIN_DATA_RATE_WINDOW_MS = 60_000
+
+function clientIpFromRequest(req: NextRequest): string {
+  const fwd = String(req.headers.get('x-forwarded-for') || '')
+    .split(',')[0]
+    ?.trim()
+  if (fwd) return fwd
+  const real = String(req.headers.get('x-real-ip') || '').trim()
+  if (real) return real
+  return 'unknown'
+}
 
 function emptyPayload(error?: string): LoginDataPayload {
   return {
@@ -225,6 +239,17 @@ export async function GET(req: NextRequest) {
   const saas = await isServerSaasBrand()
   const companyQ = normalizeCompanyName(req.nextUrl.searchParams.get('company'))
   const tenantQ = normalizeTenantId(req.nextUrl.searchParams.get('tenantId'))
+
+  if (saas) {
+    const ip = clientIpFromRequest(req)
+    const rl = simpleRateLimit(`getLoginData:${ip}`, SAAS_LOGIN_DATA_RATE_MAX, SAAS_LOGIN_DATA_RATE_WINDOW_MS)
+    if (!rl.ok) {
+      const h = corsHeaders()
+      h.set('Cache-Control', 'no-store')
+      h.set('Retry-After', String(Math.max(1, Math.ceil(rl.retryAfterMs / 1000))))
+      return NextResponse.json(emptyPayload('rate_limited'), { status: 429, headers: h })
+    }
+  }
 
   let scopeTenantId = ''
   let scopeCompany = ''

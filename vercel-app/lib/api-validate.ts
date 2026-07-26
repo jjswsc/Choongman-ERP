@@ -52,6 +52,7 @@ export const loginSchema = z.object({
   name: z.string().trim().min(1, '이름을 선택해 주세요.'),
   pw: z.string().min(1, '비밀번호를 입력해 주세요.'),
   isAdminPage: z.boolean().optional().default(true),
+  totpCode: z.string().trim().optional(),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>

@@ -15,10 +15,12 @@ export type TenantPosDeviceLimit = {
 
 export type SaasPosDeviceLimitCheck =
   | { ok: true }
-  | { ok: false; code: "saas_pos_device_limit"; message: string }
+  | { ok: false; code: "saas_pos_device_limit" | "saas_pos_device_limit_unavailable"; message: string }
 
 const POS_DEVICE_LIMIT_MESSAGE =
   "SaaS POS device limit reached. Contact your administrator to increase licensed terminals."
+const POS_DEVICE_LIMIT_UNAVAILABLE_MESSAGE =
+  "Unable to verify SaaS POS device limit. Try again or contact support."
 
 /** 순수 판정 — unit test용 */
 export function evaluateSaasPosDeviceRegistrationBlock(params: {
@@ -27,8 +29,17 @@ export function evaluateSaasPosDeviceRegistrationBlock(params: {
   allowOverage: boolean
   used: number
   maxPosDevices: number
+  /** true면 한도/사용량 조회 실패 — 신규 단말 차단 */
+  limitsUnavailable?: boolean
 }): SaasPosDeviceLimitCheck {
   if (!params.enforce || !params.isNewDeviceForTenant) return { ok: true }
+  if (params.limitsUnavailable) {
+    return {
+      ok: false,
+      code: "saas_pos_device_limit_unavailable",
+      message: POS_DEVICE_LIMIT_UNAVAILABLE_MESSAGE,
+    }
+  }
   if (params.allowOverage) return { ok: true }
   if (params.used >= Math.max(0, Math.floor(params.maxPosDevices))) {
     return { ok: false, code: "saas_pos_device_limit", message: POS_DEVICE_LIMIT_MESSAGE }
@@ -57,8 +68,8 @@ export async function loadTenantPosDeviceLimit(tenantId: string): Promise<Tenant
   }
 }
 
-/** 테넌트 소속 매장 pos_connected_devices 기준 고유 device_token 수 */
-export async function countTenantConnectedPosDevices(tenantId: string): Promise<number> {
+/** 테넌트 소속 매장 pos_connected_devices 기준 고유 device_token 수. 조회 실패 시 null */
+export async function countTenantConnectedPosDevices(tenantId: string): Promise<number | null> {
   const id = String(tenantId || "").trim()
   if (!id) return 0
   try {
@@ -84,7 +95,7 @@ export async function countTenantConnectedPosDevices(tenantId: string): Promise<
     return tokens.size
   } catch (e) {
     console.warn("countTenantConnectedPosDevices:", id, e)
-    return 0
+    return null
   }
 }
 
@@ -93,7 +104,7 @@ export async function countTenantConnectedPosDevices(tenantId: string): Promise<
  * - tenantId 없음 → 허용
  * - 동일 store+token 재등록(heartbeat) → 허용
  * - allowOverage → 허용
- * - 한도 조회 실패 → fail-open(허용) + warn
+ * - 한도/사용량 조회 실패 → fail-closed(거부)
  */
 export async function assertSaasPosDeviceRegistrationAllowed(params: {
   storeCode: string
@@ -111,9 +122,29 @@ export async function assertSaasPosDeviceRegistrationAllowed(params: {
   if (params.isNewDeviceForTenant === false) return { ok: true }
 
   const limits = await loadTenantPosDeviceLimit(tenantId!)
-  if (!limits) return { ok: true }
+  if (!limits) {
+    return evaluateSaasPosDeviceRegistrationBlock({
+      enforce: true,
+      isNewDeviceForTenant: true,
+      allowOverage: false,
+      used: 0,
+      maxPosDevices: 0,
+      limitsUnavailable: true,
+    })
+  }
 
   const used = await countTenantConnectedPosDevices(tenantId!)
+  if (used == null) {
+    return evaluateSaasPosDeviceRegistrationBlock({
+      enforce: true,
+      isNewDeviceForTenant: true,
+      allowOverage: limits.allowOverage,
+      used: 0,
+      maxPosDevices: limits.maxPosDevices,
+      limitsUnavailable: true,
+    })
+  }
+
   return evaluateSaasPosDeviceRegistrationBlock({
     enforce: true,
     isNewDeviceForTenant: true,

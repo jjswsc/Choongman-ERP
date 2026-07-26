@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
+import { getLoginData, loginCheck, changePassword, saasAdminTotpBootstrap } from "@/lib/api-client"
 import { seedSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { isLoginExcludedStoreKey } from "@/lib/pos-sales-test-office"
 import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
@@ -76,6 +76,15 @@ const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
   msg_login_submit_network_title: "Login could not be verified",
   msg_login_submit_network_soft:
     "The login request did not complete. Check the connection and try again. If the store list loaded above, the server is reachable — a retry often works.",
+  msg_login_2fa_enroll_required:
+    "Admin 2FA setup is required (Omni). Scan the QR/secret below, enter the 6-digit code, then confirm.",
+  msg_login_2fa_invalid: "Invalid 2FA code. Try again.",
+  msg_login_2fa_unavailable: "2FA is required but could not be verified. Contact support.",
+  msg_login_ip_blocked: "This IP is not allowed for this company (Omni).",
+  msg_login_policy_unavailable: "Login security policy is temporarily unavailable. Try again shortly.",
+  msg_login_2fa_placeholder: "2FA code (6 digits)",
+  msg_login_2fa_confirm_enroll: "Confirm 2FA & continue",
+  msg_login_2fa_secret_label: "Authenticator secret",
 }
 
 /** 번역 DB 없을 때 한국어 보조 (pickLoginStr이 영어만 있을 때 ko 사용자용) */
@@ -86,6 +95,15 @@ const LOGIN_I18N_FALLBACK_KO: Partial<Record<string, string>> = {
   msg_login_submit_network_title: "로그인을 확인할 수 없습니다",
   msg_login_submit_network_soft:
     "로그인 확인 요청이 완료되지 않았습니다. 연결을 확인한 뒤 다시 시도해 주세요. 위에서 매장 목록이 보였다면 서버는 닿는 경우가 많아 재시도로 해결됩니다.",
+  msg_login_2fa_enroll_required:
+    "관리자 2FA 등록이 필요합니다(Omni). 아래 시크릿을 Authenticator에 등록한 뒤 6자리 코드를 입력하고 확인하세요.",
+  msg_login_2fa_invalid: "2FA 인증번호가 올바르지 않습니다.",
+  msg_login_2fa_unavailable: "2FA가 필수인데 확인할 수 없습니다. 지원팀에 문의하세요.",
+  msg_login_ip_blocked: "이 회사(Omni)에서 허용되지 않은 IP입니다.",
+  msg_login_policy_unavailable: "로그인 보안 정책을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  msg_login_2fa_placeholder: "2FA 코드 (6자리)",
+  msg_login_2fa_confirm_enroll: "2FA 확인 후 계속",
+  msg_login_2fa_secret_label: "Authenticator 시크릿",
 }
 
 function pickLoginStr(tMsg: (k: string) => string, key: string, lang?: string): string {
@@ -227,6 +245,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [store, setStore] = useState("")
   const [user, setUser] = useState("")
   const [pw, setPw] = useState("")
+  /** Omni 관리자 2FA — 충만 UI에는 미표시 */
+  const [totpCode, setTotpCode] = useState("")
+  const [totpEnrollSecret, setTotpEnrollSecret] = useState("")
+  const [totpEnrollUrl, setTotpEnrollUrl] = useState("")
+  const [needsTotp, setNeedsTotp] = useState(false)
+  const [needsTotpEnroll, setNeedsTotpEnroll] = useState(false)
   const [loading, setLoading] = useState(() => {
     if (typeof window === "undefined") return true
     return !isSaasAdminLoginPathFromBrowser()
@@ -816,8 +840,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         name: effectiveUser,
         pw,
         isAdminPage: effectiveIsAdminPage,
+        ...(isOmniBrand && effectiveIsAdminPage && totpCode.trim()
+          ? { totpCode: totpCode.trim() }
+          : {}),
       })
       if (res.success && res.storeName && res.userName) {
+        setNeedsTotp(false)
+        setNeedsTotpEnroll(false)
+        setTotpEnrollSecret("")
+        setTotpEnrollUrl("")
         saveLoginLastSelection({
           company: res.companyName || company || undefined,
           store: res.storeName,
@@ -850,7 +881,46 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         replacePosOfflineAware(postLoginPath, (p) => router.replace(p))
       } else {
         const apiMsg = res.message || ""
-        if (isLoginCheckBackendFailureMessage(apiMsg)) {
+        const code = String(res.code || "")
+        if (isOmniBrand && code === "2fa_enrollment_required") {
+          setNeedsTotpEnroll(true)
+          setNeedsTotp(true)
+          setErrorIsConnectivity(false)
+          setLoginErrorFromClientFetch(false)
+          setError(pickLoginStr(tMsg, "msg_login_2fa_enroll_required", lang))
+          try {
+            const enroll = await saasAdminTotpBootstrap({
+              action: "bootstrap_enroll",
+              company: effectiveCompany || company || undefined,
+              store: effectiveStore,
+              name: effectiveUser,
+              pw,
+            })
+            if (enroll.success && enroll.secret) {
+              setTotpEnrollSecret(enroll.secret)
+              setTotpEnrollUrl(enroll.otpauthUrl || "")
+            }
+          } catch {
+            /* 등록 API 실패해도 안내 문구는 유지 */
+          }
+        } else if (isOmniBrand && (code === "2fa_invalid" || code === "saas_2fa_unavailable")) {
+          setNeedsTotp(true)
+          setErrorIsConnectivity(false)
+          setLoginErrorFromClientFetch(false)
+          setError(
+            code === "saas_2fa_unavailable"
+              ? pickLoginStr(tMsg, "msg_login_2fa_unavailable", lang)
+              : pickLoginStr(tMsg, "msg_login_2fa_invalid", lang)
+          )
+        } else if (isOmniBrand && (code === "ip_not_allowed" || code === "ip_allowlist_empty")) {
+          setErrorIsConnectivity(false)
+          setLoginErrorFromClientFetch(false)
+          setError(pickLoginStr(tMsg, "msg_login_ip_blocked", lang))
+        } else if (isOmniBrand && code === "saas_login_policy_unavailable") {
+          setErrorIsConnectivity(false)
+          setLoginErrorFromClientFetch(false)
+          setError(pickLoginStr(tMsg, "msg_login_policy_unavailable", lang))
+        } else if (isLoginCheckBackendFailureMessage(apiMsg)) {
           /** 응답 본문이 왔으므로 TCP/브라우저 단절이 아님 — 서버·DB·토큰 처리 등일 수 있음(연결 재시도 안내는 오해 소지) */
           setErrorIsConnectivity(false)
           setLoginErrorFromClientFetch(false)
@@ -1610,6 +1680,119 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               aria-label="Password"
               data-testid="login-password"
             />
+
+            {isOmniBrand && effectiveIsAdminPage ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder={pickLoginStr(tMsg, "msg_login_2fa_placeholder", lang)}
+                  className="login-input-field"
+                  aria-label="TOTP"
+                  data-testid="login-totp"
+                />
+                {needsTotpEnroll && totpEnrollSecret ? (
+                  <div className="rounded-lg border border-sky-500/40 bg-sky-950/40 px-3 py-2 text-left text-xs text-sky-100/95">
+                    <p className="font-medium">{pickLoginStr(tMsg, "msg_login_2fa_secret_label", lang)}</p>
+                    <p className="mt-1 break-all font-mono text-[11px] text-sky-50">{totpEnrollSecret}</p>
+                    {totpEnrollUrl ? (
+                      <p className="mt-1 break-all text-[10px] text-sky-200/80">{totpEnrollUrl}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="mt-2 w-full rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500"
+                      disabled={submitting || totpCode.trim().length !== 6}
+                      onClick={async () => {
+                        setSubmitting(true)
+                        clearFormError()
+                        try {
+                          const conf = await saasAdminTotpBootstrap({
+                            action: "bootstrap_confirm",
+                            company: company.trim() || undefined,
+                            store: hideSaasPartnerStoreField
+                              ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
+                              : store.trim(),
+                            name: user.trim(),
+                            pw,
+                            totpCode: totpCode.trim(),
+                          })
+                          if (!conf.success) {
+                            setError(
+                              conf.message || pickLoginStr(tMsg, "msg_login_2fa_invalid", lang)
+                            )
+                            return
+                          }
+                          setNeedsTotpEnroll(false)
+                          const res = await loginCheck({
+                            company: company.trim() || undefined,
+                            store: hideSaasPartnerStoreField
+                              ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
+                              : store.trim(),
+                            name: user.trim(),
+                            pw,
+                            isAdminPage: effectiveIsAdminPage,
+                            totpCode: totpCode.trim(),
+                          })
+                          if (res.success && res.storeName && res.userName) {
+                            setNeedsTotp(false)
+                            saveLoginLastSelection({
+                              company: res.companyName || company || undefined,
+                              store: res.storeName,
+                              user: res.userName,
+                            })
+                            const nextTenantId =
+                              res.tenantId && !res.saasPartnerLogin
+                                ? String(res.tenantId).trim()
+                                : ""
+                            if (res.enabledModules) {
+                              seedSaasEnabledModules(res.enabledModules, nextTenantId || null)
+                            } else {
+                              seedSaasEnabledModules(null, nextTenantId || null)
+                            }
+                            setAuth({
+                              ...(res.companyName ? { company: res.companyName } : {}),
+                              ...(nextTenantId ? { tenantId: nextTenantId } : {}),
+                              store: res.storeName,
+                              user: res.userName,
+                              role: res.role || "",
+                              token: res.token,
+                              ...(res.employeeId != null && res.employeeId > 0
+                                ? { employeeId: res.employeeId }
+                                : {}),
+                              ...(res.employeeCode
+                                ? { employeeCode: String(res.employeeCode).trim() }
+                                : {}),
+                              ...(Array.isArray(res.allowedStores) && res.allowedStores.length > 0
+                                ? { allowedStores: res.allowedStores }
+                                : {}),
+                              ...(res.canManageOfficePayroll
+                                ? { canManageOfficePayroll: true }
+                                : {}),
+                            })
+                            const postLoginPath =
+                              res.saasPartnerLogin && loginPath === "/admin/login"
+                                ? "/saas-admin"
+                                : effectiveRedirectTo
+                            replacePosOfflineAware(postLoginPath, (p) => router.replace(p))
+                          } else {
+                            setError(res.message || tMsg("msg_login_failed"))
+                          }
+                        } catch (e) {
+                          setError(e instanceof Error ? e.message : String(e))
+                        } finally {
+                          setSubmitting(false)
+                        }
+                      }}
+                    >
+                      {pickLoginStr(tMsg, "msg_login_2fa_confirm_enroll", lang)}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {error &&
               (canOfferOfflineResume ? (

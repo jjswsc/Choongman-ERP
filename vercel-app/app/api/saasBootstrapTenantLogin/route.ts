@@ -3,6 +3,7 @@ import { assertTenantInScope, requireSaasControlPlane } from "@/lib/saas-control
 import { hashPassword } from "@/lib/password"
 import { supabaseInsert, supabaseSelectFilter, supabaseCountFilter } from "@/lib/supabase-server"
 import { resolveErpStoreCodeForWrite } from "@/lib/pos-operating-store-code"
+import { assertSaasStoreRegistrationAllowed } from "@/lib/saas/saas-store-limit-server"
 
 type Body = {
   tenantId?: string
@@ -109,6 +110,31 @@ export async function POST(req: NextRequest) {
     }
 
     const storeCode = resolveBootstrapStoreCode(storeCodeInput, storeName, tenantId)
+
+    let storeAlreadyExists = false
+    try {
+      const existingStores = (await supabaseSelectFilter(
+        "erp_stores",
+        `tenant_id=eq.${encodeURIComponent(tenantId)}&store_code=eq.${encodeURIComponent(storeCode)}`,
+        { limit: 1, select: "id" }
+      )) as Array<{ id?: number }>
+      storeAlreadyExists = Boolean(existingStores?.[0]?.id)
+    } catch {
+      storeAlreadyExists = false
+    }
+
+    if (!storeAlreadyExists) {
+      const storeLimit = await assertSaasStoreRegistrationAllowed({
+        tenantId,
+        companyName,
+      })
+      if (!storeLimit.ok) {
+        return NextResponse.json(
+          { success: false, code: storeLimit.code, message: storeLimit.message },
+          { status: 403, headers }
+        )
+      }
+    }
 
     try {
       await supabaseInsert("erp_stores", {

@@ -18,6 +18,7 @@ import { invalidateErpStoresMasterCache } from "@/lib/erp-store-master"
 import { loadErpStoreRowsForTenant, tenantHasErpStoreName } from "@/lib/saas-tenant-stores-server"
 import { supabaseInsertWithPgrst204Fallback } from "@/lib/supabase-pgrst204-retry"
 import { resolveErpStoreCodeForWrite } from "@/lib/pos-operating-store-code"
+import { assertSaasStoreRegistrationAllowed } from "@/lib/saas/saas-store-limit-server"
 
 function bustStoreListCaches(): void {
   invalidateLoginDataCache()
@@ -364,6 +365,14 @@ export async function POST(req: NextRequest) {
           alreadyExists: true,
         },
         { headers }
+      )
+    }
+
+    const storeLimit = await assertSaasStoreRegistrationAllowed({ tenantId, companyName })
+    if (!storeLimit.ok) {
+      return NextResponse.json(
+        { success: false, code: storeLimit.code, message: storeLimit.message },
+        { status: 403, headers }
       )
     }
 

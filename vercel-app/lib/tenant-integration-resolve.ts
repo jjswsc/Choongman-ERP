@@ -59,6 +59,30 @@ export function kbankRuntimeFromProcessEnv(): KbankRuntimeEnv {
   }
 }
 
+/** Omni 테넌트용 — 플랫폼 env 비밀을 고객사에 섞지 않음 */
+export function emptyKbankRuntime(cacheKey = 'tenant-empty'): KbankRuntimeEnv {
+  return {
+    cacheKey,
+    consumerId: '',
+    consumerSecret: '',
+    partnerId: '',
+    partnerSecret: '',
+    merchantId: '',
+    openapiBaseUrl: '',
+    oauthBaseUrl: '',
+    proxySecret: '',
+    tokenScope: '',
+    tokenPath: '',
+    qrGeneratePath: '',
+    inquiryPath: '',
+    cancelPath: '',
+    voidPath: '',
+    settlementPath: '',
+    terminalId: '',
+    qrTypeThai: '',
+  }
+}
+
 export function mergeKbankTenantConfig(base: KbankRuntimeEnv, cfg: TenantKbankConfig, cacheKey: string): KbankRuntimeEnv {
   return {
     cacheKey,
@@ -92,7 +116,8 @@ function applyStoreKbankConfig(base: KbankRuntimeEnv, cfg: StoreKbankConfig): Kb
 export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<KbankRuntimeEnv> {
   const tenantId = String(scope?.tenantId || '').trim()
   const storeCode = String(scope?.storeCode || '').trim()
-  let runtime = kbankRuntimeFromProcessEnv()
+  const isolate = tenantId ? await shouldIsolateTenantIntegrationsFromEnv() : false
+  let runtime = isolate ? emptyKbankRuntime(`tenant:${tenantId}`) : kbankRuntimeFromProcessEnv()
 
   if (tenantId) {
     const tenantRow = await loadTenantIntegration(tenantId, 'kbank')
@@ -102,6 +127,9 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
         tenantRow.config as TenantKbankConfig,
         `tenant:${tenantId}`
       )
+    } else if (isolate) {
+      /** Omni: DB 자격 없으면 env 폴백 금지 */
+      return emptyKbankRuntime(`tenant:${tenantId}:missing`)
     }
   }
 
@@ -128,6 +156,20 @@ export function grabOAuthFromProcessEnv(): GrabOAuthCredentials {
     partnerApiBaseUrl: readEnv('GRAB_PARTNER_API_BASE_URL'),
     authBaseUrl: readEnv('GRAB_AUTH_BASE_URL'),
     requestTimeoutMs: Number(readEnv('GRAB_API_REQUEST_TIMEOUT_MS') || '') || undefined,
+    inboundOauthClientId: readEnv('GRAB_INBOUND_OAUTH_CLIENT_ID'),
+    inboundOauthClientSecret: readEnv('GRAB_INBOUND_OAUTH_CLIENT_SECRET'),
+  }
+}
+
+export function emptyGrabOAuthCredentials(cacheKey = 'tenant-empty'): GrabOAuthCredentials {
+  return {
+    cacheKey,
+    clientId: '',
+    clientSecret: '',
+    apiEnv: 'staging',
+    partnerApiBaseUrl: '',
+    authBaseUrl: '',
+    requestTimeoutMs: undefined,
   }
 }
 
@@ -146,24 +188,29 @@ function mergeGrabTenantConfig(
     partnerApiBaseUrl: pickStr(cfg.partnerApiBaseUrl, base.partnerApiBaseUrl),
     authBaseUrl: pickStr(cfg.authBaseUrl, base.authBaseUrl),
     requestTimeoutMs: cfg.requestTimeoutMs ?? base.requestTimeoutMs,
-    inboundOauthClientId: pickStr(cfg.inboundOauthClientId, readEnv('GRAB_INBOUND_OAUTH_CLIENT_ID')),
-    inboundOauthClientSecret: pickStr(cfg.inboundOauthClientSecret, readEnv('GRAB_INBOUND_OAUTH_CLIENT_SECRET')),
+    inboundOauthClientId: pickStr(cfg.inboundOauthClientId, base.inboundOauthClientId),
+    inboundOauthClientSecret: pickStr(cfg.inboundOauthClientSecret, base.inboundOauthClientSecret),
   }
 }
 
 export async function resolveGrabOAuthCredentials(scope?: IntegrationScope): Promise<GrabOAuthCredentials> {
   const tenantId = String(scope?.tenantId || '').trim()
-  const creds = grabOAuthFromProcessEnv()
-  if (!tenantId) return creds
+  const isolate = tenantId ? await shouldIsolateTenantIntegrationsFromEnv() : false
+  if (!tenantId) return grabOAuthFromProcessEnv()
   const tenantRow = await loadTenantIntegration(tenantId, 'grab')
-  if (!tenantRow) return creds
-  return mergeGrabTenantConfig(creds, tenantRow.config as TenantGrabConfig, `tenant:${tenantId}`)
+  if (!tenantRow) {
+    return isolate ? emptyGrabOAuthCredentials(`tenant:${tenantId}:missing`) : grabOAuthFromProcessEnv()
+  }
+  const base = isolate ? emptyGrabOAuthCredentials(`tenant:${tenantId}`) : grabOAuthFromProcessEnv()
+  return mergeGrabTenantConfig(base, tenantRow.config as TenantGrabConfig, `tenant:${tenantId}`)
 }
 
 /** env + DB tenant_store_integrations → Grab store map (동기 parseGrabStoreMap 대체·확장) */
 export async function resolveGrabStoreMap(scope?: IntegrationScope): Promise<Record<string, string>> {
   const tenantId = String(scope?.tenantId || '').trim()
-  const out = { ...parseGrabStoreMap() }
+  /** Omni: 플랫폼 GRAB_STORE_MAP_JSON 폴백 금지 — DB 매핑만 */
+  const isolate = tenantId ? await shouldIsolateTenantIntegrationsFromEnv() : false
+  const out: Record<string, string> = isolate ? {} : { ...parseGrabStoreMap() }
 
   if (!tenantId) return out
 
@@ -246,6 +293,11 @@ async function shouldResolveTenantIdForStoreCode(): Promise<boolean> {
   } catch {
     return isSaasBrand()
   }
+}
+
+/** Omni: 고객사 연동에 플랫폼 env 비밀 폴백 금지. 충만은 false. */
+async function shouldIsolateTenantIntegrationsFromEnv(): Promise<boolean> {
+  return shouldResolveTenantIdForStoreCode()
 }
 
 /**

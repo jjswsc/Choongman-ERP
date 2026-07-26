@@ -35,6 +35,11 @@ import {
   stampSaasTenantId,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import { assertSaasStaffRegistrationAllowed } from '@/lib/saas/saas-staff-limit-server'
+import {
+  assertSaasManagerRegistrationAllowed,
+  roleCountsAsManagerSeat,
+} from '@/lib/saas/saas-manager-limit-server'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
@@ -501,6 +506,28 @@ export async function POST(req: NextRequest) {
     const auditActor = actorFromJwt(auth, userName)
 
     if (rowId === 0) {
+      const staffLimit = await assertSaasStaffRegistrationAllowed({
+        tenantId: tenantScope.tenantId,
+        addingCount: 1,
+      })
+      if (!staffLimit.ok) {
+        return NextResponse.json(
+          { success: false, code: staffLimit.code, message: staffLimit.message },
+          { status: 403, headers }
+        )
+      }
+      if (roleCountsAsManagerSeat(requestedRole)) {
+        const mgrLimit = await assertSaasManagerRegistrationAllowed({
+          tenantId: tenantScope.tenantId,
+          addingManagerSeats: 1,
+        })
+        if (!mgrLimit.ok) {
+          return NextResponse.json(
+            { success: false, code: mgrLimit.code, message: mgrLimit.message },
+            { status: 403, headers }
+          )
+        }
+      }
       preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, null)
       payload.password = passwordValue || ''
       if (!codeRaw) {
@@ -634,6 +661,22 @@ export async function POST(req: NextRequest) {
         { success: false, message: '❌ 해당 직원을 찾을 수 없습니다.' },
         { status: 404, headers }
       )
+    }
+    const oldRoleForLimit = String(old.role || '').trim()
+    if (
+      roleCountsAsManagerSeat(requestedRole) &&
+      !roleCountsAsManagerSeat(oldRoleForLimit)
+    ) {
+      const mgrLimit = await assertSaasManagerRegistrationAllowed({
+        tenantId: tenantScope.tenantId,
+        addingManagerSeats: 1,
+      })
+      if (!mgrLimit.ok) {
+        return NextResponse.json(
+          { success: false, code: mgrLimit.code, message: mgrLimit.message },
+          { status: 403, headers }
+        )
+      }
     }
     preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, old)
     const oldStore = old ? String(old.store || '').trim() : ''

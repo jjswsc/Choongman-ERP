@@ -18,7 +18,9 @@ Vercel env는 **Omni 플랫폼 1세트**만 유지합니다. 고객·매장별 �
 | `tenant_integrations` | 고객사별 KBank OAuth / Grab OAuth |
 | `tenant_store_integrations` | 매장별 terminalId, Grab merchant 매핑 |
 
-DB 행이 없으면 기존 `process.env` 폴백(충만 단일 운영 호환).
+DB 행이 없으면:
+- **충만**: 기존 `process.env` 폴백
+- **Omni**: env 폴백 **금지** (고객사 간 자격 혼선 방지). `tenant_integrations`에 등록 필수.
 
 ## 환경 변수
 - `NEXT_PUBLIC_APP_BRAND`: `choongman` | `omnifoodtech`
@@ -43,7 +45,15 @@ DB 행이 없으면 기존 `process.env` 폴백(충만 단일 운영 호환).
 4. `tenants` 레코드 생성
 5. 초기 관리자 계정 생성(`employees.company`, `employees.tenant_id`)
 6. 매장/거래처/기초설정 데이터 시드
-7. 로그인 검증(회사/매장/사용자/비밀번호)
+7. (권장) `sql/omni_pos_anon_deny_rls.sql` + `sql/omni_saas_login_security.sql`
+8. 로그인 검증(회사/매장/사용자/비밀번호)
+9. 데이터 백업·인수: `GET /api/saasAdminTenantExport?tenantId=...&download=1`
+
+## SaaS 한도·보안 (런타임)
+- 직원/매니저/매장/POS단말/월주문/태블릿: API에서 fail-closed 검사
+- IP allowlist · admin 2FA: `tenant_policy_settings` + `employees.totp_*`
+- 연체 자동정지: `/api/cron/saas-auto-suspend` (Omni만)
+- **UI**: `/saas-admin`는 Omni 브랜드만. 충만 배포에서는 진입 차단. 로그인 2FA 입력란도 Omni `/admin/login`만.
 
 ## 전용 프로젝트 분기
 1. 전용 Supabase 프로젝트 생성

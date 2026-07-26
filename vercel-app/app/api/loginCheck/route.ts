@@ -23,6 +23,12 @@ import { isSaasPartnerLoginStore } from '@/lib/saas-partner-login-defaults'
 import { loadSaasEnabledModulesForAuth } from '@/lib/saas/tenant-module-gate'
 import { isServerSaasBrand } from '@/lib/app-brand-server'
 import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
+import { loadSaasLoginSecurityPolicy, loadEmployeeTotpSecret } from '@/lib/saas/saas-login-security-server'
+import {
+  clientIpFromHeaders,
+  ipMatchesAllowlist,
+  verifyTotpCode,
+} from '@/lib/saas/saas-login-security'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -34,7 +40,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const validated = parseOr400(loginSchema, { ...body, isAdminPage: body.isAdminPage !== false }, headers)
     if (validated.errorResponse) return validated.errorResponse
-    const { company, store, name, pw, isAdminPage } = validated.parsed
+    const { company, store, name, pw, isAdminPage, totpCode } = validated.parsed
     const companyInput = normalizeCompanyName(company)
     const saasBrand = await isServerSaasBrand()
     const partnerStoreHint = isSaasPartnerLoginStore(store)
@@ -104,7 +110,10 @@ export async function POST(req: NextRequest) {
       }
     }
     const storedPw = String(row.password || '').trim()
-    const ok = await verifyPassword(pw, storedPw)
+    const ok = await verifyPassword(pw, storedPw, {
+      /** Omni: 평문 저장 계정 로그인 거부. 충만만 레거시 평문 허용. */
+      allowLegacyPlaintext: !saasBrand,
+    })
     if (!ok) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
@@ -147,6 +156,89 @@ export async function POST(req: NextRequest) {
     const adminAllowed = new Set(['director', 'secretary', 'officer', 'ceo', 'hr', 'manager', 'franchisee', 'accounting', 'supervisor'])
     if (isAdminPage && !adminAllowed.has(finalRole)) {
       return NextResponse.json({ success: false, message: '관리자 권한이 없습니다.' }, { headers })
+    }
+
+    /**
+     * Omni: IP allowlist / admin 2FA (tenant_policy_settings).
+     * 충만(tenant 없음) 또는 정책 조회 실패(SQL 미배포) 시 스킵하지 않고 —
+     * require 플래그가 켜져 있는데 조회 실패면 fail-closed.
+     */
+    let earlyTenantId =
+      saasBrand && !partnerStoreHint
+        ? resolvedTenant?.tenantId ||
+          normalizeTenantId(row.tenant_id) ||
+          undefined
+        : undefined
+    if (saasBrand && earlyTenantId) {
+      const policy = await loadSaasLoginSecurityPolicy(earlyTenantId)
+      /** 정책 조회 실패(null) → fail-closed. 행 없음은 플래그 OFF 객체로 반환됨. */
+      if (policy === null) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'saas_login_policy_unavailable',
+            message: '로그인 보안 정책을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+          },
+          { status: 503, headers }
+        )
+      }
+      if (policy.requireIpAllowlist) {
+        if (policy.allowedIps.length === 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              code: 'ip_allowlist_empty',
+              message: 'IP 허용 목록이 비어 있습니다. SaaS 관리자에게 문의하세요.',
+            },
+            { headers }
+          )
+        }
+        const clientIp = clientIpFromHeaders(req.headers)
+        if (!ipMatchesAllowlist(clientIp, policy.allowedIps)) {
+          return NextResponse.json(
+            {
+              success: false,
+              code: 'ip_not_allowed',
+              message: '허용되지 않은 IP입니다.',
+            },
+            { headers }
+          )
+        }
+      }
+      if (policy.require2faAdmin && isAdminPage && adminAllowed.has(finalRole)) {
+        const empIdForTotp = row.id != null ? Math.floor(Number(row.id)) : 0
+        const totp = await loadEmployeeTotpSecret(empIdForTotp)
+        if (!totp) {
+          return NextResponse.json(
+            {
+              success: false,
+              code: 'saas_2fa_unavailable',
+              message: '2FA 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+            },
+            { headers }
+          )
+        }
+        if (!totp.enabled || !totp.secret) {
+          return NextResponse.json(
+            {
+              success: false,
+              code: '2fa_enrollment_required',
+              message: '관리자 2FA 등록이 필요합니다. /api/saasAdminTotp 에서 등록하세요.',
+            },
+            { headers }
+          )
+        }
+        if (!verifyTotpCode(totp.secret, String(totpCode || ''))) {
+          return NextResponse.json(
+            {
+              success: false,
+              code: '2fa_invalid',
+              message: '2FA 인증번호가 올바르지 않습니다.',
+            },
+            { headers }
+          )
+        }
+      }
     }
 
     const userName = String(row.name || '').trim()

@@ -62,6 +62,38 @@
 | 9 | enabled-modules 실패 시 전 모듈 OFF | UI 잠금 | — |
 | 10 | 2FA / IP / auto_suspend enforce | 로그인 불가 | — |
 
+### ✅ 완료 (SaaS 판매 전 P0 — Omni만, 충만 무영향)
+
+- **POS 단말 한도 fail-closed**: 한도/사용량 조회 실패 시 신규 단말 등록 거부 (`lib/saas/saas-pos-device-limit-server.ts`)
+- **직원 한도 런타임 enforce**: `saveAdminEmployee` 신규·`importEmployeesFromCsv` 교체 시 `max_staff_accounts` 검사 (`lib/saas/saas-staff-limit-server.ts`)
+- **Omni 평문 비밀번호 로그인 거부**: `verifyPassword` 기본값 plaintext OFF; `loginCheck`는 SaaS 브랜드에서만 레거시 평문 비허용
+- **getLoginData rate limit**: Omni IP당 분당 30회 (`lib/simple-rate-limit.ts`)
+- **POS-only 사이드이펙트**: logistics/accounting 모듈 OFF면 재고차감·자동분개·VAT draft 스킵 (`lib/saas/pos-completion-side-effects-gate.ts`)
+- **getPosMenus banban**: Omni에서 테넌트 메뉴 id로만 flavor links 조회
+- **월 주문 쿼터**: `savePosOrder`에서 `monthly_order_quota` fail-closed 검사 (`lib/saas/saas-order-quota-server.ts`)
+- **모듈 게이트 fail-closed**: tenantId 있을 때 게이트 조회 실패 → 503 (`lib/verify-auth.ts`)
+- **Omni anon RLS 거부 SQL**: [`sql/omni_pos_anon_deny_rls.sql`](../sql/omni_pos_anon_deny_rls.sql) — **Omni DB만** 실행
+- **POS 단말 등록 인증**: `registerPosDevice` / `registerPosMainDevice` / `setPosMainDevice` → `requirePosStoreWriteAuth`
+- **정지 계정**: `skipSaasGate`여도 정지 차단; 정지 조회 실패 → 503; bearer 게이트 fail-closed
+- **maxStores 런타임**: `saasAdminStores` POST
+- **KBank/Grab Omni env 폴백 금지**: `lib/tenant-integration-resolve.ts`
+- **연체 자동정지 cron**: `/api/cron/saas-auto-suspend` (Omni 브랜드만, 매일 UTC 17:15)
+- **매니저/태블릿 한도**: `saas-manager-limit-server` / `saas-tablet-limit-server` + `saasAdminDevices`
+- **IP allowlist + admin TOTP**: `loginCheck` enforce + `sql/omni_saas_login_security.sql` + `/api/saasAdminTotp`
+- **테넌트 export**: `GET /api/saasAdminTenantExport?tenantId=`
+- **P2 UI (Omni만, 충만 로그인 UI 비표시)**:
+  - `/admin/login` Omni: TOTP 입력·등록 확인
+  - `/saas-admin`: Omni 배너 + 비-Omni 브랜드 차단
+  - 고객사: 허용 IP textarea · 테넌트 JSON export · 태블릿 탭
+- **고도화(감사 후)**:
+  - `loginCheck` 정책 조회 null → 503 fail-closed
+  - Grab store map Omni env 폴백 제거
+  - 모듈 게이트 DB 조회 실패 → 503
+  - `requireAuth` 정지 계정을 401이 아닌 403/503으로 반환
+  - TOTP bootstrap IP allowlist + 이미 활성 시 재enroll 거부
+  - `saasBootstrapTenantLogin` maxStores 검사
+  - `/saas-admin/login`도 비-Omni 차단
+
 ## 🔴 회계·운영
 
 | # | 작업 | 위험 | 오피스 검증 |

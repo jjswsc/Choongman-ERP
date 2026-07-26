@@ -50,9 +50,11 @@ describe('password', () => {
       expect(await verifyPassword('input', '')).toBe(false)
     })
 
-    it('평문-평문 비교 (레거시)', async () => {
+    it('평문-평문 비교는 기본 허용, Omni는 allowLegacyPlaintext:false 로 거부', async () => {
       expect(await verifyPassword('hello', 'hello')).toBe(true)
-      expect(await verifyPassword('hello', 'world')).toBe(false)
+      expect(await verifyPassword('hello', 'hello', { allowLegacyPlaintext: true })).toBe(true)
+      expect(await verifyPassword('hello', 'hello', { allowLegacyPlaintext: false })).toBe(false)
+      expect(await verifyPassword('hello', 'world', { allowLegacyPlaintext: true })).toBe(false)
     })
 
     it('평문-해시 비교', async () => {

@@ -106,39 +106,6 @@ export async function GET(request: NextRequest) {
 
     const banbanFlavorMenuIdsByMenuId = new Map<number, string[]>()
     let banbanFlavorSchemaReady = false
-    try {
-      const rows = (await supabaseSelect('pos_banban_flavor_links', {
-        limit: 100000,
-        select: 'banban_menu_id,flavor_menu_id,enabled,sort_order',
-      })) as {
-        banban_menu_id?: number | null
-        flavor_menu_id?: number | null
-        enabled?: boolean | null
-        sort_order?: number | null
-      }[] | null
-      const sorted = (rows || [])
-        .filter((row) => row.enabled !== false)
-        .sort((a, b) => {
-          const aMenuId = Number(a.banban_menu_id || 0)
-          const bMenuId = Number(b.banban_menu_id || 0)
-          if (aMenuId !== bMenuId) return aMenuId - bMenuId
-          const aSort = Number(a.sort_order || 0)
-          const bSort = Number(b.sort_order || 0)
-          if (aSort !== bSort) return aSort - bSort
-          return Number(a.flavor_menu_id || 0) - Number(b.flavor_menu_id || 0)
-        })
-      for (const row of sorted) {
-        const menuId = Number(row.banban_menu_id || 0)
-        const flavorMenuId = String(row.flavor_menu_id || '').trim()
-        if (!menuId || !flavorMenuId) continue
-        const list = banbanFlavorMenuIdsByMenuId.get(menuId) || []
-        if (!list.includes(flavorMenuId)) list.push(flavorMenuId)
-        banbanFlavorMenuIdsByMenuId.set(menuId, list)
-      }
-      banbanFlavorSchemaReady = true
-    } catch {
-      // 신규 테이블 미배포 환경 fallback
-    }
 
     let rows: unknown[] | null = null
     const tenantFilter = appendPosCatalogTenantFilter('', catalogScope)
@@ -170,6 +137,58 @@ export async function GET(request: NextRequest) {
         if (cols === cachedPosMenusSelect) cachedPosMenusSelect = null
         if (cols === POS_MENUS_SELECT_BASE) throw colErr
       }
+    }
+
+    try {
+      const menuIds = (rows || [])
+        .map((r) => Number((r as { id?: number }).id || 0))
+        .filter((id) => id > 0)
+      if (menuIds.length > 0) {
+        /** Omni: 전량 100k 스캔 대신 테넌트 메뉴 id만 조회 */
+        const idFilter = catalogScope.enforce
+          ? `banban_menu_id=in.(${menuIds.join(',')})`
+          : ''
+        const banbanRows = (
+          idFilter
+            ? await supabaseSelectFilter('pos_banban_flavor_links', idFilter, {
+                limit: 100000,
+                select: 'banban_menu_id,flavor_menu_id,enabled,sort_order',
+              })
+            : await supabaseSelect('pos_banban_flavor_links', {
+                limit: 100000,
+                select: 'banban_menu_id,flavor_menu_id,enabled,sort_order',
+              })
+        ) as {
+          banban_menu_id?: number | null
+          flavor_menu_id?: number | null
+          enabled?: boolean | null
+          sort_order?: number | null
+        }[] | null
+        const sorted = (banbanRows || [])
+          .filter((row) => row.enabled !== false)
+          .sort((a, b) => {
+            const aMenuId = Number(a.banban_menu_id || 0)
+            const bMenuId = Number(b.banban_menu_id || 0)
+            if (aMenuId !== bMenuId) return aMenuId - bMenuId
+            const aSort = Number(a.sort_order || 0)
+            const bSort = Number(b.sort_order || 0)
+            if (aSort !== bSort) return aSort - bSort
+            return Number(a.flavor_menu_id || 0) - Number(b.flavor_menu_id || 0)
+          })
+        const menuIdSet = catalogScope.enforce ? new Set(menuIds) : null
+        for (const row of sorted) {
+          const menuId = Number(row.banban_menu_id || 0)
+          const flavorMenuId = String(row.flavor_menu_id || '').trim()
+          if (!menuId || !flavorMenuId) continue
+          if (menuIdSet && !menuIdSet.has(menuId)) continue
+          const list = banbanFlavorMenuIdsByMenuId.get(menuId) || []
+          if (!list.includes(flavorMenuId)) list.push(flavorMenuId)
+          banbanFlavorMenuIdsByMenuId.set(menuId, list)
+        }
+        banbanFlavorSchemaReady = true
+      }
+    } catch {
+      // 신규 테이블 미배포 환경 fallback
     }
 
     const typedRows = rows as {

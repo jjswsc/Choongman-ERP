@@ -6,11 +6,11 @@ import {
   assertSaasPosDeviceRegistrationAllowed,
   resolveSaasPosDeviceNewForTenant,
 } from '@/lib/saas/saas-pos-device-limit-server'
+import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 
 /** 포스 터미널: 이 기기를 해당 매장 메인 포스로 등록 (해당 매장 설정 행이 있을 때만 반영) */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     const body = await req.json().catch(() => ({}))
@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'storeCode and deviceToken required' }, { headers })
     }
 
+    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!authGate.ok) return authGate.response
+
     const rows = await supabaseSelectFilter(
       'pos_printer_settings',
       `store_code=eq.${encodeURIComponent(storeCode)}`,
@@ -28,8 +31,8 @@ export async function POST(req: NextRequest) {
     const exists = Array.isArray(rows) ? rows.length > 0 : !!rows
 
     if (exists) {
-      const rows = await listStoreDevicesForRoleLimits(storeCode)
-      const storeTokens = rows.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
+      const deviceRows = await listStoreDevicesForRoleLimits(storeCode)
+      const storeTokens = deviceRows.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
       const isNewForTenant = await resolveSaasPosDeviceNewForTenant({
         storeCode,
         deviceToken,

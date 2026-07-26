@@ -28,6 +28,8 @@ export type TenantPolicy = {
   allowOverage: boolean
   require2faAdmin: boolean
   requireIpAllowlist: boolean
+  /** requireIpAllowlist 시 허용 IP/CIDR 목록 */
+  allowedIps: string[]
   forceWeeklyBackup: boolean
   dataRetentionDays: number
   overdueGraceDays: number
@@ -198,6 +200,7 @@ export const DEFAULT_POLICY: TenantPolicy = {
   allowOverage: false,
   require2faAdmin: false,
   requireIpAllowlist: false,
+  allowedIps: [],
   forceWeeklyBackup: false,
   dataRetentionDays: 365,
   overdueGraceDays: 3,

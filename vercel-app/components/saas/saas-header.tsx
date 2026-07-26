@@ -50,6 +50,11 @@ export function SaasHeader() {
         <span className="text-sm font-semibold">
           {brand.headerTitle} {t("saasAdminHeaderSuffix")}
         </span>
+        {brand.key === "omnifoodtech" ? (
+          <span className="rounded bg-sky-600/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+            Omni
+          </span>
+        ) : null}
       </div>
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>

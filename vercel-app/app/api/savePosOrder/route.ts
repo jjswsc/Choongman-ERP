@@ -52,6 +52,11 @@ import {
   assertSaasTenantWritable,
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import {
+  shouldRunPosAccountingSideEffectsForStore,
+  shouldRunPosStockDeductionForStore,
+} from '@/lib/saas/pos-completion-side-effects-gate'
+import { assertSaasOrderQuotaAllowed } from '@/lib/saas/saas-order-quota-server'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
@@ -123,54 +128,60 @@ async function runCompletionSideEffects(params: {
   const { orderId, orderNo, storeCode, total, subtotal, vat, serviceAmount, createdAtIso, createdBy } = params
   if (!storeCode) return
   const salesDate = await resolvePosBusinessAccountingDateForStore(createdAtIso, storeCode)
+  const allowStock = await shouldRunPosStockDeductionForStore(storeCode)
+  const allowAccounting = await shouldRunPosAccountingSideEffectsForStore(storeCode)
   try {
-    const settings = (await supabaseSelectFilter(
-      'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
-      { limit: 1, select: 'auto_stock_deduction' }
-    )) as { auto_stock_deduction?: boolean }[] | null
-    if (settings?.[0]?.auto_stock_deduction) {
-      await processPosStockDeduction(orderId)
+    if (allowStock) {
+      const settings = (await supabaseSelectFilter(
+        'pos_printer_settings',
+        `store_code=eq.${encodeURIComponent(storeCode)}`,
+        { limit: 1, select: 'auto_stock_deduction' }
+      )) as { auto_stock_deduction?: boolean }[] | null
+      if (settings?.[0]?.auto_stock_deduction) {
+        await processPosStockDeduction(orderId)
+      }
     }
   } catch (e) {
     console.error('savePosOrder processPosStockDeduction:', e)
   }
 
-  try {
-    const alreadyPosted = await hasJournalForSource('pos_order', orderId)
-    if (!alreadyPosted) {
-      await postPosOrderJournal({
-        posOrderId: orderId,
-        salesDate,
-        total: Number(total || 0),
-        vatAmount: Number(vat || 0),
-        serviceAmount: Number(serviceAmount || 0),
-        paymentCash: Number(params.paymentCash || 0),
-        paymentCard: Number(params.paymentCard || 0),
-        paymentQr: Number(params.paymentQr || 0),
-        paymentOther: Number(params.paymentOther || 0),
-        paymentDeliveryApp: Number(params.paymentDeliveryApp || 0),
-        storeName: storeCode || undefined,
-        memo: 'POS 주문 완료 자동분개',
-      })
+  if (allowAccounting) {
+    try {
+      const alreadyPosted = await hasJournalForSource('pos_order', orderId)
+      if (!alreadyPosted) {
+        await postPosOrderJournal({
+          posOrderId: orderId,
+          salesDate,
+          total: Number(total || 0),
+          vatAmount: Number(vat || 0),
+          serviceAmount: Number(serviceAmount || 0),
+          paymentCash: Number(params.paymentCash || 0),
+          paymentCard: Number(params.paymentCard || 0),
+          paymentQr: Number(params.paymentQr || 0),
+          paymentOther: Number(params.paymentOther || 0),
+          paymentDeliveryApp: Number(params.paymentDeliveryApp || 0),
+          storeName: storeCode || undefined,
+          memo: 'POS 주문 완료 자동분개',
+        })
+      }
+    } catch (postingErr) {
+      console.error('savePosOrder posting:', postingErr)
     }
-  } catch (postingErr) {
-    console.error('savePosOrder posting:', postingErr)
-  }
 
-  try {
-    await upsertPosVatLedgerDraft({
-      posOrderId: orderId,
-      orderNo,
-      storeCode,
-      createdAtIso,
-      subtotal,
-      total,
-      vatAmount: vat,
-      createdBy,
-    })
-  } catch (vatErr) {
-    console.error('savePosOrder vat draft:', vatErr)
+    try {
+      await upsertPosVatLedgerDraft({
+        posOrderId: orderId,
+        orderNo,
+        storeCode,
+        createdAtIso,
+        subtotal,
+        total,
+        vatAmount: vat,
+        createdBy,
+      })
+    } catch (vatErr) {
+      console.error('savePosOrder vat draft:', vatErr)
+    }
   }
 }
 
@@ -289,6 +300,21 @@ export async function POST(req: NextRequest) {
     if (tenantWriteErr) {
       return NextResponse.json(
         { success: false, message: tenantWriteErr, retryAfterQueue: false },
+        { status: 403, headers }
+      )
+    }
+
+    const orderQuota = await assertSaasOrderQuotaAllowed({
+      tenantId: tenantScope.enforce ? tenantScope.tenantId : '',
+    })
+    if (!orderQuota.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: orderQuota.code,
+          message: orderQuota.message,
+          retryAfterQueue: false,
+        },
         { status: 403, headers }
       )
     }

@@ -10,11 +10,11 @@ import {
   assertSaasPosDeviceRegistrationAllowed,
   resolveSaasPosDeviceNewForTenant,
 } from '@/lib/saas/saas-pos-device-limit-server'
+import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 
 /** 포스 터미널: 이 기기를 해당 매장에 메인/주문 단말로 등록·갱신 (last_seen_at 갱신) */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     const body = await req.json().catch(() => ({}))
@@ -27,6 +27,9 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
+
+    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!authGate.ok) return authGate.response
 
     const limits = await getPosDeviceRoleLimits(storeCode)
     const rows = await listStoreDevicesForRoleLimits(storeCode)

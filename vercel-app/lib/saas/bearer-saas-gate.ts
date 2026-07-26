@@ -20,12 +20,20 @@ export async function saasGateForBearerAuth(
   try {
     return await resolveSaasModuleGateResponse(auth, pathname)
   } catch (err) {
-    console.warn("[saas-gate] bearer gate lookup failed", {
+    console.warn("[saas-gate] bearer gate lookup failed (fail-closed)", {
       pathname,
       tenantId: auth.tenantId,
       err,
     })
-    return null
+    return NextResponse.json(
+      {
+        success: false,
+        code: "saas_module_gate_unavailable",
+        message: "SaaS 모듈 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        msg: "SaaS 모듈 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      },
+      { status: 503 }
+    )
   }
 }
 

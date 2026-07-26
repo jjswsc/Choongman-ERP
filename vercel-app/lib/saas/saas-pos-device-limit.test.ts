@@ -37,4 +37,17 @@ describe("evaluateSaasPosDeviceRegistrationBlock", () => {
       }).ok
     ).toBe(true)
   })
+
+  it("fail-closed when limits unavailable", () => {
+    const r = evaluateSaasPosDeviceRegistrationBlock({
+      enforce: true,
+      isNewDeviceForTenant: true,
+      allowOverage: false,
+      used: 0,
+      maxPosDevices: 10,
+      limitsUnavailable: true,
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe("saas_pos_device_limit_unavailable")
+  })
 })

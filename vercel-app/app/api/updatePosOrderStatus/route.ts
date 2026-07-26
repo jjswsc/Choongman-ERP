@@ -33,6 +33,10 @@ import {
 } from '@/lib/pos-order-paid-at'
 import { notifyMemberPortalPickupReady } from '@/lib/member-portal-pickup-notify'
 import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
+import {
+  shouldRunPosAccountingSideEffectsForStore,
+  shouldRunPosStockDeductionForStore,
+} from '@/lib/saas/pos-completion-side-effects-gate'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -162,7 +166,11 @@ export async function POST(req: NextRequest) {
           String(prev?.created_at ?? ''),
           storeCode
         )
-        if (storeCode) {
+        const allowStock = storeCode ? await shouldRunPosStockDeductionForStore(storeCode) : false
+        const allowAccounting = storeCode
+          ? await shouldRunPosAccountingSideEffectsForStore(storeCode)
+          : false
+        if (storeCode && allowStock) {
           try {
             const settings = (await supabaseSelectFilter(
               'pos_printer_settings',
@@ -181,42 +189,44 @@ export async function POST(req: NextRequest) {
         const vat = Number(prev?.vat || 0)
         const subtotal = Number(prev?.subtotal || Math.max(0, total - vat))
         const orderNo = String(prev?.order_no || `POS-${id}`)
-        try {
-          const alreadyPosted = await hasJournalForSource('pos_order', id)
-          if (!alreadyPosted) {
-            await postPosOrderJournal({
+        if (allowAccounting) {
+          try {
+            const alreadyPosted = await hasJournalForSource('pos_order', id)
+            if (!alreadyPosted) {
+              await postPosOrderJournal({
+                posOrderId: id,
+                salesDate,
+                total,
+                vatAmount: vat,
+                serviceAmount: Number(prev?.service_amt || 0),
+                paymentCash: Number(prev?.payment_cash || 0),
+                paymentCard: Number(prev?.payment_card || 0),
+                paymentQr: Number(prev?.payment_qr || 0),
+                paymentOther: Number(prev?.payment_other || 0),
+                paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
+                storeName: storeCode || undefined,
+                memo: 'POS 주문 완료 자동분개',
+              })
+            }
+          } catch (postingErr) {
+            pushFailedStep(failedSideEffects, 'journal')
+            console.error('updatePosOrderStatus posting(retry):', postingErr)
+          }
+          try {
+            await upsertPosVatLedgerDraft({
               posOrderId: id,
-              salesDate,
+              orderNo,
+              storeCode,
+              createdAtIso: String(prev?.created_at ?? ''),
+              subtotal,
               total,
               vatAmount: vat,
-              serviceAmount: Number(prev?.service_amt || 0),
-              paymentCash: Number(prev?.payment_cash || 0),
-              paymentCard: Number(prev?.payment_card || 0),
-              paymentQr: Number(prev?.payment_qr || 0),
-              paymentOther: Number(prev?.payment_other || 0),
-              paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
-              storeName: storeCode || undefined,
-              memo: 'POS 주문 완료 자동분개',
+              createdBy: String(prev?.created_by ?? ''),
             })
+          } catch (vatErr) {
+            pushFailedStep(failedSideEffects, 'vat_draft')
+            console.error('updatePosOrderStatus vat draft(retry):', vatErr)
           }
-        } catch (postingErr) {
-          pushFailedStep(failedSideEffects, 'journal')
-          console.error('updatePosOrderStatus posting(retry):', postingErr)
-        }
-        try {
-          await upsertPosVatLedgerDraft({
-            posOrderId: id,
-            orderNo,
-            storeCode,
-            createdAtIso: String(prev?.created_at ?? ''),
-            subtotal,
-            total,
-            vatAmount: vat,
-            createdBy: String(prev?.created_by ?? ''),
-          })
-        } catch (vatErr) {
-          pushFailedStep(failedSideEffects, 'vat_draft')
-          console.error('updatePosOrderStatus vat draft(retry):', vatErr)
         }
         try {
           await enqueueKitchenPrintJob({
@@ -369,7 +379,11 @@ export async function POST(req: NextRequest) {
       storeCode
     )
     if (isPosCompletionStatus(nextStatus)) {
-      if (storeCode) {
+      const allowStock = storeCode ? await shouldRunPosStockDeductionForStore(storeCode) : false
+      const allowAccounting = storeCode
+        ? await shouldRunPosAccountingSideEffectsForStore(storeCode)
+        : false
+      if (storeCode && allowStock) {
         try {
           const settings = (await supabaseSelectFilter(
             'pos_printer_settings',
@@ -389,42 +403,44 @@ export async function POST(req: NextRequest) {
       const vat = Number(prev?.vat || 0)
       const subtotal = Number(prev?.subtotal || Math.max(0, total - vat))
       const orderNo = String(prev?.order_no || `POS-${id}`)
-      try {
-        const alreadyPosted = await hasJournalForSource('pos_order', id)
-        if (!alreadyPosted) {
-          await postPosOrderJournal({
+      if (allowAccounting) {
+        try {
+          const alreadyPosted = await hasJournalForSource('pos_order', id)
+          if (!alreadyPosted) {
+            await postPosOrderJournal({
+              posOrderId: id,
+              salesDate,
+              total,
+              vatAmount: vat,
+              serviceAmount: Number(prev?.service_amt || 0),
+              paymentCash: Number(prev?.payment_cash || 0),
+              paymentCard: Number(prev?.payment_card || 0),
+              paymentQr: Number(prev?.payment_qr || 0),
+              paymentOther: Number(prev?.payment_other || 0),
+              paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
+              storeName: storeCode || undefined,
+              memo: 'POS 주문 완료 자동분개',
+            })
+          }
+        } catch (postingErr) {
+          pushFailedStep(failedSideEffects, 'journal')
+          console.error('updatePosOrderStatus posting:', postingErr)
+        }
+        try {
+          await upsertPosVatLedgerDraft({
             posOrderId: id,
-            salesDate,
+            orderNo,
+            storeCode,
+            createdAtIso: String(prev?.created_at ?? ''),
+            subtotal,
             total,
             vatAmount: vat,
-            serviceAmount: Number(prev?.service_amt || 0),
-            paymentCash: Number(prev?.payment_cash || 0),
-            paymentCard: Number(prev?.payment_card || 0),
-            paymentQr: Number(prev?.payment_qr || 0),
-            paymentOther: Number(prev?.payment_other || 0),
-            paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
-            storeName: storeCode || undefined,
-            memo: 'POS 주문 완료 자동분개',
+            createdBy: String(prev?.created_by ?? ''),
           })
+        } catch (vatErr) {
+          pushFailedStep(failedSideEffects, 'vat_draft')
+          console.error('updatePosOrderStatus vat draft:', vatErr)
         }
-      } catch (postingErr) {
-        pushFailedStep(failedSideEffects, 'journal')
-        console.error('updatePosOrderStatus posting:', postingErr)
-      }
-      try {
-        await upsertPosVatLedgerDraft({
-          posOrderId: id,
-          orderNo,
-          storeCode,
-          createdAtIso: String(prev?.created_at ?? ''),
-          subtotal,
-          total,
-          vatAmount: vat,
-          createdBy: String(prev?.created_by ?? ''),
-        })
-      } catch (vatErr) {
-        pushFailedStep(failedSideEffects, 'vat_draft')
-        console.error('updatePosOrderStatus vat draft:', vatErr)
       }
       try {
         await enqueueKitchenPrintJob({

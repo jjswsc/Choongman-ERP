@@ -10,11 +10,11 @@ import {
   assertSaasPosDeviceRegistrationAllowed,
   resolveSaasPosDeviceNewForTenant,
 } from '@/lib/saas/saas-pos-device-limit-server'
+import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
 
 /** 관리자: 해당 기기를 해당 매장 메인 포스로 지정 */
 export async function POST(req: NextRequest) {
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
+  const headers = posApiCorsHeaders()
 
   try {
     const body = await req.json().catch(() => ({}))
@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
+
+    const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!authGate.ok) return authGate.response
 
     const settingsRows = await supabaseSelectFilter(
       'pos_printer_settings',

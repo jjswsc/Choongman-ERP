@@ -19,18 +19,34 @@ export async function hashPassword(plain: string): Promise<string> {
   return hash(s, SALT_ROUNDS)
 }
 
+export type VerifyPasswordOptions = {
+  /**
+   * DB에 평문이 남아 있을 때 문자열 비교 허용 (충만 레거시).
+   * Omni(SaaS) 로그인에서는 false — 평문 저장 계정은 로그인 거부.
+   */
+  allowLegacyPlaintext?: boolean
+}
+
 /**
  * 비밀번호 검증
  * - 해시된 DB 값과 평문 입력 비교
- * - DB가 평문(레거시)인 경우 fallback 비교
+ * - DB가 평문(레거시)인 경우: 기본 허용(충만 호환). Omni 로그인은 allowLegacyPlaintext:false 로 거부.
  */
-export async function verifyPassword(plainInput: string, storedValue: string): Promise<boolean> {
+export async function verifyPassword(
+  plainInput: string,
+  storedValue: string,
+  opts?: VerifyPasswordOptions
+): Promise<boolean> {
   const input = String(plainInput || '').trim()
   const stored = String(storedValue || '').trim()
   if (!input || !stored) return false
 
   if (isHashed(stored)) {
     return compare(input, stored)
+  }
+  /** 명시적 false(Omni)만 평문 거부. 미지정·true는 충만 레거시 유지. */
+  if (opts?.allowLegacyPlaintext === false) {
+    return false
   }
   return input === stored
 }

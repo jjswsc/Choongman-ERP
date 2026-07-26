@@ -11,19 +11,27 @@ import {
   isOfficeRole,
   isSupervisorRole,
 } from '@/lib/permissions'
-import { resolveSaasModuleGateResponse } from '@/lib/saas/tenant-module-gate'
+import { resolveSaasModuleGateResponse, resolveSaasTenantSuspendResponse } from '@/lib/saas/tenant-module-gate'
 
 async function resolveSaasModuleGateForRequest(auth: JwtPayload, req: NextRequest) {
   if (!String(auth.tenantId || "").trim()) return null
   try {
     return await resolveSaasModuleGateResponse(auth, req.nextUrl.pathname)
   } catch (err) {
-    console.warn("[saas-gate] requireAuth gate lookup failed", {
+    console.warn("[saas-gate] requireAuth gate lookup failed (fail-closed)", {
       pathname: req.nextUrl.pathname,
       tenantId: auth.tenantId,
       err,
     })
-    return null
+    return NextResponse.json(
+      {
+        success: false,
+        code: "saas_module_gate_unavailable",
+        message: "SaaS 모듈 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        msg: "SaaS 모듈 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      },
+      { status: 503 }
+    )
   }
 }
 
@@ -72,7 +80,13 @@ export async function getVerifiedAuth(
       }
     }
   }
-  if (!auth || options?.skipSaasGate) return auth
+  if (!auth) return null
+  /** 모듈 게이트는 스킵해도 Omni 정지 계정은 항상 차단 */
+  if (options?.skipSaasGate) {
+    const suspendBlock = await resolveSaasTenantSuspendResponse(auth.tenantId)
+    if (suspendBlock) return null
+    return auth
+  }
   const saasBlock = await resolveSaasModuleGateForRequest(auth, req)
   if (saasBlock) return null
   return auth
@@ -91,7 +105,8 @@ export async function requireAuth(
   | { auth: JwtPayload; errorResponse: null }
   | { auth: null; errorResponse: NextResponse }
 > {
-  const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+  /** 토큰만 검증 — 정지 응답을 401로 덮지 않도록 suspend는 여기서 별도 처리 */
+  const auth = await getVerifiedAuthTokenOnly(req)
   if (!auth) {
     return {
       auth: null,
@@ -105,6 +120,9 @@ export async function requireAuth(
       ),
     }
   }
+
+  const suspendBlock = await resolveSaasTenantSuspendResponse(auth.tenantId)
+  if (suspendBlock) return { auth: null, errorResponse: suspendBlock }
 
   if (requiredLevel === 'any') {
     const saasBlock = await resolveSaasModuleGateForRequest(auth, req)
@@ -168,6 +186,37 @@ export async function requireAuth(
   if (saasBlock) return { auth: null, errorResponse: saasBlock }
 
   return { auth, errorResponse: null }
+}
+
+/** JWT만 검증 (SaaS suspend/module 게이트 없음) */
+async function getVerifiedAuthTokenOnly(req: NextRequest): Promise<JwtPayload | null> {
+  const authHeader = req.headers.get('Authorization')
+  let bearerToken: string | null = null
+  if (authHeader?.startsWith('Bearer ')) {
+    const t = authHeader.slice(7).trim()
+    bearerToken = t || null
+  }
+  const cookieRaw = req.cookies.get('cm_token')?.value
+  const cookieToken = cookieRaw && String(cookieRaw).trim() ? String(cookieRaw).trim() : null
+
+  let auth: JwtPayload | null = null
+  if (bearerToken) {
+    auth = await verifyToken(bearerToken)
+  }
+  if (!auth && cookieToken) {
+    auth = await verifyToken(cookieToken)
+    if (!auth) {
+      try {
+        const decoded = decodeURIComponent(cookieToken)
+        if (decoded !== cookieToken) {
+          auth = await verifyToken(decoded)
+        }
+      } catch {
+        auth = null
+      }
+    }
+  }
+  return auth
 }
 
 /** 회원앱 운영 API — 본사·회계·매장 관리자 편집 허용 */

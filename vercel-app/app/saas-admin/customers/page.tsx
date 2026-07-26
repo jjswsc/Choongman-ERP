@@ -43,7 +43,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { SaasModulePricingPanel } from "@/components/saas/saas-module-pricing-panel"
 import { SaasBillingCompanyFields } from "@/components/saas/saas-billing-company-fields"
 import { SaasCustomerLoginInfoPanel } from "@/components/saas/saas-customer-login-info-panel"
+import { SaasCustomerTabletsPanel } from "@/components/saas/saas-customer-tablets-panel"
 import { useSaasCustomerLoginAccounts } from "@/hooks/use-saas-customer-login-accounts"
+import { Textarea } from "@/components/ui/textarea"
 import { isSaasPlatformInternalTenant } from "@/lib/saas-platform-internal-tenant"
 import { emptySaasBillingCompanyInfo } from "@/lib/saas-billing-company-profile"
 import { useSaasScope } from "@/components/saas/saas-scope-context"
@@ -128,6 +130,7 @@ const CUSTOMER_DETAIL_TABS = [
   "company",
   "login",
   "limits",
+  "tablets",
   "usage",
   "billing",
   "audit",
@@ -800,6 +803,31 @@ export default function SaasCustomersPage() {
     URL.revokeObjectURL(url)
   }
 
+  const exportTenantJson = async () => {
+    if (!selectedTenant) return
+    try {
+      const res = await apiFetch(
+        `/api/saasAdminTenantExport?tenantId=${encodeURIComponent(selectedTenant.id)}&download=1`
+      )
+      const json = (await res.json()) as { success?: boolean; message?: string }
+      if (!res.ok || json.success === false) {
+        await appAlert(json.message || t("saasAdminCust_exportTenantFailed"))
+        return
+      }
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `tenant-export-${selectedTenant.id}_${bangkokYmd()}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      await appAlert(String(e))
+    }
+  }
+
   const moduleInvoiceLabels = (): Record<string, string> =>
     Object.fromEntries(Object.values(SAAS_MODULE_LABEL_KEY).map((key) => [key, t(key)]))
 
@@ -1304,7 +1332,7 @@ export default function SaasCustomersPage() {
 
         <Card className="overflow-hidden border-slate-200/80 shadow-sm dark:border-slate-800">
           <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-sky-50/40 pb-3 dark:from-slate-950/40 dark:to-sky-950/20">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-lg">{selectedTenant.companyName}</CardTitle>
@@ -1324,14 +1352,25 @@ export default function SaasCustomersPage() {
                 </div>
                 <CardDescription>{tr(t, "saasAdminCust_tenantIdLine", { id: selectedTenant.id })}</CardDescription>
               </div>
-              <Button
-                type="button"
-                className="shrink-0 shadow-sm shadow-primary/20"
-                onClick={() => void saveTenantSettings()}
-                disabled={loading || saving}
-              >
-                {saving ? t("saasAdminCust_saving") : t("save")}
-              </Button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void exportTenantJson()}
+                  disabled={loading || saving}
+                >
+                  <Download className="mr-1.5 size-3.5" />
+                  {t("saasAdminCust_exportTenantJson")}
+                </Button>
+                <Button
+                  type="button"
+                  className="shadow-sm shadow-primary/20"
+                  onClick={() => void saveTenantSettings()}
+                  disabled={loading || saving}
+                >
+                  {saving ? t("saasAdminCust_saving") : t("save")}
+                </Button>
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <Button asChild size="sm" className="bg-sky-600 text-white hover:bg-sky-700">
@@ -1378,6 +1417,9 @@ export default function SaasCustomersPage() {
                   </TabsTrigger>
                   <TabsTrigger value="limits" className={DETAIL_TAB_TRIGGER_CN}>
                     {t("saasAdminCust_tabLimits")}
+                  </TabsTrigger>
+                  <TabsTrigger value="tablets" className={DETAIL_TAB_TRIGGER_CN}>
+                    {t("saasAdminCust_tabTablets")}
                   </TabsTrigger>
                   <TabsTrigger value="usage" className={DETAIL_TAB_TRIGGER_CN}>
                     {t("saasAdminCust_tabUsage")}
@@ -1710,6 +1752,30 @@ export default function SaasCustomersPage() {
                       />
                       {t("saasAdminCust_requireIpAllowlist")}
                     </label>
+                    {selectedTenant.policy.requireIpAllowlist ? (
+                      <div className="space-y-2 rounded-md border border-dashed p-3">
+                        <Label>{t("saasAdminCust_allowedIps")}</Label>
+                        <Textarea
+                          rows={4}
+                          value={(selectedTenant.policy.allowedIps || []).join("\n")}
+                          onChange={(event) =>
+                            updateTenant((tenant) => ({
+                              ...tenant,
+                              policy: {
+                                ...tenant.policy,
+                                allowedIps: event.target.value
+                                  .split(/[\n,]+/)
+                                  .map((x) => x.trim())
+                                  .filter(Boolean),
+                              },
+                            }))
+                          }
+                          placeholder={t("saasAdminCust_allowedIpsPh")}
+                          className="font-mono text-xs"
+                        />
+                        <p className="text-xs text-muted-foreground">{t("saasAdminCust_allowedIpsHint")}</p>
+                      </div>
+                    ) : null}
                     <label className="flex items-center gap-2 text-sm">
                       <Checkbox
                         checked={selectedTenant.policy.forceWeeklyBackup}
@@ -1906,6 +1972,10 @@ export default function SaasCustomersPage() {
                   companyName={selectedTenant.companyName}
                   isPlatformInternal={selectedTenant.isPlatformInternal}
                 />
+              </TabsContent>
+
+              <TabsContent value="tablets" className="space-y-4 pt-2">
+                <SaasCustomerTabletsPanel tenantId={selectedTenant.id} />
               </TabsContent>
 
               <TabsContent value="company" className="space-y-4 pt-2">
