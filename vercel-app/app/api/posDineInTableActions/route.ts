@@ -8,7 +8,10 @@ import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
-import { appendPosOrderMergedAbsorbStamp } from '@/lib/pos-order-merge'
+import {
+  appendPosOrderMergedAbsorbStamp,
+  appendPosOrderMergedKeepStamp,
+} from '@/lib/pos-order-merge'
 import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
 import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
 import { requireAuth } from '@/lib/verify-auth'
@@ -331,6 +334,8 @@ export async function POST(req: NextRequest) {
           : `[합석] 보조 쿠폰: ${absorbCoupon}`
       }
       if (!couponCode && absorbCoupon) couponCode = absorbCoupon
+      // Realtime 추가주문 오인 방지(주방 재인쇄 금지) — absorb 취소 스탬프와 쌍
+      memo = appendPosOrderMergedKeepStamp(memo, { absorbOrderId })
 
       const pointUsed =
         Math.max(0, Math.trunc(Number(keep.point_used) || 0)) +

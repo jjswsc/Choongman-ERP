@@ -1,6 +1,12 @@
 /** Realtime pos_orders UPDATE — 테이블 이동(table_name만 변경) vs 추가주문·포장체크 구분 */
 
 import {
+  isPosMergeAbsorbedLineId,
+  isPosOrderMergedKeepReceive,
+  isRecentPosOrderMergeKeepReceive,
+  parseLatestPosOrderMergeKeepStamp,
+} from '@/lib/pos-order-merge'
+import {
   isPosOrderPaidLikeStatus,
   posOrderRowPaymentSum,
 } from '@/lib/pos-payment-receipt-from-order'
@@ -158,4 +164,125 @@ export function isPosDineInTableNameOnlyUpdate(
   if (Math.abs(oldTotal - newTotal) > 0.01) return false
 
   return true
+}
+
+function itemIdsFromItemsJson(itemsJson: unknown): Set<string> {
+  const ids = new Set<string>()
+  for (const raw of parseItemsJsonArray(itemsJson)) {
+    if (typeof raw !== 'object' || raw == null) continue
+    const id = String((raw as Record<string, unknown>).id ?? '').trim()
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+/** 합석으로 새로 붙은 absorb 줄 id (`m{absorbOrderId}-…`)가 생겼는지 */
+export function hasNewPosMergeAbsorbedLineIds(
+  oldItemsJson: unknown,
+  newItemsJson: unknown
+): boolean {
+  const oldIds = itemIdsFromItemsJson(oldItemsJson)
+  for (const id of itemIdsFromItemsJson(newItemsJson)) {
+    if (oldIds.has(id)) continue
+    if (isPosMergeAbsorbedLineId(id)) return true
+  }
+  return false
+}
+
+/**
+ * 합석(keep 품목 흡수) UPDATE — 추가주문 자동 주방/홀 인쇄 대상이 아님.
+ * - keep memo에 ORDER_MERGE_KEEP 스탬프가 **새로** 생기거나
+ * - (스탬프 존재 시) items에 `m{absorbId}-` 줄이 새로 붙은 경우
+ * ※ OLD에 memo 필드가 없으면(Replica Identity) “최근 스탬프”만으로 true 하지 않는다
+ *   → 합석 직후 정상 추가주문까지 막히는 것을 방지.
+ */
+export function isPosDineInTableMergeItemsUpdate(
+  oldRow: Record<string, unknown> | null | undefined,
+  newRow: Record<string, unknown>
+): boolean {
+  const newMemo = String(newRow.memo ?? '')
+  const newHasKeepStamp = isPosOrderMergedKeepReceive(newMemo)
+  if (!newHasKeepStamp) return false
+
+  if (
+    oldRow &&
+    posOrderRealtimeRowHasField(oldRow, 'items_json') &&
+    oldRow.items_json != null
+  ) {
+    if (hasNewPosMergeAbsorbedLineIds(oldRow.items_json, newRow.items_json)) return true
+  }
+
+  // 스탬프가 이번 UPDATE에 처음 붙은 경우만 (OLD memo를 볼 수 있을 때)
+  if (!oldRow || !posOrderRealtimeRowHasField(oldRow, 'memo')) return false
+  return !isPosOrderMergedKeepReceive(String(oldRow.memo ?? ''))
+}
+
+/** 동일 합석 스탬프에 대한 qty-only 스킵은 주문당 1회만 (45초 창 전체 차단 방지) */
+const mergeQtyOnlySkipAppliedKeys = new Set<string>()
+
+function consumeMergeQtyOnlySkipOnce(orderId: number, memo: string): boolean {
+  const parsed = parseLatestPosOrderMergeKeepStamp(memo)
+  if (!parsed) return false
+  const key = `${Math.floor(orderId)}:${parsed.atMs}`
+  if (mergeQtyOnlySkipAppliedKeys.has(key)) return false
+  mergeQtyOnlySkipAppliedKeys.add(key)
+  // 메모리 누수 방지 — 최근 키만 유지
+  if (mergeQtyOnlySkipAppliedKeys.size > 200) {
+    const first = mergeQtyOnlySkipAppliedKeys.values().next().value
+    if (first != null) mergeQtyOnlySkipAppliedKeys.delete(first)
+  }
+  return true
+}
+
+/** 테스트용 */
+export function resetMergeQtyOnlySkipAppliedKeysForTests(): void {
+  mergeQtyOnlySkipAppliedKeys.clear()
+}
+
+/**
+ * Realtime·폴링 공통: 합석으로 늘어난 수량/줄을 추가주문 자동인쇄에서 제외.
+ * @returns true면 스냅샷만 갱신하고 인쇄 스킵
+ *
+ * 결제 영수증·로컬 발주 인쇄는 건드리지 않는다.
+ * 동일메뉴 consolidate(수량만 증가)는 스탬프당 1회만 스킵 → 직후 같은 줄 추가주문은 출력됨.
+ */
+export function shouldSkipDineInAddonAutoprintForTableMerge(opts: {
+  orderId?: number
+  oldRow?: Record<string, unknown> | null
+  newRow?: Record<string, unknown> | null
+  newMemo?: string | null
+  changedKeys: Iterable<string>
+  prevQtyById?: Map<string, number>
+  nowMs?: number
+}): boolean {
+  const changed = [...opts.changedKeys]
+  if (changed.length === 0) return false
+
+  const newRow = opts.newRow
+  if (opts.oldRow && newRow && isPosDineInTableMergeItemsUpdate(opts.oldRow, newRow)) {
+    const memo = String(newRow.memo ?? opts.newMemo ?? '')
+    const orderId = opts.orderId ?? Number(newRow.id ?? 0)
+    if (Number.isFinite(orderId) && orderId > 0) {
+      // Realtime이 합석을 처리했으면 poll의 qty-only 1회 스킵도 소진
+      void consumeMergeQtyOnlySkipOnce(orderId, memo)
+    }
+    return true
+  }
+
+  const memo = opts.newMemo ?? (newRow ? String(newRow.memo ?? '') : '')
+  if (!isPosOrderMergedKeepReceive(memo)) return false
+  if (!isRecentPosOrderMergeKeepReceive(memo, 45_000, opts.nowMs)) return false
+
+  const prev = opts.prevQtyById
+  const brandNewIds = changed.filter((id) => (prev?.get(id) ?? 0) <= 0)
+
+  // absorb 줄이 m-접두로 붙은 경우 (스탬프 최근)
+  if (brandNewIds.length > 0) {
+    return brandNewIds.every((id) => isPosMergeAbsorbedLineId(id))
+  }
+
+  // 동일메뉴 consolidate: qty만 증가 — 스탬프당 1회만 스킵
+  const orderId = opts.orderId ?? (newRow ? Number(newRow.id ?? 0) : 0)
+  if (!Number.isFinite(orderId) || orderId <= 0) return false
+  return consumeMergeQtyOnlySkipOnce(orderId, memo)
 }

@@ -169,6 +169,7 @@ import {
   isPosOrderItemsJsonPackagingOnlyUpdate,
   posOrderRealtimePricingFieldsChanged,
   shouldAutoprintPaymentReceiptOnRealtimeUpdate,
+  shouldSkipDineInAddonAutoprintForTableMerge,
 } from '@/lib/pos-dine-in-realtime-update'
 import {
   buildKitchenSlipGroupOpts,
@@ -5195,6 +5196,22 @@ export default function PosTerminalPage() {
         return
       }
 
+      if (
+        shouldSkipDineInAddonAutoprintForTableMerge({
+          orderId,
+          oldRow,
+          newRow: row,
+          newMemo: String(row.memo ?? ''),
+          changedKeys: changedSet,
+          prevQtyById,
+        })
+      ) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        logPosPrintDebug('remote_dine_in_add_skip_table_merge', { orderId, changedCount: changedIds.length })
+        refetchCurrentStore()
+        return
+      }
+
       const storeCodeForSkip = String(row.store_code ?? currentStoreId)
       if (
         shouldSkipDineInRemoteAddAutoprint(orderId, storeCodeForSkip, prevQtyById, newQtyById, changedSet)
@@ -5664,6 +5681,18 @@ export default function PosTerminalPage() {
                 }
                 const storeCodePoll = String(o.storeCode ?? currentStoreId)
                 const changedSet = new Set(changedIds)
+                if (
+                  shouldSkipDineInAddonAutoprintForTableMerge({
+                    orderId: oid,
+                    newMemo: String(o.memo ?? ''),
+                    changedKeys: changedSet,
+                    prevQtyById,
+                  })
+                ) {
+                  dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
+                  logPosPrintDebug('poll_meta_remote_dine_in_add_skip_table_merge', { orderId: oid })
+                  continue
+                }
                 if (
                   shouldSkipDineInRemoteAddAutoprint(oid, storeCodePoll, prevQtyById, newQtyById, changedSet)
                 ) {
@@ -11288,7 +11317,7 @@ export default function PosTerminalPage() {
                   : (keepOrderId) => {
                       mainPosSelfDineInUpdateSuppressUntilRef.current.set(
                         keepOrderId,
-                        Date.now() + 15_000
+                        Date.now() + 45_000
                       )
                     }
               }

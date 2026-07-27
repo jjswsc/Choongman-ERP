@@ -78,11 +78,11 @@ export function extractTakeoutSlotNumberFromLabel(raw: string | undefined | null
 }
 
 function tryTranslateTakeoutTableLabel(s: string, t: (key: string) => string): string | null {
-  const pick = (key: string, fallback = ''): string => {
+  const pick = (key: string): string | null => {
     const raw = String(t(key) ?? '').trim()
-    if (!raw) return fallback
-    if (raw === key) return fallback
-    if (/^pos[A-Z]/.test(raw)) return fallback
+    if (!raw) return null
+    if (raw === key) return null
+    if (/^pos[A-Z]/.test(raw)) return null
     return raw
   }
   for (const prefix of TAKEOUT_SLOT_LABEL_PREFIXES) {
@@ -90,17 +90,22 @@ function tryTranslateTakeoutTableLabel(s: string, t: (key: string) => string): s
     const slotRe = new RegExp(`^${esc}\\s*#?\\s*(\\d+)\\s*$`, 'iu')
     const slotMatch = s.match(slotRe)
     if (slotMatch) {
-      const tmpl = pick('posTakeoutSlotN', '포장 {{n}}')
+      const tmpl = pick('posTakeoutSlotN')
+      // 인쇄 i18n에 슬롯 키가 없으면 원문 유지(한국어 fallback으로 덮어쓰지 않음)
+      if (!tmpl) return null
       return tmpl.replace(/\{\{n\}\}/g, slotMatch[1])
     }
     if (s.localeCompare(prefix, undefined, { sensitivity: 'accent' }) === 0) {
-      return pick('posTakeoutSlot') || pick('posOrderTypeTakeout') || prefix
+      return pick('posTakeoutSlot') || pick('posOrderTypeTakeout') || null
     }
   }
   const directTakeoutSlotN = /^posTakeoutSlotN$/i.test(s)
-  if (directTakeoutSlotN) return pick('posTakeoutSlotN', '포장 {{n}}')
+  if (directTakeoutSlotN) {
+    const tmpl = pick('posTakeoutSlotN')
+    return tmpl || null
+  }
   const directTakeoutSlot = /^posTakeoutSlot$/i.test(s)
-  if (directTakeoutSlot) return pick('posTakeoutSlot') || pick('posOrderTypeTakeout') || '포장'
+  if (directTakeoutSlot) return pick('posTakeoutSlot') || pick('posOrderTypeTakeout') || null
   return null
 }
 

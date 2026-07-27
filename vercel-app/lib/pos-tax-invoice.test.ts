@@ -18,6 +18,16 @@ describe('parsePosOrderMemo', () => {
     expect(taxInvoice).toBeNull()
   })
 
+  it('strips ORDER_MERGED and ORDER_MERGE_KEEP from plain memo (receipt/kitchen)', () => {
+    const memo =
+      'customer note\n' +
+      '[ORDER_MERGE_KEEP 2026-07-27T13:51:00.000Z absorb_id=57]\n' +
+      '[ORDER_MERGED 2026-07-27T13:51:00.000Z keep_id=55 keep_no=055]'
+    const { plainMemo } = parsePosOrderMemo(memo)
+    expect(plainMemo).toBe('customer note')
+    expect(plainMemo).not.toMatch(/ORDER_MERGE/)
+  })
+
   it('does not merge ORDER_CANCELLED into tax invoice address when stamp was appended after block', () => {
     const tax = {
       memberNo: '',

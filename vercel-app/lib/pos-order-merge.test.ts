@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendPosOrderMergedAbsorbStamp,
+  appendPosOrderMergedKeepStamp,
   buildPosOrderMergedAbsorbStamp,
+  buildPosOrderMergedKeepStamp,
+  isPosMergeAbsorbedLineId,
   isPosOrderMergedAbsorb,
   isPosOrderMergedAbsorbRow,
+  isPosOrderMergedKeepReceive,
   isPosOrderStatsCancellation,
+  isRecentPosOrderMergeKeepReceive,
+  parseLatestPosOrderMergeKeepStamp,
   parsePosOrderMergedKeepRef,
 } from '@/lib/pos-order-merge'
 
@@ -24,6 +30,18 @@ describe('pos-order-merge', () => {
       keepOrderId: 27,
       keepOrderNo: 'CMHUAMAK-20260602-027',
     })
+  })
+
+  it('builds keep receive stamp and detects recent window', () => {
+    const stamp = buildPosOrderMergedKeepStamp({ absorbOrderId: 57 })
+    expect(stamp).toMatch(/^\[ORDER_MERGE_KEEP .+ absorb_id=57\]$/)
+    const memo = appendPosOrderMergedKeepStamp('table memo', { absorbOrderId: 57 })
+    expect(isPosOrderMergedKeepReceive(memo)).toBe(true)
+    expect(isRecentPosOrderMergeKeepReceive(memo, 60_000)).toBe(true)
+    const parsed = parseLatestPosOrderMergeKeepStamp(memo)
+    expect(parsed?.absorbOrderId).toBe(57)
+    expect(isPosMergeAbsorbedLineId('m57-line-1')).toBe(true)
+    expect(isPosMergeAbsorbedLineId('line-1')).toBe(false)
   })
 
   it('excludes merged absorb from stats cancellation', () => {

@@ -94,11 +94,11 @@ export interface ParsedPosOrderMemo {
 export const TAX_INVOICE_MARKER = '[TAX_INVOICE]'
 
 const POS_INTERNAL_MEMO_STAMP_PREFIX =
-  /^\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED))\s+[^\]]*\]\s*(.*)$/i
+  /^\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED|MERGED|MERGE_KEEP))\s+[^\]]*\]\s*(.*)$/i
 
 /** 동일 스탬프가 한 줄 안에 여러 번 붙은 경우 */
 const POS_INTERNAL_MEMO_STAMP_INLINE =
-  /\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED))\s+[^\]]*\]/gi
+  /\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED|MERGED|MERGE_KEEP))\s+[^\]]*\]/gi
 
 function stripInternalMemoLine(line: string): string {
   const t = String(line || '').trim()
@@ -150,7 +150,7 @@ export function appendPosInternalMemoStamp(memo: string | undefined | null, stam
 function stripInternalStampsFromTaxInvoicePayload(payload: string): string {
   let text = String(payload || '').trim()
   if (!text) return ''
-  text = text.replace(/\r?\n\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED))\s+[^\]]*\][^\r\n]*/gi, '')
+  text = text.replace(/\r?\n\[(?:PAY_CORRECT|ORDER_(?:CANCELLED|REFUNDED|MERGED|MERGE_KEEP))\s+[^\]]*\][^\r\n]*/gi, '')
   return text.replace(POS_INTERNAL_MEMO_STAMP_INLINE, '').trim()
 }
 

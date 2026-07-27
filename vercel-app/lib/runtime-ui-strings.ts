@@ -20,6 +20,9 @@ type RuntimeUiStringKey =
   | "posOrderTypeDineIn"
   | "posOrderTypeTakeout"
   | "posOrderTypeDelivery"
+  /** 포장 슬롯 라벨(DB에 ko `포장 1`로 저장된 값을 인쇄 언어로 변환) */
+  | "posTakeoutSlot"
+  | "posTakeoutSlotN"
   | "posMemberPortalOrder"
   | "posMemberPortalOrderNotice"
   | "posMemberPortalPaymentPending"
@@ -50,6 +53,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "매장",
     posOrderTypeTakeout: "포장",
     posOrderTypeDelivery: "배달",
+    posTakeoutSlot: "포장",
+    posTakeoutSlotN: "포장 {{n}}",
     posMemberPortalOrder: "회원주문",
     posMemberPortalOrderNotice: "회원 주문입니다",
     posMemberPortalPaymentPending: "결제대기",
@@ -79,6 +84,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "Dine-in",
     posOrderTypeTakeout: "Takeout",
     posOrderTypeDelivery: "Delivery",
+    posTakeoutSlot: "Takeout",
+    posTakeoutSlotN: "Takeout {{n}}",
     posMemberPortalOrder: "Member order",
     posMemberPortalOrderNotice: "This is a member order",
     posMemberPortalPaymentPending: "Payment pending",
@@ -110,6 +117,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ทานที่ร้าน",
     posOrderTypeTakeout: "ซื้อกลับบ้าน",
     posOrderTypeDelivery: "เดลิเวอรี",
+    posTakeoutSlot: "ห่อกลับ",
+    posTakeoutSlotN: "ห่อกลับ {{n}}",
     posMemberPortalOrder: "สั่งซื้อสมาชิก",
     posMemberPortalOrderNotice: "คำสั่งซื้อสมาชิก",
     posMemberPortalPaymentPending: "รอชำระเงิน",
@@ -139,6 +148,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ဆိုင်တွင်စားမည်",
     posOrderTypeTakeout: "ထုပ်ယူ",
     posOrderTypeDelivery: "ပို့ဆောင်",
+    posTakeoutSlot: "ထုပ်ယူ",
+    posTakeoutSlotN: "ထုပ်ယူ {{n}}",
     posMemberPortalOrder: "Member order",
     posMemberPortalOrderNotice: "This is a member order",
     posMemberPortalPaymentPending: "Payment pending",
@@ -168,6 +179,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ນັ່ງກິນໃນຮ້ານ",
     posOrderTypeTakeout: "ຫໍ່ກັບ",
     posOrderTypeDelivery: "ຈັດສົ່ງ",
+    posTakeoutSlot: "ຫໍ່ກັບ",
+    posTakeoutSlotN: "ຫໍ່ກັບ {{n}}",
     posMemberPortalOrder: "Member order",
     posMemberPortalOrderNotice: "This is a member order",
     posMemberPortalPaymentPending: "Payment pending",
@@ -197,6 +210,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "ញ៉ាំនៅហាង",
     posOrderTypeTakeout: "យកត្រឡប់",
     posOrderTypeDelivery: "ដឹកជញ្ជូន",
+    posTakeoutSlot: "យកតាមខ្លួន",
+    posTakeoutSlotN: "យកតាមខ្លួន {{n}}",
     posMemberPortalOrder: "Member order",
     posMemberPortalOrderNotice: "This is a member order",
     posMemberPortalPaymentPending: "Payment pending",
@@ -226,6 +241,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "Ăn tại chỗ",
     posOrderTypeTakeout: "Mang đi",
     posOrderTypeDelivery: "Giao hàng",
+    posTakeoutSlot: "Mang đi",
+    posTakeoutSlotN: "Mang đi {{n}}",
     posMemberPortalOrder: "Member order",
     posMemberPortalOrderNotice: "This is a member order",
     posMemberPortalPaymentPending: "Payment pending",
@@ -255,6 +272,8 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     posOrderTypeDineIn: "Makan di kedai",
     posOrderTypeTakeout: "Bungkus",
     posOrderTypeDelivery: "Penghantaran",
+    posTakeoutSlot: "Bungkus",
+    posTakeoutSlotN: "Bungkus {{n}}",
     posMemberPortalOrder: "Member order",
     posMemberPortalOrderNotice: "This is a member order",
     posMemberPortalPaymentPending: "Payment pending",
