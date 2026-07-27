@@ -1580,16 +1580,18 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           const fresh = list?.[0]
           if (fresh?.items?.length) {
             const settings = await getPosPrinterSettings({ storeCode: canceledStoreCode })
-            voidPrinted = await printPosVoidReceiptForOrder({
-              order: fresh,
-              menus,
-              promos: promosWithItems,
-              lineOpts: { promoCatalogById, menus },
-              t,
-              lang,
-              printerSettings: settings,
-              printedAt: new Date(),
-            })
+            if (settings.autoPrintCheckBillOnCancel !== false) {
+              voidPrinted = await printPosVoidReceiptForOrder({
+                order: fresh,
+                menus,
+                promos: promosWithItems,
+                lineOpts: { promoCatalogById, menus },
+                t,
+                lang,
+                printerSettings: settings,
+                printedAt: new Date(),
+              })
+            }
           }
         } catch (printErr) {
           console.error('Void receipt print (receipts tab cancel):', printErr)

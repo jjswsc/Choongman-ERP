@@ -1,0 +1,38 @@
+---
+description: pos_orders 대량 UPDATE·Realtime 자동인쇄 사고 방지 운영 규칙
+alwaysApply: true
+---
+
+# POS 주문 Realtime·자동인쇄 안전 규칙
+
+2026-07-27: 협업 할인 backfill이 이미 결제된 `pos_orders`를 일괄 UPDATE → Realtime이 전 매장 POS에 전달 → 결제 영수증 대량 재인쇄 사고. 동일 유형 재발 금지.
+
+## 절대 원칙
+
+1. **이미 결제된 주문을 영업 중 일괄 UPDATE하지 않는다.**  
+   집계·협업·백필 목적으로 `pos_orders` / 주문 관련 테이블을 대량 수정하면 Realtime → 자동인쇄·주방 출력에 닿을 수 있다.
+2. **새 컬럼은 “앞으로만 채우기”를 기본**으로 한다. 과거분 backfill은 필수일 때만, 아래 절차로.
+3. Realtime 결제 영수증 자동인쇄는 **unpaid→paid 전환**일 때만 허용한다.  
+   (`shouldAutoprintPaymentReceiptOnRealtimeUpdate` — 이미 paid인 주문의 비결제 필드 UPDATE로 재인쇄 금지)
+
+## SQL·백필 실행 절차
+
+- DDL(컬럼 추가)과 DML(과거 데이터 UPDATE)을 **분리**한다. DDL만 먼저, backfill은 별도 일정.
+- backfill SQL 상단에 **「영업 중·POS 켜진 상태 실행 금지」** 경고를 반드시 넣는다.  
+  예: [`vercel-app/sql/backfill_pos_orders_collab_discount_usage.sql`](vercel-app/sql/backfill_pos_orders_collab_discount_usage.sql)
+- 실행 순서: **미리보기(건수·샘플) → 소량 배치(가능하면) → 심야·매장 마감 후 UPDATE → 검증**
+- 가능하면 backfill 대신 **뷰/RPC로 추정·집계**하거나, 신규 주문부터만 컬럼을 채운다.
+
+## 에이전트 체크리스트 (배포·SQL·POS 인쇄 관련 작업 시)
+
+- [ ] 이 변경이 `pos_orders`(또는 Realtime 구독 대상) **UPDATE를 유발**하는가?
+- [ ] 유발하면 메인 POS **결제 영수증 / 홀 / 주방 자동인쇄**에 닿는가?
+- [ ] 닿으면 **전환 가드·dedupe**가 있는가? 없으면 구현 후 배포.
+- [ ] 대량 UPDATE면 **영업 시간 실행을 제안하지 않는다.** 심야·POS 종료 후만 안내.
+
+## 사고 시 1분 대응 (매장 LINE)
+
+1. 프린터 전원 OFF(또는 USB 분리)  
+2. 임의 재인쇄 금지  
+3. 본사 수정 배포·POS 새로고침 대기  
+4. 배포 후 프린터 재가동

@@ -99,6 +99,10 @@ export interface PosPrinterSettings {
   autoPrintKitchenSlipOnOrder?: boolean
   /** 결제 모달 열기 직전 최종 주문서(홀) 자동 인쇄 */
   autoPrintFinalOrderBeforePayment?: boolean
+  /** 주문 취소 시 주방 취소 슬립 자동 인쇄 */
+  autoPrintKitchenSlipOnCancel?: boolean
+  /** 주문 전체 취소 시 체크빌(취소·void 전표) 자동 인쇄 */
+  autoPrintCheckBillOnCancel?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
   receiptBizAbn?: string
@@ -300,6 +304,8 @@ export async function savePosPrinterSettings(params: {
   autoPrintReceiptOnPayment?: boolean
   autoPrintKitchenSlipOnOrder?: boolean
   autoPrintFinalOrderBeforePayment?: boolean
+  autoPrintKitchenSlipOnCancel?: boolean
+  autoPrintCheckBillOnCancel?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
   receiptBizAbn?: string

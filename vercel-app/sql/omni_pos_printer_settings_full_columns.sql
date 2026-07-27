@@ -58,6 +58,8 @@ ALTER TABLE public.pos_printer_settings
   ADD COLUMN IF NOT EXISTS auto_print_receipt_on_payment boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS auto_print_kitchen_slip_on_order boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS auto_print_final_order_before_payment boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS auto_print_kitchen_slip_on_cancel boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS auto_print_check_bill_on_cancel boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS receipt_biz_name text DEFAULT '',
   ADD COLUMN IF NOT EXISTS receipt_biz_tax_id text DEFAULT '',
   ADD COLUMN IF NOT EXISTS receipt_biz_abn text DEFAULT '',

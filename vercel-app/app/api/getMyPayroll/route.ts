@@ -129,6 +129,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: null, msg: '' }, { headers })
     }
 
+    // 직원 앱: แจ้งประกาศ(published_at) 이후에만 노출. 컬럼 미배포 시에는 '대기'(임시저장)만 숨김.
+    if (Object.prototype.hasOwnProperty.call(r, 'published_at')) {
+      if (r.published_at == null || String(r.published_at).trim() === '') {
+        return NextResponse.json({ success: true, data: null, msg: '' }, { headers })
+      }
+    } else if (String(r.status || '').trim() === '대기') {
+      return NextResponse.json({ success: true, data: null, msg: '' }, { headers })
+    }
+
     const storeName = String(r.store || '').trim()
     const companyName = await getStoreCompanyName(storeName)
 

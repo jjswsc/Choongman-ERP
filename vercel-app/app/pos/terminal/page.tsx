@@ -820,6 +820,8 @@ export default function PosTerminalPage() {
     }
   }, [])
   const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = useState(false)
+  const [autoPrintKitchenSlipOnCancel, setAutoPrintKitchenSlipOnCancel] = useState(false)
+  const [autoPrintCheckBillOnCancel, setAutoPrintCheckBillOnCancel] = useState(true)
   const [receiptBizName, setReceiptBizName] = useState('')
   const [receiptBizTaxId, setReceiptBizTaxId] = useState('')
   const [receiptBizAbn, setReceiptBizAbn] = useState('')
@@ -1665,6 +1667,12 @@ export default function PosTerminalPage() {
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
         setAutoPrintFinalOrderBeforePayment(Boolean(s.autoPrintFinalOrderBeforePayment))
+        setAutoPrintKitchenSlipOnCancel(
+          typeof s.autoPrintKitchenSlipOnCancel === 'boolean'
+            ? s.autoPrintKitchenSlipOnCancel
+            : Boolean(s.autoPrintKitchenSlipOnOrder)
+        )
+        setAutoPrintCheckBillOnCancel(s.autoPrintCheckBillOnCancel !== false)
         setReceiptBizName(String(s.receiptBizName || ''))
         setReceiptBizTaxId(String(s.receiptBizTaxId || ''))
         setReceiptBizAbn(String(s.receiptBizAbn || ''))
@@ -4158,6 +4166,7 @@ export default function PosTerminalPage() {
   async function runAfterFullOrderCancelVoidReceiptPrint(orderId: number) {
     if (posDemoRef.current) return
     if (!isMainPosDevice) return
+    if (!autoPrintCheckBillOnCancel) return
     try {
       const list = await getPosOrders({ orderId, storeCode: currentStoreId })
       const po = list?.[0] as PosOrder | undefined
@@ -4183,7 +4192,7 @@ export default function PosTerminalPage() {
     }
   }
 
-  /** 전체 취소 직후: 주방에 취소 줄(`-`)만 인쇄(프린터 설정 `autoPrintKitchenSlipOnOrder` 따름) */
+  /** 전체 취소 직후: 주방 취소 슬립 + (설정 시) 체크빌/void 전표 */
   async function runAfterFullOrderCancelKitchenPrints(
     orderId: number,
     channel: 'dine_in' | 'takeout' | 'delivery',
@@ -4191,97 +4200,100 @@ export default function PosTerminalPage() {
   ) {
     if (posDemoRef.current) return
     if (!isMainPosDevice) return
-    if (!autoPrintKitchenSlipOnOrder) return
-    const lines = detail.removedKitchenLines
-    if (!lines?.length) return
 
-    const orderNoStr = String(detail.orderNoForPrint ?? orderId).trim()
-    const tableName = String(detail.tableName ?? '').trim()
-    const memo = String(detail.memo ?? '')
+    if (autoPrintKitchenSlipOnCancel) {
+      const lines = detail.removedKitchenLines
+      if (lines?.length) {
+        const orderNoStr = String(detail.orderNoForPrint ?? orderId).trim()
+        const tableName = String(detail.tableName ?? '').trim()
+        const memo = String(detail.memo ?? '')
 
-    const kitchenPrintKey = `order:${orderId}:kitchen:full:${Date.now()}`
-    const runKitchenFullCancel = () => {
-      if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
-      void getPrinterSettingsForStore(currentStoreId)
-        .then(async (settings) => {
-          const ki = kitchenSlipPrintI18n(settings, lang)
-          const menusForPrint = await resolveMenusForKitchenPrint(
-            lines as Array<Record<string, unknown>>,
-            currentStoreId
-          )
-          const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
-            lines as Array<Record<string, unknown>>,
-            menusForPrint
-          )
-          const slips = buildKitchenSlipGroups(
-            kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as typeof lines,
-            buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
-          )
-          if (!slips.length) return
-          const slipDesign = resolveKitchenSlipDesign(settings)
-          const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
-          const orderTypeLabelSlip = kitchenSlipOrderTypeLabel(
-            { orderType: channel, tableName, orderNo: orderNoStr, memo },
-            ki
-          )
-          const tablePartR = tableName
-            ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
-            : ''
-          const fullBannerText = (
-            tPrint('posKitchenFullCancelBanner') ||
-            ki.t('posKitchenFullCancelBanner') ||
-            'Order fully cancelled'
-          ).trim()
-          const fullHead =
-            '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000;white-space:pre-line">' +
-            escapeHtml(fullBannerText) +
-            '</div>'
-          const printOne = (idx: number) => {
-            if (idx >= slips.length) return
-            const slip = slips[idx]
-            const html = buildKitchenSlipDocumentHtml({
-              label: slip.label,
-              orderNo: orderNoStr,
-              storeCode: currentStoreId,
-              orderTypeLabel: orderTypeLabelSlip,
-              tablePart: tablePartR,
-              dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
-              items: kitchenSlipItemsForPrint(
-                slip.items,
-                kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
-                ki,
-                menusForPrint,
-                optionNameByCodeForPrint
-              ).map((row) => ({ ...row, cancelled: true })),
-              memoLine: memoLine || null,
-              escapeHtml,
-              design: slipDesign,
-          printerSettings: settings,
-              optionNameByCode: optionNameByCodeForPrint,
-              printColorAdjust: 'exact',
-              prependItemsHtml: fullHead,
+        const kitchenPrintKey = `order:${orderId}:kitchen:full:${Date.now()}`
+        const runKitchenFullCancel = () => {
+          if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
+          void getPrinterSettingsForStore(currentStoreId)
+            .then(async (settings) => {
+              const ki = kitchenSlipPrintI18n(settings, lang)
+              const menusForPrint = await resolveMenusForKitchenPrint(
+                lines as Array<Record<string, unknown>>,
+                currentStoreId
+              )
+              const optionNameByCodeForPrint = await resolveOptionNameByCodeForKitchenPrint(
+                lines as Array<Record<string, unknown>>,
+                menusForPrint
+              )
+              const slips = buildKitchenSlipGroups(
+                kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as typeof lines,
+                buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
+              )
+              if (!slips.length) return
+              const slipDesign = resolveKitchenSlipDesign(settings)
+              const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
+              const orderTypeLabelSlip = kitchenSlipOrderTypeLabel(
+                { orderType: channel, tableName, orderNo: orderNoStr, memo },
+                ki
+              )
+              const tablePartR = tableName
+                ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
+                : ''
+              const fullBannerText = (
+                tPrint('posKitchenFullCancelBanner') ||
+                ki.t('posKitchenFullCancelBanner') ||
+                'Order fully cancelled'
+              ).trim()
+              const fullHead =
+                '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000;white-space:pre-line">' +
+                escapeHtml(fullBannerText) +
+                '</div>'
+              const printOne = (idx: number) => {
+                if (idx >= slips.length) return
+                const slip = slips[idx]
+                const html = buildKitchenSlipDocumentHtml({
+                  label: slip.label,
+                  orderNo: orderNoStr,
+                  storeCode: currentStoreId,
+                  orderTypeLabel: orderTypeLabelSlip,
+                  tablePart: tablePartR,
+                  dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
+                  items: kitchenSlipItemsForPrint(
+                    slip.items,
+                    kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as KitchenSlipRoutingItem[],
+                    ki,
+                    menusForPrint,
+                    optionNameByCodeForPrint
+                  ).map((row) => ({ ...row, cancelled: true })),
+                  memoLine: memoLine || null,
+                  escapeHtml,
+                  design: slipDesign,
+                  printerSettings: settings,
+                  optionNameByCode: optionNameByCodeForPrint,
+                  printColorAdjust: 'exact',
+                  prependItemsHtml: fullHead,
+                })
+                printPosHtmlDocument(html, {
+                  title: slip.label,
+                  printDelayMs: 0,
+                  focusIframeBeforePrint: false,
+                  printRole: 'kitchen',
+                  kitchenStation: slip.station,
+                  escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                  onPrintUnavailable: () => {
+                    void appAlert(t('posPrintUnavailable'))
+                  },
+                  onAfterCleanup: () => {
+                    if (idx + 1 < slips.length)
+                      setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
+                  },
+                })
+              }
+              setTimeout(() => printOne(0), 0)
             })
-            printPosHtmlDocument(html, {
-              title: slip.label,
-              printDelayMs: 0,
-              focusIframeBeforePrint: false,
-              printRole: 'kitchen',
-              kitchenStation: slip.station,
-              escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
-              onPrintUnavailable: () => {
-                void appAlert(t('posPrintUnavailable'))
-              },
-              onAfterCleanup: () => {
-                if (idx + 1 < slips.length)
-                  setTimeout(() => printOne(idx + 1), resolveBetweenKitchenSlipsDelayMs())
-              },
-            })
-          }
-          setTimeout(() => printOne(0), 0)
-        })
-        .catch((e) => console.error('Kitchen slip print (full cancel):', e))
+            .catch((e) => console.error('Kitchen slip print (full cancel):', e))
+        }
+        setTimeout(runKitchenFullCancel, 0)
+      }
     }
-    setTimeout(runKitchenFullCancel, 0)
+
     void runAfterFullOrderCancelVoidReceiptPrint(orderId)
   }
 
@@ -4469,11 +4481,11 @@ export default function PosTerminalPage() {
 
     try {
       const skipKitchen = opts?.skipKitchen === true
-      if (printHallOrderSheet && !skipKitchen && autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
+      if (printHallOrderSheet && !skipKitchen && autoPrintKitchenSlipOnCancel && receiptPrintItems.length > 0) {
         await printReceiptNow(receiptPayload, null, false, undefined, true, runKitchenPartialReprint)
       } else if (printHallOrderSheet) {
         await printReceiptNow(receiptPayload, null, false, undefined, true)
-      } else if (!skipKitchen && autoPrintKitchenSlipOnOrder && receiptPrintItems.length > 0) {
+      } else if (!skipKitchen && autoPrintKitchenSlipOnCancel && receiptPrintItems.length > 0) {
         setTimeout(runKitchenPartialReprint, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
       }
     } catch (e) {

@@ -74,7 +74,7 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
     '① 등록·수정: 캠페인 기본정보·기간·매장·비용·KPI를 저장합니다.\n② 목록: 검색·필터로 캠페인을 찾고 허브 링크(광고·인플루언서·프로모)로 이동합니다.\n③ A/B 비교: 기간·매장 기준 캠페인 성과를 나란히 봅니다.',
   helpSum_admin_marketing_collab_menus: '협업·제휴 캠페인의 POS 할인·증빙·적용 범위를 관리합니다.',
   helpHow_admin_marketing_collab_menus:
-    '① 캠페인을 고른 뒤 「협업 관리 목록에 포함」을 켭니다.\n② 협업 상세에서 제휴사·증빙·메뉴 범위·할인을 저장합니다.\n③ 협업 조회 탭에서 기간·제휴사별 목록을 봅니다.\n④ 사용 현황 탭에서 기간·매장별 협업 할인 주문건수·할인액을 확인합니다.',
+    '① 캠페인을 고른 뒤 「협업 관리 목록에 포함」을 켭니다.\n② 협업 상세에서 제휴사·증빙·메뉴 범위·할인을 저장합니다.\n③ 협업 조회 탭에서 기간·제휴사별 목록을 봅니다.\n④ 사용 현황 탭: 기간·매장·캠페인 검색 후 「조회」.\n⑤ 과거 주문은 sql/backfill_pos_orders_collab_discount_usage.sql 을 Supabase에서 실행한 뒤 조회합니다.',
   helpSum_admin_marketing_promos: 'POS·Grab 연동 프로모션 세트를 캠페인 단위로 구성·조회합니다.',
   helpHow_admin_marketing_promos:
     '① 상단에서 캠페인을 선택합니다.\n② 편집·구성: 메뉴를 골라 세트를 만들고 저장합니다(POS와 동일 로직).\n③ 목록 조회: 활성·기간 필터로 세트를 보고 편집 탭으로 이동합니다.',
@@ -189,7 +189,7 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
     '① Create/Edit: save basics, dates, stores, costs, and KPI.\n② List: search and open hub links (ads, influencers, promos).\n③ A/B Compare: side-by-side campaign results.',
   helpSum_admin_marketing_collab_menus: 'Manage partner/collab POS discounts, proof, and menu scope.',
   helpHow_admin_marketing_collab_menus:
-    '① Pick a campaign and enable “Include in collab list”.\n② Save partner, proof, scope, and discount details.\n③ Overview tab for period and partner filters.\n④ Usage tab: order count and collab discount amount by period and store.',
+    '① Pick a campaign and enable “Include in collab list”.\n② Save partner, proof, scope, and discount details.\n③ Overview tab for period and partner filters.\n④ Usage tab: search by period/store/campaign, then Load for order count and discount.',
   helpSum_admin_marketing_promos: 'Compose and review POS·Grab promo sets by campaign.',
   helpHow_admin_marketing_promos:
     '① Select a campaign at the top.\n② Compose: pick menus and save sets (same logic as POS).\n③ List: filter by active/period and open in compose tab.',
@@ -298,7 +298,7 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
     '① สร้าง/แก้ไข: บันทึกข้อมูลพื้นฐาน ช่วงเวลา ร้าน ต้นทุน KPI\n② รายการ: ค้นหาและเปิดลิงก์โฆษณา อินฟลู โปรโม\n③ A/B: เปรียบเทียบผลแคมเปญ',
   helpSum_admin_marketing_collab_menus: 'จัดการส่วนลด POS หลักฐาน และขอบเขตความร่วมมือ',
   helpHow_admin_marketing_collab_menus:
-    '① เลือกแคมเปญและเปิด「รวมในรายการความร่วมมือ」\n② บันทึกพันธมิตร หลักฐาน ขอบเขต ส่วนลด\n③ แท็บภาพรวมสำหรับช่วงและพันธมิตร\n④ แท็บสถานะการใช้: จำนวนออเดอร์และยอดส่วนลดตามช่วงและสาขา',
+    '① เลือกแคมเปญและเปิด「รวมในรายการความร่วมมือ」\n② บันทึกพันธมิตร หลักฐาน ขอบเขต ส่วนลด\n③ แท็บภาพรวมสำหรับช่วงและพันธมิตร\n④ แท็บสถานะการใช้: ค้นหาตามช่วง/สาขา/แคมเปญ แล้วกดโหลด',
   helpSum_admin_marketing_promos: 'สร้างและดูชุดโปรโม POS·Grab ตามแคมเปญ',
   helpHow_admin_marketing_promos:
     '① เลือกแคมเปญด้านบน\n② แก้ไข/สร้าง: เลือกเมนูและบันทึกชุด (ตรรกะเดียวกับ POS)\n③ รายการ: กรองและเปิดในแท็บแก้ไข',

@@ -449,6 +449,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: '추가 주문 시 영수증 자동 인쇄',
     posAutoPrintReceiptOnPayment: '결제 시 영수증 자동 인쇄',
     posAutoPrintFinalHallOrderBeforePayment: '결제 직전 최종 홀 주문서 자동 인쇄',
+    posAutoPrintKitchenSlipOnCancel: '취소 시 주방 주문서 자동 인쇄',
+    posAutoPrintCheckBillOnCancel: '취소 시 체크빌(취소 전표) 자동 인쇄',
     posEscPosCutSection: '용지 절단 (Windows 설치형 POS)',
     posEscPosCutSectionHint:
       '하이브리드(Choongman POS)에서 ESC/POS 절단을 켜면, 드라이버가 자동 절단하지 않는 프린터에서도 잘립니다. 웹 브라우저만 쓰는 매장은 적용되지 않습니다. 태블릿과 메인 POS가 같은 열전사로 거의 동시에 찍을 때 홀·결제 절단을 끄면 출력이 한 롤로 이어붙을 수 있어 기본값은 켭니다.',
@@ -3754,6 +3756,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: 'Auto-print receipt on add-on order',
     posAutoPrintReceiptOnPayment: 'Auto-print receipt on payment',
     posAutoPrintFinalHallOrderBeforePayment: 'Auto-print final hall order before payment',
+    posAutoPrintKitchenSlipOnCancel: 'Auto-print kitchen slip on cancel',
+    posAutoPrintCheckBillOnCancel: 'Auto-print check bill (void) on cancel',
     posEscPosCutSection: 'Paper cut (Windows installed POS)',
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
@@ -8025,6 +8029,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posAutoPrintReceiptOnPayment: 'พิมพ์ใบเสร็จอัตโนมัติเมื่อชำระ',
     posAutoPrintFinalHallOrderBeforePayment:
       'พิมพ์ใบสั่งโต๊ะ(ฮอลล์) ฉบับสุดท้ายก่อนเปิดชำระเงินอัตโนมัติ',
+    posAutoPrintKitchenSlipOnCancel: 'พิมพ์ใบสั่งครัวอัตโนมัติเมื่อยกเลิกออเดอร์',
+    posAutoPrintCheckBillOnCancel: 'พิมพ์เช็คบิล (ใบยกเลิก) อัตโนมัติเมื่อยกเลิกออเดอร์',
     posEscPosCutSection: 'ตัดกระดาษ (POS ติดตั้งบน Windows)',
     posEscPosCutSectionHint:
       'เมื่อเปิดตัด ESC/POS ในไฮบริด (Choongman POS) จะตัดได้แม้ไดรเวอร์จะไม่ตัดอัตโนมัติ ร้านที่ใช้เว็บเบราว์เซอร์อย่างเดียวจะไม่ถูกนำไปใช้ หลายเครื่องพิมพ์เครื่องความร้อนเครื่องเดียวเกือบพร้อมกัน ถ้าปิดตัดฮอลล์หรือใบเสร็จบิลอาจต่อเป็นม้วนเดียว—ค่าเริ่มต้นจึงเปิดไว้',
@@ -10850,6 +10856,8 @@ export const I18N_POS_MM: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: 'Auto-print receipt on add-on order',
     posAutoPrintReceiptOnPayment: 'Auto-print receipt on payment',
     posAutoPrintFinalHallOrderBeforePayment: 'Auto-print final hall order before payment',
+    posAutoPrintKitchenSlipOnCancel: 'Auto-print kitchen slip on cancel',
+    posAutoPrintCheckBillOnCancel: 'Auto-print check bill (void) on cancel',
     posEscPosCutSection: 'Paper cut (Windows installed POS)',
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
@@ -13697,6 +13705,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: 'Auto-print receipt on add-on order',
     posAutoPrintReceiptOnPayment: 'Auto-print receipt on payment',
     posAutoPrintFinalHallOrderBeforePayment: 'Auto-print final hall order before payment',
+    posAutoPrintKitchenSlipOnCancel: 'Auto-print kitchen slip on cancel',
+    posAutoPrintCheckBillOnCancel: 'Auto-print check bill (void) on cancel',
     posEscPosCutSection: 'Paper cut (Windows installed POS)',
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
@@ -16640,6 +16650,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: 'Auto-print receipt on add-on order',
     posAutoPrintReceiptOnPayment: 'Auto-print receipt on payment',
     posAutoPrintFinalHallOrderBeforePayment: 'Auto-print final hall order before payment',
+    posAutoPrintKitchenSlipOnCancel: 'Auto-print kitchen slip on cancel',
+    posAutoPrintCheckBillOnCancel: 'Auto-print check bill (void) on cancel',
     posEscPosCutSection: 'Paper cut (Windows installed POS)',
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
@@ -19573,6 +19585,8 @@ export const I18N_POS_VI: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: 'Auto-print receipt on add-on order',
     posAutoPrintReceiptOnPayment: 'Auto-print receipt on payment',
     posAutoPrintFinalHallOrderBeforePayment: 'Auto-print final hall order before payment',
+    posAutoPrintKitchenSlipOnCancel: 'Auto-print kitchen slip on cancel',
+    posAutoPrintCheckBillOnCancel: 'Auto-print check bill (void) on cancel',
     posEscPosCutSection: 'Paper cut (Windows installed POS)',
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
@@ -22456,6 +22470,8 @@ export const I18N_POS_MS: Record<string, string> = {
     posAutoPrintReceiptOnAddOrder: 'Auto-print receipt on add-on order',
     posAutoPrintReceiptOnPayment: 'Auto-print receipt on payment',
     posAutoPrintFinalHallOrderBeforePayment: 'Auto-print final hall order before payment',
+    posAutoPrintKitchenSlipOnCancel: 'Auto-print kitchen slip on cancel',
+    posAutoPrintCheckBillOnCancel: 'Auto-print check bill (void) on cancel',
     posEscPosCutSection: 'Paper cut (Windows installed POS)',
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',

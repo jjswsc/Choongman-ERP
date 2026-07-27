@@ -300,6 +300,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const isDraft = String(body.mode || '').toLowerCase() === 'draft'
+    const statusValue = isDraft ? '대기' : '확정'
+
     const rows: Record<string, unknown>[] = list.map((r) => ({
       month: monthStr,
       store: String(r.store || '').trim(),
@@ -333,7 +336,9 @@ export async function POST(request: NextRequest) {
       tax: Number(r.tax) || 0,
       other_ded: Number(r.otherDed) || 0,
       net_pay: Number(r.netPay) || 0,
-      status: String(r.status || '확정').trim(),
+      status: statusValue,
+      // 저장·임시저장 시 직원 앱 공개 해제 → แจ้งประกาศ 다시 눌러야 보임
+      published_at: null,
     })).map((r) => stampSaasTenantId(r, tenantScope, 'payroll_records'))
 
     for (let j = 0; j < rows.length; j += CHUNK) {
@@ -342,9 +347,28 @@ export async function POST(request: NextRequest) {
         await savePayrollRecordsChunk(monthStr, chunk, tenantScope)
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
-        if (/employee_id|employee_code|42703|column/i.test(em)) {
+        if (/published_at|42703|column/i.test(em)) {
+          const withoutPublished = chunk.map((r) => {
+            const { published_at: _p, ...rest } = r
+            return rest
+          })
+          try {
+            await savePayrollRecordsChunk(monthStr, withoutPublished, tenantScope)
+          } catch (e2) {
+            const em2 = e2 instanceof Error ? e2.message : String(e2)
+            if (/employee_id|employee_code|42703|column/i.test(em2)) {
+              const fallbackChunk = withoutPublished.map((r) => {
+                const { employee_id: _eid, employee_code: _ecode, ...rest } = r
+                return rest
+              })
+              await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+            } else {
+              throw e2
+            }
+          }
+        } else if (/employee_id|employee_code|42703|column/i.test(em)) {
           const fallbackChunk = chunk.map((r) => {
-            const { employee_id: _eid, employee_code: _ecode, ...rest } = r
+            const { employee_id: _eid, employee_code: _ecode, published_at: _p, ...rest } = r
             return rest
           })
           await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
@@ -352,6 +376,17 @@ export async function POST(request: NextRequest) {
           throw e
         }
       }
+    }
+
+    if (isDraft) {
+      return NextResponse.json(
+        {
+          success: true,
+          draft: true,
+          msg: `${monthStr} 급여가 임시 저장되었습니다.`,
+        },
+        { headers }
+      )
     }
 
     const expenseSubject = await resolvePayrollAccountSubject()

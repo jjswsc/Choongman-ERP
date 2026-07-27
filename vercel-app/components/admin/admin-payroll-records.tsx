@@ -58,6 +58,7 @@ type RecordRow = {
   other_ded: number
   net_pay: number
   status?: string
+  published_at?: string | null
 }
 
 function fmt(n: number): string {
@@ -413,6 +414,31 @@ ${rows.map((row, ri) => {
     setSendingNotice(true)
     setError(null)
     try {
+      // 직원 앱 공개 (published_at) — 실패 시 LINE/공지 보내지 않음(앱에서 안 보이는데 공지만 가는 것 방지)
+      const pubRes = await apiFetch("/api/publishPayroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthStr,
+          targets: toSend.map((r) => ({
+            store: r.store,
+            name: r.name,
+            ...(r.employee_id != null && r.employee_id > 0 ? { employeeId: r.employee_id } : {}),
+          })),
+        }),
+      })
+      const pubBody = (await pubRes.json().catch(() => null)) as {
+        success?: boolean
+        msg?: string
+        message?: string
+      } | null
+      if (!pubRes.ok || !pubBody?.success) {
+        setError(
+          String(pubBody?.msg || pubBody?.message || "").trim() || t("pay_publish_fail")
+        )
+        return
+      }
+
       const targetStore = storeFilter === "All" ? "전체" : storeFilter
       const title = `${formatMonthLabel(monthStr)} 급여 명세서 등록`
       const content = `급여 명세서가 등록되었습니다.\n앱 홈 → [내 급여 명세서]에서 확인하세요.`
@@ -435,6 +461,7 @@ ${rows.map((row, ri) => {
         setSelected(new Set())
         setSelectAll(false)
         window.dispatchEvent(new CustomEvent("notice-sent"))
+        void fetchPayrollRecords(monthStr, storeFilter)
       } else {
         setError(res.message || t("noticeSendFail"))
       }
@@ -562,10 +589,19 @@ ${rows.map((row, ri) => {
                       <td className="p-2 text-right text-primary">+{fmt(r.ot_amt || 0)}</td>
                       <td className="p-2 text-right text-destructive">-{fmt(deductSum)}</td>
                       <td className="p-2 text-right font-semibold bg-muted/30">{fmt(r.net_pay)}</td>
-                      <td className="p-2 text-center">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted">
+                      <td className="p-2 text-center space-y-0.5">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted block">
                           {r.status === "확정" ? t("pay_status_confirmed") : r.status === "지급대기" ? t("pay_status_pending") : (r.status ? r.status : t("pay_status_pending"))}
                         </span>
+                        {r.published_at ? (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 block">
+                            {t("pay_published")}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 block">
+                            {t("pay_unpublished")}
+                          </span>
+                        )}
                       </td>
                       <td className="p-2 text-center">
                         <DropdownMenu>

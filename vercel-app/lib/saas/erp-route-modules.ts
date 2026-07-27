@@ -126,6 +126,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/processAttendance", module: "attendance" },
   { prefix: "/api/getPayroll", module: "attendance" },
   { prefix: "/api/savePayroll", module: "attendance" },
+  { prefix: "/api/publishPayroll", module: "attendance" },
   { prefix: "/api/payroll", module: "attendance" },
   { prefix: "/api/getAdminEmployee", module: "attendance" },
   { prefix: "/api/saveAdminEmployee", module: "attendance" },

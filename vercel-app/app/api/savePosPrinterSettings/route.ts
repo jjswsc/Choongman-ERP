@@ -257,6 +257,8 @@ export async function POST(req: NextRequest) {
     const autoPrintReceiptOnPayment = Boolean(body?.autoPrintReceiptOnPayment)
     const autoPrintKitchenSlipOnOrder = Boolean(body?.autoPrintKitchenSlipOnOrder)
     const autoPrintFinalOrderBeforePayment = Boolean(body?.autoPrintFinalOrderBeforePayment)
+    const autoPrintKitchenSlipOnCancel = Boolean(body?.autoPrintKitchenSlipOnCancel)
+    const autoPrintCheckBillOnCancel = body?.autoPrintCheckBillOnCancel !== false
     const receiptBizName = String(body?.receiptBizName ?? '').trim()
     const receiptBizTaxId = String(body?.receiptBizTaxId ?? '').trim()
     const receiptBizAbn = String(body?.receiptBizAbn ?? '').trim()
@@ -458,6 +460,8 @@ export async function POST(req: NextRequest) {
       auto_print_receipt_on_payment: autoPrintReceiptOnPayment,
       auto_print_kitchen_slip_on_order: autoPrintKitchenSlipOnOrder,
       auto_print_final_order_before_payment: autoPrintFinalOrderBeforePayment,
+      auto_print_kitchen_slip_on_cancel: autoPrintKitchenSlipOnCancel,
+      auto_print_check_bill_on_cancel: autoPrintCheckBillOnCancel,
       receipt_biz_name: receiptBizName,
       receipt_biz_tax_id: receiptBizTaxId,
       receipt_biz_abn: receiptBizAbn,

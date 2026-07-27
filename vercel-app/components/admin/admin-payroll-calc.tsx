@@ -20,7 +20,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import Link from "next/link"
-import { Calculator, Save, FolderOpen, Calendar, Clock } from "lucide-react"
+import { Calculator, Save, FolderOpen, Calendar, Clock, FileDown } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -175,9 +175,11 @@ export function AdminPayrollCalc() {
   const [stores, setStores] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
   const [list, setList] = useState<PayrollRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [queried, setQueried] = useState(false)
+  const [loadedFromDraft, setLoadedFromDraft] = useState(false)
 
   const [editOpen, setEditOpen] = useState(false)
   const [editIdx, setEditIdx] = useState(-1)
@@ -265,13 +267,17 @@ export function AdminPayrollCalc() {
         }))
         setList(rows)
         setError(null)
-        await appAlert("✅ " + t("pay_load_done"))
+        const hasDraft = rows.some((r) => r.status === "대기")
+        setLoadedFromDraft(hasDraft)
+        await appAlert("✅ " + t("pay_load_done") + (hasDraft ? "\n" + t("pay_draft_loaded_hint") : ""))
       } else {
         setList([])
+        setLoadedFromDraft(false)
         setError(pickApiMsg(data) || t("pay_no_data"))
       }
     } catch (e) {
       setList([])
+      setLoadedFromDraft(false)
       setError(e instanceof Error ? e.message : t("pay_error"))
     } finally {
       setLoading(false)
@@ -344,6 +350,36 @@ export function AdminPayrollCalc() {
           status: String(r.status || "대기"),
           calcExplain: (r.calcExplain as PayrollCalcExplain | undefined),
         }))
+        if (list.length > 0) {
+          const prevByEid = new Map<number, PayrollRow>()
+          const prevByName = new Map<string, PayrollRow>()
+          for (const p of list) {
+            if (p.employeeId && p.employeeId > 0) prevByEid.set(p.employeeId, p)
+            prevByName.set(`${p.store}|${p.name}`, p)
+          }
+          const MANUAL_FIELDS: (keyof PayrollRow)[] = ["splBonus", "otAmt", "otherDed"]
+          const hasPrevManualEdits = list.some((p) =>
+            MANUAL_FIELDS.some((f) => (Number(p[f]) || 0) !== 0)
+          )
+          const shouldMerge = hasPrevManualEdits &&
+            await appConfirm(t("pay_calc_merge_draft_confirm"))
+          if (shouldMerge) {
+            for (let ri = 0; ri < rows.length; ri++) {
+              const r = rows[ri]
+              const prev = (r.employeeId && r.employeeId > 0 ? prevByEid.get(r.employeeId) : null)
+                || prevByName.get(`${r.store}|${r.name}`)
+              if (!prev) continue
+              for (const f of MANUAL_FIELDS) {
+                const pv = Number(prev[f]) || 0
+                if (pv !== 0) {
+                  ;(rows[ri] as Record<string, unknown>)[f] = pv
+                  rows[ri] = { ...rows[ri], netPay: calcNetPay(rows[ri]) }
+                }
+              }
+            }
+          }
+        }
+        setLoadedFromDraft(false)
         setList(rows)
         await appAlert("✅ " + t("pay_calc_done"))
       } else {
@@ -579,6 +615,70 @@ export function AdminPayrollCalc() {
     }
   }
 
+  const handleSaveDraft = async () => {
+    if (list.length === 0) return
+    const hasConfirmed = list.some((r) => String(r.status || "").trim() === "확정")
+    if (hasConfirmed) {
+      const ok = await appConfirm(t("pay_draft_overwrite_confirmed_warn"))
+      if (!ok) return
+    }
+    setSavingDraft(true)
+    setError(null)
+    try {
+      const payload = {
+        monthStr,
+        mode: "draft",
+        userStore: auth?.store || "",
+        userRole: auth?.role || "",
+        list: list.map((r) => ({
+          store: r.store,
+          name: r.name,
+          employeeId: r.employeeId,
+          employeeCode: r.employeeCode || "",
+          dept: r.dept || "",
+          role: r.role || "",
+          salary: r.salary,
+          posAllow: r.posAllow,
+          hazAllow: r.hazAllow,
+          diligenceAllow: r.diligenceAllow,
+          birthBonus: r.birthBonus,
+          holidayPay: r.holidayPay,
+          holidayWorkDays: r.holidayWorkDays || 0,
+          splBonus: r.splBonus,
+          ot15: r.ot15 || 0,
+          ot20: r.ot20 || 0,
+          ot30: r.ot30 || 0,
+          otAmt: r.otAmt,
+          lateMin: r.lateMin,
+          lateDed: r.lateDed,
+          earlyMin: r.earlyMin ?? 0,
+          earlyDed: r.earlyDed ?? 0,
+          sso: r.sso,
+          tax: r.tax,
+          otherDed: r.otherDed,
+          netPay: r.netPay,
+          status: "대기",
+        })),
+      }
+      const res = await apiFetch("/api/savePayroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setLoadedFromDraft(true)
+        await appAlert("✅ " + t("pay_draft_saved"))
+      } else {
+        setError(translateApiMessage(pickApiMsg(data)) || t("pay_save_fail"))
+      }
+    } catch {
+      setError(t("pay_save_fail"))
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
   return (
     <Card className="shadow-sm">
       <CardContent className="pt-6">
@@ -625,6 +725,15 @@ export function AdminPayrollCalc() {
             {loading ? t("loading") : t("pay_load_from_db")}
           </Button>
           <Button
+            variant="outline"
+            className="h-9 font-medium border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30 disabled:opacity-50"
+            onClick={handleSaveDraft}
+            disabled={savingDraft || !hasResult}
+          >
+            <FileDown className="mr-1.5 h-3.5 w-3.5" />
+            {savingDraft ? t("loading") : t("pay_save_draft")}
+          </Button>
+          <Button
             className="h-9 font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
             onClick={handleSave}
             disabled={saving || !hasResult}
@@ -637,10 +746,17 @@ export function AdminPayrollCalc() {
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200 space-y-0.5">
           <p>{t("pay_calc_hint_line1")}</p>
           <p>{t("pay_calc_hint_line2")}</p>
+          <p>{t("pay_calc_hint_line2b")}</p>
           <p>{t("pay_calc_hint_line3")}</p>
           <p>{t("pay_calc_hint_line4")}</p>
           <p>{t("pay_calc_hint_line5")}</p>
         </div>
+
+        {loadedFromDraft && hasResult && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            ⚠️ {t("pay_draft_banner")}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">

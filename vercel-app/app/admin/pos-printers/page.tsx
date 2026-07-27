@@ -453,6 +453,8 @@ export default function PosPrintersPage() {
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
   const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = React.useState(false)
+  const [autoPrintKitchenSlipOnCancel, setAutoPrintKitchenSlipOnCancel] = React.useState(false)
+  const [autoPrintCheckBillOnCancel, setAutoPrintCheckBillOnCancel] = React.useState(true)
   const [escPosCutAfterKitchenHtml, setEscPosCutAfterKitchenHtml] = React.useState(true)
   const [escPosCutAfterHallOrderHtml, setEscPosCutAfterHallOrderHtml] = React.useState(true)
   const [escPosCutAfterPaymentReceiptHtml, setEscPosCutAfterPaymentReceiptHtml] = React.useState(true)
@@ -732,6 +734,12 @@ export default function PosPrintersPage() {
     )
     setAutoPrintKitchenSlipOnOrder(Boolean(settings.autoPrintKitchenSlipOnOrder))
     setAutoPrintFinalOrderBeforePayment(Boolean(settings.autoPrintFinalOrderBeforePayment))
+    setAutoPrintKitchenSlipOnCancel(
+      typeof settings.autoPrintKitchenSlipOnCancel === "boolean"
+        ? settings.autoPrintKitchenSlipOnCancel
+        : Boolean(settings.autoPrintKitchenSlipOnOrder)
+    )
+    setAutoPrintCheckBillOnCancel(settings.autoPrintCheckBillOnCancel !== false)
     setEscPosCutAfterKitchenHtml(settings.escPosCutAfterKitchenHtml !== false)
     setEscPosCutAfterHallOrderHtml(Boolean(settings.escPosCutAfterHallOrderHtml))
     setEscPosCutAfterPaymentReceiptHtml(Boolean(settings.escPosCutAfterPaymentReceiptHtml))
@@ -970,6 +978,8 @@ export default function PosPrintersPage() {
         autoPrintReceiptOnPayment,
         autoPrintKitchenSlipOnOrder,
         autoPrintFinalOrderBeforePayment,
+        autoPrintKitchenSlipOnCancel,
+        autoPrintCheckBillOnCancel,
         escPosCutAfterKitchenHtml,
         escPosCutAfterHallOrderHtml,
         escPosCutAfterPaymentReceiptHtml,
@@ -1208,6 +1218,8 @@ export default function PosPrintersPage() {
         copyKeys([
           "autoPrintKitchenSlipOnOrder",
           "autoPrintFinalOrderBeforePayment",
+          "autoPrintKitchenSlipOnCancel",
+          "autoPrintCheckBillOnCancel",
           "escPosCutAfterKitchenHtml",
           "escPosCutAfterHallOrderHtml",
           "escPosCutAfterPaymentReceiptHtml",
@@ -2047,6 +2059,18 @@ export default function PosPrintersPage() {
                     label={tr("posAutoPrintFinalHallOrderBeforePayment", "결제 직전 최종 홀 주문서 자동 인쇄")}
                     value={autoPrintFinalOrderBeforePayment}
                     onChange={setAutoPrintFinalOrderBeforePayment}
+                    t={t}
+                  />
+                  <ToggleRow
+                    label={tr("posAutoPrintKitchenSlipOnCancel", "취소 시 주방 주문서 자동 인쇄")}
+                    value={autoPrintKitchenSlipOnCancel}
+                    onChange={setAutoPrintKitchenSlipOnCancel}
+                    t={t}
+                  />
+                  <ToggleRow
+                    label={tr("posAutoPrintCheckBillOnCancel", "취소 시 체크빌(취소 전표) 자동 인쇄")}
+                    value={autoPrintCheckBillOnCancel}
+                    onChange={setAutoPrintCheckBillOnCancel}
                     t={t}
                   />
                 </div>

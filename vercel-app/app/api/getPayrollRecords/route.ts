@@ -40,6 +40,7 @@ export interface PayrollRecordRow {
   other_ded: number
   net_pay: number
   status: string
+  published_at?: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -146,6 +147,10 @@ export async function GET(request: NextRequest) {
       other_ded: Number(r.other_ded) || 0,
       net_pay: Number(r.net_pay) || 0,
       status: String(r.status || ''),
+      published_at:
+        r.published_at != null && String(r.published_at).trim() !== ''
+          ? String(r.published_at)
+          : null,
     }))
 
     const filtered = filterPayrollRowsHidingOffice(list, payrollAuth)

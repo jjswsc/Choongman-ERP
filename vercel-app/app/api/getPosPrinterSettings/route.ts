@@ -145,6 +145,8 @@ export async function GET(request: NextRequest) {
     autoPrintReceiptOnPayment: false,
     autoPrintKitchenSlipOnOrder: false,
     autoPrintFinalOrderBeforePayment: false,
+    autoPrintKitchenSlipOnCancel: false,
+    autoPrintCheckBillOnCancel: true,
     receiptBizName: '',
     receiptBizTaxId: '',
     receiptBizAbn: '',
@@ -267,6 +269,8 @@ export async function GET(request: NextRequest) {
       auto_print_receipt_on_payment?: boolean
       auto_print_kitchen_slip_on_order?: boolean
       auto_print_final_order_before_payment?: boolean
+      auto_print_kitchen_slip_on_cancel?: boolean
+      auto_print_check_bill_on_cancel?: boolean
       receipt_biz_name?: string
       receipt_biz_tax_id?: string
       receipt_biz_abn?: string
@@ -428,6 +432,14 @@ export async function GET(request: NextRequest) {
       autoPrintReceiptOnPayment: Boolean(raw?.auto_print_receipt_on_payment),
       autoPrintKitchenSlipOnOrder: Boolean(raw?.auto_print_kitchen_slip_on_order),
       autoPrintFinalOrderBeforePayment: Boolean(raw?.auto_print_final_order_before_payment),
+      autoPrintKitchenSlipOnCancel:
+        typeof raw?.auto_print_kitchen_slip_on_cancel === 'boolean'
+          ? raw.auto_print_kitchen_slip_on_cancel
+          : Boolean(raw?.auto_print_kitchen_slip_on_order),
+      autoPrintCheckBillOnCancel:
+        typeof raw?.auto_print_check_bill_on_cancel === 'boolean'
+          ? raw.auto_print_check_bill_on_cancel
+          : true,
       receiptBizName: String(raw?.receipt_biz_name || '').trim() || fallback.receiptBizName,
       receiptBizTaxId: String(raw?.receipt_biz_tax_id || '').trim() || fallback.receiptBizTaxId,
       receiptBizAbn: String(raw?.receipt_biz_abn || '').trim() || fallback.receiptBizAbn,

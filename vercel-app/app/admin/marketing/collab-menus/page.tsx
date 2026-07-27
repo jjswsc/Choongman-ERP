@@ -438,7 +438,7 @@ export default function MarketingCollabMenusPage() {
         <TabsContent value="usage" className={adminTabsContentCn}>
           <Card>
             <CardContent className="p-4 sm:p-5">
-              <CollabManagementUsageTab campaigns={collabOnly} t={t} />
+              <CollabManagementUsageTab campaigns={list} t={t} />
             </CardContent>
           </Card>
         </TabsContent>

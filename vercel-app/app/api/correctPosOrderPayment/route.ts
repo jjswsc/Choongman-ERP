@@ -8,11 +8,15 @@ import {
   getPosBusinessDateStrFromConfig,
 } from '@/lib/pos-business-day'
 import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
-import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import {
+  supabaseSelectFilterStrippingUnknownColumns,
+  supabaseUpdateByFilterWithPgrst204Fallback,
+} from '@/lib/supabase-pgrst204-retry'
 import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
+import { computePayCorrectAmountPatch } from '@/lib/pos-pay-correct-amounts'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
 
@@ -47,7 +51,8 @@ function round2(n: number): number {
 
 /**
  * POS 영수증 관리: 당일(방콕) 결제가 반영된 주문(완료·결제완료·준비완료·조리중 등)의 결제 수단 분해 정정.
- * 기본은 합계 유지; `total`을 주면 주문 합계·과세 스냅샷(비율 조정)까지 함께 갱신할 수 있음.
+ * 기본은 합계 유지; `total`을 주면 메뉴 소계는 유지하고 할인·VAT만 새 합계에 맞게 재계산한다.
+ * (구버전 비율 스케일은 total 1→230 처럼 할인액이 폭증하는 버그가 있어 제거)
  * 분개 역처리는 하지 않음(회계는 별도 조정 또는 동일 총액 전제).
  */
 export async function POST(req: NextRequest) {
@@ -83,11 +88,16 @@ export async function POST(req: NextRequest) {
     const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
     const paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? 0))
 
-    const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
-      limit: 1,
-      select:
-        'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,delivery_app_code,discount_amt,coupon_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
-    })) as {
+    const rows = (await supabaseSelectFilterStrippingUnknownColumns(
+      'pos_orders',
+      `id=eq.${id}`,
+      {
+        limit: 1,
+        select:
+          'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
+      },
+      'correctPosOrderPayment'
+    )) as {
       id?: number
       store_code?: string
       total?: number
@@ -101,6 +111,8 @@ export async function POST(req: NextRequest) {
       delivery_app_code?: string | null
       discount_amt?: number
       coupon_discount_amt?: number
+      collab_discount_amt?: number
+      tier_discount_amt?: number
       delivery_fee?: number
       packaging_fee?: number
       payment_cash?: number
@@ -165,31 +177,23 @@ export async function POST(req: NextRequest) {
     }
 
     const totalDelta = Math.abs(effectiveTotal - prevTotal) > 0.02
-    let patchSubtotal: number | undefined
-    let patchVat: number | undefined
-    let patchDiscount: number | undefined
-    let patchCoupon: number | undefined
-    let patchDeliv: number | undefined
-    let patchPack: number | undefined
+    const amountPatch = totalDelta
+      ? computePayCorrectAmountPatch({
+          prevTotal,
+          effectiveTotal,
+          subtotal: Number(row.subtotal ?? 0),
+          discountAmt: Number(row.discount_amt ?? 0),
+          couponDiscountAmt: Number(row.coupon_discount_amt ?? 0),
+          deliveryFee: Number(row.delivery_fee ?? 0),
+          packagingFee: Number(row.packaging_fee ?? 0),
+          vat: Number(row.vat ?? 0),
+          collabDiscountAmt: Number(row.collab_discount_amt ?? 0),
+          tierDiscountAmt: Number(row.tier_discount_amt ?? 0),
+        })
+      : null
 
-    if (totalDelta) {
-      if (prevTotal <= 0.005) {
-        return NextResponse.json({ success: false, message: 'total_fix_requires_positive_prev' }, { status: 400, headers })
-      }
-      const r = effectiveTotal / prevTotal
-      const newSubtotal = round2(Number(row.subtotal ?? 0) * r)
-      const newDiscount = round2(Number(row.discount_amt ?? 0) * r)
-      const newCoupon = round2(Number(row.coupon_discount_amt ?? 0) * r)
-      const newDeliv = round2(Number(row.delivery_fee ?? 0) * r)
-      const newPack = round2(Number(row.packaging_fee ?? 0) * r)
-      const basePart = round2(Math.max(0, newSubtotal - newDiscount + newDeliv + newPack - newCoupon))
-      const newVat = round2(Math.max(0, effectiveTotal - basePart))
-      patchSubtotal = newSubtotal
-      patchVat = newVat
-      patchDiscount = newDiscount
-      patchCoupon = newCoupon
-      patchDeliv = newDeliv
-      patchPack = newPack
+    if (totalDelta && !amountPatch) {
+      return NextResponse.json({ success: false, message: 'total_fix_requires_positive_prev' }, { status: 400, headers })
     }
 
     const who = [caller.name, caller.employeeCode].filter(Boolean).join(' ')
@@ -228,27 +232,34 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    await supabaseUpdateByFilter(`pos_orders`, `id=eq.${id}`, {
-      ...(totalDelta
-        ? {
-            total: effectiveTotal,
-            subtotal: patchSubtotal ?? round2(Number(row.subtotal ?? 0)),
-            vat: patchVat ?? round2(Number(row.vat ?? 0)),
-            discount_amt: patchDiscount ?? round2(Number(row.discount_amt ?? 0)),
-            coupon_discount_amt: patchCoupon ?? round2(Number(row.coupon_discount_amt ?? 0)),
-            delivery_fee: patchDeliv ?? round2(Number(row.delivery_fee ?? 0)),
-            packaging_fee: patchPack ?? round2(Number(row.packaging_fee ?? 0)),
-          }
-        : {}),
-      payment_cash: paymentCash,
-      payment_card: paymentCard,
-      payment_qr: paymentQr,
-      payment_other: paymentOther,
-      payment_other_breakdown: breakdownDb,
-      payment_delivery_app: paymentDeliveryApp,
-      delivery_payment_channel: deliveryPaymentChannel,
-      memo: nextMemo,
-    })
+    await supabaseUpdateByFilterWithPgrst204Fallback(
+      'pos_orders',
+      `id=eq.${id}`,
+      {
+        ...(amountPatch
+          ? {
+              total: effectiveTotal,
+              subtotal: amountPatch.subtotal,
+              vat: amountPatch.vat,
+              discount_amt: amountPatch.discountAmt,
+              coupon_discount_amt: amountPatch.couponDiscountAmt,
+              collab_discount_amt: amountPatch.collabDiscountAmt,
+              tier_discount_amt: amountPatch.tierDiscountAmt,
+              delivery_fee: amountPatch.deliveryFee,
+              packaging_fee: amountPatch.packagingFee,
+            }
+          : {}),
+        payment_cash: paymentCash,
+        payment_card: paymentCard,
+        payment_qr: paymentQr,
+        payment_other: paymentOther,
+        payment_other_breakdown: breakdownDb,
+        payment_delivery_app: paymentDeliveryApp,
+        delivery_payment_channel: deliveryPaymentChannel,
+        memo: nextMemo,
+      },
+      'correctPosOrderPayment'
+    )
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
