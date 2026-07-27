@@ -381,6 +381,10 @@ export async function updatePosOrder(params: {
   appliedCoupons?: PosAppliedCoupon[]
   tierDiscountAmt?: number
   memberTierCode?: string
+  /** 협업 할인 금액 */
+  collabDiscountAmt?: number
+  /** 협업 캠페인 ID (marketing_campaigns.id) */
+  collabCampaignId?: number | string
   pointUsed?: number
   pointEarned?: number
   guestCount?: number
@@ -681,6 +685,10 @@ export async function savePosOrder(params: {
   appliedCoupons?: PosAppliedCoupon[]
   tierDiscountAmt?: number
   memberTierCode?: string
+  /** 협업 할인 금액 */
+  collabDiscountAmt?: number
+  /** 협업 캠페인 ID (marketing_campaigns.id) */
+  collabCampaignId?: number | string
   pointUsed?: number
   pointEarned?: number
   /** 홀 dine_in 시 권장. 미입력 시 0 */

@@ -1,9 +1,17 @@
 "use client"
 
 import * as React from "react"
+import { ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import type { MarketingCampaign } from "@/lib/api-client"
 import { useStoreList } from "@/lib/use-store-list"
@@ -100,6 +108,62 @@ function statusBadgeClass(status: string) {
   }
 }
 
+/** 적용 매장 — 행 높이 고정용 압축 셀 (전체 목록은 다이얼로그) */
+function CollabStoresCompactCell(props: {
+  branches: string[]
+  allStoresLabel: string
+  storeFilter: string
+  formatStoreLabel: (s: string) => string
+  t: TFn
+  onOpenList: () => void
+}) {
+  const { branches, allStoresLabel, storeFilter, formatStoreLabel, t, onOpenList } = props
+  if (branches.length === 0) {
+    return (
+      <span
+        className="inline-flex max-w-[9rem] truncate rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+        title={allStoresLabel}
+      >
+        {allStoresLabel}
+      </span>
+    )
+  }
+  if (branches.length === 1) {
+    const label = formatStoreLabel(branches[0]!)
+    const filtered = storeFilter && branches[0] === storeFilter
+    return (
+      <span
+        className={cn(
+          "inline-flex max-w-[9rem] truncate rounded-md border px-2 py-0.5 text-[11px] font-medium",
+          filtered
+            ? "border-primary/40 bg-primary/10 text-foreground"
+            : "border-border/70 bg-background text-foreground"
+        )}
+        title={label}
+      >
+        {label}
+      </span>
+    )
+  }
+  const countLabel = t("marketingCollabOverviewStoreCount").replace("{n}", String(branches.length))
+  const preview = formatStoreLabel(branches[0]!)
+  return (
+    <button
+      type="button"
+      onClick={onOpenList}
+      className={cn(
+        "group inline-flex max-w-[11rem] items-center gap-1 rounded-md border border-border/70 bg-background px-2 py-0.5 text-left text-[11px] font-medium transition-colors",
+        "hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      )}
+      title={branches.map(formatStoreLabel).join(", ")}
+    >
+      <span className="shrink-0 tabular-nums text-foreground">{countLabel}</span>
+      <span className="min-w-0 truncate text-muted-foreground">· {preview}</span>
+      <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100" aria-hidden />
+    </button>
+  )
+}
+
 type PartnerAgg = {
   key: string
   detail: MarketingCollabDetail
@@ -127,6 +191,7 @@ export function CollabManagementOverviewTab(props: {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [partnerKeyFilter, setPartnerKeyFilter] = React.useState("")
+  const [storesDialogCampaignId, setStoresDialogCampaignId] = React.useState<string | null>(null)
   const periodControlled = props.onPeriodFromChange != null && props.onPeriodToChange != null
   const [localPeriodFrom, setLocalPeriodFrom] = React.useState(() => getBangkokTodayRangeYmd().from)
   const [localPeriodTo, setLocalPeriodTo] = React.useState(() => getBangkokTodayRangeYmd().to)
@@ -134,6 +199,12 @@ export function CollabManagementOverviewTab(props: {
   const periodTo = periodControlled ? (props.periodTo ?? "") : localPeriodTo
   const setPeriodFrom = periodControlled ? props.onPeriodFromChange! : setLocalPeriodFrom
   const setPeriodTo = periodControlled ? props.onPeriodToChange! : setLocalPeriodTo
+
+  const storesDialogCampaign = React.useMemo(
+    () => (storesDialogCampaignId ? campaigns.find((c) => c.id === storesDialogCampaignId) ?? null : null),
+    [campaigns, storesDialogCampaignId]
+  )
+  const storesDialogBranches = storesDialogCampaign?.branches ?? []
 
   const resetPeriodToToday = React.useCallback(() => {
     const r = getBangkokTodayRangeYmd()
@@ -427,68 +498,125 @@ export function CollabManagementOverviewTab(props: {
           {t("marketingCollabOverviewEmpty")}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/80">
-          <table className="w-full min-w-[920px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
-                <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColStores")}</th>
-                <th className="min-w-[160px] px-3 py-2.5">{t("marketingCollabOverviewColCampaign")}</th>
-                <th className="min-w-[140px] px-3 py-2.5">{t("marketingCollabOverviewColPartner")}</th>
-                <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColPeriod")}</th>
-                <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColDesign")}</th>
-                <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColStatus")}</th>
-                <th className="min-w-[120px] px-3 py-2.5">{t("marketingCollabOverviewColContact")}</th>
-                <th className="whitespace-nowrap px-3 py-2.5 text-right">{t("marketingCollabOverviewColAction")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => {
-                const d = collabDetailOf(c)
-                const storeCol = c.branches?.length ? c.branches.join(", ") : allStoresLabel
-                const contact = [d.contactName, d.contactInfo].map((x) => (x ?? "").trim()).filter(Boolean).join(" / ")
-                return (
-                  <tr key={c.id} className="border-b border-border/40 last:border-0">
-                    <td className="px-3 py-2.5 align-top text-xs">{storeCol}</td>
-                    <td className="px-3 py-2.5 align-top">
-                      <div className="space-y-0.5">
-                        {c.campaignNo ? (
-                          <span className="font-mono text-[11px] text-muted-foreground">{c.campaignNo}</span>
-                        ) : null}
-                        <p className="font-medium leading-snug">{c.topic}</p>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 align-top text-xs leading-snug">{partnerLine(d, t)}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-xs text-muted-foreground">
-                      {c.startDate || "—"} ~ {c.endDate || "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-xs text-muted-foreground">
-                      {c.designStartDate || c.designEndDate ? (
-                        <>
-                          {c.designStartDate || "—"} ~ {c.designEndDate || "—"}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 align-top">
-                      <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium", statusBadgeClass(c.status))}>
-                        {statusLabelFn(c.status, t)}
-                      </span>
-                    </td>
-                    <td className="max-w-[200px] px-3 py-2.5 align-top text-xs text-muted-foreground break-words">
-                      {contact || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 align-top text-right">
-                      <Button type="button" variant="secondary" size="sm" className="h-8 text-xs" onClick={() => onGoToEdit(c.id)}>
-                        {t("marketingCollabOverviewGoEdit")}
-                      </Button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="overflow-x-auto rounded-xl border border-border/80">
+            <table className="w-full min-w-[920px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
+                  <th className="min-w-[180px] px-3 py-2.5">{t("marketingCollabOverviewColCampaign")}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColStatus")}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColPeriod")}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColDesign")}</th>
+                  <th className="min-w-[140px] px-3 py-2.5">{t("marketingCollabOverviewColPartner")}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5">{t("marketingCollabOverviewColStores")}</th>
+                  <th className="min-w-[120px] px-3 py-2.5">{t("marketingCollabOverviewColContact")}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-right">{t("marketingCollabOverviewColAction")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => {
+                  const d = collabDetailOf(c)
+                  const branches = c.branches ?? []
+                  const contact = [d.contactName, d.contactInfo].map((x) => (x ?? "").trim()).filter(Boolean).join(" / ")
+                  return (
+                    <tr key={c.id} className="border-b border-border/40 last:border-0">
+                      <td className="px-3 py-2.5 align-middle">
+                        <div className="space-y-0.5">
+                          {c.campaignNo ? (
+                            <span className="font-mono text-[11px] text-muted-foreground">{c.campaignNo}</span>
+                          ) : null}
+                          <p className="font-medium leading-snug">{c.topic}</p>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 align-middle">
+                        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium", statusBadgeClass(c.status))}>
+                          {statusLabelFn(c.status, t)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 align-middle text-xs text-muted-foreground">
+                        {c.startDate || "—"} ~ {c.endDate || "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 align-middle text-xs text-muted-foreground">
+                        {c.designStartDate || c.designEndDate ? (
+                          <>
+                            {c.designStartDate || "—"} ~ {c.designEndDate || "—"}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-xs leading-snug">{partnerLine(d, t)}</td>
+                      <td className="px-3 py-2.5 align-middle">
+                        <CollabStoresCompactCell
+                          branches={branches}
+                          allStoresLabel={allStoresLabel}
+                          storeFilter={storeFilter}
+                          formatStoreLabel={formatStoreLabel}
+                          t={t}
+                          onOpenList={() => setStoresDialogCampaignId(c.id)}
+                        />
+                      </td>
+                      <td className="max-w-[200px] px-3 py-2.5 align-middle text-xs text-muted-foreground break-words">
+                        {contact || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-right">
+                        <Button type="button" variant="secondary" size="sm" className="h-8 text-xs" onClick={() => onGoToEdit(c.id)}>
+                          {t("marketingCollabOverviewGoEdit")}
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <Dialog
+            open={storesDialogCampaignId != null}
+            onOpenChange={(open) => {
+              if (!open) setStoresDialogCampaignId(null)
+            }}
+          >
+            <DialogContent className="max-h-[85vh] max-w-md overflow-hidden sm:rounded-xl">
+              <DialogHeader>
+                <DialogTitle>{t("marketingCollabOverviewColStores")}</DialogTitle>
+                <DialogDescription className="text-left">
+                  {storesDialogCampaign?.topic
+                    ? `${storesDialogCampaign.campaignNo ? `${storesDialogCampaign.campaignNo} · ` : ""}${storesDialogCampaign.topic}`
+                    : t("marketingCollabOverviewStoresDialogDesc")}
+                </DialogDescription>
+              </DialogHeader>
+              {storesDialogBranches.length === 0 ? (
+                <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                  {allStoresLabel}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    {t("marketingCollabOverviewStoreCount").replace("{n}", String(storesDialogBranches.length))}
+                  </p>
+                  <ul className="max-h-[min(50vh,22rem)] space-y-1.5 overflow-y-auto rounded-lg border border-border/60 bg-muted/10 p-2">
+                    {storesDialogBranches.map((s) => {
+                      const label = formatStoreLabel(s)
+                      const active = Boolean(storeFilter && s === storeFilter)
+                      return (
+                        <li
+                          key={s}
+                          className={cn(
+                            "rounded-md px-2.5 py-1.5 text-sm",
+                            active ? "bg-primary/10 font-medium text-foreground" : "bg-background text-foreground"
+                          )}
+                        >
+                          {label}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        </>
       )}
     </div>
   )

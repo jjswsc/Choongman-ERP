@@ -302,6 +302,8 @@ export const I18N_POS_KO: Record<string, string> = {
       '프린터에는 연결되었지만 돈통 열기 명령이 실패했습니다. 돈통 케이블/드라이버를 확인해 주세요.',
     posDrawerOpenErrShellException:
       'POS 앱 내부 통신 오류로 돈통 열기에 실패했습니다. 앱을 재시작한 뒤 다시 시도해 주세요.',
+    posDrawerOpenErrNoScript:
+      '현금 서랍 스크립트가 설치본에 없습니다. Windows POS를 최신(0.1.15+)으로 재설치해 주세요.',
     posDrawerOpenErrAllLocalBridgeFailed:
       '로컬 브리지 연결에 실패했습니다. 브리지 프로그램 실행 상태를 확인해 주세요.',
     posDrawerOpenErrBridgeResponseFailed:
@@ -3559,6 +3561,8 @@ export const I18N_POS_EN: Record<string, string> = {
       'Printer connection is present, but the drawer-kick command failed. Check the drawer cable and driver.',
     posDrawerOpenErrShellException:
       'POS shell communication failed while opening the drawer. Restart the app and try again.',
+    posDrawerOpenErrNoScript:
+      'Cash drawer script is missing from this install. Reinstall Windows POS 0.1.15 or newer.',
     posDrawerOpenErrAllLocalBridgeFailed:
       'Could not reach the local drawer bridge. Confirm the bridge service is running.',
     posDrawerOpenErrBridgeResponseFailed:
@@ -7330,6 +7334,8 @@ export const I18N_POS_TH: Record<string, string> = {
       'เชื่อมต่อเครื่องพิมพ์ได้ แต่คำสั่งเปิดลิ้นชักล้มเหลว ตรวจสายลิ้นชัก/ไดรเวอร์',
     posDrawerOpenErrShellException:
       'สื่อสารกับแอป POS ไม่สำเร็จขณะเปิดลิ้นชัก โปรดปิดแล้วเปิดแอปใหม่',
+    posDrawerOpenErrNoScript:
+      'ไม่มีสคริปต์เปิดลิ้นชักในตัวติดตั้ง กรุณาติดตั้ง Windows POS เวอร์ชัน 0.1.15 ขึ้นไปใหม่',
     posDrawerOpenErrAllLocalBridgeFailed:
       'เชื่อมต่อบริดจ์ในเครื่องไม่สำเร็จ โปรดตรวจว่าโปรแกรมบริดจ์กำลังทำงาน',
     posDrawerOpenErrBridgeResponseFailed:

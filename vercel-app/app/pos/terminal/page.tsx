@@ -123,6 +123,7 @@ import {
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { posOrderCouponFieldsFromOrderRow, posOrderCouponFieldsFromPayload } from '@/lib/pos-order-coupon-fields'
 import { posOrderTierDiscountFieldsFromPayload } from '@/lib/pos-order-tier-discount-fields'
+import { posOrderCollabDiscountFieldsFromPayload } from '@/lib/pos-order-collab-discount-fields'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { mapDineInAddonCartLineForKitchenPrint, mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
 import {
@@ -8306,6 +8307,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
@@ -8485,6 +8487,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
@@ -8896,6 +8899,7 @@ export default function PosTerminalPage() {
                     ...addonMemberFields,
                     ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                     pointEarned: 0,
                     guestCount: payload.guestCount ?? existingOrder.guestCount,
                     paymentCash: 0,
@@ -8935,6 +8939,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
                     localOrderNo: posSaveClientKey,
@@ -9108,6 +9113,7 @@ export default function PosTerminalPage() {
                   discountAmt,
                   couponDiscountAmt: payload.couponDiscountAmt ?? 0,
                   ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                   discountReason: String(payload.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
@@ -9492,6 +9498,7 @@ export default function PosTerminalPage() {
                     memberNo: payload.memberNo,
                     ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
                     ...posOrderPaymentFieldsFromSnapshot(pay),
@@ -9536,6 +9543,7 @@ export default function PosTerminalPage() {
                       memberNo: payload.memberNo,
                       ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
                       ...posOrderPaymentFieldsFromSnapshot(pay),
@@ -9576,6 +9584,7 @@ export default function PosTerminalPage() {
                       memberNo: payload.memberNo,
                       ...posOrderCouponFieldsFromPayload(payload),
                     ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
                       localOrderNo: posSaveClientKey,
@@ -10033,6 +10042,8 @@ export default function PosTerminalPage() {
                   memberId: payload.memberId,
                   memberNo: payload.memberNo,
                   ...posOrderCouponFieldsFromPayload(payload),
+                  ...posOrderTierDiscountFieldsFromPayload(payload),
+                  ...posOrderCollabDiscountFieldsFromPayload(payload),
                   pointUsed: payload.pointUsed,
                   localOrderNo: posSaveClientKey,
                   items: cartLinesToPosOrderItems(payloadItemsNormalized),
@@ -10162,6 +10173,7 @@ export default function PosTerminalPage() {
                   discountAmt,
                   couponDiscountAmt: payload.couponDiscountAmt ?? 0,
                   ...posOrderTierDiscountFieldsFromPayload(payload),
+                    ...posOrderCollabDiscountFieldsFromPayload(payload),
                   discountReason: String(payload.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,

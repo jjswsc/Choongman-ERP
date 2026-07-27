@@ -4,3 +4,4 @@
 export * from './marketing-campaigns-core'
 export * from './marketing-line-oa'
 export * from './marketing-campaign-analytics'
+export * from './collab-discount-usage'

@@ -2,7 +2,7 @@
 export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_pageTitle: '회원앱 운영',
   mpAdmin_pageDesc:
-    '월별 프로모션·신메뉴·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널을 함께 관리합니다.',
+    '월별 프로모션·신메뉴·팝업·정보·공지 목록을 검색·필터하고, 매장·디자인·문의 채널·가입 매장 통계를 함께 관리합니다.',
   mpAdmin_qrBtn: '회원앱 QR',
   mpAdmin_readOnlyNotice: '이 화면은 조회만 가능합니다. 편집은 본사·회계·매장 관리자 계정으로 로그인해 주세요.',
 
@@ -14,6 +14,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_tabStores: '매장',
   mpAdmin_tabDesign: '디자인',
   mpAdmin_tabContact: '문의',
+  mpAdmin_tabSignupStats: '가입 매장 통계',
   mpAdmin_tabDelivery: '배달·포장',
 
   mpAdmin_designTitle: '배경화면 디자인 관리',
@@ -416,7 +417,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
 export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_pageTitle: 'Member app',
   mpAdmin_pageDesc:
-    'Search and filter monthly promos, new menus, popups, info, and notices; manage stores, design, and contact channels in one place.',
+    'Search and filter monthly promos, new menus, popups, info, and notices; manage stores, design, contact channels, and sign-up-by-store stats in one place.',
   mpAdmin_qrBtn: 'Member app QR',
   mpAdmin_readOnlyNotice:
     'This screen is view-only. Sign in with HQ, accounting, or store manager access to edit.',
@@ -429,6 +430,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_tabStores: 'Stores',
   mpAdmin_tabDesign: 'Design',
   mpAdmin_tabContact: 'Contact',
+  mpAdmin_tabSignupStats: 'Sign-up by store',
   mpAdmin_tabDelivery: 'Delivery · Takeout',
 
   mpAdmin_designTitle: 'Background design',
@@ -830,7 +832,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
 export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_pageTitle: 'จัดการแอปสมาชิก',
   mpAdmin_pageDesc:
-    'ค้นหาและกรองโปรโมชันประจำเดือน เมนูใหม่ ป๊อปอัป ข้อมูลและประกาศ จัดการสาขา ดีไซน์ และช่องทางติดต่อในที่เดียว',
+    'ค้นหาและกรองโปรโมชันประจำเดือน เมนูใหม่ ป๊อปอัป ข้อมูลและประกาศ จัดการสาขา ดีไซน์ ช่องทางติดต่อ และสถิติสมัครตามร้านในที่เดียว',
   mpAdmin_qrBtn: 'QR แอปสมาชิก',
   mpAdmin_readOnlyNotice:
     'หน้านี้ดูได้อย่างเดียว กรุณาเข้าสู่ระบบด้วยบัญชีสำนักงานใหญ่ บัญชี หรือผู้จัดการสาขาเพื่อแก้ไข',
@@ -843,6 +845,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_tabStores: 'สาขา',
   mpAdmin_tabDesign: 'ดีไซน์',
   mpAdmin_tabContact: 'ติดต่อ',
+  mpAdmin_tabSignupStats: 'สถิติสมัครตามร้าน',
   mpAdmin_tabDelivery: 'เดลิเวอรี · ห่อกลับ',
 
   mpAdmin_designTitle: 'จัดการพื้นหลัง',

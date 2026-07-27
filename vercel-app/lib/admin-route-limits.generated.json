@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-21T10:05:41.669Z",
-  "entryCount": 1608,
+  "generatedAt": "2026-07-27T04:20:43.637Z",
+  "entryCount": 1698,
   "entries": [
     {
       "path": "app/admin/grab-integration/page.tsx",
@@ -11,14 +11,14 @@
     },
     {
       "path": "app/admin/members/visits/page.tsx",
-      "line": 204,
+      "line": 205,
       "kind": "limit",
       "value": 1,
       "apiLabel": "admin/members/visits"
     },
     {
       "path": "app/admin/members/visits/page.tsx",
-      "line": 214,
+      "line": 215,
       "kind": "limit",
       "value": 500,
       "apiLabel": "admin/members/visits"
@@ -325,8 +325,22 @@
       "apiLabel": "cleanupTransactionalData"
     },
     {
+      "path": "app/api/collabDiscountUsage/route.ts",
+      "line": 168,
+      "kind": "pageSize",
+      "value": 5000,
+      "apiLabel": "collabDiscountUsage"
+    },
+    {
       "path": "app/api/confirmHrPolicyRead/route.ts",
-      "line": 29,
+      "line": 54,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "confirmHrPolicyRead"
+    },
+    {
+      "path": "app/api/confirmHrPolicyRead/route.ts",
+      "line": 61,
       "kind": "limit",
       "value": 1,
       "apiLabel": "confirmHrPolicyRead"
@@ -347,56 +361,56 @@
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 117,
+      "line": 146,
       "kind": "limit",
       "value": 1,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 149,
+      "line": 178,
       "kind": "limit",
       "value": 1,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 160,
+      "line": 189,
       "kind": "limit",
       "value": 5,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 180,
+      "line": 213,
       "kind": "limit",
       "value": 5,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 188,
+      "line": 225,
       "kind": "limit",
       "value": 5,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 207,
+      "line": 248,
       "kind": "limit",
       "value": 10,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 215,
+      "line": 260,
       "kind": "limit",
       "value": 10,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 232,
+      "line": 281,
       "kind": "limit",
       "value": 10,
       "apiLabel": "createAttendanceFromSchedule"
@@ -584,6 +598,13 @@
       "apiLabel": "deleteExpenseRegisterItem"
     },
     {
+      "path": "app/api/deleteFixedExpense/route.ts",
+      "line": 44,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteFixedExpense"
+    },
+    {
       "path": "app/api/deleteInboundBatch/route.ts",
       "line": 34,
       "kind": "limit",
@@ -591,11 +612,88 @@
       "apiLabel": "deleteInboundBatch"
     },
     {
+      "path": "app/api/deleteInteriorDirectPurchase/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorDirectPurchase"
+    },
+    {
+      "path": "app/api/deleteInteriorExpenseItem/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorExpenseItem"
+    },
+    {
       "path": "app/api/deleteInteriorFile/route.ts",
-      "line": 23,
+      "line": 34,
       "kind": "limit",
       "value": 1,
       "apiLabel": "deleteInteriorFile"
+    },
+    {
+      "path": "app/api/deleteInteriorKitchenItem/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorKitchenItem"
+    },
+    {
+      "path": "app/api/deleteInteriorLayoutItem/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorLayoutItem"
+    },
+    {
+      "path": "app/api/deleteInteriorMaterialSpec/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorMaterialSpec"
+    },
+    {
+      "path": "app/api/deleteInteriorScheduleItem/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorScheduleItem"
+    },
+    {
+      "path": "app/api/deleteInteriorSpecification/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorSpecification"
+    },
+    {
+      "path": "app/api/deleteInteriorVendorDirectory/route.ts",
+      "line": 37,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorVendorDirectory"
+    },
+    {
+      "path": "app/api/deleteInteriorVendorDirectory/route.ts",
+      "line": 41,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorVendorDirectory"
+    },
+    {
+      "path": "app/api/deleteInteriorVendorTrack/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorVendorTrack"
+    },
+    {
+      "path": "app/api/deleteInteriorWorkPackage/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteInteriorWorkPackage"
     },
     {
       "path": "app/api/deleteItemCategory/route.ts",
@@ -771,6 +869,20 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "deleteWarningLetterRegistry"
+    },
+    {
+      "path": "app/api/deleteWorkLogItem/route.ts",
+      "line": 23,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteWorkLogItem"
+    },
+    {
+      "path": "app/api/deleteWorkLogItem/route.ts",
+      "line": 28,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteWorkLogItem"
     },
     {
       "path": "app/api/executeExpensePayment/route.ts",
@@ -1019,7 +1131,7 @@
     },
     {
       "path": "app/api/extractInteriorQuoteAmount/route.ts",
-      "line": 27,
+      "line": 32,
       "kind": "limit",
       "value": 1,
       "apiLabel": "extractInteriorQuoteAmount"
@@ -1355,21 +1467,35 @@
     },
     {
       "path": "app/api/getAttendancePendingList/route.ts",
-      "line": 113,
+      "line": 126,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendancePendingList"
     },
     {
       "path": "app/api/getAttendancePendingList/route.ts",
-      "line": 119,
+      "line": 134,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getAttendancePendingList"
+    },
+    {
+      "path": "app/api/getAttendancePendingList/route.ts",
+      "line": 144,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendancePendingList"
     },
     {
       "path": "app/api/getAttendanceQrDevices/route.ts",
-      "line": 54,
+      "line": 79,
+      "kind": "limit",
+      "value": 50,
+      "apiLabel": "getAttendanceQrDevices"
+    },
+    {
+      "path": "app/api/getAttendanceQrDevices/route.ts",
+      "line": 86,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getAttendanceQrDevices"
@@ -1502,49 +1628,63 @@
     },
     {
       "path": "app/api/getCombinedOutboundHistory/route.ts",
-      "line": 140,
+      "line": 145,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getCombinedOutboundHistory"
     },
     {
       "path": "app/api/getCombinedOutboundHistory/route.ts",
-      "line": 171,
+      "line": 176,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "getCombinedOutboundHistory"
-    },
-    {
-      "path": "app/api/getCombinedOutboundHistory/route.ts",
-      "line": 172,
-      "kind": "maxRows",
-      "value": 100000,
       "apiLabel": "getCombinedOutboundHistory"
     },
     {
       "path": "app/api/getCombinedOutboundHistory/route.ts",
       "line": 177,
-      "kind": "pageSize",
-      "value": 8000,
-      "apiLabel": "getCombinedOutboundHistory"
-    },
-    {
-      "path": "app/api/getCombinedOutboundHistory/route.ts",
-      "line": 178,
       "kind": "maxRows",
       "value": 100000,
       "apiLabel": "getCombinedOutboundHistory"
     },
     {
       "path": "app/api/getCombinedOutboundHistory/route.ts",
-      "line": 247,
+      "line": 182,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "getCombinedOutboundHistory"
+    },
+    {
+      "path": "app/api/getCombinedOutboundHistory/route.ts",
+      "line": 183,
+      "kind": "maxRows",
+      "value": 100000,
+      "apiLabel": "getCombinedOutboundHistory"
+    },
+    {
+      "path": "app/api/getCombinedOutboundHistory/route.ts",
+      "line": 242,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "getCombinedOutboundHistory"
+    },
+    {
+      "path": "app/api/getCombinedOutboundHistory/route.ts",
+      "line": 243,
+      "kind": "maxRows",
+      "value": 100000,
+      "apiLabel": "getCombinedOutboundHistory"
+    },
+    {
+      "path": "app/api/getCombinedOutboundHistory/route.ts",
+      "line": 299,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getCombinedOutboundHistory"
     },
     {
       "path": "app/api/getCombinedOutboundHistory/route.ts",
-      "line": 251,
+      "line": 303,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getCombinedOutboundHistory"
@@ -1628,7 +1768,14 @@
     },
     {
       "path": "app/api/getEmployeeSalaryHistory/route.ts",
-      "line": 61,
+      "line": 75,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getEmployeeSalaryHistory"
+    },
+    {
+      "path": "app/api/getEmployeeSalaryHistory/route.ts",
+      "line": 82,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getEmployeeSalaryHistory"
@@ -1747,14 +1894,21 @@
     },
     {
       "path": "app/api/getHrPolicies/route.ts",
-      "line": 49,
+      "line": 63,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getHrPolicies"
     },
     {
       "path": "app/api/getHrPolicies/route.ts",
-      "line": 56,
+      "line": 71,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getHrPolicies"
+    },
+    {
+      "path": "app/api/getHrPolicies/route.ts",
+      "line": 82,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getHrPolicies"
@@ -1880,140 +2034,154 @@
     },
     {
       "path": "app/api/getInteriorDashboardSummary/route.ts",
-      "line": 70,
+      "line": 89,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getInteriorDashboardSummary"
     },
     {
       "path": "app/api/getInteriorDashboardSummary/route.ts",
-      "line": 93,
+      "line": 103,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getInteriorDashboardSummary"
+    },
+    {
+      "path": "app/api/getInteriorDashboardSummary/route.ts",
+      "line": 165,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "getInteriorDashboardSummary"
     },
     {
       "path": "app/api/getInteriorDashboardSummary/route.ts",
-      "line": 104,
+      "line": 176,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "getInteriorDashboardSummary"
     },
     {
       "path": "app/api/getInteriorDashboardSummary/route.ts",
-      "line": 148,
+      "line": 222,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "getInteriorDashboardSummary"
     },
     {
       "path": "app/api/getInteriorDashboardSummary/route.ts",
-      "line": 182,
+      "line": 258,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "getInteriorDashboardSummary"
     },
     {
       "path": "app/api/getInteriorDirectPurchases/route.ts",
-      "line": 15,
+      "line": 33,
       "kind": "limit",
       "value": 300,
       "apiLabel": "getInteriorDirectPurchases"
     },
     {
       "path": "app/api/getInteriorExpenseItems/route.ts",
-      "line": 15,
+      "line": 33,
       "kind": "limit",
       "value": 200,
       "apiLabel": "getInteriorExpenseItems"
     },
     {
       "path": "app/api/getInteriorFiles/route.ts",
-      "line": 40,
+      "line": 58,
       "kind": "limit",
       "value": 100,
       "apiLabel": "getInteriorFiles"
     },
     {
       "path": "app/api/getInteriorKitchenItems/route.ts",
-      "line": 15,
+      "line": 33,
       "kind": "limit",
       "value": 300,
       "apiLabel": "getInteriorKitchenItems"
     },
     {
       "path": "app/api/getInteriorLayoutEditorPrefs/route.ts",
-      "line": 39,
+      "line": 50,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getInteriorLayoutEditorPrefs"
     },
     {
       "path": "app/api/getInteriorLayoutItems/route.ts",
-      "line": 23,
+      "line": 41,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getInteriorLayoutItems"
     },
     {
       "path": "app/api/getInteriorLayoutZoneBackground/route.ts",
-      "line": 22,
+      "line": 39,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getInteriorLayoutZoneBackground"
     },
     {
       "path": "app/api/getInteriorMaterialSpecs/route.ts",
-      "line": 15,
+      "line": 33,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getInteriorMaterialSpecs"
     },
     {
       "path": "app/api/getInteriorProjects/route.ts",
-      "line": 12,
+      "line": 43,
+      "kind": "limit",
+      "value": 200,
+      "apiLabel": "getInteriorProjects"
+    },
+    {
+      "path": "app/api/getInteriorProjects/route.ts",
+      "line": 50,
       "kind": "limit",
       "value": 200,
       "apiLabel": "getInteriorProjects"
     },
     {
       "path": "app/api/getInteriorSchedule/route.ts",
-      "line": 17,
+      "line": 35,
       "kind": "limit",
       "value": 200,
       "apiLabel": "getInteriorSchedule"
     },
     {
       "path": "app/api/getInteriorSpecifications/route.ts",
-      "line": 15,
+      "line": 33,
       "kind": "limit",
       "value": 200,
       "apiLabel": "getInteriorSpecifications"
     },
     {
       "path": "app/api/getInteriorVendorDirectory/route.ts",
-      "line": 11,
+      "line": 29,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getInteriorVendorDirectory"
     },
     {
       "path": "app/api/getInteriorVendorTracks/route.ts",
-      "line": 15,
+      "line": 33,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getInteriorVendorTracks"
     },
     {
       "path": "app/api/getInteriorWorkPackages/route.ts",
-      "line": 39,
+      "line": 56,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getInteriorWorkPackages"
     },
     {
       "path": "app/api/getInteriorWorkPackages/route.ts",
-      "line": 61,
+      "line": 78,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getInteriorWorkPackages"
@@ -2034,7 +2202,7 @@
     },
     {
       "path": "app/api/getInvoicePrintOverrides/route.ts",
-      "line": 67,
+      "line": 75,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getInvoicePrintOverrides"
@@ -2083,51 +2251,51 @@
     },
     {
       "path": "app/api/getItemsByVendor/route.ts",
-      "line": 91,
+      "line": 116,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getItemsByVendor"
     },
     {
       "path": "app/api/getItemsByVendor/route.ts",
-      "line": 137,
+      "line": 124,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getItemsByVendor"
     },
     {
       "path": "app/api/getItemsByVendor/route.ts",
-      "line": 147,
+      "line": 173,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getItemsByVendor"
     },
     {
       "path": "app/api/getItemsByVendor/route.ts",
-      "line": 154,
+      "line": 180,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getItemsByVendor"
     },
     {
       "path": "app/api/getItemsByVendor/route.ts",
-      "line": 170,
+      "line": 189,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getItemsByVendor"
+    },
+    {
+      "path": "app/api/getItemsByVendor/route.ts",
+      "line": 204,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getItemsByVendor"
     },
     {
       "path": "app/api/getItemsByVendor/route.ts",
-      "line": 179,
+      "line": 217,
       "kind": "limit",
-      "value": 1,
-      "apiLabel": "getItemsByVendor"
-    },
-    {
-      "path": "app/api/getItemsByVendor/route.ts",
-      "line": 186,
-      "kind": "limit",
-      "value": 1,
+      "value": 1000,
       "apiLabel": "getItemsByVendor"
     },
     {
@@ -2153,42 +2321,42 @@
     },
     {
       "path": "app/api/getLeavePendingList/route.ts",
-      "line": 104,
+      "line": 119,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getLeavePendingList"
     },
     {
       "path": "app/api/getLeavePendingList/route.ts",
-      "line": 110,
+      "line": 126,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getLeavePendingList"
     },
     {
       "path": "app/api/getLeavePendingList/route.ts",
-      "line": 121,
+      "line": 140,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getLeavePendingList"
     },
     {
       "path": "app/api/getLeavePendingList/route.ts",
-      "line": 127,
+      "line": 146,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getLeavePendingList"
     },
     {
       "path": "app/api/getLeavePendingList/route.ts",
-      "line": 159,
+      "line": 178,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getLeavePendingList"
     },
     {
       "path": "app/api/getLeavePendingList/route.ts",
-      "line": 162,
+      "line": 181,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getLeavePendingList"
@@ -2237,7 +2405,14 @@
     },
     {
       "path": "app/api/getLoginData/route.ts",
-      "line": 48,
+      "line": 117,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "getLoginData"
+    },
+    {
+      "path": "app/api/getLoginData/route.ts",
+      "line": 130,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getLoginData"
@@ -2293,7 +2468,14 @@
     },
     {
       "path": "app/api/getMyHrPolicies/route.ts",
-      "line": 48,
+      "line": 67,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "getMyHrPolicies"
+    },
+    {
+      "path": "app/api/getMyHrPolicies/route.ts",
+      "line": 74,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getMyHrPolicies"
@@ -2321,56 +2503,42 @@
     },
     {
       "path": "app/api/getMyNotices/route.ts",
-      "line": 58,
+      "line": 87,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getMyNotices"
+    },
+    {
+      "path": "app/api/getMyNotices/route.ts",
+      "line": 94,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getMyNotices"
     },
     {
       "path": "app/api/getMyPayroll/route.ts",
-      "line": 16,
+      "line": 23,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyPayroll"
     },
     {
       "path": "app/api/getMyPayroll/route.ts",
-      "line": 18,
+      "line": 25,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyPayroll"
     },
     {
       "path": "app/api/getMyPayroll/route.ts",
-      "line": 21,
+      "line": 28,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyPayroll"
     },
     {
       "path": "app/api/getMyPayroll/route.ts",
-      "line": 24,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "getMyPayroll"
-    },
-    {
-      "path": "app/api/getMyPayroll/route.ts",
-      "line": 26,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "getMyPayroll"
-    },
-    {
-      "path": "app/api/getMyPayroll/route.ts",
-      "line": 29,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "getMyPayroll"
-    },
-    {
-      "path": "app/api/getMyPayroll/route.ts",
-      "line": 32,
+      "line": 31,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyPayroll"
@@ -2384,21 +2552,63 @@
     },
     {
       "path": "app/api/getMyPayroll/route.ts",
-      "line": 81,
+      "line": 36,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyPayroll"
     },
     {
       "path": "app/api/getMyPayroll/route.ts",
-      "line": 93,
+      "line": 39,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getMyPayroll"
+    },
+    {
+      "path": "app/api/getMyPayroll/route.ts",
+      "line": 40,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getMyPayroll"
+    },
+    {
+      "path": "app/api/getMyPayroll/route.ts",
+      "line": 97,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getMyPayroll"
+    },
+    {
+      "path": "app/api/getMyPayroll/route.ts",
+      "line": 112,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getMyPayroll"
+    },
+    {
+      "path": "app/api/getMyPayroll/route.ts",
+      "line": 120,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyPayroll"
     },
     {
       "path": "app/api/getNextPosMenuCode/route.ts",
-      "line": 23,
+      "line": 59,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getNextPosMenuCode"
+    },
+    {
+      "path": "app/api/getNextPosMenuCode/route.ts",
+      "line": 124,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "getNextPosMenuCode"
+    },
+    {
+      "path": "app/api/getNextPosMenuCode/route.ts",
+      "line": 128,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getNextPosMenuCode"
@@ -2671,9 +2881,16 @@
     },
     {
       "path": "app/api/getPayrollRecords/route.ts",
-      "line": 81,
+      "line": 100,
       "kind": "limit",
-      "value": 1000,
+      "value": 10000,
+      "apiLabel": "getPayrollRecords"
+    },
+    {
+      "path": "app/api/getPayrollRecords/route.ts",
+      "line": 107,
+      "kind": "limit",
+      "value": 10000,
       "apiLabel": "getPayrollRecords"
     },
     {
@@ -2713,21 +2930,42 @@
     },
     {
       "path": "app/api/getPettyCashMonthDetail/route.ts",
-      "line": 98,
+      "line": 112,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getPettyCashMonthDetail"
     },
     {
       "path": "app/api/getPettyCashMonthDetail/route.ts",
-      "line": 104,
+      "line": 120,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getPettyCashMonthDetail"
     },
     {
       "path": "app/api/getPettyCashMonthDetail/route.ts",
-      "line": 110,
+      "line": 133,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "getPettyCashMonthDetail"
+    },
+    {
+      "path": "app/api/getPettyCashMonthDetail/route.ts",
+      "line": 141,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "getPettyCashMonthDetail"
+    },
+    {
+      "path": "app/api/getPettyCashMonthDetail/route.ts",
+      "line": 155,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "getPettyCashMonthDetail"
+    },
+    {
+      "path": "app/api/getPettyCashMonthDetail/route.ts",
+      "line": 163,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getPettyCashMonthDetail"
@@ -2741,21 +2979,14 @@
     },
     {
       "path": "app/api/getPettyCashSummary/route.ts",
-      "line": 62,
+      "line": 82,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "getPettyCashSummary"
     },
     {
       "path": "app/api/getPettyCashSummary/route.ts",
-      "line": 68,
-      "kind": "limit",
-      "value": 20000,
-      "apiLabel": "getPettyCashSummary"
-    },
-    {
-      "path": "app/api/getPettyCashSummary/route.ts",
-      "line": 74,
+      "line": 90,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "getPettyCashSummary"
@@ -3049,35 +3280,42 @@
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 110,
+      "line": 120,
       "kind": "limit",
-      "value": 100000,
+      "value": 10000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 152,
+      "line": 126,
       "kind": "limit",
       "value": 10000,
+      "apiLabel": "getPosMenus"
+    },
+    {
+      "path": "app/api/getPosMenus/route.ts",
+      "line": 154,
+      "kind": "limit",
+      "value": 100000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
       "line": 158,
       "kind": "limit",
-      "value": 10000,
+      "value": 100000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 206,
+      "line": 226,
       "kind": "limit",
       "value": 100000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenuScreenConfig/route.ts",
-      "line": 28,
+      "line": 37,
       "kind": "limit",
       "value": 20,
       "apiLabel": "getPosMenuScreenConfig"
@@ -3147,35 +3385,35 @@
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 60,
+      "line": 61,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 65,
+      "line": 66,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 70,
+      "line": 71,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 74,
+      "line": 75,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 228,
+      "line": 230,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
@@ -3357,13 +3595,6 @@
     },
     {
       "path": "app/api/getSaasTenantSettings/route.ts",
-      "line": 329,
-      "kind": "limit",
-      "value": 100,
-      "apiLabel": "getSaasTenantSettings"
-    },
-    {
-      "path": "app/api/getSaasTenantSettings/route.ts",
       "line": 330,
       "kind": "limit",
       "value": 100,
@@ -3371,42 +3602,56 @@
     },
     {
       "path": "app/api/getSaasTenantSettings/route.ts",
-      "line": 333,
+      "line": 331,
       "kind": "limit",
-      "value": 2000,
+      "value": 100,
       "apiLabel": "getSaasTenantSettings"
     },
     {
       "path": "app/api/getSaasTenantSettings/route.ts",
       "line": 334,
       "kind": "limit",
-      "value": 8000,
+      "value": 2000,
       "apiLabel": "getSaasTenantSettings"
     },
     {
       "path": "app/api/getSaasTenantSettings/route.ts",
       "line": 335,
       "kind": "limit",
-      "value": 5000,
+      "value": 8000,
       "apiLabel": "getSaasTenantSettings"
     },
     {
       "path": "app/api/getSaasTenantSettings/route.ts",
       "line": 336,
       "kind": "limit",
-      "value": 10000,
+      "value": 5000,
       "apiLabel": "getSaasTenantSettings"
     },
     {
       "path": "app/api/getSaasTenantSettings/route.ts",
       "line": 337,
       "kind": "limit",
+      "value": 10000,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 338,
+      "kind": "limit",
       "value": 100,
       "apiLabel": "getSaasTenantSettings"
     },
     {
       "path": "app/api/getSentNotices/route.ts",
-      "line": 114,
+      "line": 179,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "getSentNotices"
+    },
+    {
+      "path": "app/api/getSentNotices/route.ts",
+      "line": 186,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getSentNotices"
@@ -3553,42 +3798,28 @@
     },
     {
       "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 137,
+      "line": 212,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "getThaiTaxFilingSummary"
     },
     {
       "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 138,
+      "line": 213,
       "kind": "maxRows",
       "value": 100000,
       "apiLabel": "getThaiTaxFilingSummary"
     },
     {
       "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 227,
+      "line": 221,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "getThaiTaxFilingSummary"
     },
     {
       "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 228,
-      "kind": "maxRows",
-      "value": 100000,
-      "apiLabel": "getThaiTaxFilingSummary"
-    },
-    {
-      "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 233,
-      "kind": "pageSize",
-      "value": 4000,
-      "apiLabel": "getThaiTaxFilingSummary"
-    },
-    {
-      "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 234,
+      "line": 222,
       "kind": "maxRows",
       "value": 100000,
       "apiLabel": "getThaiTaxFilingSummary"
@@ -3686,14 +3917,42 @@
     },
     {
       "path": "app/api/getVendorsForPurchase/route.ts",
-      "line": 11,
+      "line": 41,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "getVendorsForPurchase"
+    },
+    {
+      "path": "app/api/getVendorsForPurchase/route.ts",
+      "line": 43,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "getVendorsForPurchase"
+    },
+    {
+      "path": "app/api/getVendorsForPurchase/route.ts",
+      "line": 47,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getVendorsForPurchase"
     },
     {
       "path": "app/api/getVendorsForSales/route.ts",
-      "line": 19,
+      "line": 50,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getVendorsForSales"
+    },
+    {
+      "path": "app/api/getVendorsForSales/route.ts",
+      "line": 52,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getVendorsForSales"
+    },
+    {
+      "path": "app/api/getVendorsForSales/route.ts",
+      "line": 56,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getVendorsForSales"
@@ -3707,35 +3966,49 @@
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 114,
+      "line": 137,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getWeeklySchedule"
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 117,
+      "line": 144,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getWeeklySchedule"
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 132,
+      "line": 163,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getWeeklySchedule"
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 205,
+      "line": 238,
+      "kind": "limit",
+      "value": 200,
+      "apiLabel": "getWeeklySchedule"
+    },
+    {
+      "path": "app/api/getWeeklySchedule/route.ts",
+      "line": 246,
       "kind": "limit",
       "value": 200,
       "apiLabel": "getWeeklySchedule"
     },
     {
       "path": "app/api/getWorkLogData/route.ts",
-      "line": 84,
+      "line": 126,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "getWorkLogData"
+    },
+    {
+      "path": "app/api/getWorkLogData/route.ts",
+      "line": 133,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getWorkLogData"
@@ -3826,7 +4099,14 @@
     },
     {
       "path": "app/api/importEmployeesFromCsv/route.ts",
-      "line": 223,
+      "line": 279,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "importEmployeesFromCsv"
+    },
+    {
+      "path": "app/api/importEmployeesFromCsv/route.ts",
+      "line": 282,
       "kind": "limit",
       "value": 1,
       "apiLabel": "importEmployeesFromCsv"
@@ -3889,7 +4169,7 @@
     },
     {
       "path": "app/api/loginCheck/route.ts",
-      "line": 141,
+      "line": 299,
       "kind": "limit",
       "value": 1,
       "apiLabel": "loginCheck"
@@ -4358,7 +4638,7 @@
     },
     {
       "path": "app/api/payInteriorExpense/route.ts",
-      "line": 34,
+      "line": 46,
       "kind": "limit",
       "value": 1,
       "apiLabel": "payInteriorExpense"
@@ -4414,35 +4694,35 @@
     },
     {
       "path": "app/api/posMenuCategories/route.ts",
-      "line": 76,
+      "line": 82,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "posMenuCategories"
     },
     {
       "path": "app/api/posMenuCategories/route.ts",
-      "line": 80,
+      "line": 86,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "posMenuCategories"
     },
     {
       "path": "app/api/posMenuCategories/route.ts",
-      "line": 109,
+      "line": 115,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "posMenuCategories"
     },
     {
       "path": "app/api/posMenuCategories/route.ts",
-      "line": 174,
+      "line": 180,
       "kind": "limit",
       "value": 1,
       "apiLabel": "posMenuCategories"
     },
     {
       "path": "app/api/posMenuCategories/route.ts",
-      "line": 235,
+      "line": 242,
       "kind": "limit",
       "value": 1,
       "apiLabel": "posMenuCategories"
@@ -4568,21 +4848,35 @@
     },
     {
       "path": "app/api/processAttendanceApproval/route.ts",
-      "line": 53,
+      "line": 79,
       "kind": "limit",
       "value": 1,
       "apiLabel": "processAttendanceApproval"
     },
     {
       "path": "app/api/processAttendanceApproval/route.ts",
-      "line": 189,
+      "line": 86,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "processAttendanceApproval"
+    },
+    {
+      "path": "app/api/processAttendanceApproval/route.ts",
+      "line": 227,
       "kind": "limit",
       "value": 1,
       "apiLabel": "processAttendanceApproval"
     },
     {
       "path": "app/api/processLeaveApproval/route.ts",
-      "line": 48,
+      "line": 73,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "processLeaveApproval"
+    },
+    {
+      "path": "app/api/processLeaveApproval/route.ts",
+      "line": 80,
       "kind": "limit",
       "value": 1,
       "apiLabel": "processLeaveApproval"
@@ -4715,7 +5009,7 @@
     },
     {
       "path": "app/api/registerPosMainDevice/route.ts",
-      "line": 26,
+      "line": 29,
       "kind": "limit",
       "value": 1,
       "apiLabel": "registerPosMainDevice"
@@ -4757,21 +5051,21 @@
     },
     {
       "path": "app/api/requestLeave/route.ts",
-      "line": 39,
+      "line": 60,
       "kind": "limit",
       "value": 1,
       "apiLabel": "requestLeave"
     },
     {
       "path": "app/api/requestLeave/route.ts",
-      "line": 84,
+      "line": 105,
       "kind": "limit",
       "value": 1,
       "apiLabel": "requestLeave"
     },
     {
       "path": "app/api/requestLeave/route.ts",
-      "line": 92,
+      "line": 113,
       "kind": "limit",
       "value": 1,
       "apiLabel": "requestLeave"
@@ -4819,78 +5113,85 @@
       "apiLabel": "restoreFromPriceHistory"
     },
     {
+      "path": "app/api/saasAdminDevices/route.ts",
+      "line": 36,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "saasAdminDevices"
+    },
+    {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 58,
+      "line": 63,
       "kind": "limit",
       "value": 500,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 119,
+      "line": 124,
       "kind": "limit",
       "value": 0,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 140,
+      "line": 145,
       "kind": "maxRows",
       "value": 8000,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 141,
+      "line": 146,
       "kind": "pageSize",
       "value": 800,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 152,
+      "line": 157,
       "kind": "maxRows",
       "value": 8000,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 153,
+      "line": 158,
       "kind": "pageSize",
       "value": 800,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 161,
+      "line": 166,
       "kind": "maxRows",
       "value": 8000,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 162,
+      "line": 167,
       "kind": "pageSize",
       "value": 800,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 301,
+      "line": 306,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 443,
+      "line": 464,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saasAdminEmployees"
     },
     {
       "path": "app/api/saasAdminEmployees/route.ts",
-      "line": 455,
+      "line": 476,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saasAdminEmployees"
@@ -5009,23 +5310,9 @@
     },
     {
       "path": "app/api/saasAdminStores/route.ts",
-      "line": 75,
+      "line": 90,
       "kind": "limit",
       "value": 500,
-      "apiLabel": "saasAdminStores"
-    },
-    {
-      "path": "app/api/saasAdminStores/route.ts",
-      "line": 181,
-      "kind": "maxRows",
-      "value": 5000,
-      "apiLabel": "saasAdminStores"
-    },
-    {
-      "path": "app/api/saasAdminStores/route.ts",
-      "line": 182,
-      "kind": "pageSize",
-      "value": 800,
       "apiLabel": "saasAdminStores"
     },
     {
@@ -5044,23 +5331,65 @@
     },
     {
       "path": "app/api/saasAdminStores/route.ts",
-      "line": 328,
+      "line": 211,
+      "kind": "maxRows",
+      "value": 5000,
+      "apiLabel": "saasAdminStores"
+    },
+    {
+      "path": "app/api/saasAdminStores/route.ts",
+      "line": 212,
+      "kind": "pageSize",
+      "value": 800,
+      "apiLabel": "saasAdminStores"
+    },
+    {
+      "path": "app/api/saasAdminStores/route.ts",
+      "line": 347,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saasAdminStores"
     },
     {
+      "path": "app/api/saasAdminTotp/route.ts",
+      "line": 227,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saasAdminTotp"
+    },
+    {
+      "path": "app/api/saasAdminTotp/route.ts",
+      "line": 299,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saasAdminTotp"
+    },
+    {
+      "path": "app/api/saasAdminTotp/route.ts",
+      "line": 320,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saasAdminTotp"
+    },
+    {
       "path": "app/api/saasBootstrapTenantLogin/route.ts",
-      "line": 57,
+      "line": 56,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saasBootstrapTenantLogin"
     },
     {
       "path": "app/api/saasBootstrapTenantLogin/route.ts",
-      "line": 100,
+      "line": 99,
       "kind": "limit",
       "value": 3,
+      "apiLabel": "saasBootstrapTenantLogin"
+    },
+    {
+      "path": "app/api/saasBootstrapTenantLogin/route.ts",
+      "line": 119,
+      "kind": "limit",
+      "value": 1,
       "apiLabel": "saasBootstrapTenantLogin"
     },
     {
@@ -5219,63 +5548,63 @@
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 165,
+      "line": 170,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 288,
+      "line": 293,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 379,
+      "line": 384,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 405,
+      "line": 410,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 433,
+      "line": 438,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 461,
+      "line": 466,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 560,
+      "line": 587,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 605,
+      "line": 632,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 615,
+      "line": 642,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"
@@ -5422,17 +5751,52 @@
     },
     {
       "path": "app/api/saveHrPolicy/route.ts",
-      "line": 136,
+      "line": 166,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saveHrPolicy"
+    },
+    {
+      "path": "app/api/saveHrPolicy/route.ts",
+      "line": 173,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveHrPolicy"
     },
     {
       "path": "app/api/saveInteriorProject/route.ts",
-      "line": 41,
+      "line": 64,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveInteriorProject"
+    },
+    {
+      "path": "app/api/saveInteriorProject/route.ts",
+      "line": 68,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saveInteriorProject"
+    },
+    {
+      "path": "app/api/saveInteriorProjectFile/route.ts",
+      "line": 34,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saveInteriorProjectFile"
+    },
+    {
+      "path": "app/api/saveInteriorVendorDirectory/route.ts",
+      "line": 68,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saveInteriorVendorDirectory"
+    },
+    {
+      "path": "app/api/saveInteriorVendorDirectory/route.ts",
+      "line": 72,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "saveInteriorVendorDirectory"
     },
     {
       "path": "app/api/saveItem/route.ts",
@@ -5471,28 +5835,28 @@
     },
     {
       "path": "app/api/savePayroll/route.ts",
-      "line": 170,
+      "line": 204,
       "kind": "limit",
       "value": 30,
       "apiLabel": "savePayroll"
     },
     {
       "path": "app/api/savePayroll/route.ts",
-      "line": 190,
+      "line": 224,
       "kind": "limit",
       "value": 400,
       "apiLabel": "savePayroll"
     },
     {
       "path": "app/api/savePayroll/route.ts",
-      "line": 327,
+      "line": 370,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "savePayroll"
     },
     {
       "path": "app/api/savePayroll/route.ts",
-      "line": 370,
+      "line": 413,
       "kind": "limit",
       "value": 30,
       "apiLabel": "savePayroll"
@@ -5646,7 +6010,7 @@
     },
     {
       "path": "app/api/savePosMenuScreenConfig/route.ts",
-      "line": 38,
+      "line": 65,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosMenuScreenConfig"
@@ -5667,14 +6031,14 @@
     },
     {
       "path": "app/api/savePosOrder/route.ts",
-      "line": 74,
+      "line": 85,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosOrder"
     },
     {
       "path": "app/api/savePosOrder/route.ts",
-      "line": 124,
+      "line": 138,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosOrder"
@@ -5695,14 +6059,14 @@
     },
     {
       "path": "app/api/savePosPrinterSettings/route.ts",
-      "line": 123,
+      "line": 124,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "savePosPrinterSettings"
     },
     {
       "path": "app/api/savePosPrinterSettings/route.ts",
-      "line": 375,
+      "line": 382,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosPrinterSettings"
@@ -5751,7 +6115,7 @@
     },
     {
       "path": "app/api/savePosSettlement/route.ts",
-      "line": 73,
+      "line": 99,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosSettlement"
@@ -5793,7 +6157,7 @@
     },
     {
       "path": "app/api/saveSchedule/route.ts",
-      "line": 69,
+      "line": 95,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "saveSchedule"
@@ -5828,21 +6192,21 @@
     },
     {
       "path": "app/api/saveWorkLogData/route.ts",
-      "line": 26,
+      "line": 38,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveWorkLogData"
     },
     {
       "path": "app/api/saveWorkLogData/route.ts",
-      "line": 45,
+      "line": 59,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveWorkLogData"
     },
     {
       "path": "app/api/sendNotice/route.ts",
-      "line": 142,
+      "line": 157,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "sendNotice"
@@ -5863,7 +6227,7 @@
     },
     {
       "path": "app/api/setPosMainDevice/route.ts",
-      "line": 33,
+      "line": 36,
       "kind": "limit",
       "value": 1,
       "apiLabel": "setPosMainDevice"
@@ -5884,63 +6248,63 @@
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 112,
+      "line": 138,
       "kind": "limit",
       "value": 1,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 128,
+      "line": 158,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 154,
+      "line": 185,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 315,
+      "line": 335,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 434,
+      "line": 454,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 446,
+      "line": 466,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 460,
+      "line": 480,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 516,
+      "line": 536,
       "kind": "limit",
       "value": 50,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 551,
+      "line": 571,
       "kind": "limit",
       "value": 1,
       "apiLabel": "submitAttendance"
@@ -6184,6 +6548,20 @@
       "apiLabel": "updateInboundBatch"
     },
     {
+      "path": "app/api/updateManagerCheck/route.ts",
+      "line": 25,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "updateManagerCheck"
+    },
+    {
+      "path": "app/api/updateManagerCheck/route.ts",
+      "line": 30,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "updateManagerCheck"
+    },
+    {
       "path": "app/api/updateManualBalanceTransaction/route.ts",
       "line": 86,
       "kind": "limit",
@@ -6255,28 +6633,28 @@
     },
     {
       "path": "app/api/updatePosOrder/route.ts",
-      "line": 128,
+      "line": 158,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrder"
     },
     {
       "path": "app/api/updatePosOrderStatus/route.ts",
-      "line": 114,
+      "line": 118,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrderStatus"
     },
     {
       "path": "app/api/updatePosOrderStatus/route.ts",
-      "line": 170,
+      "line": 178,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrderStatus"
     },
     {
       "path": "app/api/updatePosOrderStatus/route.ts",
-      "line": 377,
+      "line": 391,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrderStatus"
@@ -6317,6 +6695,20 @@
       "apiLabel": "updateStoreRepairTicket"
     },
     {
+      "path": "app/api/updateWorkLogPriority/route.ts",
+      "line": 24,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "updateWorkLogPriority"
+    },
+    {
+      "path": "app/api/updateWorkLogPriority/route.ts",
+      "line": 29,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "updateWorkLogPriority"
+    },
+    {
       "path": "app/api/uploadLeaveCertificate/route.ts",
       "line": 32,
       "kind": "limit",
@@ -6339,77 +6731,63 @@
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 37,
+      "line": 43,
       "kind": "maxDurationSec",
       "value": 120,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 102,
+      "line": 108,
       "kind": "pageSize",
       "value": 500,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 103,
+      "line": 109,
       "kind": "maxRows",
       "value": 5000,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 115,
+      "line": 121,
       "kind": "pageSize",
       "value": 500,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 116,
+      "line": 122,
       "kind": "maxRows",
       "value": 5000,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 219,
+      "line": 293,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 220,
+      "line": 294,
       "kind": "maxRows",
       "value": 100000,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 262,
-      "kind": "pageSize",
-      "value": 4000,
-      "apiLabel": "vatLedger"
-    },
-    {
-      "path": "app/api/vatLedger/route.ts",
-      "line": 263,
-      "kind": "maxRows",
-      "value": 100000,
-      "apiLabel": "vatLedger"
-    },
-    {
-      "path": "app/api/vatLedger/route.ts",
-      "line": 415,
+      "line": 469,
       "kind": "limit",
       "value": 1,
       "apiLabel": "vatLedger"
     },
     {
       "path": "app/api/vatLedger/route.ts",
-      "line": 591,
+      "line": 645,
       "kind": "limit",
       "value": 1,
       "apiLabel": "vatLedger"
@@ -6465,70 +6843,70 @@
     },
     {
       "path": "app/pos/order/page.tsx",
-      "line": 1222,
+      "line": 1229,
       "kind": "limit",
       "value": 50,
       "apiLabel": "pos/order"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1502,
+      "line": 1610,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 3804,
+      "line": 3925,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 5205,
+      "line": 5350,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 5430,
+      "line": 5575,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6694,
+      "line": 6963,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6990,
+      "line": 7259,
       "kind": "limit",
       "value": 20,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 8441,
+      "line": 8716,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 8995,
+      "line": 9282,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 9444,
+      "line": 9766,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
@@ -6962,14 +7340,28 @@
     },
     {
       "path": "lib/attendance-qr-device-server.ts",
-      "line": 25,
+      "line": 45,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:attendance-qr-device-server"
     },
     {
       "path": "lib/attendance-qr-device-server.ts",
-      "line": 39,
+      "line": 52,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:attendance-qr-device-server"
+    },
+    {
+      "path": "lib/attendance-qr-device-server.ts",
+      "line": 73,
+      "kind": "limit",
+      "value": 2,
+      "apiLabel": "lib:attendance-qr-device-server"
+    },
+    {
+      "path": "lib/attendance-qr-device-server.ts",
+      "line": 82,
       "kind": "limit",
       "value": 2,
       "apiLabel": "lib:attendance-qr-device-server"
@@ -7403,56 +7795,56 @@
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 110,
+      "line": 111,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 157,
+      "line": 158,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 169,
+      "line": 170,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 186,
+      "line": 187,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 203,
+      "line": 204,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 216,
+      "line": 217,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 224,
+      "line": 225,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:erp-store-master"
     },
     {
       "path": "lib/erp-store-master.ts",
-      "line": 234,
+      "line": 235,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "lib:erp-store-master"
@@ -8088,6 +8480,13 @@
       "apiLabel": "lib:intercompany-vat-reconcile"
     },
     {
+      "path": "lib/interior-tenant-guard.ts",
+      "line": 87,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:interior-tenant-guard"
+    },
+    {
       "path": "lib/invoice-backed-input-vat-ledger.ts",
       "line": 70,
       "kind": "limit",
@@ -8240,6 +8639,13 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:line-crm-import"
+    },
+    {
+      "path": "lib/login-data-employees-server.ts",
+      "line": 54,
+      "kind": "limit",
+      "value": 20000,
+      "apiLabel": "lib:login-data-employees-server"
     },
     {
       "path": "lib/marketing-campaign-code-resolve.ts",
@@ -8502,7 +8908,7 @@
     },
     {
       "path": "lib/member-point-line-notify.ts",
-      "line": 211,
+      "line": 210,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-point-line-notify"
@@ -8669,6 +9075,13 @@
       "apiLabel": "lib:member-portal-dashboard"
     },
     {
+      "path": "lib/member-portal-notifications.test.ts",
+      "line": 16,
+      "kind": "limit",
+      "value": 10,
+      "apiLabel": "lib:member-portal-notifications.test"
+    },
+    {
       "path": "lib/member-portal-order-detail-server.ts",
       "line": 29,
       "kind": "limit",
@@ -8732,6 +9145,62 @@
       "apiLabel": "lib:member-portal-prepay-stats"
     },
     {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 117,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 139,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 169,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 377,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 387,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 409,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 460,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
+      "path": "lib/member-portal-promo-code.ts",
+      "line": 481,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-portal-promo-code"
+    },
+    {
       "path": "lib/member-portal-snow-onion-background.ts",
       "line": 19,
       "kind": "limit",
@@ -8782,98 +9251,140 @@
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 271,
+      "line": 305,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 332,
+      "line": 366,
       "kind": "limit",
       "value": 100,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 369,
+      "line": 403,
       "kind": "limit",
       "value": 200,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 437,
+      "line": 471,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 454,
+      "line": 488,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 546,
+      "line": 588,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 576,
+      "line": 606,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 725,
+      "line": 720,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 748,
+      "line": 809,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 893,
+      "line": 965,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 1116,
+      "line": 988,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 1168,
+      "line": 1087,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-card"
+    },
+    {
+      "path": "lib/member-stamp-card.ts",
+      "line": 1139,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-card"
+    },
+    {
+      "path": "lib/member-stamp-card.ts",
+      "line": 1154,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-card"
+    },
+    {
+      "path": "lib/member-stamp-card.ts",
+      "line": 1299,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-card"
+    },
+    {
+      "path": "lib/member-stamp-card.ts",
+      "line": 1326,
+      "kind": "limit",
+      "value": 20,
+      "apiLabel": "lib:member-stamp-card"
+    },
+    {
+      "path": "lib/member-stamp-card.ts",
+      "line": 1473,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-card"
+    },
+    {
+      "path": "lib/member-stamp-card.ts",
+      "line": 1554,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 1176,
+      "line": 1562,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:member-stamp-card"
     },
     {
       "path": "lib/member-stamp-card.ts",
-      "line": 1184,
+      "line": 1570,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:member-stamp-card"
@@ -8881,6 +9392,20 @@
     {
       "path": "lib/member-stamp-notify.ts",
       "line": 8,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-notify"
+    },
+    {
+      "path": "lib/member-stamp-notify.ts",
+      "line": 14,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:member-stamp-notify"
+    },
+    {
+      "path": "lib/member-stamp-notify.ts",
+      "line": 26,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-stamp-notify"
@@ -8978,49 +9503,21 @@
     },
     {
       "path": "lib/members-server-core.ts",
-      "line": 1090,
+      "line": 1093,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:members-server-core"
     },
     {
       "path": "lib/members-server-core.ts",
-      "line": 1115,
+      "line": 1121,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:members-server-core"
     },
     {
       "path": "lib/members-server-core.ts",
-      "line": 1126,
-      "kind": "limit",
-      "value": 5,
-      "apiLabel": "lib:members-server-core"
-    },
-    {
-      "path": "lib/members-server-core.ts",
-      "line": 1134,
-      "kind": "limit",
-      "value": 5,
-      "apiLabel": "lib:members-server-core"
-    },
-    {
-      "path": "lib/members-server-core.ts",
-      "line": 1144,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "lib:members-server-core"
-    },
-    {
-      "path": "lib/members-server-core.ts",
-      "line": 1163,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "lib:members-server-core"
-    },
-    {
-      "path": "lib/members-server-core.ts",
-      "line": 1216,
+      "line": 1174,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:members-server-core"
@@ -9139,14 +9636,14 @@
     },
     {
       "path": "lib/members-server-points.ts",
-      "line": 500,
+      "line": 510,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:members-server-points"
     },
     {
       "path": "lib/members-server-points.ts",
-      "line": 526,
+      "line": 536,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:members-server-points"
@@ -9475,21 +9972,21 @@
     },
     {
       "path": "lib/pos-close-engine/finalize.ts",
-      "line": 27,
+      "line": 46,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-close-engine/finalize"
     },
     {
       "path": "lib/pos-close-engine/snapshot.ts",
-      "line": 32,
+      "line": 42,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:pos-close-engine/snapshot"
     },
     {
       "path": "lib/pos-close-engine/snapshot.ts",
-      "line": 46,
+      "line": 58,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-close-engine/snapshot"
@@ -9643,42 +10140,42 @@
     },
     {
       "path": "lib/pos-ledger-drafts.ts",
-      "line": 213,
+      "line": 258,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "lib:pos-ledger-drafts"
     },
     {
       "path": "lib/pos-ledger-drafts.ts",
-      "line": 214,
+      "line": 259,
       "kind": "maxRows",
       "value": 100000,
       "apiLabel": "lib:pos-ledger-drafts"
     },
     {
       "path": "lib/pos-ledger-drafts.ts",
-      "line": 265,
+      "line": 310,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:pos-ledger-drafts"
     },
     {
       "path": "lib/pos-ledger-drafts.ts",
-      "line": 299,
+      "line": 434,
       "kind": "pageSize",
-      "value": 8000,
+      "value": 4000,
       "apiLabel": "lib:pos-ledger-drafts"
     },
     {
       "path": "lib/pos-ledger-drafts.ts",
-      "line": 300,
+      "line": 435,
       "kind": "maxRows",
-      "value": 500000,
+      "value": 100000,
       "apiLabel": "lib:pos-ledger-drafts"
     },
     {
       "path": "lib/pos-ledger-drafts.ts",
-      "line": 422,
+      "line": 539,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-ledger-drafts"
@@ -9825,56 +10322,56 @@
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 290,
+      "line": 291,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 318,
+      "line": 319,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 341,
+      "line": 342,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 381,
+      "line": 393,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 554,
+      "line": 566,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 570,
+      "line": 582,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 892,
+      "line": 904,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:pos-menu-upsert-server"
     },
     {
       "path": "lib/pos-menu-upsert-server.ts",
-      "line": 1000,
+      "line": 1012,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-menu-upsert-server"
@@ -10014,7 +10511,14 @@
     },
     {
       "path": "lib/pos-receipt-member-enrich-client.ts",
-      "line": 77,
+      "line": 76,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:pos-receipt-member-enrich-client"
+    },
+    {
+      "path": "lib/pos-receipt-member-enrich-client.ts",
+      "line": 131,
       "kind": "limit",
       "value": 30,
       "apiLabel": "lib:pos-receipt-member-enrich-client"
@@ -10154,7 +10658,7 @@
     },
     {
       "path": "lib/pos-store.ts",
-      "line": 757,
+      "line": 763,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "lib:pos-store"
@@ -10287,119 +10791,119 @@
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 54,
+      "line": 58,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 117,
+      "line": 121,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 136,
+      "line": 140,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 190,
+      "line": 194,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 243,
+      "line": 247,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 299,
+      "line": 305,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 351,
+      "line": 360,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 366,
+      "line": 375,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 394,
+      "line": 403,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 455,
+      "line": 464,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 461,
+      "line": 470,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 472,
+      "line": 481,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 510,
+      "line": 519,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 579,
+      "line": 588,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 611,
+      "line": 620,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 646,
+      "line": 655,
       "kind": "limit",
       "value": 10,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 714,
+      "line": 723,
       "kind": "limit",
       "value": 100,
       "apiLabel": "lib:receivable-payable"
@@ -10473,6 +10977,34 @@
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:saas-control-plane-scope"
+    },
+    {
+      "path": "lib/saas-login-tenant-resolve.ts",
+      "line": 42,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "lib:saas-login-tenant-resolve"
+    },
+    {
+      "path": "lib/saas-login-tenant-resolve.ts",
+      "line": 63,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas-login-tenant-resolve"
+    },
+    {
+      "path": "lib/saas-login-tenant-resolve.ts",
+      "line": 73,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas-login-tenant-resolve"
+    },
+    {
+      "path": "lib/saas-login-tenant-resolve.ts",
+      "line": 91,
+      "kind": "limit",
+      "value": 3,
+      "apiLabel": "lib:saas-login-tenant-resolve"
     },
     {
       "path": "lib/saas-onboarding-server.ts",
@@ -10595,72 +11127,170 @@
     },
     {
       "path": "lib/saas-tenant-stores-server.ts",
-      "line": 222,
+      "line": 230,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:saas-tenant-stores-server"
     },
     {
       "path": "lib/saas-tenant-stores-server.ts",
-      "line": 238,
+      "line": 249,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "lib:saas-tenant-stores-server"
+    },
+    {
+      "path": "lib/saas-tenant-stores-server.ts",
+      "line": 260,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:saas-tenant-stores-server"
     },
     {
       "path": "lib/saas-tenant-stores-server.ts",
-      "line": 245,
+      "line": 267,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:saas-tenant-stores-server"
     },
     {
+      "path": "lib/saas/saas-login-security-server.ts",
+      "line": 25,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-login-security-server"
+    },
+    {
+      "path": "lib/saas/saas-login-security-server.ts",
+      "line": 49,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-login-security-server"
+    },
+    {
+      "path": "lib/saas/saas-login-security-server.ts",
+      "line": 78,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-login-security-server"
+    },
+    {
+      "path": "lib/saas/saas-manager-limit-server.ts",
+      "line": 85,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-manager-limit-server"
+    },
+    {
+      "path": "lib/saas/saas-order-quota-server.ts",
+      "line": 65,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-order-quota-server"
+    },
+    {
       "path": "lib/saas/saas-pos-device-limit-server.ts",
-      "line": 46,
+      "line": 57,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:saas/saas-pos-device-limit-server"
     },
     {
       "path": "lib/saas/saas-pos-device-limit-server.ts",
-      "line": 66,
+      "line": 77,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:saas/saas-pos-device-limit-server"
     },
     {
       "path": "lib/saas/saas-pos-device-limit-server.ts",
-      "line": 76,
+      "line": 87,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:saas/saas-pos-device-limit-server"
     },
     {
       "path": "lib/saas/saas-pos-device-limit-server.ts",
-      "line": 141,
+      "line": 172,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:saas/saas-pos-device-limit-server"
     },
     {
       "path": "lib/saas/saas-pos-device-limit-server.ts",
-      "line": 151,
+      "line": 182,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:saas/saas-pos-device-limit-server"
     },
     {
+      "path": "lib/saas/saas-staff-limit-server.ts",
+      "line": 60,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-staff-limit-server"
+    },
+    {
+      "path": "lib/saas/saas-store-limit-server.ts",
+      "line": 54,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-store-limit-server"
+    },
+    {
+      "path": "lib/saas/saas-tablet-limit-server.ts",
+      "line": 73,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-tablet-limit-server"
+    },
+    {
+      "path": "lib/saas/saas-tablet-limit-server.ts",
+      "line": 88,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-tablet-limit-server"
+    },
+    {
+      "path": "lib/saas/saas-tenant-export-server.ts",
+      "line": 29,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:saas/saas-tenant-export-server"
+    },
+    {
+      "path": "lib/saas/saas-tenant-export-server.ts",
+      "line": 38,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "lib:saas/saas-tenant-export-server"
+    },
+    {
+      "path": "lib/saas/saas-tenant-export-server.ts",
+      "line": 48,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "lib:saas/saas-tenant-export-server"
+    },
+    {
       "path": "lib/saas/tenant-module-gate.ts",
-      "line": 52,
+      "line": 57,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:saas/tenant-module-gate"
     },
     {
       "path": "lib/saas/tenant-module-gate.ts",
-      "line": 56,
+      "line": 61,
       "kind": "limit",
       "value": 50,
+      "apiLabel": "lib:saas/tenant-module-gate"
+    },
+    {
+      "path": "lib/saas/tenant-module-gate.ts",
+      "line": 204,
+      "kind": "limit",
+      "value": 1,
       "apiLabel": "lib:saas/tenant-module-gate"
     },
     {
@@ -10676,6 +11306,13 @@
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:send-notice-util"
+    },
+    {
+      "path": "lib/settle-pos-order-payment-fast.ts",
+      "line": 141,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:settle-pos-order-payment-fast"
     },
     {
       "path": "lib/shopeefood-order-status-sync.ts",
@@ -10777,280 +11414,273 @@
     },
     {
       "path": "lib/tax-invoice-deposit-seq-server.ts",
-      "line": 35,
+      "line": 92,
+      "kind": "pageSize",
+      "value": 2000,
+      "apiLabel": "lib:tax-invoice-deposit-seq-server"
+    },
+    {
+      "path": "lib/tax-invoice-deposit-seq-server.ts",
+      "line": 113,
       "kind": "pageSize",
       "value": 5000,
       "apiLabel": "lib:tax-invoice-deposit-seq-server"
     },
     {
       "path": "lib/tax-invoice-deposit-seq-server.ts",
-      "line": 54,
-      "kind": "pageSize",
-      "value": 5000,
-      "apiLabel": "lib:tax-invoice-deposit-seq-server"
-    },
-    {
-      "path": "lib/tax-invoice-deposit-seq-server.ts",
-      "line": 65,
+      "line": 204,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:tax-invoice-deposit-seq-server"
     },
     {
-      "path": "lib/tax-invoice-deposit-seq-server.ts",
-      "line": 73,
-      "kind": "pageSize",
-      "value": 5000,
-      "apiLabel": "lib:tax-invoice-deposit-seq-server"
-    },
-    {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 290,
+      "line": 291,
       "kind": "pageSize",
       "value": 2000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 291,
+      "line": 292,
       "kind": "maxRows",
       "value": 30000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 387,
+      "line": 392,
       "kind": "limit",
       "value": 12000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 413,
+      "line": 418,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 414,
+      "line": 419,
       "kind": "maxRows",
       "value": 200000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 421,
+      "line": 426,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 422,
+      "line": 427,
       "kind": "maxRows",
       "value": 200000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 428,
+      "line": 433,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 429,
+      "line": 434,
       "kind": "maxRows",
       "value": 200000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 470,
+      "line": 475,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 471,
+      "line": 476,
       "kind": "maxRows",
       "value": 30000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 679,
+      "line": 689,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 680,
+      "line": 690,
       "kind": "maxRows",
       "value": 30000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 729,
+      "line": 739,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 730,
+      "line": 740,
       "kind": "maxRows",
       "value": 40000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 736,
+      "line": 746,
       "kind": "limit",
       "value": 15000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 754,
+      "line": 764,
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 755,
+      "line": 765,
       "kind": "maxRows",
       "value": 30000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 877,
+      "line": 887,
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 878,
+      "line": 888,
       "kind": "maxRows",
       "value": 50000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 884,
+      "line": 894,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 994,
+      "line": 1004,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1024,
+      "line": 1034,
       "kind": "pageSize",
       "value": 4000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1025,
+      "line": 1035,
       "kind": "maxRows",
       "value": 80000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1050,
+      "line": 1060,
       "kind": "limit",
       "value": 15000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1068,
+      "line": 1078,
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1069,
+      "line": 1079,
       "kind": "maxRows",
       "value": 30000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1244,
+      "line": 1254,
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1245,
+      "line": 1255,
       "kind": "maxRows",
       "value": 50000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1342,
+      "line": 1352,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1372,
+      "line": 1382,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1426,
+      "line": 1436,
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1427,
+      "line": 1437,
       "kind": "maxRows",
       "value": 50000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tax-ledger-auto-sync.ts",
-      "line": 1438,
+      "line": 1448,
       "kind": "limit",
       "value": 15000,
       "apiLabel": "lib:tax-ledger-auto-sync"
     },
     {
       "path": "lib/tenant-integration-resolve.ts",
-      "line": 215,
+      "line": 262,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:tenant-integration-resolve"
     },
     {
       "path": "lib/tenant-integration-resolve.ts",
-      "line": 265,
+      "line": 317,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:tenant-integration-resolve"

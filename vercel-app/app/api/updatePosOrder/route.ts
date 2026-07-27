@@ -334,6 +334,17 @@ export async function POST(req: NextRequest) {
     const discountAmtNet = resolveManualDiscountNetForOrderSave({ discountAmt, serviceAmt, items })
     const manualDiscountForCoupons = Math.max(0, discountAmtNet - preCouponSum)
     const collabDiscountAmt = Math.max(0, Number(body?.collabDiscountAmt ?? body?.collab_discount_amt ?? 0))
+    const marketingCampaignIdRaw =
+      body?.collabCampaignId ??
+      body?.collab_campaign_id ??
+      body?.marketingCampaignId ??
+      body?.marketing_campaign_id
+    const marketingCampaignIdNum = (() => {
+      if (marketingCampaignIdRaw == null || marketingCampaignIdRaw === '') return null
+      const n = Number(marketingCampaignIdRaw)
+      if (!Number.isFinite(n) || n <= 0) return null
+      return Math.trunc(n)
+    })()
     const tierDiscountAmt = Math.max(0, Number(body?.tierDiscountAmt ?? body?.tier_discount_amt ?? 0))
     const memberTierCode =
       String(body?.memberTierCode ?? body?.member_tier_code ?? '').trim().toUpperCase() || null
@@ -487,6 +498,12 @@ export async function POST(req: NextRequest) {
         : discountReasonForSave,
       tier_discount_amt: tierDiscountAmt,
       member_tier_code: memberTierCode,
+      ...(preserveDbFinancials
+        ? {}
+        : {
+            collab_discount_amt: collabDiscountAmt,
+            marketing_campaign_id: marketingCampaignIdNum,
+          }),
       service_amt: preserveDbFinancials
         ? Math.max(0, Number(current?.service_amt ?? 0) || 0)
         : serviceAmt,

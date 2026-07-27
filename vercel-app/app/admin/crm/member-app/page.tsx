@@ -54,7 +54,16 @@ export default function CrmMemberAppContentPage() {
   const canEdit = canEditMemberPortalAdmin(auth?.role || "", auth?.store)
   const canViewAllSignupStats = hasOfficeStaffScope(auth?.role || "", auth?.store)
   const [activeTab, setActiveTab] = React.useState<
-    "all" | "design" | "popup" | "promo" | "new_menu" | "info" | "stores" | "contact" | "delivery"
+    | "all"
+    | "design"
+    | "popup"
+    | "promo"
+    | "new_menu"
+    | "info"
+    | "stores"
+    | "contact"
+    | "signup_stats"
+    | "delivery"
   >("all")
   const [items, setItems] = React.useState<MemberPortalContentAdminItem[]>([])
   const [contactFacebookUrl, setContactFacebookUrl] = React.useState("")
@@ -816,6 +825,9 @@ export default function CrmMemberAppContentPage() {
             <TabsTrigger value="stores" className={adminTabsTriggerCn}>{t("mpAdmin_tabStores")}</TabsTrigger>
             <TabsTrigger value="design" className={adminTabsTriggerCn}>{t("mpAdmin_tabDesign")}</TabsTrigger>
             <TabsTrigger value="contact" className={adminTabsTriggerCn}>{t("mpAdmin_tabContact")}</TabsTrigger>
+            <TabsTrigger value="signup_stats" className={adminTabsTriggerCn}>
+              {t("mpAdmin_tabSignupStats")}
+            </TabsTrigger>
             <TabsTrigger value="delivery" className={adminTabsTriggerCn}>{t("mpAdmin_tabDelivery")}</TabsTrigger>
             </TabsList>
           </AdminTabsBarWithHelp>
@@ -1067,17 +1079,9 @@ export default function CrmMemberAppContentPage() {
                 </fieldset>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("mpAdmin_stampCardTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">{t("crmCouponStampMovedHint")}</p>
-                <Button asChild variant="outline">
-                  <Link href="/admin/crm/coupons?tab=stamp">{t("crmCouponTabStamp")}</Link>
-                </Button>
-              </CardContent>
-            </Card>
+          </TabsContent>
+
+          <TabsContent value="signup_stats" className={cn(adminTabsContentCn, "space-y-4")}>
             <Card>
               <CardHeader>
                 <CardTitle>{t("mpAdmin_signupStoreStatsTitle")}</CardTitle>

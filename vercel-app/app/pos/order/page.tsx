@@ -1459,6 +1459,8 @@ export default function PosOrderPage() {
         couponCode: couponPayloadFields.couponCode || undefined,
         couponDiscountAmt: couponPayloadFields.couponDiscountAmt || undefined,
         appliedCoupons: appliedCoupons.length ? appliedCoupons : undefined,
+        ...(appliedCollabId ? { collabCampaignId: appliedCollabId } : {}),
+        ...(collabDiscountAmt > 0.0001 ? { collabDiscountAmt } : {}),
         deliveryFee: deliveryFeeAmt || undefined,
         packagingFee: packagingFeeAmt || undefined,
         paymentCash: payment.cash || undefined,

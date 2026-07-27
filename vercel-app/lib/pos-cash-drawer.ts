@@ -70,8 +70,8 @@ export function formatPosCashDrawerFailureMessage(
     }
     if (shellReason === 'no_script') {
       return tx(
-        'posDrawerOpenErrShellException',
-        'POS 하이브리드 앱 내부 통신 오류로 돈통 열기에 실패했습니다. 앱을 재시작해 주세요.'
+        'posDrawerOpenErrNoScript',
+        '현금 서랍 스크립트가 설치본에 없습니다. Windows POS를 최신(0.1.15+)으로 재설치해 주세요.'
       )
     }
     return tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')

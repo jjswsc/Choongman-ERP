@@ -292,6 +292,24 @@ try {
   }
 
   Invoke-Step { npx electron-builder @builderArgs }
+
+  # 돈통 ESC/POS 킥 스크립트 — Omni brand config 병합 후에도 extraResources 누락되면 안 됨
+  $searchRoots = @()
+  if ($ebOutputFolder) {
+    $searchRoots += (Join-Path $windowsPosDir $ebOutputFolder)
+  }
+  $searchRoots += (Join-Path $windowsPosDir "dist")
+  $drawerScriptHits = @()
+  foreach ($root in $searchRoots) {
+    if (-not (Test-Path -LiteralPath $root)) { continue }
+    $drawerScriptHits += @(
+      Get-ChildItem -LiteralPath $root -Recurse -Filter "send-thermal-escpos-drawer-kick.ps1" -ErrorAction SilentlyContinue
+    )
+  }
+  if ($drawerScriptHits.Count -lt 1) {
+    throw "Build missing cash-drawer script (resources/scripts/send-thermal-escpos-drawer-kick.ps1). Check package.json extraResources / brand config."
+  }
+  Write-Host "OK: cash-drawer script packaged ($($drawerScriptHits[0].FullName))"
 }
 finally {
   Pop-Location
