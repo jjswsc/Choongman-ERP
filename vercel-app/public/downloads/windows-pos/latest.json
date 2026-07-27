@@ -1,20 +1,20 @@
 {
-  "version": "0.1.14",
-  "publishedAtUtc": "2026-07-24T05:53:53.0981909Z",
-  "notes": "Persist printer and Main settings across NSIS updates (AppData userData + legacy migrate) 0.1.14 — OmniFoodTech",
-  "brand": "omnifoodtech",
-  "installerUrl": "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-  "installerSha256": "ca34932d1f38ecc02e147d456360f2ec3835585bd2f2f3e25c947f1713ba36db",
-  "files": [
-    {
-      "name": "cm-pos-windows-latest-setup.exe",
-      "url": "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-      "sha256": "ca34932d1f38ecc02e147d456360f2ec3835585bd2f2f3e25c947f1713ba36db"
-    },
-    {
-      "name": "cm-pos-windows-0.1.14-setup.exe",
-      "url": "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.14-setup.exe",
-      "sha256": "ca34932d1f38ecc02e147d456360f2ec3835585bd2f2f3e25c947f1713ba36db"
-    }
-  ]
+    "version":  "0.1.15",
+    "files":  [
+                  {
+                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+                      "name":  "cm-pos-windows-latest-setup.exe",
+                      "sha256":  "0da9938e5232504f0e573700652e4195e26dd131bafd2036fbb6f9b74df8c87a"
+                  },
+                  {
+                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.15-setup.exe",
+                      "name":  "cm-pos-windows-0.1.15-setup.exe",
+                      "sha256":  "0da9938e5232504f0e573700652e4195e26dd131bafd2036fbb6f9b74df8c87a"
+                  }
+              ],
+    "installerSha256":  "0da9938e5232504f0e573700652e4195e26dd131bafd2036fbb6f9b74df8c87a",
+    "publishedAtUtc":  "2026-07-27T04:28:45.9076653Z",
+    "installerUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+    "brand":  "omnifoodtech",
+    "notes":  "Cash drawer ESC/POS script packaging fix (0.1.15). Reinstall required for drawer open."
 }
