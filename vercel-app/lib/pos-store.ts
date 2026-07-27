@@ -674,7 +674,9 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
   const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
   const [floorLabelsByStoreId, setFloorLabelsByStoreId] = useState<Record<string, PosFloorLabels>>({})
   const floorLabelsByStoreIdRef = useRef<Record<string, PosFloorLabels>>({})
-  const [currentStoreId, setCurrentStoreId] = useState<string>('')
+  const [currentStoreId, setCurrentStoreId] = useState<string>(() =>
+    String(canonicalAuthStore || '').trim()
+  )
   const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
   const ordersByStoreIdRef = useRef<Record<string, Order[]>>({})
   const [loading, setLoading] = useState(true)
@@ -690,6 +692,13 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
   useEffect(() => {
     ordersByStoreIdRef.current = ordersByStoreId
   }, [ordersByStoreId])
+
+  /** auth 매장이 생기면 부트스트랩 전에도 currentStoreId를 채워 /pos 튕김 레이스를 줄임 */
+  useEffect(() => {
+    const code = String(canonicalAuthStore || '').trim()
+    if (!code) return
+    setCurrentStoreId((prev) => (prev ? prev : code))
+  }, [canonicalAuthStore])
 
   /** API 대기 전 sessionStorage 진행 중 주문 즉시 표시 (새로고침·재진입) */
   useEffect(() => {
@@ -809,6 +818,14 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       return
     }
     if (!effectiveStoreCodes?.length) {
+      /**
+       * 목록이 잠깐 비는 레이스에서 stores를 비우고 loading=false 하면
+       * 터미널이 직원 홈(/pos)으로 튕긴다. auth 매장이 있으면 유지.
+       */
+      if (canonicalAuthStore) {
+        setLoading(true)
+        return
+      }
       setStores([])
       setLoading(false)
       return

@@ -526,11 +526,35 @@ export default function PosTerminalPage() {
     t,
   ])
 
+  /**
+   * 매장 컨텍스트가 없을 때만 직원 홈(/pos)으로 보냄.
+   * 단, 스토어 목록·auth 하이드레이트 레이스 / 배포 후 리마운트 때
+   * currentStoreId가 잠깐 ''이 되어 주문 대기·전송 중 튕기던 문제를 막는다.
+   */
+  const everHadStoreIdRef = useRef(Boolean(String(currentStoreId || '').trim()))
+  const currentStoreIdRef = useRef(currentStoreId)
+  const authStoreRef = useRef(auth?.store)
   useEffect(() => {
+    currentStoreIdRef.current = currentStoreId
+    if (String(currentStoreId || '').trim()) everHadStoreIdRef.current = true
+  }, [currentStoreId])
+  useEffect(() => {
+    authStoreRef.current = auth?.store
+  }, [auth?.store])
+  useEffect(() => {
+    if (isPosDemo) return
     if (loadingTables) return
-    if (currentStoreId) return
-    router.replace('/pos')
-  }, [loadingTables, currentStoreId, router])
+    if (String(currentStoreId || '').trim()) return
+    if (String(auth?.store || '').trim()) return
+    if ((posStores?.length ?? 0) > 0) return
+    if (everHadStoreIdRef.current) return
+    const timer = window.setTimeout(() => {
+      if (String(currentStoreIdRef.current || '').trim()) return
+      if (String(authStoreRef.current || '').trim()) return
+      router.replace('/pos')
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [loadingTables, currentStoreId, router, isPosDemo, auth?.store, posStores])
 
   const notifyQueuedSave = useCallback(async (orderNo?: string, queued?: boolean) => {
     await notifyQueuedPosSave({
@@ -2187,12 +2211,18 @@ export default function PosTerminalPage() {
     Boolean(selectedTableId) ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null
+  /**
+   * 태블릿(좁은 화면): 서빙/배달/포장 상세를 메인 영역으로 채움.
+   * 홀은 `!selectedTableId` 기준 — 주문 전송 직후 `pendingDineInOrderId`가 잡혀도
+   * 플로어로 튕기지 않고 서빙 패널이 전체로 유지돼야 함.
+   * (메뉴 키잉 중=`selectedTableId` 있음 → 기존처럼 메뉴+하단 카트)
+   */
   const shouldFullscreenOrderDetailOnNarrow =
     isNarrowViewport &&
     (
       (activeTab === 'delivery' && Boolean(selectedDeliveryOrder)) ||
       (activeTab === 'takeout' && Boolean(selectedTakeoutOrder)) ||
-      (activeTab === 'tables' && Boolean(servingTable?.order) && !pendingDineInOrderId)
+      (activeTab === 'tables' && Boolean(servingTable?.order) && !selectedTableId)
     )
   const isDineInAddOrderMode =
     activeTab === 'tables' &&
@@ -9414,34 +9444,45 @@ export default function PosTerminalPage() {
                 }
                 /** 저장 후 cart 비움 + 해당 테이블 서빙 패널로 (바닥에 품목 잔존·결제 카트 단절 방지) */
                 const submittedTableId = selectedTableId ?? servingTableId
+                const refreshAfterSaveArgs = {
+                  orderType: 'dine_in' as const,
+                  tableName: payload.tableName,
+                  memo: payload.memo,
+                  status: 'pending' as const,
+                  orderNo: savedOrderNo,
+                  serverOrderId: savedOrderId,
+                  total: mergeSubtotal - (payload.discountAmt ?? 0),
+                  items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
+                  queuedWithoutServerId,
+                }
+                /**
+                 * 태블릿: 메뉴→플로어로 전환하기 전에 테이블에 주문을 먼저 붙여
+                 * `servingTable?.order` 공백 프레임(플로어만 보이는 튕김)을 막는다.
+                 */
+                if (savedOrderId != null && savedOrderId > 0) {
+                  upsertOptimisticOrder({
+                    storeCode: currentStoreId,
+                    serverOrderId: savedOrderId,
+                    orderNo: savedOrderNo,
+                    orderType: 'dine_in',
+                    tableName: payload.tableName,
+                    tableLayoutFloor:
+                      parsePosTableFloorFromLabel(payload.tableName) ??
+                      getTableFloor(submittedTableId),
+                    memo: payload.memo,
+                    status: 'pending',
+                    total: mergeSubtotal - (payload.discountAmt ?? 0),
+                    items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
+                  })
+                }
                 clearCartFromTerminal()
                 setSelectedTableId(null)
                 setServingTableId(submittedTableId)
-                /** Omni: optimistic+refetch를 버튼 잠금에서 분리 — 저장 성공 직후 주문 버튼 해제 */
+                /** Omni: refetch를 버튼 잠금에서 분리 — 저장 성공 직후 주문 버튼 해제 */
                 if (isOmniPaymentFastPath) {
-                  void refreshStoreListAfterOrderSave({
-                    orderType: 'dine_in',
-                    tableName: payload.tableName,
-                    memo: payload.memo,
-                    status: 'pending',
-                    orderNo: savedOrderNo,
-                    serverOrderId: savedOrderId,
-                    total: mergeSubtotal - (payload.discountAmt ?? 0),
-                    items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
-                    queuedWithoutServerId,
-                  })
+                  void refreshStoreListAfterOrderSave(refreshAfterSaveArgs)
                 } else {
-                  await refreshStoreListAfterOrderSave({
-                    orderType: 'dine_in',
-                    tableName: payload.tableName,
-                    memo: payload.memo,
-                    status: 'pending',
-                    orderNo: savedOrderNo,
-                    serverOrderId: savedOrderId,
-                    total: mergeSubtotal - (payload.discountAmt ?? 0),
-                    items: mapPosOrderItemsToTerminalOrderSnapshot(posItemsForSave),
-                    queuedWithoutServerId,
-                  })
+                  await refreshStoreListAfterOrderSave(refreshAfterSaveArgs)
                 }
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
