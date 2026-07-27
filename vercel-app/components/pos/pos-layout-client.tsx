@@ -20,6 +20,7 @@ import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabl
 import { isSaasPartnerLoginStoreClient } from "@/lib/saas-partner-login-defaults-client"
 import { inspectPosHybridPrintHealth } from "@/lib/pos-hybrid-print-health"
 import { sendPosHealthAlert } from "@/lib/pos-health-alert-client"
+import { getPosPrinterSettings } from "@/lib/api-client"
 
 const POS_TOPBAR_HIDDEN_KEY = "cm-pos-topbar-hidden"
 const POS_PRINT_STARTUP_ALERT_KEY = "cm-pos-print-startup-health-alert-v1"
@@ -184,6 +185,34 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     setShellMinimizeAvailable(typeof window.cmPosShell?.minimizeWindow === "function")
     setShellQuitAvailable(typeof window.cmPosShell?.quitApp === "function")
   }, [])
+
+  /** 로그인 후 POS 홈부터 Second Monitor 자동 오픈 (터미널 진입 전에 열리도록) */
+  useEffect(() => {
+    if (!initialized || !auth) return
+    if (isPosLoginPage || isCustomerDisplayPage) return
+    const storeCode = String(auth.store || "").trim()
+    if (!storeCode) return
+    const shell = typeof window !== "undefined" ? window.cmPosShell : undefined
+    if (typeof shell?.configureCustomerDisplay !== "function") return
+    let cancelled = false
+    void getPosPrinterSettings({ storeCode })
+      .then((s) => {
+        if (cancelled) return
+        void shell.configureCustomerDisplay!({
+          enabled: Boolean(s.dualMonitorEnabled),
+          autoOpen: s.customerDisplayAutoOpen !== false,
+          monitorPreference:
+            s.customerDisplayMonitorPreference === "primary-only" ? "primary-only" : "secondary-first",
+          storeCode,
+        })
+      })
+      .catch(() => {
+        /* ignore — 터미널 진입 시 재시도 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [initialized, auth, auth?.store, isPosLoginPage, isCustomerDisplayPage])
 
   useEffect(() => {
     if (!isCmPosHybridShell()) return
@@ -483,12 +512,14 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         items-start였을 때 높이=콘텐츠만큼만 잡혀 스크롤이 생기지 않고 overflow-hidden에 잘림.
       */}
       <main
-        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${isTouchViewport ? "p-0" : "p-2 md:p-4"} ${padForRevealStrip ? "pt-12" : ""}`}
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+          isCustomerDisplayPage || isTouchViewport ? "p-0" : "p-2 md:p-4"
+        } ${padForRevealStrip ? "pt-12" : ""}`}
       >
         {useViewport ? (
           <div
             className={
-              isTouchViewport
+              isCustomerDisplayPage || isTouchViewport
                 ? "mx-auto flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
                 : "mx-auto flex h-full min-h-0 w-full max-w-[1024px] max-h-[768px] min-[1024px]:min-h-[600px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
             }

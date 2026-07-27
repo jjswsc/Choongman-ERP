@@ -131,9 +131,9 @@ export default function PosCustomerDisplayPage() {
         Number(bd.cardFeeAmt || 0) > 0 ||
         Number(bd.otherFeeAmt || 0) > 0)
     return (
-      <>
+      <div className="shrink-0">
         {showBreakdownRows && bd ? (
-          <div className="mt-4 rounded-xl border border-white/20 p-4 text-lg">
+          <div className="mt-3 rounded-xl border border-white/20 p-3 text-lg md:mt-4 md:p-4">
             <div className="flex items-center justify-between">
               <span>{t("posSubtotal") || "소계"}</span>
               <span>
@@ -189,10 +189,10 @@ export default function PosCustomerDisplayPage() {
             ) : null}
           </div>
         ) : null}
-        <div className="mt-4 text-right text-3xl font-bold">
+        <div className="mt-3 text-right text-3xl font-bold md:mt-4">
           {(t("posTotal") || "합계")}: {Number(state?.totalAmount || 0).toLocaleString()}
         </div>
-      </>
+      </div>
     )
   }
 
@@ -204,9 +204,9 @@ export default function PosCustomerDisplayPage() {
         : "bg-slate-950 text-white"
 
   return (
-    <div className={`h-full min-h-[100dvh] w-full ${rootClass}`}>
-      <div className="mx-auto flex h-full max-w-5xl flex-col p-8">
-        <div className="mb-6 flex items-center justify-between border-b border-white/20 pb-4">
+    <div className={`flex h-full min-h-0 w-full flex-col overflow-hidden ${rootClass}`}>
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden p-6 md:p-8">
+        <div className="mb-4 flex shrink-0 items-center justify-between border-b border-white/20 pb-3">
           <h1 className="text-2xl font-bold">{t("posCustomerDisplayTitle") || "Customer Display"}</h1>
           <span className="text-sm opacity-80">{storeCode || "-"}</span>
         </div>
@@ -245,18 +245,20 @@ export default function PosCustomerDisplayPage() {
         ) : null}
 
         {current === "ordering" ? (
-          <div className="flex flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {resolvedBrandLogo ? (
                
               <img
                 src={resolvedBrandLogo}
                 alt=""
-                className="mx-auto mb-4 h-16 max-w-[min(100%,280px)] object-contain"
+                className="mx-auto mb-3 h-14 max-w-[min(100%,280px)] shrink-0 object-contain md:mb-4 md:h-16"
               />
             ) : null}
-            <h2 className="mb-3 text-3xl font-semibold">{state?.title || (t("posCustomerOrdering") || "주문 확인")}</h2>
+            <h2 className="mb-3 shrink-0 text-3xl font-semibold">
+              {state?.title || (t("posCustomerOrdering") || "주문 확인")}
+            </h2>
             {showOrderSummary && state?.showOrderSummary !== false ? (
-              <div className="flex-1 space-y-2 overflow-auto rounded-xl border border-white/20 p-4">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-xl border border-white/20 p-4">
                 {(state?.items || []).map((it, idx) => (
                   <div key={`${it.name}-${idx}`} className="flex items-center justify-between text-xl">
                     <span>{it.qty} x {it.name}</span>
@@ -265,7 +267,7 @@ export default function PosCustomerDisplayPage() {
                 ))}
               </div>
             ) : (
-              <div className="flex-1 rounded-xl border border-white/20 p-4 text-xl">
+              <div className="min-h-0 flex-1 rounded-xl border border-white/20 p-4 text-xl">
                 {t("posCustomerOrderingInProgress") || "주문 진행 중"}
               </div>
             )}
@@ -274,20 +276,20 @@ export default function PosCustomerDisplayPage() {
         ) : null}
 
         {current === "payment" ? (
-          <div className="flex flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {resolvedBrandLogo ? (
                
               <img
                 src={resolvedBrandLogo}
                 alt=""
-                className="mx-auto mb-3 h-16 max-w-[min(100%,280px)] object-contain"
+                className="mx-auto mb-3 h-14 max-w-[min(100%,280px)] shrink-0 object-contain md:h-16"
               />
             ) : null}
-            <h2 className="mb-3 text-3xl font-semibold text-center">
+            <h2 className="mb-3 shrink-0 text-center text-3xl font-semibold">
               {state?.message || paymentMessage || (t("posCustomerPayment") || "결제 진행 중")}
             </h2>
             {Array.isArray(state?.paymentLines) && (state?.paymentLines?.length ?? 0) > 0 ? (
-              <div className="mb-4 space-y-1 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-lg">
+              <div className="mb-3 shrink-0 space-y-1 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-lg">
                 {(state?.paymentLines ?? []).map((row, i) => (
                   <div key={i} className="flex items-center justify-between gap-3">
                     <span className="text-white/90">{row.label}</span>
@@ -297,7 +299,7 @@ export default function PosCustomerDisplayPage() {
               </div>
             ) : null}
             {showOrderSummary && state?.showOrderSummary !== false && Array.isArray(state?.items) && state.items.length > 0 ? (
-              <div className="flex-1 space-y-2 overflow-auto rounded-xl border border-white/20 p-4">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-xl border border-white/20 p-4">
                 {state.items.map((it, idx) => (
                   <div key={`${it.name}-${idx}`} className="flex items-center justify-between text-xl">
                     <span>{it.qty} x {it.name}</span>
@@ -306,7 +308,7 @@ export default function PosCustomerDisplayPage() {
                 ))}
               </div>
             ) : (
-              <div className="flex-1 rounded-xl border border-white/20 p-4 text-xl text-center">
+              <div className="min-h-0 flex-1 rounded-xl border border-white/20 p-4 text-xl text-center">
                 {t("posCustomerPayment") || "결제 진행 중"}
               </div>
             )}
@@ -315,7 +317,7 @@ export default function PosCustomerDisplayPage() {
         ) : null}
 
         {current === "change" ? (
-          <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-4 text-center">
             {resolvedBrandLogo ? (
               <img
                 src={resolvedBrandLogo}
@@ -360,7 +362,7 @@ export default function PosCustomerDisplayPage() {
         ) : null}
 
         {current === "qr" ? (
-          <div className="flex flex-1 flex-col items-center justify-center text-center">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto text-center">
             {resolvedBrandLogo ? (
                
               <img

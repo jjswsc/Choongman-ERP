@@ -1018,6 +1018,95 @@ let customerDisplayConfig = {
   storeCode: "",
 };
 let customerDisplayLastState = null;
+/** secondary 모니터가 늦게 잡히는 경우 auto-open 재시도 */
+let customerDisplayAutoOpenRetryTimers = [];
+
+function clearCustomerDisplayAutoOpenRetries() {
+  for (const timer of customerDisplayAutoOpenRetryTimers) {
+    try {
+      clearTimeout(timer);
+    } catch {
+      /* ignore */
+    }
+  }
+  customerDisplayAutoOpenRetryTimers = [];
+}
+
+function scheduleCustomerDisplayAutoOpenRetries() {
+  clearCustomerDisplayAutoOpenRetries();
+  if (!customerDisplayConfig.enabled || !customerDisplayConfig.autoOpen) return;
+  for (const ms of [1500, 4000, 9000]) {
+    customerDisplayAutoOpenRetryTimers.push(
+      setTimeout(() => {
+        if (!customerDisplayConfig.enabled || !customerDisplayConfig.autoOpen) return;
+        if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) return;
+        void ensureCustomerDisplayWindow(false);
+      }, ms)
+    );
+  }
+}
+
+function readCustomerDisplayConfigFromRuntime() {
+  try {
+    const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+    if (!fs.existsSync(userPath)) return null;
+    let raw = fs.readFileSync(userPath, "utf8");
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    const parsed = JSON.parse(raw) || {};
+    const cd = parsed.customerDisplay;
+    if (!cd || typeof cd !== "object") return null;
+    return {
+      enabled: Boolean(cd.enabled),
+      autoOpen: cd.autoOpen !== false,
+      monitorPreference:
+        String(cd.monitorPreference || "secondary-first") === "primary-only"
+          ? "primary-only"
+          : "secondary-first",
+      storeCode: String(cd.storeCode || "").trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCustomerDisplayConfigToRuntime(cfg) {
+  try {
+    ensureUserRuntimeConfigSeeded();
+    const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+    let parsed = {};
+    try {
+      let raw = fs.readFileSync(userPath, "utf8");
+      if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+      parsed = JSON.parse(raw) || {};
+    } catch {
+      parsed = {};
+    }
+    parsed.customerDisplay = {
+      enabled: Boolean(cfg.enabled),
+      autoOpen: cfg.autoOpen !== false,
+      monitorPreference:
+        String(cfg.monitorPreference || "secondary-first") === "primary-only"
+          ? "primary-only"
+          : "secondary-first",
+      storeCode: String(cfg.storeCode || "").trim(),
+    };
+    fs.writeFileSync(userPath, JSON.stringify(parsed, null, 4) + "\n", "utf8");
+  } catch (e) {
+    console.warn(
+      "[cm-pos] write customerDisplay runtime-config failed:",
+      e && e.message ? e.message : e
+    );
+  }
+}
+
+function applySavedCustomerDisplayConfig() {
+  const saved = readCustomerDisplayConfigFromRuntime();
+  if (!saved) return;
+  customerDisplayConfig = {
+    ...customerDisplayConfig,
+    ...saved,
+  };
+}
 
 /**
  * Electron 메인에서 간헐적으로 발생하는 "Object has been destroyed" 레이스는
@@ -3056,7 +3145,9 @@ if (!gotLock) {
             : "secondary-first",
         storeCode: String(params?.storeCode || customerDisplayConfig.storeCode || "").trim(),
       };
+      writeCustomerDisplayConfigToRuntime(customerDisplayConfig);
       if (!customerDisplayConfig.enabled) {
+        clearCustomerDisplayAutoOpenRetries();
         return closeCustomerDisplayWindow();
       }
       if (customerDisplayConfig.autoOpen) {
@@ -3065,8 +3156,11 @@ if (!gotLock) {
           windowMissing ||
           !prevEnabled ||
           prevMonitorPreference !== customerDisplayConfig.monitorPreference;
-        return ensureCustomerDisplayWindow(false, { reposition: needReposition });
+        const result = await ensureCustomerDisplayWindow(false, { reposition: needReposition });
+        scheduleCustomerDisplayAutoOpenRetries();
+        return result;
       }
+      clearCustomerDisplayAutoOpenRetries();
       return { ok: true };
     });
 
@@ -3180,12 +3274,23 @@ if (!gotLock) {
       return { ok: true };
     });
 
+    applySavedCustomerDisplayConfig();
     createWindow();
     void startEmbeddedLinkposBridge();
+    if (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen) {
+      void ensureCustomerDisplayWindow(false).finally(() => {
+        scheduleCustomerDisplayAutoOpenRetries();
+      });
+    }
 
     const rebalanceCustomerDisplay = () => {
-      if (!customerDisplayWindow || customerDisplayWindow.isDestroyed()) return;
-      placeCustomerWindowOnTarget(customerDisplayWindow);
+      if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+        placeCustomerWindowOnTarget(customerDisplayWindow);
+        return;
+      }
+      if (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen) {
+        void ensureCustomerDisplayWindow(false);
+      }
     };
     screen.on("display-added", rebalanceCustomerDisplay);
     screen.on("display-removed", rebalanceCustomerDisplay);
