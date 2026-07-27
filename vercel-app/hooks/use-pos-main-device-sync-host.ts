@@ -115,6 +115,7 @@ import {
   isPosDineInTableNameOnlyUpdate,
   isPosOrderItemsJsonPackagingOnlyUpdate,
   posOrderRealtimePricingFieldsChanged,
+  shouldAutoprintPaymentReceiptOnRealtimeUpdate,
 } from '@/lib/pos-dine-in-realtime-update'
 import {
   isPosOrderPaidLikeStatus,
@@ -1091,8 +1092,8 @@ export function usePosMainDeviceSyncHost(): void {
 
       if (
         wantPayment &&
-        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
-        posOrderRowPaymentSum(row) > 0 &&
+        !packagingOnlyUpdate &&
+        shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRow, row) &&
         claimMainPosPaymentReceiptAutoprint(orderId, String(row.store_code ?? storeCode).trim())
       ) {
         void getPosOrders({ orderId, storeCode })

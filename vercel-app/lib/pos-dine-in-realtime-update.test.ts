@@ -4,6 +4,7 @@ import {
   isPosDineInTableNameOnlyUpdate,
   isPosOrderItemsJsonPackagingOnlyUpdate,
   posOrderRealtimePricingFieldsChanged,
+  shouldAutoprintPaymentReceiptOnRealtimeUpdate,
 } from '@/lib/pos-dine-in-realtime-update'
 
 describe('inferPosOrderTypeFromRow', () => {
@@ -115,6 +116,94 @@ describe('posOrderRealtimePricingFieldsChanged', () => {
       posOrderRealtimePricingFieldsChanged(
         { id: 1, discount_amt: 0, total: 1982 },
         { id: 1, discount_amt: 10, total: 1972 }
+      )
+    ).toBe(true)
+  })
+})
+
+describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
+  it('skips already-paid order updates (collab backfill / non-payment fields)', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 100,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 100,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          collab_discount_amt: 50,
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('skips when OLD is PK-only (cannot prove unpaid→paid)', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 200,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('allows unpaid→paid with payment appearing', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 1,
+          status: 'pending',
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 200,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        }
+      )
+    ).toBe(true)
+  })
+
+  it('allows status unpaid→paid even if payment was already on OLD', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 1,
+          status: 'pending',
+          payment_cash: 0,
+          payment_card: 150,
+          payment_qr: 0,
+          payment_other: 0,
+        },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 0,
+          payment_card: 150,
+          payment_qr: 0,
+          payment_other: 0,
+        }
       )
     ).toBe(true)
   })

@@ -164,7 +164,12 @@ import {
   resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
-import { isPosDineInTableNameOnlyUpdate, isPosOrderItemsJsonPackagingOnlyUpdate, posOrderRealtimePricingFieldsChanged } from '@/lib/pos-dine-in-realtime-update'
+import {
+  isPosDineInTableNameOnlyUpdate,
+  isPosOrderItemsJsonPackagingOnlyUpdate,
+  posOrderRealtimePricingFieldsChanged,
+  shouldAutoprintPaymentReceiptOnRealtimeUpdate,
+} from '@/lib/pos-dine-in-realtime-update'
 import {
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
@@ -5055,8 +5060,8 @@ export default function PosTerminalPage() {
 
       if (
         wantPayment &&
-        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
-        posOrderRowPaymentSum(row) > 0 &&
+        !packagingOnlyUpdate &&
+        shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRowForAutoprint, row) &&
         !printedPaymentReceiptIdsRef.current.has(orderId)
       ) {
         void getPosOrders({ orderId, storeCode: currentStoreId })
