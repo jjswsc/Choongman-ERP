@@ -1149,7 +1149,8 @@ function broadcastCustomerDisplayState(payload) {
   }
 }
 
-async function ensureCustomerDisplayWindow(forceOpen = false) {
+async function ensureCustomerDisplayWindow(forceOpen = false, options = {}) {
+  const reposition = Boolean(options && options.reposition);
   const allowOpen = forceOpen || (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen);
   if (!allowOpen) return { ok: true, reason: "disabled" };
   if (shouldSkipCustomerDisplayWindow(forceOpen)) {
@@ -1164,12 +1165,14 @@ async function ensureCustomerDisplayWindow(forceOpen = false) {
     return { ok: true, reason: "single-display-skip" };
   }
   if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
-    placeCustomerWindowOnTarget(customerDisplayWindow);
+    if (forceOpen || reposition) {
+      placeCustomerWindowOnTarget(customerDisplayWindow);
+    }
     if (forceOpen) {
       customerDisplayWindow.show();
       customerDisplayWindow.focus();
-    } else {
-      /** 주문·결제 상태 갱신마다 focus() 하면 캐셔 POS가 고객 화면으로 바뀜 */
+    } else if (!customerDisplayWindow.isVisible()) {
+      /** 숨김 상태일 때만 다시 표시 — 매 상태 갱신마다 setBounds/showInactive 하면 보조 모니터가 깜빡임 */
       customerDisplayWindow.showInactive();
       refocusMainPosWindow();
     }
@@ -3041,6 +3044,8 @@ if (!gotLock) {
       if (!senderAllowedOrigin(event.sender)) {
         return { ok: false, reason: "forbidden" };
       }
+      const prevEnabled = Boolean(customerDisplayConfig.enabled);
+      const prevMonitorPreference = customerDisplayConfig.monitorPreference;
       customerDisplayConfig = {
         ...customerDisplayConfig,
         enabled: Boolean(params?.enabled),
@@ -3055,7 +3060,12 @@ if (!gotLock) {
         return closeCustomerDisplayWindow();
       }
       if (customerDisplayConfig.autoOpen) {
-        return ensureCustomerDisplayWindow(false);
+        const windowMissing = !customerDisplayWindow || customerDisplayWindow.isDestroyed();
+        const needReposition =
+          windowMissing ||
+          !prevEnabled ||
+          prevMonitorPreference !== customerDisplayConfig.monitorPreference;
+        return ensureCustomerDisplayWindow(false, { reposition: needReposition });
       }
       return { ok: true };
     });
@@ -3080,7 +3090,7 @@ if (!gotLock) {
       }
       const storeCode = String(payload?.storeCode || customerDisplayConfig.storeCode || "").trim();
       const kindRaw = String(payload?.kind || "idle");
-      const kind = ["idle", "ordering", "payment", "qr"].includes(kindRaw) ? kindRaw : "idle";
+      const kind = ["idle", "ordering", "payment", "qr", "change"].includes(kindRaw) ? kindRaw : "idle";
       const normalized = {
         storeCode,
         kind,
@@ -3091,14 +3101,38 @@ if (!gotLock) {
         title: typeof payload?.title === "string" ? payload.title : undefined,
         message: typeof payload?.message === "string" ? payload.message : undefined,
         qrPayload: typeof payload?.qrPayload === "string" ? payload.qrPayload : undefined,
+        qrType:
+          String(payload?.qrType || "").trim().toUpperCase() === "CREDIT_CARD"
+            ? "CREDIT_CARD"
+            : typeof payload?.qrPayload === "string"
+              ? "THAI_QR"
+              : undefined,
+        paymentLines: Array.isArray(payload?.paymentLines) ? payload.paymentLines : undefined,
+        brandLogoUrl: typeof payload?.brandLogoUrl === "string" ? payload.brandLogoUrl : undefined,
         items: Array.isArray(payload?.items) ? payload.items : undefined,
         totalAmount: Number(payload?.totalAmount || 0),
+        changeAmountBaht:
+          payload?.changeAmountBaht != null && Number.isFinite(Number(payload.changeAmountBaht))
+            ? Number(payload.changeAmountBaht)
+            : undefined,
         breakdown:
           payload?.breakdown && typeof payload.breakdown === "object"
             ? {
                 subtotal: Number(payload.breakdown.subtotal || 0),
                 discountAmt: Number(payload.breakdown.discountAmt || 0),
                 vatFeeAmt: Number(payload.breakdown.vatFeeAmt || 0),
+                receiptExclusiveSubtotalDisplay:
+                  payload.breakdown.receiptExclusiveSubtotalDisplay != null
+                    ? Number(payload.breakdown.receiptExclusiveSubtotalDisplay)
+                    : undefined,
+                receiptVatDisplayAmt:
+                  payload.breakdown.receiptVatDisplayAmt != null
+                    ? Number(payload.breakdown.receiptVatDisplayAmt)
+                    : undefined,
+                receiptTaxableGrossForDisplay:
+                  payload.breakdown.receiptTaxableGrossForDisplay != null
+                    ? Number(payload.breakdown.receiptTaxableGrossForDisplay)
+                    : undefined,
                 vatRate: Number(payload.breakdown.vatRate || 0),
                 vatMode:
                   String(payload.breakdown.vatMode || "included") === "separate"
@@ -3127,11 +3161,21 @@ if (!gotLock) {
             : undefined,
         showOrderSummary: payload?.showOrderSummary !== false,
         showOrderTotal: payload?.showOrderTotal !== false,
+        idleMediaType:
+          payload?.idleMediaType === "image" || payload?.idleMediaType === "video"
+            ? payload.idleMediaType
+            : payload?.idleMediaType === "none"
+              ? "none"
+              : undefined,
+        idleMediaUrl: typeof payload?.idleMediaUrl === "string" ? payload.idleMediaUrl : undefined,
       };
       broadcastCustomerDisplayState(normalized);
-      if (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen) {
+      if (
+        customerDisplayConfig.enabled &&
+        customerDisplayConfig.autoOpen &&
+        (!customerDisplayWindow || customerDisplayWindow.isDestroyed())
+      ) {
         await ensureCustomerDisplayWindow(false);
-        refocusMainPosWindow();
       }
       return { ok: true };
     });

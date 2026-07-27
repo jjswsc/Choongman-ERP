@@ -116,6 +116,86 @@ export default function PosCustomerDisplayPage() {
     },
     [t]
   )
+
+  const renderTotalWithBreakdown = () => {
+    if (!showOrderTotal || state?.showOrderTotal === false) return null
+    const bd = state?.breakdown
+    const showBreakdownRows =
+      bd &&
+      (Number(bd.discountAmt || 0) > 0 ||
+        resolveReceiptVatPrintAmount({
+          vatFeeAmt: bd.vatFeeAmt,
+          receiptVatDisplayAmt: bd.receiptVatDisplayAmt,
+        }) > 0 ||
+        Number(bd.serviceFeeAmt || 0) > 0 ||
+        Number(bd.cardFeeAmt || 0) > 0 ||
+        Number(bd.otherFeeAmt || 0) > 0)
+    return (
+      <>
+        {showBreakdownRows && bd ? (
+          <div className="mt-4 rounded-xl border border-white/20 p-4 text-lg">
+            <div className="flex items-center justify-between">
+              <span>{t("posSubtotal") || "소계"}</span>
+              <span>
+                {Number(
+                  resolveReceiptSubtotalPrintAmount({
+                    subtotal: bd.subtotal,
+                    vatFeeMode: bd.vatMode,
+                    receiptExclusiveSubtotalDisplay: bd.receiptExclusiveSubtotalDisplay,
+                    receiptTaxableGrossForDisplay: bd.receiptTaxableGrossForDisplay,
+                  }) || 0
+                ).toLocaleString()}
+              </span>
+            </div>
+            {Number(bd.discountAmt || 0) > 0 ? (
+              <div className="mt-1 flex items-center justify-between">
+                <span>{t("posDiscount") || "할인"}</span>
+                <span>-{Number(bd.discountAmt || 0).toLocaleString()}</span>
+              </div>
+            ) : null}
+            {resolveReceiptVatPrintAmount({
+              vatFeeAmt: bd.vatFeeAmt,
+              receiptVatDisplayAmt: bd.receiptVatDisplayAmt,
+            }) > 0 ? (
+              <div className="mt-1 flex items-center justify-between">
+                <span>{formatFeeLabel(t("vatFee") || "부가세", bd.vatRate, bd.vatMode)}</span>
+                <span>
+                  {Number(
+                    resolveReceiptVatPrintAmount({
+                      vatFeeAmt: bd.vatFeeAmt,
+                      receiptVatDisplayAmt: bd.receiptVatDisplayAmt,
+                    }) || 0
+                  ).toLocaleString()}
+                </span>
+              </div>
+            ) : null}
+            {Number(bd.serviceFeeAmt || 0) > 0 ? (
+              <div className="mt-1 flex items-center justify-between">
+                <span>{formatFeeLabel(t("serviceFee") || "서비스비", bd.serviceRate, bd.serviceMode)}</span>
+                <span>+{Number(bd.serviceFeeAmt || 0).toLocaleString()}</span>
+              </div>
+            ) : null}
+            {Number(bd.cardFeeAmt || 0) > 0 ? (
+              <div className="mt-1 flex items-center justify-between">
+                <span>{formatFeeLabel(t("cardFee") || "카드 수수료", bd.cardRate, bd.cardMode)}</span>
+                <span>+{Number(bd.cardFeeAmt || 0).toLocaleString()}</span>
+              </div>
+            ) : null}
+            {Number(bd.otherFeeAmt || 0) > 0 ? (
+              <div className="mt-1 flex items-center justify-between">
+                <span>{formatFeeLabel(t("otherFee") || "기타 수수료", bd.otherRate, bd.otherMode)}</span>
+                <span>+{Number(bd.otherFeeAmt || 0).toLocaleString()}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="mt-4 text-right text-3xl font-bold">
+          {(t("posTotal") || "합계")}: {Number(state?.totalAmount || 0).toLocaleString()}
+        </div>
+      </>
+    )
+  }
+
   const rootClass =
     theme === "light"
       ? "bg-white text-slate-900"
@@ -189,11 +269,7 @@ export default function PosCustomerDisplayPage() {
                 {t("posCustomerOrderingInProgress") || "주문 진행 중"}
               </div>
             )}
-            {showOrderTotal && state?.showOrderTotal !== false ? (
-              <div className="mt-4 text-right text-3xl font-bold">
-                {(t("posTotal") || "합계")}: {Number(state?.totalAmount || 0).toLocaleString()}
-              </div>
-            ) : null}
+            {renderTotalWithBreakdown()}
           </div>
         ) : null}
 
@@ -234,81 +310,7 @@ export default function PosCustomerDisplayPage() {
                 {t("posCustomerPayment") || "결제 진행 중"}
               </div>
             )}
-            {showOrderTotal && state?.showOrderTotal !== false ? (
-              <>
-                {state?.breakdown ? (
-                  (
-                    Number(state.breakdown.discountAmt || 0) > 0 ||
-                    resolveReceiptVatPrintAmount({
-                      vatFeeAmt: state.breakdown.vatFeeAmt,
-                      receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
-                    }) > 0 ||
-                    Number(state.breakdown.serviceFeeAmt || 0) > 0 ||
-                    Number(state.breakdown.cardFeeAmt || 0) > 0 ||
-                    Number(state.breakdown.otherFeeAmt || 0) > 0
-                  ) ? (
-                    <div className="mt-4 rounded-xl border border-white/20 p-4 text-lg">
-                      <div className="flex items-center justify-between">
-                        <span>{t("posSubtotal") || "소계"}</span>
-                        <span>
-                          {Number(
-                            resolveReceiptSubtotalPrintAmount({
-                              subtotal: state.breakdown.subtotal,
-                              vatFeeMode: state.breakdown.vatMode,
-                              receiptExclusiveSubtotalDisplay: state.breakdown.receiptExclusiveSubtotalDisplay,
-                              receiptTaxableGrossForDisplay: state.breakdown.receiptTaxableGrossForDisplay,
-                            }) || 0
-                          ).toLocaleString()}
-                        </span>
-                      </div>
-                      {Number(state.breakdown.discountAmt || 0) > 0 ? (
-                        <div className="mt-1 flex items-center justify-between">
-                          <span>{t("posDiscount") || "할인"}</span>
-                          <span>-{Number(state.breakdown.discountAmt || 0).toLocaleString()}</span>
-                        </div>
-                      ) : null}
-                      {resolveReceiptVatPrintAmount({
-                        vatFeeAmt: state.breakdown.vatFeeAmt,
-                        receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
-                      }) > 0 ? (
-                        <div className="mt-1 flex items-center justify-between">
-                          <span>{formatFeeLabel(t("vatFee") || "부가세", state.breakdown.vatRate, state.breakdown.vatMode)}</span>
-                          <span>
-                            {Number(
-                              resolveReceiptVatPrintAmount({
-                                vatFeeAmt: state.breakdown.vatFeeAmt,
-                                receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
-                              }) || 0
-                            ).toLocaleString()}
-                          </span>
-                        </div>
-                      ) : null}
-                      {Number(state.breakdown.serviceFeeAmt || 0) > 0 ? (
-                        <div className="mt-1 flex items-center justify-between">
-                          <span>{formatFeeLabel(t("serviceFee") || "서비스비", state.breakdown.serviceRate, state.breakdown.serviceMode)}</span>
-                          <span>+{Number(state.breakdown.serviceFeeAmt || 0).toLocaleString()}</span>
-                        </div>
-                      ) : null}
-                      {Number(state.breakdown.cardFeeAmt || 0) > 0 ? (
-                        <div className="mt-1 flex items-center justify-between">
-                          <span>{formatFeeLabel(t("cardFee") || "카드 수수료", state.breakdown.cardRate, state.breakdown.cardMode)}</span>
-                          <span>+{Number(state.breakdown.cardFeeAmt || 0).toLocaleString()}</span>
-                        </div>
-                      ) : null}
-                      {Number(state.breakdown.otherFeeAmt || 0) > 0 ? (
-                        <div className="mt-1 flex items-center justify-between">
-                          <span>{formatFeeLabel(t("otherFee") || "기타 수수료", state.breakdown.otherRate, state.breakdown.otherMode)}</span>
-                          <span>+{Number(state.breakdown.otherFeeAmt || 0).toLocaleString()}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null
-                ) : null}
-                <div className="mt-4 text-right text-3xl font-bold">
-                  {(t("posTotal") || "합계")}: {Number(state?.totalAmount || 0).toLocaleString()}
-                </div>
-              </>
-            ) : null}
+            {renderTotalWithBreakdown()}
           </div>
         ) : null}
 

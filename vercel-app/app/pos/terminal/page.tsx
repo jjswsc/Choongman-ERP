@@ -858,6 +858,8 @@ export default function PosTerminalPage() {
   const [feeStackOrder, setFeeStackOrder] = useState<Array<'vat' | 'service' | 'other'>>(['service', 'vat', 'other'])
   const [paymentTotalRoundingMode, setPaymentTotalRoundingMode] = useState<'round' | 'floor' | 'none'>('round')
   const [dualMonitorEnabled, setDualMonitorEnabled] = useState(false)
+  /** 프린터 설정 로드 전에는 configure(enabled:false)로 고객 창을 닫지 않음 — Dine-in 진입 시 바탕화면 깜빡임 방지 */
+  const [dualMonitorConfigReady, setDualMonitorConfigReady] = useState(false)
   const [requireGuestCount, setRequireGuestCount] = useState(true)
   const [customerDisplayAutoOpen, setCustomerDisplayAutoOpen] = useState(true)
   const [customerDisplayMonitorPreference, setCustomerDisplayMonitorPreference] = useState<'secondary-first' | 'primary-only'>('secondary-first')
@@ -1632,6 +1634,7 @@ export default function PosTerminalPage() {
     const requestStoreCode = String(currentStoreId || '').trim()
     if (!requestStoreCode) return
     const seq = ++storeSettingsLoadSeqRef.current
+    setDualMonitorConfigReady(false)
     getPrinterSettingsForStore(requestStoreCode)
       .then((s) => {
         if (seq !== storeSettingsLoadSeqRef.current) return
@@ -1714,6 +1717,7 @@ export default function PosTerminalPage() {
         setFeeStackOrder(normalizeFeeStackOrder(s.feeStackOrder))
         setPaymentTotalRoundingMode(normalizePaymentTotalRoundingMode(s.paymentTotalRoundingMode))
         setDualMonitorEnabled(Boolean(s.dualMonitorEnabled))
+        setDualMonitorConfigReady(true)
         setRequireGuestCount(s.requireGuestCount !== false)
         setCustomerDisplayAutoOpen(s.customerDisplayAutoOpen !== false)
         setCustomerDisplayMonitorPreference(
@@ -1801,6 +1805,7 @@ export default function PosTerminalPage() {
         setOtherRate(0)
         setOtherMode('separate')
         setDualMonitorEnabled(false)
+        setDualMonitorConfigReady(true)
         setRequireGuestCount(true)
         setCustomerDisplayAutoOpen(true)
         setCustomerDisplayMonitorPreference('secondary-first')
@@ -3315,6 +3320,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!currentStoreId) return
+    if (!dualMonitorConfigReady) return
     const shell = window.cmPosShell
     if (typeof shell?.configureCustomerDisplay !== 'function') return
     void shell.configureCustomerDisplay({
@@ -3323,7 +3329,13 @@ export default function PosTerminalPage() {
       monitorPreference: customerDisplayMonitorPreference,
       storeCode: currentStoreId,
     })
-  }, [currentStoreId, dualMonitorEnabled, customerDisplayAutoOpen, customerDisplayMonitorPreference])
+  }, [
+    currentStoreId,
+    dualMonitorConfigReady,
+    dualMonitorEnabled,
+    customerDisplayAutoOpen,
+    customerDisplayMonitorPreference,
+  ])
 
   useEffect(() => {
     if (!currentStoreId) return
@@ -3402,7 +3414,8 @@ export default function PosTerminalPage() {
                 kind: 'ordering',
                 title: customerDisplayT('posCustomerOrdering') || '주문 확인',
                 items: customerDisplayOrderItems,
-                totalAmount: customerDisplayOrderTotal,
+                totalAmount: customerDisplayBreakdown.total,
+                breakdown: customerDisplayBreakdown,
               }
             : customerDisplayDefaultState === 'qr'
               ? {
