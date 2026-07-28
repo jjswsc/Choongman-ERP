@@ -160,6 +160,8 @@ export function getExportPp30RdPrepTxtUrl(params: {
   outputVat?: number
   inputNet?: number
   inputVat?: number
+  /** txt=RD Prep 신고용, xlsx=검수용 엑셀 */
+  format?: 'txt' | 'xlsx'
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
@@ -174,6 +176,7 @@ export function getExportPp30RdPrepTxtUrl(params: {
   if (params.outputVat != null && Number.isFinite(params.outputVat)) q.set('outputVat', String(params.outputVat))
   if (params.inputNet != null && Number.isFinite(params.inputNet)) q.set('inputNet', String(params.inputNet))
   if (params.inputVat != null && Number.isFinite(params.inputVat)) q.set('inputVat', String(params.inputVat))
+  if (params.format === 'xlsx') q.set('format', 'xlsx')
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportPp30RdPrepTxt?${q}`
   }

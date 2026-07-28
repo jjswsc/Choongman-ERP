@@ -2903,6 +2903,8 @@ export const i18n = {
     accCompVatExport: 'CSV보내기',
     accCompPp30VatReconcileXlsx: 'PP30 정산 엑셀 (Flowaccount 양식)',
     accCompPp30RdPrepTxt: 'RD Prep TXT',
+    accCompPp30RdPrepExcel: '검수용 엑셀',
+    accCompPp30RdPrepDownloadFail: '다운로드에 실패했습니다.',
     accCompRdFilingWorkflowNote:
       'e-Filing에는 .rdx만 업로드됩니다. ERP TXT → RD Prep에서 .rdx 저장 → efiling.rd.go.th 업로드',
     accCompRdPrepDownloadApp: 'RD Prep 다운로드',
@@ -10467,6 +10469,8 @@ Only matters the employee must handle personally on a working day:
     accCompVatExport: 'Export CSV',
     accCompPp30VatReconcileXlsx: 'PP30 reconcile Excel (Flowaccount-style)',
     accCompPp30RdPrepTxt: 'RD Prep TXT',
+    accCompPp30RdPrepExcel: 'Excel (review)',
+    accCompPp30RdPrepDownloadFail: 'Download failed.',
     accCompRdFilingWorkflowNote:
       'e-Filing accepts .rdx only. ERP TXT → save .rdx in RD Prep → upload at efiling.rd.go.th',
     accCompRdPrepDownloadApp: 'Download RD Prep',
@@ -17616,6 +17620,8 @@ orderItemQty: 'จำนวน',
     accCompVatExport: 'ส่งออก CSV',
     accCompPp30VatReconcileXlsx: 'ดาวน์โหลด Excel ภ.พ.30 (รูปแบบ Flowaccount)',
     accCompPp30RdPrepTxt: 'RD Prep TXT',
+    accCompPp30RdPrepExcel: 'Excel ตรวจสอบ',
+    accCompPp30RdPrepDownloadFail: 'ดาวน์โหลดไม่สำเร็จครับ',
     accCompRdFilingWorkflowNote:
       '※ e-Filing รับเฉพาะไฟล์ .rdx เท่านั้น ไม่สามารถอัปโหลด .txt ได้\n① ดาวน์โหลด TXT จาก ERP → ② เปิดโปรแกรม RD Prep นำเข้าแล้วบันทึกเป็น .rdx → ③ อัปโหลด .rdx ที่ efiling.rd.go.th',
     accCompRdPrepDownloadApp: 'ดาวน์โหลด RD Prep (กรมสรรพากร)',

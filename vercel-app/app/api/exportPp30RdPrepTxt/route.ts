@@ -6,9 +6,17 @@ import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib
 import type { VatLedgerRow } from '@/lib/vat-ledger-csv'
 import { buildRdFilingTxtFilename, rdDigitsOnly } from '@/lib/rd-filing-common'
 import { pp30LedgerToRdPrepTxt } from '@/lib/pp30-rd-prep-txt'
+import {
+  buildPp30RdPrepReviewWorkbook,
+  buildPp30RdPrepXlsxFilename,
+} from '@/lib/pp30-rd-prep-xlsx'
+import { writeErpXlsxWorkbookToBuffer } from '@/lib/erp-excel-export'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -36,6 +44,8 @@ export async function GET(request: NextRequest) {
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
   const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
+  const formatRaw = String(searchParams.get('format') || 'txt').trim().toLowerCase()
+  const format = formatRaw === 'xlsx' || formatRaw === 'excel' ? 'xlsx' : 'txt'
   const payerTaxId = String(searchParams.get('payerTaxId') || '').trim()
   const payerBranchNo = String(searchParams.get('payerBranchNo') || '').trim()
   const payerName = String(searchParams.get('payerName') || '').trim()
@@ -107,7 +117,7 @@ export async function GET(request: NextRequest) {
     const sumInNet = inputRows.reduce((s, r) => s + (Number(r.net_amount) || 0), 0)
     const sumInVat = inputRows.reduce((s, r) => s + (Number(r.vat_amount) || 0), 0)
 
-    const txt = pp30LedgerToRdPrepTxt(outputRows, inputRows, {
+    const opts = {
       payerTaxId,
       payerBranchNo,
       payerName,
@@ -117,7 +127,28 @@ export async function GET(request: NextRequest) {
       outputVat: Number.isFinite(outputVat) ? outputVat : sumOutVat,
       inputNet: Number.isFinite(inputNet) ? inputNet : sumInNet,
       inputVat: Number.isFinite(inputVat) ? inputVat : sumInVat,
-    })
+    }
+
+    if (format === 'xlsx') {
+      const wb = buildPp30RdPrepReviewWorkbook(outputRows, inputRows, opts)
+      const buf = await writeErpXlsxWorkbookToBuffer(wb)
+      const filename = buildPp30RdPrepXlsxFilename({
+        taxId13: payerTaxId,
+        taxMonth: yearMonth,
+        branchNo6: payerBranchNo,
+      })
+      return new NextResponse(new Uint8Array(buf), {
+        status: 200,
+        headers: {
+          ...Object.fromEntries(headers.entries()),
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-store',
+        },
+      })
+    }
+
+    const txt = pp30LedgerToRdPrepTxt(outputRows, inputRows, opts)
     const filename = buildRdFilingTxtFilename({
       taxType: 'PP30',
       taxId13: payerTaxId,
@@ -130,6 +161,7 @@ export async function GET(request: NextRequest) {
         ...Object.fromEntries(headers.entries()),
         'Content-Type': 'text/plain; charset=utf-8',
         'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
       },
     })
   } catch (e) {

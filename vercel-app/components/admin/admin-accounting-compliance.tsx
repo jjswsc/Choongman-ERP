@@ -203,6 +203,7 @@ import {
   csvCell,
 } from "./admin-accounting-compliance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
+import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
 import { whtCertificateFromLedgerRow, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
 import {
   downloadThaiSsoSps110FromPayrollXlsx,
@@ -3338,44 +3339,7 @@ export function AdminAccountingCompliance({
     return `${taxSummary.period.startMonth} ~ ${taxSummary.period.endMonth}`
   }, [taxSummary?.period, taxMonth])
 
-  const pp30RdPrepUrl = React.useMemo(
-    () =>
-      getExportPp30RdPrepTxtUrl({
-        userRole: role,
-        taxMonth,
-        yearMonth: taxMonth,
-        periodType,
-        filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForApi,
-        payerTaxId: pnd1PayerTaxId,
-        payerBranchNo: pnd1PayerBranchNo,
-        payerName: pnd1PayerName,
-        outputNet: vatSettlement.outputNet,
-        outputVat: vatSettlement.outputVat,
-        inputNet: vatSettlement.claimableInputNet,
-        inputVat: vatSettlement.claimableInputVat,
-      }),
-    [
-      role,
-      taxMonth,
-      periodType,
-      ledgerStatusFilter,
-      storeFilterForApi,
-      pnd1PayerTaxId,
-      pnd1PayerBranchNo,
-      pnd1PayerName,
-      vatSettlement.outputNet,
-      vatSettlement.outputVat,
-      vatSettlement.claimableInputNet,
-      vatSettlement.claimableInputVat,
-    ]
-  )
-
-  const handleDownloadPp30RdPrepTxt = React.useCallback(async () => {
-    if (!pp30Queried) {
-      appAlert(t("accCompPp30ExportNeedSearch"))
-      return
-    }
+  const resolvePp30RdPrepPayer = React.useCallback(async () => {
     let payerName = String(pnd1PayerName || "").trim()
     let payerTaxId = String(pnd1PayerTaxId || "")
       .replace(/\D/g, "")
@@ -3405,43 +3369,80 @@ export function AdminAccountingCompliance({
             .join(", "),
         })
       )
-      return
+      return null
     }
-
-    const url = getExportPp30RdPrepTxtUrl({
-      userRole: role,
-      taxMonth,
-      yearMonth: taxMonth,
-      periodType,
-      filingStatus: ledgerStatusFilter,
-      storeFilter: storeFilterForApi,
-      payerTaxId,
-      payerBranchNo,
-      payerName,
-      outputNet: vatSettlement.outputNet,
-      outputVat: vatSettlement.outputVat,
-      inputNet: vatSettlement.claimableInputNet,
-      inputVat: vatSettlement.claimableInputVat,
-    })
-    window.open(url, "_blank", "noopener,noreferrer")
+    return { payerName, payerTaxId, payerBranchNo }
   }, [
-    pp30Queried,
-    pnd1PayerTaxId,
     pnd1PayerName,
+    pnd1PayerTaxId,
     pnd1PayerBranchNo,
     loadRdPayerFromStoreSources,
-    role,
-    taxMonth,
-    periodType,
-    ledgerStatusFilter,
-    storeFilterForApi,
-    vatSettlement.outputNet,
-    vatSettlement.outputVat,
-    vatSettlement.claimableInputNet,
-    vatSettlement.claimableInputVat,
     t,
     tr,
   ])
+
+  const handleDownloadPp30RdPrepFile = React.useCallback(
+    async (format: "txt" | "xlsx") => {
+      if (!pp30Queried) {
+        appAlert(t("accCompPp30ExportNeedSearch"))
+        return
+      }
+      const payer = await resolvePp30RdPrepPayer()
+      if (!payer) return
+      const url = getExportPp30RdPrepTxtUrl({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForApi,
+        payerTaxId: payer.payerTaxId,
+        payerBranchNo: payer.payerBranchNo,
+        payerName: payer.payerName,
+        outputNet: vatSettlement.outputNet,
+        outputVat: vatSettlement.outputVat,
+        inputNet: vatSettlement.claimableInputNet,
+        inputVat: vatSettlement.claimableInputVat,
+        format,
+      })
+      const fallback =
+        format === "xlsx"
+          ? `PP30_${payer.payerTaxId}_${taxMonth}_review.xlsx`
+          : `PP30_${payer.payerTaxId}_${taxMonth}.txt`
+      try {
+        await downloadAuthenticatedFile(url, fallback)
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e || "")
+        appAlert(
+          detail
+            ? `${t("accCompPp30RdPrepDownloadFail")}\n(${detail.slice(0, 220)})`
+            : t("accCompPp30RdPrepDownloadFail")
+        )
+      }
+    },
+    [
+      pp30Queried,
+      resolvePp30RdPrepPayer,
+      role,
+      taxMonth,
+      periodType,
+      ledgerStatusFilter,
+      storeFilterForApi,
+      vatSettlement.outputNet,
+      vatSettlement.outputVat,
+      vatSettlement.claimableInputNet,
+      vatSettlement.claimableInputVat,
+      t,
+    ]
+  )
+
+  const handleDownloadPp30RdPrepTxt = React.useCallback(async () => {
+    await handleDownloadPp30RdPrepFile("txt")
+  }, [handleDownloadPp30RdPrepFile])
+
+  const handleDownloadPp30RdPrepExcel = React.useCallback(async () => {
+    await handleDownloadPp30RdPrepFile("xlsx")
+  }, [handleDownloadPp30RdPrepFile])
 
   const closingDraftPayload = React.useMemo<IncomeExpenseClosingPreview | null>(() => {
     const raw = closingDraft?.payload
@@ -3606,7 +3607,16 @@ export function AdminAccountingCompliance({
       payerTaxId,
       payerBranchNo,
     })
-    window.open(url, "_blank", "noopener,noreferrer")
+    try {
+      await downloadAuthenticatedFile(url, `PND53_${payerTaxId}_${taxMonth}.txt`)
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e || "")
+      appAlert(
+        detail
+          ? `${t("accCompPp30RdPrepDownloadFail")}\n(${detail.slice(0, 220)})`
+          : t("accCompPp30RdPrepDownloadFail")
+      )
+    }
   }, [
     pnd1PayerTaxId,
     pnd1PayerBranchNo,
@@ -4716,6 +4726,7 @@ export function AdminAccountingCompliance({
             setPp30SearchSeq={setPp30SearchSeq}
             onFilingSearch={onFilingSearch}
             handleDownloadPp30RdPrepTxt={handleDownloadPp30RdPrepTxt}
+            handleDownloadPp30RdPrepExcel={handleDownloadPp30RdPrepExcel}
             handleDownloadPnd53RdFilingTxt={handleDownloadPnd53RdFilingTxt}
             pp30SubView={pp30SubView}
             setPp30SubView={setPp30SubView}

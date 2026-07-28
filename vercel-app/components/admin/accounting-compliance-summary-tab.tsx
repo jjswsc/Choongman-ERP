@@ -46,6 +46,7 @@ import {
   accountingResultThRightCn,
 } from "@/lib/accounting-result-ui"
 import { appAlert } from "@/lib/app-message"
+import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
 import type {
   VatDraft,
   WhtDraft,
@@ -118,6 +119,7 @@ export interface AccountingComplianceSummaryTabProps {
   setPp30SearchSeq: React.Dispatch<React.SetStateAction<number>>
   onFilingSearch?: () => void
   handleDownloadPp30RdPrepTxt: () => void
+  handleDownloadPp30RdPrepExcel: () => void
   handleDownloadPnd53RdFilingTxt: () => void
 
   // PP30 sub-views
@@ -345,6 +347,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     setPp30SearchSeq,
     onFilingSearch,
     handleDownloadPp30RdPrepTxt,
+    handleDownloadPp30RdPrepExcel,
     handleDownloadPnd53RdFilingTxt,
     pp30SubView,
     setPp30SubView,
@@ -600,6 +603,21 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
                   {t("accCompPp30RdPrepTxt")}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                    "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                  )}
+                  disabled={loading || summaryLoading}
+                  onClick={() => void handleDownloadPp30RdPrepExcel()}
+                >
+                  <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
+                  {t("accCompPp30RdPrepExcel")}
+                </Button>
                 <RdPrepFilingHelper
                   t={t}
                   variant="compact"
@@ -623,7 +641,17 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       appAlert(t("accCompPp30ExportNeedSearch"))
                       return
                     }
-                    window.open(pnd1RdPrepUrl, "_blank", "noopener,noreferrer")
+                    void downloadAuthenticatedFile(
+                      pnd1RdPrepUrl,
+                      `PND1_${taxMonth}.txt`
+                    ).catch((e) => {
+                      const detail = e instanceof Error ? e.message : String(e || "")
+                      appAlert(
+                        detail
+                          ? `${t("accCompPp30RdPrepDownloadFail")}\n(${detail.slice(0, 220)})`
+                          : t("accCompPp30RdPrepDownloadFail")
+                      )
+                    })
                   }}
                 >
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
