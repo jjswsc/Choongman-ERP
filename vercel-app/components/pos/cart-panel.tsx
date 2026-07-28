@@ -4564,6 +4564,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setShowPaymentModal(false)
   }
 
+  const clearSelectedMemberState = useCallback(() => {
+    setSelectedMemberId('')
+    setMemberKeyword('')
+    setMemberOptions([])
+    setMemberMap({})
+  }, [])
+
   const handleClearCart = () => {
     resetTaxInvoiceUiState()
     setCartItems([])
@@ -4579,6 +4586,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setDiscountReason('')
     setAppliedCollabId(null)
     setPaymentTableNameOverride(null)
+    clearSelectedMemberState()
     checkoutExistingPosOrderIdRef.current = null
     setIsExistingOrderCheckout(false)
   }
@@ -5390,7 +5398,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             selectedMemberTierLabel={selectedMemberTierLabel}
             memberOptions={memberOptions}
             onSelectMember={setSelectedMemberId}
-            onClearMember={() => setSelectedMemberId('')}
+            onClearMember={clearSelectedMemberState}
             tierDiscountAmt={tierDiscountAmt}
             selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
             memberSearchEmpty={memberSearchEmpty}
@@ -5804,7 +5812,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               selectedMemberTierLabel={selectedMemberTierLabel}
               memberOptions={memberOptions}
               onSelectMember={setSelectedMemberId}
-              onClearMember={() => setSelectedMemberId('')}
+              onClearMember={clearSelectedMemberState}
               tierDiscountAmt={tierDiscountAmt}
               selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
               memberSearchEmpty={memberSearchEmpty}
