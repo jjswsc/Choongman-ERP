@@ -253,6 +253,18 @@ export function AdminAccountingCompliance({
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const formatLoadFailMessage = React.useCallback(
+    (detail?: unknown) => {
+      const base = t("accCompLoadFail")
+      const raw = String(detail || "").trim()
+      if (!raw) return base
+      if (/tenant_id|column.*tenant_id|42703/i.test(raw)) {
+        return `${base}\n(pos_orders.tenant_id 컬럼이 없어 조회에 실패했습니다. SQL 패치를 먼저 실행해 주세요.)`
+      }
+      return `${base}\n(${raw.slice(0, 220)})`
+    },
+    [t]
+  )
   const role = auth?.role || ""
   const canUse = canManageAccountingCompliance(role, auth?.store)
   const canWriteCompliance = canWriteAccountingCompliance(role)
@@ -1000,7 +1012,7 @@ export function AdminAccountingCompliance({
       const rows = data.entries || []
       setVatRows(mapVat(rows))
       if (data.error && rows.length === 0) {
-        appAlert(t("accCompLoadFail"))
+        appAlert(formatLoadFailMessage(data.error))
       } else if (opts?.forceSync) {
         if (data.syncWarning === "POS_SYNC_FAILED") {
           appAlert(t("accCompVatSyncPosFail"))
@@ -1024,7 +1036,7 @@ export function AdminAccountingCompliance({
         appAlert(t("accCompVatSyncTimeout"))
       } else {
         setVatRows([])
-        appAlert(t("accCompLoadFail"))
+        appAlert(formatLoadFailMessage(msg))
       }
     } finally {
       if (seq === vatLoadSeqRef.current) setLoading(false)
@@ -1039,6 +1051,7 @@ export function AdminAccountingCompliance({
     mapVat,
     loadVatStoreNameGaps,
     t,
+    formatLoadFailMessage,
     isHeadOfficeLedgerStore,
   ])
 
@@ -4032,13 +4045,13 @@ export function AdminAccountingCompliance({
       const data = await getPnd91AnnualSummary({ year: pnd91Year, storeFilter: storeFilterForApi })
       if (!data.success) throw new Error(data.error || "LOAD_FAILED")
       setPnd91Summary(data)
-    } catch {
+    } catch (e) {
       setPnd91Summary(null)
-      appAlert(t("accCompLoadFail"))
+      appAlert(formatLoadFailMessage(e instanceof Error ? e.message : e))
     } finally {
       setPnd91Loading(false)
     }
-  }, [canUse, showPnd1Area, pnd91Year, storeFilterForApi, t])
+  }, [canUse, showPnd1Area, pnd91Year, storeFilterForApi, t, formatLoadFailMessage])
 
   const pnd91ExportUrl = React.useMemo(() => {
     if (pnd91Year == null) return "#"

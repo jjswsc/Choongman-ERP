@@ -1,6 +1,11 @@
 -- 매출 관리 집계 RPC — pos_orders 전량 fetch 없이 GROUP BY (행 수 상한 없음)
 -- Supabase SQL Editor에서 실행 후 /api/posSalesBy* 가 RPC 우선 사용.
 --
+-- 선행(충만·Omni 공통): RPC가 o.tenant_id 를 참조하므로 컬럼이 없으면 42703.
+-- 충만은 보통 p_tenant_id=null 이라 필터는 no-op. Omni만 tenant 격리에 사용.
+ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS tenant_id text;
+CREATE INDEX IF NOT EXISTS idx_pos_orders_tenant_id ON public.pos_orders (tenant_id);
+--
 -- p_agg_mode:
 --   store | store_channel | period | period_by_store | channel | payment
 --   | delivery_platform | delivery_payment | delivery_app | menu
