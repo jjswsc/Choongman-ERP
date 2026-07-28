@@ -202,7 +202,14 @@ export async function GET(request: NextRequest) {
     const dbStoreNames = storeScope.dbStoreNameValues || []
     const storeNameDbFilter =
       storeFilter && storeFilter !== 'All' && storeFilter !== '*' && dbStoreNames.length > 0
-        ? `store_name=in.(${dbStoreNames.map((v) => `"${String(v).replace(/"/g, '')}"`).join(',')})`
+        ? (() => {
+            const cleaned = Array.from(
+              new Set(dbStoreNames.map((v) => String(v || '').trim()).filter(Boolean))
+            ).slice(0, 40)
+            if (!cleaned.length) return ''
+            if (cleaned.length === 1) return `store_name=eq.${encodeURIComponent(cleaned[0]!)}`
+            return `store_name=in.(${cleaned.map((v) => encodeURIComponent(v)).join(',')})`
+          })()
         : ''
     const vatMonthFilter = [monthBase, storeNameDbFilter].filter(Boolean).join('&')
     const [vatRowsRaw, whtRows] = await Promise.all([

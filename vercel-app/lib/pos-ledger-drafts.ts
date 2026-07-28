@@ -218,19 +218,28 @@ export async function enrichVatLedgerRowsStoreNames(
   rows: Record<string, unknown>[]
 ): Promise<Record<string, unknown>[]> {
   const { posOrderIds, stockLogIds, expenseIds } = collectVatLedgerAutoMemoIds(rows || [])
+  const displayNameCache = new Map<string, string>()
+  const resolveCached = async (key: string): Promise<string> => {
+    const k = String(key || '').trim()
+    if (!k) return ''
+    const hit = displayNameCache.get(k)
+    if (hit != null) return hit
+    const normalized = (await resolveStoreDisplayNameForVatLedger(k)) || k
+    displayNameCache.set(k, normalized)
+    return normalized
+  }
+
   if (!posOrderIds.length && !stockLogIds.length && !expenseIds.length) {
-    const out: Record<string, unknown>[] = []
-    for (const row of rows || []) {
+    const uniqueKeys = Array.from(
+      new Set((rows || []).map((row) => String(row.store_name || '').trim()).filter(Boolean))
+    )
+    await Promise.all(uniqueKeys.map((k) => resolveCached(k)))
+    return (rows || []).map((row) => {
       const current = String(row.store_name || '').trim()
-      if (!current) {
-        out.push(row)
-        continue
-      }
-      const normalized = await resolveStoreDisplayNameForVatLedger(current)
-      if (normalized && normalized !== current) out.push({ ...row, store_name: normalized })
-      else out.push(row)
-    }
-    return out
+      if (!current) return row
+      const normalized = displayNameCache.get(current) || current
+      return normalized !== current ? { ...row, store_name: normalized } : row
+    })
   }
   const [posStoreByOrderId, stockLocationByLogId, expenseStoreById] = await Promise.all([
     buildPosOrderStoreCodeMap(posOrderIds),
@@ -240,9 +249,19 @@ export async function enrichVatLedgerRowsStoreNames(
   const maps: VatLedgerStoreResolveMaps = { posStoreByOrderId, stockLocationByLogId, expenseStoreById }
   const out: Record<string, unknown>[] = []
   for (const row of rows || []) {
-    const resolved = await resolveVatLedgerEntryStoreNameForScope(row, maps)
-    if (resolved) out.push({ ...row, store_name: resolved })
-    else out.push(row)
+    const current = String(row.store_name || '').trim()
+    if (current) {
+      const normalized = await resolveCached(current)
+      out.push(normalized && normalized !== current ? { ...row, store_name: normalized } : row)
+      continue
+    }
+    const sourceKey = parseAutoMemoSourceKey(String(row.memo || ''), maps)
+    if (!sourceKey) {
+      out.push(row)
+      continue
+    }
+    const resolved = await resolveCached(sourceKey)
+    out.push(resolved ? { ...row, store_name: resolved } : row)
   }
   return out
 }

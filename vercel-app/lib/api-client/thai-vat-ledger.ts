@@ -25,21 +25,25 @@ export async function getVatLedger(params: {
   const data = (await res.json()) as {
     entries?: Record<string, unknown>[]
     error?: string
+    errorDetail?: string
     syncWarning?: string | null
     posSynced?: number
     synced?: boolean
   }
+  const errorLabel = data?.errorDetail
+    ? `${data.error || 'QUERY_FAILED'}: ${data.errorDetail}`
+    : data?.error
   if (!res.ok) {
     return {
       entries: [] as Record<string, unknown>[],
-      error: data?.error || `HTTP_${res.status}`,
+      error: errorLabel || `HTTP_${res.status}`,
       syncWarning: data?.syncWarning || null,
       posSynced: 0,
     }
   }
   return {
     entries: data.entries || [],
-    error: data.error,
+    error: errorLabel,
     syncWarning: data.syncWarning || null,
     posSynced: Number(data.posSynced || 0),
   }

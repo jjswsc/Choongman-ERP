@@ -57,6 +57,20 @@ function matchesFilingStatus(v: unknown, filter: '' | 'draft' | 'submitted'): bo
   return normalizeLedgerFilingStatus(v) === filter
 }
 
+/** PostgREST store_name 필터 — `&` 등 특수문자(예: R&B)가 쿼리를 끊지 않도록 encode */
+function buildVatLedgerStoreNameDbFilter(dbStoreNames: string[]): string {
+  const cleaned = Array.from(
+    new Set((dbStoreNames || []).map((v) => String(v || '').trim()).filter(Boolean))
+  ).slice(0, 40)
+  if (!cleaned.length) return ''
+  if (cleaned.length === 1) return `store_name=eq.${encodeURIComponent(cleaned[0]!)}`
+  return `store_name=in.(${cleaned.map((v) => encodeURIComponent(v)).join(',')})`
+}
+
+function vatLedgerQueryErrorDetail(e: unknown): string {
+  return e instanceof Error ? e.message : String(e || 'UNKNOWN')
+}
+
 function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
   const next = { ...row }
   delete next.filing_status
@@ -203,10 +217,7 @@ export async function GET(request: NextRequest) {
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
     const dbStoreNames = scopedStoreFilter ? storeScope.dbStoreNameValues || [] : []
-    const storeNameDbFilter =
-      dbStoreNames.length > 0
-        ? `store_name=in.(${dbStoreNames.map((v) => `"${String(v).replace(/"/g, '')}"`).join(',')})`
-        : ''
+    const storeNameDbFilter = buildVatLedgerStoreNameDbFilter(dbStoreNames)
     const monthAndStoreFilter = [monthFilter, storeNameDbFilter].filter(Boolean).join('&')
 
     const runVatAutoSync = async (opts?: { skipPos?: boolean }) => {
@@ -287,13 +298,31 @@ export async function GET(request: NextRequest) {
     // 동기화 실패와 무관하게 원장 조회는 항상 시도 (빈 화면·「불러오지 못했습니다」 방지)
     let entries: Record<string, unknown>[] = []
     try {
-      const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthAndStoreFilter, {
-        select: '*',
-        order: 'doc_date.asc,id.asc',
-        pageSize: 4000,
-        maxRows: 100000,
-      })) as Record<string, unknown>[] | null
-      const enrichedRows = await enrichVatLedgerRowsStoreNames(rows || [])
+      let rows: Record<string, unknown>[] = []
+      try {
+        rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthAndStoreFilter, {
+          select: '*',
+          order: 'doc_date.asc,id.asc',
+          pageSize: 4000,
+          maxRows: 100000,
+        })) as Record<string, unknown>[]
+      } catch (scopedErr) {
+        // 매장 in-필터 파싱/길이 문제로 실패하면 월만 조회 후 JS 매칭으로 폴백
+        if (!storeNameDbFilter) throw scopedErr
+        console.warn('vatLedger GET scoped select failed, fallback month-only:', scopedErr)
+        rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+          select: '*',
+          order: 'doc_date.asc,id.asc',
+          pageSize: 4000,
+          maxRows: 100000,
+        })) as Record<string, unknown>[]
+      }
+      let enrichedRows = rows || []
+      try {
+        enrichedRows = await enrichVatLedgerRowsStoreNames(enrichedRows)
+      } catch (enrichErr) {
+        console.warn('vatLedger GET enrich store_name skipped:', enrichErr)
+      }
       entries = enrichedRows.filter((row) => {
         if (!storeScope.matches(String(row.store_name || ''))) return false
         return matchesFilingStatus(row.filing_status, filingStatus)
@@ -304,6 +333,7 @@ export async function GET(request: NextRequest) {
         {
           entries: [],
           error: 'QUERY_FAILED',
+          errorDetail: vatLedgerQueryErrorDetail(loadErr).slice(0, 400),
           syncWarning,
           synced: didSync,
           posSynced,
@@ -324,7 +354,14 @@ export async function GET(request: NextRequest) {
     )
   } catch (e) {
     console.error('vatLedger GET:', e)
-    return NextResponse.json({ entries: [], error: 'QUERY_FAILED' }, { headers })
+    return NextResponse.json(
+      {
+        entries: [],
+        error: 'QUERY_FAILED',
+        errorDetail: vatLedgerQueryErrorDetail(e).slice(0, 400),
+      },
+      { headers }
+    )
   }
 }
 
