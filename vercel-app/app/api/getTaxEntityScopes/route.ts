@@ -46,11 +46,17 @@ export async function GET(request: NextRequest) {
     })) as TaxEntityStoreRow[] | null
 
     const active = (entities || []).filter((e) => e.is_active !== false)
+    const storesByEntity: Record<string, string[]> = {}
     const countByEntity: Record<string, number> = {}
     for (const row of links || []) {
       const code = String(row.entity_code || '').trim()
+      const store = String(row.store_code || '').trim()
       if (!code) continue
       countByEntity[code] = (countByEntity[code] || 0) + 1
+      if (!store) continue
+      const list = storesByEntity[code] || []
+      list.push(store)
+      storesByEntity[code] = list
     }
 
     const scopes = active
@@ -60,6 +66,7 @@ export async function GET(request: NextRequest) {
         const name = String(e.entity_name || '').trim()
         const taxId = String(e.tax_id || '').trim()
         const storeCount = countByEntity[code] || 0
+        const stores = Array.from(new Set(storesByEntity[code] || [])).sort((a, b) => a.localeCompare(b))
         return {
           value: `entity:${code}`,
           label: formatTaxEntityScopeLabel({
@@ -71,6 +78,7 @@ export async function GET(request: NextRequest) {
           entityCode: code,
           taxId,
           storeCount,
+          stores,
         }
       })
       .filter(Boolean)

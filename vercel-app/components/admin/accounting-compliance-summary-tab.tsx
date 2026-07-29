@@ -66,6 +66,10 @@ import { isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 import { Pp30SalesAdjustmentPanel, type Pp30AdjustedOutput } from "@/components/admin/tax-filing/pp30-sales-adjustment-panel"
 import {
+  TaxEntityStoreScopeFilters,
+  type TaxEntityScopeOption,
+} from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
+import {
   readPnd91ChecklistEntry,
   writePnd91ChecklistEntry,
   type Pnd91ChecklistStatus,
@@ -93,6 +97,7 @@ export interface AccountingComplianceSummaryTabProps {
   setLedgerStatusFilter: (v: "all" | "draft" | "submitted") => void
   storeOptions: string[]
   storeOptionLabel: (code: string) => string
+  taxEntityScopeOptions?: TaxEntityScopeOption[]
   loading: boolean
   setLoading: (v: boolean) => void
   canUse: boolean
@@ -327,6 +332,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     setLedgerStatusFilter,
     storeOptions,
     storeOptionLabel,
+    taxEntityScopeOptions = [],
     loading,
     setLoading,
     canUse,
@@ -504,21 +510,15 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             />
           </div>
           {isOffice ? (
-            <div className="shrink-0">
-              <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-              <Select value={storeTb} onValueChange={setStoreTb!}>
-                <SelectTrigger className="h-9 w-[min(100%,360px)] min-w-[180px]">
-                  <SelectValue>{storeOptionLabel(storeTb || "All")}</SelectValue>
-                </SelectTrigger>
-                <SelectContent className="max-w-[min(100vw-2rem,420px)]">
-                  {storeOptions.map((s) => (
-                    <SelectItem key={s} value={s} className="whitespace-normal">
-                      {storeOptionLabel(s)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <TaxEntityStoreScopeFilters
+              idPrefix="pp30-summary"
+              scopeValue={storeTb || "All"}
+              onScopeChange={(v) => setStoreTb?.(v)}
+              entityOptions={taxEntityScopeOptions}
+              storeOptions={storeOptions}
+              storeOptionLabel={storeOptionLabel}
+              t={t}
+            />
           ) : isManager && managerStore ? (
             <div className="shrink-0">
               <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>

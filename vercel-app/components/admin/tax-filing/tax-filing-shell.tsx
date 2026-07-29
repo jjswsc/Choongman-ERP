@@ -17,13 +17,6 @@ import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { apiFetch, useStoreList } from "@/lib/api-client"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { isManagerOrFranchiseeRole, isOfficeRole, isOfficeStore } from "@/lib/permissions"
@@ -33,6 +26,10 @@ import { TaxFilingWhtTab } from "@/components/admin/tax-filing/tab-wht"
 import { TaxFilingCitTab } from "@/components/admin/tax-filing/tab-cit"
 import { TaxFilingSsoTab } from "@/components/admin/tax-filing/tab-sso"
 import { TaxFilingStoreProfilesTab } from "@/components/admin/tax-filing/tab-store-profiles"
+import {
+  TaxEntityStoreScopeFilters,
+  type TaxEntityScopeOption,
+} from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
 
 type FilingTabKey =
   | "pp30"
@@ -66,12 +63,12 @@ function useYmStoreFilter(defaultYm: () => string, defaultStore: () => string) {
 
 function useFilingTabFilters(
   storeOptions: string[],
+  entityOptions: TaxEntityScopeOption[],
   isOffice: boolean,
   isManager: boolean,
   managerStore: string,
   storeOptionLabel: (code: string) => string,
-  tAccCompYearMonth: string,
-  tAccCompStore: string,
+  t: (key: string) => string,
   tSearch: string
 ) {
   const defaultYm = React.useCallback(() => getBangkokRecentYearMonths(1)[0], [])
@@ -127,7 +124,7 @@ function useFilingTabFilters(
         <CardContent className="pt-4 pb-4">
           <div className="flex flex-wrap gap-3 items-end">
             <div>
-              <div className="text-xs text-muted-foreground mb-1">{tAccCompYearMonth}</div>
+              <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
               <Input
                 type="month"
                 className="h-9 w-[160px]"
@@ -136,26 +133,18 @@ function useFilingTabFilters(
               />
             </div>
             {isOffice ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{tAccCompStore}</div>
-                <Select value={storeFilter} onValueChange={onStoreFilterChange}>
-                  <SelectTrigger className="w-[min(100vw-2rem,360px)] min-w-[200px]">
-                    <SelectValue placeholder={storeOptionLabel(storeFilter || "All")}>
-                      {storeOptionLabel(storeFilter || "All")}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-w-[min(100vw-2rem,420px)]">
-                    {storeOptions.map((s) => (
-                      <SelectItem key={`${tabKey}-${s}`} value={s} className="whitespace-normal">
-                        {storeOptionLabel(s)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <TaxEntityStoreScopeFilters
+                idPrefix={`${tabKey}-shell`}
+                scopeValue={storeFilter || "All"}
+                onScopeChange={onStoreFilterChange}
+                entityOptions={entityOptions}
+                storeOptions={storeOptions}
+                storeOptionLabel={storeOptionLabel}
+                t={t}
+              />
             ) : isManager && managerStore ? (
               <div className="text-sm text-muted-foreground pb-1">
-                {tAccCompStore}: <span className="text-foreground font-medium">{managerStore}</span>
+                {t("accCompStore")}: <span className="text-foreground font-medium">{managerStore}</span>
               </div>
             ) : null}
             {onSearch ? (
@@ -180,7 +169,7 @@ function useFilingTabFilters(
         </CardContent>
       </Card>
     ),
-    [isOffice, isManager, managerStore, storeOptionLabel, storeOptions, tAccCompStore, tAccCompYearMonth, tSearch]
+    [isOffice, isManager, managerStore, storeOptionLabel, storeOptions, entityOptions, t, tSearch]
   )
 
   const pick = (f: ReturnType<typeof useYmStoreFilter>): FilingFilterProps => ({
@@ -276,9 +265,7 @@ export function TaxFilingShell() {
     }
   }, [searchParams])
 
-  const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<
-    Array<{ value: string; label: string }>
-  >([])
+  const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<TaxEntityScopeOption[]>([])
 
   React.useEffect(() => {
     if (!isOffice) return
@@ -294,6 +281,9 @@ export function TaxFilingShell() {
             .map((r: Record<string, unknown>) => ({
               value: String(r.value || "").trim(),
               label: String(r.label || "").trim(),
+              stores: Array.isArray(r.stores)
+                ? r.stores.map((s) => String(s || "").trim()).filter(Boolean)
+                : [],
             }))
             .filter((r: { value: string }) => !!r.value)
         )
@@ -306,45 +296,32 @@ export function TaxFilingShell() {
     }
   }, [isOffice])
 
-  const taxEntityScopeLabelMap = React.useMemo(() => {
-    const out: Record<string, string> = {}
-    for (const row of taxEntityScopeOptions) {
-      if (!row.value) continue
-      out[row.value] = row.label || row.value
-    }
-    return out
-  }, [taxEntityScopeOptions])
-
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []
     const uniq = Array.from(
       new Set((storeList || []).map((s) => String(s).trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
-    const entityScopes = Array.from(
-      new Set(taxEntityScopeOptions.map((o) => String(o.value || "").trim()).filter(Boolean))
-    )
-    return ["All", ...entityScopes, ...uniq]
-  }, [isOffice, isManager, managerStore, storeList, taxEntityScopeOptions])
+    return ["All", ...uniq]
+  }, [isOffice, isManager, managerStore, storeList])
 
   const storeOptionLabel = React.useCallback(
     (code: string) => {
-      if (code === "All") return t("all")
-      if (code.startsWith("entity:")) return taxEntityScopeLabelMap[code] || code.replace(/^entity:/, "법인 · ")
+      if (code === "All") return t("accCompStoreAll")
       return code
     },
-    [t, taxEntityScopeLabelMap]
+    [t]
   )
 
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
+    taxEntityScopeOptions,
     isOffice,
     isManager,
     managerStore,
     storeOptionLabel,
-    t("accCompYearMonth"),
-    t("accCompStore"),
+    t,
     t("search")
   )
 

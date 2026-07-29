@@ -337,7 +337,9 @@ export function AdminAccountingCompliance({
     >
   >({})
   const [taxLinkMetaLoading, setTaxLinkMetaLoading] = React.useState(false)
-  const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<Array<{ value: string; label: string }>>([])
+  const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<
+    Array<{ value: string; label: string; stores?: string[] }>
+  >([])
 
   const franchiseStoreCodes = React.useMemo(
     () =>
@@ -735,14 +737,11 @@ export function AdminAccountingCompliance({
     const uniq = Array.from(
       new Set((posStores || []).map((s) => String(s).trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
-    const entityScopes = externalFiling
-      ? Array.from(new Set((taxEntityScopeOptions || []).map((o) => String(o.value || '').trim()).filter(Boolean)))
-      : []
-    return ["All", ...entityScopes, ...uniq]
-  }, [isOffice, isManager, scopedStoreChoices, posStores, externalFiling, taxEntityScopeOptions])
+    return ["All", ...uniq]
+  }, [isOffice, isManager, scopedStoreChoices, posStores])
 
   React.useEffect(() => {
-    if (!canUse || !isOffice || !externalFiling) return
+    if (!canUse || !isOffice) return
     let cancelled = false
     ;(async () => {
       try {
@@ -754,6 +753,9 @@ export function AdminAccountingCompliance({
           .map((r: Record<string, unknown>) => ({
             value: String(r.value || '').trim(),
             label: String(r.label || r.value || '').trim(),
+            stores: Array.isArray(r.stores)
+              ? r.stores.map((s) => String(s || '').trim()).filter(Boolean)
+              : [],
           }))
           .filter((r: { value: string }) => !!r.value)
         setTaxEntityScopeOptions(next)
@@ -764,7 +766,7 @@ export function AdminAccountingCompliance({
     return () => {
       cancelled = true
     }
-  }, [canUse, isOffice, externalFiling])
+  }, [canUse, isOffice])
 
   React.useEffect(() => {
     if (externalFiling) return
@@ -4136,9 +4138,9 @@ export function AdminAccountingCompliance({
 
   const storeOptionLabel = React.useCallback(
     (code: string) => {
-      if (code === "All") return t("all")
+      if (code === "All") return t("accCompStoreAll")
       if (code.startsWith("entity:")) {
-        return taxEntityScopeLabelMap[code] || code.replace(/^entity:/, "법인 · ")
+        return taxEntityScopeLabelMap[code] || code.replace(/^entity:/, "")
       }
       return formatStoreLabel(code) || code
     },
@@ -4753,6 +4755,7 @@ export function AdminAccountingCompliance({
             setLedgerStatusFilter={setLedgerStatusFilter}
             storeOptions={storeOptions}
             storeOptionLabel={storeOptionLabel}
+            taxEntityScopeOptions={taxEntityScopeOptions}
             loading={loading}
             setLoading={setLoading}
             canUse={canUse}

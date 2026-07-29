@@ -129,7 +129,7 @@ export function formatTaxEntityScopeLabel(input: {
     taxId ? `TIN ${taxId}` : '',
     storeCount > 0 ? `${storeCount}개 매장` : '',
   ].filter(Boolean)
-  return parts.length ? `법인 · ${name} (${parts.join(' · ')})` : `법인 · ${name}`
+  return parts.length ? `${name} (${parts.join(' · ')})` : name
 }
 
 /**
