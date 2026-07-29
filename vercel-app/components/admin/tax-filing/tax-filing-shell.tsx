@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStoreList } from "@/lib/api-client"
+import { apiFetch, useStoreList } from "@/lib/api-client"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { isManagerOrFranchiseeRole, isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { isHeadOfficeLikeStoreName } from "@/lib/internal-outbound"
@@ -139,12 +139,14 @@ function useFilingTabFilters(
               <div>
                 <div className="text-xs text-muted-foreground mb-1">{tAccCompStore}</div>
                 <Select value={storeFilter} onValueChange={onStoreFilterChange}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
+                  <SelectTrigger className="w-[min(100vw-2rem,360px)] min-w-[200px]">
+                    <SelectValue placeholder={storeOptionLabel(storeFilter || "All")}>
+                      {storeOptionLabel(storeFilter || "All")}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-w-[min(100vw-2rem,420px)]">
                     {storeOptions.map((s) => (
-                      <SelectItem key={`${tabKey}-${s}`} value={s}>
+                      <SelectItem key={`${tabKey}-${s}`} value={s} className="whitespace-normal">
                         {storeOptionLabel(s)}
                       </SelectItem>
                     ))}
@@ -274,15 +276,64 @@ export function TaxFilingShell() {
     }
   }, [searchParams])
 
+  const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<
+    Array<{ value: string; label: string }>
+  >([])
+
+  React.useEffect(() => {
+    if (!isOffice) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await apiFetch("/api/getTaxEntityScopes")
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        const rows = Array.isArray(data?.scopes) ? data.scopes : []
+        setTaxEntityScopeOptions(
+          rows
+            .map((r: Record<string, unknown>) => ({
+              value: String(r.value || "").trim(),
+              label: String(r.label || "").trim(),
+            }))
+            .filter((r: { value: string }) => !!r.value)
+        )
+      } catch {
+        if (!cancelled) setTaxEntityScopeOptions([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isOffice])
+
+  const taxEntityScopeLabelMap = React.useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const row of taxEntityScopeOptions) {
+      if (!row.value) continue
+      out[row.value] = row.label || row.value
+    }
+    return out
+  }, [taxEntityScopeOptions])
+
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []
     const uniq = Array.from(
       new Set((storeList || []).map((s) => String(s).trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
-    return ["All", ...uniq]
-  }, [isOffice, isManager, managerStore, storeList])
+    const entityScopes = Array.from(
+      new Set(taxEntityScopeOptions.map((o) => String(o.value || "").trim()).filter(Boolean))
+    )
+    return ["All", ...entityScopes, ...uniq]
+  }, [isOffice, isManager, managerStore, storeList, taxEntityScopeOptions])
 
-  const storeOptionLabel = React.useCallback((code: string) => (code === "All" ? t("all") : code), [t])
+  const storeOptionLabel = React.useCallback(
+    (code: string) => {
+      if (code === "All") return t("all")
+      if (code.startsWith("entity:")) return taxEntityScopeLabelMap[code] || code.replace(/^entity:/, "법인 · ")
+      return code
+    },
+    [t, taxEntityScopeLabelMap]
+  )
 
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
 

@@ -1,7 +1,8 @@
 import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { createTaxStoreScopeMatcher, resolveTaxScopeStoreCodes } from '@/lib/tax-entity-scope'
 
 type JournalEntryLite = {
   id?: number
@@ -67,11 +68,6 @@ function buildCorporateTaxPeriodLabel(period: {
   return `${period.periodKey} (${period.startMonth} ~ ${period.endMonth})`
 }
 
-function isStoreMatched(storeName: string | null | undefined, filter: string): boolean {
-  if (!filter || filter === 'All') return true
-  return String(storeName || '').trim().toLowerCase() === filter.trim().toLowerCase()
-}
-
 function toFixed2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100
 }
@@ -87,6 +83,93 @@ function monthEnd(month: string): string {
   return `${month}-${String(d).padStart(2, '0')}`
 }
 
+async function loadPlFromRpc(params: {
+  startDate: string
+  endDate: string
+  storeNames: string[] | null
+}): Promise<{ revenue: number; expense: number; entryCount: number } | null> {
+  try {
+    const rows = await supabaseRpc<Array<{ revenue?: number; expense?: number; entry_count?: number }>>(
+      'get_corporate_tax_pl_agg',
+      {
+        p_start_date: params.startDate,
+        p_end_date: params.endDate,
+        p_store_names: params.storeNames,
+      }
+    )
+    const row = Array.isArray(rows) ? rows[0] : null
+    if (!row) return { revenue: 0, expense: 0, entryCount: 0 }
+    return {
+      revenue: Number(row.revenue) || 0,
+      expense: Number(row.expense) || 0,
+      entryCount: Number(row.entry_count) || 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function loadPlFromSelectFallback(params: {
+  startDate: string
+  endDate: string
+  storeFilter: string
+  storeNames: string[] | null
+}): Promise<{ revenue: number; expense: number; entryCount: number }> {
+  const isStoreInScope = await createTaxStoreScopeMatcher(params.storeFilter)
+  const storeIn =
+    params.storeNames && params.storeNames.length > 0 && params.storeNames.length <= 80
+      ? `&or=(${params.storeNames.map((s) => `store_name.eq.${encodeURIComponent(s)}`).join(',')})`
+      : ''
+
+  const entries = (await supabaseSelectFilter(
+    'journal_entries',
+    `accounting_date=gte.${encodeURIComponent(params.startDate)}&accounting_date=lte.${encodeURIComponent(params.endDate)}${storeIn}`,
+    { select: 'id,store_name', limit: 100000 }
+  )) as JournalEntryLite[] | null
+
+  const entryIds: number[] = []
+  for (const e of entries || []) {
+    if (storeIn) {
+      const id = Number(e.id || 0)
+      if (id > 0) entryIds.push(id)
+      continue
+    }
+    const ok = await isStoreInScope({ storeName: e.store_name })
+    if (!ok) continue
+    const id = Number(e.id || 0)
+    if (id > 0) entryIds.push(id)
+  }
+
+  // 배치로 journal_lines 조회 (URL 길이·응답 크기 완화)
+  const BATCH = 200
+  let revenue = 0
+  let expense = 0
+  for (let i = 0; i < entryIds.length; i += BATCH) {
+    const chunk = entryIds.slice(i, i + BATCH)
+    const idList = chunk.join(',')
+    if (!idList) continue
+    const lines = (await supabaseSelectFilter('journal_lines', `journal_entry_id=in.(${idList})`, {
+      select: 'account_code,side,amount',
+      limit: 100000,
+    })) as JournalLineLite[] | null
+    for (const ln of lines || []) {
+      const code = String(ln.account_code || '').trim()
+      if (!code) continue
+      const amt = Math.abs(Number(ln.amount) || 0)
+      const side = String(ln.side || '').toLowerCase()
+      if (code.startsWith('4')) {
+        if (side === 'credit') revenue += amt
+        else revenue -= amt
+      } else if (code.startsWith('5')) {
+        if (side === 'debit') expense += amt
+        else expense -= amt
+      }
+    }
+  }
+
+  return { revenue, expense, entryCount: entryIds.length }
+}
+
 export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   periodType?: 'monthly' | 'half_year' | 'annual'
   taxRate?: number
@@ -100,39 +183,39 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   const endDate = monthEnd(period.endMonth)
   const taxRate = Number(input.taxRate)
   const appliedTaxRate = Number.isFinite(taxRate) && taxRate >= 0 ? taxRate : 0.2
-
-  const entries = (await supabaseSelectFilter(
-    'journal_entries',
-    `accounting_date=gte.${encodeURIComponent(startDate)}&accounting_date=lte.${encodeURIComponent(endDate)}`,
-    { select: 'id,store_name', limit: 100000 }
-  )) as JournalEntryLite[] | null
-  const entryIds = (entries || [])
-    .filter((e) => isStoreMatched(e.store_name, scope.storeFilter))
-    .map((e) => Number(e.id || 0))
-    .filter((id) => id > 0)
-  const idList = entryIds.join(',')
-  const lines = entryIds.length
-    ? ((await supabaseSelectFilter('journal_lines', `journal_entry_id=in.(${idList})`, {
-        select: 'account_code,side,amount',
-        limit: 300000,
-      })) as JournalLineLite[] | null)
-    : []
+  const taxScope = await resolveTaxScopeStoreCodes(scope.storeFilter)
 
   let revenue = 0
   let expense = 0
-  for (const ln of lines || []) {
-    const code = String(ln.account_code || '').trim()
-    if (!code) continue
-    const amt = Math.abs(Number(ln.amount) || 0)
-    const side = String(ln.side || '').toLowerCase()
-    if (code.startsWith('4')) {
-      if (side === 'credit') revenue += amt
-      else revenue -= amt
-    } else if (code.startsWith('5')) {
-      if (side === 'debit') expense += amt
-      else expense -= amt
+  let entryCount = 0
+
+  if (taxScope.storeCodes && taxScope.storeCodes.length === 0) {
+    revenue = 0
+    expense = 0
+    entryCount = 0
+  } else {
+    const fromRpc = await loadPlFromRpc({
+      startDate,
+      endDate,
+      storeNames: taxScope.storeCodes,
+    })
+    if (fromRpc) {
+      revenue = fromRpc.revenue
+      expense = fromRpc.expense
+      entryCount = fromRpc.entryCount
+    } else {
+      const fb = await loadPlFromSelectFallback({
+        startDate,
+        endDate,
+        storeFilter: scope.storeFilter,
+        storeNames: taxScope.storeCodes,
+      })
+      revenue = fb.revenue
+      expense = fb.expense
+      entryCount = fb.entryCount
     }
   }
+
   const accountingProfit = revenue - expense
 
   let adjustmentRows: TaxAdjustmentRow[] = []
@@ -179,7 +262,7 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   if (!Number.isFinite(appliedTaxRate) || appliedTaxRate < 0) validationErrors.push('INVALID_TAX_RATE')
   if (!Number.isFinite(taxableIncome) || taxableIncome < 0) validationErrors.push('INVALID_TAXABLE_INCOME')
   if (!Number.isFinite(filingTaxDue) || filingTaxDue < 0) validationErrors.push('INVALID_FILING_TAX_DUE')
-  if (!entryIds.length) validationWarnings.push('NO_JOURNAL_ENTRIES_IN_PERIOD')
+  if (!entryCount) validationWarnings.push('NO_JOURNAL_ENTRIES_IN_PERIOD')
   if (period.periodType === 'annual' && period.months.length !== 12) validationWarnings.push('ANNUAL_MONTH_COUNT_MISMATCH')
   if (period.periodType === 'half_year' && period.months.length !== 6) {
     validationWarnings.push('HALF_YEAR_MONTH_COUNT_MISMATCH')
@@ -215,4 +298,3 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
     adjustments,
   }
 }
-

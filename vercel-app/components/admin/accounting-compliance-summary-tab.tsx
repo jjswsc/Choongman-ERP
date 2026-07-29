@@ -64,6 +64,7 @@ import {
 } from "./admin-accounting-compliance-utils"
 import { isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
+import { Pp30SalesAdjustmentPanel, type Pp30AdjustedOutput } from "@/components/admin/tax-filing/pp30-sales-adjustment-panel"
 import {
   readPnd91ChecklistEntry,
   writePnd91ChecklistEntry,
@@ -480,6 +481,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     setPayrollTinGapResult,
   } = props
 
+  const [salesAdjResult, setSalesAdjResult] = React.useState<Pp30AdjustedOutput | null>(null)
+  const onSalesAdjustmentResult = React.useCallback((r: Pp30AdjustedOutput | null) => {
+    setSalesAdjResult(r)
+  }, [])
+
   return (
     <Card className="border-border/80 shadow-sm">
       <CardHeader className="pb-2">
@@ -501,12 +507,12 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             <div className="shrink-0">
               <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
               <Select value={storeTb} onValueChange={setStoreTb!}>
-                <SelectTrigger className="h-9 w-[180px]">
-                  <SelectValue />
+                <SelectTrigger className="h-9 w-[min(100%,360px)] min-w-[180px]">
+                  <SelectValue>{storeOptionLabel(storeTb || "All")}</SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[min(100vw-2rem,420px)]">
                   {storeOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
+                    <SelectItem key={s} value={s} className="whitespace-normal">
                       {storeOptionLabel(s)}
                     </SelectItem>
                   ))}
@@ -1019,6 +1025,13 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 {t("accCompVatByLine")}
               </Button>
             </div>
+            <Pp30SalesAdjustmentPanel
+              t={t}
+              taxMonth={taxMonth}
+              storeName={storeFilterForApi}
+              pp30Queried={pp30Queried}
+              onAdjustmentResult={onSalesAdjustmentResult}
+            />
             <Card>
               <CardContent className="p-2 overflow-x-auto space-y-3">
                 {posFilingOutputSummaries.length > 0 ? (

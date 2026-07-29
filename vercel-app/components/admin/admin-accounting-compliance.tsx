@@ -337,6 +337,7 @@ export function AdminAccountingCompliance({
     >
   >({})
   const [taxLinkMetaLoading, setTaxLinkMetaLoading] = React.useState(false)
+  const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<Array<{ value: string; label: string }>>([])
 
   const franchiseStoreCodes = React.useMemo(
     () =>
@@ -591,8 +592,6 @@ export function AdminAccountingCompliance({
   const [ssoPayrollRows, setSsoPayrollRows] = React.useState<Record<string, unknown>[]>([])
   const [ssoPayrollPreview, setSsoPayrollPreview] = React.useState<SsoPayrollPreview | null>(null)
   const [ssoPayrollLoadedAt, setSsoPayrollLoadedAt] = React.useState<string>("")
-  const [ssoOnlineEnabled, setSsoOnlineEnabled] = React.useState(false)
-  const [ssoEmployeeRegReady, setSsoEmployeeRegReady] = React.useState(false)
   const [ssoSubmissionMemo, setSsoSubmissionMemo] = React.useState("")
   const [ssoAttachmentInput, setSsoAttachmentInput] = React.useState("")
   const [ssoEvidenceUploading, setSsoEvidenceUploading] = React.useState(false)
@@ -736,8 +735,36 @@ export function AdminAccountingCompliance({
     const uniq = Array.from(
       new Set((posStores || []).map((s) => String(s).trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
-    return ["All", ...uniq]
-  }, [isOffice, isManager, scopedStoreChoices, posStores])
+    const entityScopes = externalFiling
+      ? Array.from(new Set((taxEntityScopeOptions || []).map((o) => String(o.value || '').trim()).filter(Boolean)))
+      : []
+    return ["All", ...entityScopes, ...uniq]
+  }, [isOffice, isManager, scopedStoreChoices, posStores, externalFiling, taxEntityScopeOptions])
+
+  React.useEffect(() => {
+    if (!canUse || !isOffice || !externalFiling) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await apiFetch('/api/getTaxEntityScopes')
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        const rows = Array.isArray(data?.scopes) ? data.scopes : []
+        const next = rows
+          .map((r: Record<string, unknown>) => ({
+            value: String(r.value || '').trim(),
+            label: String(r.label || r.value || '').trim(),
+          }))
+          .filter((r: { value: string }) => !!r.value)
+        setTaxEntityScopeOptions(next)
+      } catch {
+        if (!cancelled) setTaxEntityScopeOptions([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [canUse, isOffice, externalFiling])
 
   React.useEffect(() => {
     if (externalFiling) return
@@ -2360,6 +2387,8 @@ export function AdminAccountingCompliance({
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
+    // 세무 신고 셸(hideTabBar)은 탭·매장 필터를 셸이 소유 — KT20K 쿼리로 내부 탭을 덮어쓰지 않음
+    if (hideTabBar) return
     const q = new URLSearchParams(window.location.search)
     const tabRaw = String(q.get(KT20K_TAB_QUERY_KEY) || "").trim().toLowerCase()
     if (tabRaw === "1" || tabRaw === "true" || tabRaw === "kt20k") {
@@ -2385,10 +2414,14 @@ export function AdminAccountingCompliance({
       const n = Number(tolRaw)
       if (Number.isFinite(n) && n >= 0) setKt20kDiffTolerance(String(n))
     }
-  }, [])
+  }, [hideTabBar])
 
   React.useEffect(() => {
     if (!kt20kPendingStoreFromQuery) return
+    if (hideTabBar) {
+      setKt20kPendingStoreFromQuery("")
+      return
+    }
     const pick = kt20kPendingStoreFromQuery
     const isAllowed = storeOptions.includes(pick) || pick === storeTb
     if (isAllowed) {
@@ -2403,10 +2436,13 @@ export function AdminAccountingCompliance({
     }
     // invalid query value for current role/store scope
     setKt20kPendingStoreFromQuery("")
-  }, [kt20kPendingStoreFromQuery, storeOptions, storeTb, setStoreTb, isOffice])
+  }, [kt20kPendingStoreFromQuery, storeOptions, storeTb, setStoreTb, isOffice, hideTabBar])
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
+    // SSO/PP30 등에서 매장만 바꿔도 kt20k_store 쿼리가 바뀌면 keep-alive 캐시 키가 갈라져
+    // 세무 신고 셸이 새로 마운트되며 기본 탭(PP.30)으로 튕긴다. KT20K 탭에서만 URL 동기화.
+    if (hideTabBar || tab !== "kt20k") return
     const url = new URL(window.location.href)
     if (kt20kReasonTagFilter.length) {
       url.searchParams.set(KT20K_TAGS_QUERY_KEY, kt20kReasonTagFilter.join(","))
@@ -2430,13 +2466,9 @@ export function AdminAccountingCompliance({
     } else {
       url.searchParams.delete(KT20K_STORE_QUERY_KEY)
     }
-    if (tab === "kt20k") {
-      url.searchParams.set(KT20K_TAB_QUERY_KEY, "1")
-    } else {
-      url.searchParams.delete(KT20K_TAB_QUERY_KEY)
-    }
+    url.searchParams.set(KT20K_TAB_QUERY_KEY, "1")
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`)
-  }, [kt20kReasonTagFilter, kt20kDiffTolerance, kt20kYear, storeTb, tab])
+  }, [kt20kReasonTagFilter, kt20kDiffTolerance, kt20kYear, storeTb, tab, hideTabBar])
 
   React.useEffect(() => {
     if (!canUse || tab !== "sso") return
@@ -2446,8 +2478,9 @@ export function AdminAccountingCompliance({
 
   React.useEffect(() => {
     if (!externalFiling || filingSearchTick == null || filingSearchTick < 1) return
+    if (initialTab !== "sso" && tab !== "sso") return
     void runSsoSearch()
-  }, [externalFiling, filingSearchTick, runSsoSearch])
+  }, [externalFiling, filingSearchTick, runSsoSearch, initialTab, tab])
 
   React.useEffect(() => {
     if (!isEmbeddedPp36Section || filingSearchTick == null || filingSearchTick < 1) return
@@ -3319,7 +3352,6 @@ export function AdminAccountingCompliance({
     },
     [etaxStepAudit]
   )
-  const ssoStep1Ready = ssoOnlineEnabled && ssoEmployeeRegReady
   const ssoStep2Ready = ssoQueried && !!ssoPayrollPreview && ssoPayrollPreview.rowCount > 0
   const ssoEmployeePreviewRows = React.useMemo(
     () => (ssoQueried ? ssoPayrollRows.slice(0, 150) : []),
@@ -4092,9 +4124,25 @@ export function AdminAccountingCompliance({
     loadPnd91,
   ])
 
+  const taxEntityScopeLabelMap = React.useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const row of taxEntityScopeOptions || []) {
+      const key = String(row.value || '').trim()
+      if (!key) continue
+      out[key] = String(row.label || '').trim() || key
+    }
+    return out
+  }, [taxEntityScopeOptions])
+
   const storeOptionLabel = React.useCallback(
-    (code: string) => (code === "All" ? t("all") : formatStoreLabel(code) || code),
-    [t, formatStoreLabel]
+    (code: string) => {
+      if (code === "All") return t("all")
+      if (code.startsWith("entity:")) {
+        return taxEntityScopeLabelMap[code] || code.replace(/^entity:/, "법인 · ")
+      }
+      return formatStoreLabel(code) || code
+    },
+    [t, formatStoreLabel, taxEntityScopeLabelMap]
   )
 
   const workflowStatusLabel = React.useCallback(
@@ -5168,11 +5216,6 @@ export function AdminAccountingCompliance({
             ssoStoreFilter={ssoStoreFilter}
             setSsoStoreFilter={setSsoStoreFilter}
             ssoSelectedStore={ssoSelectedStore}
-            ssoOnlineEnabled={ssoOnlineEnabled}
-            setSsoOnlineEnabled={setSsoOnlineEnabled}
-            ssoEmployeeRegReady={ssoEmployeeRegReady}
-            setSsoEmployeeRegReady={setSsoEmployeeRegReady}
-            ssoStep1Ready={ssoStep1Ready}
             ssoQueried={ssoQueried}
             ssoPayrollLoading={ssoPayrollLoading}
             ssoPayrollRows={ssoPayrollRows}
