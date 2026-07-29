@@ -176,15 +176,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const isUnpublish = String(body.mode || '').toLowerCase() === 'unpublish'
     const ids = await findPayrollRowIds(monthStr, scopedTargets, tenantScope)
     if (ids.length === 0) {
       return NextResponse.json(
-        { success: false, msg: '공개할 급여 기록을 찾지 못했습니다. 먼저 DB에 저장해 주세요.' },
+        {
+          success: false,
+          msg: isUnpublish
+            ? '미공개할 급여 기록을 찾지 못했습니다.'
+            : '공개할 급여 기록을 찾지 못했습니다. 먼저 DB에 저장해 주세요.',
+        },
         { status: 404, headers }
       )
     }
 
-    const publishedAt = new Date().toISOString()
+    const publishedAt = isUnpublish ? null : new Date().toISOString()
     let updated = 0
     try {
       for (const id of ids) {
@@ -208,9 +214,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        published: updated,
+        published: isUnpublish ? 0 : updated,
+        unpublished: isUnpublish ? updated : 0,
         publishedAt,
-        msg: `${updated}건의 급여 명세서가 직원 앱에 공개되었습니다.`,
+        msg: isUnpublish
+          ? `${updated}건의 급여 명세서가 직원 앱에서 미공개 처리되었습니다.`
+          : `${updated}건의 급여 명세서가 직원 앱에 공개되었습니다.`,
       },
       { headers }
     )

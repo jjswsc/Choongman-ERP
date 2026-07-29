@@ -386,23 +386,41 @@ export function ManagementMarginTab({
     [t]
   )
 
+  const paramsRef = React.useRef({
+    yearMonthStart,
+    yearMonthEnd,
+    storeFilter,
+    userStore: auth?.store,
+    userRole: auth?.role,
+    t,
+  })
+  paramsRef.current = {
+    yearMonthStart,
+    yearMonthEnd,
+    storeFilter,
+    userStore: auth?.store,
+    userRole: auth?.role,
+    t,
+  }
+
   React.useEffect(() => {
     if (queryToken <= 0) return
-    if (isFinancialStatementStoreNone(storeFilter)) {
+    const p = paramsRef.current
+    if (isFinancialStatementStoreNone(p.storeFilter)) {
       setLoading(false)
       setData(null)
-      setError(t("salesSelectStoreHint") || "매장을 선택하세요.")
+      setError(p.t("salesSelectStoreHint") || "매장을 선택하세요.")
       return
     }
     let cancelled = false
     setLoading(true)
     setError(null)
     void getManagementMarginBridge({
-      yearMonthStart,
-      yearMonthEnd,
-      storeFilter,
-      userStore: auth?.store,
-      userRole: auth?.role,
+      yearMonthStart: p.yearMonthStart,
+      yearMonthEnd: p.yearMonthEnd,
+      storeFilter: p.storeFilter,
+      userStore: p.userStore,
+      userRole: p.userRole,
     })
       .then((d) => {
         if (!cancelled) setData(d)
@@ -419,7 +437,7 @@ export function ManagementMarginTab({
     return () => {
       cancelled = true
     }
-  }, [yearMonthStart, yearMonthEnd, storeFilter, auth?.store, auth?.role, queryToken])
+  }, [queryToken])
 
   const periodLine =
     yearMonthStart === yearMonthEnd

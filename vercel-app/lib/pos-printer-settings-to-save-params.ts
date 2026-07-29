@@ -128,7 +128,10 @@ export function posPrinterSettingsToSaveParams(
     autoPrintReceiptOnPayment: Boolean(s.autoPrintReceiptOnPayment),
     autoPrintKitchenSlipOnOrder: Boolean(s.autoPrintKitchenSlipOnOrder),
     autoPrintFinalOrderBeforePayment: Boolean(s.autoPrintFinalOrderBeforePayment),
-    autoPrintKitchenSlipOnCancel: Boolean(s.autoPrintKitchenSlipOnCancel),
+    autoPrintKitchenSlipOnCancel:
+      typeof s.autoPrintKitchenSlipOnCancel === "boolean"
+        ? s.autoPrintKitchenSlipOnCancel
+        : Boolean(s.autoPrintKitchenSlipOnOrder),
     autoPrintCheckBillOnCancel: s.autoPrintCheckBillOnCancel !== false,
     receiptBizName: String(s.receiptBizName ?? "").trim(),
     receiptBizTaxId: String(s.receiptBizTaxId ?? "").trim(),

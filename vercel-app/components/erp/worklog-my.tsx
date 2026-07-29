@@ -430,10 +430,13 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     void loadData()
   }
 
+  // 표시용 번역만: Finish 본문 + 매니저 코멘트 (편집 중인 Continue/Today 원문은 제외)
   const contentsToTranslate = React.useMemo(() => {
     const set = new Set<string>()
-    for (const it of [...localFinish, ...localContinue, ...localToday]) {
+    for (const it of localFinish) {
       if (it.content?.trim()) set.add(it.content.trim())
+    }
+    for (const it of [...localFinish, ...localContinue, ...localToday]) {
       const c = it.managerComment?.trim()
       if (c && !c.startsWith("⚡")) set.add(c)
     }
@@ -462,7 +465,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
           })
         })
         .catch(() => {})
-    }, 350)
+    }, 120)
     return () => {
       cancelled = true
       clearTimeout(handle)

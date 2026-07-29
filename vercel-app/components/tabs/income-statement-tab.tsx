@@ -559,7 +559,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   React.useEffect(() => {
     if (!props.hideControls) return
-    if (props.queryToken == null) return
+    // 부모(재무제표) queryToken: 0=미검색. 검색 버튼으로만 조회.
+    if (props.queryToken == null || props.queryToken <= 0) return
     runIncomeFetchRef.current()
   }, [props.hideControls, props.queryToken])
 
@@ -2260,7 +2261,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 !showIncomeCompareTable &&
                 !loading &&
                 incomeCompareFetchId === 0 &&
-                !props.hideControls && (
+                (!props.hideControls || (props.queryToken ?? 0) <= 0) && (
                   <p className="py-8 text-center text-sm text-muted-foreground">
                     {t("msg_click_query") || "Click Query button."}
                   </p>

@@ -9,11 +9,39 @@ import { requireAuth } from '@/lib/verify-auth'
 
 const LANG_MAP: Record<string, string> = { ko: 'ko', en: 'en', th: 'th', mm: 'my', la: 'lo', kh: 'km', vi: 'vi', ms: 'ms' }
 const UA = 'Mozilla/5.0 (compatible; ChoongmanERP/1.0)'
+/** Google gtx 부하 완화용 동시 호출 수 */
+const CONCURRENCY = 5
+const CACHE_MAX = 800
+
+/** 프로세스 수명 동안 유지 (동일 원문 재번역 생략) */
+const translateCache = new Map<string, string>()
+
+function cacheGet(key: string): string | undefined {
+  const hit = translateCache.get(key)
+  if (hit === undefined) return undefined
+  // LRU: 재삽입으로 최근 사용 표시
+  translateCache.delete(key)
+  translateCache.set(key, hit)
+  return hit
+}
+
+function cacheSet(key: string, value: string) {
+  if (translateCache.has(key)) translateCache.delete(key)
+  translateCache.set(key, value)
+  while (translateCache.size > CACHE_MAX) {
+    const oldest = translateCache.keys().next().value
+    if (oldest === undefined) break
+    translateCache.delete(oldest)
+  }
+}
 
 async function translateOne(text: string, targetLang: string): Promise<string> {
   const trimmed = String(text || '').trim()
   if (!trimmed) return ''
   const tl = LANG_MAP[targetLang] || targetLang || 'en'
+  const cacheKey = `${tl}\0${trimmed}`
+  const cached = cacheGet(cacheKey)
+  if (cached !== undefined) return cached
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(trimmed.slice(0, 5000))}`
     const resp = await fetch(url, { headers: { 'User-Agent': UA } })
@@ -25,12 +53,30 @@ async function translateOne(text: string, targetLang: string): Promise<string> {
     if (Array.isArray(data) && Array.isArray((data as unknown[])[0])) {
       const first = (data as unknown[])[0] as Array<[string | null]>
       const result = first.map((x) => x[0]).filter(Boolean).join('')
-      if (result && result.trim()) return result
+      if (result && result.trim()) {
+        cacheSet(cacheKey, result)
+        return result
+      }
     }
   } catch (e) {
     console.warn('translate google:', e)
   }
   return trimmed
+}
+
+async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  async function worker() {
+    while (true) {
+      const i = next++
+      if (i >= items.length) return
+      results[i] = await fn(items[i]!, i)
+    }
+  }
+  const n = Math.min(Math.max(1, concurrency), Math.max(1, items.length))
+  await Promise.all(Array.from({ length: n }, () => worker()))
+  return results
 }
 
 export async function POST(request: NextRequest) {
@@ -52,13 +98,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ translated: [] }, { headers })
     }
 
-    const results: string[] = []
-    for (let i = 0; i < texts.length; i++) {
-      const src = String(texts[i] ?? '').trim()
+    const sources = texts.map((t) => String(t ?? '').trim())
+    const results = await mapPool(sources, CONCURRENCY, async (src) => {
       const t = await translateOne(src, targetLang)
-      results.push((t && t.trim()) || src)
-      if (i < texts.length - 1) await new Promise((r) => setTimeout(r, 80))
-    }
+      return (t && t.trim()) || src
+    })
     return NextResponse.json({ translated: results }, { headers })
   } catch (e) {
     console.error('translate:', e)

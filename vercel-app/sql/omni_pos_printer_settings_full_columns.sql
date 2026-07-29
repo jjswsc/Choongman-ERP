@@ -140,6 +140,13 @@ CREATE POLICY "pos_printer_settings_allow_public"
   USING (true)
   WITH CHECK (true);
 
+-- 주방 주문 자동인쇄 ON 매장 → 취소 주방도 ON
+-- (컬럼 DEFAULT false만 두면 부분취소 시 주방 취소 슬립이 안 나감)
+UPDATE public.pos_printer_settings
+SET auto_print_kitchen_slip_on_cancel = true
+WHERE COALESCE(auto_print_kitchen_slip_on_order, false) = true
+  AND COALESCE(auto_print_kitchen_slip_on_cancel, false) = false;
+
 -- 확인
 SELECT column_name
 FROM information_schema.columns

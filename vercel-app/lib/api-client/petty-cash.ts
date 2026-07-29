@@ -138,26 +138,63 @@ export async function getPettyCashSummary(params: {
   }
 }
 
+/** 세션 내 번역 캐시 (같은 원문 재요청 생략) */
+const translateClientCache = new Map<string, string>()
+const TRANSLATE_CLIENT_CACHE_MAX = 600
+
+function translateCacheKey(text: string, lang: string) {
+  return `${lang}\0${text}`
+}
+
 /** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시 */
 export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim()).map((s) => String(s).trim())
   if (filtered.length === 0) return []
   if (!readAutoTranslateEnabled()) return filtered
   const tl = String(targetLang || 'ko').toLowerCase().slice(0, 2)
+
+  const results = new Array<string>(filtered.length)
+  const missingIdx: number[] = []
+  const missingTexts: string[] = []
+  filtered.forEach((src, i) => {
+    const hit = translateClientCache.get(translateCacheKey(src, tl))
+    if (hit !== undefined) {
+      results[i] = hit
+    } else {
+      missingIdx.push(i)
+      missingTexts.push(src)
+    }
+  })
+  if (missingTexts.length === 0) return results
+
   try {
     const res = await apiFetchWithOffline('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texts: filtered, targetLang: tl }),
+      body: JSON.stringify({ texts: missingTexts, targetLang: tl }),
     })
     const data = (await res.json()) as { translated?: string[] }
     const translated = Array.isArray(data?.translated) ? data.translated : []
-    if (translated.length !== filtered.length) return filtered
-    return translated.map((v, i) => {
-      const src = filtered[i]
-      const out = (v == null ? '' : String(v)).trim()
-      return out || src
+    if (translated.length !== missingTexts.length) {
+      missingIdx.forEach((idx, j) => {
+        results[idx] = missingTexts[j]!
+      })
+      return results.map((v, i) => v ?? filtered[i]!)
+    }
+    missingIdx.forEach((idx, j) => {
+      const src = missingTexts[j]!
+      const out = (translated[j] == null ? '' : String(translated[j])).trim() || src
+      results[idx] = out
+      const key = translateCacheKey(src, tl)
+      if (translateClientCache.has(key)) translateClientCache.delete(key)
+      translateClientCache.set(key, out)
+      while (translateClientCache.size > TRANSLATE_CLIENT_CACHE_MAX) {
+        const oldest = translateClientCache.keys().next().value
+        if (oldest === undefined) break
+        translateClientCache.delete(oldest)
+      }
     })
+    return results.map((v, i) => v ?? filtered[i]!)
   } catch {
     return filtered
   }

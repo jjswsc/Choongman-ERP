@@ -17,6 +17,8 @@ export const ERP_KEEP_ALIVE_EXCLUDED_PATH_PREFIXES = [
  */
 export const ERP_KEEP_ALIVE_QUERY_AGNOSTIC_PATH_PREFIXES = [
   "/admin/sales-management",
+  // 세무 신고: 내부 탭·매장 필터가 쿼리를 건드리면 keep-alive 슬롯이 갈라져 PP.30으로 리셋됨
+  "/admin/tax-filing",
 ] as const
 
 export function normalizeErpPathOnly(href: string): string {

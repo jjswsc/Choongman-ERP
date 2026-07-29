@@ -322,7 +322,8 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
 
   React.useEffect(() => {
     if (!props.hideControls) return
-    if (props.queryToken == null) return
+    // 부모(재무제표) queryToken: 0=미검색. 검색 버튼으로만 조회.
+    if (props.queryToken == null || props.queryToken <= 0) return
     runBalanceFetchRef.current()
   }, [props.hideControls, props.queryToken])
 
@@ -588,7 +589,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                 !showBalanceCompareTable &&
                 !loading &&
                 balanceCompareFetchId === 0 &&
-                !props.hideControls && (
+                (!props.hideControls || (props.queryToken ?? 0) <= 0) && (
                   <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query")}</p>
                 )}
 

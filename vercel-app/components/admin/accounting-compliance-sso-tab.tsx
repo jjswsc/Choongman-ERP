@@ -58,14 +58,7 @@ export interface AccountingComplianceSsoTabProps {
   setSsoStoreFilter: (v: string) => void
   ssoSelectedStore: string
 
-  // SSO step 1 checklist
-  ssoOnlineEnabled: boolean
-  setSsoOnlineEnabled: (v: boolean) => void
-  ssoEmployeeRegReady: boolean
-  setSsoEmployeeRegReady: (v: boolean) => void
-  ssoStep1Ready: boolean
-
-  // SSO step 2 payroll query
+  // SSO step 1 payroll query
   ssoQueried: boolean
   ssoPayrollLoading: boolean
   ssoPayrollRows: Record<string, unknown>[]
@@ -137,11 +130,6 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
     ssoStoreFilter,
     setSsoStoreFilter,
     ssoSelectedStore,
-    ssoOnlineEnabled,
-    setSsoOnlineEnabled,
-    ssoEmployeeRegReady,
-    setSsoEmployeeRegReady,
-    ssoStep1Ready,
     ssoQueried,
     ssoPayrollLoading,
     ssoPayrollRows,
@@ -195,28 +183,6 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
             {!ssoQueried ? (
               <AccountingEmptyState>{t("accCompSsoEmptySearchHint")}</AccountingEmptyState>
             ) : null}
-            <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-2">
-              <div className="text-sm font-bold">{t("accCompSsoStep1Title")}</div>
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={ssoOnlineEnabled}
-                  onChange={(e) => setSsoOnlineEnabled(e.target.checked)}
-                />
-                {t("accCompSsoStep1ChecklistOnline")}
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={ssoEmployeeRegReady}
-                  onChange={(e) => setSsoEmployeeRegReady(e.target.checked)}
-                />
-                {t("accCompSsoStep1ChecklistEmployment")}
-              </label>
-              <div className="text-[11px] text-muted-foreground">
-                {t("accCompColStatus")}: {ssoStep1Ready ? t("accCompWorkflowStatusDone") : t("accCompNotCompleted")}
-              </div>
-            </div>
             <div className="flex flex-wrap gap-2 items-end">
               {!externalFiling ? (
                 <div>
@@ -277,7 +243,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                 type="button"
                 variant="default"
                 onClick={() => void exportOfficialUploadFromPayroll()}
-                disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
+                disabled={ssoPayrollExporting || !ssoQueried || !ssoStep2Ready}
                 title={t("accCompSsoOfficialUploadHint")}
               >
                 <Download className="h-4 w-4 mr-2" />
@@ -287,7 +253,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                 type="button"
                 variant="outline"
                 onClick={() => void exportSps110FromPayroll()}
-                disabled={ssoPayrollExporting || !ssoQueried || !ssoStep1Ready || !ssoStep2Ready}
+                disabled={ssoPayrollExporting || !ssoQueried || !ssoStep2Ready}
                 title={t("accCompSsoSps110Hint")}
               >
                 <Download className="h-4 w-4 mr-2" />
@@ -303,7 +269,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
             {ssoQueried ? (
               <>
                 <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="text-sm font-bold">{t("accCompSsoStep2Title")}</div>
+                  <div className="text-sm font-bold">{t("accCompSsoStep1Title")}</div>
                   <div className="text-[11px] text-muted-foreground">
                     {t("accCompMonth")}: {taxMonth} / {t("store")}: {ssoSelectedStore || t("accCompAll")} /{" "}
                     {t("accCompLoadTime")}:{" "}
@@ -380,9 +346,9 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   ) : null}
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="text-sm font-bold">{t("accCompSsoStep3Title")}</div>
+                  <div className="text-sm font-bold">{t("accCompSsoStep2Title")}</div>
                   <div className="text-[11px] text-muted-foreground whitespace-pre-line">
-                    {t("accCompSsoStep3Guide")}
+                    {t("accCompSsoStep2Guide")}
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button
@@ -405,9 +371,9 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   </div>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
-                  <div className="text-sm font-bold">{t("accCompSsoStep4Title")}</div>
+                  <div className="text-sm font-bold">{t("accCompSsoStep3Title")}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {t("accCompSsoStep4Guide")}
+                    {t("accCompSsoStep3Guide")}
                   </div>
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground">{t("accCompEvidenceMemo")}</div>
@@ -490,7 +456,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                       type="button"
                       size="sm"
                       onClick={() => void markSsoSubmissionDone()}
-                      disabled={!ssoStep1Ready || !ssoStep2Ready || ssoSubmissionSaving || !canApproveCompliance}
+                      disabled={!ssoStep2Ready || ssoSubmissionSaving || !canApproveCompliance}
                     >
                       {ssoSubmissionSaving ? t("loading") : t("accCompMarkSsoSubmissionDone")}
                     </Button>

@@ -38,19 +38,23 @@ export function LedgerReconciliationTab({
   const [loading, setLoading] = React.useState(false)
   const [data, setData] = React.useState<SubledgerGlReconciliationData | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const paramsRef = React.useRef({ yearMonth, storeFilter, t })
+  paramsRef.current = { yearMonth, storeFilter, t }
 
   React.useEffect(() => {
-    if (!yearMonth || queryToken <= 0) return
-    if (isFinancialStatementStoreNone(storeFilter)) {
+    if (queryToken <= 0) return
+    const { yearMonth: ym, storeFilter: sf, t: tt } = paramsRef.current
+    if (!ym) return
+    if (isFinancialStatementStoreNone(sf)) {
       setLoading(false)
       setData(null)
-      setError(t("salesSelectStoreHint") || "매장을 선택하세요.")
+      setError(tt("salesSelectStoreHint") || "매장을 선택하세요.")
       return
     }
     let cancelled = false
     setLoading(true)
     setError(null)
-    getSubledgerGlReconciliation({ yearMonth, storeFilter })
+    getSubledgerGlReconciliation({ yearMonth: ym, storeFilter: sf })
       .then((d) => {
         if (!cancelled) setData(d)
       })
@@ -66,7 +70,7 @@ export function LedgerReconciliationTab({
     return () => {
       cancelled = true
     }
-  }, [yearMonth, storeFilter, queryToken])
+  }, [queryToken])
 
   const diffRecv = data?.receivables.difference ?? 0
   const diffPay = data?.payables.difference ?? 0

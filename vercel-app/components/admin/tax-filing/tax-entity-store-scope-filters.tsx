@@ -92,10 +92,12 @@ export function TaxEntityStoreScopeFilters({
   return (
     <>
       {entityOptions.length > 0 ? (
-        <div className="shrink-0">
+        // 래퍼에 고정 폭: SelectTrigger 기본 w-full이 flex 행에서 남는 폭을 먹어
+        // 법인·매장 사이 큰 공백이 생기는 것 방지
+        <div className="w-72 max-w-full shrink-0">
           <div className="text-xs text-muted-foreground mb-1">{t("accCompTaxEntity")}</div>
           <Select value={entitySelectValue} onValueChange={onEntityChange}>
-            <SelectTrigger className="h-9 w-[min(100%,320px)] min-w-[180px]">
+            <SelectTrigger className="h-9 w-full">
               <SelectValue>
                 {entitySelectValue === "All"
                   ? t("accCompTaxEntityAll")
@@ -114,10 +116,10 @@ export function TaxEntityStoreScopeFilters({
         </div>
       ) : null}
 
-      <div className="shrink-0">
+      <div className="w-56 max-w-full shrink-0">
         <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
         <Select value={storeSelectValue} onValueChange={onStoreChange}>
-          <SelectTrigger className="h-9 w-[min(100%,220px)] min-w-[160px]">
+          <SelectTrigger className="h-9 w-full">
             <SelectValue>
               {storeSelectValue === "All" ? t("accCompStoreAll") : storeOptionLabel(storeSelectValue)}
             </SelectValue>

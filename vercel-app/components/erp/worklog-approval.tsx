@@ -128,7 +128,10 @@ export function WorklogApproval({ onPendingChange }: Props) {
     void loadData()
   }
 
+  const contentTransMapRef = React.useRef<Record<string, string>>({})
+
   React.useEffect(() => {
+    contentTransMapRef.current = {}
     setContentTransMap({})
   }, [lang])
 
@@ -142,28 +145,42 @@ export function WorklogApproval({ onPendingChange }: Props) {
 
   React.useEffect(() => {
     if (texts.length === 0) return
-    const missing = texts.filter((txt) => !(txt in contentTransMap))
-    if (missing.length === 0) return
     let cancelled = false
+    const CHUNK = 8
     const handle = setTimeout(() => {
-      translateTexts(missing, lang)
-        .then((translated) => {
-          if (cancelled) return
-          setContentTransMap((prev) => {
-            const next = { ...prev }
-            missing.forEach((txt, i) => {
-              next[txt] = translated[i] ?? txt
+      void (async () => {
+        // contentTransMap을 deps에 넣지 않음 → 청크 반영 중 effect가 재실행되어 취소되지 않음
+        while (!cancelled) {
+          const missing = texts.filter((txt) => !(txt in contentTransMapRef.current))
+          if (missing.length === 0) return
+          const chunk = missing.slice(0, CHUNK)
+          try {
+            const translated = await translateTexts(chunk, lang)
+            if (cancelled) return
+            const patch: Record<string, string> = {}
+            chunk.forEach((txt, i) => {
+              patch[txt] = translated[i] ?? txt
             })
-            return next
-          })
-        })
-        .catch(() => {})
-    }, 350)
+            contentTransMapRef.current = { ...contentTransMapRef.current, ...patch }
+            setContentTransMap((prev) => ({ ...prev, ...patch }))
+          } catch {
+            if (cancelled) return
+            // 실패해도 같은 청크 재시도 루프에 빠지지 않도록 원문으로 채움
+            const patch: Record<string, string> = {}
+            chunk.forEach((txt) => {
+              patch[txt] = txt
+            })
+            contentTransMapRef.current = { ...contentTransMapRef.current, ...patch }
+            setContentTransMap((prev) => ({ ...prev, ...patch }))
+          }
+        }
+      })()
+    }, 120)
     return () => {
       cancelled = true
       clearTimeout(handle)
     }
-  }, [texts, lang, contentTransMap])
+  }, [texts, lang])
 
   const getTransContent = (content: string) =>
     (content && contentTransMap[content]) || content || "-"

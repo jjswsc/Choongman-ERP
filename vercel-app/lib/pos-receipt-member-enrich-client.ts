@@ -57,7 +57,7 @@ async function resolveOrderPointEarnedForReceipt(
   data: ReceiptModalData,
   order?: Pick<PosOrder, 'id' | 'memberId' | 'memberNo' | 'pointEarned'> | null
 ): Promise<number> {
-  let pointEarned = roundMemberPointsEarn(data.memberPointEarned ?? order?.pointEarned)
+  const pointEarned = roundMemberPointsEarn(data.memberPointEarned ?? order?.pointEarned)
   if (pointEarned > 0) return pointEarned
 
   const orderId = Math.max(

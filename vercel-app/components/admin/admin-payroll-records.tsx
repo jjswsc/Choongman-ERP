@@ -1,5 +1,5 @@
 "use client"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
 import { useState, useEffect, useCallback } from "react"
@@ -129,6 +129,7 @@ export function AdminPayrollRecords() {
   const [error, setError] = useState<string | null>(null)
   const [queried, setQueried] = useState(false)
   const [sendingNotice, setSendingNotice] = useState(false)
+  const [unpublishing, setUnpublishing] = useState(false)
 
   const { posStores: storeList } = useStoreList()
   useEffect(() => {
@@ -472,6 +473,53 @@ ${rows.map((row, ri) => {
     }
   }
 
+  const handleUnpublish = async () => {
+    if (!monthStr) {
+      await appAlert(t("pay_month_select"))
+      return
+    }
+    const toUnpub = Array.from(selected).map((i) => filteredList[i])
+    if (toUnpub.length === 0) {
+      await appAlert(t("pay_notice_select_hint"))
+      return
+    }
+    if (!(await appConfirm(t("pay_unpublish_confirm")))) return
+    setUnpublishing(true)
+    setError(null)
+    try {
+      const res = await apiFetch("/api/publishPayroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthStr,
+          mode: "unpublish",
+          targets: toUnpub.map((r) => ({
+            store: r.store,
+            name: r.name,
+            ...(r.employee_id != null && r.employee_id > 0 ? { employeeId: r.employee_id } : {}),
+          })),
+        }),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        success?: boolean
+        msg?: string
+        message?: string
+      } | null
+      if (!res.ok || !body?.success) {
+        setError(String(body?.msg || body?.message || "").trim() || t("pay_unpublish_fail"))
+        return
+      }
+      await appAlert(t("pay_unpublish_success"))
+      setSelected(new Set())
+      setSelectAll(false)
+      void fetchPayrollRecords(monthStr, storeFilter)
+    } catch {
+      setError(t("pay_unpublish_fail"))
+    } finally {
+      setUnpublishing(false)
+    }
+  }
+
   const hasResult = filteredList.length > 0
 
   return (
@@ -525,10 +573,19 @@ ${rows.map((row, ri) => {
                 variant="outline"
                 className="h-9"
                 onClick={handleSendNotice}
-                disabled={sendingNotice || selected.size === 0}
+                disabled={sendingNotice || unpublishing || selected.size === 0}
               >
                 <Megaphone className="mr-1.5 h-3.5 w-3.5" />
                 {sendingNotice ? t("loading") : t("pay_send_notice")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                onClick={() => void handleUnpublish()}
+                disabled={sendingNotice || unpublishing || selected.size === 0}
+              >
+                {unpublishing ? t("loading") : t("pay_unpublish")}
               </Button>
             </>
           )}

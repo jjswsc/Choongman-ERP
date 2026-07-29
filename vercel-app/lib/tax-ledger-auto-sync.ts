@@ -1024,9 +1024,10 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
 
-  const monthFilter = buildPayrollMonthPostgrestFilter(validMonths)
+  const payrollMonthFilter = buildPayrollMonthPostgrestFilter(validMonths)
+  const taxMonthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
-  const payrollFilter = appendStoreNameFilter(monthFilter, storeFilter).replace(/store_name=eq\./g, 'store=eq.')
+  const payrollFilter = appendStoreNameFilter(payrollMonthFilter, storeFilter).replace(/store_name=eq\./g, 'store=eq.')
   const payrollRows = (await supabaseSelectFilterAllPages('payroll_records', payrollFilter, {
     select:
       'id,month,store,name,employee_id,status,salary,pos_allow,haz_allow,diligence_allow,birth_bonus,holiday_pay,spl_bonus,ot_amt,sso,tax,other_ded,net_pay',
@@ -1070,7 +1071,8 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     if (key !== '|' && !employeeTinByStoreName.has(key)) employeeTinByStoreName.set(key, tin)
   }
 
-  const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:PAYROLL_RECORD_WHT:%')}`
+  // withholding_tax_ledger_entries uses tax_month (not payroll_records.month)
+  const autoBase = `${taxMonthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:PAYROLL_RECORD_WHT:%')}`
   const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
   const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
     select: 'id,memo,filing_status',

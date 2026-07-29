@@ -2051,7 +2051,16 @@ export default function PosPrintersPage() {
                   <p className="text-xs text-muted-foreground">
                     {tr("posReceiptAutoPrintSectionHint", "영수증/주방 주문서 자동 인쇄 시점을 선택합니다.")}
                   </p>
-                  <ToggleRow label={tr("posKitchenAutoPrintOnOrder", "주문 완료 시 주방 주문서 자동 인쇄")} value={autoPrintKitchenSlipOnOrder} onChange={setAutoPrintKitchenSlipOnOrder} t={t} />
+                  <ToggleRow
+                    label={tr("posKitchenAutoPrintOnOrder", "주문 완료 시 주방 주문서 자동 인쇄")}
+                    value={autoPrintKitchenSlipOnOrder}
+                    onChange={(v) => {
+                      setAutoPrintKitchenSlipOnOrder(v)
+                      // 주방 주문을 켜면 취소 주방도 같이 ON (꺼진 채로 두면 부분취소 시 주방 미인쇄)
+                      if (v) setAutoPrintKitchenSlipOnCancel(true)
+                    }}
+                    t={t}
+                  />
                   <ToggleRow label={tr("posAutoPrintReceiptOnOrder", "주문 시 영수증 자동 인쇄")} value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
                   <ToggleRow label={tr("posAutoPrintReceiptOnAddOrder", "추가 주문 시 영수증 자동 인쇄")} value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
                   <ToggleRow label={tr("posAutoPrintReceiptOnPayment", "결제 시 영수증 자동 인쇄")} value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />

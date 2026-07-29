@@ -257,7 +257,11 @@ export async function POST(req: NextRequest) {
     const autoPrintReceiptOnPayment = Boolean(body?.autoPrintReceiptOnPayment)
     const autoPrintKitchenSlipOnOrder = Boolean(body?.autoPrintKitchenSlipOnOrder)
     const autoPrintFinalOrderBeforePayment = Boolean(body?.autoPrintFinalOrderBeforePayment)
-    const autoPrintKitchenSlipOnCancel = Boolean(body?.autoPrintKitchenSlipOnCancel)
+    // 미전송 시: 주방 주문 자동인쇄와 동일. 명시 false만 OFF (DEFAULT false로 덮어쓰지 않음)
+    const autoPrintKitchenSlipOnCancel =
+      typeof body?.autoPrintKitchenSlipOnCancel === 'boolean'
+        ? body.autoPrintKitchenSlipOnCancel
+        : autoPrintKitchenSlipOnOrder
     const autoPrintCheckBillOnCancel = body?.autoPrintCheckBillOnCancel !== false
     const receiptBizName = String(body?.receiptBizName ?? '').trim()
     const receiptBizTaxId = String(body?.receiptBizTaxId ?? '').trim()
