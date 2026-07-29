@@ -53,7 +53,7 @@ import {
   filterExpenseWithdrawAccountSubjects,
 } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { stripWithdrawalCategoryMetaFromNote } from "@/lib/bank-transaction-note-meta"
+import { bankNoteUserDisplayText } from "@/lib/bank-transaction-note-meta"
 import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -256,7 +256,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (amountParam && parseMoneyAmount(amountParam) > 0) setAmount(moneyInputStringFromAmount(amountParam))
       if (bankMemoParam) setBankMemo(bankMemoParam)
       if (bankNoteParam || memoParam) {
-        setMemo(memoParam || stripWithdrawalCategoryMetaFromNote(bankNoteParam || "") || "")
+        setMemo(memoParam || bankNoteUserDisplayText(bankNoteParam || "") || "")
       }
       if (transDateParam && /^\d{4}-\d{2}-\d{2}$/.test(transDateParam)) setTransDate(transDateParam)
       if (accountIdParam) setAccountId(accountIdParam)

@@ -89,7 +89,7 @@ import {
   extractExpenseAccrualPrefix,
   extractWithdrawalCategoryFromNote,
   mergeWithdrawalCategoryIntoBankNote,
-  stripWithdrawalCategoryMetaFromNote,
+  bankNoteUserDisplayText,
 } from "@/lib/bank-transaction-note-meta"
 import {
   BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE,
@@ -1493,7 +1493,7 @@ export function BankTransactionsTab() {
       const noteText =
         edits?.note !== undefined
           ? String(edits.note || "")
-          : stripWithdrawalCategoryMetaFromNote(r.note || "")
+          : bankNoteUserDisplayText(r.note || "")
       const vendorCode = String(edits?.vendorCode ?? r.vendorCode ?? "").trim()
       const vendorName = vendorOptions.find((v) => v.code === vendorCode)?.name || ""
       const storeName = String(edits?.storeName ?? r.storeName ?? "").trim()
@@ -1760,7 +1760,7 @@ export function BankTransactionsTab() {
         transType === "withdraw" ? Math.abs(r.amount ?? 0) : "",
         attrDate,
         r.memo || "",
-        stripWithdrawalCategoryMetaFromNote(r.note || ""),
+        bankNoteUserDisplayText(r.note || ""),
       ])
     }
     const tableBody = `<table>
@@ -1864,7 +1864,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           setQueryRowEdits((prev) => {
             const edits = prev[rowId]
             const base =
-              edits?.note !== undefined ? edits.note ?? "" : stripWithdrawalCategoryMetaFromNote(r.note ?? "")
+              edits?.note !== undefined ? edits.note ?? "" : bankNoteUserDisplayText(r.note ?? "")
             const cur = base.trim()
             const next = cur ? `${cur} | ${phrase}` : phrase
             return { ...prev, [rowId]: { ...prev[rowId], note: next } }
@@ -2764,7 +2764,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         onClick={() => {
                                       const amt = Math.abs(r.amount ?? 0)
                                       const bankMemo = (r.memo || "").trim().slice(0, 500)
-                                      const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
+                                      const bankNote = bankNoteUserDisplayText((r.note || "").trim()).slice(0, 500)
                                       const q = new URLSearchParams({ tab: "expenseRegister", updateExisting: "1" })
                                       if (r.id) q.set("bankTransactionId", String(r.id))
                                       if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
@@ -2823,7 +2823,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       onClick={() => {
                                         const amt = Math.abs(r.amount ?? 0)
                                         const bankMemo = (r.memo || "").trim().slice(0, 500)
-                                        const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
+                                        const bankNote = bankNoteUserDisplayText((r.note || "").trim()).slice(0, 500)
                                         const q = new URLSearchParams({ tab: "expenseRegister", category: "transfer" })
                                         q.set("bankTransactionId", String(r.id))
                                         if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
@@ -2958,7 +2958,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   value={
                                     edits?.note !== undefined
                                       ? edits.note
-                                      : stripWithdrawalCategoryMetaFromNote(r.note ?? "")
+                                      : bankNoteUserDisplayText(r.note ?? "")
                                   }
                                   onChange={(e) => r.id && setQueryRowEdit(r.id, "note", e.target.value)}
                                   onFocus={() => {

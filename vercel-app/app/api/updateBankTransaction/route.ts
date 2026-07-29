@@ -9,6 +9,7 @@ import {
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
+  bankNoteUserDisplayText,
   extractExpenseAccrualPrefix,
   extractWithdrawalCategoryFromNote,
   mergeWithdrawalCategoryIntoBankNote,
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       patch.account_subject_id = asid && !isNaN(asid) ? asid : null
     }
     if (note !== undefined) {
-      const newDisplay = String(note || '').trim()
+      const newDisplay = bankNoteUserDisplayText(String(note || ''))
       const prevNote = String(existing[0].note || '')
       const cat = extractWithdrawalCategoryFromNote(prevNote)
       if (cat) {

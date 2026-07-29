@@ -26,6 +26,11 @@ export function stripExpenseAccrualPrefix(note: string): string {
   return String(note || '').replace(/^expense_accrual_id:\d+;\s*/i, '').trim()
 }
 
+/** 통장 화면 MEMO 입력·표시용 — 내부 연동 메타만 제거 */
+export function bankNoteUserDisplayText(note: string): string {
+  return stripWithdrawalCategoryMetaFromNote(stripExpenseAccrualPrefix(note)).trim()
+}
+
 export function mergeWithdrawalCategoryIntoBankNote(displayText: string, category: string): string {
   const base = stripWithdrawalCategoryMetaFromNote(displayText).trim()
   const tag = `withdrawal_category:${category}`
@@ -46,6 +51,25 @@ export function composeBankNoteWithCategoryAndOptionalAccrualPrefix(
     stripWithdrawalCategoryMetaFromNote(rest).trim()
   const body = mergeWithdrawalCategoryIntoBankNote(userDesc, category)
   return prefix ? `${prefix}${body}` : body
+}
+
+/**
+ * 지급예정↔통장 연결 시 note 기록.
+ * expense_accrual_id·withdrawal_category 메타는 유지하되, 사용자가 넣었던 MEMO 문구는 덮어쓰지 않는다.
+ */
+export function composeBankNoteForExpenseAccrualLink(
+  existingNote: string,
+  expenseAccrualId: number,
+  withdrawalCategory: string,
+  preferredUserDisplay?: string
+): string {
+  const fromExisting = bankNoteUserDisplayText(existingNote)
+  const preferred = String(preferredUserDisplay || '').trim()
+  const userDesc = fromExisting || bankNoteUserDisplayText(preferred) || preferred
+  const body = mergeWithdrawalCategoryIntoBankNote(userDesc, withdrawalCategory)
+  const id = Math.floor(Number(expenseAccrualId) || 0)
+  if (id <= 0) return body
+  return `expense_accrual_id:${id};${body}`
 }
 
 /** 지출등록(이체) → 통장 카드대금 연동 대기열 표시용 */

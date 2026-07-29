@@ -19,6 +19,7 @@ import { registerCardExpenseFromBankTransaction } from '@/lib/card-bank-expense-
 import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
+import { composeBankNoteForExpenseAccrualLink } from '@/lib/bank-transaction-note-meta'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 
@@ -409,7 +410,11 @@ export async function POST(request: NextRequest) {
           }
           bankId = existingBankId
           await updateBankTransactionWithIdentityFallback(bankId, {
-            note,
+            note: composeBankNoteForExpenseAccrualLink(
+              String(bankRow.note || ''),
+              expenseAccrualId,
+              withdrawalCategory
+            ),
             category: bankCategory,
             store: store || source.store_name || null,
             expense_date: transDate,
@@ -495,7 +500,11 @@ export async function POST(request: NextRequest) {
         linkedBankMemo = String(bankRow.memo || '').trim()
         bankId = existingBankId
         await updateBankTransactionWithIdentityFallback(bankId, {
-          note,
+          note: composeBankNoteForExpenseAccrualLink(
+            String(bankRow.note || ''),
+            expenseAccrualId,
+            withdrawalCategory
+          ),
           category: bankCategory,
           vendor_code: vendorCode,
           expense_date: transDate,

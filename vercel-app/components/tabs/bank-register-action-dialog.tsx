@@ -34,7 +34,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import {
-  stripWithdrawalCategoryMetaFromNote,
+  bankNoteUserDisplayText,
 } from "@/lib/bank-transaction-note-meta"
 import {
   BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE,
@@ -170,7 +170,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 const r = registerActionRow
                 const amt = Math.abs(r.amount ?? 0)
                 const bankMemo = (r.memo || "").trim().slice(0, 500)
-                const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
+                const bankNote = bankNoteUserDisplayText((r.note || "").trim()).slice(0, 500)
                 const q = new URLSearchParams({ tab: "expenseRegister" })
                 if (r.id) q.set("bankTransactionId", String(r.id))
                 if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
@@ -335,7 +335,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         paymentMethod: "bank" as const,
                         amount: bankAmt,
                         transDate: String(approvedPickRow.transDate || "").slice(0, 10),
-                        memo: stripWithdrawalCategoryMetaFromNote(
+                        memo: bankNoteUserDisplayText(
                           (approvedPickRow.note || approvedPickRow.memo || "").trim()
                         ),
                         bankTransactionId: Number(approvedPickRow.id),
