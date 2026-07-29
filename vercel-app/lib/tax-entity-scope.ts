@@ -111,24 +111,26 @@ export function cleanTaxEntityDisplayName(raw: string): string {
 
 /**
  * UI용 법인 스코프 라벨 — value는 entity:... 이지만 화면에는 회사명·TIN·매장수만 표시
- * 예: 법인 · Aisa Commerce & Trade Co.,Ltd. (TIN 0105568080622 · 3개 매장)
+ * storeCountLabel은 호출측 i18n으로 넘김 (예: "3개 매장" / "3 stores")
  */
 export function formatTaxEntityScopeLabel(input: {
   entityName?: string | null
   entityCode?: string | null
   taxId?: string | null
   storeCount?: number | null
+  /** i18n으로 만든 매장수 문구. 없으면 영문 fallback */
+  storeCountLabel?: string | null
 }): string {
   const name =
     cleanTaxEntityDisplayName(String(input.entityName || '')) ||
     String(input.entityCode || '').trim() ||
-    '법인'
+    'Entity'
   const taxId = String(input.taxId || '').replace(/\D/g, '').trim()
   const storeCount = Math.max(0, Number(input.storeCount) || 0)
-  const parts = [
-    taxId ? `TIN ${taxId}` : '',
-    storeCount > 0 ? `${storeCount}개 매장` : '',
-  ].filter(Boolean)
+  const storePart =
+    String(input.storeCountLabel || '').trim() ||
+    (storeCount > 0 ? `${storeCount} stores` : '')
+  const parts = [taxId ? `TIN ${taxId}` : '', storePart].filter(Boolean)
   return parts.length ? `${name} (${parts.join(' · ')})` : name
 }
 

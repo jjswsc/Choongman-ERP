@@ -224,6 +224,7 @@ import {
   type Pnd91ChecklistStatus,
 } from "@/lib/pnd91-checklist-storage"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow, isStockAutoVatRow } from "@/lib/vat-ledger-pos"
+import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 import {
   buildCorporateTaxPdfHtml,
@@ -750,13 +751,29 @@ export function AdminAccountingCompliance({
         if (cancelled) return
         const rows = Array.isArray(data?.scopes) ? data.scopes : []
         const next = rows
-          .map((r: Record<string, unknown>) => ({
-            value: String(r.value || '').trim(),
-            label: String(r.label || r.value || '').trim(),
-            stores: Array.isArray(r.stores)
-              ? r.stores.map((s) => String(s || '').trim()).filter(Boolean)
-              : [],
-          }))
+          .map((r: Record<string, unknown>) => {
+            const storeCount = Number(r.storeCount) || 0
+            const entityName = String(r.entityName || r.label || '').trim()
+            const taxId = String(r.taxId || '').trim()
+            const entityCode = String(r.entityCode || '').trim()
+            const value = String(r.value || '').trim()
+            return {
+              value,
+              label: formatTaxEntityScopeLabel({
+                entityName,
+                entityCode,
+                taxId,
+                storeCount,
+                storeCountLabel:
+                  storeCount > 0
+                    ? t('accCompTaxEntityStoreCount').replace('{{n}}', String(storeCount))
+                    : '',
+              }),
+              stores: Array.isArray(r.stores)
+                ? r.stores.map((s) => String(s || '').trim()).filter(Boolean)
+                : [],
+            }
+          })
           .filter((r: { value: string }) => !!r.value)
         setTaxEntityScopeOptions(next)
       } catch {
@@ -766,7 +783,7 @@ export function AdminAccountingCompliance({
     return () => {
       cancelled = true
     }
-  }, [canUse, isOffice])
+  }, [canUse, isOffice, t])
 
   React.useEffect(() => {
     if (externalFiling) return

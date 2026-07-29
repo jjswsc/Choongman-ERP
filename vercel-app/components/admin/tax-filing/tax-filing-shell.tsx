@@ -30,6 +30,7 @@ import {
   TaxEntityStoreScopeFilters,
   type TaxEntityScopeOption,
 } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
+import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope"
 
 type FilingTabKey =
   | "pp30"
@@ -278,13 +279,29 @@ export function TaxFilingShell() {
         const rows = Array.isArray(data?.scopes) ? data.scopes : []
         setTaxEntityScopeOptions(
           rows
-            .map((r: Record<string, unknown>) => ({
-              value: String(r.value || "").trim(),
-              label: String(r.label || "").trim(),
-              stores: Array.isArray(r.stores)
-                ? r.stores.map((s) => String(s || "").trim()).filter(Boolean)
-                : [],
-            }))
+            .map((r: Record<string, unknown>) => {
+              const storeCount = Number(r.storeCount) || 0
+              const entityName = String(r.entityName || r.label || "").trim()
+              const taxId = String(r.taxId || "").trim()
+              const entityCode = String(r.entityCode || "").trim()
+              const value = String(r.value || "").trim()
+              return {
+                value,
+                label: formatTaxEntityScopeLabel({
+                  entityName,
+                  entityCode,
+                  taxId,
+                  storeCount,
+                  storeCountLabel:
+                    storeCount > 0
+                      ? t("accCompTaxEntityStoreCount").replace("{{n}}", String(storeCount))
+                      : "",
+                }),
+                stores: Array.isArray(r.stores)
+                  ? r.stores.map((s) => String(s || "").trim()).filter(Boolean)
+                  : [],
+              }
+            })
             .filter((r: { value: string }) => !!r.value)
         )
       } catch {
@@ -294,7 +311,7 @@ export function TaxFilingShell() {
     return () => {
       cancelled = true
     }
-  }, [isOffice])
+  }, [isOffice, t])
 
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []

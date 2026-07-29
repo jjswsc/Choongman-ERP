@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
             taxId,
             storeCount,
           }),
+          entityName: name,
           entityCode: code,
           taxId,
           storeCount,
