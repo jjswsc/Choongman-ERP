@@ -533,7 +533,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               value={periodType}
               onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}
             >
-              <SelectTrigger className="h-9 w-[150px]">
+              <SelectTrigger className="h-9 w-[76px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -549,7 +549,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               value={ledgerStatusFilter}
               onValueChange={(v) => setLedgerStatusFilter(v as "all" | "draft" | "submitted")}
             >
-              <SelectTrigger className="h-9 w-[150px]">
+              <SelectTrigger className="h-9 w-[76px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
