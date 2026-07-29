@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
      * 충만(tenant 없음) 또는 정책 조회 실패(SQL 미배포) 시 스킵하지 않고 —
      * require 플래그가 켜져 있는데 조회 실패면 fail-closed.
      */
-    let earlyTenantId =
+    const earlyTenantId =
       saasBrand && !partnerStoreHint
         ? resolvedTenant?.tenantId ||
           normalizeTenantId(row.tenant_id) ||
