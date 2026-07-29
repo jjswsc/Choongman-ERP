@@ -224,7 +224,7 @@ import {
   type Pnd91ChecklistStatus,
 } from "@/lib/pnd91-checklist-storage"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow, isStockAutoVatRow } from "@/lib/vat-ledger-pos"
-import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope"
+import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 import {
   buildCorporateTaxPdfHtml,

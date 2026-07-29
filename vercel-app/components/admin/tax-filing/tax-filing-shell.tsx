@@ -30,7 +30,7 @@ import {
   TaxEntityStoreScopeFilters,
   type TaxEntityScopeOption,
 } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
-import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope"
+import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
 
 type FilingTabKey =
   | "pp30"
