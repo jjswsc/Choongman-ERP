@@ -339,7 +339,7 @@ export function AdminAccountingCompliance({
   >({})
   const [taxLinkMetaLoading, setTaxLinkMetaLoading] = React.useState(false)
   const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<
-    Array<{ value: string; label: string; stores?: string[] }>
+    Array<{ value: string; label: string; stores?: string[]; taxId?: string; entityName?: string }>
   >([])
 
   const franchiseStoreCodes = React.useMemo(
@@ -417,12 +417,58 @@ export function AdminAccountingCompliance({
   )
 
   const pp30StoreLinkEval = React.useMemo(() => {
+    const scope = String(storeFilterForApi || "").trim()
+    if (!scope || scope === "All") return null
+
+    // 법인 스코프: 매핑 매장의 납세자/거래처 프로필을 우선 사용
+    if (scope.startsWith("entity:")) {
+      const ent = taxEntityScopeOptions.find((o) => o.value === scope)
+      const mappedStores = Array.isArray(ent?.stores) ? ent!.stores! : []
+      let best: ReturnType<typeof evaluateStoreTaxLink> | null = null
+      for (const st of mappedStores) {
+        const extras = aliasKeysForStore(st, storeLabels, legacyToCanonical)
+        const profile = findTaxLinkProfileForStore(st)
+        const ev = evaluateStoreTaxLink(st, profile, taxLinkVendors, extras)
+        if (ev.status === "linked") return ev
+        if (ev.status === "inferred") {
+          if (!best || best.status === "missing" || best.status === "profile_only") best = ev
+        } else if (ev.status === "profile_only") {
+          if (!best || best.status === "missing") best = ev
+        }
+      }
+      if (best) return best
+
+      const taxId = String(ent?.taxId || "")
+        .replace(/\D/g, "")
+        .trim()
+        .slice(0, 13)
+      const name = String(ent?.entityName || "").trim()
+      if (taxId.length === 13 && name) {
+        return {
+          status: "profile_only" as const,
+          vendorCode: "",
+          vendorName: name,
+          taxId,
+          matchVia: "profile_fields" as const,
+        }
+      }
+      return {
+        status: "missing" as const,
+        vendorCode: "",
+        vendorName: name,
+        taxId,
+        matchVia: null,
+      }
+    }
+
     if (storeFilterForLedger === "All") return null
     const extras = aliasKeysForStore(storeFilterForLedger, storeLabels, legacyToCanonical)
     const profile = findTaxLinkProfileForStore(storeFilterForLedger)
     return evaluateStoreTaxLink(storeFilterForLedger, profile, taxLinkVendors, extras)
   }, [
+    storeFilterForApi,
     storeFilterForLedger,
+    taxEntityScopeOptions,
     findTaxLinkProfileForStore,
     taxLinkVendors,
     storeLabels,
@@ -772,6 +818,8 @@ export function AdminAccountingCompliance({
               stores: Array.isArray(r.stores)
                 ? r.stores.map((s) => String(s || '').trim()).filter(Boolean)
                 : [],
+              taxId,
+              entityName,
             }
           })
           .filter((r: { value: string }) => !!r.value)
@@ -2333,13 +2381,29 @@ export function AdminAccountingCompliance({
 
     // 1) 이미 로드된 매장 납세자 프로필 (Store taxpayer profiles와 동일 데이터)
     if (storeKey) {
-      const cached = findTaxLinkProfileForStore(storeKey)
-      if (cached) {
-        applyGaps(
-          String(cached.taxpayerName || "").trim(),
-          String(cached.taxId || ""),
-          String(cached.branchNo || "").trim() || undefined
-        )
+      if (storeKey.startsWith("entity:")) {
+        const ent = taxEntityScopeOptions.find((o) => o.value === storeKey)
+        applyGaps(String(ent?.entityName || "").trim(), String(ent?.taxId || ""))
+        for (const st of ent?.stores || []) {
+          if (payerTaxId.length === 13 && payerName) break
+          const cached = findTaxLinkProfileForStore(st)
+          if (cached) {
+            applyGaps(
+              String(cached.taxpayerName || "").trim(),
+              String(cached.taxId || ""),
+              String(cached.branchNo || "").trim() || undefined
+            )
+          }
+        }
+      } else {
+        const cached = findTaxLinkProfileForStore(storeKey)
+        if (cached) {
+          applyGaps(
+            String(cached.taxpayerName || "").trim(),
+            String(cached.taxId || ""),
+            String(cached.branchNo || "").trim() || undefined
+          )
+        }
       }
     }
 
@@ -2353,17 +2417,23 @@ export function AdminAccountingCompliance({
 
     // 3) API resolve (canonical store_code + vendor fallback)
     if (storeKey && (payerTaxId.length !== 13 || !payerName)) {
-      try {
-        const { profile } = await getStoreTaxFilingProfile(storeKey)
-        if (profile) {
-          applyGaps(
-            String(profile.taxpayerName || "").trim(),
-            String(profile.taxId || ""),
-            String(profile.branchNo || "").trim() || undefined
-          )
+      const resolveKeys = storeKey.startsWith("entity:")
+        ? taxEntityScopeOptions.find((o) => o.value === storeKey)?.stores || []
+        : [storeKey]
+      for (const rk of resolveKeys) {
+        if (payerTaxId.length === 13 && payerName) break
+        try {
+          const { profile } = await getStoreTaxFilingProfile(rk)
+          if (profile) {
+            applyGaps(
+              String(profile.taxpayerName || "").trim(),
+              String(profile.taxId || ""),
+              String(profile.branchNo || "").trim() || undefined
+            )
+          }
+        } catch {
+          /* keep current */
         }
-      } catch {
-        /* keep current */
       }
     }
 
@@ -2383,6 +2453,7 @@ export function AdminAccountingCompliance({
     kt20kEmployer.companyName,
     kt20kEmployer.companyTaxId,
     etaxTaxId,
+    taxEntityScopeOptions,
   ])
 
   React.useEffect(() => {
