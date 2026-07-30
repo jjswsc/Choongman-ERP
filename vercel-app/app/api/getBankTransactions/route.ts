@@ -109,6 +109,9 @@ export async function GET(request: NextRequest) {
       for (let i = 0; i < rowIds.length; i += 80) {
         const chunk = rowIds.slice(i, i + 80)
         const idList = chunk.join(',')
+        // 입금 1건에 인보이스 수금(Receive)이 여러 행일 수 있음 — limit=chunk.length 이면
+        // isReceivableLinked 가 잘려 false 로 나와 「미연결」 배지가 유지됨.
+        const receivableLinkLimit = Math.min(Math.max(chunk.length * 50, 500), 5000)
         const [ptRows, recvRows, settleRows, cardRows] = await Promise.all([
           supabaseSelectFilter('payable_transactions', `bank_transaction_id=in.(${idList})`, {
             select: 'bank_transaction_id',
@@ -117,7 +120,7 @@ export async function GET(request: NextRequest) {
           supabaseSelectFilter(
             'receivable_transactions',
             `bank_transaction_id=in.(${idList})&ref_type=eq.Receive&ref_id=not.is.null`,
-            { select: 'bank_transaction_id', limit: chunk.length }
+            { select: 'bank_transaction_id', limit: receivableLinkLimit }
           ) as Promise<{ bank_transaction_id?: number }[] | null>,
           supabaseSelectFilter('pos_channel_settlements', `bank_transaction_id=in.(${idList})`, {
             select: 'bank_transaction_id',

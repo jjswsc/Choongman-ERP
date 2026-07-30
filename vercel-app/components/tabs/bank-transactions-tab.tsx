@@ -555,27 +555,6 @@ export function BankTransactionsTab() {
     }
   }, [auth?.role, selectedAccountStore])
 
-  const openReceivablePick = React.useCallback(async (row: (typeof list)[0]) => {
-    if (!row?.id) return
-    setReceivablePickRow(row)
-    setReceivablePickLoading(true)
-    setReceivablePickSelectedIds([])
-    setReceivablePickCreditApply(0)
-    setReceivablePickMismatchReason("")
-    setReceivablePickMismatchNote("")
-    setReceivablePickStoreCreditAvailable(0)
-    try {
-      const res = await getOpenReceivablesForBankTx({ bankTransactionId: Number(row.id) })
-      setReceivablePickList(res.list || [])
-      setReceivablePickStoreCreditAvailable(Math.max(0, Number(res.storeCreditAvailable) || 0))
-    } catch {
-      setReceivablePickList([])
-      setReceivablePickStoreCreditAvailable(0)
-    } finally {
-      setReceivablePickLoading(false)
-    }
-  }, [])
-
   const openReceivableLinkedView = React.useCallback(async (row: (typeof list)[0]) => {
     if (!row?.id) return
     setReceivableLinkedRow(row)
@@ -598,6 +577,37 @@ export function BankTransactionsTab() {
       setReceivableLinkedLoading(false)
     }
   }, [])
+
+  const openReceivablePick = React.useCallback(async (row: (typeof list)[0]) => {
+    if (!row?.id) return
+    setReceivablePickLoading(true)
+    setReceivablePickSelectedIds([])
+    setReceivablePickCreditApply(0)
+    setReceivablePickMismatchReason("")
+    setReceivablePickMismatchNote("")
+    setReceivablePickStoreCreditAvailable(0)
+    try {
+      const res = await getOpenReceivablesForBankTx({ bankTransactionId: Number(row.id) })
+      if (res.alreadyLinked) {
+        setReceivablePickRow(null)
+        setReceivablePickList([])
+        setList((prev) =>
+          prev.map((r) => (Number(r.id) === Number(row.id) ? { ...r, isReceivableLinked: true } : r))
+        )
+        await openReceivableLinkedView({ ...row, isReceivableLinked: true })
+        return
+      }
+      setReceivablePickRow(row)
+      setReceivablePickList(res.list || [])
+      setReceivablePickStoreCreditAvailable(Math.max(0, Number(res.storeCreditAvailable) || 0))
+    } catch {
+      setReceivablePickRow(row)
+      setReceivablePickList([])
+      setReceivablePickStoreCreditAvailable(0)
+    } finally {
+      setReceivablePickLoading(false)
+    }
+  }, [openReceivableLinkedView])
 
   React.useEffect(() => {
     if (!registerExpenseRow) {

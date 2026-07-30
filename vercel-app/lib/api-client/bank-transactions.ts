@@ -477,6 +477,8 @@ export async function getOpenReceivablesForBankTx(params: { bankTransactionId: n
     success: boolean
     message?: string
     list: OpenReceivableForBankItem[]
+    /** 인보이스 수금 연결이 이미 있으면 true — 빈 list 와 「미결 없음」을 구분 */
+    alreadyLinked?: boolean
     storeCreditAvailable?: number
   }>
 }
