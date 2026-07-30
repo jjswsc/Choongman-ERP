@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-client"
 import { Settings2, Save, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
 import { appAlert } from "@/lib/app-message"
+import { tr } from "@/lib/i18n"
 
 type AdjState = {
   excludeCash: boolean
@@ -210,9 +211,13 @@ export function Pp30SalesAdjustmentPanel({
       })
       const data = await res.json()
       if (!data.success) throw new Error(data.error || "SAVE_FAILED")
-      appAlert("저장 완료")
+      await appAlert(t("accCompPp30AdjSaved"))
     } catch (err) {
-      appAlert(`저장 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}`)
+      await appAlert(
+        tr(t, "accCompPp30AdjSaveFail", {
+          msg: err instanceof Error ? err.message : t("accCompUnknownError"),
+        })
+      )
     } finally {
       setSaving(false)
     }
@@ -222,7 +227,7 @@ export function Pp30SalesAdjustmentPanel({
     if (loading) {
       return (
         <div className="flex items-center gap-2 text-xs text-muted-foreground p-2">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> 채널별 매출 로드 중…
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("accCompPp30AdjLoadingChannels")}
         </div>
       )
     }
@@ -240,12 +245,17 @@ export function Pp30SalesAdjustmentPanel({
   }
 
   const channels: ChannelDef[] = [
-    { key: "excludeCash", ratioKey: "cashRatio", label: "현금", originalAmt: channelData.totals.cash, adjustedAmt: result?.adjusted.cash ?? 0 },
-    { key: "excludeCard", ratioKey: "cardRatio", label: "카드", originalAmt: channelData.totals.card, adjustedAmt: result?.adjusted.card ?? 0 },
-    { key: "excludeQr", ratioKey: "qrRatio", label: "QR", originalAmt: channelData.totals.qr, adjustedAmt: result?.adjusted.qr ?? 0 },
-    { key: "excludeDeliveryApp", ratioKey: "deliveryRatio", label: "배달앱", originalAmt: channelData.totals.deliveryApp, adjustedAmt: result?.adjusted.deliveryApp ?? 0 },
-    { key: "excludeOther", ratioKey: "otherRatio", label: "기타", originalAmt: channelData.totals.other, adjustedAmt: result?.adjusted.other ?? 0 },
+    { key: "excludeCash", ratioKey: "cashRatio", label: t("accCompPp30ChCash"), originalAmt: channelData.totals.cash, adjustedAmt: result?.adjusted.cash ?? 0 },
+    { key: "excludeCard", ratioKey: "cardRatio", label: t("accCompPp30ChCard"), originalAmt: channelData.totals.card, adjustedAmt: result?.adjusted.card ?? 0 },
+    { key: "excludeQr", ratioKey: "qrRatio", label: t("accCompPp30ChQr"), originalAmt: channelData.totals.qr, adjustedAmt: result?.adjusted.qr ?? 0 },
+    { key: "excludeDeliveryApp", ratioKey: "deliveryRatio", label: t("accCompPp30ChDelivery"), originalAmt: channelData.totals.deliveryApp, adjustedAmt: result?.adjusted.deliveryApp ?? 0 },
+    { key: "excludeOther", ratioKey: "otherRatio", label: t("accCompPp30ChOther"), originalAmt: channelData.totals.other, adjustedAmt: result?.adjusted.other ?? 0 },
   ]
+
+  const reductionPct =
+    channelData.totals.total > 0
+      ? Math.round((1 - (result?.adjusted.total ?? 0) / channelData.totals.total) * 100)
+      : 0
 
   return (
     <Card className="border-dashed border-amber-300 bg-amber-50/30">
@@ -255,10 +265,10 @@ export function Pp30SalesAdjustmentPanel({
       >
         <CardTitle className="flex items-center gap-2 text-sm font-medium">
           <Settings2 className="h-4 w-4 text-amber-600" />
-          <span>PP30 매출 조정</span>
+          <span>{t("accCompPp30AdjTitle")}</span>
           {hasAnyAdjustment && (
             <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-              조정 중
+              {t("accCompPp30AdjActiveBadge")}
             </span>
           )}
           <span className="ml-auto text-xs text-muted-foreground">
@@ -267,8 +277,11 @@ export function Pp30SalesAdjustmentPanel({
         </CardTitle>
         {!open && hasAnyAdjustment && result && (
           <div className="text-xs text-amber-700 mt-1">
-            원본 {fmtNum(channelData.totals.total)} → 조정 {fmtNum(result.adjusted.total)}
-            {" "}({channelData.totals.total > 0 ? `-${Math.round((1 - result.adjusted.total / channelData.totals.total) * 100)}%` : ""})
+            {tr(t, "accCompPp30AdjCollapsedSummary", {
+              a: fmtNum(channelData.totals.total),
+              b: fmtNum(result.adjusted.total),
+            })}
+            {channelData.totals.total > 0 ? ` (-${reductionPct}%)` : ""}
           </div>
         )}
       </CardHeader>
@@ -299,7 +312,7 @@ export function Pp30SalesAdjustmentPanel({
                       </span>
                     )}
                     {excluded && (
-                      <span className="text-xs text-red-500 font-medium">제외</span>
+                      <span className="text-xs text-red-500 font-medium">{t("accCompPp30AdjExcluded")}</span>
                     )}
                   </div>
                   {!excluded && ch.originalAmt > 0 && (
@@ -326,26 +339,28 @@ export function Pp30SalesAdjustmentPanel({
           {result && (
             <div className="rounded-md bg-white/70 border p-3 space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">원본 매출 ({channelData.totals.count}건)</span>
+                <span className="text-muted-foreground">
+                  {tr(t, "accCompPp30AdjOriginalSales", { n: String(channelData.totals.count) })}
+                </span>
                 <span className="tabular-nums font-medium">{fmtNum(channelData.totals.total)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-amber-700 font-medium">조정 후 매출 (VAT 포함)</span>
+                <span className="text-amber-700 font-medium">{t("accCompPp30AdjAdjustedGross")}</span>
                 <span className="tabular-nums font-bold text-amber-700">{fmtNum(result.adjusted.total)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">조정 후 공급가액</span>
+                <span className="text-muted-foreground">{t("accCompPp30AdjAdjustedNet")}</span>
                 <span className="tabular-nums">{fmtNum(result.net)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">조정 후 매출세액 (VAT 7%)</span>
+                <span className="text-muted-foreground">{t("accCompPp30AdjAdjustedVat")}</span>
                 <span className="tabular-nums">{fmtNum(result.vat)}</span>
               </div>
               {channelData.totals.total > 0 && hasAnyAdjustment && (
                 <div className="flex justify-between text-xs pt-1 border-t">
-                  <span className="text-muted-foreground">감소율</span>
+                  <span className="text-muted-foreground">{t("accCompPp30AdjReductionRate")}</span>
                   <span className="tabular-nums text-red-600 font-medium">
-                    -{Math.round((1 - result.adjusted.total / channelData.totals.total) * 100)}%
+                    -{reductionPct}%
                   </span>
                 </div>
               )}
@@ -360,18 +375,18 @@ export function Pp30SalesAdjustmentPanel({
                 onClick={() => setShowDaily(!showDaily)}
               >
                 {showDaily ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                일별 배분 ({dailyResults.length}일)
+                {tr(t, "accCompPp30AdjDailyBreakdown", { n: String(dailyResults.length) })}
               </button>
               {showDaily && (
                 <div className="mt-2 max-h-[300px] overflow-y-auto rounded border">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted/80">
                       <tr>
-                        <th className="text-left p-1.5 font-medium">날짜</th>
-                        <th className="text-right p-1.5 font-medium">원본</th>
-                        <th className="text-right p-1.5 font-medium text-amber-700">조정</th>
-                        <th className="text-right p-1.5 font-medium">공급가</th>
-                        <th className="text-right p-1.5 font-medium">VAT</th>
+                        <th className="text-left p-1.5 font-medium">{t("accCompPp30AdjColDate")}</th>
+                        <th className="text-right p-1.5 font-medium">{t("accCompPp30AdjColOriginal")}</th>
+                        <th className="text-right p-1.5 font-medium text-amber-700">{t("accCompPp30AdjColAdjusted")}</th>
+                        <th className="text-right p-1.5 font-medium">{t("accCompPp30AdjColNet")}</th>
+                        <th className="text-right p-1.5 font-medium">{t("accCompPp30AdjColVat")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -399,7 +414,7 @@ export function Pp30SalesAdjustmentPanel({
           <div className="flex justify-end">
             <Button size="sm" onClick={handleSave} disabled={saving}>
               <Save className="h-3.5 w-3.5 mr-1" />
-              {saving ? "저장 중..." : "조정 저장"}
+              {saving ? t("loading") : t("accCompPp30AdjSave")}
             </Button>
           </div>
         </CardContent>

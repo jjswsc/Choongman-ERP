@@ -338,7 +338,7 @@ export function StoreTaxFilingProfilesPanel({
             })}
           </span>
           <Button type="button" size="sm" variant="outline" disabled={listLoading} onClick={() => void loadList()}>
-            {listLoading ? t("loading") : t("refresh")}
+            {listLoading ? t("loading") : t("store_refresh")}
           </Button>
         </div>
 
@@ -356,7 +356,7 @@ export function StoreTaxFilingProfilesPanel({
             </div>
             <div className="max-h-[min(420px,50vh)] overflow-y-auto space-y-0.5 pr-1">
               {filteredStores.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">{t("noData")}</p>
+                <p className="text-xs text-muted-foreground py-4 text-center">{t("emp_result_empty")}</p>
               ) : (
                 filteredStores.map((code) => {
                   const p = profilesByStore[code]
