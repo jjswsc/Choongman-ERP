@@ -224,5 +224,16 @@ export async function qrTableStaffSessionByTable(storeCode: string, tableName: s
   const res = await apiFetch(
     `/api/qr-table/staff/session-by-table?storeCode=${encodeURIComponent(storeCode)}&tableName=${encodeURIComponent(tableName)}`
   )
-  return parseJson<{ success: boolean; session?: QrTableSession | null; message?: string }>(res)
+  return parseJson<{
+    success: boolean
+    session?: QrTableSession | null
+    orderBalance?: {
+      orderId: number | null
+      total: number
+      paymentQr: number
+      balanceDue: number
+      status: string
+    } | null
+    message?: string
+  }>(res)
 }

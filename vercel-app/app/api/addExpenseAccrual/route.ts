@@ -19,6 +19,11 @@ import {
   resolveSaasTenantScope,
   stampSaasTenantId,
 } from '@/lib/saas-tenant-scope'
+import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
+import {
+  invoiceReceivedFromDocumentType,
+  parseExpenseDocumentTypeInput,
+} from '@/lib/expense-document-type'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -203,8 +208,23 @@ export async function POST(request: NextRequest) {
     }
 
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const documentTypeParsed = parseExpenseDocumentTypeInput(
+      (body as { documentType?: unknown; document_type?: unknown }).documentType ??
+        (body as { documentType?: unknown; document_type?: unknown }).document_type
+    )
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
     const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
+
+    let documentNo: string | null = null
+    try {
+      documentNo = await allocateExpenseDocumentNo(expenseDate)
+    } catch (docErr) {
+      console.error('addExpenseAccrual document_no:', docErr)
+      return NextResponse.json(
+        { success: false, message: '문서번호 발급에 실패했습니다. expense_document_no SQL을 확인해 주세요.' },
+        { status: 500, headers }
+      )
+    }
 
     const accrualRow = stampSaasTenantId<Record<string, unknown>>({
       payee_code: encodedPayeeCode,
@@ -218,9 +238,19 @@ export async function POST(request: NextRequest) {
       store_name: storeName || null,
       created_by: userName || null,
       status: 'planned',
+      document_no: documentNo,
       ...(attachmentUrlsJson ? { attachment_urls: attachmentUrlsJson } : {}),
     }, tenantScope, 'expense_accruals')
-    if (typeof invoiceReceived === 'boolean') accrualRow.invoice_received = invoiceReceived
+    if (documentTypeParsed !== undefined) {
+      accrualRow.document_type = documentTypeParsed
+      accrualRow.invoice_received =
+        typeof invoiceReceived === 'boolean'
+          ? invoiceReceived
+          : invoiceReceivedFromDocumentType(documentTypeParsed)
+    } else if (typeof invoiceReceived === 'boolean') {
+      accrualRow.invoice_received = invoiceReceived
+      if (invoiceReceived) accrualRow.document_type = 'tax_invoice'
+    }
     if (invoiceNoRaw !== undefined) accrualRow.invoice_no = String(invoiceNoRaw || '').trim() || null
     if (invoicePhotoRaw !== undefined) {
       const photo = String(invoicePhotoRaw || '').trim()
@@ -313,6 +343,7 @@ export async function POST(request: NextRequest) {
           ? '전도금 보충 청구가 지급예정에 등록되었습니다. 승인 후 통장 거래와 연동하세요.'
           : '지출 발생이 등록되었습니다.',
         id: expenseAccrualId,
+        documentNo,
       },
       { headers }
     )

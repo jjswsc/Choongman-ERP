@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       order: 'trans_date.desc,id.desc',
       limit: 20000,
       select:
-        'id,card_account_id,trans_date,trans_type,amount,memo,bank_transaction_id,vendor_code,account_subject_id,note,is_bill_header,parent_id',
+        'id,card_account_id,trans_date,trans_type,amount,memo,bank_transaction_id,vendor_code,account_subject_id,note,is_bill_header,parent_id,document_no',
     })) as {
       id?: number
       card_account_id?: number
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       note?: string
       is_bill_header?: boolean
       parent_id?: number | null
+      document_no?: string | null
     }[]
 
     const childSumByParent = new Map<number, number>()
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest) {
         vendorCode: (r.vendor_code || '').toString().trim() || null,
         accountSubjectId: r.account_subject_id ?? null,
         note: (r.note || '').toString().trim() || null,
+        documentNo: String(r.document_no || '').trim() || null,
         isBillHeader,
         parentId: r.parent_id != null ? Number(r.parent_id) : null,
         allocatedAmount,

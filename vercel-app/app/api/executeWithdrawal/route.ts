@@ -11,6 +11,11 @@ import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
 
 import { INTERNAL_BANK_SOURCE_MARKER, bankCategoryForWithdrawalCategory } from '@/lib/bank-transaction-note-meta'
+import { allocateExpenseDocumentNo, resolveDocumentNoForAccrualId } from '@/lib/expense-document-no-server'
+import {
+  invoiceReceivedFromDocumentType,
+  parseExpenseDocumentTypeInput,
+} from '@/lib/expense-document-type'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -112,6 +117,22 @@ export async function POST(request: NextRequest) {
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const documentTypeParsed = parseExpenseDocumentTypeInput(
+      (body as { documentType?: unknown; document_type?: unknown }).documentType ??
+        (body as { documentType?: unknown; document_type?: unknown }).document_type
+    )
+    const resolvedInvoiceReceived =
+      typeof invoiceReceived === 'boolean'
+        ? invoiceReceived
+        : documentTypeParsed !== undefined
+          ? invoiceReceivedFromDocumentType(documentTypeParsed)
+          : undefined
+    const resolvedDocumentType =
+      documentTypeParsed !== undefined
+        ? documentTypeParsed
+        : resolvedInvoiceReceived === true
+          ? 'tax_invoice'
+          : undefined
     const invoiceNo = String(body.invoiceNo || body.invoice_no || '').trim()
     const invoicePhotoUrl = String(body.invoicePhotoUrl || body.invoice_photo_url || '').trim()
     const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
@@ -210,6 +231,32 @@ export async function POST(request: NextRequest) {
     let pettyCashTransactionId: number | null = null
     let fixedAssetId: number | null = null
 
+    const expenseAccrualIdRaw = Number(body.expenseAccrualId || body.expense_accrual_id || 0)
+    const needsExpenseDocumentNo = [
+      'expense',
+      'expense_advance',
+      'purchase_payment',
+      'purchase_advance',
+      'fixed_asset',
+    ].includes(category)
+    let documentNo: string | null = null
+    if (needsExpenseDocumentNo) {
+      if (expenseAccrualIdRaw > 0) {
+        documentNo = await resolveDocumentNoForAccrualId(expenseAccrualIdRaw)
+      }
+      if (!documentNo) {
+        try {
+          documentNo = await allocateExpenseDocumentNo(transDate)
+        } catch (docErr) {
+          console.error('executeWithdrawal document_no:', docErr)
+          return NextResponse.json(
+            { success: false, message: '문서번호 발급에 실패했습니다. expense_document_no SQL을 확인해 주세요.' },
+            { status: 500, headers }
+          )
+        }
+      }
+    }
+
     if (paymentMethod === 'bank') {
       const accountId = Number(body.accountId || body.account_id || 0)
       if (!accountId) {
@@ -233,7 +280,8 @@ export async function POST(request: NextRequest) {
       }
       if (vendorCode) row.vendor_code = vendorCode
       if (accountSubjectId != null) row.account_subject_id = Number(accountSubjectId)
-      if (typeof invoiceReceived === 'boolean') row.invoice_received = invoiceReceived
+      if (typeof resolvedInvoiceReceived === 'boolean') row.invoice_received = resolvedInvoiceReceived
+      if (resolvedDocumentType !== undefined) row.document_type = resolvedDocumentType
       if (invoiceNo) row.invoice_no = invoiceNo
       if (invoicePhotoUrl) row.invoice_photo_url = invoicePhotoUrl
       if (vatAmount > 0) row.vat_amount = vatAmount
@@ -241,6 +289,7 @@ export async function POST(request: NextRequest) {
       const withholdingTaxRate = Math.max(0, Number(body.withholdingTaxRate ?? body.withholding_tax_rate ?? 0) || 0)
       if (withholdingTaxRate > 0) row.withholding_tax_rate = withholdingTaxRate
       if (attachmentUrlsJson) row.attachment_urls = attachmentUrlsJson
+      if (documentNo) row.document_no = documentNo
       if (category === 'transfer_external') {
         const extMemo = [memo, `받는사람: ${transferBankRecipientName}`, `계좌: ${transferBankAccountNo}`].filter(Boolean).join(' / ')
         row.memo = extMemo
@@ -303,11 +352,12 @@ export async function POST(request: NextRequest) {
       }
       if (accountSubjectId != null) row.account_subject_id = Number(accountSubjectId)
       if (vendorCode) row.vendor_code = vendorCode
-      if (typeof invoiceReceived === 'boolean') row.invoice_received = invoiceReceived
+      if (typeof resolvedInvoiceReceived === 'boolean') row.invoice_received = resolvedInvoiceReceived
       if (invoiceNo) row.invoice_no = invoiceNo
       if (invoicePhotoUrl) row.invoice_photo_url = invoicePhotoUrl
       if (vatAmount > 0) row.vat_amount = vatAmount
       if (withholdingTaxAmount > 0) row.withholding_tax_amount = withholdingTaxAmount
+      if (documentNo) row.document_no = documentNo
 
       const inserted = await insertPettyTransactionWithIdentityFallback(row)
       pettyCashTransactionId = Number(inserted?.[0]?.id || 0) || null
@@ -431,6 +481,7 @@ export async function POST(request: NextRequest) {
       bankTransactionId: bankTransactionId ?? undefined,
       pettyCashTransactionId: pettyCashTransactionId ?? undefined,
       fixedAssetId: fixedAssetId ?? undefined,
+      documentNo: documentNo ?? undefined,
     }, { headers })
   } catch (e) {
     console.error('executeWithdrawal:', e)

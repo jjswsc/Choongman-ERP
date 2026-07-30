@@ -24,6 +24,7 @@ import {
   bankCategoryForWithdrawalCategory,
   composeBankNoteForExpenseAccrualLink,
 } from '@/lib/bank-transaction-note-meta'
+import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -83,6 +84,8 @@ type ExpenseAccrualRow = {
   invoice_received?: boolean | null
   invoice_no?: string | null
   invoice_photo_url?: string | null
+  document_no?: string | null
+  document_type?: string | null
 }
 
 type PayableTxRow = {
@@ -134,10 +137,12 @@ function invoiceFieldsFromAccrual(
 ): Record<string, unknown> {
   const vat = Math.max(0, Math.abs(Number(source.vat_amount ?? 0) || 0))
   const payeeCode = String(source.payee_code || '').split('::wm::')[0]?.trim()
+  const documentType = String(source.document_type || '').trim() || null
   return {
     invoice_received: Boolean(source.invoice_received),
     invoice_no: String(source.invoice_no || '').trim() || null,
     invoice_photo_url: String(source.invoice_photo_url || '').trim() || null,
+    ...(documentType ? { document_type: documentType } : {}),
     ...(options?.includeVatAmount && vat > 0 ? { vat_amount: vat } : {}),
     ...(payeeCode && !payeeCode.startsWith('auto_') ? { vendor_code: payeeCode } : {}),
   }
@@ -186,12 +191,21 @@ export async function POST(request: NextRequest) {
     }
 
     const accrual = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,payee_code,payee_name,amount,withholding_tax_amount,vat_amount,expense_date,due_date,memo,store_name,account_subject_id,status,invoice_received,invoice_no,invoice_photo_url',
+      select: 'id,payee_code,payee_name,amount,withholding_tax_amount,vat_amount,expense_date,due_date,memo,store_name,account_subject_id,status,invoice_received,invoice_no,invoice_photo_url,document_no,document_type',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const source = accrual?.[0]
     if (!source?.id) {
       return NextResponse.json({ success: false, message: '지출 발생 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
+    }
+    let documentNo = String(source.document_no || '').trim() || null
+    if (!documentNo) {
+      try {
+        documentNo = await allocateExpenseDocumentNo(source.expense_date || transDate)
+        await supabaseUpdate('expense_accruals', expenseAccrualId, { document_no: documentNo })
+      } catch (docErr) {
+        console.error('executeExpensePayment document_no:', docErr)
+      }
     }
     const accrualStatus = String(source.status || '').toLowerCase()
     if (accrualStatus === 'rejected') {
@@ -351,6 +365,7 @@ export async function POST(request: NextRequest) {
             user_employee_code: userEmployeeCode,
             category: bankCategory,
             expense_date: transDate,
+            ...(documentNo ? { document_no: documentNo } : {}),
           })) as { id?: number }[]
           bankId = Number(inserted?.[0]?.id || 0) || null
           if (!bankId) {
@@ -422,6 +437,7 @@ export async function POST(request: NextRequest) {
             category: bankCategory,
             store: store || source.store_name || null,
             expense_date: transDate,
+            ...(documentNo ? { document_no: documentNo } : {}),
           })
         } else {
           const accountId = Number(body.accountId || body.account_id || 0)
@@ -441,6 +457,7 @@ export async function POST(request: NextRequest) {
             user_employee_code: userEmployeeCode,
             category: bankCategory,
             expense_date: transDate,
+            ...(documentNo ? { document_no: documentNo } : {}),
           })) as { id?: number }[]
           bankId = Number(inserted?.[0]?.id || 0) || null
           if (!bankId) {
@@ -517,6 +534,7 @@ export async function POST(request: NextRequest) {
           user_employee_id: userEmployeeId,
           user_employee_code: userEmployeeCode,
           ...invoiceFieldsFromAccrual(source),
+          ...(documentNo ? { document_no: documentNo } : {}),
         })
         if (!isPrepay) {
           try {
@@ -554,6 +572,7 @@ export async function POST(request: NextRequest) {
           expense_date: transDate,
           account_subject_id: accrualAccountSubjectId,
           ...invoiceFieldsFromAccrual(source),
+          ...(documentNo ? { document_no: documentNo } : {}),
         })) as { id?: number }[]
         bankId = Number(inserted?.[0]?.id || 0) || null
         if (!isPrepay) {
@@ -588,6 +607,7 @@ export async function POST(request: NextRequest) {
         user_employee_code: userEmployeeCode,
         account_subject_id: accrualAccountSubjectId,
         ...invoiceFieldsFromAccrual(source, { includeVatAmount: true }),
+        ...(documentNo ? { document_no: documentNo } : {}),
       })) as { id?: number }[]
       pettyId = Number(inserted?.[0]?.id || 0) || null
       if (!isPrepay) {

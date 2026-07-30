@@ -20,6 +20,16 @@ import {
 import type { QrBuffetTier, QrTableSession } from '@/lib/qr-table-types'
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
 import { appAlert } from '@/lib/app-message'
+import { useLang } from '@/lib/lang-context'
+import { useT, tOr } from '@/lib/i18n'
+
+type OrderBalance = {
+  orderId: number | null
+  total: number
+  paymentQr: number
+  balanceDue: number
+  status: string
+}
 
 export function QrTableSessionPanel(props: {
   storeCode: string
@@ -27,9 +37,13 @@ export function QrTableSessionPanel(props: {
   onChanged?: () => void
 }) {
   const { storeCode, tableName, onChanged } = props
+  const { lang } = useLang()
+  const t = useT(lang)
+  const tr = React.useCallback((k: string, fb: string) => tOr(t, k, fb), [t])
   const [enabled, setEnabled] = React.useState(false)
   const [ready, setReady] = React.useState(false)
   const [session, setSession] = React.useState<QrTableSession | null>(null)
+  const [orderBalance, setOrderBalance] = React.useState<OrderBalance | null>(null)
   const [tiers, setTiers] = React.useState<QrBuffetTier[]>([])
   const [guestCount, setGuestCount] = React.useState(2)
   const [tierId, setTierId] = React.useState('')
@@ -43,15 +57,18 @@ export function QrTableSessionPanel(props: {
       setEnabled(on)
       if (!on) {
         setSession(null)
+        setOrderBalance(null)
         setTiers([])
         return
       }
       const sessRes = await qrTableStaffSessionByTable(storeCode, tableName)
       setSession(sessRes.session || null)
-      setTiers((adminRes.tiers || []).filter((t) => t.active))
+      setOrderBalance(sessRes.orderBalance || null)
+      setTiers((adminRes.tiers || []).filter((x) => x.active))
     } catch {
       setEnabled(false)
       setSession(null)
+      setOrderBalance(null)
     } finally {
       setReady(true)
     }
@@ -77,6 +94,7 @@ export function QrTableSessionPanel(props: {
         return
       }
       setSession(res.session || null)
+      await reload()
       onChanged?.()
     } finally {
       setBusy(false)
@@ -93,6 +111,7 @@ export function QrTableSessionPanel(props: {
         return
       }
       setSession(res.session || null)
+      await reload()
       onChanged?.()
     } finally {
       setBusy(false)
@@ -105,42 +124,69 @@ export function QrTableSessionPanel(props: {
     !session
       ? null
       : session.status === 'active' && session.entryPaid
-        ? { label: 'QR 주문중', className: 'bg-emerald-100 text-emerald-800' }
+        ? { label: tr('qrTableSessionOrdering', 'QR 주문중'), className: 'bg-emerald-100 text-emerald-800' }
         : session.entryPaymentModeResolved === 'prepay' && !session.entryPaid
-          ? { label: '입장 선결제 대기', className: 'bg-amber-100 text-amber-900' }
-          : { label: '입장 후불 확정 필요', className: 'bg-orange-100 text-orange-900' }
+          ? {
+              label: tr('qrTableSessionAwaitPrepay', '입장 선결제 대기'),
+              className: 'bg-amber-100 text-amber-900',
+            }
+          : {
+              label: tr('qrTableSessionAwaitConfirm', '입장 후불 확정 필요'),
+              className: 'bg-orange-100 text-orange-900',
+            }
 
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">QR 테이블오더</p>
+        <p className="text-sm font-semibold">{tr('qrTableSessionTitle', 'QR 테이블오더')}</p>
         {badge ? (
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-            {badge.label}
-          </span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
         ) : null}
       </div>
 
       {session ? (
         <div className="space-y-2 text-sm">
           <p>
-            인원 {session.guestCount} · 입장 ฿{session.entryTotal.toLocaleString()} ·{' '}
-            {session.entryPaid ? '입장확정' : '미확정'}
+            {tr('qrTableSessionGuests', '인원')} {session.guestCount} · ฿{session.entryTotal.toLocaleString()} ·{' '}
+            {session.entryPaid
+              ? tr('qrTableSessionEntryConfirmed', '입장확정')
+              : tr('qrTableSessionEntryPending', '미확정')}
           </p>
+          {orderBalance && orderBalance.orderId ? (
+            <div className="rounded-md border border-amber-200/80 bg-white/70 px-2.5 py-2 text-xs space-y-0.5">
+              <p>
+                {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
+                {Number(orderBalance.total || 0).toLocaleString()}
+              </p>
+              <p>
+                {tr('qrTableSessionPaidQr', 'QR 입금')} ฿
+                {Number(orderBalance.paymentQr || 0).toLocaleString()}
+              </p>
+              <p className="font-semibold text-amber-950">
+                {tr('qrTableSessionBalanceDue', '잔액')} ฿
+                {Number(orderBalance.balanceDue || 0).toLocaleString()}
+              </p>
+            </div>
+          ) : null}
           {session.status === 'awaiting_entry' && !session.entryPaid ? (
             <Button size="sm" disabled={busy} onClick={() => void confirmEntry()}>
-              입장 후불 확정 (메뉴 오픈)
+              {tr('qrTableSessionConfirmEntry', '입장 후불 확정 (메뉴 오픈)')}
             </Button>
           ) : null}
           {session.posOrderId ? (
-            <p className="text-xs text-muted-foreground">주문 #{session.posOrderId}</p>
+            <p className="text-xs text-muted-foreground">
+              {tr('qrTableSessionOrderNo', '주문 #{id}').replace('{id}', String(session.posOrderId))}
+            </p>
           ) : null}
+          <p className="text-[11px] text-muted-foreground">
+            {tr('qrTableSessionCloseHint', 'POS에서 결제·취소하면 QR 세션이 자동 종료됩니다.')}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs">인원</Label>
+              <Label className="text-xs">{tr('qrTableSessionGuests', '인원')}</Label>
               <Input
                 type="number"
                 min={1}
@@ -150,15 +196,15 @@ export function QrTableSessionPanel(props: {
               />
             </div>
             <div>
-              <Label className="text-xs">티어</Label>
+              <Label className="text-xs">{tr('qrTableSessionTier', '티어')}</Label>
               <Select value={tierId} onValueChange={setTierId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="선택" />
+                  <SelectValue placeholder={tr('qrTableSessionSelectTier', '선택')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {tiers.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {buffetTierDisplayName(t)} (฿{t.pricePerPerson})
+                  {tiers.map((tier) => (
+                    <SelectItem key={tier.id} value={String(tier.id)}>
+                      {buffetTierDisplayName(tier, lang)} (฿{tier.pricePerPerson})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -166,7 +212,7 @@ export function QrTableSessionPanel(props: {
             </div>
           </div>
           <Button size="sm" disabled={busy || !tierId} onClick={() => void openSession()}>
-            QR 세션 오픈
+            {tr('qrTableSessionOpen', 'QR 세션 오픈')}
           </Button>
         </div>
       )}

@@ -39,6 +39,8 @@ export interface ExpenseAccrualPlanItem {
   rejectedAt?: string | null
   rejectionNote?: string | null
   storeName?: string
+  /** FlowAccount식 EXPyyyymmNNNN */
+  documentNo?: string | null
   /** getApprovedExpenseAccrualsForBankTx: 통장 적요 vs 지급처(느슨) */
   payeeMemoMatchQuality?: PayeeMemoMatchQuality
   payeeMemoMatchDetail?: string
@@ -124,6 +126,8 @@ export async function addExpenseAccrual(params: {
   attachmentUrls?: string[]
   /** 세금계산서(텍스 인보이스) 수령 여부 */
   invoiceReceived?: boolean
+  /** Invoice | Tax Invoice | Receipt — Tax Invoice만 PP.30 */
+  documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
 }) {
@@ -132,7 +136,7 @@ export async function addExpenseAccrual(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; id?: number }>
+  return res.json() as Promise<{ success: boolean; message?: string; id?: number; documentNo?: string }>
 }
 
 export async function updateExpenseRegisterItem(params: {
@@ -147,6 +151,7 @@ export async function updateExpenseRegisterItem(params: {
   vendorCode?: string
   accountSubjectId?: number | null
   invoiceReceived?: boolean
+  documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
   userRole?: string
@@ -204,6 +209,7 @@ export async function updateExpenseAccrual(params: {
   userRole?: string
   attachmentUrls?: string[]
   invoiceReceived?: boolean
+  documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
 }) {
@@ -230,6 +236,7 @@ export async function deleteExpenseAccrual(params: {
 export async function updateExpenseAccrualInvoice(params: {
   expenseAccrualId: number
   invoiceReceived?: boolean
+  documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
 }) {
@@ -380,6 +387,7 @@ export interface CardTransaction {
   allocatedAmount?: number
   remainingAmount?: number
   allocationComplete?: boolean
+  documentNo?: string | null
 }
 
 export async function getCardAccounts() {
@@ -426,7 +434,7 @@ export async function saveCardTransaction(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string; documentNo?: string }>
 }
 
 export async function deleteCardAccount(params: { id: number }) {
@@ -669,6 +677,7 @@ export async function executeWithdrawal(params: {
   usefulLifeMonths?: number
   residualRate?: number
   invoiceReceived?: boolean
+  documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
   vatAmount?: number

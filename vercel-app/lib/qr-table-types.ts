@@ -15,6 +15,11 @@ export type QrOrderStoreSettings = {
   requireStaffOpen: boolean
   maxOpenMinutes: number
   allowReorderAfterPaid: boolean
+  /** Guest-facing print card */
+  printLogoUrl?: string
+  printBrandColor?: string
+  printAccentColor?: string
+  printBrandLine?: string
 }
 
 export type QrBuffetTier = {
@@ -99,5 +104,9 @@ export function defaultQrOrderStoreSettings(storeCode: string): QrOrderStoreSett
     requireStaffOpen: true,
     maxOpenMinutes: 240,
     allowReorderAfterPaid: false,
+    printLogoUrl: '',
+    printBrandColor: '#b45309',
+    printAccentColor: '#faf7f2',
+    printBrandLine: '',
   }
 }

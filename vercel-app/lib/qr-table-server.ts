@@ -49,6 +49,10 @@ type DbSettings = {
   require_staff_open?: boolean
   max_open_minutes?: number
   allow_reorder_after_paid?: boolean
+  print_logo_url?: string | null
+  print_brand_color?: string | null
+  print_accent_color?: string | null
+  print_brand_line?: string | null
 }
 
 type DbTier = {
@@ -106,9 +110,11 @@ type DbMenu = {
   category?: string
   category_main?: string
   price?: number | string
+  image?: string | null
   image_url?: string | null
   is_active?: boolean
   sell_hall?: boolean
+  sold_out_date?: string | null
   description_default?: string | null
   description_table?: string | null
   kitchen_printer?: number | null
@@ -133,6 +139,10 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
     requireStaffOpen: row.require_staff_open !== false,
     maxOpenMinutes: Math.max(30, Math.floor(asNum(row.max_open_minutes) || 240)),
     allowReorderAfterPaid: Boolean(row.allow_reorder_after_paid),
+    printLogoUrl: String(row.print_logo_url || '').trim(),
+    printBrandColor: String(row.print_brand_color || '').trim() || '#b45309',
+    printAccentColor: String(row.print_accent_color || '').trim() || '#faf7f2',
+    printBrandLine: String(row.print_brand_line || '').trim(),
   }
 }
 
@@ -266,6 +276,10 @@ export async function upsertQrOrderStoreSettings(
         require_staff_open: Boolean(settings.requireStaffOpen),
         max_open_minutes: Math.max(30, Math.floor(settings.maxOpenMinutes || 240)),
         allow_reorder_after_paid: Boolean(settings.allowReorderAfterPaid),
+        print_logo_url: String(settings.printLogoUrl || '').trim() || null,
+        print_brand_color: String(settings.printBrandColor || '').trim() || null,
+        print_accent_color: String(settings.printAccentColor || '').trim() || null,
+        print_brand_line: String(settings.printBrandLine || '').trim() || null,
         updated_at: now,
       },
     ],
@@ -888,6 +902,16 @@ export async function pollEntryPayStatus(sessionId: number): Promise<{
   return { entryPaid: false, status: session.status }
 }
 
+function menuImageUrl(m: DbMenu): string {
+  return String(m.image || m.image_url || '').trim()
+}
+
+function isMenuSoldOutToday(soldOutDate: string | null | undefined): boolean {
+  const d = String(soldOutDate || '').trim().slice(0, 10)
+  if (!d) return false
+  return d === getBangkokTodayDateString()
+}
+
 export async function loadQrMenusForSession(session: QrTableSession) {
   if (!session.entryPaid && session.status !== 'active') {
     throw new Error('entry_not_ready')
@@ -902,6 +926,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   for (const m of menus) {
     const id = Number(m.id || 0)
     if (!id) continue
+    const soldOut = isMenuSoldOutToday(m.sold_out_date)
     const item = {
       id: String(id),
       menuId: id,
@@ -911,7 +936,8 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       categoryMain: String(m.category_main || ''),
       price: included.has(id) ? 0 : asNum(m.price),
       listPrice: asNum(m.price),
-      imageUrl: String(m.image_url || ''),
+      imageUrl: menuImageUrl(m),
+      soldOut,
       buffetIncluded: included.has(id),
       description: resolvePosMenuDescriptionForChannel(
         {
@@ -926,6 +952,40 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     else extraMenus.push(item)
   }
   return { includedMenus, extraMenus }
+}
+
+/** POS 결제·취소·환불 시 연결된 QR 세션을 closed 로 전환 (Realtime 영수증과 무관). */
+export async function closeQrTableSessionsForPosOrder(params: {
+  orderId: number
+  reason?: string
+}): Promise<number> {
+  const orderId = Math.trunc(Number(params.orderId || 0))
+  if (!orderId) return 0
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_qr_table_sessions',
+      `pos_order_id=eq.${orderId}&status=in.(awaiting_entry,active)`,
+      { limit: 50, select: 'id' }
+    )) as Array<{ id?: number }>
+    const ids = (rows || []).map((r) => Number(r.id || 0)).filter(Boolean)
+    if (!ids.length) return 0
+    const now = getBangkokDateTimeString()
+    for (const id of ids) {
+      await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${id}`, {
+        status: 'closed',
+        closed_at: now,
+        updated_at: now,
+      })
+    }
+    void params.reason
+    return ids.length
+  } catch (e) {
+    // Schema not deployed yet — ignore
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/pgrst205|schema_missing|pos_qr_table_sessions|could not find the table/i.test(msg)) return 0
+    console.error('closeQrTableSessionsForPosOrder:', e)
+    return 0
+  }
 }
 
 export async function submitQrCart(params: {
@@ -974,6 +1034,7 @@ export async function submitQrCart(params: {
     if (!menuId || !qty) continue
     const menu = byId.get(menuId)
     if (!menu) throw new Error(`menu_not_found:${menuId}`)
+    if (isMenuSoldOutToday(menu.sold_out_date)) throw new Error(`menu_sold_out:${menuId}`)
     const isIncluded = included.has(menuId)
     const unitPrice = isIncluded ? 0 : asNum(menu.price)
     if (!isIncluded) extrasSubtotal += unitPrice * qty

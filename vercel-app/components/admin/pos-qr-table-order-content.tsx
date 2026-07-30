@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,10 +29,24 @@ import { appAlert } from '@/lib/app-message'
 import { hrefToHelpSummaryKey } from '@/lib/admin-help-registry'
 import { useAppBrandConfig } from '@/components/app-brand-provider'
 
+function isSchemaMissingError(msg: string): boolean {
+  const m = String(msg || '').toLowerCase()
+  return (
+    m === 'schema_missing' ||
+    m.includes('pgrst205') ||
+    m.includes('pos_table_qr_tokens') ||
+    m.includes('pos_qr_order_store_settings') ||
+    m.includes('pos_buffet_tiers') ||
+    m.includes('print_logo_url') ||
+    m.includes('could not find the table') ||
+    (m.includes('could not find the') && m.includes('column'))
+  )
+}
+
 export function PosQrTableOrderContent() {
   const { lang } = useLang()
   const t = useT(lang)
-  const tr = (k: string, fb: string) => tOr(t, k, fb)
+  const tr = React.useCallback((k: string, fb: string) => tOr(t, k, fb), [t])
   const { posStoreOptions } = useStoreList()
   const brand = useAppBrandConfig()
   const [storeCode, setStoreCode] = React.useState('')
@@ -56,17 +71,24 @@ export function PosQrTableOrderContent() {
     if (!storeCode && posStoreOptions?.length) setStoreCode(posStoreOptions[0].code)
   }, [posStoreOptions, storeCode])
 
+  const alertApiError = React.useCallback(
+    async (raw: string) => {
+      if (isSchemaMissingError(raw)) {
+        await appAlert(tr('qrTableSchemaMissing', 'DB 테이블이 아직 없습니다. SQL을 먼저 실행해 주세요.'))
+        return
+      }
+      await appAlert(raw || 'error')
+    },
+    [tr]
+  )
+
   const reload = React.useCallback(async () => {
     if (!storeCode) return
     setLoading(true)
     try {
       const data = await qrTableAdminGet(storeCode)
-      if (!data.success) {
-        const msg =
-          data.message === 'qr_table_schema_missing'
-            ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
-            : data.message || tr('load_failed', '불러오기에 실패했습니다.')
-        await appAlert(msg)
+      if (!data.success && data.message) {
+        await alertApiError(data.message)
         return
       }
       if (data.settings) setSettings(data.settings)
@@ -82,24 +104,20 @@ export function PosQrTableOrderContent() {
         }))
       )
     } catch (e) {
-      await appAlert(e instanceof Error ? e.message : tr('load_failed', '불러오기에 실패했습니다.'))
+      await alertApiError(e instanceof Error ? e.message : 'load_failed')
     } finally {
       setLoading(false)
     }
-  }, [storeCode])
+  }, [storeCode, alertApiError])
 
   React.useEffect(() => {
     void reload()
-  }, [reload])
+  }, [storeCode]) // eslint-disable-line react-hooks/exhaustive-deps -- storeCode only; avoid reload identity loops
 
   async function saveSettings() {
     const res = await qrTableAdminSaveSettings({ ...settings, storeCode })
     if (!res.success) {
-      const msg =
-        res.message === 'qr_table_schema_missing'
-          ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
-          : res.message || tr('save_failed', '저장에 실패했습니다.')
-      await appAlert(msg)
+      await alertApiError(res.message || 'save_failed')
       return
     }
     if (res.settings) setSettings(res.settings)
@@ -121,11 +139,7 @@ export function PosQrTableOrderContent() {
       includedMenuIds: tierForm.includedMenuIds,
     })
     if (!res.success) {
-      const msg =
-        res.message === 'qr_table_schema_missing'
-          ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
-          : res.message || tr('tier_save_failed', '티어 저장에 실패했습니다.')
-      await appAlert(msg)
+      await alertApiError(res.message || 'tier_save_failed')
       return
     }
     setTierForm({
@@ -153,17 +167,13 @@ export function PosQrTableOrderContent() {
       }
       const res = await qrTableAdminAction({ action: 'generateTokens', storeCode, tableNames })
       if (!res.success) {
-        const msg =
-          res.message === 'qr_table_schema_missing'
-            ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
-            : res.message || tr('token_failed', 'QR 생성에 실패했습니다.')
-        await appAlert(msg)
+        await alertApiError(res.message || 'token_failed')
         return
       }
       setTokens(res.tokens || [])
       await appAlert(tr('qrTableTokensReady', 'QR 토큰을 생성했습니다.'))
     } catch (e) {
-      await appAlert(e instanceof Error ? e.message : 'token_failed')
+      await alertApiError(e instanceof Error ? e.message : 'token_failed')
     }
   }
 
@@ -177,226 +187,329 @@ export function PosQrTableOrderContent() {
     })
   }
 
+  const menusCountLabel = (n: number) =>
+    tr('qrTableTierMenusCount', '포함 메뉴 {n}개').replace('{n}', String(n))
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-4 md:p-6">
-      <div>
-        <h1 className="text-xl font-semibold">{tr('adminPosQrTableOrder', 'QR 테이블오더')}</h1>
-        <p className="text-sm text-muted-foreground">
-          {tr('adminPosQrTableOrderDesc', '매장별 QR 오더 ON/OFF, 결제 모드, 티어·포함 메뉴, 테이블 QR을 관리합니다.')}
-        </p>
-      </div>
-      <HelpSumHowBlocks helpSumKey={hrefToHelpSummaryKey('/admin/pos-qr-table-order')} />
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px]">
-          <Label>{tr('store', '매장')}</Label>
-          <Select value={storeCode} onValueChange={setStoreCode}>
-            <SelectTrigger>
-              <SelectValue placeholder="Store" />
-            </SelectTrigger>
-            <SelectContent>
-              {(posStoreOptions || []).map((s) => (
-                <SelectItem key={s.code} value={s.code}>
-                  {s.label || s.code}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="outline" onClick={() => void reload()} disabled={loading}>
-          {tr('refresh', '새로고침')}
-        </Button>
-      </div>
-
-      <section className="rounded-lg border bg-card p-4 space-y-4">
-        <h2 className="font-medium">{tr('qrTableSettings', '매장 설정')}</h2>
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>{tr('qrTableEnabled', 'QR 테이블오더 사용')}</span>
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={(e) => setSettings((s) => ({ ...s, enabled: e.target.checked }))}
-          />
-        </label>
-        <div className="grid gap-3 md:grid-cols-2">
+    <div className="flex-1 overflow-auto">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <QrCode className="h-5 w-5 text-primary" aria-hidden />
+          </div>
           <div>
-            <Label>{tr('qrTableMode', '모드')}</Label>
-            <Select value={settings.mode} onValueChange={(v) => setSettings((s) => ({ ...s, mode: v as QrOrderStoreSettings['mode'] }))}>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              {tr('adminPosQrTableOrder', 'QR 테이블오더')}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {tr(
+                'adminPosQrTableOrderDesc',
+                '매장별 QR 오더 ON/OFF, 결제 모드, 가격 티어·포함 메뉴, 테이블 QR 인쇄를 관리합니다.'
+              )}
+            </p>
+          </div>
+        </div>
+
+        <HelpSumHowBlocks helpSumKey={hrefToHelpSummaryKey('/admin/pos-qr-table-order')} />
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px] flex-1 sm:flex-none">
+            <Label>{tr('store', '매장')}</Label>
+            <Select value={storeCode} onValueChange={setStoreCode}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={tr('qrTableSelectStore', '매장 선택')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="buffet">{tr('qrTableMode_buffet', '티어')}</SelectItem>
-                <SelectItem value="a_la_carte">{tr('qrTableMode_alacarte', '일반')}</SelectItem>
-                <SelectItem value="both">{tr('qrTableMode_both', '티어 + 일반')}</SelectItem>
+                {(posStoreOptions || []).map((s) => (
+                  <SelectItem key={s.code} value={s.code}>
+                    {s.label || s.code}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          <label className="flex items-center justify-between gap-3 pt-6 text-sm">
-            <span>{tr('qrTableRequireStaffOpen', '직원 세션 오픈 필수')}</span>
-            <input
-              type="checkbox"
-              checked={settings.requireStaffOpen}
-              onChange={(e) => setSettings((s) => ({ ...s, requireStaffOpen: e.target.checked }))}
-            />
-          </label>
-          <div>
-            <Label>{tr('qrTableEntryPay', '입장가 결제')}</Label>
-            <Select
-              value={settings.entryPaymentMode}
-              onValueChange={(v) => setSettings((s) => ({ ...s, entryPaymentMode: v as QrOrderStoreSettings['entryPaymentMode'] }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="postpay">{tr('qrPayMode_postpay', '후불')}</SelectItem>
-                <SelectItem value="prepay">{tr('qrPayMode_prepay', '선결제')}</SelectItem>
-                <SelectItem value="guest_choice">{tr('qrPayMode_guestChoice', '손님 선택')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>{tr('qrTableExtrasPay', '별도메뉴 결제')}</Label>
-            <Select
-              value={settings.extrasPaymentMode}
-              onValueChange={(v) => setSettings((s) => ({ ...s, extrasPaymentMode: v as QrOrderStoreSettings['extrasPaymentMode'] }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="postpay">{tr('qrPayMode_postpay', '후불')}</SelectItem>
-                <SelectItem value="prepay">{tr('qrPayMode_prepay', '선결제')}</SelectItem>
-                <SelectItem value="guest_choice">{tr('qrPayMode_guestChoice', '손님 선택')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
-      </section>
-
-      <section className="rounded-lg border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="font-medium">{tr('qrTableTiers', '티어')}</h2>
-        </div>
-        <ul className="space-y-2 text-sm">
-          {tiers.map((tier) => (
-            <li key={tier.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
-              <span>
-                {tier.code} · {tier.nameEn || tier.nameTh || tier.nameKo} · ฿{tier.pricePerPerson} · {tr('menus', '메뉴')} {(tier.includedMenuIds || []).length}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  setTierForm({
-                    id: tier.id,
-                    code: tier.code,
-                    nameTh: tier.nameTh,
-                    nameEn: tier.nameEn,
-                    nameKo: tier.nameKo,
-                    pricePerPerson: tier.pricePerPerson,
-                    sortOrder: tier.sortOrder,
-                    active: tier.active,
-                    includedMenuIds: [...(tier.includedMenuIds || [])],
-                  })
-                }
-              >
-                {tr('edit', '수정')}
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <div className="grid gap-2 md:grid-cols-2">
-          <Input placeholder={tr('qrTierCode', '티어 코드')} value={tierForm.code} onChange={(e) => setTierForm((f) => ({ ...f, code: e.target.value }))} />
-          <Input
-            type="number"
-            placeholder={tr('qrTierPricePerPax', '인당 가격')}
-            value={tierForm.pricePerPerson}
-            onChange={(e) => setTierForm((f) => ({ ...f, pricePerPerson: Number(e.target.value || 0) }))}
-          />
-          <Input placeholder={tr('qrTierNameTh', '태국어 이름')} value={tierForm.nameTh} onChange={(e) => setTierForm((f) => ({ ...f, nameTh: e.target.value }))} />
-          <Input placeholder={tr('qrTierNameEn', '영어 이름')} value={tierForm.nameEn} onChange={(e) => setTierForm((f) => ({ ...f, nameEn: e.target.value }))} />
-          <Input placeholder={tr('qrTierNameKo', '한국어 이름')} value={tierForm.nameKo} onChange={(e) => setTierForm((f) => ({ ...f, nameKo: e.target.value }))} />
-        </div>
-        <div className="max-h-56 overflow-auto rounded border p-2">
-          <p className="mb-2 text-xs text-muted-foreground">{tr('qrTableIncludedMenus', '포함 메뉴')}</p>
-          <div className="grid gap-1 sm:grid-cols-2">
-            {menus.map((m) => {
-              const id = Number(m.id)
-              const checked = tierForm.includedMenuIds.includes(id)
-              return (
-                <label key={m.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={checked} onChange={() => toggleMenu(id)} />
-                  <span className="truncate">
-                    {m.code} {m.name}
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-        </div>
-        <Button onClick={() => void saveTier()}>{tierForm.id ? tr('update', '수정 저장') : tr('add', '추가')}</Button>
-      </section>
-
-      <section className="rounded-lg border bg-card p-4 space-y-4">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="font-medium">{tr('qrTableTokens', '테이블 QR')}</h2>
-          <Button variant="outline" onClick={() => void generateTokens()}>
-            {tr('qrTableGenerateTokens', '레이아웃 기준 생성')}
+          <Button variant="outline" onClick={() => void reload()} disabled={loading}>
+            {tr('refresh', '새로고침')}
           </Button>
         </div>
-        {!tokens.length ? (
-          <p className="text-sm text-muted-foreground">
-            {tr('qrTableTokensEmpty', '아직 QR이 없습니다. 「레이아웃 기준 생성」을 눌러 주세요.')}
-          </p>
-        ) : (
-          <QrTablePrintCardsSection
-            storeLabel={
-              posStoreOptions.find((s) => s.code === storeCode)?.label || storeCode
-            }
-            brandLine={String(brand?.appName || '').trim() || undefined}
-            tokens={tokens}
-            labels={{
-              title: tr('qrTablePrintTitle', '테이블별 QR 카드 (인쇄·다운로드)'),
-              hint: tr(
-                'qrTablePrintHint',
-                '손님용 테이블 카드입니다. PNG 단건 저장, PDF 일괄 저장, 브라우저 인쇄를 지원합니다. A6·테이블 텐트에 맞게 디자인되어 있습니다.'
-              ),
-              downloadOne: tr('qrTableDownloadPng', 'PNG 다운로드'),
-              downloadAllPdf: tr('qrTableDownloadPdf', '전체 PDF'),
-              printAll: tr('qrTablePrintAll', '전체 인쇄'),
-              preview: tr('qrTableCardPreview', '미리보기'),
-              scanTh: tr('qrTableCardScanTh', 'สแกนเพื่อสั่งอาหาร'),
-              scanEn: tr('qrTableCardScanEn', 'Scan to order'),
-              popupBlocked: tr('popupBlockedAllow', '팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.'),
-            }}
-          />
-        )}
-        {tokens.length > 0 ? (
-          <details className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-            <summary className="cursor-pointer font-medium text-muted-foreground">
-              {tr('qrTableUrlList', 'URL 목록')}
-            </summary>
-            <ul className="mt-2 max-h-40 space-y-1 overflow-auto">
-              {tokens.map((tok) => (
-                <li key={tok.token}>
-                  <span className="font-medium">{tok.tableName}</span>{' '}
-                  <a
-                    className="break-all text-xs text-primary underline"
-                    href={tok.publicUrl || `/t/${tok.token}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {tok.publicUrl || `/t/${tok.token}`}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </section>
+
+        <section className="space-y-4 rounded-lg border bg-card p-4">
+          <h2 className="text-sm font-semibold">{tr('qrTableSettings', '매장 설정')}</h2>
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>{tr('qrTableEnabled', 'QR 테이블오더 사용')}</span>
+            <input
+              type="checkbox"
+              checked={settings.enabled}
+              onChange={(e) => setSettings((s) => ({ ...s, enabled: e.target.checked }))}
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>{tr('qrTableMode', '주문 모드')}</Label>
+              <Select
+                value={settings.mode}
+                onValueChange={(v) => setSettings((s) => ({ ...s, mode: v as QrOrderStoreSettings['mode'] }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="buffet">{tr('qrTableModeBuffet', '티어(뷔페형)')}</SelectItem>
+                  <SelectItem value="a_la_carte">{tr('qrTableModeAlaCarte', '일반 메뉴')}</SelectItem>
+                  <SelectItem value="both">{tr('qrTableModeBoth', '티어 + 일반')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex items-center justify-between gap-3 pt-6 text-sm">
+              <span>{tr('qrTableRequireStaffOpen', '직원 세션 오픈 필수')}</span>
+              <input
+                type="checkbox"
+                checked={settings.requireStaffOpen}
+                onChange={(e) => setSettings((s) => ({ ...s, requireStaffOpen: e.target.checked }))}
+              />
+            </label>
+            <div>
+              <Label>{tr('qrTableEntryPay', '입장가(티어) 결제')}</Label>
+              <Select
+                value={settings.entryPaymentMode}
+                onValueChange={(v) =>
+                  setSettings((s) => ({ ...s, entryPaymentMode: v as QrOrderStoreSettings['entryPaymentMode'] }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="postpay">{tr('qrTablePayPostpay', '후불 (POS)')}</SelectItem>
+                  <SelectItem value="prepay">{tr('qrTablePayPrepay', '선결제 (손님 QR)')}</SelectItem>
+                  <SelectItem value="guest_choice">{tr('qrTablePayGuestChoice', '손님이 선택')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{tr('qrTableExtrasPay', '별도 메뉴 결제')}</Label>
+              <Select
+                value={settings.extrasPaymentMode}
+                onValueChange={(v) =>
+                  setSettings((s) => ({ ...s, extrasPaymentMode: v as QrOrderStoreSettings['extrasPaymentMode'] }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="postpay">{tr('qrTablePayPostpay', '후불 (POS)')}</SelectItem>
+                  <SelectItem value="prepay">{tr('qrTablePayPrepay', '선결제 (손님 QR)')}</SelectItem>
+                  <SelectItem value="guest_choice">{tr('qrTablePayGuestChoice', '손님이 선택')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-md border border-dashed p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {tr('qrTablePrintBrand', '인쇄 카드 브랜드')}
+            </h3>
+            <div>
+              <Label>{tr('qrTablePrintLogoUrl', '로고 URL')}</Label>
+              <Input
+                placeholder="https://…"
+                value={settings.printLogoUrl || ''}
+                onChange={(e) => setSettings((s) => ({ ...s, printLogoUrl: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>{tr('qrTablePrintBrandColor', '브랜드 색')}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="color"
+                    className="h-9 w-12 p-1"
+                    value={/^#[0-9a-fA-F]{6}$/.test(settings.printBrandColor || '') ? settings.printBrandColor! : '#b45309'}
+                    onChange={(e) => setSettings((s) => ({ ...s, printBrandColor: e.target.value }))}
+                  />
+                  <Input
+                    value={settings.printBrandColor || ''}
+                    onChange={(e) => setSettings((s) => ({ ...s, printBrandColor: e.target.value }))}
+                    placeholder="#b45309"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>{tr('qrTablePrintAccentColor', '배경 액센트')}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="color"
+                    className="h-9 w-12 p-1"
+                    value={/^#[0-9a-fA-F]{6}$/.test(settings.printAccentColor || '') ? settings.printAccentColor! : '#faf7f2'}
+                    onChange={(e) => setSettings((s) => ({ ...s, printAccentColor: e.target.value }))}
+                  />
+                  <Input
+                    value={settings.printAccentColor || ''}
+                    onChange={(e) => setSettings((s) => ({ ...s, printAccentColor: e.target.value }))}
+                    placeholder="#faf7f2"
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <Label>{tr('qrTablePrintBrandLine', '카드 부제 (브랜드 문구)')}</Label>
+              <Input
+                value={settings.printBrandLine || ''}
+                onChange={(e) => setSettings((s) => ({ ...s, printBrandLine: e.target.value }))}
+                placeholder={String(brand?.appName || '').trim() || 'Omni'}
+              />
+            </div>
+          </div>
+          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+        </section>
+
+        <section className="space-y-3 rounded-lg border bg-card p-4">
+          <h2 className="text-sm font-semibold">{tr('qrTableTiers', '가격 티어')}</h2>
+          <ul className="space-y-2 text-sm">
+            {tiers.map((tier) => (
+              <li
+                key={tier.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2"
+              >
+                <span>
+                  {tier.code} · {tier.nameEn || tier.nameTh || tier.nameKo} · ฿{tier.pricePerPerson} ·{' '}
+                  {menusCountLabel((tier.includedMenuIds || []).length)}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setTierForm({
+                      id: tier.id,
+                      code: tier.code,
+                      nameTh: tier.nameTh,
+                      nameEn: tier.nameEn,
+                      nameKo: tier.nameKo,
+                      pricePerPerson: tier.pricePerPerson,
+                      sortOrder: tier.sortOrder,
+                      active: tier.active,
+                      includedMenuIds: [...(tier.includedMenuIds || [])],
+                    })
+                  }
+                >
+                  {tr('edit', '수정')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Input
+              placeholder={tr('qrTableTierCodePh', '코드 (예: STD)')}
+              value={tierForm.code}
+              onChange={(e) => setTierForm((f) => ({ ...f, code: e.target.value }))}
+            />
+            <Input
+              type="number"
+              placeholder={tr('qrTableTierPricePh', '인당 가격 (฿)')}
+              value={tierForm.pricePerPerson}
+              onChange={(e) => setTierForm((f) => ({ ...f, pricePerPerson: Number(e.target.value || 0) }))}
+            />
+            <Input
+              placeholder={tr('qrTableTierNameThPh', '이름 (태국어)')}
+              value={tierForm.nameTh}
+              onChange={(e) => setTierForm((f) => ({ ...f, nameTh: e.target.value }))}
+            />
+            <Input
+              placeholder={tr('qrTableTierNameEnPh', '이름 (영어)')}
+              value={tierForm.nameEn}
+              onChange={(e) => setTierForm((f) => ({ ...f, nameEn: e.target.value }))}
+            />
+            <Input
+              placeholder={tr('qrTableTierNameKoPh', '이름 (한국어)')}
+              value={tierForm.nameKo}
+              onChange={(e) => setTierForm((f) => ({ ...f, nameKo: e.target.value }))}
+            />
+          </div>
+          <div className="max-h-56 overflow-auto rounded border p-2">
+            <p className="mb-2 text-xs text-muted-foreground">{tr('qrTableIncludedMenus', '포함 메뉴')}</p>
+            <div className="grid gap-1 sm:grid-cols-2">
+              {menus.map((m) => {
+                const id = Number(m.id)
+                const checked = tierForm.includedMenuIds.includes(id)
+                return (
+                  <label key={m.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={checked} onChange={() => toggleMenu(id)} />
+                    <span className="truncate">
+                      {m.code} {m.name}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+          <Button onClick={() => void saveTier()}>
+            {tierForm.id ? tr('update', '수정 저장') : tr('add', '추가')}
+          </Button>
+        </section>
+
+        <section className="space-y-4 rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">{tr('qrTableTokens', '테이블 QR')}</h2>
+            <Button variant="outline" size="sm" onClick={() => void generateTokens()}>
+              {tr('qrTableGenerateTokens', '레이아웃 기준 생성')}
+            </Button>
+          </div>
+          {!tokens.length ? (
+            <p className="text-sm text-muted-foreground">
+              {tr('qrTableTokensEmpty', '아직 QR이 없습니다. 「레이아웃 기준 생성」을 눌러 주세요.')}
+            </p>
+          ) : (
+            <QrTablePrintCardsSection
+              storeLabel={posStoreOptions.find((s) => s.code === storeCode)?.label || storeCode}
+              brandLine={
+                String(settings.printBrandLine || '').trim() ||
+                String(brand?.appName || '').trim() ||
+                undefined
+              }
+              logoUrl={String(settings.printLogoUrl || '').trim() || undefined}
+              brandColor={String(settings.printBrandColor || '').trim() || undefined}
+              accentColor={String(settings.printAccentColor || '').trim() || undefined}
+              tokens={tokens}
+              labels={{
+                title: tr('qrTablePrintTitle', '테이블별 QR 카드 (인쇄·다운로드)'),
+                hint: tr(
+                  'qrTablePrintHint',
+                  '손님용 테이블 카드입니다. PNG 단건 저장, PDF 일괄 저장, 브라우저 인쇄를 지원합니다.'
+                ),
+                downloadOne: tr('qrTableDownloadPng', 'PNG 다운로드'),
+                downloadAllPdf: tr('qrTableDownloadPdf', '전체 PDF'),
+                printAll: tr('qrTablePrintAll', '전체 인쇄'),
+                preview: tr('qrTableCardPreview', '미리보기'),
+                scanTh: tr('qrTableScanTh', 'สแกนเพื่อสั่งอาหาร'),
+                scanEn: tr('qrTableScanShortEn', 'Scan to order'),
+                popupBlocked: tr('qrTablePopupBlocked', '팝업이 차단되었습니다.'),
+              }}
+            />
+          )}
+          {tokens.length > 0 ? (
+            <details className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <summary className="cursor-pointer font-medium text-muted-foreground">
+                {tr('qrTableUrlList', 'URL 목록')}
+              </summary>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-auto">
+                {tokens.map((tok) => (
+                  <li key={tok.token}>
+                    <span className="font-medium">{tok.tableName}</span>{' '}
+                    <a
+                      className="break-all text-xs text-primary underline"
+                      href={tok.publicUrl || `/t/${tok.token}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {tok.publicUrl || `/t/${tok.token}`}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </section>
+      </div>
     </div>
   )
 }

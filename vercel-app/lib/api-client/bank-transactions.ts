@@ -111,6 +111,7 @@ export type ExpenseSearchRelation =
   | 'paid_petty'
   | 'rejected'
   | 'bank_only'
+  | 'card_only'
 
 export interface ExpenseSearchOverviewRow {
   rowKey: string
@@ -134,12 +135,14 @@ export interface ExpenseSearchOverviewRow {
   bankTransDate?: string
   accrualId?: number
   bankTransactionId?: number
+  cardTransactionId?: number
   accountId?: number
   planStatus?: 'planned' | 'approved' | 'paid' | 'rejected'
   memo?: string
   invoiceReceived?: boolean
   invoiceNo?: string
   invoicePhotoUrl?: string
+  documentNo?: string
   bankLinked?: boolean
   pettyLinked?: boolean
   linkStatus?: string
@@ -160,6 +163,7 @@ export async function getExpenseSearchOverview(params: {
   accountId?: string | number
   category?: string
   vendorFilter?: string
+  documentNo?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -169,6 +173,7 @@ export async function getExpenseSearchOverview(params: {
   if (params.accountId && params.accountId !== '__all__') q.set('accountId', String(params.accountId))
   if (params.category && params.category !== '__all__') q.set('category', params.category)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  if (params.documentNo) q.set('documentNo', params.documentNo)
   const res = await apiFetch(`/api/getExpenseSearchOverview?${q}`)
   return res.json() as Promise<{
     list: ExpenseSearchOverviewRow[]

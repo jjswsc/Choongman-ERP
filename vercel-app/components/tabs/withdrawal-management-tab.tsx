@@ -62,6 +62,7 @@ import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from "@/lib/office-store
 import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import { encodeCardPayeeCode, parseCardAccountIdFromPayeeCode } from "@/lib/prepayment-accrual-categories"
+import { VendorRdSearchButton } from "@/components/erp/vendor-rd-search"
 import {
   resolveExpenseFeeAmounts,
   type ExpenseFeeVatMode,
@@ -78,6 +79,11 @@ import {
 } from "@/components/erp/expense-document-attach-panel"
 import { ExpenseRecurringTemplatesBar } from "@/components/erp/expense-recurring-templates-bar"
 import { suggestAccountSubjectId, suggestVendorFromHint } from "@/lib/expense-ocr-suggestions"
+import {
+  type ExpenseDocumentType,
+  documentTypeFromInvoiceReceived,
+  invoiceReceivedFromDocumentType,
+} from "@/lib/expense-document-type"
 import {
   todayStrBkk,
   processExpenseAttachmentFiles,
@@ -123,9 +129,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [assetCode, setAssetCode] = React.useState("")
   const [usefulLifeMonths, setUsefulLifeMonths] = React.useState("60")
   const [invoiceReceived, setInvoiceReceived] = React.useState(false)
+  const [documentType, setDocumentType] = React.useState<ExpenseDocumentType | "">("")
   const [invoiceNo, setInvoiceNo] = React.useState("")
   /** 경비·매입 — 인보이스·영수증 첨부 (이미지/PDF, 최대 3개) */
   const [expenseAttachmentFiles, setExpenseAttachmentFiles] = React.useState<File[]>([])
+
+  const applyDocumentType = React.useCallback((next: ExpenseDocumentType | "") => {
+    setDocumentType(next)
+    setInvoiceReceived(invoiceReceivedFromDocumentType(next || null))
+  }, [])
   const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
   const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
   /** 선택 시 (총액−VAT)×% 로 WHT 자동 계산. null = 미선택 */
@@ -306,13 +318,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         const w = Math.max(0, Number(accrualWhtParam) || 0)
         setAccrualWithholdingTax(w > 0 ? String(w) : "")
       }
-      if (invoiceReceivedParam === "1" || invoiceReceivedParam === "true") setInvoiceReceived(true)
+      if (invoiceReceivedParam === "1" || invoiceReceivedParam === "true") {
+        applyDocumentType(documentTypeFromInvoiceReceived(true) || "tax_invoice")
+      }
       if (invoiceNoParam) setInvoiceNo(invoiceNoParam)
       if (editAccrualId) {
         setExpensePayMode("later")
       }
     }
-  }, [searchParams, mapCategoryToMainSub])
+  }, [searchParams, mapCategoryToMainSub, applyDocumentType])
 
   React.useEffect(() => {
     if (!isBankLinkMode || bankLinkStorePinned.current) return
@@ -599,7 +613,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
       if (f.invoiceNo) {
         setInvoiceNo(f.invoiceNo)
-        setInvoiceReceived(true)
       }
       if (f.vendorNameHint) {
         const vendor = suggestVendorFromHint(vendors, f.vendorNameHint)
@@ -833,9 +846,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const feeResolved =
       categoryMain === "expense" ? resolveFeeSubmitAmounts(amt, activeFeeVatMode) : null
     let submitInvoiceReceived = invoiceReceived
+    let submitDocumentType: ExpenseDocumentType | "" = documentType
     if (feeResolved) {
       amt = feeResolved.gross
       submitInvoiceReceived = feeResolved.invoiceReceived
+      submitDocumentType = feeResolved.invoiceReceived ? "tax_invoice" : documentType
     }
     const vatV = feeResolved
       ? feeResolved.vat
@@ -898,6 +913,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           ...(categoryMain === "purchase" || categoryMain === "expense"
             ? {
                 invoiceReceived: submitInvoiceReceived,
+                documentType: submitDocumentType || null,
                 invoiceNo: invoiceNo.trim() || undefined,
                 ...(accrualInvoicePhotoUrl ? { invoicePhotoUrl: accrualInvoicePhotoUrl } : {}),
               }
@@ -929,6 +945,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setAccrualWhtRate(null)
         setAutoCreateWhtCert(false)
         setInvoiceReceived(false)
+        setDocumentType("")
         setInvoiceNo("")
         setActiveFeeVatMode(null)
         hasAppliedParams.current = false
@@ -955,6 +972,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           ...(categoryMain === "purchase" || categoryMain === "expense"
             ? {
                 invoiceReceived: submitInvoiceReceived,
+                documentType: submitDocumentType || null,
                 invoiceNo: invoiceNo.trim() || undefined,
                 ...(accrualInvoicePhotoUrl ? { invoicePhotoUrl: accrualInvoicePhotoUrl } : {}),
               }
@@ -991,6 +1009,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setAccrualWhtRate(null)
         setAutoCreateWhtCert(false)
         setInvoiceReceived(false)
+        setDocumentType("")
         setInvoiceNo("")
         setActiveFeeVatMode(null)
         if (queued) {
@@ -1099,6 +1118,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             ? Number(accountSubjectId)
             : undefined,
         invoiceReceived: categoryMain === "purchase" ? invoiceReceived : undefined,
+        documentType:
+          categoryMain === "purchase" || categoryMain === "expense"
+            ? documentType || null
+            : undefined,
         invoiceNo: categoryMain === "purchase" ? invoiceNo.trim() || undefined : undefined,
         invoicePhotoUrl,
         userRole: auth?.role,
@@ -1213,6 +1236,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       return
     }
     const submitInvoiceReceived = feeResolved ? feeResolved.invoiceReceived : invoiceReceived
+    const submitDocumentType: ExpenseDocumentType | "" = feeResolved?.invoiceReceived
+      ? "tax_invoice"
+      : documentType
 
     setSaving(true)
     try {
@@ -1289,6 +1315,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         assetCode: categoryMain === "fixed_asset" ? assetCode || undefined : undefined,
         usefulLifeMonths: categoryMain === "fixed_asset" ? Number(usefulLifeMonths) || 60 : undefined,
         invoiceReceived: (categoryMain === "purchase" || categoryMain === "expense") ? submitInvoiceReceived : undefined,
+        documentType:
+          categoryMain === "purchase" || categoryMain === "expense"
+            ? submitDocumentType || null
+            : undefined,
         invoiceNo: (categoryMain === "purchase" || categoryMain === "expense") ? invoiceNo.trim() || undefined : undefined,
         invoicePhotoUrl,
         vatAmount:
@@ -1568,13 +1598,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const raw = parseMoneyAmount(amount)
     if (!Number.isFinite(raw) || raw <= 0) {
       setAccrualVatAmount("")
-      setInvoiceReceived(false)
+      applyDocumentType("")
       return
     }
     const resolved = resolveExpenseFeeAmounts(raw, activeFeeVatMode)
     setAccrualVatAmount(resolved.vat > 0 ? String(resolved.vat) : "")
-    setInvoiceReceived(resolved.invoiceReceived)
-  }, [activeFeeVatMode, amount, categoryMain])
+    applyDocumentType(resolved.invoiceReceived ? "tax_invoice" : "")
+  }, [activeFeeVatMode, amount, categoryMain, applyDocumentType])
 
   const handleRegisterDeliveryFeeBatch = React.useCallback(async () => {
     const batchDate = resolveMonthEndDate(deliveryFeeMonth)
@@ -1624,6 +1654,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           accountSubjectId: subjectId,
           accountId: Number(accountId),
           invoiceReceived: resolved.invoiceReceived,
+          documentType: resolved.invoiceReceived ? "tax_invoice" : null,
           vatAmount: resolved.vat > 0 ? resolved.vat : undefined,
           userName: auth?.user,
           userRole: auth?.role,
@@ -1710,6 +1741,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           accountSubjectId: subjectId,
           accountId: Number(accountId),
           invoiceReceived: resolved.invoiceReceived,
+          documentType: resolved.invoiceReceived ? "tax_invoice" : null,
           vatAmount: resolved.vat > 0 ? resolved.vat : undefined,
           userName: auth?.user,
           userRole: auth?.role,
@@ -1828,6 +1860,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           vendorCode: vendorCode.trim(),
           invoiceReceived,
+          documentType: documentType || null,
           invoiceNo: invoiceNo.trim() || undefined,
           invoicePhotoUrl,
           userRole: auth?.role,
@@ -2171,7 +2204,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             <>
               {categoryMain === "purchase" && (
                 <div className="flex items-end gap-2">
-                  <div className="flex items-end gap-2">
+                  <div className="flex items-end gap-2 flex-wrap">
                     <Label className="pb-2.5 shrink-0">{tt("vendor", "Vendor")}</Label>
                     <Select
                       value={vendorCode}
@@ -2196,6 +2229,32 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         ))}
                       </SelectContent>
                     </Select>
+                    <VendorRdSearchButton
+                      triggerSize="sm"
+                      triggerVariant="outline"
+                      triggerClassName="h-9"
+                      onPick={(c) => {
+                        const matched = vendors.find(
+                          (v) =>
+                            String((v as { taxId?: string; tax_id?: string }).taxId || (v as { tax_id?: string }).tax_id || "").replace(/\D/g, "") ===
+                              c.taxId ||
+                            v.name.trim() === c.name.trim()
+                        )
+                        if (matched) {
+                          setVendorCode(matched.code)
+                          setPayeeCode(matched.code)
+                          setPayeeName(matched.name)
+                          setPayeeManual(false)
+                        } else {
+                          void appAlert(
+                            tt(
+                              "vendorRdPickSaveVendorFirst",
+                              "Save this company in Vendors first, then select it here."
+                            ) + `\n${c.name} (${c.taxId})`
+                          )
+                        }
+                      }}
+                    />
                   </div>
                   {vendorCode && (
                     <div className="text-sm text-muted-foreground pb-2">
@@ -2325,6 +2384,29 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         placeholder={tt("expensePayeeName", "Payee Name")}
                       />
                     )}
+                    <VendorRdSearchButton
+                      triggerSize="sm"
+                      triggerVariant="outline"
+                      triggerClassName="h-9"
+                      initialQuery={payeeName}
+                      onPick={(c) => {
+                        const matched = vendors.find(
+                          (v) =>
+                            String((v as { taxId?: string; tax_id?: string }).taxId || (v as { tax_id?: string }).tax_id || "").replace(/\D/g, "") ===
+                              c.taxId ||
+                            v.name.trim() === c.name.trim()
+                        )
+                        if (matched) {
+                          setPayeeManual(false)
+                          setPayeeCode(matched.code)
+                          setPayeeName(matched.name)
+                        } else {
+                          setPayeeManual(true)
+                          setPayeeCode(c.taxId || "")
+                          setPayeeName(c.name)
+                        }
+                      }}
+                    />
                   </div>
                   <div className="flex items-end gap-2">
                     <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>
@@ -2704,6 +2786,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               onFilesChange={setExpenseAttachmentFiles}
               invoiceReceived={invoiceReceived}
               onInvoiceReceivedChange={setInvoiceReceived}
+              documentType={documentType}
+              onDocumentTypeChange={applyDocumentType}
               invoiceNo={invoiceNo}
               onInvoiceNoChange={setInvoiceNo}
               onOcrFields={handleExpenseOcrFields}

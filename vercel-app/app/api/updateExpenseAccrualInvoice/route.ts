@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  invoiceReceivedFromDocumentType,
+  parseExpenseDocumentTypeInput,
+} from '@/lib/expense-document-type'
 
 /** 지출 발생(expense_accruals) 세금계산서 수령 여부 — 승인·지급 후에도 변경 가능 */
 export async function POST(request: NextRequest) {
@@ -20,6 +24,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const expenseAccrualId = Number(body.expenseAccrualId ?? body.expense_accrual_id ?? 0)
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const documentTypeParsed = parseExpenseDocumentTypeInput(
+      body.documentType ?? body.document_type
+    )
     const invoiceNo = body.invoiceNo ?? body.invoice_no
     const invoicePhotoUrl = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
 
@@ -36,7 +43,17 @@ export async function POST(request: NextRequest) {
     }
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (typeof invoiceReceived === 'boolean') patch.invoice_received = invoiceReceived
+    if (documentTypeParsed !== undefined) {
+      patch.document_type = documentTypeParsed
+      patch.invoice_received =
+        typeof invoiceReceived === 'boolean'
+          ? invoiceReceived
+          : invoiceReceivedFromDocumentType(documentTypeParsed)
+    } else if (typeof invoiceReceived === 'boolean') {
+      patch.invoice_received = invoiceReceived
+      if (invoiceReceived) patch.document_type = 'tax_invoice'
+      else patch.document_type = null
+    }
     if (invoiceNo !== undefined) patch.invoice_no = String(invoiceNo || '').trim() || null
     if (invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(invoicePhotoUrl || '').trim() || null
 

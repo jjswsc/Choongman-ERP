@@ -530,6 +530,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (
+      nextStatus === 'paid' ||
+      isPosCompletionStatus(nextStatus) ||
+      isPosReversalStatus(nextStatus)
+    ) {
+      try {
+        const { closeQrTableSessionsForPosOrder } = await import('@/lib/qr-table-server')
+        await closeQrTableSessionsForPosOrder({ orderId: id, reason: nextStatus })
+      } catch (qrCloseErr) {
+        console.error('updatePosOrderStatus qr session close:', qrCloseErr)
+      }
+    }
+
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('updatePosOrderStatus:', e)

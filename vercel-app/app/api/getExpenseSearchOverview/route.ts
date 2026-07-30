@@ -29,6 +29,9 @@ export async function GET(request: NextRequest) {
     const accountId = String(searchParams.get('accountId') || '').trim()
     const categoryFilter = String(searchParams.get('category') || '').trim().toLowerCase()
     const vendorFilter = String(searchParams.get('vendorFilter') || '').trim()
+    const documentNoFilter = String(
+      searchParams.get('documentNo') || searchParams.get('documentNoFilter') || ''
+    ).trim()
 
     const userRole = String(auth.role || '').trim()
     if (!canViewExpenseSearch(userRole)) {
@@ -53,6 +56,7 @@ export async function GET(request: NextRequest) {
       accountId: accountId && accountId !== '__all__' ? accountId : '',
       categoryFilter,
       vendorFilter,
+      documentNoFilter,
       scopedAllowedStores,
     })
 

@@ -11,6 +11,10 @@ import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } 
 import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
 import { canEditExpenseAccrualPlan } from '@/lib/expense-accrual-approve-policy'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  invoiceReceivedFromDocumentType,
+  parseExpenseDocumentTypeInput,
+} from '@/lib/expense-document-type'
 
 type ExpenseAccrualRow = {
   id?: number
@@ -237,6 +241,10 @@ export async function POST(request: NextRequest) {
       attachmentUrlsSerialized = attachmentResult.json
     }
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
+    const documentTypeParsed = parseExpenseDocumentTypeInput(
+      (body as { documentType?: unknown; document_type?: unknown }).documentType ??
+        (body as { documentType?: unknown; document_type?: unknown }).document_type
+    )
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
     const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
 
@@ -256,7 +264,16 @@ export async function POST(request: NextRequest) {
     if (attachmentUrlsSerialized !== undefined) {
       accrualPatch.attachment_urls = attachmentUrlsSerialized
     }
-    if (typeof invoiceReceived === 'boolean') accrualPatch.invoice_received = invoiceReceived
+    if (documentTypeParsed !== undefined) {
+      accrualPatch.document_type = documentTypeParsed
+      accrualPatch.invoice_received =
+        typeof invoiceReceived === 'boolean'
+          ? invoiceReceived
+          : invoiceReceivedFromDocumentType(documentTypeParsed)
+    } else if (typeof invoiceReceived === 'boolean') {
+      accrualPatch.invoice_received = invoiceReceived
+      if (invoiceReceived) accrualPatch.document_type = 'tax_invoice'
+    }
     if (invoiceNoRaw !== undefined) accrualPatch.invoice_no = String(invoiceNoRaw || '').trim() || null
     if (invoicePhotoRaw !== undefined) {
       accrualPatch.invoice_photo_url = String(invoicePhotoRaw || '').trim() || null

@@ -1093,6 +1093,7 @@ export function ExpenseManagementTab() {
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
+                        <th className="w-[120px] text-center py-2 px-2">{tt("expenseDocumentNo", "Doc No.")}</th>
                         <th className="w-[88px] text-center py-2 px-2">{tt("bankCategoryLabel", "Category")}</th>
                         <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
                         <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
@@ -1116,7 +1117,7 @@ export function ExpenseManagementTab() {
                       {expensePlansByStore.map(([storeLabel, rows]) => (
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
-                            <td colSpan={11} className="py-2 px-3 text-sm font-medium">
+                            <td colSpan={12} className="py-2 px-3 text-sm font-medium">
                               {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
@@ -1127,6 +1128,9 @@ export function ExpenseManagementTab() {
                                   const codeLabel = r.payeeCode && !r.payeeCode.startsWith("auto_") ? ` (${r.payeeCode})` : ""
                                   return (
                                     <>
+                                      <td className="py-2 px-2 text-center align-top tabular-nums text-xs whitespace-nowrap">
+                                        {r.documentNo || "—"}
+                                      </td>
                                       <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                       <td className="py-2 px-2 text-muted-foreground align-top break-words text-sm leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
                                       <td className="py-2 px-2 align-top text-sm leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={getPayeeLine(r.payeeName, codeLabel)}>{getPayeeLine(r.payeeName, codeLabel)}</td>
@@ -1278,7 +1282,7 @@ export function ExpenseManagementTab() {
                           </tr>
                           {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
                             <tr className="border-b bg-muted/20">
-                              <td className="py-2 px-2" colSpan={11}>
+                              <td className="py-2 px-2" colSpan={12}>
                                 <div className="flex flex-wrap items-end gap-2">
                                   <Select
                                     value={payMethodById[r.id] || "bank"}
@@ -1390,6 +1394,7 @@ export function ExpenseManagementTab() {
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
+                        <th className="w-[120px] text-center py-2 px-2">{tt("expenseDocumentNo", "Doc No.")}</th>
                         <th className="w-[88px] text-center py-2 px-2">{tt("bankCategoryLabel", "Category")}</th>
                         <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
                         <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
@@ -1413,13 +1418,16 @@ export function ExpenseManagementTab() {
                       {purchasePlansByStore.map(([storeLabel, rows]) => (
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
-                            <td colSpan={11} className="py-2 px-3 text-sm font-medium">
+                            <td colSpan={12} className="py-2 px-3 text-sm font-medium">
                               {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
                           {rows.map((r) => (
                             <React.Fragment key={r.id}>
                               <tr className="border-b">
+                                <td className="py-2 px-2 text-center align-top tabular-nums text-xs whitespace-nowrap">
+                                  {r.documentNo || "—"}
+                                </td>
                                 <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                 <td className="py-2 px-2 text-muted-foreground align-top break-words text-sm leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
                                 <td
@@ -1512,7 +1520,7 @@ export function ExpenseManagementTab() {
                               </tr>
                               {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
                                 <tr className="border-b bg-muted/20">
-                                  <td className="py-2 px-2" colSpan={11}>
+                                  <td className="py-2 px-2" colSpan={12}>
                                     <div className="flex flex-wrap items-end gap-2">
                                       <Select value={payMethodById[r.id] || "bank"} onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}>
                                         <SelectTrigger className="w-[120px] h-9">

@@ -10,6 +10,7 @@ export type ExpenseSearchRelation =
   | 'paid_petty'
   | 'rejected'
   | 'bank_only'
+  | 'card_only'
 
 export interface ExpenseSearchOverviewRow {
   rowKey: string
@@ -33,12 +34,14 @@ export interface ExpenseSearchOverviewRow {
   bankTransDate?: string
   accrualId?: number
   bankTransactionId?: number
+  cardTransactionId?: number
   accountId?: number
   planStatus?: 'planned' | 'approved' | 'paid' | 'rejected'
   memo?: string
   invoiceReceived?: boolean
   invoiceNo?: string
   invoicePhotoUrl?: string
+  documentNo?: string
   bankLinked?: boolean
   pettyLinked?: boolean
   linkStatus?: string
@@ -68,6 +71,7 @@ type ExpenseAccrualRow = {
   invoice_received?: boolean | null
   invoice_no?: string | null
   invoice_photo_url?: string | null
+  document_no?: string | null
 }
 
 type BankTxRow = {
@@ -85,6 +89,21 @@ type BankTxRow = {
   invoice_received?: boolean
   invoice_no?: string
   invoice_photo_url?: string
+  document_no?: string | null
+}
+
+type CardTxRow = {
+  id?: number
+  card_account_id?: number
+  trans_date?: string
+  amount?: number
+  memo?: string
+  vendor_code?: string
+  account_subject_id?: number | null
+  note?: string | null
+  is_bill_header?: boolean | null
+  parent_id?: number | null
+  document_no?: string | null
 }
 
 type PayableLinkRow = {
@@ -95,7 +114,7 @@ type PayableLinkRow = {
 }
 
 const ACCRUAL_SELECT =
-  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,invoice_received,invoice_no,invoice_photo_url'
+  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,invoice_received,invoice_no,invoice_photo_url,document_no'
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
   const src = String(raw || '').trim()
@@ -211,7 +230,7 @@ async function fetchBankRegisterRows(
     order: 'trans_date.desc,id.desc',
     limit: 20000,
     select:
-      'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url',
+      'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url,document_no',
   })) as BankTxRow[]
 }
 
@@ -220,9 +239,44 @@ async function fetchBankRowsByIds(ids: number[]): Promise<BankTxRow[]> {
   const idList = ids.join(',')
   return (await supabaseSelectFilter('bank_transactions', `id=in.(${idList})`, {
     select:
-      'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url',
+      'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url,document_no',
     limit: ids.length,
   })) as BankTxRow[]
+}
+
+async function fetchCardExpenseRows(startStr: string, endStr: string): Promise<CardTxRow[]> {
+  try {
+    return (await supabaseSelectFilter(
+      'card_transactions',
+      `trans_type=eq.expense&trans_date=gte.${startStr}&trans_date=lte.${endStr}`,
+      {
+        order: 'trans_date.desc,id.desc',
+        limit: 10000,
+        select:
+          'id,card_account_id,trans_date,amount,memo,vendor_code,account_subject_id,note,is_bill_header,parent_id,document_no',
+      }
+    )) as CardTxRow[]
+  } catch (e) {
+    console.warn('fetchCardExpenseRows:', e)
+    return []
+  }
+}
+
+async function fetchCardAccountStoreMap(): Promise<Map<number, string>> {
+  try {
+    const rows = (await supabaseSelect('card_accounts', {
+      select: 'id,store',
+      limit: 2000,
+    })) as { id?: number; store?: string }[]
+    const map = new Map<number, string>()
+    for (const r of rows || []) {
+      const id = Number(r.id || 0)
+      if (id > 0) map.set(id, String(r.store || '').trim())
+    }
+    return map
+  } catch {
+    return new Map()
+  }
 }
 
 async function fetchAccountStoreMap(): Promise<Map<number, string>> {
@@ -261,6 +315,12 @@ function matchesVendor(
   return hay.includes(needle)
 }
 
+function matchesDocumentNo(documentNoFilter: string, ...docs: Array<string | null | undefined>): boolean {
+  const needle = documentNoFilter.trim().toLowerCase()
+  if (!needle) return true
+  return docs.some((d) => String(d || '').toLowerCase().includes(needle))
+}
+
 export async function buildExpenseSearchOverview(params: {
   startStr: string
   endStr: string
@@ -268,10 +328,19 @@ export async function buildExpenseSearchOverview(params: {
   accountId?: string
   categoryFilter?: string
   vendorFilter?: string
+  documentNoFilter?: string
   scopedAllowedStores: string[]
 }): Promise<{ list: ExpenseSearchOverviewRow[]; summary: ExpenseSearchOverviewSummary }> {
-  const { startStr, endStr, storeFilter = '', accountId = '', categoryFilter = '', vendorFilter = '', scopedAllowedStores } =
-    params
+  const {
+    startStr,
+    endStr,
+    storeFilter = '',
+    accountId = '',
+    categoryFilter = '',
+    vendorFilter = '',
+    documentNoFilter = '',
+    scopedAllowedStores,
+  } = params
 
   if (!startStr || !endStr) {
     return {
@@ -280,7 +349,7 @@ export async function buildExpenseSearchOverview(params: {
     }
   }
 
-  const [accrualRows, bankRowsInRange, accountStoreMap, payableLinks] = await Promise.all([
+  const [accrualRows, bankRowsInRange, accountStoreMap, payableLinks, cardRows, cardStoreMap] = await Promise.all([
     fetchAccrualsForRange(startStr, endStr),
     fetchBankRegisterRows(startStr, endStr, accountId || undefined),
     fetchAccountStoreMap(),
@@ -288,6 +357,8 @@ export async function buildExpenseSearchOverview(params: {
       select: 'bank_transaction_id,expense_accrual_id,petty_cash_transaction_id,amount',
       limit: 20000,
     }) as Promise<PayableLinkRow[]>,
+    fetchCardExpenseRows(startStr, endStr),
+    fetchCardAccountStoreMap(),
   ])
 
   const paymentByAccrual = new Map<number, number>()
@@ -336,6 +407,7 @@ export async function buildExpenseSearchOverview(params: {
     const decoded = decodePayeeCode(r.payee_code)
     if (!matchesCategory(decoded.withdrawalCategory, categoryFilter)) continue
     if (!matchesVendor(vendorFilter, undefined, decoded.payeeCode, r.payee_name)) continue
+    if (!matchesDocumentNo(documentNoFilter, r.document_no)) continue
 
     const id = Number(r.id || 0)
     if (id <= 0) continue
@@ -408,6 +480,7 @@ export async function buildExpenseSearchOverview(params: {
       invoiceReceived: Boolean(row.invoice_received ?? bank?.invoice_received),
       invoiceNo: String(row.invoice_no || bank?.invoice_no || '').trim() || undefined,
       invoicePhotoUrl: String(row.invoice_photo_url || bank?.invoice_photo_url || '').trim() || undefined,
+      documentNo: String(row.document_no || bank?.document_no || '').trim() || undefined,
       bankLinked: hasBank,
       pettyLinked: hasPetty,
       linkStatus: hasBank ? 'bank_plan' : hasPetty ? 'petty' : 'unlinked',
@@ -443,6 +516,15 @@ export async function buildExpenseSearchOverview(params: {
     const vendorCode = String(bank.vendor_code || decoded?.payeeCode || '').trim() || undefined
 
     if (!matchesVendor(vendorFilter, vendorCode, decoded?.payeeCode, linkedAccrual?.payee_name)) continue
+    if (
+      !matchesDocumentNo(
+        documentNoFilter,
+        bank.document_no,
+        linkedAccrual?.document_no
+      )
+    ) {
+      continue
+    }
 
     rows.push({
       rowKey: `bank-${bankId}`,
@@ -488,9 +570,43 @@ export async function buildExpenseSearchOverview(params: {
       invoiceReceived: Boolean(bank.invoice_received ?? linkedAccrual?.invoice_received),
       invoiceNo: String(bank.invoice_no || linkedAccrual?.invoice_no || '').trim() || undefined,
       invoicePhotoUrl: String(bank.invoice_photo_url || linkedAccrual?.invoice_photo_url || '').trim() || undefined,
+      documentNo: String(bank.document_no || linkedAccrual?.document_no || '').trim() || undefined,
       bankLinked: plannedBankSet.has(bankId),
       pettyLinked: false,
       linkStatus: plannedBankSet.has(bankId) ? 'bank_plan' : 'unlinked',
+    })
+  }
+
+  for (const card of cardRows || []) {
+    if (Boolean(card.is_bill_header) || Number(card.parent_id || 0) > 0) continue
+    const cardId = Number(card.id || 0)
+    if (!cardId) continue
+    const storeName = cardStoreMap.get(Number(card.card_account_id || 0)) || ''
+    if (!storeAllowedForAuth(storeName, scopedAllowedStores)) continue
+    if (!storeMatchesFilter(storeName, storeFilter)) continue
+    if (categoryFilter && categoryFilter !== 'expense' && categoryFilter !== 'card') continue
+    const vendorCode = String(card.vendor_code || '').trim() || undefined
+    if (!matchesVendor(vendorFilter, vendorCode, vendorCode, undefined)) continue
+    if (!matchesDocumentNo(documentNoFilter, card.document_no)) continue
+    if (accountId) continue
+
+    rows.push({
+      rowKey: `card-${cardId}`,
+      relation: 'card_only',
+      storeName,
+      category: 'expense',
+      payeeCode: vendorCode,
+      vendorCode,
+      bankAmount: Math.abs(Number(card.amount) || 0),
+      expenseDate: String(card.trans_date || '').slice(0, 10) || undefined,
+      bankTransDate: String(card.trans_date || '').slice(0, 10) || undefined,
+      cardTransactionId: cardId,
+      accountSubjectId: card.account_subject_id ?? null,
+      memo: String(card.memo || card.note || '').trim() || undefined,
+      documentNo: String(card.document_no || '').trim() || undefined,
+      bankLinked: false,
+      pettyLinked: false,
+      linkStatus: 'card',
     })
   }
 

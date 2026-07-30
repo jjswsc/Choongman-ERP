@@ -21,6 +21,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { VendorRdSearchButton } from "@/components/erp/vendor-rd-search"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -828,6 +829,7 @@ export function CardManagementTab() {
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
                     <th className="p-2 text-center">{tt("date", "Date")}</th>
+                    <th className="p-2 text-left whitespace-nowrap">{tt("expenseDocumentNo", "Doc No.")}</th>
                     <th className="p-2 text-center">{tt("cardManagementType", "Type")}</th>
                     <th className="p-2 text-left">{tt("vendor", "Vendor")}</th>
                     <th className="p-2 text-left">{tt("accountSubject", "Account Subject")}</th>
@@ -847,6 +849,9 @@ export function CardManagementTab() {
                     return (
                       <tr key={tx.id} className={`border-t ${isChild ? "bg-muted/20" : ""}`}>
                         <td className="p-2 text-center">{tx.transDate}</td>
+                        <td className="p-2 text-left tabular-nums text-xs whitespace-nowrap">
+                          {tx.transType === "expense" && !isHeader ? tx.documentNo || "—" : "—"}
+                        </td>
                         <td className="p-2 text-center">
                           {isHeader ? (
                             <span className="text-amber-700 dark:text-amber-300 font-medium">
@@ -1014,7 +1019,26 @@ export function CardManagementTab() {
             {transFormType === "expense" && (
               <>
                 <div>
-                  <label className="text-sm font-medium">{tt("vendor", "Vendor")}</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-medium">{tt("vendor", "Vendor")}</label>
+                    <VendorRdSearchButton
+                      triggerSize="sm"
+                      triggerVariant="ghost"
+                      triggerClassName="h-7 px-2 text-[11px]"
+                      onPick={(c) => {
+                        const matched = vendors.find((v) => v.name.trim() === c.name.trim())
+                        if (matched) setTransFormVendor(matched.code)
+                        else {
+                          void appAlert(
+                            tt(
+                              "vendorRdPickSaveVendorFirst",
+                              "Save this company in Vendors first, then select it here."
+                            ) + `\n${c.name} (${c.taxId})`
+                          )
+                        }
+                      }}
+                    />
+                  </div>
                   <Select value={transFormVendor} onValueChange={setTransFormVendor}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="—" />

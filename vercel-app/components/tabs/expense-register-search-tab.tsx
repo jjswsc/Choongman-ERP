@@ -75,6 +75,8 @@ function relationBadgeClass(relation: ExpenseSearchRelation): string {
       return "bg-red-100 text-red-800 border-red-200"
     case "bank_only":
       return "bg-slate-100 text-slate-700 border-slate-200"
+    case "card_only":
+      return "bg-violet-100 text-violet-800 border-violet-200"
     default:
       return "bg-muted text-muted-foreground"
   }
@@ -110,6 +112,7 @@ export function ExpenseRegisterSearchTab() {
   })
   const [categoryFilter, setCategoryFilter] = React.useState<string>("__all__")
   const [vendorFilter, setVendorFilter] = React.useState("")
+  const [documentNoFilter, setDocumentNoFilter] = React.useState("")
   const [relationFilter, setRelationFilter] = React.useState<string>("__all__")
   const [accounts, setAccounts] = React.useState<BankAccount[]>([])
   const [accountSubjects, setAccountSubjects] = React.useState<AccountSubjectItem[]>([])
@@ -167,6 +170,7 @@ export function ExpenseRegisterSearchTab() {
         paid_petty: tt("expenseSearchRelationPaidPetty", "Paid (Petty)"),
         rejected: tt("expenseSearchRelationRejected", "Rejected"),
         bank_only: tt("expenseSearchRelationBankOnly", "Bank Only"),
+        card_only: tt("expenseSearchRelationCardOnly", "Card"),
       }
       return map[relation] || relation
     },
@@ -185,6 +189,7 @@ export function ExpenseRegisterSearchTab() {
         accountId,
         category: categoryFilter !== "__all__" ? categoryFilter : undefined,
         vendorFilter: vendorFilter.trim() || undefined,
+        documentNo: documentNoFilter.trim() || undefined,
       })
       setList(res.list || [])
       setSummary(res.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
@@ -195,7 +200,7 @@ export function ExpenseRegisterSearchTab() {
     } finally {
       setLoading(false)
     }
-  }, [accountId, categoryFilter, endStr, startStr, storeFilter, vendorFilter])
+  }, [accountId, categoryFilter, documentNoFilter, endStr, startStr, storeFilter, vendorFilter])
 
   React.useEffect(() => {
     const s = searchParams.get("startStr")
@@ -208,7 +213,7 @@ export function ExpenseRegisterSearchTab() {
     setLoadedOnce(false)
     setList([])
     setSummary({ planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
-  }, [storeFilter, accountId, startStr, endStr, categoryFilter, vendorFilter])
+  }, [storeFilter, accountId, startStr, endStr, categoryFilter, vendorFilter, documentNoFilter])
 
   const handledSearchRefreshRef = React.useRef<string | null>(null)
 
@@ -267,6 +272,7 @@ export function ExpenseRegisterSearchTab() {
       const res = await updateExpenseAccrualInvoice({
         expenseAccrualId: r.accrualId,
         invoiceReceived: checked,
+        documentType: checked ? 'tax_invoice' : null,
       })
       if (res.success) {
         setList((prev) =>
@@ -525,13 +531,20 @@ export function ExpenseRegisterSearchTab() {
                 <SelectItem value="paid_bank">{relationLabel("paid_bank")}</SelectItem>
                 <SelectItem value="paid_petty">{relationLabel("paid_petty")}</SelectItem>
                 <SelectItem value="bank_only">{relationLabel("bank_only")}</SelectItem>
+                <SelectItem value="card_only">{relationLabel("card_only")}</SelectItem>
                 <SelectItem value="rejected">{relationLabel("rejected")}</SelectItem>
               </SelectContent>
             </Select>
             <Input
               value={vendorFilter}
               onChange={(e) => setVendorFilter(e.target.value)}
-              placeholder={tt("vendor", "Vendor") + " " + tt("code", "Code")}
+              placeholder={tt("expenseSearchVendorNameOrCode", "Vendor name / code")}
+              className="w-[180px] h-9"
+            />
+            <Input
+              value={documentNoFilter}
+              onChange={(e) => setDocumentNoFilter(e.target.value)}
+              placeholder={tt("expenseSearchDocumentNo", "Doc No. EXPyyyymm000x")}
               className="w-[180px] h-9"
             />
             <Button size="sm" onClick={() => void loadData()} disabled={loading} className="h-9">
@@ -577,6 +590,7 @@ export function ExpenseRegisterSearchTab() {
                 <thead className="bg-muted/50 sticky top-0 z-[1]">
                   <tr>
                     <th className="p-2 text-center">{tt("expenseSearchColRelation", "Link")}</th>
+                    <th className="p-2 text-left whitespace-nowrap">{tt("expenseDocumentNo", "Doc No.")}</th>
                     <th className="p-2 text-center min-w-[168px]">{tt("expenseSearchColTimeline", "Timeline")}</th>
                     <th className="p-2 text-left">{tt("store", "Store")}</th>
                     <th className="p-2 text-center">{tt("bankCategoryLabel", "Category")}</th>
@@ -618,6 +632,9 @@ export function ExpenseRegisterSearchTab() {
                               </div>
                             ) : null}
                           </div>
+                        </td>
+                        <td className="p-2 text-left tabular-nums text-xs whitespace-nowrap">
+                          {r.documentNo || "—"}
                         </td>
                         <td className="p-2">
                           <ExpenseSearchTimelineCell row={r} />

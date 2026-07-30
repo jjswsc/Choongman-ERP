@@ -7,6 +7,10 @@ import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment
 import { syncPayableLedgerAfterBankWithdrawCategoryChange } from '@/lib/receivable-payable'
 import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  invoiceReceivedFromDocumentType,
+  parseExpenseDocumentTypeInput,
+} from '@/lib/expense-document-type'
 
 type BankTxRow = {
   id?: number
@@ -123,6 +127,10 @@ export async function POST(request: NextRequest) {
       ? Number(accountSubjectIdRaw)
       : null
     const invoiceReceived = typeof body.invoiceReceived === 'boolean' ? body.invoiceReceived : undefined
+    const documentTypeParsed = parseExpenseDocumentTypeInput(
+      (body as { documentType?: unknown; document_type?: unknown }).documentType ??
+        (body as { documentType?: unknown; document_type?: unknown }).document_type
+    )
     const invoiceNo = String(body.invoiceNo || '').trim()
     const invoicePhotoUrl = String(body.invoicePhotoUrl || '').trim()
 
@@ -268,7 +276,17 @@ export async function POST(request: NextRequest) {
       vendor_code: vendorCode || null,
       account_subject_id: accountSubjectId,
     }
-    if (invoiceReceived !== undefined) patch.invoice_received = invoiceReceived
+    if (documentTypeParsed !== undefined) {
+      patch.document_type = documentTypeParsed
+      patch.invoice_received =
+        invoiceReceived !== undefined
+          ? invoiceReceived
+          : invoiceReceivedFromDocumentType(documentTypeParsed)
+    } else if (invoiceReceived !== undefined) {
+      patch.invoice_received = invoiceReceived
+      if (invoiceReceived) patch.document_type = 'tax_invoice'
+      else patch.document_type = null
+    }
     patch.invoice_no = invoiceNo || null
     patch.invoice_photo_url = invoicePhotoUrl || null
     await supabaseUpdate('bank_transactions', bankTransactionId, patch)
@@ -295,7 +313,17 @@ export async function POST(request: NextRequest) {
         accrualPatch.payee_code = encodePayeeCodeForRegister(vendorCode, category!)
         accrualPatch.payee_name = vendorCode
       }
-      if (invoiceReceived !== undefined) accrualPatch.invoice_received = invoiceReceived
+      if (documentTypeParsed !== undefined) {
+        accrualPatch.document_type = documentTypeParsed
+        accrualPatch.invoice_received =
+          invoiceReceived !== undefined
+            ? invoiceReceived
+            : invoiceReceivedFromDocumentType(documentTypeParsed)
+      } else if (invoiceReceived !== undefined) {
+        accrualPatch.invoice_received = invoiceReceived
+        if (invoiceReceived) accrualPatch.document_type = 'tax_invoice'
+        else accrualPatch.document_type = null
+      }
       accrualPatch.invoice_no = invoiceNo || null
       accrualPatch.invoice_photo_url = invoicePhotoUrl || null
       await supabaseUpdate('expense_accruals', accrualId, accrualPatch)

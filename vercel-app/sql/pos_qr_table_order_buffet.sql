@@ -37,6 +37,10 @@ create table if not exists public.pos_qr_order_store_settings (
   require_staff_open boolean not null default true,
   max_open_minutes integer not null default 240,
   allow_reorder_after_paid boolean not null default false,
+  print_logo_url text,
+  print_brand_color text,
+  print_accent_color text,
+  print_brand_line text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

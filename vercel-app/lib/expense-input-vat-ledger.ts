@@ -4,6 +4,10 @@ import {
   probeVatLedgerEvidenceColumns,
   vatLedgerRowForSchemaError,
 } from '@/lib/vat-ledger-invoice-evidence'
+import {
+  expenseDocumentQualifiesForPp30,
+  normalizeExpenseDocumentType,
+} from '@/lib/expense-document-type'
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
   const src = String(raw || '').trim()
@@ -42,6 +46,7 @@ type ExpenseAccrualRow = {
   created_by?: string | null
   invoice_received?: boolean | null
   invoice_no?: string | null
+  document_type?: string | null
 }
 
 async function lookupVendorTaxId(payeeCode: string): Promise<string | null> {
@@ -73,7 +78,8 @@ export async function deleteExpenseAccrualInputVatLedger(expenseAccrualId: numbe
 
 /**
  * 지출 발생(expense_accruals)의 부가세를 매입 세금계산서(PP30 input) 보조장부에 자동 반영한다.
- * 승인·지급 여부와 관계없이 vat_amount>0 이고 반려가 아니면 초안으로 적재한다.
+ * document_type=tax_invoice(또는 레거시 invoice_received) 이고 vat_amount>0 이며 반려가 아니면 초안으로 적재한다.
+ * Invoice / Receipt 첨부는 PP.30에 넣지 않는다.
  */
 export async function syncExpenseAccrualInputVatLedger(
   expenseAccrualId: number,
@@ -85,7 +91,7 @@ export async function syncExpenseAccrualInputVatLedger(
   const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${id}`, {
     limit: 1,
     select:
-      'id,status,payee_code,payee_name,amount,vat_amount,expense_date,memo,store_name,created_by,invoice_received,invoice_no',
+      'id,status,payee_code,payee_name,amount,vat_amount,expense_date,memo,store_name,created_by,invoice_received,invoice_no,document_type',
   })) as ExpenseAccrualRow[] | null
   const row = rows?.[0]
   if (!row?.id) return
@@ -95,16 +101,23 @@ export async function syncExpenseAccrualInputVatLedger(
   const vatAmount = Math.max(0, Math.abs(Number(row.vat_amount ?? 0) || 0))
   const gross = Math.max(0, Math.abs(Number(row.amount ?? 0) || 0))
   const fallbackStoreName = String(options?.fallbackStoreName || '').trim()
+  const documentType = normalizeExpenseDocumentType(row.document_type)
+  const qualifiesForPp30 = expenseDocumentQualifiesForPp30({
+    documentType,
+    invoiceReceived: row.invoice_received,
+  })
 
-  if (status === 'rejected' || vatAmount <= 0 || gross <= 0) {
+  if (status === 'rejected' || vatAmount <= 0 || gross <= 0 || !qualifiesForPp30) {
     const existing = (await supabaseSelectFilter(
       'vat_ledger_entries',
       `memo=ilike.${encodeURIComponent(`%${memoTag}%`)}`,
-      { limit: 5, select: 'id' }
-    )) as { id?: number }[] | null
+      { limit: 5, select: 'id,filing_status' }
+    )) as { id?: number; filing_status?: string | null }[] | null
     for (const e of existing || []) {
       const eid = Math.floor(Number(e?.id) || 0)
-      if (eid > 0) await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${eid}`)
+      if (eid <= 0) continue
+      if (String(e?.filing_status || '').trim().toLowerCase() === 'submitted') continue
+      await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${eid}`)
     }
     return
   }
@@ -130,7 +143,9 @@ export async function syncExpenseAccrualInputVatLedger(
   const tin = await lookupVendorTaxId(payeeCode)
   const invoiceNoRaw = String(row.invoice_no || '').trim()
   const invoiceNo = (invoiceNoRaw || `EA-${id}`).slice(0, 128)
-  const invoiceReceived = Boolean(row.invoice_received)
+  // Tax Invoice면 증빙 수령, 그 외(레거시 미설정 포함)는 invoice_received 기준
+  const invoiceReceived =
+    documentType === 'tax_invoice' ? true : Boolean(row.invoice_received)
   const evidenceStatus = invoiceReceived ? 'received' : 'required_pending'
   const evidenceReasonCode = invoiceReceived ? null : 'missing_invoice'
 

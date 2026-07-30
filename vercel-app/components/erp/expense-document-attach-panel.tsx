@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { Camera, ScanLine } from "lucide-react"
+import { Camera, FileText, Receipt, ScanLine, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -18,6 +18,12 @@ import {
   writeExpenseDocOcrAutoFill,
   writeExpenseDocScanSkip,
 } from "@/lib/expense-doc-prefs"
+import {
+  type ExpenseDocumentType,
+  invoiceReceivedFromDocumentType,
+  normalizeExpenseDocumentType,
+} from "@/lib/expense-document-type"
+import { cn } from "@/lib/utils"
 
 const ExpenseDocumentScanDialog = dynamic(
   () =>
@@ -38,8 +44,12 @@ export type ExpenseDocumentAttachPanelProps = {
   files: File[]
   onFilesChange: (files: File[]) => void
   maxFiles?: number
+  /** @deprecated Prefer documentType — kept for petty/card callers */
   invoiceReceived: boolean
   onInvoiceReceivedChange: (v: boolean) => void
+  /** Invoice | Tax Invoice | Receipt — Tax Invoice만 PP.30 연동 */
+  documentType?: ExpenseDocumentType | ""
+  onDocumentTypeChange?: (v: ExpenseDocumentType | "") => void
   invoiceNo: string
   onInvoiceNoChange: (v: string) => void
   onOcrFields?: (fields: ExpenseOcrFieldPayload) => void
@@ -48,12 +58,56 @@ export type ExpenseDocumentAttachPanelProps = {
   className?: string
 }
 
+const DOC_TYPE_OPTIONS: {
+  value: ExpenseDocumentType
+  icon: typeof FileText
+  labelKey: string
+  labelFb: string
+  descKey: string
+  descFb: string
+  accent: string
+  selected: string
+}[] = [
+  {
+    value: "invoice",
+    icon: FileText,
+    labelKey: "expenseDocTypeInvoice",
+    labelFb: "Invoice",
+    descKey: "expenseDocTypeInvoiceDesc",
+    descFb: "일반 청구서",
+    accent: "text-slate-600",
+    selected: "border-slate-400 bg-slate-50 ring-1 ring-slate-300/80 shadow-sm",
+  },
+  {
+    value: "tax_invoice",
+    icon: ShieldCheck,
+    labelKey: "expenseDocTypeTaxInvoice",
+    labelFb: "Tax Invoice",
+    descKey: "expenseDocTypeTaxInvoiceDesc",
+    descFb: "ใบกำกับภาษี · PP.30",
+    accent: "text-emerald-700",
+    selected: "border-emerald-500 bg-emerald-50/90 ring-1 ring-emerald-400/70 shadow-sm",
+  },
+  {
+    value: "receipt",
+    icon: Receipt,
+    labelKey: "expenseDocTypeReceipt",
+    labelFb: "Receipt",
+    descKey: "expenseDocTypeReceiptDesc",
+    descFb: "영수증·ใบเสร็จ",
+    accent: "text-amber-700",
+    selected: "border-amber-400 bg-amber-50/90 ring-1 ring-amber-300/80 shadow-sm",
+  },
+]
+
 export function ExpenseDocumentAttachPanel({
   files,
   onFilesChange,
   maxFiles = 3,
   invoiceReceived,
   onInvoiceReceivedChange,
+  documentType: documentTypeProp,
+  onDocumentTypeChange,
   invoiceNo,
   onInvoiceNoChange,
   onOcrFields,
@@ -81,6 +135,21 @@ export function ExpenseDocumentAttachPanel({
   const [scanSkip, setScanSkip] = React.useState(false)
   const [ocrHint, setOcrHint] = React.useState<string | null>(null)
   const [thumbUrls, setThumbUrls] = React.useState<string[]>([])
+
+  const controlledType = onDocumentTypeChange != null
+  const resolvedType: ExpenseDocumentType | "" = controlledType
+    ? normalizeExpenseDocumentType(documentTypeProp) ?? ""
+    : invoiceReceived
+      ? "tax_invoice"
+      : ""
+
+  const setDocumentType = React.useCallback(
+    (next: ExpenseDocumentType | "") => {
+      if (onDocumentTypeChange) onDocumentTypeChange(next)
+      onInvoiceReceivedChange(invoiceReceivedFromDocumentType(next || null))
+    },
+    [onDocumentTypeChange, onInvoiceReceivedChange]
+  )
 
   React.useEffect(() => {
     setOcrAutoFill(readExpenseDocOcrAutoFill())
@@ -172,18 +241,26 @@ export function ExpenseDocumentAttachPanel({
   )
 
   const showInvoice = variant === "full"
+  const showDocNo = showInvoice && resolvedType !== "receipt"
 
   return (
-    <div className={className ?? "max-w-2xl space-y-3 rounded-lg border border-border/60 bg-muted/15 p-3"}>
+    <div
+      className={
+        className ??
+        "max-w-2xl space-y-3.5 rounded-xl border border-border/70 bg-gradient-to-b from-muted/25 to-background p-3.5 shadow-sm"
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label className="text-sm font-medium">{tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}</Label>
+        <Label className="text-sm font-semibold tracking-tight">
+          {tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}
+        </Label>
         <div className="flex flex-wrap items-center gap-2">
           {ocrLoading ? (
             <span className="text-xs text-muted-foreground">{tt("expenseDocOcrRunning", "문서 인식 중…")}</span>
           ) : null}
           {onOcrFields ? (
             <>
-              <label className="flex items-center gap-2 cursor-pointer rounded-md border border-border/60 bg-background/80 px-2 py-1">
+              <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-border/60 bg-background/90 px-2 py-1 shadow-sm">
                 <Checkbox
                   checked={ocrAutoFill}
                   onCheckedChange={(c) => {
@@ -211,7 +288,7 @@ export function ExpenseDocumentAttachPanel({
               </Button>
             </>
           ) : null}
-          <label className="flex items-center gap-2 cursor-pointer rounded-md border border-border/60 bg-background/80 px-2 py-1">
+          <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-border/60 bg-background/90 px-2 py-1 shadow-sm">
             <Checkbox
               checked={scanSkip}
               onCheckedChange={(c) => {
@@ -225,7 +302,7 @@ export function ExpenseDocumentAttachPanel({
           </label>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         {ocrAutoFill && onOcrFields
           ? tt(
               "expenseDocAttachUnifiedHint",
@@ -239,25 +316,74 @@ export function ExpenseDocumentAttachPanel({
       {ocrHint ? <p className="text-xs text-primary/90">{ocrHint}</p> : null}
 
       {showInvoice ? (
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Checkbox
-              checked={invoiceReceived}
-              onCheckedChange={(c) => onInvoiceReceivedChange(c === true)}
-              disabled={disabled}
-            />
-            <span className="text-sm">{tt("poInvoiceReceived", "Invoice Received")}</span>
-          </label>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm shrink-0">{tt("wm_invoiceNoLabel", "Invoice Number")}</Label>
-            <Input
-              value={invoiceNo}
-              onChange={(e) => onInvoiceNoChange(e.target.value)}
-              placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
-              className="w-[140px] h-9"
-              disabled={disabled}
-            />
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <Label className="text-xs font-medium text-foreground/80">
+                {tt("expenseDocTypeLabel", "문서 유형")}
+              </Label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {tt(
+                  "expenseDocTypeHint",
+                  "Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다."
+                )}
+              </p>
+            </div>
+            {resolvedType === "tax_invoice" ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                <ShieldCheck className="h-3 w-3" />
+                PP.30
+              </span>
+            ) : null}
           </div>
+          <div
+            className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+            role="radiogroup"
+            aria-label={tt("expenseDocTypeLabel", "문서 유형")}
+          >
+            {DOC_TYPE_OPTIONS.map((opt) => {
+              const selected = resolvedType === opt.value
+              const Icon = opt.icon
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={disabled}
+                  onClick={() => setDocumentType(selected ? "" : opt.value)}
+                  className={cn(
+                    "group relative flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-all",
+                    "hover:border-foreground/25 hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed",
+                    selected ? opt.selected : "border-border/70 bg-background/70"
+                  )}
+                >
+                  <span className={cn("flex items-center gap-1.5 text-sm font-semibold", selected ? opt.accent : "text-foreground")}>
+                    <Icon className="h-4 w-4 shrink-0 opacity-90" />
+                    {tt(opt.labelKey, opt.labelFb)}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground leading-snug">
+                    {tt(opt.descKey, opt.descFb)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {showDocNo ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/60 px-2.5 py-2">
+              <Label className="text-xs shrink-0 text-muted-foreground">
+                {tt("wm_invoiceNoLabel", "Invoice Number")}
+              </Label>
+              <Input
+                value={invoiceNo}
+                onChange={(e) => onInvoiceNoChange(e.target.value)}
+                placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
+                className="w-[160px] h-8 text-sm"
+                disabled={disabled}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -305,7 +431,7 @@ export function ExpenseDocumentAttachPanel({
         >
           {tt("chooseFile", "파일 선택")}
         </Button>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground tabular-nums">
           {files.length}/{maxFiles}
         </span>
       </div>
@@ -315,10 +441,10 @@ export function ExpenseDocumentAttachPanel({
           {files.map((f, i) => (
             <li
               key={`${f.name}-${i}`}
-              className="flex items-center gap-2 rounded border bg-background/80 px-2 py-1 text-xs max-w-full"
+              className="flex items-center gap-2 rounded-lg border bg-background/90 px-2 py-1.5 text-xs max-w-full shadow-sm"
             >
               {thumbUrls[i] && f.type.startsWith("image/") ? (
-                <img src={thumbUrls[i]} alt="" className="h-10 w-10 rounded object-cover border shrink-0" />
+                <img src={thumbUrls[i]} alt="" className="h-10 w-10 rounded-md object-cover border shrink-0" />
               ) : null}
               <span className="truncate max-w-[120px]">{f.name}</span>
               <Button

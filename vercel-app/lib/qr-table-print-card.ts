@@ -10,10 +10,34 @@ export type QrTablePrintCardInput = {
   url: string
   /** Optional brand line under store (e.g. Omni) */
   brandLine?: string
+  /** Optional logo image URL (https) */
+  logoUrl?: string
+  /** Primary brand hex, default amber */
+  brandColor?: string
+  /** Soft background accent hex */
+  accentColor?: string
 }
 
 const W = 900
 const H = 1200
+
+function normalizeHex(raw: string | undefined, fallback: string): string {
+  const s = String(raw || '').trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`
+  }
+  return fallback
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = normalizeHex(hex, '#b45309').slice(1)
+  const n = parseInt(h, 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 function roundRect(
   ctx: CanvasRenderingContext2D,
@@ -36,6 +60,7 @@ function roundRect(
 async function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
+    img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error('qr_image_failed'))
     img.src = src
@@ -50,6 +75,9 @@ export async function renderQrTablePrintCardCanvas(
   const tableName = String(input.tableName || '').trim() || '—'
   const storeLabel = String(input.storeLabel || '').trim() || 'Store'
   const brandLine = String(input.brandLine || '').trim()
+  const brandColor = normalizeHex(input.brandColor, '#b45309')
+  const accentColor = normalizeHex(input.accentColor, '#faf7f2')
+  const logoUrl = String(input.logoUrl || '').trim()
 
   const qrDataUrl = await QRCode.toDataURL(url, {
     width: 640,
@@ -59,6 +87,15 @@ export async function renderQrTablePrintCardCanvas(
   })
   const qrImg = await loadImage(qrDataUrl)
 
+  let logoImg: HTMLImageElement | null = null
+  if (logoUrl && /^https?:\/\//i.test(logoUrl)) {
+    try {
+      logoImg = await loadImage(logoUrl)
+    } catch {
+      logoImg = null
+    }
+  }
+
   const canvas = document.createElement('canvas')
   canvas.width = W
   canvas.height = H
@@ -67,14 +104,14 @@ export async function renderQrTablePrintCardCanvas(
 
   // Background wash
   const bg = ctx.createLinearGradient(0, 0, 0, H)
-  bg.addColorStop(0, '#faf7f2')
-  bg.addColorStop(0.55, '#f3ebe0')
-  bg.addColorStop(1, '#ebe1d3')
+  bg.addColorStop(0, accentColor)
+  bg.addColorStop(0.55, hexToRgba(brandColor, 0.08))
+  bg.addColorStop(1, hexToRgba(brandColor, 0.14))
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, W, H)
 
   // Soft decorative corner arcs
-  ctx.fillStyle = 'rgba(180, 83, 9, 0.08)'
+  ctx.fillStyle = hexToRgba(brandColor, 0.08)
   ctx.beginPath()
   ctx.arc(0, 0, 280, 0, Math.PI * 2)
   ctx.fill()
@@ -87,13 +124,12 @@ export async function renderQrTablePrintCardCanvas(
   roundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 36)
   ctx.fillStyle = '#fffdf9'
   ctx.fill()
-  ctx.strokeStyle = 'rgba(120, 53, 15, 0.12)'
+  ctx.strokeStyle = hexToRgba(brandColor, 0.18)
   ctx.lineWidth = 2
   ctx.stroke()
 
   // Top accent bar
-  roundRect(ctx, pad, pad, W - pad * 2, 18, 0)
-  ctx.fillStyle = '#b45309'
+  ctx.fillStyle = brandColor
   ctx.beginPath()
   ctx.moveTo(pad, pad)
   ctx.lineTo(W - pad, pad)
@@ -102,29 +138,42 @@ export async function renderQrTablePrintCardCanvas(
   ctx.closePath()
   ctx.fill()
 
+  let headerY = pad + 72
+  if (logoImg) {
+    const maxH = 72
+    const maxW = 220
+    const ratio = Math.min(maxW / logoImg.width, maxH / logoImg.height)
+    const lw = logoImg.width * ratio
+    const lh = logoImg.height * ratio
+    ctx.drawImage(logoImg, (W - lw) / 2, pad + 36, lw, lh)
+    headerY = pad + 36 + lh + 36
+  }
+
   // Store / brand
   ctx.textAlign = 'center'
   ctx.fillStyle = '#78716c'
   ctx.font = '600 28px "Segoe UI", "Noto Sans Thai", sans-serif'
-  ctx.fillText(storeLabel.slice(0, 40), W / 2, pad + 72)
+  ctx.fillText(storeLabel.slice(0, 40), W / 2, headerY)
   if (brandLine) {
     ctx.fillStyle = '#a8a29e'
     ctx.font = '500 22px "Segoe UI", sans-serif'
-    ctx.fillText(brandLine.slice(0, 36), W / 2, pad + 106)
+    ctx.fillText(brandLine.slice(0, 36), W / 2, headerY + 34)
   }
+
+  const tableTitleY = headerY + (brandLine ? 90 : 64)
 
   // Table label
   ctx.fillStyle = '#1c1917'
   ctx.font = '700 42px "Segoe UI", "Noto Sans Thai", sans-serif'
-  ctx.fillText('TABLE', W / 2, pad + 170)
+  ctx.fillText('TABLE', W / 2, tableTitleY)
   ctx.font = '800 120px "Segoe UI", "Pretendard", sans-serif'
   const tableDisplay = tableName.length > 8 ? tableName.slice(0, 10) : tableName
-  ctx.fillText(tableDisplay, W / 2, pad + 290)
+  ctx.fillText(tableDisplay, W / 2, tableTitleY + 120)
 
   // QR frame
   const qrSize = 480
   const qrX = (W - qrSize) / 2
-  const qrY = pad + 340
+  const qrY = Math.min(tableTitleY + 160, H - pad - qrSize - 200)
   roundRect(ctx, qrX - 28, qrY - 28, qrSize + 56, qrSize + 56, 28)
   ctx.fillStyle = '#ffffff'
   ctx.fill()

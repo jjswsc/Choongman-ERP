@@ -29,6 +29,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import type { VendorLinkedStore } from "@/components/erp/vendor-table"
+import { VendorRdSearchButton } from "@/components/erp/vendor-rd-search"
 
 export interface VendorFormData {
   code: string
@@ -106,10 +107,26 @@ export function VendorForm({
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-            <Building2 className="h-3.5 w-3.5 text-success" />
-            {t("vendorName")}
-          </label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Building2 className="h-3.5 w-3.5 text-success" />
+              {t("vendorName")}
+            </label>
+            <VendorRdSearchButton
+              triggerSize="sm"
+              triggerVariant="ghost"
+              triggerClassName="h-7 px-2 text-[11px]"
+              initialQuery={formData.name || formData.tax_no}
+              onPick={(c) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  name: c.name || prev.name,
+                  tax_no: c.taxId || prev.tax_no,
+                  address: c.address || prev.address,
+                }))
+              }}
+            />
+          </div>
           <Input
             placeholder={t("vendorNamePh")}
             className="h-10 text-sm"

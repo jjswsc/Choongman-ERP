@@ -36,7 +36,11 @@ export async function POST(request: NextRequest) {
     }
 
     const patch: Record<string, unknown> = {}
-    if (typeof invoiceReceived === 'boolean') patch.invoice_received = invoiceReceived
+    if (typeof invoiceReceived === 'boolean') {
+      patch.invoice_received = invoiceReceived
+      if (invoiceReceived) patch.document_type = 'tax_invoice'
+      else patch.document_type = null
+    }
     if (invoiceNo !== undefined) patch.invoice_no = String(invoiceNo || '').trim() || null
     if (invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(invoicePhotoUrl || '').trim() || null
     if (purchaseOrderId !== undefined) {

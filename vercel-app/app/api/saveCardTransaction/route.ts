@@ -3,6 +3,7 @@ import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supa
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { deleteJournalEntriesBySource, postCardTransactionJournal } from '@/lib/accounting-posting'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
+import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
 
 /** 카드 거래 생성/수정 */
 export async function POST(request: NextRequest) {
@@ -141,12 +142,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, id, message: '수정되었습니다.' }, { headers })
     }
 
+    let documentNo: string | null = null
+    if (transType === 'expense') {
+      try {
+        documentNo = await allocateExpenseDocumentNo(transDate)
+      } catch (docErr) {
+        console.error('saveCardTransaction document_no:', docErr)
+        return NextResponse.json(
+          { success: false, message: '문서번호 발급에 실패했습니다. expense_document_no SQL을 확인해 주세요.' },
+          { status: 500, headers }
+        )
+      }
+    }
+
     const inserted = (await supabaseInsert('card_transactions', {
       ...row,
       bank_transaction_id: bankTransactionId,
       vendor_code: transType === 'expense' ? (vendorCode ?? null) : null,
       account_subject_id: transType === 'expense' ? (accountSubjectId ?? null) : null,
       note: transType === 'expense' ? (note ?? null) : null,
+      ...(documentNo ? { document_no: documentNo } : {}),
       created_at: new Date().toISOString(),
     })) as { id?: number }[]
     const newId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
@@ -167,7 +182,10 @@ export async function POST(request: NextRequest) {
         console.error('saveCardTransaction create posting:', postingErr)
       }
     }
-    return NextResponse.json({ success: true, id: newId, message: '추가되었습니다.' }, { headers })
+    return NextResponse.json(
+      { success: true, id: newId, message: '추가되었습니다.', documentNo: documentNo || undefined },
+      { headers }
+    )
   } catch (e) {
     console.error('saveCardTransaction:', e)
     return NextResponse.json(

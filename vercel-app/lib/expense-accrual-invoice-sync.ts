@@ -2,12 +2,14 @@ import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
 import { updateVatLedgerEntryEvidence } from '@/lib/vat-ledger-invoice-evidence'
+import { normalizeExpenseDocumentType } from '@/lib/expense-document-type'
 
 type AccrualInvoiceRow = {
   id?: number
   invoice_received?: boolean | null
   invoice_no?: string | null
   invoice_photo_url?: string | null
+  document_type?: string | null
 }
 
 /** 지출 발생의 인보이스 상태를 연결된 통장 출금·VAT 보조장부에 반영 */
@@ -19,12 +21,14 @@ export async function syncExpenseAccrualInvoiceEvidence(expenseAccrualId: number
 
   const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${id}`, {
     limit: 1,
-    select: 'id,invoice_received,invoice_no,invoice_photo_url',
+    select: 'id,invoice_received,invoice_no,invoice_photo_url,document_type',
   })) as AccrualInvoiceRow[] | null
   const row = rows?.[0]
   if (!row?.id) return
 
-  const invoiceReceived = Boolean(row.invoice_received)
+  const documentType = normalizeExpenseDocumentType(row.document_type)
+  const invoiceReceived =
+    documentType === 'tax_invoice' ? true : Boolean(row.invoice_received)
   const evidenceStatus = invoiceReceived ? 'received' : 'required_pending'
   const evidenceReasonCode = invoiceReceived ? null : 'missing_invoice'
 
@@ -49,7 +53,7 @@ export async function propagateExpenseAccrualInvoiceToLinkedBank(expenseAccrualI
 
   const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${id}`, {
     limit: 1,
-    select: 'id,invoice_received,invoice_no,invoice_photo_url',
+    select: 'id,invoice_received,invoice_no,invoice_photo_url,document_type',
   })) as AccrualInvoiceRow[] | null
   const accrual = accrualRows?.[0]
   if (!accrual?.id) return
@@ -63,10 +67,12 @@ export async function propagateExpenseAccrualInvoiceToLinkedBank(expenseAccrualI
   const bankIds = [...new Set((payableRows || []).map((p) => Math.floor(Number(p.bank_transaction_id) || 0)).filter((n) => n > 0))]
   if (!bankIds.length) return
 
+  const documentType = normalizeExpenseDocumentType(accrual.document_type)
   const patch: Record<string, unknown> = {
-    invoice_received: Boolean(accrual.invoice_received),
+    invoice_received: documentType === 'tax_invoice' ? true : Boolean(accrual.invoice_received),
     invoice_no: String(accrual.invoice_no || '').trim() || null,
     invoice_photo_url: String(accrual.invoice_photo_url || '').trim() || null,
+    document_type: documentType,
   }
 
   for (const bankId of bankIds) {

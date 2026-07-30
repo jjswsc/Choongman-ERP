@@ -18,6 +18,9 @@ type TokenRow = { tableName: string; token: string; publicUrl?: string }
 export function QrTablePrintCardsSection(props: {
   storeLabel: string
   brandLine?: string
+  logoUrl?: string
+  brandColor?: string
+  accentColor?: string
   tokens: TokenRow[]
   labels: {
     title: string
@@ -26,12 +29,12 @@ export function QrTablePrintCardsSection(props: {
     downloadAllPdf: string
     printAll: string
     preview: string
-    scanTh: string
-    scanEn: string
-    popupBlocked: string
+    scanTh?: string
+    scanEn?: string
+    popupBlocked?: string
   }
 }) {
-  const { storeLabel, brandLine, tokens, labels } = props
+  const { storeLabel, brandLine, logoUrl, brandColor, accentColor, tokens, labels } = props
   const [previews, setPreviews] = React.useState<Record<string, string>>({})
   const [busy, setBusy] = React.useState(false)
 
@@ -40,6 +43,9 @@ export function QrTablePrintCardsSection(props: {
       tokens.map((tok) => ({
         storeLabel,
         brandLine,
+        logoUrl,
+        brandColor,
+        accentColor,
         tableName: tok.tableName,
         url:
           tok.publicUrl ||
@@ -47,7 +53,7 @@ export function QrTablePrintCardsSection(props: {
             ? `${window.location.origin}/t/${tok.token}`
             : `/t/${tok.token}`),
       })),
-    [tokens, storeLabel, brandLine]
+    [tokens, storeLabel, brandLine, logoUrl, brandColor, accentColor]
   )
 
   React.useEffect(() => {
@@ -80,7 +86,7 @@ export function QrTablePrintCardsSection(props: {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'failed'
       if (msg === 'popup_blocked') {
-        await appAlert(labels.popupBlocked)
+        await appAlert(labels.popupBlocked || 'Popup blocked')
       } else {
         await appAlert(msg)
       }
@@ -155,8 +161,10 @@ export function QrTablePrintCardsSection(props: {
               ) : (
                 <div className="h-28 w-28 animate-pulse rounded-lg bg-stone-200/80" />
               )}
-              <p className="text-[11px] font-semibold text-stone-800">{labels.scanTh}</p>
-              <p className="text-[10px] text-stone-500">{labels.scanEn}</p>
+              <p className="text-[11px] font-semibold text-stone-800">
+                {labels.scanTh || 'สแกนเพื่อสั่งอาหาร'}
+              </p>
+              <p className="text-[10px] text-stone-500">{labels.scanEn || 'Scan to order'}</p>
               <Button
                 type="button"
                 size="sm"

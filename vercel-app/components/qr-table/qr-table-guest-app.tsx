@@ -15,6 +15,7 @@ import {
 } from '@/lib/api-client/qr-table'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
+import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-table-guest'
 
 type MenuItem = {
   menuId: number
@@ -22,6 +23,7 @@ type MenuItem = {
   price: number
   listPrice: number
   imageUrl: string
+  soldOut?: boolean
   buffetIncluded: boolean
   description: string
   category: string
@@ -31,6 +33,7 @@ type MenuItem = {
 type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'menu' | 'error'
 
 const AUTH_KEY = 'cm_qr_table_session_auth'
+const LANG_KEY = 'cm_qr_table_guest_lang'
 
 export function QrTableGuestApp({ token }: { token: string }) {
   const [step, setStep] = React.useState<Step>('boot')
@@ -58,7 +61,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
     balanceDue: number
     items: Array<{ name?: string; qty?: number; quantity?: number; price?: number; buffetIncluded?: boolean }>
   } | null>(null)
-  const [lang, setLang] = React.useState('th')
+  const [lang, setLang] = React.useState<QrGuestLang>('th')
+
+  const g = React.useCallback((key: string) => qrGuestT(lang, key), [lang])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    setLang(normalizeQrGuestLang(sessionStorage.getItem(LANG_KEY) || navigator.language?.slice(0, 2)))
+  }, [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -152,9 +162,18 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return () => window.clearInterval(t)
   }, [step, sessionAuth, qrPayload])
 
+  function changeLang(next: QrGuestLang) {
+    setLang(next)
+    try {
+      sessionStorage.setItem(LANG_KEY, next)
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function handleOpen() {
     if (!tierId) {
-      setError('Please select a buffet tier')
+      setError(g('selectTier'))
       return
     }
     setBusy(true)
@@ -201,7 +220,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
   }
 
-  function bumpCart(menuId: number, delta: number) {
+  function bumpCart(menuId: number, delta: number, soldOut?: boolean) {
+    if (soldOut && delta > 0) return
     setCart((prev) => {
       const next = { ...prev }
       const v = Math.max(0, (next[menuId] || 0) + delta)
@@ -284,12 +304,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const list = tab === 'included' ? includedMenus : extraMenus
 
   if (step === 'boot') {
-    return <div className="flex min-h-dvh items-center justify-center bg-stone-50 text-stone-600">Loading…</div>
+    return <div className="flex min-h-dvh items-center justify-center bg-stone-50 text-stone-600">{g('loading')}</div>
   }
   if (step === 'error') {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-stone-50 p-6 text-center">
-        <p className="text-lg font-semibold text-stone-900">Cannot open table order</p>
+        <p className="text-lg font-semibold text-stone-900">{g('cannotOpen')}</p>
         <p className="text-sm text-stone-600">{error}</p>
       </div>
     )
@@ -301,12 +321,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-stone-500">{storeCode}</p>
-            <h1 className="text-lg font-semibold">Table {tableName}</h1>
+            <h1 className="text-lg font-semibold">
+              {g('table')} {tableName}
+            </h1>
           </div>
           <select
             className="rounded-md border border-stone-300 bg-white px-2 py-1 text-sm"
             value={lang}
-            onChange={(e) => setLang(e.target.value)}
+            onChange={(e) => changeLang(normalizeQrGuestLang(e.target.value))}
           >
             <option value="th">ไทย</option>
             <option value="en">EN</option>
@@ -320,7 +342,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       {step === 'tier' ? (
         <section className="space-y-4 p-4">
           <div>
-            <label className="text-sm font-medium">Guests</label>
+            <label className="text-sm font-medium">{g('guests')}</label>
             <div className="mt-1 flex items-center gap-3">
               <button type="button" className="h-10 w-10 rounded-full bg-stone-200" onClick={() => setGuestCount((n) => Math.max(1, n - 1))}>
                 −
@@ -333,7 +355,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">Buffet tier</p>
+            <p className="text-sm font-medium">{g('buffetTier')}</p>
             {selectedTier.map((t) => (
               <button
                 key={t.id}
@@ -345,22 +367,27 @@ export function QrTableGuestApp({ token }: { token: string }) {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{buffetTierDisplayName(t, lang)}</span>
-                  <span className="font-semibold">฿{t.pricePerPerson.toLocaleString()}/pax</span>
+                  <span className="font-semibold">
+                    ฿{t.pricePerPerson.toLocaleString()}
+                    {g('perPax')}
+                  </span>
                 </div>
-                <p className="mt-1 text-xs text-stone-500">{(t.includedMenuIds || []).length} included menus</p>
+                <p className="mt-1 text-xs text-stone-500">
+                  {g('includedMenusCount').replace('{n}', String((t.includedMenuIds || []).length))}
+                </p>
               </button>
             ))}
           </div>
 
           {settings?.entryPaymentMode === 'guest_choice' ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium">Entry payment</p>
+              <p className="text-sm font-medium">{g('entryPayment')}</p>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" className={`rounded-lg border px-3 py-2 ${entryChoice === 'prepay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setEntryChoice('prepay')}>
-                  Pay now (QR)
+                  {g('payNow')}
                 </button>
                 <button type="button" className={`rounded-lg border px-3 py-2 ${entryChoice === 'postpay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setEntryChoice('postpay')}>
-                  Pay later
+                  {g('payLater')}
                 </button>
               </div>
             </div>
@@ -368,13 +395,13 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
           {settings?.extrasPaymentMode === 'guest_choice' ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium">Drinks / extras payment</p>
+              <p className="text-sm font-medium">{g('extrasPayment')}</p>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" className={`rounded-lg border px-3 py-2 ${extrasChoice === 'prepay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setExtrasChoice('prepay')}>
-                  Pay now (QR)
+                  {g('payNow')}
                 </button>
                 <button type="button" className={`rounded-lg border px-3 py-2 ${extrasChoice === 'postpay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setExtrasChoice('postpay')}>
-                  Pay later
+                  {g('payLater')}
                 </button>
               </div>
             </div>
@@ -386,31 +413,33 @@ export function QrTableGuestApp({ token }: { token: string }) {
             onClick={handleOpen}
             className="w-full rounded-xl bg-amber-700 py-3 font-semibold text-white disabled:opacity-60"
           >
-            {busy ? 'Opening…' : 'Continue'}
+            {busy ? g('opening') : g('continue')}
           </button>
           {settings?.requireStaffOpen ? (
-            <p className="text-xs text-stone-500">This store requires staff to open the table first. If open fails, please call staff.</p>
+            <p className="text-xs text-stone-500">{g('staffOpenHint')}</p>
           ) : null}
         </section>
       ) : null}
 
       {step === 'pay_entry' ? (
         <section className="space-y-4 p-4">
-          <p className="text-sm text-stone-600">Please pay buffet entry by PromptPay QR.</p>
+          <p className="text-sm text-stone-600">{g('payEntryHint')}</p>
           <p className="text-2xl font-semibold">฿{(session?.entryTotal || 0).toLocaleString()}</p>
           {!qrPayload ? (
             <button type="button" disabled={busy} onClick={handleEntryQr} className="w-full rounded-xl bg-amber-700 py-3 font-semibold text-white">
-              Show QR
+              {g('showQr')}
             </button>
           ) : (
             <div className="rounded-xl border border-stone-200 bg-white p-4 text-center">
-              <p className="mb-2 text-sm">Amount ฿{qrAmount.toLocaleString()}</p>
+              <p className="mb-2 text-sm">
+                {g('amount')} ฿{qrAmount.toLocaleString()}
+              </p>
               <img
                 alt="PromptPay QR"
                 className="mx-auto h-56 w-56 object-contain"
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrPayload)}`}
               />
-              <p className="mt-2 text-xs text-stone-500">Waiting for payment…</p>
+              <p className="mt-2 text-xs text-stone-500">{g('waitingPay')}</p>
             </div>
           )}
         </section>
@@ -418,14 +447,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
       {step === 'wait_staff' ? (
         <section className="space-y-3 p-4 text-center">
-          <p className="text-lg font-semibold">Waiting for staff confirmation</p>
-          <p className="text-sm text-stone-600">Please ask staff to confirm buffet entry for this table. Then refresh.</p>
+          <p className="text-lg font-semibold">{g('waitStaffTitle')}</p>
+          <p className="text-sm text-stone-600">{g('waitStaffBody')}</p>
           <button
             type="button"
             className="rounded-xl bg-stone-800 px-4 py-2 text-white"
             onClick={() => window.location.reload()}
           >
-            Refresh
+            {g('refresh')}
           </button>
         </section>
       ) : null}
@@ -434,28 +463,54 @@ export function QrTableGuestApp({ token }: { token: string }) {
         <section className="pb-28">
           <div className="sticky top-[57px] z-10 flex gap-2 border-b border-stone-200 bg-white px-4 py-2">
             <button type="button" className={`flex-1 rounded-lg py-2 text-sm font-medium ${tab === 'included' ? 'bg-amber-100 text-amber-900' : 'bg-stone-100'}`} onClick={() => setTab('included')}>
-              Included
+              {g('included')}
             </button>
             <button type="button" className={`flex-1 rounded-lg py-2 text-sm font-medium ${tab === 'extras' ? 'bg-amber-100 text-amber-900' : 'bg-stone-100'}`} onClick={() => setTab('extras')}>
-              Extras
+              {g('extras')}
             </button>
           </div>
           <ul className="divide-y divide-stone-100">
             {list.map((m) => (
-              <li key={m.menuId} className="flex gap-3 px-4 py-3">
+              <li key={m.menuId} className={`flex gap-3 px-4 py-3 ${m.soldOut ? 'opacity-55' : ''}`}>
+                {m.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.imageUrl}
+                    alt=""
+                    className="h-16 w-16 shrink-0 rounded-lg object-cover bg-stone-100"
+                  />
+                ) : (
+                  <div className="h-16 w-16 shrink-0 rounded-lg bg-stone-100" />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{m.name}</p>
                   {m.description ? <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{m.description}</p> : null}
                   <p className="mt-1 text-sm font-semibold">
-                    {m.buffetIncluded ? <span className="text-emerald-700">Included</span> : `฿${m.price.toLocaleString()}`}
+                    {m.soldOut ? (
+                      <span className="text-red-600">{g('soldOut')}</span>
+                    ) : m.buffetIncluded ? (
+                      <span className="text-emerald-700">{g('included')}</span>
+                    ) : (
+                      `฿${m.price.toLocaleString()}`
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button type="button" className="h-8 w-8 rounded-full bg-stone-200" onClick={() => bumpCart(m.menuId, -1)}>
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-full bg-stone-200 disabled:opacity-40"
+                    disabled={m.soldOut}
+                    onClick={() => bumpCart(m.menuId, -1, m.soldOut)}
+                  >
                     −
                   </button>
                   <span className="w-6 text-center">{cart[m.menuId] || 0}</span>
-                  <button type="button" className="h-8 w-8 rounded-full bg-amber-700 text-white" onClick={() => bumpCart(m.menuId, 1)}>
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-full bg-amber-700 text-white disabled:opacity-40"
+                    disabled={m.soldOut}
+                    onClick={() => bumpCart(m.menuId, 1, m.soldOut)}
+                  >
                     +
                   </button>
                 </div>
@@ -465,16 +520,24 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
           {orderSummary ? (
             <div className="mx-4 mt-4 rounded-xl border border-stone-200 bg-white p-3 text-sm">
-              <p className="font-medium">Current order</p>
-              <p>Total ฿{Number(orderSummary.total || 0).toLocaleString()}</p>
-              <p>Paid QR ฿{Number(orderSummary.paymentQr || 0).toLocaleString()}</p>
-              <p className="font-semibold">Balance ฿{Number(orderSummary.balanceDue || 0).toLocaleString()}</p>
+              <p className="font-medium">{g('currentOrder')}</p>
+              <p>
+                {g('total')} ฿{Number(orderSummary.total || 0).toLocaleString()}
+              </p>
+              <p>
+                {g('paidQr')} ฿{Number(orderSummary.paymentQr || 0).toLocaleString()}
+              </p>
+              <p className="font-semibold">
+                {g('balance')} ฿{Number(orderSummary.balanceDue || 0).toLocaleString()}
+              </p>
             </div>
           ) : null}
 
           {qrPayload ? (
             <div className="mx-4 mt-3 rounded-xl border border-stone-200 bg-white p-3 text-center">
-              <p className="mb-2 text-sm">Pay extras ฿{qrAmount.toLocaleString()}</p>
+              <p className="mb-2 text-sm">
+                {g('payExtras')} ฿{qrAmount.toLocaleString()}
+              </p>
               <img
                 alt="Extras QR"
                 className="mx-auto h-48 w-48 object-contain"
@@ -490,7 +553,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
               onClick={handleSubmit}
               className="w-full rounded-xl bg-amber-700 py-3 font-semibold text-white disabled:opacity-50"
             >
-              Send to kitchen
+              {g('sendKitchen')}
             </button>
           </div>
         </section>
