@@ -23,6 +23,7 @@ import {
 } from '@/lib/saas-tenant-scope'
 
 const LATE_DED_HOURS_BASE = 208
+const MONTHLY_OT_HOURS_BASE = 240
 const OT_MULTIPLIER = 1.5
 
 function toDateStr(val: string | Date | null | undefined): string {
@@ -394,7 +395,7 @@ export async function GET(request: NextRequest) {
         earlyDed = LATE_DED_HOURS_BASE > 0 && salary > 0 && earlyMin > 0
           ? Math.floor((earlyMin / 60) * (salary / LATE_DED_HOURS_BASE))
           : 0
-        const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
+        const hourlyForOt = MONTHLY_OT_HOURS_BASE > 0 && salary ? salary / MONTHLY_OT_HOURS_BASE : 0
         otAmt = hourlyForOt > 0 && otMin > 0 ? Math.floor((otMin / 60) * hourlyForOt * OT_MULTIPLIER) : 0
       }
 

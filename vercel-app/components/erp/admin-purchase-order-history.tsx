@@ -896,7 +896,8 @@ function groupCartByStore(cart: CartItem[]): Map<string, CartItem[]> {
 }
 
 function formatPoAmount(n: number | null | undefined): string {
-  const x = Number(n ?? 0)
+  if (n == null) return "-"
+  const x = Number(n)
   if (!Number.isFinite(x)) return "-"
   return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }

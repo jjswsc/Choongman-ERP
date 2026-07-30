@@ -181,6 +181,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [manualLineName, setManualLineName] = React.useState("")
   const [manualLinePrice, setManualLinePrice] = React.useState("")
   const [manualLineQty, setManualLineQty] = React.useState("1")
+  const [manualLinePriceMode, setManualLinePriceMode] = React.useState<"vat_excluded" | "vat_included">("vat_excluded")
   /** 회계 PO 수동 줄 기본 VAT — Pepsi 프로모션 지원 등은 면세로 추가 */
   const [manualLineTaxType, setManualLineTaxType] = React.useState<"taxable" | "exempt">("taxable")
   /** 회계 PO: 선택 매장 (미선택 가능) */
@@ -289,7 +290,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const addManualLineToCart = React.useCallback(() => {
     const name = manualLineName.trim()
     if (!name) return
-    const price = Number(String(manualLinePrice).replace(/,/g, "")) || 0
+    const inputPrice = Number(String(manualLinePrice).replace(/,/g, "")) || 0
+    const price =
+      manualLinePriceMode === "vat_included" && !poLineIsVatExempt(manualLineTaxType)
+        ? Math.round((inputPrice / 1.07) * 100) / 100
+        : inputPrice
     const qty = Math.max(0.0001, Number(String(manualLineQty).replace(/,/g, "")) || 1)
     const code = `SVC-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     setBillingIntentMode(null)
@@ -297,7 +302,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     setManualLineName("")
     setManualLinePrice("")
     setManualLineQty("1")
-  }, [manualLineName, manualLinePrice, manualLineQty, manualLineTaxType])
+  }, [manualLineName, manualLinePrice, manualLineQty, manualLinePriceMode, manualLineTaxType])
 
   React.useEffect(() => {
     let cancelled = false
@@ -976,7 +981,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   placeholder={
                     allowManualLines
                       ? t("poAccountingVendorSearchPh")
-                      : t("vendorSearchPh") || "거래처 검색 또는 직접 입력 (코드, 이름)"
+                      : t("vendorSearchPh")
                   }
                   value={vendorDropdownOpen ? vendorSearchQuery : (vendorSelect?.name ?? vendorSearchQuery)}
                   onChange={(e) => {
@@ -1022,7 +1027,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   {filteredVendors.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
                       {vendorSearchQuery.trim()
-                        ? (t("vendorSearchHint") || "조회 버튼으로 직접 검색")
+                        ? t("vendorSearchHint")
                         : t("purchaseOrderSelectVendor")}
                     </div>
                   ) : (
@@ -1228,6 +1233,29 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 className="h-9"
               />
             </div>
+            <div className="w-full space-y-1 sm:w-44">
+              <label className="text-xs text-muted-foreground">{t("poManualLinePriceMode")}</label>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant={manualLinePriceMode === "vat_excluded" ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-9 flex-1 px-2 text-xs"
+                  onClick={() => setManualLinePriceMode("vat_excluded")}
+                >
+                  {t("poManualLinePriceModeExclVat")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={manualLinePriceMode === "vat_included" ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-9 flex-1 px-2 text-xs"
+                  onClick={() => setManualLinePriceMode("vat_included")}
+                >
+                  {t("poManualLinePriceModeInclVat")}
+                </Button>
+              </div>
+            </div>
             <div className="w-full space-y-1 sm:w-24">
               <label className="text-xs text-muted-foreground">{t("poManualLineQty")}</label>
               <Input
@@ -1261,6 +1289,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   {t("poExemptShort")}
                 </Button>
               </div>
+              {manualLinePriceMode === "vat_included" ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {t("poManualLinePriceModeInclHint")}
+                </p>
+              ) : null}
             </div>
             <Button type="button" variant="secondary" className="h-9 w-full sm:w-auto" onClick={addManualLineToCart}>
               {t("poManualLineAdd")}

@@ -18,20 +18,28 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   const headers = posApiCorsHeaders()
-  const authResult = await requireAuth(req, 'any')
-  if (authResult.errorResponse) return applyPosApiCors(authResult.errorResponse)
+  try {
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) return applyPosApiCors(authResult.errorResponse)
 
-  const storeCode = String(req.nextUrl.searchParams.get('storeCode') || '').trim()
-  if (!storeCode) {
-    return applyPosApiCors(NextResponse.json({ success: false, message: 'store_required' }, { status: 400, headers }))
+    const storeCode = String(req.nextUrl.searchParams.get('storeCode') || '').trim()
+    if (!storeCode) {
+      return applyPosApiCors(NextResponse.json({ success: false, message: 'store_required' }, { status: 400, headers }))
+    }
+    const write = await requirePosStoreWriteAuth(req, storeCode, headers)
+    if (!write.ok) return write.response
+
+    const settings = await loadQrOrderStoreSettings(storeCode)
+    const tiers = await loadBuffetTiersForStore(storeCode, { includeInactive: true, withMenus: true })
+    const tokens = await listQrTokensForStore(storeCode, req.nextUrl.origin)
+    return applyPosApiCors(NextResponse.json({ success: true, settings, tiers, tokens }, { headers }))
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e ?? 'error')
+    const msg = raw.includes("Could not find the table 'public.pos_table_qr_tokens'")
+      ? 'qr_table_schema_missing'
+      : raw
+    return applyPosApiCors(NextResponse.json({ success: false, message: msg }, { status: 400, headers }))
   }
-  const write = await requirePosStoreWriteAuth(req, storeCode, headers)
-  if (!write.ok) return write.response
-
-  const settings = await loadQrOrderStoreSettings(storeCode)
-  const tiers = await loadBuffetTiersForStore(storeCode, { includeInactive: true, withMenus: true })
-  const tokens = await listQrTokensForStore(storeCode, req.nextUrl.origin)
-  return applyPosApiCors(NextResponse.json({ success: true, settings, tiers, tokens }, { headers }))
 }
 
 export async function PUT(req: NextRequest) {
@@ -54,7 +62,10 @@ export async function PUT(req: NextRequest) {
     })
     return applyPosApiCors(NextResponse.json({ success: true, settings }, { headers }))
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'error'
+    const raw = e instanceof Error ? e.message : 'error'
+    const msg = raw.includes("Could not find the table 'public.pos_table_qr_tokens'")
+      ? 'qr_table_schema_missing'
+      : raw
     return applyPosApiCors(NextResponse.json({ success: false, message: msg }, { status: 400, headers }))
   }
 }
@@ -107,7 +118,10 @@ export async function POST(req: NextRequest) {
 
     return applyPosApiCors(NextResponse.json({ success: false, message: 'unknown_action' }, { status: 400, headers }))
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'error'
+    const raw = e instanceof Error ? e.message : 'error'
+    const msg = raw.includes("Could not find the table 'public.pos_table_qr_tokens'")
+      ? 'qr_table_schema_missing'
+      : raw
     return applyPosApiCors(NextResponse.json({ success: false, message: msg }, { status: 400, headers }))
   }
 }

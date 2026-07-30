@@ -52,7 +52,8 @@ import {
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 
-const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
+const LATE_DED_HOURS_BASE = 208 // 지각/조퇴 공제 기준(기존 정책 유지)
+const MONTHLY_OT_HOURS_BASE = 240 // 월급제 OT 기준: 월급 ÷ 30일 ÷ 8시간
 const OT_MULTIPLIER = 1.5
 // 매장 직원: 한 달에 10분 이상 지각 3번 이상 → 반차(0.5일) 급여 삭감
 const LATE_HALF_DAY_MIN = 10
@@ -1380,7 +1381,7 @@ export async function GET(request: NextRequest) {
             if (el.minutes > 0) earlyDed += Math.floor((el.minutes / 60) * hourlyLateEarly)
           }
         }
-        const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
+        const hourlyForOt = MONTHLY_OT_HOURS_BASE > 0 && salary ? salary / MONTHLY_OT_HOURS_BASE : 0
         otAmt = 0
         if (hourlyForOt > 0) {
           for (const ol of otLinesForEmp) {
@@ -1649,7 +1650,7 @@ export async function GET(request: NextRequest) {
       const otBaseHourly =
         isHourly
           ? salAmt
-          : (LATE_DED_HOURS_BASE > 0 && salary > 0 ? salary / LATE_DED_HOURS_BASE : 0)
+          : (MONTHLY_OT_HOURS_BASE > 0 && salary > 0 ? salary / MONTHLY_OT_HOURS_BASE : 0)
       const otLines = attDayLines[attKey]?.ot || []
       for (const otLine of otLines) {
         const dayAmt =
@@ -1661,7 +1662,7 @@ export async function GET(request: NextRequest) {
           reason: otLine.countedMin > 0 ? '연장근무(1.5배)' : '연장근무 미인정',
           detail:
             otLine.countedMin > 0
-              ? `${Math.round((otLine.countedMin / 60) * 10) / 10}시간 반영`
+              ? `${otLine.countedMin}분 (${(otLine.countedMin / 60).toFixed(2)}시간) 반영`
               : `${otLine.rawMin}분 (최소 ${OT_PAYROLL_MIN_MINUTES}분 미만)`,
           minutes: otLine.countedMin,
           amount: dayAmt,
@@ -1670,7 +1671,7 @@ export async function GET(request: NextRequest) {
       if (otAmt > 0 || otLines.length > 0) {
         explain.ot.push({
           reason: 'OT 합계',
-          detail: `${Math.round((otMin / 60) * 10) / 10}시간`,
+          detail: `${otMin}분 (${(otMin / 60).toFixed(2)}시간)`,
           minutes: otMin,
           amount: otAmt,
         })

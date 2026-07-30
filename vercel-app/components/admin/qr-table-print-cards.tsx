@@ -26,6 +26,9 @@ export function QrTablePrintCardsSection(props: {
     downloadAllPdf: string
     printAll: string
     preview: string
+    scanTh: string
+    scanEn: string
+    popupBlocked: string
   }
 }) {
   const { storeLabel, brandLine, tokens, labels } = props
@@ -77,7 +80,7 @@ export function QrTablePrintCardsSection(props: {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'failed'
       if (msg === 'popup_blocked') {
-        await appAlert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.')
+        await appAlert(labels.popupBlocked)
       } else {
         await appAlert(msg)
       }
@@ -152,8 +155,8 @@ export function QrTablePrintCardsSection(props: {
               ) : (
                 <div className="h-28 w-28 animate-pulse rounded-lg bg-stone-200/80" />
               )}
-              <p className="text-[11px] font-semibold text-stone-800">สแกนเพื่อสั่งอาหาร</p>
-              <p className="text-[10px] text-stone-500">Scan to order</p>
+              <p className="text-[11px] font-semibold text-stone-800">{labels.scanTh}</p>
+              <p className="text-[10px] text-stone-500">{labels.scanEn}</p>
               <Button
                 type="button"
                 size="sm"

@@ -61,6 +61,14 @@ export function PosQrTableOrderContent() {
     setLoading(true)
     try {
       const data = await qrTableAdminGet(storeCode)
+      if (!data.success) {
+        const msg =
+          data.message === 'qr_table_schema_missing'
+            ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
+            : data.message || tr('load_failed', '불러오기에 실패했습니다.')
+        await appAlert(msg)
+        return
+      }
       if (data.settings) setSettings(data.settings)
       setTiers(data.tiers || [])
       setTokens(data.tokens || [])
@@ -74,7 +82,7 @@ export function PosQrTableOrderContent() {
         }))
       )
     } catch (e) {
-      await appAlert(e instanceof Error ? e.message : 'load_failed')
+      await appAlert(e instanceof Error ? e.message : tr('load_failed', '불러오기에 실패했습니다.'))
     } finally {
       setLoading(false)
     }
@@ -87,7 +95,11 @@ export function PosQrTableOrderContent() {
   async function saveSettings() {
     const res = await qrTableAdminSaveSettings({ ...settings, storeCode })
     if (!res.success) {
-      await appAlert(res.message || 'save_failed')
+      const msg =
+        res.message === 'qr_table_schema_missing'
+          ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
+          : res.message || tr('save_failed', '저장에 실패했습니다.')
+      await appAlert(msg)
       return
     }
     if (res.settings) setSettings(res.settings)
@@ -109,7 +121,11 @@ export function PosQrTableOrderContent() {
       includedMenuIds: tierForm.includedMenuIds,
     })
     if (!res.success) {
-      await appAlert(res.message || 'tier_save_failed')
+      const msg =
+        res.message === 'qr_table_schema_missing'
+          ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
+          : res.message || tr('tier_save_failed', '티어 저장에 실패했습니다.')
+      await appAlert(msg)
       return
     }
     setTierForm({
@@ -137,7 +153,11 @@ export function PosQrTableOrderContent() {
       }
       const res = await qrTableAdminAction({ action: 'generateTokens', storeCode, tableNames })
       if (!res.success) {
-        await appAlert(res.message || 'token_failed')
+        const msg =
+          res.message === 'qr_table_schema_missing'
+            ? tr('qrTableSchemaMissing', 'QR 테이블오더 DB 스키마가 아직 적용되지 않았습니다. 먼저 SQL을 실행해 주세요.')
+            : res.message || tr('token_failed', 'QR 생성에 실패했습니다.')
+        await appAlert(msg)
         return
       }
       setTokens(res.tokens || [])
@@ -158,11 +178,11 @@ export function PosQrTableOrderContent() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-4 md:p-6">
       <div>
-        <h1 className="text-xl font-semibold">{tr('adminPosQrTableOrder', 'QR 테이블오더 · 뷔페')}</h1>
+        <h1 className="text-xl font-semibold">{tr('adminPosQrTableOrder', 'QR 테이블오더')}</h1>
         <p className="text-sm text-muted-foreground">
-          {tr('adminPosQrTableOrderDesc', '매장별 QR 오더 ON/OFF, 결제 모드, 뷔페 티어·포함 메뉴, 테이블 QR을 관리합니다.')}
+          {tr('adminPosQrTableOrderDesc', '매장별 QR 오더 ON/OFF, 결제 모드, 티어·포함 메뉴, 테이블 QR을 관리합니다.')}
         </p>
       </div>
       <HelpSumHowBlocks helpSumKey={hrefToHelpSummaryKey('/admin/pos-qr-table-order')} />
@@ -206,9 +226,9 @@ export function PosQrTableOrderContent() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="buffet">buffet</SelectItem>
-                <SelectItem value="a_la_carte">a_la_carte</SelectItem>
-                <SelectItem value="both">both</SelectItem>
+                <SelectItem value="buffet">{tr('qrTableMode_buffet', '티어')}</SelectItem>
+                <SelectItem value="a_la_carte">{tr('qrTableMode_alacarte', '일반')}</SelectItem>
+                <SelectItem value="both">{tr('qrTableMode_both', '티어 + 일반')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -230,9 +250,9 @@ export function PosQrTableOrderContent() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="postpay">postpay</SelectItem>
-                <SelectItem value="prepay">prepay</SelectItem>
-                <SelectItem value="guest_choice">guest_choice</SelectItem>
+                <SelectItem value="postpay">{tr('qrPayMode_postpay', '후불')}</SelectItem>
+                <SelectItem value="prepay">{tr('qrPayMode_prepay', '선결제')}</SelectItem>
+                <SelectItem value="guest_choice">{tr('qrPayMode_guestChoice', '손님 선택')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -246,9 +266,9 @@ export function PosQrTableOrderContent() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="postpay">postpay</SelectItem>
-                <SelectItem value="prepay">prepay</SelectItem>
-                <SelectItem value="guest_choice">guest_choice</SelectItem>
+                <SelectItem value="postpay">{tr('qrPayMode_postpay', '후불')}</SelectItem>
+                <SelectItem value="prepay">{tr('qrPayMode_prepay', '선결제')}</SelectItem>
+                <SelectItem value="guest_choice">{tr('qrPayMode_guestChoice', '손님 선택')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -258,13 +278,13 @@ export function PosQrTableOrderContent() {
 
       <section className="rounded-lg border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="font-medium">{tr('qrTableTiers', '뷔페 티어')}</h2>
+          <h2 className="font-medium">{tr('qrTableTiers', '티어')}</h2>
         </div>
         <ul className="space-y-2 text-sm">
           {tiers.map((tier) => (
             <li key={tier.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
               <span>
-                {tier.code} · {tier.nameEn || tier.nameTh || tier.nameKo} · ฿{tier.pricePerPerson} · menus {(tier.includedMenuIds || []).length}
+                {tier.code} · {tier.nameEn || tier.nameTh || tier.nameKo} · ฿{tier.pricePerPerson} · {tr('menus', '메뉴')} {(tier.includedMenuIds || []).length}
               </span>
               <Button
                 size="sm"
@@ -289,16 +309,16 @@ export function PosQrTableOrderContent() {
           ))}
         </ul>
         <div className="grid gap-2 md:grid-cols-2">
-          <Input placeholder="CODE" value={tierForm.code} onChange={(e) => setTierForm((f) => ({ ...f, code: e.target.value }))} />
+          <Input placeholder={tr('qrTierCode', '티어 코드')} value={tierForm.code} onChange={(e) => setTierForm((f) => ({ ...f, code: e.target.value }))} />
           <Input
             type="number"
-            placeholder="Price/pax"
+            placeholder={tr('qrTierPricePerPax', '인당 가격')}
             value={tierForm.pricePerPerson}
             onChange={(e) => setTierForm((f) => ({ ...f, pricePerPerson: Number(e.target.value || 0) }))}
           />
-          <Input placeholder="Name TH" value={tierForm.nameTh} onChange={(e) => setTierForm((f) => ({ ...f, nameTh: e.target.value }))} />
-          <Input placeholder="Name EN" value={tierForm.nameEn} onChange={(e) => setTierForm((f) => ({ ...f, nameEn: e.target.value }))} />
-          <Input placeholder="Name KO" value={tierForm.nameKo} onChange={(e) => setTierForm((f) => ({ ...f, nameKo: e.target.value }))} />
+          <Input placeholder={tr('qrTierNameTh', '태국어 이름')} value={tierForm.nameTh} onChange={(e) => setTierForm((f) => ({ ...f, nameTh: e.target.value }))} />
+          <Input placeholder={tr('qrTierNameEn', '영어 이름')} value={tierForm.nameEn} onChange={(e) => setTierForm((f) => ({ ...f, nameEn: e.target.value }))} />
+          <Input placeholder={tr('qrTierNameKo', '한국어 이름')} value={tierForm.nameKo} onChange={(e) => setTierForm((f) => ({ ...f, nameKo: e.target.value }))} />
         </div>
         <div className="max-h-56 overflow-auto rounded border p-2">
           <p className="mb-2 text-xs text-muted-foreground">{tr('qrTableIncludedMenus', '포함 메뉴')}</p>
@@ -348,6 +368,9 @@ export function PosQrTableOrderContent() {
               downloadAllPdf: tr('qrTableDownloadPdf', '전체 PDF'),
               printAll: tr('qrTablePrintAll', '전체 인쇄'),
               preview: tr('qrTableCardPreview', '미리보기'),
+              scanTh: tr('qrTableCardScanTh', 'สแกนเพื่อสั่งอาหาร'),
+              scanEn: tr('qrTableCardScanEn', 'Scan to order'),
+              popupBlocked: tr('popupBlockedAllow', '팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.'),
             }}
           />
         )}
