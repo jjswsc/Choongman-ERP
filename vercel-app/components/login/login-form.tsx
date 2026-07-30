@@ -55,6 +55,7 @@ import {
   reportNetworkFailure,
 } from "@/lib/offline/network"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { canAccessSaasAdmin } from "@/lib/permissions"
 import {
   isSaasPlatformDefaultLoginCompany,
   isSaasAdminLoginPath,
@@ -142,6 +143,8 @@ type LoginApp = "erp" | "pos" | "mobile"
 
 /** 마지막 로그인 선택(회사·매장·이름) — PIN은 저장하지 않음 */
 const LOGIN_LAST_SELECTION_KEY = "cm_login_last_selection"
+/** SaaS 관리 로그인 전용 — POS/ERP 선택과 섞이지 않게 분리 */
+const LOGIN_LAST_SELECTION_SAAS_KEY = "cm_login_last_selection_saas_admin"
 
 type LoginLastSelection = {
   company?: string
@@ -149,10 +152,14 @@ type LoginLastSelection = {
   user?: string
 }
 
-function readLoginLastSelection(): LoginLastSelection | null {
+function loginLastSelectionStorageKey(saasAdmin: boolean): string {
+  return saasAdmin ? LOGIN_LAST_SELECTION_SAAS_KEY : LOGIN_LAST_SELECTION_KEY
+}
+
+function readLoginLastSelection(saasAdmin = false): LoginLastSelection | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem(LOGIN_LAST_SELECTION_KEY)
+    const raw = localStorage.getItem(loginLastSelectionStorageKey(saasAdmin))
     if (!raw) return null
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== "object") return null
@@ -171,19 +178,29 @@ function readLoginLastSelection(): LoginLastSelection | null {
   }
 }
 
-function saveLoginLastSelection(sel: { company?: string; store: string; user: string }) {
+function saveLoginLastSelection(
+  sel: { company?: string; store?: string; user?: string },
+  opts?: { saasAdmin?: boolean }
+) {
   if (typeof window === "undefined") return
-  const store = sel.store.trim()
-  const user = sel.user.trim()
-  if (!store || !user) return
+  const saasAdmin = Boolean(opts?.saasAdmin)
+  const user = String(sel.user ?? "").trim()
+  const company = String(sel.company ?? "").trim()
+  let store = String(sel.store ?? "").trim()
+  if (saasAdmin && !store) store = SAAS_PARTNER_LOGIN_STORE_DEFAULT
+  /** SaaS: 회사·이름만 있어도 저장(대리점은 매장 필드 숨김). 일반: 매장·이름 필수 */
+  if (saasAdmin) {
+    if (!company && !user) return
+  } else if (!store || !user) {
+    return
+  }
   try {
-    const company = String(sel.company ?? "").trim()
     localStorage.setItem(
-      LOGIN_LAST_SELECTION_KEY,
+      loginLastSelectionStorageKey(saasAdmin),
       JSON.stringify({
         ...(company ? { company } : {}),
-        store,
-        user,
+        ...(store ? { store } : {}),
+        ...(user ? { user } : {}),
       })
     )
   } catch {
@@ -324,8 +341,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   useLayoutEffect(() => {
     if (lastLoginSelectionHydratedRef.current) return
     lastLoginSelectionHydratedRef.current = true
-    lastLoginSelectionRef.current = readLoginLastSelection()
-  }, [])
+    const saas =
+      isSaasAdminLoginPath(normalizeLoginPathname(pathname)) || isSaasAdminLoginPathFromBrowser()
+    lastLoginSelectionRef.current = readLoginLastSelection(saas)
+  }, [pathname])
 
   useEffect(() => {
     const p = normalizeLoginPathname(pathname)
@@ -460,7 +479,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
      * 회사 로그인 바로가기(switch=1 / company·store·user 프리필):
      * 새 탭은 sessionStorage가 비지만 localStorage에 대리점(Partner/admin) 스냅샷이 남아
      * 「오프라인 모드로 들어가기」가 뜨는 문제 → 스냅샷 제거 후 고객사 로그인 폼만 표시.
+     *
+     * SaaS 관리(/saas-admin/login)는 서버 인증 필수 — POS 오프라인 스냅샷으로 진입하면
+     * /saas-admin ↔ 로그인 화면이 반복되므로 스냅샷을 쓰지 않는다.
      */
+    if (resolveSaasAdminLogin()) {
+      setOfflineResume(null)
+      return
+    }
     const switchingAccount =
       forceAccountSwitch ||
       Boolean(queryCompany) ||
@@ -472,7 +498,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       return
     }
     setOfflineResume(loadOfflineResumeAuth())
-  }, [forceAccountSwitch, queryCompany, queryStore, queryUser])
+  }, [forceAccountSwitch, queryCompany, queryStore, queryUser, resolveSaasAdminLogin])
 
   useEffect(() => {
     persistOfflinePilotFromQuery(searchParams)
@@ -672,7 +698,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         prefillsMismatch ||
         (isSaasPartnerLoginStoreClient(auth.store || "") &&
           (Boolean(queryCompany) || Boolean(queryStore) || Boolean(queryUser)))
-      if (mustSwitchAccount) {
+      /**
+       * SaaS 관리: 권한 없는 세션(POS 스냅샷·오프라인 진입 등)으로 /saas-admin ↔ 로그인 루프 방지.
+       * ?msg=no_admin 이거나, 본사/회계도 아니고 대리점(Partner) 세션도 아니면 폼만 표시.
+       * (대리점은 saas_partner_users로 별도 허용 — canAccessSaasAdmin만으로 끊으면 안 됨)
+       */
+      const saasLoginDenied =
+        resolveSaasAdminLogin() &&
+        (initialNoticeKey === "msg_no_admin_permission" ||
+          (!canAccessSaasAdmin(auth.role || "") &&
+            !isSaasPartnerLoginStoreClient(auth.store || "")))
+      if (mustSwitchAccount || saasLoginDenied) {
         clearOfflineLoginSnapshot()
         setOfflineResume(null)
         setAuth(null)
@@ -714,6 +750,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     queryStore,
     queryUser,
     setAuth,
+    initialNoticeKey,
   ])
 
   /** Omni POS: 회사명 입력 후 해당 테넌트 매장·직원만 로드 */
@@ -745,6 +782,34 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setError(tMsg(initialNoticeKey))
     setErrorIsConnectivity(false)
   }, [auth, initialNoticeKey, tMsg])
+
+  /** SaaS 관리: 입력 중인 회사·이름(·매장)을 브라우저에 보관 — 다음 방문 시 프리필 (PIN 제외) */
+  useEffect(() => {
+    if (!isSaasAdminLogin) return
+    if (queryCompany || queryStore || queryUser) return
+    const timer = window.setTimeout(() => {
+      saveLoginLastSelection(
+        {
+          company: company.trim() || undefined,
+          store: hideSaasPartnerStoreField
+            ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
+            : store.trim() || undefined,
+          user: user.trim() || undefined,
+        },
+        { saasAdmin: true }
+      )
+    }, 450)
+    return () => window.clearTimeout(timer)
+  }, [
+    isSaasAdminLogin,
+    company,
+    store,
+    user,
+    hideSaasPartnerStoreField,
+    queryCompany,
+    queryStore,
+    queryUser,
+  ])
 
   useEffect(() => {
     if (companyPrefillAppliedRef.current) return
@@ -849,11 +914,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         setNeedsTotpEnroll(false)
         setTotpEnrollSecret("")
         setTotpEnrollUrl("")
-        saveLoginLastSelection({
-          company: res.companyName || company || undefined,
-          store: res.storeName,
-          user: res.userName,
-        })
+        saveLoginLastSelection(
+          {
+            company: res.companyName || company || undefined,
+            store: res.storeName,
+            user: res.userName,
+          },
+          { saasAdmin: resolveSaasAdminLogin() }
+        )
         const nextTenantId =
           res.tenantId && !res.saasPartnerLogin ? String(res.tenantId).trim() : ""
         /** 로그인 직후 enabled-modules API 왕복 제거 */
@@ -1096,6 +1164,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    * 스냅샷 없어도 POS·하이브리드는 캐시 목록에서 고른 매장·이름으로 오프라인 진입 허용.
    */
   const effectiveOfflineResume = useMemo((): AuthState | null => {
+    /** SaaS 관리는 온라인 서버 인증 필수 — POS 오프라인 CTA/전체화면 진입 금지 */
+    if (isSaasAdminLogin || resolveSaasAdminLogin()) return null
     /** 고객사 로그인 전환 중에는 대리점 오프라인 CTA 숨김 */
     if (
       forceAccountSwitch ||
@@ -1125,6 +1195,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       token,
     })
   }, [
+    isSaasAdminLogin,
+    resolveSaasAdminLogin,
     forceAccountSwitch,
     queryCompany,
     queryStore,
@@ -1551,14 +1623,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                     isSaasAdminLogin &&
                     (!nextCompany.trim() || !isSaasPlatformDefaultLoginCompany(nextCompany.trim()))
                   if (nextPartnerFlow) {
-                    /** 대리점 — Partner 기본값 유지 */
+                    /** 대리점 — Partner 기본값 유지. 이름 입력은 유지(매 글자마다 지우지 않음) */
                     setStore((prev) => prev.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT)
                   } else if (isSaasAdminLogin) {
                     setStore("")
                   } else {
                     setStore("")
+                    setUser("")
                   }
-                  setUser("")
                 }}
                 placeholder={isSaasAdminLogin ? t.typePartnerCompany : t.typeCompany}
                 className="login-input-field"
@@ -1738,11 +1810,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                           })
                           if (res.success && res.storeName && res.userName) {
                             setNeedsTotp(false)
-                            saveLoginLastSelection({
-                              company: res.companyName || company || undefined,
-                              store: res.storeName,
-                              user: res.userName,
-                            })
+                            saveLoginLastSelection(
+                              {
+                                company: res.companyName || company || undefined,
+                                store: res.storeName,
+                                user: res.userName,
+                              },
+                              { saasAdmin: resolveSaasAdminLogin() }
+                            )
                             const nextTenantId =
                               res.tenantId && !res.saasPartnerLogin
                                 ? String(res.tenantId).trim()
