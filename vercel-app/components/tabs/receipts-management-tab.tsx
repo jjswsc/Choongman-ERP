@@ -1519,7 +1519,18 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         }
       }
       void runAutoPrintAfterPayCorrect(orderForPrint)
-      await appAlert(t('posReceiptPayCorrectSaved'))
+      const syncStatus = res.settlementSync?.status
+      if (res.settlementSyncError) {
+        await appAlert(
+          `${t('posReceiptPayCorrectSaved')}\n\n${t('posReceiptPayCorrectSettlementSyncFail') || '주문은 저장됐지만 결산 동기화에 실패했습니다. POS 결산에서 「현금 맞추기」를 눌러 주세요.'}`
+        )
+      } else {
+        await appAlert(
+          syncStatus === 'synced'
+            ? t('posReceiptPayCorrectSettlementSynced') || t('posReceiptPayCorrectSaved')
+            : t('posReceiptPayCorrectSaved')
+        )
+      }
       setPayCorrectOrder(null)
       setPayCorrectReason('')
       setPcOrderTotal('')

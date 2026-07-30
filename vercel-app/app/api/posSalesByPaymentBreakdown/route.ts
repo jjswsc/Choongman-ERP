@@ -336,6 +336,30 @@ export async function GET(request: NextRequest) {
         .map(([paymentKey, sales]) => ({ paymentKey, sales }))
     }
 
+    const liveCashFromSummary = Math.max(
+      0,
+      Math.round(
+        (Number(summary.find((r) => String(r.paymentKey).toLowerCase() === 'cash')?.sales ?? 0) || 0) * 100
+      ) / 100
+    )
+    const settlementCashFromCredit = Math.max(
+      0,
+      Math.round(
+        (Number(creditByChannel.find((r) => String(r.channelKey).toLowerCase() === 'cash')?.sales ?? 0) || 0) *
+          100
+      ) / 100
+    )
+    const cashDiff = Math.round((settlementCashFromCredit - liveCashFromSummary) * 100) / 100
+    const cashReconcile =
+      settlementCashFromCredit > 0.005 || liveCashFromSummary > 0.005
+        ? {
+            liveCash: liveCashFromSummary,
+            settlementCash: settlementCashFromCredit,
+            mismatch: Math.abs(cashDiff) > 0.02,
+            diff: cashDiff,
+          }
+        : null
+
     return NextResponse.json(
       {
         deliveryByChannel,
@@ -343,6 +367,7 @@ export async function GET(request: NextRequest) {
         creditByChannel,
         creditTotal: sumCreditPaymentChannelSales(creditByChannel),
         summary: summary.sort((a, b) => b.sales - a.sales),
+        cashReconcile,
       },
       { headers }
     )
@@ -355,6 +380,7 @@ export async function GET(request: NextRequest) {
         creditByChannel: [],
         creditTotal: 0,
         summary: [],
+        cashReconcile: null,
       },
       { headers }
     )

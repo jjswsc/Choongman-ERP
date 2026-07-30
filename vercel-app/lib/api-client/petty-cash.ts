@@ -326,6 +326,8 @@ export async function updatePettyCashTransaction(params: {
   memo?: string
   receiptUrl?: string | null
   accountSubjectId?: number | null
+  /** 빈 문자열이면 거래처 해제 */
+  vendorCode?: string | null
   invoiceReceived?: boolean
   invoiceNo?: string
   invoicePhotoUrl?: string | null
@@ -344,6 +346,7 @@ export async function updatePettyCashTransaction(params: {
       memo: params.memo ?? '',
       receiptUrl: params.receiptUrl,
       accountSubjectId: params.accountSubjectId,
+      ...(params.vendorCode !== undefined ? { vendorCode: params.vendorCode ?? '' } : {}),
       invoiceReceived: params.invoiceReceived,
       invoiceNo: params.invoiceNo,
       invoicePhotoUrl: params.invoicePhotoUrl,

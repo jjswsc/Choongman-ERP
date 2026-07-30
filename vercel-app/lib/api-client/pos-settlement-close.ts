@@ -91,6 +91,14 @@ export async function getPosSettlement(params: {
     systemCashFromOrders?: number
     /** 해당 결산일(trans_date)·매장 시재 거래 순액(입금+, 출금-/매출출금-) — 마감 예상 돈통용 */
     tillNetForSettleDate?: number
+    /** 저장 결산 현금 vs 실시간 주문 현금 */
+    cashReconcile?: {
+      liveCash: number
+      savedCash: number | null
+      mismatch: boolean
+      diff: number
+      closed: boolean
+    }
     linkpos?: {
       approvedCount: number
       failedCount: number
@@ -106,6 +114,28 @@ export async function getPosSettlement(params: {
     }
     settlement: PosSettlement | PosSettlement[] | null
     closeRun?: PosCloseRun | null
+  }>
+}
+
+/** 결산 현금을 완료 주문 합에 맞춤(마감이어도 결제 금액만, 시재 유지) */
+export async function reconcilePosSettlementCash(params: {
+  storeCode: string
+  settleDate: string
+}) {
+  const res = await apiFetchWithOffline('/api/reconcilePosSettlementCash', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    result?: {
+      status: string
+      liveCash: number
+      savedCashBefore: number | null
+      savedCashAfter: number | null
+    }
   }>
 }
 

@@ -42,6 +42,7 @@ import {
   mergeBalanceSheetReports,
   mergeIncomeStatementReports,
 } from '@/lib/accounting-income-statement-merge'
+import { shouldExcludeBankWithdrawFromPlExpense } from '@/lib/bank-transaction-note-meta'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
@@ -437,6 +438,7 @@ type BankWithdrawPlRow = {
   account_subject_id?: number | null
   vendor_code?: string | null
   memo?: string | null
+  note?: string | null
   store?: string | null
 }
 
@@ -450,13 +452,15 @@ async function fetchBankWithdrawRowsForPl(
   const filter =
     `account_id=in.(${idList})&trans_type=eq.withdraw&` +
     buildBankWithdrawPlPeriodOrFilter(startStr, endStr)
-  const rows = (await supabaseSelectFilterAllPages('bank_transactions', filter, {
-    select: 'id,amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo,store',
+  const raw = (await supabaseSelectFilterAllPages('bank_transactions', filter, {
+    select: 'id,amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo,note,store',
     order: 'id.asc',
     pageSize: 8000,
     maxRows: ACCOUNTING_ROWS_MAX,
   })) as BankWithdrawPlRow[]
-  const fetched = rows.length
+  /** 잔액 계산과 동일: expense_internal·세금납부(BS)는 손익 비용에서 제외 */
+  const rows = raw.filter((r) => !shouldExcludeBankWithdrawFromPlExpense(r))
+  const fetched = raw.length
   return { rows, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
 }
 

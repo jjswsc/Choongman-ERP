@@ -3,6 +3,8 @@
  * 이체, 고정비, 비용 등
  */
 
+import { looksLikeTaxAuthorityRemittanceMemo } from '@/lib/bank-transaction-note-meta'
+
 export type WithdrawCategory = 'transfer' | 'expense' | 'correction' | 'loan' | 'advance' | 'unclassified'
 
 /** 출금 시 적요 기반 용도·계정과목 추천 */
@@ -28,6 +30,11 @@ export function suggestWithdrawFromMemo(
   // 전도금 (선급)
   if (/\b(전도|선급|선지급|advance|prepay|ล่วงหน้า)\b/i.test(m)) {
     return { category: 'advance' }
+  }
+
+  // VAT·원천 등 세무서 납부(BS) — 손익 5510으로 올리지 않음
+  if (looksLikeTaxAuthorityRemittanceMemo(memo)) {
+    return { category: 'unclassified' }
   }
 
   // 반복 경비(임대·공과 등) — 통장 용도는 경비(expense)로 통일

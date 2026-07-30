@@ -14,6 +14,9 @@ import {
   resolvePosPaymentKeysForStore,
 } from '@/lib/pos-payment-settings-resolve'
 import { resolvePosDeliveryAppSettlementGross } from '@/lib/pos-delivery-app-settlement-amount'
+import {
+  buildSettlementCashReconcile,
+} from '@/lib/pos-settlement-sync-after-pay-correct'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -434,6 +437,13 @@ export async function GET(request: NextRequest) {
       | null
     const closeRun = closeRuns?.[0]
 
+    const settlementRow = list[0] ?? null
+    const cashReconcile = buildSettlementCashReconcile({
+      liveCash: systemCashFromOrders,
+      savedCash: settlementRow?.cashAmt,
+      closed: settlementRow?.closed,
+    })
+
     return NextResponse.json(
       {
         systemTotal,
@@ -441,6 +451,7 @@ export async function GET(request: NextRequest) {
         systemVat,
         systemCashFromOrders,
         tillNetForSettleDate,
+        cashReconcile,
         linkpos: {
           approvedCount: linkposApprovedCount,
           failedCount: linkposFailedCount,
@@ -454,7 +465,7 @@ export async function GET(request: NextRequest) {
           autoDineInDeliveryBreakdown,
           autoOtherBreakdown,
         },
-        settlement: list[0] ?? null,
+        settlement: settlementRow,
         closeRun: closeRun
           ? {
               id: Number(closeRun.id || 0),

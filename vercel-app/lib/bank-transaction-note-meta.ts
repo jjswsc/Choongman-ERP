@@ -3,6 +3,54 @@
  * 사용자가 입력한 상세 텍스트(통장 화면 '메모/비고')는 유지하기 위한 유틸.
  */
 
+/** 지출관리에서 통장 행을 새로 만들 때 넣는 마커. 통장 잔액·목록·손익에서 제외(실거래 import와 이중 방지). */
+export const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
+
+const TAX_SETTLEMENT_WITHDRAWAL_CATEGORIES = new Set([
+  'tax_vat',
+  'tax_withholding',
+  'tax_corporate',
+])
+
+export function isExpenseInternalBankNote(note: string | null | undefined): boolean {
+  return String(note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER)
+}
+
+export function isTaxSettlementWithdrawalCategory(cat: string | null | undefined): boolean {
+  return TAX_SETTLEMENT_WITHDRAWAL_CATEGORIES.has(String(cat || '').trim().toLowerCase())
+}
+
+/**
+ * VAT·원천·법인세 납부(미지급세금 정산)는 손익 비용이 아님.
+ * 통장 category를 unclassified 로 두면 손익 집계에서 제외된다.
+ */
+export function bankCategoryForWithdrawalCategory(withdrawalCategory: string): string | null {
+  if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) return 'unclassified'
+  return null
+}
+
+/** 세무서(กรมสรรพากร) 납부·ภ.พ.30 등 — BS 정산으로 보고 손익에서 제외 */
+export function looksLikeTaxAuthorityRemittanceMemo(memo: string | null | undefined): boolean {
+  const m = String(memo || '')
+  if (!m.trim()) return false
+  if (/ภ\.?\s*พ\.?\s*30|ภพ\.?\s*30|ภ\.?\s*ง\.?\s*ด|ภงด/i.test(m)) return true
+  if (/revenue\s*dep|สรรพากร|กรมสรรพากร/i.test(m)) return true
+  if (/paid\s+for\s+ref[\s\S]{0,120}revenue/i.test(m)) return true
+  return false
+}
+
+/** 손익 비용에 넣으면 안 되는 통장 출금 (내부 생성·세금 납부 정산) */
+export function shouldExcludeBankWithdrawFromPlExpense(row: {
+  note?: string | null
+  memo?: string | null
+}): boolean {
+  if (isExpenseInternalBankNote(row.note)) return true
+  const wCat = extractWithdrawalCategoryFromNote(String(row.note || ''))
+  if (wCat && isTaxSettlementWithdrawalCategory(wCat)) return true
+  if (looksLikeTaxAuthorityRemittanceMemo(row.memo)) return true
+  return false
+}
+
 export function extractWithdrawalCategoryFromNote(note: string): string | null {
   const m = String(note || '').match(/withdrawal_category:([a-z_]+)/i)
   return m?.[1] ? m[1].toLowerCase() : null

@@ -4744,6 +4744,8 @@ export const i18n = {
     salesPaymentBreakdownCreditTitle: '결제수단별 매출 — 카드/지갑',
     salesPaymentBreakdownFootnote:
       '배달·카드 표는 POS 결산에 저장한 breakdown(Visa/Grab 등)을 합산합니다. 결산 전 매장·미연동 건만 LINKPOS 또는 주문 배달액으로 보조합니다.',
+    salesPaymentCashReconcileMismatch:
+      '결산 현금({settlement})과 완료 주문 현금 합({live})이 {diff} 다릅니다. POS에서 결제 정정 후 결산을 열면 자동으로 맞춥니다.',
     salesDeliveryPlatformFootnote:
       '비율은 배달 매출 합계 대비입니다. 과거 주문은 품목·메모에 남은 코드로 추정할 수 있습니다.',
     salesChannel: '채널',
@@ -5737,6 +5739,7 @@ export const i18n = {
     attendance_qr_store_forbidden: '이 매장에 QR 단말을 등록할 권한이 없습니다.',
     attendance_qr_device_not_registered: '등록되지 않은 QR 단말입니다.',
     adminPosPrinters: '프린터 설정',
+    adminPosQrTableOrder: 'QR 테이블오더·뷔페',
     adminPosCoupons: '쿠폰',
     company_name: '회사명',
     adminPosTaxInvoiceRecipients: '세금계산서 수취인',
@@ -7177,6 +7180,10 @@ export const i18n = {
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다. Omni에서는 노출 매장(Store)을 저장해야 해당 매장 POS에 보입니다.',
     helpHow_admin_pos_menus:
       '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 가격이력 탭 안의 「가격 예약」에서 지정일 가격을 미리 등록할 수 있습니다.\n【노출 매장】메뉴 정보의 Store에서 매장을 선택·저장해야 POS에 표시됩니다(특히 Omni). 미저장이면 체크만 되어 보여도 POS에 안 나올 수 있습니다.\n【최종가격】매장별 VAT·서비스비 등 %와 포함/별도, 「별도 항목 적용 순서」(병렬 / 서비스→부가세 / 부가세→서비스), 그리고 「결제 합계 반올림」(반올림·반내림·그대로)을 설정합니다. 미리보기로 누적 결과를 확인한 뒤 저장하세요.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n【메뉴 유형 체크박스】메뉴 정보의 홀/배달/포장 체크박스는 메뉴 화면 구성의 유형(매장·배달·포장)과 연동됩니다. 체크 해제한 유형에서는 해당 메뉴 타일이 POS 메뉴 그리드에서 숨겨집니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션·노출 매장 등을 저장합니다. 대분류를 고르면 메뉴 코드가 접두사+번호로 자동 발급되며(신규 대분류 포함), 기존 코드와 겹치지 않습니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 행 편집, 우측 단계 순서·현재 단계 선택의 3패널 구조입니다. 가운데에서 선택 단계를 저장한 뒤, 옵션 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요. 「값 일괄 추가」에서는 직접 입력하거나「메뉴 검색·선택」으로 등록된 메뉴를 골라 입력란에 넣을 수 있습니다.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·「프로모 카테고리」(Grab·POS 소분류)를 저장합니다. 새 소분류는 상단 「카테고리 설정」→ Promotion에서 추가합니다. Grab 배달 프로모는「Grab 캠페인 시각(방콕)」으로 할인 시작·종료 시각을 지정할 수 있습니다. 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 「가격 이력」 내부의 「가격 예약」에서 예약 등록·조회·취소를 관리할 수 있습니다.\n⑥ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.',
+    helpSum_admin_pos_qr_table_order:
+      '손님 폰 QR 테이블오더와 뷔페 티어(인당 입장가·포함 메뉴)를 매장별로 켭니다. 입장가/별도메뉴 선결제·후불·손님 선택을 설정하고, 테이블 QR을 발급합니다. Omni 파일럿부터 사용합니다.',
+    helpHow_admin_pos_qr_table_order:
+      '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·입장/별도 후불로 시작하는 것을 권장합니다.\n② 뷔페 티어를 추가하고 포함 메뉴를 체크합니다. 포함 메뉴는 손님 앱에서 0원으로만 주문됩니다.\n③ 「레이아웃 기준 생성」으로 테이블 QR을 만든 뒤, 카드 미리보기에서 PNG 단건·전체 PDF·전체 인쇄로 테이블에 부착할 카드를 받습니다.\n④ POS에서 테이블「QR 세션 오픈」→ 손님이 /t/{token}으로 메뉴 전송 → 퇴장 시 POS 결제(이미 QR 입금된 금액은 payment_qr로 반영).\n⑤ 선결제(입장/별도)는 KBank PromptPay를 쓰며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
     helpSum_admin_items:
       '품목 기본정보와 판매가/원가를 관리하고, 가격 이력과 가격 예약(지정일 자동 반영)을 조회·등록하는 화면입니다.',
     helpHow_admin_items:
@@ -12358,6 +12365,8 @@ Only matters the employee must handle personally on a working day:
     salesPaymentBreakdownCreditTitle: 'Sales Report by Card Type — Credit Card',
     salesPaymentBreakdownFootnote:
       'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved.',
+    salesPaymentCashReconcileMismatch:
+      'Settlement cash ({settlement}) differs from completed-order cash ({live}) by {diff}. Opening POS settlement after a payment correction realigns them automatically.',
     salesDeliveryPlatformFootnote:
       'Percentages are share of delivery sales only. Older orders may infer platform from line items.',
     salesChannel: 'Channel',
@@ -13354,6 +13363,7 @@ orderItemQty: 'Qty',
     attendance_qr_store_forbidden: 'Not allowed to register a QR kiosk for this store.',
     attendance_qr_device_not_registered: 'This device is not registered as a QR kiosk.',
     adminPosPrinters: 'Printer Settings',
+    adminPosQrTableOrder: 'QR table order · buffet',
     adminPosCoupons: 'Coupons',
     company_name: 'Company name',
     adminPosTaxInvoiceRecipients: 'Tax invoice recipients',
@@ -14797,6 +14807,10 @@ orderItemQty: 'Qty',
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery). On Omni, store scope must be saved for the menu to appear on that store’s POS.',
     helpHow_admin_pos_menus:
       '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Inside Price history, use “Price schedule” to pre-register future price changes.\n【Store scope】In Menu info → Store, select and save stores so the item appears on POS (especially on Omni). If scope is not saved, checkboxes may look selected but the menu still stays hidden on POS.\n【Final price】Per store, set VAT/service % and included/separate, separate-fee application order (parallel / service→VAT / VAT→service, or reorder with arrows), and payment-total rounding (round / round down / keep as-is). Use the live preview, then save.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n【Menu type checkboxes】Hall/Delivery/Packaging checkboxes in Menu info are linked to the menu-screen type view (dine-in/delivery/takeout). If a type is unchecked, that menu tile is hidden in the POS menu grid for that type.\n① After choosing a store, use the menu grid and form to save items, hall / delivery prices, and store scope. Choosing a main category auto-assigns a unique menu code (prefix + number), including newly created main categories.\n② In Options config, use the 3-panel layout: menu list on the left, option rows in the center, step order / current step on the right. Save steps from the center first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards. Under Bulk add values, type labels or use Search menus to append catalog rows to the field, then press Bulk add values.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ In the Sets tab, save bundle price, channels, and Promo category (Grab/POS subcategory). Add new subcategories under Category settings → Promotion. For Grab delivery promos, set Grab campaign times (Bangkok). Use Bundle set inquiry for activate/deactivate/copy/campaign link.\n⑤ In Price history > Price schedule, register, review, and cancel future price updates.\n⑥ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.',
+    helpSum_admin_pos_qr_table_order:
+      'Enable guest-phone QR table ordering and buffet tiers (per-person entry price + included menus) per store. Configure entry/extras as prepay, postpay, or guest choice, and issue table QR codes. Start with the Omni pilot.',
+    helpHow_admin_pos_qr_table_order:
+      '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay for entry/extras.\n② Add buffet tiers and check included menus (forced to ฿0 on the guest app).\n③ Generate table QR codes from the floor layout, then download PNG / PDF or print guest-facing table cards.\n④ On POS: open QR session → guest orders via /t/{token} → close payment at POS (QR deposits stay on payment_qr).\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
     helpSum_admin_items:
       'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
     helpHow_admin_items:
@@ -19307,6 +19321,8 @@ orderItemQty: 'จำนวน',
     salesPaymentBreakdownCreditTitle: 'รายงานตามการชำระ — บัตรเครดิต',
     salesPaymentBreakdownFootnote:
       'ตารางเดลิเวอรี·บัตรรวม breakdown จาก POS ปิดยอด (Visa/Grab ฯลฯ) ก่อนปิดยอดใช้ LINKPOS หรือยอดเดลิเวอรีจากออเดอร์ช่วยเติม',
+    salesPaymentCashReconcileMismatch:
+      'ยอดเงินสดจากปิดยอด ({settlement}) ไม่เท่ากับยอดเงินสดจากออเดอร์ที่เสร็จแล้ว ({live}) ต่าง {diff} บาท — เปิดหน้าปิดยอด POS หลังแก้ช่องทางชำระ ระบบจะจัดให้ตรงกันอัตโนมัติครับ',
     salesExcludeTestOfficePosNote:
       'ออเดอร์ POS สำนักงานใหญ่/ออฟฟิศเป็นทดสอบ ไม่รวมในการจัดการยอดขาย·รายชื่อสาขา ยอดสำนักงานใหญ่ดูที่งบกำไรขาดทุน (ส่งออกโลจิสติกส์)',
     salesDeliveryPlatformFootnote: 'เปอร์เซ็นต์เทียบยอดเดลิเวอรีรวม ออเดอร์เก่าอาจอนุมานจากรายการ',

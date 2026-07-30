@@ -523,6 +523,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptPayCorrectForbidden: '이 매장 주문만 정정할 수 있습니다.',
     posReceiptPayCorrectReasonShort: '사유를 2자 이상 입력해 주세요.',
     posReceiptPayCorrectSaved: '결제 수단을 저장했습니다. 결제 완료 손님 영수증을 자동 출력합니다.',
+    posReceiptPayCorrectSettlementSynced:
+      '결제 수단을 저장했고, 당일 POS 결산 현금·결제 금액도 주문과 맞게 갱신했습니다.',
+    posReceiptPayCorrectSettlementSyncFail:
+      '주문은 저장됐지만 결산 동기화에 실패했습니다. POS 결산에서 「현금 맞추기」를 눌러 주세요.',
     posReceiptPayCorrectUnauthorized: '로그인이 필요합니다.',
     posReceiptPayCorrectConfirm: '이대로 저장할까요?',
     posReceiptPayCorrectOtherDetail: '「기타」세부(합계는 기타 금액과 같아야 함)',
@@ -1922,6 +1926,12 @@ export const I18N_POS_KO: Record<string, string> = {
       '결제 화면에는 카드 구분 없이 기록됩니다. 마감 시 EDC 단말 결산서를 보고 아래에 브랜드별 금액을 입력해 주세요.',
     posSettlementCashFromPosReadOnly:
       '완료 주문의 현금 결제 합계입니다. POS 결제 수단과 맞추기 위해 이 금액은 수정할 수 없습니다.',
+    posSettlementCashReconciledBanner:
+      '결제 정정·주문 변경으로 결산 현금이 주문 합계와 달라 자동으로 맞췄습니다. ERP 매출(Payment/Card) 현금도 같은 금액입니다.',
+    posSettlementCashMismatchBanner:
+      '결산에 저장된 현금과 완료 주문 현금 합이 다릅니다. 「현금 맞추기」로 주문 기준으로 맞출 수 있습니다.',
+    posSettlementCashReconcileBtn: '현금 맞추기',
+    posSettlementCashReconcileDone: '결산 현금을 주문 합계에 맞췄습니다.',
     posSettlementAutoQrLockedHint:
       'QR·PromptPay 등은 완료 주문·LinkPOS에서 집계된 금액입니다. 매장 계정에서는 수정할 수 없습니다. 오류가 있으면 당일 주문의 결제 정정(본사·회계) 또는 권한 계정으로만 조정하세요.',
     posSettlementAutoDeliveryLockedHint:
@@ -3798,6 +3808,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptPayCorrectForbidden: 'You can only correct orders for your store.',
     posReceiptPayCorrectReasonShort: 'Enter a reason (at least 2 characters).',
     posReceiptPayCorrectSaved: 'Payment split saved. Post-payment customer receipt prints automatically.',
+    posReceiptPayCorrectSettlementSynced:
+      'Payment split saved, and today’s POS settlement cash/payment totals were updated to match the orders.',
+    posReceiptPayCorrectSettlementSyncFail:
+      'Payment was saved, but settlement sync failed. Open POS Settlement and tap “Align cash”.',
     posReceiptPayCorrectUnauthorized: 'Sign-in required.',
     posReceiptPayCorrectConfirm: 'Save this correction?',
     posReceiptPayCorrectOtherDetail: '“Other” breakdown (must match the Other total)',
@@ -5182,6 +5196,12 @@ export const I18N_POS_EN: Record<string, string> = {
       'Checkout records card as one amount. At close, use your EDC terminal settlement report and enter amounts by brand below.',
     posSettlementCashFromPosReadOnly:
       'Total cash from completed orders. This amount cannot be edited so it stays aligned with POS.',
+    posSettlementCashReconciledBanner:
+      'Settlement cash was out of sync with completed orders (e.g. after a payment correction) and was updated automatically. ERP Payment/Card cash uses the same amount.',
+    posSettlementCashMismatchBanner:
+      'Saved settlement cash differs from completed-order cash. Use “Align cash” to match settlement to orders.',
+    posSettlementCashReconcileBtn: 'Align cash',
+    posSettlementCashReconcileDone: 'Settlement cash was aligned to completed-order totals.',
     posSettlementAutoQrLockedHint:
       'QR / PromptPay amounts come from completed orders and LinkPOS. Store accounts cannot edit them. If wrong, correct the order payment (head office / accounting) or use an authorized account.',
     posSettlementAutoDeliveryLockedHint:
@@ -7079,6 +7099,12 @@ export const I18N_POS_TH: Record<string, string> = {
       'หน้าชำระเงินบันทึกบัตรเป็นยอดรวมเดียว ตอนปิดร้านให้ดูรายงานจากเครื่อง EDC แล้วกรอกแยกตามแบรนด์ด้านล่าง',
     posSettlementCashFromPosReadOnly:
       'ยอดเงินสดจากออเดอร์ที่เสร็จแล้ว ตัวเลขนี้แก้ไม่ได้เพื่อให้ตรงกับ POS',
+    posSettlementCashReconciledBanner:
+      'ยอดเงินสดในปิดยอดไม่ตรงกับออเดอร์ (เช่น หลังแก้ช่องทางชำระ) ระบบปรับให้อัตโนมัติแล้ว ยอดเงินสดใน ERP Payment/Card ใช้ตัวเลขเดียวกันครับ',
+    posSettlementCashMismatchBanner:
+      'ยอดเงินสดที่บันทึกในปิดยอดไม่เท่ากับยอดเงินสดจากออเดอร์ที่เสร็จแล้ว กด「จัดยอดเงินสด」เพื่อให้ตรงกับออเดอร์ครับ',
+    posSettlementCashReconcileBtn: 'จัดยอดเงินสด',
+    posSettlementCashReconcileDone: 'ปรับยอดเงินสดในปิดยอดให้ตรงกับออเดอร์แล้วครับ',
     posSettlementAutoQrLockedHint:
       'ยอด QR / พร้อมเพย์ มาจากออเดอร์ที่ปิดแล้วและ LinkPOS บัญชีร้านแก้ไขไม่ได้ หากผิดให้แก้การชำระที่ออเดอร์ (สำนักงานใหญ่ / บัญชี) หรือใช้บัญชีที่ได้รับอนุญาต',
     posSettlementAutoDeliveryLockedHint:
@@ -8104,6 +8130,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptPayCorrectForbidden: 'แก้ได้เฉพาะบิลของสาขาคุณเท่านั้น',
     posReceiptPayCorrectReasonShort: 'กรอกเหตุผลอย่างน้อย 2 ตัวอักษร',
     posReceiptPayCorrectSaved: 'บันทึกการแก้ช่องทางชำระแล้ว พิมพ์เฉพาะใบเสร็จหลังชำระเงิน',
+    posReceiptPayCorrectSettlementSynced:
+      'บันทึกการแก้ช่องทางชำระแล้ว และอัปเดตยอดเงินสด/ยอดชำระในปิดยอดวันนั้นให้ตรงกับออเดอร์แล้วครับ',
+    posReceiptPayCorrectSettlementSyncFail:
+      'บันทึกออเดอร์แล้ว แต่ซิงก์ปิดยอดไม่สำเร็จ กรุณาเปิดหน้าปิดยอด POS แล้วกด「จัดยอดเงินสด」ครับ',
     posReceiptPayCorrectUnauthorized: 'ต้องเข้าสู่ระบบ',
     posReceiptPayCorrectConfirm: 'บันทึกการแก้ไขนี้?',
     posReceiptPayCorrectOtherDetail: 'เลือกรายละเอียด “อื่นๆ” ให้ตรงการชำระ (ต้องสอดคล้องกับยอดในช่องอื่นๆ เมื่อบันทึก)',

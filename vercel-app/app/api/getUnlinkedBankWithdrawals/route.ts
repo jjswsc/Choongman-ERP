@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { INTERNAL_BANK_SOURCE_MARKER } from '@/lib/bank-transaction-note-meta'
 
-const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const UNLINKED_BANK_SCAN_MAX_ROWS = 1_000_000
 
 /** 미연결 출금 거래 목록 (지출/매입 관리 연결용) */

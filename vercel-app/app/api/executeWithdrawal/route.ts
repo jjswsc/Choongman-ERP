@@ -10,7 +10,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
 import { requireAuth } from '@/lib/verify-auth'
 
-const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
+import { INTERNAL_BANK_SOURCE_MARKER, bankCategoryForWithdrawalCategory } from '@/lib/bank-transaction-note-meta'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -468,6 +468,8 @@ function mapToWithdrawalCategory(main: string, sub: string): WithdrawalCategory 
 }
 
 function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
+  const taxBank = bankCategoryForWithdrawalCategory(cat)
+  if (taxBank) return taxBank
   const map: Record<WithdrawalCategory, string> = {
     purchase_payment: 'purchase_payment',
     purchase_advance: 'advance',
@@ -481,9 +483,9 @@ function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
     transfer_from_petty: 'transfer',
     loan_repayment: 'loan',
     loan_given: 'advance',
-    tax_vat: 'expense',
-    tax_withholding: 'expense',
-    tax_corporate: 'expense',
+    tax_vat: 'unclassified',
+    tax_withholding: 'unclassified',
+    tax_corporate: 'unclassified',
     correction: 'correction',
     dividend: 'expense',
   }

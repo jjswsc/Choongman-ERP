@@ -46,6 +46,7 @@ import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
 import {
   PosOrderTaxInvoiceEntryRow,
   PosOrderTaxInvoiceStatusButton,
@@ -763,9 +764,25 @@ export function TableOrderPanel({
       </div>
 
       {!order ? (
-        <div className="p-3 text-base text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
+        <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
+          <div className="text-base text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
+          {storeCode ? (
+            <QrTableSessionPanel
+              storeCode={storeCode}
+              tableName={String(tableName || '').trim()}
+              onChanged={onServed}
+            />
+          ) : null}
+        </div>
       ) : (
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
+          {order.type === 'dine-in' && storeCode ? (
+            <QrTableSessionPanel
+              storeCode={storeCode}
+              tableName={String(tableName || '').trim()}
+              onChanged={onServed}
+            />
+          ) : null}
           {order.type === 'dine-in' && (
               <div className="flex flex-wrap items-center gap-2">
                 <button

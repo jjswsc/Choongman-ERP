@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
+import { INTERNAL_BANK_SOURCE_MARKER } from '@/lib/bank-transaction-note-meta'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -10,7 +11,6 @@ import {
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 
-const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const BANK_TX_SUMMARY_SCAN_MAX_ROWS = 1_000_000
 
 /** 통장 거래 목록 + 잔액 검증용 집계 */

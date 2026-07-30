@@ -24,6 +24,7 @@ import {
   getPosBusinessDaySettings,
   validatePosClose,
   finalizePosClose,
+  reconcilePosSettlementCash,
   useStoreList,
   type PosDeliveryApp,
   type PosCloseRun,
@@ -285,6 +286,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [systemTotal, setSystemTotal] = React.useState(0)
   /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
   const [systemCashFromOrders, setSystemCashFromOrders] = React.useState(0)
+  const [cashReconcileBanner, setCashReconcileBanner] = React.useState<'mismatch' | null>(null)
   const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
   const [closeRun, setCloseRun] = React.useState<PosCloseRun | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -574,12 +576,18 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           systemVat: vat,
           systemCashFromOrders: cashFromOrdersRaw,
           tillNetForSettleDate: tillNetRaw,
+          cashReconcile,
           linkpos,
           settlement: s,
           closeRun: nextCloseRun,
         } = main
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
         setSystemCashFromOrders(autoCashTotal)
+        if (cashReconcile?.mismatch) {
+          setCashReconcileBanner('mismatch')
+        } else {
+          setCashReconcileBanner(null)
+        }
         setTillNetForSettleDate(Number(tillNetRaw ?? 0) || 0)
         const posCardOrdersTotal = Number(linkpos?.cardReportedTotal ?? 0) || 0
         const autoCardMap = (linkpos?.autoCardBreakdown || {}) as Record<string, number>
@@ -1535,6 +1543,52 @@ ${footerStamp}
             </AdminTabsBarWithHelp>
 
             <TabsContent value="entry" className="space-y-4">
+              {cashReconcileBanner === 'mismatch' && (
+                <div
+                  className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+                  data-tour="pos-tour-cash-mismatch-banner"
+                >
+                  <p>
+                    {t('posSettlementCashMismatchBanner') ||
+                      '결산에 저장된 현금과 완료 주문 현금 합이 다릅니다. 「현금 맞추기」로 주문 기준으로 맞출 수 있습니다.'}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-amber-400 bg-white"
+                    disabled={saving || !effectiveStore}
+                    onClick={() => {
+                      void (async () => {
+                        if (!effectiveStore) return
+                        setSaving(true)
+                        try {
+                          const res = await reconcilePosSettlementCash({
+                            storeCode: effectiveStore,
+                            settleDate,
+                          })
+                          if (!res.success) {
+                            await appAlert(res.message || t('msg_save_fail_detail') || '실패')
+                            return
+                          }
+                          setCashReconcileBanner(null)
+                          await appAlert(
+                            t('posSettlementCashReconcileDone') ||
+                              '결산 현금을 주문 합계에 맞췄습니다.'
+                          )
+                          void loadData()
+                        } catch (e) {
+                          await appAlert(String(e))
+                        } finally {
+                          setSaving(false)
+                        }
+                      })()
+                    }}
+                  >
+                    {t('posSettlementCashReconcileBtn') || '현금 맞추기'}
+                  </Button>
+                </div>
+              )}
               <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3" data-tour="pos-tour-close-system-summary">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{t('posSystemSubtotal') || '공급가액'}</span>

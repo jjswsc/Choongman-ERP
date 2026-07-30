@@ -53,6 +53,7 @@ import {
   deletePettyCashTransaction,
   updatePettyCashTransactionInvoice,
   getAccountSubjects,
+  getVendorsForPurchase,
   getAdminEmployeeList,
   getBankAccounts,
   getUnlinkedBankWithdrawalsForPetty,
@@ -60,6 +61,7 @@ import {
   type PettyCashItem,
   type PettyCashSummaryResult,
   type AccountSubjectItem,
+  type VendorForPurchase,
   type BankAccount,
   type UnlinkedBankWithdrawalForPetty,
 } from "@/lib/api-client"
@@ -162,6 +164,7 @@ export function PettyCashTab({
   const [addAmount, setAddAmount] = useState("")
   const [addMemo, setAddMemo] = useState("")
   const [addAccountSubjectId, setAddAccountSubjectId] = useState("")
+  const [addVendorCode, setAddVendorCode] = useState("")
   const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null)
   const [addReceiptPreview, setAddReceiptPreview] = useState<string | null>(null)
   const [addInvoiceReceived, setAddInvoiceReceived] = useState(false)
@@ -172,6 +175,7 @@ export function PettyCashTab({
   const [updatingInvoiceId, setUpdatingInvoiceId] = useState<number | null>(null)
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
   const [accountSubjectOptions, setAccountSubjectOptions] = useState<AccountSubjectItem[]>([])
+  const [vendors, setVendors] = useState<VendorForPurchase[]>([])
   const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
   const [pendingAccountSubjectByRowId, setPendingAccountSubjectByRowId] = useState<Record<number, string>>({})
   const [monthlySearchMode, setMonthlySearchMode] = useState<"month" | "period">("month")
@@ -197,6 +201,7 @@ export function PettyCashTab({
   const [editAmount, setEditAmount] = useState("")
   const [editMemo, setEditMemo] = useState("")
   const [editAccountSubjectId, setEditAccountSubjectId] = useState("")
+  const [editVendorCode, setEditVendorCode] = useState("")
   const [editReceiptFile, setEditReceiptFile] = useState<File | null>(null)
   const [editReceiptPreview, setEditReceiptPreview] = useState<string | null>(null)
   const [editInvoiceReceived, setEditInvoiceReceived] = useState(false)
@@ -352,13 +357,37 @@ export function PettyCashTab({
     Promise.all([
       getAccountSubjects({ forExpense: true, excludeHeaders: true }),
       getAccountSubjects({ forCost: true, excludeHeaders: true }),
-    ]).then(([expense, cost]) => {
-      setAccountSubjectOptions([...(cost || []), ...(expense || [])])
-    }).catch(() => setAccountSubjectOptions([]))
+      getAccountSubjects({ type: "asset", excludeHeaders: true }),
+      getVendorsForPurchase().catch(() => [] as VendorForPurchase[]),
+    ])
+      .then(([expense, cost, assets, vendorList]) => {
+        const advanceCodes = new Set(["1150", "1160"])
+        const advance = (assets || []).filter((a) => advanceCodes.has(String(a.code || "").trim()))
+        const byId = new Map<number, AccountSubjectItem>()
+        for (const a of [...(cost || []), ...(expense || []), ...advance]) {
+          if (a.id != null) byId.set(a.id, a)
+        }
+        setAccountSubjectOptions(Array.from(byId.values()))
+        setVendors(Array.isArray(vendorList) ? vendorList : [])
+      })
+      .catch(() => {
+        setAccountSubjectOptions([])
+        setVendors([])
+      })
   }, [])
 
   /** 저장된 원문 그대로 표시(관리자·모바일 동일, 브라우저 검색·대사 가능) */
   const formatMemo = (memo: string) => String(memo || "").trim() || "-"
+
+  const vendorDisplayName = useCallback(
+    (code?: string | null) => {
+      const c = String(code || "").trim()
+      if (!c) return "—"
+      const hit = vendors.find((v) => String(v.code || "").trim() === c)
+      return hit ? `${hit.name}` : c
+    },
+    [vendors]
+  )
 
   const plCostSubjectIds = useMemo(
     () =>
@@ -782,6 +811,9 @@ export function PettyCashTab({
       memo: addMemo,
       receiptUrl,
       accountSubjectId: addAccountSubjectId ? Number(addAccountSubjectId) : null,
+      ...(addType === "expense" && addVendorCode.trim()
+        ? { vendorCode: addVendorCode.trim() }
+        : {}),
       ...(addType === "expense"
         ? {
             invoiceReceived: addInvoiceReceived,
@@ -799,6 +831,7 @@ export function PettyCashTab({
       setAddAmount("")
       setAddMemo("")
       setAddAccountSubjectId("")
+      setAddVendorCode("")
       setAddInvoiceReceived(false)
       setAddInvoiceNo("")
       setAddVatAmount("")
@@ -822,6 +855,7 @@ export function PettyCashTab({
     setEditAmount(String(Math.abs(r.amount)))
     setEditMemo(r.memo || "")
     setEditAccountSubjectId((r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "")
+    setEditVendorCode(String(r.vendorCode || "").trim())
     setEditInvoiceReceived(Boolean(r.invoiceReceived))
     setEditInvoiceNo(r.invoiceNo || "")
     setEditVatAmount(r.vatAmount && r.vatAmount > 0 ? String(r.vatAmount) : "")
@@ -918,6 +952,7 @@ export function PettyCashTab({
       memo: editMemo,
       receiptUrl: receiptUrl,
       accountSubjectId: editAccountSubjectId ? Number(editAccountSubjectId) : null,
+      vendorCode: editType === "expense" ? editVendorCode.trim() : "",
       ...(editType === "expense"
         ? {
             invoiceReceived: editInvoiceReceived,
@@ -1299,6 +1334,7 @@ export function PettyCashTab({
       t("pettyColAmount") || "Amount",
       t("pettyColBalance") || "Balance",
       t("accountSubject") || "Account Subject",
+      t("vendor") || "Vendor",
       t("pettyColMemo") || "Memo",
       t("pettyColUser") || "User",
     ]
@@ -1306,9 +1342,9 @@ export function PettyCashTab({
       ? (monthlyDepartment === "All" ? `${t("pettyScopeOffice") || "Office"} ${t("all") || "All"}` : `${t("pettyScopeOffice") || "Office"} (${monthlyDepartment})`)
       : (monthlyStore === "All" ? t("all") || "All" : monthlyStore)
     const rows: string[][] = [
-      [t("pettyTabMonthly") || "Monthly Status", "", "", "", "", "", "", ""],
-      [t("pettyYearMonth") || "Period", monthlyYm, "", "", "", "", "", ""],
-      [t("store") || "Store", storeLabel, "", "", "", "", "", ""],
+      [t("pettyTabMonthly") || "Monthly Status", "", "", "", "", "", "", "", ""],
+      [t("pettyYearMonth") || "Period", monthlyYm, "", "", "", "", "", "", ""],
+      [t("store") || "Store", storeLabel, "", "", "", "", "", "", ""],
       [],
       cols,
     ]
@@ -1325,6 +1361,7 @@ export function PettyCashTab({
         String(r.amount),
         String(r.balance_after ?? 0),
         getAccountSubjectName(r.accountSubjectId ?? r.account_subject_id ?? null),
+        r.trans_type === "expense" ? vendorDisplayName(r.vendorCode) : "",
         r.memo || "",
         r.user_name || "",
       ])
@@ -1558,6 +1595,7 @@ ${rows.map((row, ri) => {
                         {canSearchAll && <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("store") || "매장"}</th>}
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColType") || "유형"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColAmount") || "금액"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[7rem]">{t("vendor") || "거래처"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColUser") || "등록자"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColReceipt") || "영수증"}</th>
@@ -1573,6 +1611,9 @@ ${rows.map((row, ri) => {
                           <td className={`px-3 py-2.5 text-center align-top whitespace-nowrap tabular-nums text-sm ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
+                          </td>
+                          <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[8rem]" title={vendorDisplayName(r.vendorCode)}>
+                            {r.trans_type === "expense" ? vendorDisplayName(r.vendorCode) : "—"}
                           </td>
                           <td className="px-3 py-2.5 align-top text-left text-sm whitespace-normal break-words min-w-[12rem] max-w-[min(85vw,_22rem)]">{formatMemo(r.memo || "")}</td>
                           <td className="px-3 py-2.5 text-center align-top text-sm text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
@@ -1678,6 +1719,22 @@ ${rows.map((row, ri) => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {addType === "expense" ? (
+                    <div>
+                      <label className="text-xs text-muted-foreground">{t("vendor") || "거래처"} <span className="text-muted-foreground">({t("optional")})</span></label>
+                      <Select value={addVendorCode || "__none__"} onValueChange={(v) => setAddVendorCode(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="h-9 mt-1 text-xs">
+                          <SelectValue placeholder={t("vendor") || "거래처"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— {t("optional") || "선택안함"}</SelectItem>
+                          {vendors.map((v) => (
+                            <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
                   <div className="space-y-1">
                     <label className="flex items-center gap-2 text-sm font-bold">
                       <Camera className="h-3.5 w-3.5" />
@@ -1934,6 +1991,7 @@ ${rows.map((row, ri) => {
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColAmount") || "금액"}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColBalance") || "잔액"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap min-w-[7rem]">{t("accountSubject") || "계정과목"}</th>
+                        <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap min-w-[7rem]">{t("vendor") || "거래처"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColUser") || "등록자"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
@@ -1989,6 +2047,9 @@ ${rows.map((row, ri) => {
                                 </Button>
                               )}
                             </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[8rem]" title={vendorDisplayName(r.vendorCode)}>
+                            {r.trans_type === "expense" ? vendorDisplayName(r.vendorCode) : "—"}
                           </td>
                           <td className="px-3 py-2.5 align-top text-left text-sm whitespace-normal break-words min-w-[12rem] max-w-[min(85vw,_22rem)]">{formatMemo(r.memo || "")}</td>
                           <td className="px-3 py-2.5 text-center align-top text-sm text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
@@ -2092,6 +2153,22 @@ ${rows.map((row, ri) => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {editType === "expense" ? (
+                    <div>
+                      <label className="text-xs text-muted-foreground">{t("vendor") || "거래처"} <span className="text-muted-foreground">({t("optional")})</span></label>
+                      <Select value={editVendorCode || "__none__"} onValueChange={(v) => setEditVendorCode(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="h-9 mt-1 text-xs">
+                          <SelectValue placeholder={t("vendor") || "거래처"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— {t("optional") || "선택안함"}</SelectItem>
+                          {vendors.map((v) => (
+                            <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
                   <div>
                     <label className="flex items-center gap-2 text-sm font-bold">
                       <Camera className="h-3.5 w-3.5" />

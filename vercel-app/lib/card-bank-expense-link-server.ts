@@ -4,6 +4,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { resolveCardBillAccountSubjectId } from '@/lib/card-bill-account'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
 import {
+  INTERNAL_BANK_SOURCE_MARKER,
   extractWithdrawalCategoryFromNote,
   hasCardBillQueueMarker,
   mergeCardBillQueueIntoBankNote,
@@ -11,7 +12,6 @@ import {
 import { collectLinkedBankTransactionIds } from '@/lib/petty-bank-expense-link-server'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 
-const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const LINKED_BANK_SCAN_MAX_ROWS = 1_000_000
 
 /** 카드사·카드대금 키워드 (통장 적요 필터·힌트용) */

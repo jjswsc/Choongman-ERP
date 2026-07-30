@@ -451,7 +451,19 @@ export async function correctPosOrderPayment(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    settlementSync?: {
+      status: 'no_settlement' | 'already_matched' | 'synced'
+      closed: boolean
+      settleDate: string
+      liveCash: number
+      savedCashBefore: number | null
+      savedCashAfter: number | null
+    } | null
+    settlementSyncError?: string | null
+  }>
 }
 
 /** 홀 주문: 빈 테이블로 이동 (table_name만 변경) */

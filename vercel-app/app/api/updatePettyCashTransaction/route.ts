@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       ? (body.receiptUrl || body.receipt_url ? String(body.receiptUrl || body.receipt_url).trim() : null)
       : undefined
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    const vendorCodeRaw = body.vendorCode ?? body.vendor_code
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
     const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
@@ -118,8 +119,22 @@ export async function POST(request: NextRequest) {
       }
       patch.account_subject_id = asid
     }
+    if (vendorCodeRaw !== undefined) {
+      const vc = String(vendorCodeRaw || '').trim()
+      patch.vendor_code = vc || null
+    }
 
-    await supabaseUpdate('petty_cash_transactions', id, patch)
+    try {
+      await supabaseUpdate('petty_cash_transactions', id, patch)
+    } catch (updErr) {
+      const msg = String(updErr || '').toLowerCase()
+      if (patch.vendor_code !== undefined && msg.includes('vendor_code')) {
+        delete patch.vendor_code
+        await supabaseUpdate('petty_cash_transactions', id, patch)
+      } else {
+        throw updErr
+      }
+    }
 
     const finalAccountSubjectId =
       patch.account_subject_id !== undefined

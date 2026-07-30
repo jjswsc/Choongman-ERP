@@ -570,6 +570,13 @@ export type PosSalesPaymentBreakdown = {
   creditByChannel: { channelKey: string; sales: number }[]
   creditTotal: number
   summary: { paymentKey: string; sales: number }[]
+  /** 결산 Cash vs 주문 payment_cash 합 불일치 시 안내 */
+  cashReconcile?: {
+    liveCash: number
+    settlementCash: number
+    mismatch: boolean
+    diff: number
+  } | null
 }
 
 export async function getPosSalesByPaymentBreakdown(params: {
@@ -591,5 +598,6 @@ export async function getPosSalesByPaymentBreakdown(params: {
     creditByChannel: Array.isArray(json.creditByChannel) ? json.creditByChannel : [],
     creditTotal: Number(json.creditTotal ?? 0) || 0,
     summary: Array.isArray(json.summary) ? json.summary : [],
+    cashReconcile: json.cashReconcile ?? null,
   }
 }

@@ -19,9 +19,11 @@ import { registerCardExpenseFromBankTransaction } from '@/lib/card-bank-expense-
 import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
-import { composeBankNoteForExpenseAccrualLink } from '@/lib/bank-transaction-note-meta'
-
-const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
+import {
+  INTERNAL_BANK_SOURCE_MARKER,
+  bankCategoryForWithdrawalCategory,
+  composeBankNoteForExpenseAccrualLink,
+} from '@/lib/bank-transaction-note-meta'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -110,6 +112,8 @@ function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdraw
 
 function mapWithdrawalCategoryToBankCategory(withdrawalCategory: string): string {
   const c = String(withdrawalCategory || '').toLowerCase()
+  const taxBank = bankCategoryForWithdrawalCategory(c)
+  if (taxBank) return taxBank
   if (c === 'purchase_payment') return 'purchase_payment'
   if (c.includes('transfer')) return 'transfer'
   if (c.includes('loan')) return 'loan'

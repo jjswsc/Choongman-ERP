@@ -1,0 +1,500 @@
+'use client'
+
+import * as React from 'react'
+import {
+  qrTableClaimSession,
+  qrTableGetMenus,
+  qrTableGetOrder,
+  qrTableGetSession,
+  qrTableIssueEntryQr,
+  qrTableIssueExtrasQr,
+  qrTableOpenSession,
+  qrTablePollEntryPay,
+  qrTablePollExtrasPay,
+  qrTableSubmitCart,
+} from '@/lib/api-client/qr-table'
+import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
+import { buffetTierDisplayName } from '@/lib/qr-table-types'
+
+type MenuItem = {
+  menuId: number
+  name: string
+  price: number
+  listPrice: number
+  imageUrl: string
+  buffetIncluded: boolean
+  description: string
+  category: string
+  categoryMain: string
+}
+
+type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'menu' | 'error'
+
+const AUTH_KEY = 'cm_qr_table_session_auth'
+
+export function QrTableGuestApp({ token }: { token: string }) {
+  const [step, setStep] = React.useState<Step>('boot')
+  const [error, setError] = React.useState('')
+  const [settings, setSettings] = React.useState<QrOrderStoreSettings | null>(null)
+  const [tiers, setTiers] = React.useState<QrBuffetTier[]>([])
+  const [tableName, setTableName] = React.useState('')
+  const [storeCode, setStoreCode] = React.useState('')
+  const [guestCount, setGuestCount] = React.useState(2)
+  const [tierId, setTierId] = React.useState<number>(0)
+  const [entryChoice, setEntryChoice] = React.useState<'prepay' | 'postpay'>('postpay')
+  const [extrasChoice, setExtrasChoice] = React.useState<'prepay' | 'postpay'>('postpay')
+  const [sessionAuth, setSessionAuth] = React.useState('')
+  const [session, setSession] = React.useState<QrTableSession | null>(null)
+  const [includedMenus, setIncludedMenus] = React.useState<MenuItem[]>([])
+  const [extraMenus, setExtraMenus] = React.useState<MenuItem[]>([])
+  const [cart, setCart] = React.useState<Record<number, number>>({})
+  const [tab, setTab] = React.useState<'included' | 'extras'>('included')
+  const [qrPayload, setQrPayload] = React.useState('')
+  const [qrAmount, setQrAmount] = React.useState(0)
+  const [busy, setBusy] = React.useState(false)
+  const [orderSummary, setOrderSummary] = React.useState<{
+    total: number
+    paymentQr: number
+    balanceDue: number
+    items: Array<{ name?: string; qty?: number; quantity?: number; price?: number; buffetIncluded?: boolean }>
+  } | null>(null)
+  const [lang, setLang] = React.useState('th')
+
+  React.useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await qrTableGetSession(token)
+        if (cancelled) return
+        if (!data.success) {
+          setError(data.message || 'invalid')
+          setStep('error')
+          return
+        }
+        setSettings(data.settings || null)
+        setTiers(data.tiers || [])
+        setTableName(data.token?.tableName || '')
+        setStoreCode(data.token?.storeCode || '')
+        if (data.settings?.entryPaymentMode === 'prepay') setEntryChoice('prepay')
+        if (data.settings?.extrasPaymentMode === 'prepay') setExtrasChoice('prepay')
+        const saved = typeof window !== 'undefined' ? sessionStorage.getItem(AUTH_KEY) : null
+        if (data.activeSession) {
+          const claimed = await qrTableClaimSession(token)
+          if (claimed.success && claimed.sessionAuth && claimed.session) {
+            sessionStorage.setItem(AUTH_KEY, claimed.sessionAuth)
+            setSessionAuth(claimed.sessionAuth)
+            setSession(claimed.session)
+            if (claimed.session.status === 'active' && claimed.session.entryPaid) {
+              setStep('menu')
+              return
+            }
+            if (claimed.session.entryPaymentModeResolved === 'prepay' && !claimed.session.entryPaid) {
+              setStep('pay_entry')
+              return
+            }
+            setStep('wait_staff')
+            return
+          }
+        }
+        if (saved) setSessionAuth(saved)
+        setStep('tier')
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'boot_failed')
+          setStep('error')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  React.useEffect(() => {
+    if (step !== 'menu' || !sessionAuth) return
+    let cancelled = false
+    ;(async () => {
+      const menus = await qrTableGetMenus(sessionAuth)
+      if (cancelled || !menus?.success) return
+      setIncludedMenus((menus.includedMenus || []) as MenuItem[])
+      setExtraMenus((menus.extraMenus || []) as MenuItem[])
+      setSession(menus.session || null)
+      const order = await qrTableGetOrder(sessionAuth)
+      if (order?.success && order.order) {
+        setOrderSummary({
+          total: Number(order.order.total || 0),
+          paymentQr: Number(order.order.paymentQr || 0),
+          balanceDue: Number(order.order.balanceDue || 0),
+          items: (order.order.items || []) as Array<{
+            name?: string
+            qty?: number
+            quantity?: number
+            price?: number
+            buffetIncluded?: boolean
+          }>,
+        })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [step, sessionAuth])
+
+  React.useEffect(() => {
+    if (step !== 'pay_entry' || !sessionAuth || !qrPayload) return
+    const t = window.setInterval(async () => {
+      const st = await qrTablePollEntryPay(sessionAuth)
+      if (st?.entryPaid) {
+        setQrPayload('')
+        setStep('menu')
+      }
+    }, 3000)
+    return () => window.clearInterval(t)
+  }, [step, sessionAuth, qrPayload])
+
+  async function handleOpen() {
+    if (!tierId) {
+      setError('Please select a buffet tier')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const res = await qrTableOpenSession({
+        token,
+        guestCount,
+        tierId,
+        entryPaymentChoice: entryChoice,
+        extrasPaymentChoice: extrasChoice,
+      })
+      if (!res.success || !res.session || !res.sessionAuth) {
+        setError(res.message || 'open_failed')
+        return
+      }
+      sessionStorage.setItem(AUTH_KEY, res.sessionAuth)
+      setSessionAuth(res.sessionAuth)
+      setSession(res.session)
+      if (res.session.entryPaymentModeResolved === 'prepay' && !res.session.entryPaid) {
+        setStep('pay_entry')
+      } else if (res.session.status === 'active' && res.session.entryPaid) {
+        setStep('menu')
+      } else {
+        setStep('wait_staff')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleEntryQr() {
+    setBusy(true)
+    try {
+      const res = await qrTableIssueEntryQr(sessionAuth)
+      if (!res.success) {
+        setError(res.message || 'qr_failed')
+        return
+      }
+      setQrPayload(String(res.qrPayload || ''))
+      setQrAmount(Number(res.qrAmount || 0))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function bumpCart(menuId: number, delta: number) {
+    setCart((prev) => {
+      const next = { ...prev }
+      const v = Math.max(0, (next[menuId] || 0) + delta)
+      if (v <= 0) delete next[menuId]
+      else next[menuId] = v
+      return next
+    })
+  }
+
+  async function handleSubmit() {
+    const lines = Object.entries(cart).map(([menuId, qty]) => ({
+      menuId: Number(menuId),
+      qty: Number(qty),
+    }))
+    if (!lines.length) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await qrTableSubmitCart(sessionAuth, lines)
+      if (!res.success) {
+        setError(res.message || 'submit_failed')
+        return
+      }
+      setCart({})
+      if (res.order) {
+        setOrderSummary({
+          total: Number(res.order.total || 0),
+          paymentQr: Number(res.order.paymentQr || 0),
+          balanceDue: Number(res.order.balanceDue || 0),
+          items: (res.order.items || []) as Array<{
+            name?: string
+            qty?: number
+            quantity?: number
+            price?: number
+            buffetIncluded?: boolean
+          }>,
+        })
+      }
+      if (session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay') {
+        const extrasTotal = lines.reduce((sum, l) => {
+          const m = extraMenus.find((x) => x.menuId === l.menuId)
+          return sum + (m ? m.listPrice * l.qty : 0)
+        }, 0)
+        if (extrasTotal >= 1) {
+          const qr = await qrTableIssueExtrasQr(sessionAuth)
+          if (qr?.success) {
+            setQrPayload(String(qr.qrPayload || ''))
+            setQrAmount(Number(qr.qrAmount || 0))
+            const poll = window.setInterval(async () => {
+              const st = await qrTablePollExtrasPay(sessionAuth)
+              if (st?.paid) {
+                window.clearInterval(poll)
+                setQrPayload('')
+                const order = await qrTableGetOrder(sessionAuth)
+                if (order?.success && order.order) {
+                  setOrderSummary({
+                    total: Number(order.order.total || 0),
+                    paymentQr: Number(order.order.paymentQr || 0),
+                    balanceDue: Number(order.order.balanceDue || 0),
+                    items: (order.order.items || []) as Array<{
+                      name?: string
+                      qty?: number
+                      quantity?: number
+                      price?: number
+                      buffetIncluded?: boolean
+                    }>,
+                  })
+                }
+              }
+            }, 3000)
+          }
+        }
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const selectedTier = tiers.filter((t) => t.active !== false)
+  const list = tab === 'included' ? includedMenus : extraMenus
+
+  if (step === 'boot') {
+    return <div className="flex min-h-dvh items-center justify-center bg-stone-50 text-stone-600">Loading…</div>
+  }
+  if (step === 'error') {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-stone-50 p-6 text-center">
+        <p className="text-lg font-semibold text-stone-900">Cannot open table order</p>
+        <p className="text-sm text-stone-600">{error}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto min-h-dvh max-w-lg bg-stone-50 text-stone-900">
+      <header className="sticky top-0 z-10 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-stone-500">{storeCode}</p>
+            <h1 className="text-lg font-semibold">Table {tableName}</h1>
+          </div>
+          <select
+            className="rounded-md border border-stone-300 bg-white px-2 py-1 text-sm"
+            value={lang}
+            onChange={(e) => setLang(e.target.value)}
+          >
+            <option value="th">ไทย</option>
+            <option value="en">EN</option>
+            <option value="ko">한국어</option>
+          </select>
+        </div>
+      </header>
+
+      {error ? <p className="mx-4 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+
+      {step === 'tier' ? (
+        <section className="space-y-4 p-4">
+          <div>
+            <label className="text-sm font-medium">Guests</label>
+            <div className="mt-1 flex items-center gap-3">
+              <button type="button" className="h-10 w-10 rounded-full bg-stone-200" onClick={() => setGuestCount((n) => Math.max(1, n - 1))}>
+                −
+              </button>
+              <span className="text-xl font-semibold">{guestCount}</span>
+              <button type="button" className="h-10 w-10 rounded-full bg-stone-200" onClick={() => setGuestCount((n) => Math.min(99, n + 1))}>
+                +
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Buffet tier</p>
+            {selectedTier.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTierId(t.id)}
+                className={`w-full rounded-xl border px-4 py-3 text-left ${
+                  tierId === t.id ? 'border-amber-600 bg-amber-50' : 'border-stone-200 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{buffetTierDisplayName(t, lang)}</span>
+                  <span className="font-semibold">฿{t.pricePerPerson.toLocaleString()}/pax</span>
+                </div>
+                <p className="mt-1 text-xs text-stone-500">{(t.includedMenuIds || []).length} included menus</p>
+              </button>
+            ))}
+          </div>
+
+          {settings?.entryPaymentMode === 'guest_choice' ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Entry payment</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" className={`rounded-lg border px-3 py-2 ${entryChoice === 'prepay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setEntryChoice('prepay')}>
+                  Pay now (QR)
+                </button>
+                <button type="button" className={`rounded-lg border px-3 py-2 ${entryChoice === 'postpay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setEntryChoice('postpay')}>
+                  Pay later
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {settings?.extrasPaymentMode === 'guest_choice' ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Drinks / extras payment</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" className={`rounded-lg border px-3 py-2 ${extrasChoice === 'prepay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setExtrasChoice('prepay')}>
+                  Pay now (QR)
+                </button>
+                <button type="button" className={`rounded-lg border px-3 py-2 ${extrasChoice === 'postpay' ? 'border-amber-600 bg-amber-50' : 'bg-white'}`} onClick={() => setExtrasChoice('postpay')}>
+                  Pay later
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleOpen}
+            className="w-full rounded-xl bg-amber-700 py-3 font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? 'Opening…' : 'Continue'}
+          </button>
+          {settings?.requireStaffOpen ? (
+            <p className="text-xs text-stone-500">This store requires staff to open the table first. If open fails, please call staff.</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {step === 'pay_entry' ? (
+        <section className="space-y-4 p-4">
+          <p className="text-sm text-stone-600">Please pay buffet entry by PromptPay QR.</p>
+          <p className="text-2xl font-semibold">฿{(session?.entryTotal || 0).toLocaleString()}</p>
+          {!qrPayload ? (
+            <button type="button" disabled={busy} onClick={handleEntryQr} className="w-full rounded-xl bg-amber-700 py-3 font-semibold text-white">
+              Show QR
+            </button>
+          ) : (
+            <div className="rounded-xl border border-stone-200 bg-white p-4 text-center">
+              <p className="mb-2 text-sm">Amount ฿{qrAmount.toLocaleString()}</p>
+              <img
+                alt="PromptPay QR"
+                className="mx-auto h-56 w-56 object-contain"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrPayload)}`}
+              />
+              <p className="mt-2 text-xs text-stone-500">Waiting for payment…</p>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {step === 'wait_staff' ? (
+        <section className="space-y-3 p-4 text-center">
+          <p className="text-lg font-semibold">Waiting for staff confirmation</p>
+          <p className="text-sm text-stone-600">Please ask staff to confirm buffet entry for this table. Then refresh.</p>
+          <button
+            type="button"
+            className="rounded-xl bg-stone-800 px-4 py-2 text-white"
+            onClick={() => window.location.reload()}
+          >
+            Refresh
+          </button>
+        </section>
+      ) : null}
+
+      {step === 'menu' ? (
+        <section className="pb-28">
+          <div className="sticky top-[57px] z-10 flex gap-2 border-b border-stone-200 bg-white px-4 py-2">
+            <button type="button" className={`flex-1 rounded-lg py-2 text-sm font-medium ${tab === 'included' ? 'bg-amber-100 text-amber-900' : 'bg-stone-100'}`} onClick={() => setTab('included')}>
+              Included
+            </button>
+            <button type="button" className={`flex-1 rounded-lg py-2 text-sm font-medium ${tab === 'extras' ? 'bg-amber-100 text-amber-900' : 'bg-stone-100'}`} onClick={() => setTab('extras')}>
+              Extras
+            </button>
+          </div>
+          <ul className="divide-y divide-stone-100">
+            {list.map((m) => (
+              <li key={m.menuId} className="flex gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{m.name}</p>
+                  {m.description ? <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{m.description}</p> : null}
+                  <p className="mt-1 text-sm font-semibold">
+                    {m.buffetIncluded ? <span className="text-emerald-700">Included</span> : `฿${m.price.toLocaleString()}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" className="h-8 w-8 rounded-full bg-stone-200" onClick={() => bumpCart(m.menuId, -1)}>
+                    −
+                  </button>
+                  <span className="w-6 text-center">{cart[m.menuId] || 0}</span>
+                  <button type="button" className="h-8 w-8 rounded-full bg-amber-700 text-white" onClick={() => bumpCart(m.menuId, 1)}>
+                    +
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {orderSummary ? (
+            <div className="mx-4 mt-4 rounded-xl border border-stone-200 bg-white p-3 text-sm">
+              <p className="font-medium">Current order</p>
+              <p>Total ฿{Number(orderSummary.total || 0).toLocaleString()}</p>
+              <p>Paid QR ฿{Number(orderSummary.paymentQr || 0).toLocaleString()}</p>
+              <p className="font-semibold">Balance ฿{Number(orderSummary.balanceDue || 0).toLocaleString()}</p>
+            </div>
+          ) : null}
+
+          {qrPayload ? (
+            <div className="mx-4 mt-3 rounded-xl border border-stone-200 bg-white p-3 text-center">
+              <p className="mb-2 text-sm">Pay extras ฿{qrAmount.toLocaleString()}</p>
+              <img
+                alt="Extras QR"
+                className="mx-auto h-48 w-48 object-contain"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrPayload)}`}
+              />
+            </div>
+          ) : null}
+
+          <div className="fixed inset-x-0 bottom-0 mx-auto max-w-lg border-t border-stone-200 bg-white p-3">
+            <button
+              type="button"
+              disabled={busy || Object.keys(cart).length === 0}
+              onClick={handleSubmit}
+              className="w-full rounded-xl bg-amber-700 py-3 font-semibold text-white disabled:opacity-50"
+            >
+              Send to kitchen
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  )
+}

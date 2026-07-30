@@ -3,8 +3,11 @@ import {
   bankNoteUserDisplayText,
   composeBankNoteForExpenseAccrualLink,
   composeBankNoteWithCategoryAndOptionalAccrualPrefix,
+  looksLikeTaxAuthorityRemittanceMemo,
+  shouldExcludeBankWithdrawFromPlExpense,
   stripExpenseAccrualPrefix,
 } from '@/lib/bank-transaction-note-meta'
+import { suggestWithdrawFromMemo } from '@/lib/suggest-withdraw-from-memo'
 
 describe('bankNoteUserDisplayText', () => {
   it('strips expense_accrual_id prefix and withdrawal_category tag', () => {
@@ -47,5 +50,61 @@ describe('composeBankNoteWithCategoryAndOptionalAccrualPrefix', () => {
       'expense_accrual_id:5;new memo | withdrawal_category:expense'
     )
     expect(stripExpenseAccrualPrefix(existing)).toContain('old')
+  })
+})
+
+describe('shouldExcludeBankWithdrawFromPlExpense', () => {
+  it('excludes expense_internal shadow rows', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: 'expense_accrual_id:1;withdrawal_category:tax_vat;source:expense_internal',
+        memo: 'ภ.พ.30 06/2026',
+      })
+    ).toBe(true)
+  })
+
+  it('excludes tax_vat settlement even without internal marker', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: 'expense_accrual_id:1;withdrawal_category:tax_vat',
+        memo: 'VAT pay',
+      })
+    ).toBe(true)
+  })
+
+  it('excludes revenue-department remittance memos', () => {
+    expect(
+      looksLikeTaxAuthorityRemittanceMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT')
+    ).toBe(true)
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: null,
+        memo: 'Payment | Paid for Ref X8126 REVENUE DEPARTMENT',
+      })
+    ).toBe(true)
+  })
+
+  it('keeps ordinary expense withdrawals', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: 'expense_accrual_id:9;withdrawal_category:expense',
+        memo: 'Office supplies',
+      })
+    ).toBe(false)
+  })
+})
+
+describe('suggestWithdrawFromMemo tax remittance', () => {
+  it('suggests unclassified for ภ.พ.30 / revenue dept', () => {
+    expect(suggestWithdrawFromMemo('ภ.พ.30 06/2026', []).category).toBe('unclassified')
+    expect(
+      suggestWithdrawFromMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT', []).category
+    ).toBe('unclassified')
+  })
+
+  it('still suggests 5510 for generic tax fees', () => {
+    expect(
+      suggestWithdrawFromMemo('tax stamp fee', [{ id: 99, code: '5510' }])
+    ).toEqual({ category: 'expense', accountSubjectId: 99 })
   })
 })

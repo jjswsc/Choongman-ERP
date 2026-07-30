@@ -193,6 +193,13 @@ export type PosSettlementResponse = {
   systemVat?: number
   systemCashFromOrders?: number
   tillNetForSettleDate?: number
+  cashReconcile?: {
+    liveCash: number
+    savedCash: number | null
+    mismatch: boolean
+    diff: number
+    closed: boolean
+  }
   linkpos?: {
     approvedCount: number
     failedCount: number

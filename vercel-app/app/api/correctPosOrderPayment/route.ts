@@ -19,6 +19,7 @@ import {
 import { computePayCorrectAmountPatch } from '@/lib/pos-pay-correct-amounts'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 import { resolveDeliveryPaymentChannelForSave } from '@/lib/pos-delivery-platform'
+import { syncPosSettlementAfterPayCorrect } from '@/lib/pos-settlement-sync-after-pay-correct'
 
 async function resolveBearerCaller(request: NextRequest): Promise<JwtPayload | null> {
   const auth = request.headers.get('authorization') || ''
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
+          'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,order_type,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
       },
       'correctPosOrderPayment'
     )) as {
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
       memo?: string
       table_name?: string
       order_no?: string
+      order_type?: string | null
       delivery_app_code?: string | null
       discount_amt?: number
       coupon_discount_amt?: number
@@ -232,6 +234,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const beforePay = {
+      paymentCash: Number(row.payment_cash) || 0,
+      paymentCard: Number(row.payment_card) || 0,
+      paymentQr: Number(row.payment_qr) || 0,
+      paymentOther: Number(row.payment_other) || 0,
+      paymentDeliveryApp: Number(row.payment_delivery_app) || 0,
+      deliveryPaymentChannel: row.delivery_payment_channel,
+      orderType: row.order_type,
+    }
+    const afterPay = {
+      paymentCash,
+      paymentCard,
+      paymentQr,
+      paymentOther,
+      paymentDeliveryApp,
+      deliveryPaymentChannel,
+      orderType: row.order_type,
+    }
+
     await supabaseUpdateByFilterWithPgrst204Fallback(
       'pos_orders',
       `id=eq.${id}`,
@@ -261,7 +282,40 @@ export async function POST(req: NextRequest) {
       'correctPosOrderPayment'
     )
 
-    return NextResponse.json({ success: true }, { headers })
+    let settlementSync: Awaited<ReturnType<typeof syncPosSettlementAfterPayCorrect>> | null = null
+    let settlementSyncError: string | null = null
+    try {
+      settlementSync = await syncPosSettlementAfterPayCorrect({
+        storeCode,
+        settleDateYmd: createdBd,
+        who,
+        reason,
+        before: beforePay,
+        after: afterPay,
+      })
+    } catch (syncErr) {
+      console.error('correctPosOrderPayment settlement sync:', syncErr)
+      settlementSyncError =
+        syncErr instanceof Error ? syncErr.message.slice(0, 300) : String(syncErr).slice(0, 300)
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        settlementSync: settlementSync
+          ? {
+              status: settlementSync.status,
+              closed: settlementSync.closed,
+              settleDate: settlementSync.settleDate,
+              liveCash: settlementSync.liveCash,
+              savedCashBefore: settlementSync.savedCashBefore,
+              savedCashAfter: settlementSync.savedCashAfter,
+            }
+          : null,
+        settlementSyncError,
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('correctPosOrderPayment:', e)
     const msg = e instanceof Error ? e.message : String(e)

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
-import { composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
+import { bankCategoryForWithdrawalCategory, composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
 import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 import { syncPayableLedgerAfterBankWithdrawCategoryChange } from '@/lib/receivable-payable'
 import { parseMoneyAmount } from '@/lib/money-amount'
@@ -63,6 +63,8 @@ function mapToWithdrawalCategory(main: string, sub: string): WithdrawalCategory 
 }
 
 function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
+  const taxBank = bankCategoryForWithdrawalCategory(cat)
+  if (taxBank) return taxBank
   const map: Record<WithdrawalCategory, string> = {
     purchase_payment: 'purchase_payment',
     purchase_advance: 'advance',
@@ -76,9 +78,9 @@ function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
     transfer_from_petty: 'transfer',
     loan_repayment: 'loan',
     loan_given: 'advance',
-    tax_vat: 'expense',
-    tax_withholding: 'expense',
-    tax_corporate: 'expense',
+    tax_vat: 'unclassified',
+    tax_withholding: 'unclassified',
+    tax_corporate: 'unclassified',
     correction: 'correction',
     dividend: 'expense',
   }

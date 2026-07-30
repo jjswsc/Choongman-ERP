@@ -4066,6 +4066,26 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       "배달·카드 표는 POS 결산에 저장한 breakdown(Visa/Grab 등)을 합산합니다. 결산 전 매장·미연동 건만 LINKPOS 또는 주문 배달액으로 보조합니다."
                     )}
                   </p>
+                  {paymentBreakdownData.cashReconcile?.mismatch ? (
+                    <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                      {tr(
+                        "salesPaymentCashReconcileMismatch",
+                        "결산 현금({settlement})과 완료 주문 현금 합({live})이 {diff} 다릅니다. POS에서 결제 정정 후 결산을 열면 자동으로 맞춥니다."
+                      )
+                        .replace(
+                          "{settlement}",
+                          formatSalesAmount(paymentBreakdownData.cashReconcile.settlementCash)
+                        )
+                        .replace(
+                          "{live}",
+                          formatSalesAmount(paymentBreakdownData.cashReconcile.liveCash)
+                        )
+                        .replace(
+                          "{diff}",
+                          formatSalesAmount(Math.abs(paymentBreakdownData.cashReconcile.diff))
+                        )}
+                    </div>
+                  ) : null}
                   <div className="mb-6 grid gap-6 lg:grid-cols-2">
                     <div className="rounded-lg border bg-card p-4">
                       <h3 className="mb-3 text-sm font-semibold">

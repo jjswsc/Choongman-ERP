@@ -1,6 +1,7 @@
 import { supabaseInsert, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpdate } from '@/lib/supabase-server'
 import { postWithdrawalJournal } from '@/lib/accounting-posting'
 import {
+  INTERNAL_BANK_SOURCE_MARKER,
   extractWithdrawalCategoryFromNote,
   hasPettyCashQueueMarker,
   mergePettyCashQueueIntoBankNote,
@@ -8,7 +9,6 @@ import {
 } from '@/lib/bank-transaction-note-meta'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 
-const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 const LINKED_BANK_SCAN_MAX_ROWS = 1_000_000
 
 /** 패티캐시 보충·이체 키워드 (통장 적요 필터·힌트용) */
