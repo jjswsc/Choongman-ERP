@@ -40,6 +40,26 @@ describe('resolveWht50Tawi', () => {
     expect(r.paymentDateDisplay).toBe('16/7/2569')
   })
 
+  it('fills payee address and 13-digit tax id cells when provided', () => {
+    const withPayee: WhtCertificateData = {
+      ...base,
+      incomeRecipient: {
+        name: 'ทรู มูฟ เอช ยูนิเวอร์แซล คอมมูนิเคชั่น จำกัด',
+        taxId: '0105553045044',
+        address: '18 อาคารทรู ทาวเวอร์ ถนนรัชดาภิเษก แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพมหานคร 10310',
+      },
+    }
+    const r = resolveWht50Tawi(withPayee)
+    expect(r.recipientTaxId).toBe('0105553045044')
+    expect(r.recipientAddress).toContain('ทรู ทาวเวอร์')
+    const html = buildWht50TawiCertificateHtml(withPayee, 1)
+    expect(html).toContain('ทรู ทาวเวอร์')
+    expect(html).not.toContain('wht-addr2')
+    for (const d of '0105553045044') {
+      expect(html).toContain(`class="wht-tin-cell">${d}</td>`)
+    }
+  })
+
   it('uses PND3 for natural person when form hint is not set', () => {
     const r = resolveWht50Tawi({
       ...base,

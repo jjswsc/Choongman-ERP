@@ -272,7 +272,8 @@ export function AdminPurchaseOrderHistory() {
             address: ho.address || "",
             phone: ho.phone,
           },
-          vendorResolved?.taxId
+          vendorResolved?.taxId,
+          vendorResolved?.address
         )
         if (!cert || !openWhtCertificatePrintWindow([cert], lang)) {
           await appAlert(t("whtCertPrintBlocked"))

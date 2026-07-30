@@ -72,7 +72,10 @@ import {
   expenseWhtAmountFromRate,
 } from "@/lib/expense-accrual-net"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
-import { whtCertificateFromExpenseRegister } from "@/lib/wht-certificate-data"
+import {
+  resolveVendorPayeeForWht,
+  whtCertificateFromExpenseRegister,
+} from "@/lib/wht-certificate-data"
 import {
   ExpenseDocumentAttachPanel,
   type ExpenseOcrFieldPayload,
@@ -657,13 +660,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     setAccrualWithholdingTax(wht > 0 ? moneyInputStringFromAmount(wht) : "")
   }, [categoryMain, amount, accrualVatAmount, accrualWhtRate])
 
-  const resolvePayeeTaxIdForWht = React.useCallback(
-    (codeRaw: string, nameRaw: string) => {
-      const code = String(codeRaw || "").trim()
-      const name = String(nameRaw || "").trim()
-      const found = vendors.find((v) => v.code === code || (name && v.name === name))
-      return String(found?.taxId || "").trim()
-    },
+  const resolvePayeeForWht = React.useCallback(
+    (codeRaw: string, nameRaw: string) => resolveVendorPayeeForWht(vendors, codeRaw, nameRaw),
     [vendors]
   )
 
@@ -672,6 +670,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       certificateNo: string
       payeeName: string
       payeeTaxId?: string
+      payeeAddress?: string
       grossInclVat: number
       vatAmount: number
       whtAmount: number
@@ -689,6 +688,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             paymentDate: params.paymentDate,
             payeeName: params.payeeName,
             payeeTaxId: params.payeeTaxId,
+            payeeAddress: params.payeeAddress,
             grossInclVat: params.grossInclVat,
             vatAmount: params.vatAmount,
             whtRate: params.whtRate,
@@ -926,7 +926,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         await openExpenseWhtCertificateIfNeeded({
           certificateNo: `EAW-${editAccrualIdParam}`,
           payeeName: name || code,
-          payeeTaxId: resolvePayeeTaxIdForWht(code, name),
+          ...(() => {
+            const p = resolvePayeeForWht(code, name)
+            return { payeeTaxId: p.taxId, payeeAddress: p.address }
+          })(),
           grossInclVat: amt,
           vatAmount: vatV,
           whtAmount: whtV,
@@ -988,7 +991,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           await openExpenseWhtCertificateIfNeeded({
             certificateNo: newId > 0 ? `EAW-${newId}` : `EAW-${Date.now()}`,
             payeeName: name || code,
-            payeeTaxId: resolvePayeeTaxIdForWht(code, name),
+            ...(() => {
+              const p = resolvePayeeForWht(code, name)
+              return { payeeTaxId: p.taxId, payeeAddress: p.address }
+            })(),
             grossInclVat: amt,
             vatAmount: vatV,
             whtAmount: whtV,
@@ -1355,10 +1361,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             : payeeName.trim() || payeeCode.trim() || "—"
         const payeeCodeForWht =
           categoryMain === "purchase" ? vendorCode : payeeCode.trim() || vendorCode.trim()
+        const payeeWht = resolvePayeeForWht(payeeCodeForWht, payeeLabel)
         await openExpenseWhtCertificateIfNeeded({
           certificateNo: newBankTxId ? `BTW-${newBankTxId}` : `BTW-${Date.now()}`,
           payeeName: payeeLabel,
-          payeeTaxId: resolvePayeeTaxIdForWht(payeeCodeForWht, payeeLabel),
+          payeeTaxId: payeeWht.taxId,
+          payeeAddress: payeeWht.address,
           grossInclVat: submitAmt,
           vatAmount: submitVat,
           whtAmount: submitWht,

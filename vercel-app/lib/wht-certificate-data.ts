@@ -36,6 +36,7 @@ export function resolveWhtCertificateParties(params: {
   direction: 'inbound' | 'outbound'
   payeeName: string
   payeeTaxId: string
+  payeeAddress?: string
   headOffice: HeadOfficeCompany
 }): { withholdingAgent: WhtCertificateParty; incomeRecipient: WhtCertificateParty } {
   const hqParty: WhtCertificateParty = {
@@ -46,6 +47,7 @@ export function resolveWhtCertificateParties(params: {
   const counterparty: WhtCertificateParty = {
     name: String(params.payeeName || '').trim() || '—',
     taxId: String(params.payeeTaxId || '').trim() || '—',
+    address: String(params.payeeAddress || '').trim() || undefined,
   }
   if (params.direction === 'inbound') {
     return { withholdingAgent: counterparty, incomeRecipient: hqParty }
@@ -66,7 +68,8 @@ export function whtCertificateFromPurchaseOrder(
     created_at?: string | null
   },
   headOffice: HeadOfficeCompany,
-  vendorTaxId?: string
+  vendorTaxId?: string,
+  vendorAddress?: string
 ): WhtCertificateData | null {
   const wht = Math.max(0, Number(po.withholding_tax_amount) || 0)
   if (wht <= 0) return null
@@ -88,6 +91,7 @@ export function whtCertificateFromPurchaseOrder(
       tax_month: docDate.slice(0, 7),
       payee_name: String(po.vendor_name || po.vendor_code || ''),
       payee_tax_id: vendorTaxId || '',
+      payee_address: vendorAddress || '',
       income_type: '로열티·용역 수입',
       gross_amount: gross > 0 ? gross : total,
       wht_rate: rateRaw,
@@ -106,6 +110,7 @@ export function whtCertificateFromExpenseRegister(
     paymentDate: string
     payeeName: string
     payeeTaxId?: string
+    payeeAddress?: string
     grossInclVat: number
     vatAmount: number
     whtRate: number | null
@@ -129,6 +134,7 @@ export function whtCertificateFromExpenseRegister(
       tax_month: paymentDate.slice(0, 7),
       payee_name: String(params.payeeName || '').trim(),
       payee_tax_id: String(params.payeeTaxId || '').trim(),
+      payee_address: String(params.payeeAddress || '').trim(),
       income_type: String(params.incomeType || '').trim() || 'ค่าบริการ',
       gross_amount: grossExVat > 0 ? grossExVat : grossIncl,
       wht_rate: params.whtRate,
@@ -142,12 +148,45 @@ export function whtCertificateFromExpenseRegister(
   )
 }
 
+/** 거래처 마스터로 50 ทวิ 수취인 TIN·주소 보강 (장부/인쇄 공통) */
+function normalizeVendorNameKey(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/บริษัท\s*/g, '')
+    .replace(/\s*จำกัด\s*$/g, '')
+    .replace(/\s*co\.?\s*,?\s*ltd\.?\s*$/g, '')
+    .trim()
+}
+
+export function resolveVendorPayeeForWht(
+  vendors: { code?: string; name?: string; taxId?: string; address?: string }[],
+  codeRaw: string,
+  nameRaw: string
+): { taxId: string; address: string } {
+  const code = String(codeRaw || '').trim()
+  const name = String(nameRaw || '').trim()
+  const nameKey = normalizeVendorNameKey(name)
+  const found =
+    vendors.find((v) => code && String(v.code || '').trim() === code) ||
+    vendors.find((v) => name && String(v.name || '').trim() === name) ||
+    (nameKey
+      ? vendors.find((v) => normalizeVendorNameKey(String(v.name || '')) === nameKey)
+      : undefined)
+  return {
+    taxId: String(found?.taxId || '').trim(),
+    address: String(found?.address || '').trim(),
+  }
+}
+
 export function whtCertificateFromLedgerRow(
   row: {
     payment_date?: string
     tax_month?: string
     payee_name?: string
     payee_tax_id?: string
+    payee_address?: string
     income_type?: string
     gross_amount?: string | number | null
     wht_rate?: string | number | null
@@ -169,6 +208,7 @@ export function whtCertificateFromLedgerRow(
     direction,
     payeeName: String(row.payee_name || ''),
     payeeTaxId: String(row.payee_tax_id || ''),
+    payeeAddress: String(row.payee_address || ''),
     headOffice,
   })
   const incomeType = String(row.income_type || '').trim()

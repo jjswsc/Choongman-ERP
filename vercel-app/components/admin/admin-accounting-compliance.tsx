@@ -88,6 +88,7 @@ import {
   type ValidatePnd1RdPrepResult,
   type ValidatePnd3Pnd53Result,
   getHeadOfficeInfo,
+  getVendorsForPurchase,
   type PayrollWhtTinGapResult,
   getKt20kSettings,
   saveKt20kSettings,
@@ -204,7 +205,7 @@ import {
 } from "./admin-accounting-compliance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
-import { whtCertificateFromLedgerRow, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
+import { whtCertificateFromLedgerRow, resolveVendorPayeeForWht, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
 import {
   downloadThaiSsoSps110FromPayrollXlsx,
   type Sps110EmployerInfo,
@@ -3372,13 +3373,19 @@ export function AdminAccountingCompliance({
         return
       }
       const ho = await loadHeadOfficeForWht()
-      const items = eligible.map((r) =>
-        whtCertificateFromLedgerRow(
+      const vendors = await getVendorsForPurchase().catch(() => [])
+      const items = eligible.map((r) => {
+        const payeeName = String(r.payee_name || "").trim()
+        const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName)
+        const payeeTaxId = String(r.payee_tax_id || "").trim() || fromVendor.taxId
+        const payeeAddress = fromVendor.address
+        return whtCertificateFromLedgerRow(
           {
             payment_date: r.payment_date,
             tax_month: r.tax_month,
             payee_name: r.payee_name,
-            payee_tax_id: r.payee_tax_id,
+            payee_tax_id: payeeTaxId,
+            payee_address: payeeAddress,
             income_type: r.income_type,
             gross_amount: r.gross_amount,
             wht_rate: r.wht_rate,
@@ -3391,7 +3398,7 @@ export function AdminAccountingCompliance({
           },
           ho
         )
-      )
+      })
       if (!openWhtCertificatePrintWindow(items, lang)) {
         appAlert(t("whtCertPrintBlocked"))
       }
