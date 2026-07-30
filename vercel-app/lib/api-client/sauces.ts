@@ -403,16 +403,30 @@ export async function uploadPosMenuImage(params: { file: File; menuId?: string |
 }
 
 /** 고객화면 평상시 배경 이미지·동영상 (pos-menu-images 버킷, customer-display/ 경로) */
-export async function uploadCustomerDisplayMedia(params: { storeCode: string; file: File }) {
-  const file = params.file
+export async function uploadCustomerDisplayMedia(params: {
+  storeCode: string
+  file: File
+  /** UI에서 선택한 미디어 종류 — type/확장자가 비었을 때 기본 MIME 힌트 */
+  preferredKind?: 'image' | 'video'
+}) {
   const storeCode = String(params.storeCode || '').trim()
+  const { fileForCustomerDisplayMediaUpload } = await import('@/lib/customer-display-media-upload')
+  const prepared = fileForCustomerDisplayMediaUpload(params.file, params.preferredKind)
+  if (!prepared) {
+    return {
+      success: false,
+      message: 'JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.',
+      url: undefined,
+    }
+  }
+  const { file, contentType } = prepared
   const pres = await apiFetchWithOffline('/api/uploadCustomerDisplayMedia/presign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       storeCode,
       fileName: file.name,
-      contentType: file.type || 'application/octet-stream',
+      contentType,
       fileSize: file.size,
     }),
   })

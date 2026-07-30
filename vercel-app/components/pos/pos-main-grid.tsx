@@ -48,7 +48,7 @@ export function POSMainGrid({
   return (
     <div
       className={cn(
-        "grid min-h-0 min-w-0 flex-1 grid-cols-1 items-stretch gap-2 px-2 pb-2 pt-2 min-[768px]:grid-cols-2 min-[768px]:gap-3 min-[768px]:px-3 min-[768px]:pb-3 min-[768px]:pt-3",
+        "grid min-h-0 min-w-0 flex-1 grid-cols-1 items-stretch gap-2 px-2 pb-2 pt-2 min-[768px]:grid-cols-2 max-[920px]:grid-cols-1 min-[768px]:gap-3 min-[768px]:px-3 min-[768px]:pb-3 min-[768px]:pt-3",
         "min-[1025px]:gap-4 min-[1025px]:px-4 min-[1025px]:pb-4 min-[1025px]:pt-4",
         /* overflow-x-hidden 은 떠 있는 라벨·세로 클리핑 이슈 유발 → 세로 스크롤만 */
         "overflow-y-auto overflow-x-visible overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y"
@@ -71,7 +71,7 @@ export function POSMainGrid({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2 min-[768px]:p-3 min-[1025px]:p-4">
             <div
               className={cn(
-                "grid min-h-[min(52vh,22rem)] w-full min-w-0 flex-1 auto-rows-[minmax(0,1fr)]",
+                "grid min-h-[min(48vh,20rem)] min-[1024px]:min-h-[min(52vh,22rem)] w-full min-w-0 flex-1 auto-rows-[minmax(0,1fr)]",
                 "grid-cols-2 grid-rows-3 gap-2 min-[1025px]:gap-3",
                 "[grid-template-columns:minmax(0,1fr)_minmax(0,1fr)]"
               )}
@@ -120,7 +120,7 @@ export function POSMainGrid({
               {t("posManage")}
             </h2>
           </header>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2 min-[768px]:p-3 min-[1025px]:p-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y p-2 min-[768px]:p-3 min-[1025px]:p-4">
             <div
               className={cn(
                 "grid w-full min-w-0 flex-1 auto-rows-[minmax(0,1fr)] content-start",

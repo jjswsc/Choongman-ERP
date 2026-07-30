@@ -228,18 +228,34 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
       }
       setUploadingMedia(true)
       try {
-        const res = await uploadCustomerDisplayMedia({ storeCode: sc, file })
+        const res = await uploadCustomerDisplayMedia({
+          storeCode: sc,
+          file,
+          preferredKind: idleMediaType === 'video' ? 'video' : 'image',
+        })
         if (!res.success || !res.url) {
-          await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
+          await appAlert(
+            localizeApiMessage(
+              res.message,
+              t,
+              tr("posCustomerIdleMediaUploadFail", "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요."),
+              lang
+            )
+          )
           return
         }
         setIdleMediaUrl(res.url)
         await appAlert(tr("posCustomerIdleMediaUploaded", "미디어가 업로드되었습니다. 저장을 눌러 반영하세요."))
+      } catch (e) {
+        await appAlert(
+          tr("posCustomerIdleMediaUploadFail", "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요.") +
+            (e instanceof Error && e.message ? `: ${e.message}` : "")
+        )
       } finally {
         setUploadingMedia(false)
       }
     },
-    [idleMediaType, storeCode, tr]
+    [idleMediaType, lang, storeCode, t, tr]
   )
 
   if (!String(storeCode || "").trim()) {
@@ -365,7 +381,11 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
           <div className="mt-3 space-y-2">
             <Input
               type="file"
-              accept={idleMediaType === "video" ? "video/mp4,video/webm" : "image/jpeg,image/png,image/gif,image/webp"}
+              accept={
+                idleMediaType === "video"
+                  ? "video/mp4,video/webm,.mp4,.webm"
+                  : "image/jpeg,image/jpg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp"
+              }
               className="cursor-pointer"
               disabled={uploadingMedia}
               onChange={(e) => {

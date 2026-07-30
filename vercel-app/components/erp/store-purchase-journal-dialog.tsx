@@ -29,6 +29,12 @@ type StorePurchaseJournalDialogProps = {
   onDeleted?: () => void
 }
 
+function formatAmount2(n: number): string {
+  const x = Number(n)
+  if (!Number.isFinite(x)) return "0.00"
+  return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export function StorePurchaseJournalDialog({
   open,
   orderId,
@@ -154,7 +160,7 @@ export function StorePurchaseJournalDialog({
                         <td className="py-1 pr-2 font-mono">{line.accountCode}</td>
                         <td className="py-1 pr-2">{line.accountName}</td>
                         <td className="py-1 pr-2 text-center">{line.side === "debit" ? "D" : "C"}</td>
-                        <td className="py-1 text-right tabular-nums">฿{line.amount.toLocaleString()}</td>
+                        <td className="py-1 text-right tabular-nums">฿{formatAmount2(line.amount)}</td>
                       </tr>
                     ))}
                   </tbody>

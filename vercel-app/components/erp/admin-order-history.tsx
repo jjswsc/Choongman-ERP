@@ -57,6 +57,12 @@ function displayNick(nick: string, full: string): string {
   return s.slice(0, 8) + "…"
 }
 
+function formatMoney2(n: number): string {
+  const x = Number(n)
+  if (!Number.isFinite(x)) return "0.00"
+  return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 interface ItemRow {
   id: string
   orderId: number
@@ -741,8 +747,8 @@ ${rowsToPrint.map((r) => {
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.vendor || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap text-xs">{r.outboundLocation || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.qty}</td>
-                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
-                      <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{formatMoney2(r.price || 0)}</td>
+                      <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{formatMoney2(r.price * r.qty)}</td>
                       {isHQ && (
                         <td className="px-2 py-1.5">
                           <div className="flex flex-col items-center gap-1">

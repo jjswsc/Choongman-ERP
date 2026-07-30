@@ -887,6 +887,12 @@ export const I18N_POS_KO: Record<string, string> = {
     posCustomerIdleMediaUploaded: '미디어가 업로드되었습니다. 저장을 눌러 반영하세요.',
     posCustomerIdleMediaUrlPh: '또는 공개 URL 직접 입력',
     posCustomerIdleMediaClear: '미디어 지우기',
+    posCustomerIdleMediaUploadFail:
+      '미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요.',
+    posCustomerIdleMediaTypeInvalid:
+      'JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.',
+    posCustomerIdleMediaImageTooLarge: '이미지는 4MB 이하만 업로드할 수 있습니다.',
+    posCustomerIdleMediaVideoTooLarge: '동영상은 50MB 이하만 업로드할 수 있습니다.',
     posCustomerIdleMessage: '평상시 문구',
     posCustomerIdleMessagePh: '예: 주문해 주셔서 감사합니다',
     posCustomerPaymentMessage: '결제중 문구',
@@ -4175,6 +4181,11 @@ export const I18N_POS_EN: Record<string, string> = {
     posCustomerIdleMediaUploaded: 'Media uploaded. Press Save to apply.',
     posCustomerIdleMediaUrlPh: 'Or paste a public URL',
     posCustomerIdleMediaClear: 'Clear media',
+    posCustomerIdleMediaUploadFail:
+      'Media upload failed. Use JPG/PNG/WebP (≤4MB) or MP4/WebM (≤50MB).',
+    posCustomerIdleMediaTypeInvalid: 'Only JPG, PNG, GIF, WebP images or MP4, WebM videos can be uploaded.',
+    posCustomerIdleMediaImageTooLarge: 'Images must be 4MB or smaller.',
+    posCustomerIdleMediaVideoTooLarge: 'Videos must be 50MB or smaller.',
     posCustomerIdleMessage: 'Idle message',
     posCustomerIdleMessagePh: 'e.g. Thank you for visiting',
     posCustomerPaymentMessage: 'Payment message',
@@ -7825,6 +7836,11 @@ export const I18N_POS_TH: Record<string, string> = {
     posCustomerIdleMediaUploaded: 'อัปโหลดแล้ว กดบันทึกเพื่อใช้',
     posCustomerIdleMediaUrlPh: 'หรือวาง URL สาธารณะ',
     posCustomerIdleMediaClear: 'ล้างสื่อ',
+    posCustomerIdleMediaUploadFail:
+      'อัปโหลดสื่อไม่สำเร็จ กรุณาใช้ JPG/PNG/WebP (≤4MB) หรือ MP4/WebM (≤50MB)',
+    posCustomerIdleMediaTypeInvalid: 'อัปโหลดได้เฉพาะรูป JPG, PNG, GIF, WebP หรือวิดีโอ MP4, WebM',
+    posCustomerIdleMediaImageTooLarge: 'รูปต้องไม่เกิน 4MB',
+    posCustomerIdleMediaVideoTooLarge: 'วิดีโอต้องไม่เกิน 50MB',
     posCustomerIdleMessage: 'ข้อความตอนไม่สั่ง',
     posCustomerIdleMessagePh: 'เช่น ขอบคุณที่มาใช้บริการ',
     posCustomerPaymentMessage: 'ข้อความตอนชำระเงิน',

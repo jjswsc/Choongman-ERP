@@ -80,11 +80,11 @@ function monthBoundsFromYm(ym: string): { startStr: string; endStr: string } {
   return { startStr, endStr }
 }
 
-/** 금액 표시: 천 단위 콤마, 소수는 필요 시 최대 2자리 */
+/** 금액 표시: 천 단위 콤마, 소수는 항상 2자리 */
 function formatMoneyComma(n: number): string {
   const x = Number(n)
   if (!Number.isFinite(x)) return "0"
-  return x.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /** 수량 입력(문자열) → 1 이상 정수 */

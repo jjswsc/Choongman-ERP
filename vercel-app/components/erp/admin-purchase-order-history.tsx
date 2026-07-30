@@ -700,10 +700,10 @@ ${allRows.map((row, ri) => {
                         )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                        {po.vat != null ? po.vat.toLocaleString() : "-"}
+                        {formatPoAmount(po.vat)}
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-primary tabular-nums">
-                        {po.total != null ? po.total.toLocaleString() : "-"}
+                        {formatPoAmount(po.total)}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
@@ -893,4 +893,10 @@ function groupCartByStore(cart: CartItem[]): Map<string, CartItem[]> {
     byStore.set(store, arr)
   }
   return byStore
+}
+
+function formatPoAmount(n: number | null | undefined): string {
+  const x = Number(n ?? 0)
+  if (!Number.isFinite(x)) return "-"
+  return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  isCustomerDisplayImageContentType,
+  isCustomerDisplayVideoContentType,
+  normalizeCustomerDisplayMediaContentType,
+} from '@/lib/customer-display-media-upload'
+import {
   supabaseCreateSignedUploadUrl,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
@@ -7,8 +12,6 @@ import {
 const BUCKET = 'pos-menu-images'
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
-const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
-const VIDEO_TYPES = new Set(['video/mp4', 'video/webm'])
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -26,15 +29,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'storeCode가 필요합니다.' }, { status: 400, headers })
     }
     const fileName = String(body.fileName || 'file').trim() || 'file'
-    const contentType = String(body.contentType || 'application/octet-stream').toLowerCase().split(';')[0].trim()
+    const contentType = normalizeCustomerDisplayMediaContentType(body.contentType || 'application/octet-stream')
     const fileSize = Number(body.fileSize)
 
     if (!Number.isFinite(fileSize) || fileSize <= 0) {
       return NextResponse.json({ success: false, message: '파일 크기가 필요합니다.' }, { status: 400, headers })
     }
 
-    const isImage = IMAGE_TYPES.has(contentType)
-    const isVideo = VIDEO_TYPES.has(contentType)
+    const isImage = isCustomerDisplayImageContentType(contentType)
+    const isVideo = isCustomerDisplayVideoContentType(contentType)
     if (!isImage && !isVideo) {
       return NextResponse.json(
         {
@@ -58,14 +61,17 @@ export async function POST(request: NextRequest) {
     }
 
     const safeStore = storeCode.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) || 'store'
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    let safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    if (!/\.(jpe?g|png|gif|webp|mp4|webm)$/i.test(safeName)) {
+      safeName += isVideo ? (contentType === 'video/webm' ? '.webm' : '.mp4') : contentType === 'image/png' ? '.png' : contentType === 'image/gif' ? '.gif' : contentType === 'image/webp' ? '.webp' : '.jpg'
+    }
     const storagePath = `customer-display/${safeStore}/${Date.now()}-${safeName}`
 
     const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
     const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
 
     return NextResponse.json(
-      { success: true, signedUrl, publicUrl, storagePath },
+      { success: true, signedUrl, publicUrl, storagePath, contentType },
       { headers }
     )
   } catch (e) {

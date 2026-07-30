@@ -33,7 +33,7 @@ function detectFeeStackPreset(mode: PosFeeStackMode, order: PosFeeStackKey[]): F
 }
 
 function formatBaht(n: number): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string }) {

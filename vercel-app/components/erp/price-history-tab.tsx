@@ -147,7 +147,7 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
   }, [restoreDate, loadHistory, t])
 
   const formatValue = (v: number | null) =>
-    v != null ? Number(v).toLocaleString(lang === "ko" ? "ko-KR" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"
+    v != null ? Number(v).toLocaleString(lang === "ko" ? "ko-KR" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"
 
   const formatDateOnly = React.useCallback((dateStr: string) => {
     try {
