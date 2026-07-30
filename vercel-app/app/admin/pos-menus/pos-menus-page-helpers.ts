@@ -365,6 +365,7 @@ export const emptyForm = {
   vatIncluded: true,
   isActive: true,
   isBanban: false,
+  buffetIncludable: false,
   banbanFlavorMenuIds: [] as string[],
   sellHall: true,
   sellDelivery: true,

@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
+import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
+import { useQrFloorSessionHints } from '@/lib/use-qr-floor-session-hints'
 import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
 import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
@@ -493,6 +495,7 @@ export default function PosTerminalPage() {
     upsertOrderFromServer,
     loadingTables,
   } = usePosStore()
+  const { getQrSessionMarker } = useQrFloorSessionHints(isPosDemo ? null : currentStoreId)
   const { formatStoreLabel, resolveStoreKey, legacyToCanonical, storeLabels, posStores } = useStoreList()
 
   const businessOpenGate = usePosBusinessOpenGate(currentStoreId, { skip: isPosDemo })
@@ -11003,10 +11006,30 @@ export default function PosTerminalPage() {
               {selectedTableId ? (
                 <div
                   className={cn(
-                    'flex-1 min-h-0 overflow-hidden',
+                    'flex-1 min-h-0 overflow-hidden flex flex-col',
                     !isNarrowViewport && 'min-h-[260px]'
                   )}
                 >
+                  {currentStoreId && String(selectedTable?.name || '').trim() ? (
+                    <div className="shrink-0 pb-3">
+                      <QrTableSessionPanel
+                        storeCode={currentStoreId}
+                        tableName={String(selectedTable?.name || '').trim()}
+                        onChanged={() => {
+                          const openedFromEmpty = selectedTableId
+                          void Promise.resolve(refetchCurrentStore()).then(() => {
+                            // 세션 오픈 시 pos_order가 생기므로 서빙 패널로 전환해 QR 상태를 계속 보이게
+                            if (openedFromEmpty) {
+                              setServingTableId(openedFromEmpty)
+                              setSelectedTableId(null)
+                              clearCartFromTerminal()
+                            }
+                          })
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="min-h-0 flex-1 overflow-hidden">
                   <PosBusinessOpenGateBlock
                     blocked={businessOpenBlocked}
                     loading={businessOpenGate.loading}
@@ -11039,6 +11062,7 @@ export default function PosTerminalPage() {
                       className="h-full"
                     />
                   </PosBusinessOpenGateBlock>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -11133,6 +11157,7 @@ export default function PosTerminalPage() {
                         delayBadgeEnabled={cookingRules.delayBadgeEnabled}
                         delaySoundEnabled={cookingRules.delaySoundEnabled}
                         delayAlertOverMin={cookingRules.delayAlertOverMin}
+                        getQrSessionMarker={getQrSessionMarker}
                       />
                     </div>
                   )}

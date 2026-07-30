@@ -4,6 +4,8 @@
  */
 import QRCode from 'qrcode'
 
+export type QrTablePrintCardFormat = 'a6' | 'square' | 'sticker'
+
 export type QrTablePrintCardInput = {
   storeLabel: string
   tableName: string
@@ -16,10 +18,21 @@ export type QrTablePrintCardInput = {
   brandColor?: string
   /** Soft background accent hex */
   accentColor?: string
+  /** Print template size */
+  format?: QrTablePrintCardFormat
 }
 
-const W = 900
-const H = 1200
+const FORMAT_PX: Record<QrTablePrintCardFormat, { w: number; h: number; qr: number }> = {
+  a6: { w: 900, h: 1200, qr: 480 },
+  square: { w: 1000, h: 1000, qr: 520 },
+  sticker: { w: 800, h: 800, qr: 460 },
+}
+
+const FORMAT_PDF_MM: Record<QrTablePrintCardFormat, { w: number; h: number; page: string | number[] }> = {
+  a6: { w: 105, h: 140, page: 'a6' },
+  square: { w: 100, h: 100, page: [100, 100] },
+  sticker: { w: 70, h: 70, page: [70, 70] },
+}
 
 function normalizeHex(raw: string | undefined, fallback: string): string {
   const s = String(raw || '').trim()
@@ -67,10 +80,13 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/** High-res printable card (900×1200). */
+/** High-res printable card. */
 export async function renderQrTablePrintCardCanvas(
   input: QrTablePrintCardInput
 ): Promise<HTMLCanvasElement> {
+  const format: QrTablePrintCardFormat =
+    input.format === 'square' || input.format === 'sticker' ? input.format : 'a6'
+  const { w: W, h: H, qr: qrSize } = FORMAT_PX[format]
   const url = String(input.url || '').trim()
   const tableName = String(input.tableName || '').trim() || '—'
   const storeLabel = String(input.storeLabel || '').trim() || 'Store'
@@ -80,7 +96,7 @@ export async function renderQrTablePrintCardCanvas(
   const logoUrl = String(input.logoUrl || '').trim()
 
   const qrDataUrl = await QRCode.toDataURL(url, {
-    width: 640,
+    width: Math.max(320, qrSize),
     margin: 2,
     errorCorrectionLevel: 'H',
     color: { dark: '#1c1917', light: '#ffffff' },
@@ -110,71 +126,73 @@ export async function renderQrTablePrintCardCanvas(
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, W, H)
 
-  // Soft decorative corner arcs
   ctx.fillStyle = hexToRgba(brandColor, 0.08)
   ctx.beginPath()
-  ctx.arc(0, 0, 280, 0, Math.PI * 2)
+  ctx.arc(0, 0, Math.min(W, H) * 0.28, 0, Math.PI * 2)
   ctx.fill()
   ctx.beginPath()
-  ctx.arc(W, H, 320, 0, Math.PI * 2)
+  ctx.arc(W, H, Math.min(W, H) * 0.32, 0, Math.PI * 2)
   ctx.fill()
 
-  // Main card panel
-  const pad = 48
-  roundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 36)
+  const pad = format === 'sticker' ? 28 : 48
+  roundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, format === 'sticker' ? 24 : 36)
   ctx.fillStyle = '#fffdf9'
   ctx.fill()
   ctx.strokeStyle = hexToRgba(brandColor, 0.18)
   ctx.lineWidth = 2
   ctx.stroke()
 
-  // Top accent bar
   ctx.fillStyle = brandColor
   ctx.beginPath()
   ctx.moveTo(pad, pad)
   ctx.lineTo(W - pad, pad)
-  ctx.lineTo(W - pad, pad + 16)
-  ctx.lineTo(pad, pad + 16)
+  ctx.lineTo(W - pad, pad + 14)
+  ctx.lineTo(pad, pad + 14)
   ctx.closePath()
   ctx.fill()
 
-  let headerY = pad + 72
+  let headerY = pad + (format === 'sticker' ? 48 : 72)
   if (logoImg) {
-    const maxH = 72
-    const maxW = 220
+    const maxH = format === 'sticker' ? 48 : 72
+    const maxW = format === 'sticker' ? 160 : 220
     const ratio = Math.min(maxW / logoImg.width, maxH / logoImg.height)
     const lw = logoImg.width * ratio
     const lh = logoImg.height * ratio
-    ctx.drawImage(logoImg, (W - lw) / 2, pad + 36, lw, lh)
-    headerY = pad + 36 + lh + 36
+    ctx.drawImage(logoImg, (W - lw) / 2, pad + (format === 'sticker' ? 24 : 36), lw, lh)
+    headerY = pad + (format === 'sticker' ? 24 : 36) + lh + (format === 'sticker' ? 20 : 36)
   }
 
-  // Store / brand
   ctx.textAlign = 'center'
   ctx.fillStyle = '#78716c'
-  ctx.font = '600 28px "Segoe UI", "Noto Sans Thai", sans-serif'
+  ctx.font = format === 'sticker' ? '600 22px "Segoe UI", "Noto Sans Thai", sans-serif' : '600 28px "Segoe UI", "Noto Sans Thai", sans-serif'
   ctx.fillText(storeLabel.slice(0, 40), W / 2, headerY)
-  if (brandLine) {
+  if (brandLine && format !== 'sticker') {
     ctx.fillStyle = '#a8a29e'
     ctx.font = '500 22px "Segoe UI", sans-serif'
     ctx.fillText(brandLine.slice(0, 36), W / 2, headerY + 34)
   }
 
-  const tableTitleY = headerY + (brandLine ? 90 : 64)
-
-  // Table label
+  const tableTitleY = headerY + (brandLine && format !== 'sticker' ? 80 : 48)
   ctx.fillStyle = '#1c1917'
-  ctx.font = '700 42px "Segoe UI", "Noto Sans Thai", sans-serif'
-  ctx.fillText('TABLE', W / 2, tableTitleY)
-  ctx.font = '800 120px "Segoe UI", "Pretendard", sans-serif'
+  if (format !== 'sticker') {
+    ctx.font = '700 36px "Segoe UI", "Noto Sans Thai", sans-serif'
+    ctx.fillText('TABLE', W / 2, tableTitleY)
+  }
+  ctx.font =
+    format === 'sticker'
+      ? '800 72px "Segoe UI", "Pretendard", sans-serif'
+      : format === 'square'
+        ? '800 96px "Segoe UI", "Pretendard", sans-serif'
+        : '800 120px "Segoe UI", "Pretendard", sans-serif'
   const tableDisplay = tableName.length > 8 ? tableName.slice(0, 10) : tableName
-  ctx.fillText(tableDisplay, W / 2, tableTitleY + 120)
+  ctx.fillText(tableDisplay, W / 2, tableTitleY + (format === 'sticker' ? 70 : 110))
 
-  // QR frame
-  const qrSize = 480
   const qrX = (W - qrSize) / 2
-  const qrY = Math.min(tableTitleY + 160, H - pad - qrSize - 200)
-  roundRect(ctx, qrX - 28, qrY - 28, qrSize + 56, qrSize + 56, 28)
+  const qrY = Math.min(
+    tableTitleY + (format === 'sticker' ? 90 : 140),
+    H - pad - qrSize - (format === 'a6' ? 160 : 80)
+  )
+  roundRect(ctx, qrX - 20, qrY - 20, qrSize + 40, qrSize + 40, 22)
   ctx.fillStyle = '#ffffff'
   ctx.fill()
   ctx.strokeStyle = 'rgba(28, 25, 23, 0.08)'
@@ -182,19 +200,22 @@ export async function renderQrTablePrintCardCanvas(
   ctx.stroke()
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
 
-  // Instructions
-  const copyY = qrY + qrSize + 70
-  ctx.fillStyle = '#1c1917'
-  ctx.font = '700 36px "Noto Sans Thai", "Segoe UI", sans-serif'
-  ctx.fillText('สแกนเพื่อสั่งอาหาร', W / 2, copyY)
-  ctx.fillStyle = '#57534e'
-  ctx.font = '600 26px "Segoe UI", sans-serif'
-  ctx.fillText('Scan to order from your phone', W / 2, copyY + 44)
-
-  // Footer hint
-  ctx.fillStyle = '#a8a29e'
-  ctx.font = '500 18px "Segoe UI", sans-serif'
-  ctx.fillText('Wi‑Fi recommended · No app install', W / 2, H - pad - 36)
+  if (format === 'a6') {
+    const copyY = qrY + qrSize + 70
+    ctx.fillStyle = '#1c1917'
+    ctx.font = '700 36px "Noto Sans Thai", "Segoe UI", sans-serif'
+    ctx.fillText('สแกนเพื่อสั่งอาหาร', W / 2, copyY)
+    ctx.fillStyle = '#57534e'
+    ctx.font = '600 26px "Segoe UI", sans-serif'
+    ctx.fillText('Scan to order from your phone', W / 2, copyY + 44)
+    ctx.fillStyle = '#a8a29e'
+    ctx.font = '500 18px "Segoe UI", sans-serif'
+    ctx.fillText('Wi‑Fi recommended · No app install', W / 2, H - pad - 36)
+  } else if (format === 'square') {
+    ctx.fillStyle = '#57534e'
+    ctx.font = '600 24px "Segoe UI", "Noto Sans Thai", sans-serif'
+    ctx.fillText('Scan to order · สแกนเพื่อสั่ง', W / 2, Math.min(H - pad - 28, qrY + qrSize + 48))
+  }
 
   return canvas
 }
@@ -221,13 +242,19 @@ export async function downloadQrTablePrintCardsPdf(
 ): Promise<void> {
   if (!cards.length) return
   const { default: jsPDF } = await import('jspdf')
-  // A6 portrait mm ≈ 105 × 148 — one card per page
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a6' })
+  const format: QrTablePrintCardFormat =
+    cards[0]?.format === 'square' || cards[0]?.format === 'sticker' ? cards[0].format : 'a6'
+  const mm = FORMAT_PDF_MM[format]
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: mm.page as 'a6' | number[],
+  })
   for (let i = 0; i < cards.length; i++) {
-    if (i > 0) pdf.addPage('a6', 'portrait')
-    const canvas = await renderQrTablePrintCardCanvas(cards[i])
+    if (i > 0) pdf.addPage(mm.page as 'a6' | number[], 'portrait')
+    const canvas = await renderQrTablePrintCardCanvas({ ...cards[i], format })
     const img = canvas.toDataURL('image/jpeg', 0.92)
-    pdf.addImage(img, 'JPEG', 0, 0, 105, 140)
+    pdf.addImage(img, 'JPEG', 0, 0, mm.w, mm.h)
   }
   pdf.save(filename)
 }

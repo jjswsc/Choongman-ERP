@@ -1015,6 +1015,7 @@ export default function PosMenusPage() {
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
           isBanban: m.isBanban ?? false,
+          buffetIncludable: m.buffetIncludable ?? false,
           banbanFlavorMenuIds: m.banbanFlavorMenuIds ?? [],
           sellHall: m.sellHall !== false,
           sellDelivery: m.sellDelivery !== false,
@@ -1247,6 +1248,7 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
+      buffetIncludable: formData.buffetIncludable,
       banbanFlavorMenuIds: formData.isBanban ? formData.banbanFlavorMenuIds : [],
       sellHall: formData.sellHall,
       sellDelivery: formData.sellDelivery,
@@ -1288,6 +1290,7 @@ export default function PosMenusPage() {
       optionSelectionGroups: editingMenu?.optionSelectionGroups,
       optionSelectionConfig: editingMenu?.optionSelectionConfig,
       isBanban: formData.isBanban,
+      buffetIncludable: formData.buffetIncludable,
       banbanFlavorMenuIds: formData.isBanban ? formData.banbanFlavorMenuIds : [],
       storeCodes: scopeForSave,
       sellHall: formData.sellHall,
@@ -1344,6 +1347,7 @@ export default function PosMenusPage() {
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
+      buffetIncludable: menu.buffetIncludable ?? false,
       banbanFlavorMenuIds: menu.banbanFlavorMenuIds ?? [],
       sellHall: menu.sellHall !== false,
       sellDelivery: menu.sellDelivery !== false,
@@ -4307,6 +4311,21 @@ export default function PosMenusPage() {
                       <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S Boneless) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
                         <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
                         {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
+                      </label>
+                      <label
+                        className="flex items-center gap-2 text-xs"
+                        title={
+                          t("posMenuBuffetIncludableHint") ||
+                          "QR 뷔페 티어에서 포함(0원) 후보로 고를 수 있습니다. 실제 포함은 QR 테이블오더 티어에서 체크합니다."
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.buffetIncludable}
+                          onChange={(e) => setFormData((p) => ({ ...p, buffetIncludable: e.target.checked }))}
+                          disabled={isPromoLinkedMenuEdit}
+                        />
+                        {t("posMenuBuffetIncludable") || "뷔페 포함 가능 (QR)"}
                       </label>
                     </div>
                     {formData.isBanban && (

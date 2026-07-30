@@ -34,6 +34,8 @@ export interface PosMenu {
   cookingTimeMin?: number | null
   /** 반반 메뉴: POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문, 원가는 각 0.5씩 */
   isBanban?: boolean
+  /** QR 뷔페 티어 포함 메뉴 후보 (실제 포함은 티어 연결로 확정) */
+  buffetIncludable?: boolean
   /** 반반 메뉴별 허용 맛 메뉴 id 목록 (명시적 whitelist) */
   banbanFlavorMenuIds?: string[]
   /** 프로모션 마스터와 연동된 미러 메뉴 */

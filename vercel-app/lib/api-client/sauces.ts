@@ -249,6 +249,7 @@ export async function savePosMenu(
     cookingTimeMin?: number | null
     deliveryAppFeePercent?: number | null
     isBanban?: boolean
+    buffetIncludable?: boolean
     banbanFlavorMenuIds?: string[]
     descriptionDefault?: string
     descriptionDelivery?: string | null

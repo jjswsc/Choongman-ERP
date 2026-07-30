@@ -93,6 +93,8 @@ export interface TableFloorViewProps {
    * `null`이면 마커 없음.
    */
   timeTourSpotlights?: TableFloorTimeTourSpotlights | null
+  /** QR 테이블오더 세션 뱃지: awaiting | active | call */
+  getQrSessionMarker?: (id: string, name: string) => 'awaiting' | 'active' | 'call' | null
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -191,6 +193,7 @@ export function TableFloorView({
   tableListMode = 'all',
   timeTourSpotlights = null,
   displayScale = 1,
+  getQrSessionMarker,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const floorLabelFallback = t('posFloorLabel') || 'Floor {n}'
@@ -470,6 +473,7 @@ export function TableFloorView({
         const surfHofAabb = tab.h / tab.aabbHpx
         const floorTableLabel = formatDisplayTableLabel(tab.name, tab.id)
         const tableBadgeNumber = getTableBadgeNumber(floorTableLabel)
+        const qrMarker = getQrSessionMarker?.(tab.id, tab.name) || null
 
         return (
           <div
@@ -499,6 +503,25 @@ export function TableFloorView({
               boxSizing: 'border-box',
             }}
           >
+            {qrMarker ? (
+              <span
+                className={cn(
+                  'pointer-events-none absolute -left-1 -top-1 z-20 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide shadow-md ring-1',
+                  qrMarker === 'call' && 'animate-pulse bg-rose-600 text-white ring-rose-300',
+                  qrMarker === 'active' && 'bg-emerald-600 text-white ring-emerald-300',
+                  qrMarker === 'awaiting' && 'bg-amber-500 text-white ring-amber-200'
+                )}
+                title={
+                  qrMarker === 'call'
+                    ? 'QR guest call'
+                    : qrMarker === 'active'
+                      ? 'QR ordering'
+                      : 'QR awaiting entry'
+                }
+              >
+                {qrMarker === 'call' ? 'CALL' : 'QR'}
+              </span>
+            ) : null}
             {/* AABB(바깥) + w×h 논리 면(안): 회전 90/270이어도 보이는 점유 면·그리드와 맞음 */}
             <div
               className="absolute"

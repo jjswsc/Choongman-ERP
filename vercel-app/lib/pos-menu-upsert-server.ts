@@ -59,6 +59,7 @@ export type PosMenuUpsertApiBody = {
   kitchenPrinter?: number | null
   cookingTimeMin?: number | null
   isBanban?: boolean
+  buffetIncludable?: boolean
   banbanFlavorMenuIds?: string[]
   descriptionDefault?: string
   descriptionDelivery?: string | null
@@ -102,6 +103,7 @@ type ExistingMenuRow = {
   kitchen_printer?: number | null
   cooking_time_min?: number | null
   is_banban?: boolean | null
+  buffet_includable?: boolean | null
   description_default?: string | null
   description_delivery?: string | null
   description_table?: string | null
@@ -183,6 +185,7 @@ export function buildPosMenuUpsertRow(
           : null
     }
     row.is_banban = 'isBanban' in body ? body.isBanban === true : false
+    row.buffet_includable = 'buffetIncludable' in body ? body.buffetIncludable === true : false
     row.sell_hall = body.sellHall !== false
     row.sell_delivery = body.sellDelivery !== false
     row.sell_packaging = body.sellPackaging !== false
@@ -236,6 +239,7 @@ export function buildPosMenuUpsertRow(
         : null
   }
   if ('isBanban' in body) row.is_banban = body.isBanban === true
+  if ('buffetIncludable' in body) row.buffet_includable = body.buffetIncludable === true
   if ('sellHall' in body) row.sell_hall = body.sellHall !== false
   if ('sellDelivery' in body) row.sell_delivery = body.sellDelivery !== false
   if ('sellPackaging' in body) row.sell_packaging = body.sellPackaging !== false
@@ -565,7 +569,7 @@ export async function upsertPosMenuFromBody(
           {
             limit: 1,
             select:
-              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,delivery_app_fee_percent,sell_hall,sell_delivery,sell_packaging',
+              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,buffet_includable,description_default,description_delivery,description_table,delivery_app_fee_percent,sell_hall,sell_delivery,sell_packaging',
           }
         )) as ExistingMenuRow[] | null
       } catch (err) {
@@ -782,6 +786,7 @@ export async function upsertPosMenuFromBody(
             fieldUnchanged('kitchen_printer', normNum) &&
             fieldUnchanged('cooking_time_min', normNum) &&
             fieldUnchanged('is_banban', normBool) &&
+            fieldUnchanged('buffet_includable', normBool) &&
             fieldUnchanged('delivery_app_fee_percent', normNum) &&
             fieldUnchanged('sell_hall', normBool) &&
             fieldUnchanged('sell_delivery', normBool) &&
@@ -1096,6 +1101,7 @@ export async function upsertPosMenuFromBody(
         kitchenPrinterInBody ||
         cookingTimeInBody ||
         'isBanban' in body ||
+        'buffetIncludable' in body ||
         hasDescriptionDefault ||
         hasDescriptionDelivery ||
         hasDescriptionTable ||
@@ -1108,6 +1114,7 @@ export async function upsertPosMenuFromBody(
         err.includes('kitchen_printer') ||
         err.includes('cooking_time_min') ||
         err.includes('is_banban') ||
+        err.includes('buffet_includable') ||
         err.includes('description_default') ||
         err.includes('description_delivery') ||
         err.includes('description_table') ||
@@ -1123,6 +1130,7 @@ export async function upsertPosMenuFromBody(
       delete rowWithout.kitchen_printer
       delete rowWithout.cooking_time_min
       delete rowWithout.is_banban
+      delete rowWithout.buffet_includable
       delete rowWithout.description_default
       delete rowWithout.description_delivery
       delete rowWithout.description_table

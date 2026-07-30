@@ -103,6 +103,8 @@ create table if not exists public.pos_qr_table_sessions (
   pending_entry_partner_txn_id text,
   pending_extras_partner_txn_id text,
   pending_extras_amount numeric(12, 2),
+  staff_call_at timestamptz,
+  staff_call_note text,
   closed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

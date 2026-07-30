@@ -200,6 +200,12 @@ export async function POST(req: NextRequest) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
         table_name: targetTableName,
       })
+      try {
+        const { syncQrSessionTableNameForOrder } = await import('@/lib/qr-table-server')
+        await syncQrSessionTableNameForOrder({ orderId, targetTableName })
+      } catch (qrSyncErr) {
+        console.error('posDineInTableActions move qr session sync:', qrSyncErr)
+      }
       return NextResponse.json({ success: true }, { headers })
     }
 
@@ -392,6 +398,13 @@ export async function POST(req: NextRequest) {
           keepOrderNo: String(keep.order_no ?? ''),
         }),
       })
+
+      try {
+        const { closeQrSessionsForAbsorbedOrder } = await import('@/lib/qr-table-server')
+        await closeQrSessionsForAbsorbedOrder(absorbOrderId)
+      } catch (qrMergeErr) {
+        console.error('posDineInTableActions merge qr session close:', qrMergeErr)
+      }
 
       return NextResponse.json({ success: true }, { headers })
     }

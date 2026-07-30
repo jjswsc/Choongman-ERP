@@ -2,7 +2,7 @@
 export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   adminPosQrTableOrder: 'QR 테이블오더',
   adminPosQrTableOrderDesc:
-    '매장별 QR 오더 ON/OFF, 결제 모드, 가격 티어·포함 메뉴, 테이블 QR 인쇄를 관리합니다.',
+    '매장별 QR 오더 ON/OFF, 결제 모드, 가격 티어·포함 메뉴, 테이블 QR 인쇄를 관리합니다. 포함 후보는 메뉴 관리「뷔페 포함 가능」에서 지정합니다.',
   qrTableSettings: '매장 설정',
   qrTableEnabled: 'QR 테이블오더 사용',
   qrTableMode: '주문 모드',
@@ -17,6 +17,10 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTablePayGuestChoice: '손님이 선택',
   qrTableTiers: '가격 티어',
   qrTableIncludedMenus: '포함 메뉴',
+  qrTableIncludedMenusHint:
+    '메뉴 관리에서「뷔페 포함 가능」으로 표시한 메뉴만 보입니다. 실제 0원 포함은 여기서 체크합니다.',
+  qrTableIncludedMenusEmpty:
+    '후보가 없습니다. 메뉴 관리에서「뷔페 포함 가능」을 켠 뒤 다시 열어 주세요.',
   qrTableTokens: '테이블 QR',
   qrTableGenerateTokens: '레이아웃 기준 생성',
   qrTableTokensEmpty: '아직 QR이 없습니다. 「레이아웃 기준 생성」을 눌러 주세요.',
@@ -57,6 +61,16 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableSessionPaidQr: 'QR 입금',
   qrTableSessionBalanceDue: '잔액',
   qrTableSessionCloseHint: 'POS에서 결제·취소하면 QR 세션이 자동 종료됩니다.',
+  qrTableSessionStaffCall: '손님 호출',
+  qrTableSessionAckCall: '호출 확인',
+  qrTableMaxOpenMinutes: '세션 최대 시간(분)',
+  qrTableSessionAlaCarte: '일반 메뉴 모드',
+  qrTableTierValidFrom: '유효 시작일',
+  qrTableTierValidTo: '유효 종료일',
+  qrTablePrintFormat: '규격',
+  qrTablePrintFormatA6: 'A6 텐트',
+  qrTablePrintFormatSquare: '정사각',
+  qrTablePrintFormatSticker: '스티커',
   qrTablePrintBrand: '인쇄 카드 브랜드',
   qrTablePrintLogoUrl: '로고 URL',
   qrTablePrintBrandColor: '브랜드 색',
@@ -66,9 +80,9 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableScanEn: 'Scan to order from your phone',
   qrTableScanShortEn: 'Scan to order',
   helpSum_admin_pos_qr_table_order:
-    '손님 폰 QR 테이블오더와 가격 티어(인당 입장가·포함 메뉴)를 매장별로 켭니다. 입장가/별도메뉴 선결제·후불·손님 선택을 설정하고, 테이블 QR 카드를 인쇄합니다.',
+    '손님 폰 QR 테이블오더와 가격 티어(인당 입장가·포함 메뉴)를 매장별로 켭니다. 포함 후보는 메뉴 관리「뷔페 포함 가능」에서, 티어별 실제 포함은 이 화면에서 고릅니다.',
   helpHow_admin_pos_qr_table_order:
-    '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 가격 티어를 추가하고 포함 메뉴를 체크합니다. 포함 메뉴는 손님 앱에서 0원으로만 주문됩니다.\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ POS에서「QR 세션 오픈」→ 손님이 /t/{token}으로 주문 → 퇴장 시 POS 결제.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
+    '① 메뉴 관리에서 뷔페 포함 후보 메뉴에「뷔페 포함 가능」을 켭니다.\n② 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n③ 가격 티어를 추가하고 포함 후보 중 실제 포함 메뉴를 체크합니다(손님 앱 0원).\n④ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n⑤ POS에서「QR 세션 오픈」→ 손님이 /t/{token}으로 주문 → 퇴장 시 POS 결제.\n⑥ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
 }
 
 export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
@@ -89,6 +103,10 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTablePayGuestChoice: 'Guest chooses',
   qrTableTiers: 'Price tiers',
   qrTableIncludedMenus: 'Included menus',
+  qrTableIncludedMenusHint:
+    'Only menus marked Buffet includable in Menu management appear here. Check which ones are actually included (฿0) for this tier.',
+  qrTableIncludedMenusEmpty:
+    'No candidates. Mark menus as Buffet includable in Menu management, then reload.',
   qrTableTokens: 'Table QR',
   qrTableGenerateTokens: 'Generate from layout',
   qrTableTokensEmpty: 'No QR yet. Tap “Generate from layout”.',
@@ -128,6 +146,16 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableSessionPaidQr: 'Paid via QR',
   qrTableSessionBalanceDue: 'Balance due',
   qrTableSessionCloseHint: 'Paying or cancelling at POS automatically closes the QR session.',
+  qrTableSessionStaffCall: 'Guest call',
+  qrTableSessionAckCall: 'Ack call',
+  qrTableMaxOpenMinutes: 'Max session minutes',
+  qrTableSessionAlaCarte: 'À la carte mode',
+  qrTableTierValidFrom: 'Valid from',
+  qrTableTierValidTo: 'Valid to',
+  qrTablePrintFormat: 'Format',
+  qrTablePrintFormatA6: 'A6 tent',
+  qrTablePrintFormatSquare: 'Square',
+  qrTablePrintFormatSticker: 'Sticker',
   qrTablePrintBrand: 'Print card brand',
   qrTablePrintLogoUrl: 'Logo URL',
   qrTablePrintBrandColor: 'Brand color',
@@ -137,9 +165,9 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableScanEn: 'Scan to order from your phone',
   qrTableScanShortEn: 'Scan to order',
   helpSum_admin_pos_qr_table_order:
-    'Enable guest-phone QR table ordering and price tiers (per-person entry + included menus) per store. Configure prepay/postpay/guest choice and print table QR cards.',
+    'Enable guest-phone QR table ordering and price tiers (per-person entry + included menus) per store. Mark buffet candidates in Menu management; pick actual includes per tier here.',
   helpHow_admin_pos_qr_table_order:
-    '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Add price tiers and check included menus (฿0 on guest app).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ On POS: open QR session → guest orders via /t/{token} → close at POS.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
+    '① In Menu management, turn on Buffet includable for candidate menus.\n② Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n③ Add price tiers and check which candidate menus are included (฿0 on guest app).\n④ Generate QR from layout, then download PNG/PDF or print cards.\n⑤ On POS: open QR session → guest orders via /t/{token} → close at POS.\n⑥ Prepay uses KBank PromptPay; keep order status pending until final close.',
 }
 
 export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
@@ -160,6 +188,10 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTablePayGuestChoice: 'ให้ลูกค้าเลือก',
   qrTableTiers: 'ระดับราคา',
   qrTableIncludedMenus: 'เมนูรวม',
+  qrTableIncludedMenusHint:
+    'แสดงเฉพาะเมนูที่ติ๊ก「ใส่บุฟเฟต์ได้」ในหน้าจัดการเมนู การรวมจริง (฿0) เลือกที่นี่',
+  qrTableIncludedMenusEmpty:
+    'ยังไม่มีรายการ — ไปที่จัดการเมนูแล้วเปิด「ใส่บุฟเฟต์ได้」ก่อนครับ',
   qrTableTokens: 'QR โต๊ะ',
   qrTableGenerateTokens: 'สร้างจากผังโต๊ะ',
   qrTableTokensEmpty: 'ยังไม่มี QR กด「สร้างจากผังโต๊ะ」',
@@ -199,6 +231,16 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableSessionPaidQr: 'ชำระ QR แล้ว',
   qrTableSessionBalanceDue: 'คงเหลือ',
   qrTableSessionCloseHint: 'ชำระหรือยกเลิกที่ POS แล้วเซสชัน QR จะปิดอัตโนมัติ',
+  qrTableSessionStaffCall: 'ลูกค้าเรียก',
+  qrTableSessionAckCall: 'รับทราบการเรียก',
+  qrTableMaxOpenMinutes: 'เวลาเซสชันสูงสุด (นาที)',
+  qrTableSessionAlaCarte: 'โหมดเมนูทั่วไป',
+  qrTableTierValidFrom: 'เริ่มใช้ได้',
+  qrTableTierValidTo: 'สิ้นสุด',
+  qrTablePrintFormat: 'ขนาด',
+  qrTablePrintFormatA6: 'A6 ตั้งโต๊ะ',
+  qrTablePrintFormatSquare: 'สี่เหลี่ยม',
+  qrTablePrintFormatSticker: 'สติกเกอร์',
   qrTablePrintBrand: 'แบรนด์การ์ดพิมพ์',
   qrTablePrintLogoUrl: 'URL โลโก้',
   qrTablePrintBrandColor: 'สีแบรนด์',
@@ -208,7 +250,7 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableScanEn: 'Scan to order from your phone',
   qrTableScanShortEn: 'Scan to order',
   helpSum_admin_pos_qr_table_order:
-    'เปิดให้ลูกค้าสั่งผ่าน QR บนมือถือ และตั้งระดับราคา (ค่าเข้าต่อคน + เมนูรวม) ตามสาขา ตั้งค่าชำระล่วงหน้า/ทีหลัง และพิมพ์การ์ด QR โต๊ะ',
+    'เปิดให้ลูกค้าสั่งผ่าน QR บนมือถือ และตั้งระดับราคา (ค่าเข้าต่อคน + เมนูรวม) ตามสาขา เลือกเมนูที่เป็นผู้สมัครบุฟเฟต์ที่จัดการเมนู แล้วติ๊กเมนูรวมจริงที่นี่',
   helpHow_admin_pos_qr_table_order:
-    '① เลือกสาขาแล้วเปิด「สั่งอาหารด้วย QR」 แนะนำให้พนักงานเปิดเซสชันก่อน + จ่ายทีหลังสำหรับไฟลอต Omni\n② เพิ่มระดับราคาและติ๊กเมนูรวม (ราคา 0 ในแอปลูกค้า)\n③ สร้าง QR จากผังโต๊ะ แล้วดาวน์โหลด PNG/PDF หรือพิมพ์การ์ด\n④ ที่ POS: เปิดเซสชัน QR → ลูกค้าสั่งผ่าน /t/{token} → ชำระที่ POS เมื่อออก\n⑤ ชำระล่วงหน้าใช้ KBank PromptPay และคงสถานะออเดอร์เป็น pending จนกว่าจะปิดบิล',
+    '① ที่จัดการเมนู เปิด「ใส่บุฟเฟต์ได้」ให้เมนูที่เป็นผู้สมัคร\n② เลือกสาขาแล้วเปิด「สั่งอาหารด้วย QR」 แนะนำให้พนักงานเปิดเซสชันก่อน + จ่ายทีหลังสำหรับไฟลอต Omni\n③ เพิ่มระดับราคาและติ๊กเมนูรวมจากผู้สมัคร (ราคา 0 ในแอปลูกค้า)\n④ สร้าง QR จากผังโต๊ะ แล้วดาวน์โหลด PNG/PDF หรือพิมพ์การ์ด\n⑤ ที่ POS: เปิดเซสชัน QR → ลูกค้าสั่งผ่าน /t/{token} → ชำระที่ POS เมื่อออก\n⑥ ชำระล่วงหน้าใช้ KBank PromptPay และคงสถานะออเดอร์เป็น pending จนกว่าจะปิดบิล',
 }

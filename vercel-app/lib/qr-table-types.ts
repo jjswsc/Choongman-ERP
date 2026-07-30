@@ -63,6 +63,8 @@ export type QrTableSession = {
   entryPaymentChannel: QrEntryPaymentChannel | null
   posOrderId: number | null
   openedBy: string
+  staffCallAt?: string | null
+  staffCallNote?: string | null
   createdAt: string
   updatedAt: string
 }

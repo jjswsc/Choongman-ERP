@@ -32,7 +32,7 @@ const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_group
 const POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG = POS_MENUS_SELECT_WITH_GROUPS + ',option_selection_config'
 const POS_MENUS_SELECT_WITH_ALL =
   POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG +
-  ',kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table,sell_hall,sell_delivery,sell_packaging,sell_member'
+  ',kitchen_printer,cooking_time_min,is_banban,buffet_includable,description_default,description_delivery,description_table,sell_hall,sell_delivery,sell_packaging,sell_member'
 const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
 /** 성공한 select 컬럼 캐시 — 매 요청 6회 폴백 왕복 방지 */
@@ -209,6 +209,7 @@ export async function GET(request: NextRequest) {
       kitchen_printer?: number | null
       cooking_time_min?: number | null
       is_banban?: boolean
+      buffet_includable?: boolean
       promo_id?: number | null
       description_default?: string
       description_delivery?: string | null
@@ -299,6 +300,7 @@ export async function GET(request: NextRequest) {
       const kp = row.kitchen_printer
       const ctm = row.cooking_time_min
       const isBanban = (row as { is_banban?: boolean }).is_banban === true
+      const buffetIncludable = (row as { buffet_includable?: boolean }).buffet_includable === true
       const pid = row.promo_id
       return [{
         id: String(row.id ?? ''),
@@ -318,6 +320,7 @@ export async function GET(request: NextRequest) {
         kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
         isBanban,
+        buffetIncludable,
         banbanFlavorMenuIds: (() => {
           if (!banbanFlavorSchemaReady || rowMenuId <= 0) return undefined
           const linked = banbanFlavorMenuIdsByMenuId.get(rowMenuId) || []
@@ -393,6 +396,7 @@ export async function GET(request: NextRequest) {
         const kp = row.kitchen_printer
         const ctm = row.cooking_time_min
         const isBanban = (row as { is_banban?: boolean }).is_banban === true
+        const buffetIncludable = (row as { buffet_includable?: boolean }).buffet_includable === true
         const pid = row.promo_id
         return {
           id: String(row.id ?? ''),
@@ -412,6 +416,7 @@ export async function GET(request: NextRequest) {
           kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
           cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
           isBanban,
+          buffetIncludable,
           banbanFlavorMenuIds: (() => {
             if (!banbanFlavorSchemaReady || rowMenuId <= 0) return undefined
             const linked = banbanFlavorMenuIdsByMenuId.get(rowMenuId) || []

@@ -53,7 +53,9 @@ export function PosQrTableOrderContent() {
   const [settings, setSettings] = React.useState<QrOrderStoreSettings>(defaultQrOrderStoreSettings(''))
   const [tiers, setTiers] = React.useState<QrBuffetTier[]>([])
   const [tokens, setTokens] = React.useState<Array<{ tableName: string; token: string; publicUrl?: string }>>([])
-  const [menus, setMenus] = React.useState<Array<{ id: string; name: string; code: string }>>([])
+  const [menus, setMenus] = React.useState<
+    Array<{ id: string; name: string; code: string; buffetIncludable?: boolean }>
+  >([])
   const [loading, setLoading] = React.useState(false)
   const [tierForm, setTierForm] = React.useState({
     id: 0,
@@ -64,8 +66,20 @@ export function PosQrTableOrderContent() {
     pricePerPerson: 299,
     sortOrder: 0,
     active: true,
+    validFrom: '',
+    validTo: '',
     includedMenuIds: [] as number[],
   })
+
+  const includableMenus = React.useMemo(() => {
+    const selected = new Set(tierForm.includedMenuIds)
+    return menus.filter((m) => {
+      if (m.buffetIncludable === true) return true
+      // 이미 티어에 연결된 메뉴는 스키마 이전 데이터 편집을 위해 유지
+      const id = Number(m.id)
+      return id > 0 && selected.has(id)
+    })
+  }, [menus, tierForm.includedMenuIds])
 
   React.useEffect(() => {
     if (!storeCode && posStoreOptions?.length) setStoreCode(posStoreOptions[0].code)
@@ -101,6 +115,7 @@ export function PosQrTableOrderContent() {
           id: String(m.id || ''),
           name: String(m.name || ''),
           code: String(m.code || ''),
+          buffetIncludable: m.buffetIncludable === true,
         }))
       )
     } catch (e) {
@@ -136,6 +151,8 @@ export function PosQrTableOrderContent() {
       pricePerPerson: tierForm.pricePerPerson,
       sortOrder: tierForm.sortOrder,
       active: tierForm.active,
+      validFrom: tierForm.validFrom || null,
+      validTo: tierForm.validTo || null,
       includedMenuIds: tierForm.includedMenuIds,
     })
     if (!res.success) {
@@ -151,6 +168,8 @@ export function PosQrTableOrderContent() {
       pricePerPerson: 299,
       sortOrder: 0,
       active: true,
+      validFrom: '',
+      validTo: '',
       includedMenuIds: [],
     })
     await reload()
@@ -305,6 +324,21 @@ export function PosQrTableOrderContent() {
               </Select>
             </div>
           </div>
+          <div>
+            <Label>{tr('qrTableMaxOpenMinutes', '세션 최대 시간(분)')}</Label>
+            <Input
+              type="number"
+              min={30}
+              max={720}
+              value={settings.maxOpenMinutes}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  maxOpenMinutes: Math.max(30, Math.min(720, Number(e.target.value || 240))),
+                }))
+              }
+            />
+          </div>
           <div className="space-y-3 rounded-md border border-dashed p-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {tr('qrTablePrintBrand', '인쇄 카드 브랜드')}
@@ -388,6 +422,8 @@ export function PosQrTableOrderContent() {
                       pricePerPerson: tier.pricePerPerson,
                       sortOrder: tier.sortOrder,
                       active: tier.active,
+                      validFrom: String(tier.validFrom || '').slice(0, 10),
+                      validTo: String(tier.validTo || '').slice(0, 10),
                       includedMenuIds: [...(tier.includedMenuIds || [])],
                     })
                   }
@@ -424,22 +460,53 @@ export function PosQrTableOrderContent() {
               value={tierForm.nameKo}
               onChange={(e) => setTierForm((f) => ({ ...f, nameKo: e.target.value }))}
             />
+            <div>
+              <Label className="text-xs">{tr('qrTableTierValidFrom', '유효 시작일')}</Label>
+              <Input
+                type="date"
+                value={tierForm.validFrom}
+                onChange={(e) => setTierForm((f) => ({ ...f, validFrom: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">{tr('qrTableTierValidTo', '유효 종료일')}</Label>
+              <Input
+                type="date"
+                value={tierForm.validTo}
+                onChange={(e) => setTierForm((f) => ({ ...f, validTo: e.target.value }))}
+              />
+            </div>
           </div>
           <div className="max-h-56 overflow-auto rounded border p-2">
             <p className="mb-2 text-xs text-muted-foreground">{tr('qrTableIncludedMenus', '포함 메뉴')}</p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              {tr(
+                'qrTableIncludedMenusHint',
+                '메뉴 관리에서「뷔페 포함 가능」으로 표시한 메뉴만 보입니다. 실제 0원 포함은 여기서 체크합니다.'
+              )}
+            </p>
             <div className="grid gap-1 sm:grid-cols-2">
-              {menus.map((m) => {
-                const id = Number(m.id)
-                const checked = tierForm.includedMenuIds.includes(id)
-                return (
-                  <label key={m.id} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={checked} onChange={() => toggleMenu(id)} />
-                    <span className="truncate">
-                      {m.code} {m.name}
-                    </span>
-                  </label>
-                )
-              })}
+              {includableMenus.length === 0 ? (
+                <p className="col-span-full text-sm text-muted-foreground">
+                  {tr(
+                    'qrTableIncludedMenusEmpty',
+                    '후보가 없습니다. 메뉴 관리에서「뷔페 포함 가능」을 켠 뒤 다시 열어 주세요.'
+                  )}
+                </p>
+              ) : (
+                includableMenus.map((m) => {
+                  const id = Number(m.id)
+                  const checked = tierForm.includedMenuIds.includes(id)
+                  return (
+                    <label key={m.id} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={checked} onChange={() => toggleMenu(id)} />
+                      <span className="truncate">
+                        {m.code} {m.name}
+                      </span>
+                    </label>
+                  )
+                })
+              )}
             </div>
           </div>
           <Button onClick={() => void saveTier()}>
@@ -470,6 +537,12 @@ export function PosQrTableOrderContent() {
               brandColor={String(settings.printBrandColor || '').trim() || undefined}
               accentColor={String(settings.printAccentColor || '').trim() || undefined}
               tokens={tokens}
+              formatLabels={{
+                format: tr('qrTablePrintFormat', '규격'),
+                a6: tr('qrTablePrintFormatA6', 'A6 텐트'),
+                square: tr('qrTablePrintFormatSquare', '정사각'),
+                sticker: tr('qrTablePrintFormatSticker', '스티커'),
+              }}
               labels={{
                 title: tr('qrTablePrintTitle', '테이블별 QR 카드 (인쇄·다운로드)'),
                 hint: tr(

@@ -237,3 +237,47 @@ export async function qrTableStaffSessionByTable(storeCode: string, tableName: s
     message?: string
   }>(res)
 }
+
+export async function qrTableCallStaff(sessionAuth: string, note?: string) {
+  const res = await fetch('/api/qr-table/session/call-staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...sessionHeaders(sessionAuth) },
+    body: JSON.stringify({ note: note || '' }),
+  })
+  return parseJson<{ success: boolean; session?: QrTableSession; message?: string }>(res)
+}
+
+export async function qrTableStaffAckCall(sessionId: number, storeCode: string) {
+  const res = await apiFetch('/api/qr-table/staff/ack-call', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, storeCode }),
+  })
+  return parseJson<{ success: boolean; session?: QrTableSession; message?: string }>(res)
+}
+
+export async function qrTableStaffAdjustGuests(sessionId: number, storeCode: string, guestCount: number) {
+  const res = await apiFetch('/api/qr-table/staff/adjust-guests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, storeCode, guestCount }),
+  })
+  return parseJson<{ success: boolean; session?: QrTableSession; message?: string }>(res)
+}
+
+export async function qrTableStaffSessionsMap(storeCode: string) {
+  const res = await apiFetch(
+    `/api/qr-table/staff/sessions-map?storeCode=${encodeURIComponent(storeCode)}`
+  )
+  return parseJson<{
+    success: boolean
+    sessions?: Array<{
+      tableName: string
+      status: string
+      entryPaid: boolean
+      staffCallAt: string | null
+      posOrderId: number | null
+    }>
+    message?: string
+  }>(res)
+}

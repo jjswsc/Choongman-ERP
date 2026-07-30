@@ -20,7 +20,11 @@ export function mapQrError(e: unknown): NextResponse {
         ? 403
         : msg === 'table_busy' || msg === 'already_paid' || msg === 'order_closed'
           ? 409
-          : msg === 'staff_open_required' || msg === 'entry_not_ready' || msg === 'entry_requires_prepay'
+          : msg === 'staff_open_required' ||
+              msg === 'entry_not_ready' ||
+              msg === 'entry_requires_prepay' ||
+              msg === 'session_expired' ||
+              msg === 'session_closed'
             ? 422
             : 400
   return qrError(msg, status)

@@ -9,9 +9,18 @@ import {
   downloadQrTablePrintCardPng,
   downloadQrTablePrintCardsPdf,
   openQrTablePrintCardsWindow,
+  type QrTablePrintCardFormat,
   type QrTablePrintCardInput,
 } from '@/lib/qr-table-print-card'
 import { cn } from '@/lib/utils'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type TokenRow = { tableName: string; token: string; publicUrl?: string }
 
@@ -22,6 +31,12 @@ export function QrTablePrintCardsSection(props: {
   brandColor?: string
   accentColor?: string
   tokens: TokenRow[]
+  formatLabels?: {
+    format: string
+    a6: string
+    square: string
+    sticker: string
+  }
   labels: {
     title: string
     hint: string
@@ -34,9 +49,10 @@ export function QrTablePrintCardsSection(props: {
     popupBlocked?: string
   }
 }) {
-  const { storeLabel, brandLine, logoUrl, brandColor, accentColor, tokens, labels } = props
+  const { storeLabel, brandLine, logoUrl, brandColor, accentColor, tokens, labels, formatLabels } = props
   const [previews, setPreviews] = React.useState<Record<string, string>>({})
   const [busy, setBusy] = React.useState(false)
+  const [format, setFormat] = React.useState<QrTablePrintCardFormat>('a6')
 
   const cardInputs = React.useMemo(
     (): QrTablePrintCardInput[] =>
@@ -46,6 +62,7 @@ export function QrTablePrintCardsSection(props: {
         logoUrl,
         brandColor,
         accentColor,
+        format,
         tableName: tok.tableName,
         url:
           tok.publicUrl ||
@@ -53,7 +70,7 @@ export function QrTablePrintCardsSection(props: {
             ? `${window.location.origin}/t/${tok.token}`
             : `/t/${tok.token}`),
       })),
-    [tokens, storeLabel, brandLine, logoUrl, brandColor, accentColor]
+    [tokens, storeLabel, brandLine, logoUrl, brandColor, accentColor, format]
   )
 
   React.useEffect(() => {
@@ -104,7 +121,20 @@ export function QrTablePrintCardsSection(props: {
           <h3 className="font-medium">{labels.title}</h3>
           <p className="text-xs text-muted-foreground">{labels.hint}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[140px]">
+            <Label className="text-xs">{formatLabels?.format || 'Format'}</Label>
+            <Select value={format} onValueChange={(v) => setFormat(v as QrTablePrintCardFormat)}>
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="a6">{formatLabels?.a6 || 'A6 tent'}</SelectItem>
+                <SelectItem value="square">{formatLabels?.square || 'Square'}</SelectItem>
+                <SelectItem value="sticker">{formatLabels?.sticker || 'Sticker'}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             type="button"
             size="sm"

@@ -65,6 +65,10 @@ export async function PUT(req: NextRequest) {
       requireStaffOpen: body.requireStaffOpen !== false,
       maxOpenMinutes: Number(body.maxOpenMinutes || 240),
       allowReorderAfterPaid: Boolean(body.allowReorderAfterPaid),
+      printLogoUrl: body.printLogoUrl != null ? String(body.printLogoUrl) : '',
+      printBrandColor: body.printBrandColor != null ? String(body.printBrandColor) : '',
+      printAccentColor: body.printAccentColor != null ? String(body.printAccentColor) : '',
+      printBrandLine: body.printBrandLine != null ? String(body.printBrandLine) : '',
     })
     return applyPosApiCors(NextResponse.json({ success: true, settings }, { headers }))
   } catch (e) {

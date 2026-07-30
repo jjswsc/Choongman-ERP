@@ -11,6 +11,7 @@ import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-de
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { resolvePosMenuDescriptionForChannel } from '@/lib/pos-menu-display-description'
+import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import {
@@ -90,6 +91,8 @@ type DbSession = {
   pending_entry_partner_txn_id?: string | null
   pending_extras_partner_txn_id?: string | null
   pending_extras_amount?: number | string | null
+  staff_call_at?: string | null
+  staff_call_note?: string | null
   closed_at?: string | null
   created_at?: string
   updated_at?: string
@@ -118,6 +121,7 @@ type DbMenu = {
   description_default?: string | null
   description_table?: string | null
   kitchen_printer?: number | null
+  sort_order?: number | null
 }
 
 function asNum(v: unknown): number {
@@ -188,6 +192,8 @@ function mapSession(row: DbSession): QrTableSession {
         : null,
     posOrderId: row.pos_order_id != null ? Number(row.pos_order_id) : null,
     openedBy: String(row.opened_by || 'guest_qr'),
+    staffCallAt: row.staff_call_at ? String(row.staff_call_at) : null,
+    staffCallNote: row.staff_call_note ? String(row.staff_call_note) : null,
     createdAt: String(row.created_at || ''),
     updatedAt: String(row.updated_at || ''),
   }
@@ -369,8 +375,39 @@ export async function saveBuffetTier(input: {
   }
 
   if (Array.isArray(input.includedMenuIds)) {
+    let previousIds = new Set<number>()
+    if (tierId > 0) {
+      try {
+        const prevRows = (await supabaseSelectFilter(
+          'pos_buffet_tier_menus',
+          `tier_id=eq.${tierId}`,
+          { select: 'menu_id', limit: 5000 }
+        )) as Array<{ menu_id?: number }>
+        previousIds = new Set(
+          (prevRows || []).map((r) => Number(r.menu_id || 0)).filter((x) => x > 0)
+        )
+      } catch {
+        previousIds = new Set()
+      }
+    }
     await supabaseDeleteByFilter('pos_buffet_tier_menus', `tier_id=eq.${tierId}`)
-    const menuIds = [...new Set(input.includedMenuIds.map((x) => Math.floor(Number(x))).filter((x) => x > 0))]
+    let menuIds = [...new Set(input.includedMenuIds.map((x) => Math.floor(Number(x))).filter((x) => x > 0))]
+    if (menuIds.length > 0) {
+      try {
+        const includableRows = (await supabaseSelectFilter(
+          'pos_menus',
+          `id=in.(${menuIds.join(',')})&buffet_includable=eq.true`,
+          { select: 'id', limit: menuIds.length }
+        )) as Array<{ id?: number }>
+        const allowed = new Set(
+          (includableRows || []).map((r) => Number(r.id || 0)).filter((x) => x > 0)
+        )
+        // 후보 플래그 + 이 티어에 이미 연결되어 있던 메뉴(마이그레이션 전) 유지
+        menuIds = menuIds.filter((id) => allowed.has(id) || previousIds.has(id))
+      } catch {
+        // buffet_includable 컬럼 미배포 시 기존처럼 전부 허용
+      }
+    }
     for (const menu_id of menuIds) {
       await supabaseInsert('pos_buffet_tier_menus', { tier_id: tierId, menu_id })
     }
@@ -499,7 +536,8 @@ export async function loadActiveSessionForTable(
     { limit: 1, order: 'id.desc' }
   )) as DbSession[]
   const row = rows?.[0]
-  return row ? mapSession(row) : null
+  if (!row) return null
+  return expireSessionIfStale(mapSession(row))
 }
 
 export async function requireQrGuestSession(
@@ -509,8 +547,172 @@ export async function requireQrGuestSession(
   const session = await loadSessionById(sessionId)
   if (!session) throw new Error('session_not_found')
   if (!verifyQrSessionSecret(rawSecret, session.secretHash)) throw new Error('session_forbidden')
-  if (session.status === 'closed' || session.status === 'expired') throw new Error('session_closed')
-  return session
+  const live = await expireSessionIfStale(session)
+  if (!live || live.status === 'closed' || live.status === 'expired') throw new Error('session_expired')
+  return live
+}
+
+function sessionAgeMinutes(createdAt: string): number {
+  const t = Date.parse(String(createdAt || ''))
+  if (!Number.isFinite(t)) return 0
+  return Math.max(0, (Date.now() - t) / 60000)
+}
+
+/** Soft-expire open sessions past max_open_minutes (lazy + cron). */
+export async function expireSessionIfStale(session: QrTableSession): Promise<QrTableSession | null> {
+  if (session.status === 'closed' || session.status === 'expired') return null
+  try {
+    const settings = await loadQrOrderStoreSettings(session.storeCode)
+    const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 240))
+    if (sessionAgeMinutes(session.createdAt) < maxMin) return session
+    const now = getBangkokDateTimeString()
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+      status: 'expired',
+      closed_at: now,
+      updated_at: now,
+      staff_call_at: null,
+      staff_call_note: null,
+    })
+    return null
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/pgrst205|schema_missing|pos_qr_table_sessions|could not find/i.test(msg)) return session
+    console.error('expireSessionIfStale:', e)
+    return session
+  }
+}
+
+export async function expireStaleQrSessionsBatch(limit = 200): Promise<number> {
+  const rows = (await supabaseSelectFilter(
+    'pos_qr_table_sessions',
+    `status=in.(awaiting_entry,active)`,
+    { limit, order: 'id.asc', select: 'id,store_code,created_at,status,guest_count,tier_id,tier_price_snapshot,entry_total,entry_payment_mode_resolved,extras_payment_mode_resolved,entry_paid,entry_paid_at,entry_payment_channel,pos_order_id,opened_by,staff_call_at,staff_call_note,token_id,table_name,updated_at' }
+  )) as DbSession[]
+  let n = 0
+  for (const row of rows || []) {
+    const mapped = mapSession(row)
+    const next = await expireSessionIfStale(mapped)
+    if (!next) n += 1
+  }
+  return n
+}
+
+export async function syncQrSessionTableNameForOrder(params: {
+  orderId: number
+  targetTableName: string
+}): Promise<void> {
+  const orderId = Math.trunc(Number(params.orderId || 0))
+  const table = String(params.targetTableName || '').trim()
+  if (!orderId || !table) return
+  try {
+    const now = getBangkokDateTimeString()
+    const rows = (await supabaseSelectFilter(
+      'pos_qr_table_sessions',
+      `pos_order_id=eq.${orderId}&status=in.(awaiting_entry,active)`,
+      { limit: 20, select: 'id' }
+    )) as Array<{ id?: number }>
+    for (const r of rows || []) {
+      const id = Number(r.id || 0)
+      if (!id) continue
+      await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${id}`, {
+        table_name: table,
+        updated_at: now,
+      })
+    }
+  } catch (e) {
+    console.error('syncQrSessionTableNameForOrder:', e)
+  }
+}
+
+/** Absorb 주문에 묶인 QR 세션은 종료. keep 주문 세션은 유지. */
+export async function closeQrSessionsForAbsorbedOrder(absorbOrderId: number): Promise<void> {
+  const orderId = Math.trunc(Number(absorbOrderId || 0))
+  if (!orderId) return
+  try {
+    await closeQrTableSessionsForPosOrder({ orderId, reason: 'merged' })
+  } catch (e) {
+    console.error('closeQrSessionsForAbsorbedOrder:', e)
+  }
+}
+
+export async function requestStaffCall(params: {
+  session: QrTableSession
+  note?: string
+}): Promise<QrTableSession> {
+  if (params.session.status !== 'active' && params.session.status !== 'awaiting_entry') {
+    throw new Error('session_closed')
+  }
+  const now = getBangkokDateTimeString()
+  const note = String(params.note || '').trim().slice(0, 120)
+  await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${params.session.id}`, {
+    staff_call_at: now,
+    staff_call_note: note || null,
+    updated_at: now,
+  })
+  const next = await loadSessionById(params.session.id)
+  if (!next) throw new Error('session_not_found')
+  return next
+}
+
+export async function ackStaffCall(sessionId: number): Promise<QrTableSession> {
+  const id = Math.trunc(Number(sessionId || 0))
+  if (!id) throw new Error('session_not_found')
+  const now = getBangkokDateTimeString()
+  await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${id}`, {
+    staff_call_at: null,
+    staff_call_note: null,
+    updated_at: now,
+  })
+  const next = await loadSessionById(id)
+  if (!next) throw new Error('session_not_found')
+  return next
+}
+
+export type QrFloorSessionHint = {
+  tableName: string
+  status: QrSessionStatus
+  entryPaid: boolean
+  staffCallAt: string | null
+  posOrderId: number | null
+}
+
+export async function listActiveQrSessionsForStore(storeCode: string): Promise<QrFloorSessionHint[]> {
+  const code = String(storeCode || '').trim()
+  if (!code) return []
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_qr_table_sessions',
+      `store_code=eq.${encodeURIComponent(code)}&status=in.(awaiting_entry,active)`,
+      {
+        limit: 500,
+        order: 'id.desc',
+        select:
+          'id,store_code,table_name,status,entry_paid,staff_call_at,pos_order_id,created_at,guest_count,tier_id,tier_price_snapshot,entry_total,entry_payment_mode_resolved,extras_payment_mode_resolved,entry_paid_at,entry_payment_channel,opened_by,token_id,updated_at,staff_call_note',
+      }
+    )) as DbSession[]
+    const out: QrFloorSessionHint[] = []
+    const seen = new Set<string>()
+    for (const row of rows || []) {
+      const mapped = mapSession(row)
+      const live = await expireSessionIfStale(mapped)
+      if (!live) continue
+      const key = live.tableName.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        tableName: live.tableName,
+        status: live.status,
+        entryPaid: live.entryPaid,
+        staffCallAt: live.staffCallAt || null,
+        posOrderId: live.posOrderId,
+      })
+    }
+    return out
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/pgrst205|schema_missing|pos_qr_table_sessions|could not find/i.test(msg)) return []
+    throw e
+  }
 }
 
 async function loadIncludedMenuIdSet(tierId: number): Promise<Set<number>> {
@@ -607,8 +809,8 @@ export async function openQrTableSession(params: {
   const storeCode = String(params.storeCode || '').trim()
   const tableName = String(params.tableName || '').trim()
   const guestCount = Math.min(99, Math.max(1, Math.floor(Number(params.guestCount) || 1)))
-  const tierId = Math.floor(Number(params.tierId) || 0)
-  if (!storeCode || !tableName || !tierId) throw new Error('open_required')
+  let tierId = Math.floor(Number(params.tierId) || 0)
+  if (!storeCode || !tableName) throw new Error('open_required')
 
   const settings = await loadQrOrderStoreSettings(storeCode)
   if (!settings.enabled) throw new Error('store_disabled')
@@ -617,36 +819,45 @@ export async function openQrTableSession(params: {
   const existing = await loadActiveSessionForTable(storeCode, tableName)
   if (existing) throw new Error('table_busy')
 
-  const tiers = await loadBuffetTiersForStore(storeCode, { withMenus: false })
-  const tier = tiers.find((t) => t.id === tierId)
-  if (!tier || !tier.active) throw new Error('tier_not_found')
+  const isAlaCarteOnly = settings.mode === 'a_la_carte'
+  if (isAlaCarteOnly) tierId = 0
+  if (!isAlaCarteOnly && !tierId) throw new Error('tier_required')
+
+  let tier: QrBuffetTier | null = null
+  let entryTotal = 0
+  let tierPriceSnapshot = 0
+  if (tierId > 0) {
+    const tiers = await loadBuffetTiersForStore(storeCode, { withMenus: false })
+    tier = tiers.find((t) => t.id === tierId) || null
+    if (!tier || !tier.active) throw new Error('tier_not_found')
+    tierPriceSnapshot = tier.pricePerPerson
+    entryTotal = Math.round(tier.pricePerPerson * guestCount * 100) / 100
+  }
 
   const entryMode = resolvePaymentChoice(settings.entryPaymentMode, params.entryPaymentChoice)
   const extrasMode = resolvePaymentChoice(settings.extrasPaymentMode, params.extrasPaymentChoice)
-  const entryTotal = Math.round(tier.pricePerPerson * guestCount * 100) / 100
+  // À la carte: no buffet entry fee — unlock immediately (postpay path) or via staff
+  const effectiveEntryMode: QrResolvedPaymentMode =
+    !tierId ? 'postpay' : entryMode
   const { raw, hash } = generateQrSessionSecret()
   const now = getBangkokDateTimeString()
 
-  const entryPaid = entryMode === 'postpay' && params.forceStaff
-  const status: QrSessionStatus = entryPaid || entryMode === 'postpay' ? (params.forceStaff ? 'active' : 'awaiting_entry') : 'awaiting_entry'
-
-  // Staff postpay open → unlock immediately (active + entry_paid via staff confirm path later if guest opened)
   let resolvedStatus: QrSessionStatus = 'awaiting_entry'
   let resolvedEntryPaid = false
-  if (entryMode === 'postpay' && params.forceStaff) {
+  if (!tierId) {
+    // No entry fee: staff open unlocks; guest open also unlocks when staff-open not required
     resolvedStatus = 'active'
     resolvedEntryPaid = true
-  } else if (entryMode === 'prepay') {
+  } else if (effectiveEntryMode === 'postpay' && params.forceStaff) {
+    resolvedStatus = 'active'
+    resolvedEntryPaid = true
+  } else if (effectiveEntryMode === 'prepay') {
     resolvedStatus = 'awaiting_entry'
     resolvedEntryPaid = false
-  } else if (entryMode === 'postpay' && !params.forceStaff) {
-    // Guest opened postpay — wait staff confirm
+  } else {
     resolvedStatus = 'awaiting_entry'
     resolvedEntryPaid = false
   }
-
-  void status
-  void entryPaid
 
   const inserted = (await supabaseInsertWithPgrst204Fallback(
     'pos_qr_table_sessions',
@@ -656,14 +867,14 @@ export async function openQrTableSession(params: {
       token_id: params.tokenId ?? null,
       status: resolvedStatus,
       guest_count: guestCount,
-      tier_id: tierId,
-      tier_price_snapshot: tier.pricePerPerson,
+      tier_id: tierId > 0 ? tierId : null,
+      tier_price_snapshot: tierPriceSnapshot,
       entry_total: entryTotal,
-      entry_payment_mode_resolved: entryMode,
+      entry_payment_mode_resolved: effectiveEntryMode,
       extras_payment_mode_resolved: extrasMode,
       entry_paid: resolvedEntryPaid,
       entry_paid_at: resolvedEntryPaid ? now : null,
-      entry_payment_channel: resolvedEntryPaid ? 'pos' : null,
+      entry_payment_channel: resolvedEntryPaid ? (params.forceStaff ? 'pos' : 'qr') : null,
       pos_order_id: null,
       session_secret_hash: hash,
       opened_by: String(params.openedBy || 'guest_qr'),
@@ -678,7 +889,6 @@ export async function openQrTableSession(params: {
 
   let session = mapSession(row)
 
-  // Create dine-in order with buffet entry line when unlocked (staff postpay) or always for tracking
   const orderId = await createOrEnsurePosOrderForSession(session, tier)
   await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     pos_order_id: orderId,
@@ -691,24 +901,26 @@ export async function openQrTableSession(params: {
 
 async function createOrEnsurePosOrderForSession(
   session: QrTableSession,
-  tier: QrBuffetTier
+  tier: QrBuffetTier | null
 ): Promise<number> {
   if (session.posOrderId) return session.posOrderId
 
-  const entryLine: Record<string, unknown> = {
-    id: `buffet-entry-${session.id}`,
-    name: `[Buffet] ${buffetTierDisplayName(tier, 'en')} × ${session.guestCount}`,
-    price: session.tierPriceSnapshot,
-    qty: session.guestCount,
-    quantity: session.guestCount,
-    note: '',
-    isBuffetEntry: true,
-    buffetTierId: tier.id,
-    source: 'qr_table',
-    kitchenPrinter: 0,
+  const items: Array<Record<string, unknown>> = []
+  if (tier && session.tierId) {
+    items.push({
+      id: `buffet-entry-${session.id}`,
+      name: `[Buffet] ${buffetTierDisplayName(tier, 'en')} × ${session.guestCount}`,
+      price: session.tierPriceSnapshot,
+      qty: session.guestCount,
+      quantity: session.guestCount,
+      note: '',
+      isBuffetEntry: true,
+      buffetTierId: tier.id,
+      source: 'qr_table',
+      kitchenPrinter: 0,
+    })
   }
 
-  const items = [entryLine]
   const subtotal = computeItemsSubtotal(items)
   const pricing = computePosPricing({
     subtotal,
@@ -718,7 +930,9 @@ async function createOrEnsurePosOrderForSession(
   })
   const orderNo = await allocateNextPosOrderNo(session.storeCode, { tenantId: '' })
   const now = getBangkokDateTimeString()
-  const memo = `[QR테이블] ${buffetTierDisplayName(tier)} / ${session.guestCount}pax`
+  const memo = tier
+    ? `[QR테이블] ${buffetTierDisplayName(tier)} / ${session.guestCount}pax`
+    : `[QR테이블] à la carte / ${session.guestCount}pax`
 
   const row = enrichPosOrderRowForSaaS(
     {
@@ -917,9 +1131,19 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     throw new Error('entry_not_ready')
   }
   const tierId = Number(session.tierId || 0)
-  if (!tierId) throw new Error('tier_required')
-  const included = await loadIncludedMenuIdSet(tierId)
+  const included = tierId > 0 ? await loadIncludedMenuIdSet(tierId) : new Set<number>()
   const menus = await loadHallMenusForStore(session.storeCode)
+  menus.sort((a, b) => {
+    const mainA = normalizePromotionCategoryMain(a.category_main)
+    const mainB = normalizePromotionCategoryMain(b.category_main)
+    if (mainA !== mainB) return mainA.localeCompare(mainB)
+    const catA = String(a.category || '').trim()
+    const catB = String(b.category || '').trim()
+    if (catA !== catB) return catA.localeCompare(catB)
+    const so = asNum(a.sort_order) - asNum(b.sort_order)
+    if (so !== 0) return so
+    return asNum(a.id) - asNum(b.id)
+  })
 
   const includedMenus = []
   const extraMenus = []
@@ -927,18 +1151,22 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     const id = Number(m.id || 0)
     if (!id) continue
     const soldOut = isMenuSoldOutToday(m.sold_out_date)
+    const isIncluded = included.has(id)
+    const categoryMain = normalizePromotionCategoryMain(m.category_main)
+    const category = String(m.category || '').trim()
     const item = {
       id: String(id),
       menuId: id,
       code: String(m.code || ''),
       name: String(m.name || ''),
-      category: String(m.category || ''),
-      categoryMain: String(m.category_main || ''),
-      price: included.has(id) ? 0 : asNum(m.price),
+      category,
+      categoryMain,
+      price: isIncluded ? 0 : asNum(m.price),
       listPrice: asNum(m.price),
       imageUrl: menuImageUrl(m),
       soldOut,
-      buffetIncluded: included.has(id),
+      buffetIncluded: isIncluded,
+      sortOrder: asNum(m.sort_order),
       description: resolvePosMenuDescriptionForChannel(
         {
           descriptionDefault: String(m.description_default || ''),
@@ -948,10 +1176,10 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       ),
       kitchenPrinter: m.kitchen_printer ?? null,
     }
-    if (included.has(id)) includedMenus.push(item)
+    if (tierId > 0 && isIncluded) includedMenus.push(item)
     else extraMenus.push(item)
   }
-  return { includedMenus, extraMenus }
+  return { includedMenus, extraMenus, mode: tierId > 0 ? 'buffet' : 'a_la_carte' }
 }
 
 /** POS 결제·취소·환불 시 연결된 QR 세션을 closed 로 전환 (Realtime 영수증과 무관). */
@@ -1001,7 +1229,7 @@ export async function submitQrCart(params: {
   }
 
   const tierId = Number(session.tierId || 0)
-  const included = await loadIncludedMenuIdSet(tierId)
+  const included = tierId > 0 ? await loadIncludedMenuIdSet(tierId) : new Set<number>()
   const menus = await loadHallMenusForStore(session.storeCode)
   const byId = new Map(menus.map((m) => [Number(m.id || 0), m]))
 
@@ -1038,6 +1266,7 @@ export async function submitQrCart(params: {
     const isIncluded = included.has(menuId)
     const unitPrice = isIncluded ? 0 : asNum(menu.price)
     if (!isIncluded) extrasSubtotal += unitPrice * qty
+    const kitchenTag = isIncluded ? 'Buffet' : 'Extra'
     newLines.push({
       id: `qr-${session.id}-${menuId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       menuId: String(menuId),
@@ -1045,9 +1274,9 @@ export async function submitQrCart(params: {
       price: unitPrice,
       qty,
       quantity: qty,
-      note: String(line.note || '').slice(0, 200),
+      note: [String(line.note || '').slice(0, 200), kitchenTag].filter(Boolean).join(' · '),
       buffetIncluded: isIncluded,
-      buffetTierId: tierId,
+      buffetTierId: tierId || null,
       source: 'qr_table',
       kitchenPrinter: menu.kitchen_printer ?? null,
       qrPrepaid: false,
@@ -1086,7 +1315,15 @@ export async function submitQrCart(params: {
     const kitchenDelta = filterKitchenCartLinesForDineInAdd(
       newLines as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
       [] as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
-    )
+    ).map((line) => {
+      const row = line as Record<string, unknown>
+      const included = row.buffetIncluded === true
+      const baseName = String(row.name || '')
+      return {
+        ...row,
+        name: included ? `[Buffet] ${baseName}` : `[Extra] ${baseName}`,
+      }
+    })
     if (kitchenDelta.length) {
       await enqueueKitchenPrintJob({
         storeCode: session.storeCode,
@@ -1102,6 +1339,103 @@ export async function submitQrCart(params: {
   }
 
   return { orderId: session.posOrderId, addedCount: newLines.length }
+}
+
+/** Staff: change guest count. Increase adds buffet entry qty; decrease staff-only (never below 1). */
+export async function adjustQrSessionGuestCount(params: {
+  sessionId: number
+  newGuestCount: number
+  staffLabel?: string
+}): Promise<QrTableSession> {
+  const session = await loadSessionById(params.sessionId)
+  if (!session) throw new Error('session_not_found')
+  if (session.status === 'closed' || session.status === 'expired') throw new Error('session_closed')
+  if (!session.tierId || session.tierPriceSnapshot <= 0) {
+    // à la carte: only update guest_count on session/order
+    const nextCount = Math.min(99, Math.max(1, Math.floor(Number(params.newGuestCount) || 1)))
+    const now = getBangkokDateTimeString()
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+      guest_count: nextCount,
+      updated_at: now,
+    })
+    if (session.posOrderId) {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+        guest_count: nextCount,
+        updated_at: now,
+      })
+    }
+    void params.staffLabel
+    const next = await loadSessionById(session.id)
+    if (!next) throw new Error('session_not_found')
+    return next
+  }
+
+  const nextCount = Math.min(99, Math.max(1, Math.floor(Number(params.newGuestCount) || 1)))
+  const prevCount = session.guestCount
+  if (nextCount === prevCount) return session
+
+  if (!session.posOrderId) throw new Error('order_missing')
+  const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    limit: 1,
+    select: 'id,items_json,status',
+  })) as Array<{ id?: number; items_json?: unknown; status?: string }>
+  const order = orderRows?.[0]
+  if (!order?.id) throw new Error('order_missing')
+  if (['paid', 'cancelled', 'completed'].includes(String(order.status || '').toLowerCase())) {
+    throw new Error('order_closed')
+  }
+
+  const items = parseItemsJson(order.items_json)
+  const entryIdx = items.findIndex((it) => it.isBuffetEntry === true)
+  const entryTotal = Math.round(session.tierPriceSnapshot * nextCount * 100) / 100
+  if (entryIdx >= 0) {
+    items[entryIdx] = {
+      ...items[entryIdx],
+      qty: nextCount,
+      quantity: nextCount,
+      price: session.tierPriceSnapshot,
+      name: String(items[entryIdx].name || '').replace(/×\s*\d+/, `× ${nextCount}`),
+    }
+  } else if (nextCount > 0) {
+    items.unshift({
+      id: `buffet-entry-${session.id}`,
+      name: `[Buffet] entry × ${nextCount}`,
+      price: session.tierPriceSnapshot,
+      qty: nextCount,
+      quantity: nextCount,
+      note: '',
+      isBuffetEntry: true,
+      buffetTierId: session.tierId,
+      source: 'qr_table',
+      kitchenPrinter: 0,
+    })
+  }
+
+  const subtotal = computeItemsSubtotal(items)
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt: 0,
+    deliveryFee: 0,
+    packagingFee: 0,
+  })
+  const now = getBangkokDateTimeString()
+  await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    items_json: JSON.stringify(items),
+    subtotal,
+    vat: pricing.vatFeeAmt,
+    total: pricing.finalTotal,
+    guest_count: nextCount,
+    updated_at: now,
+  })
+  await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+    guest_count: nextCount,
+    entry_total: entryTotal,
+    updated_at: now,
+  })
+  void params.staffLabel
+  const next = await loadSessionById(session.id)
+  if (!next) throw new Error('session_not_found')
+  return next
 }
 
 export async function issueExtrasPayQr(sessionId: number): Promise<{
@@ -1220,7 +1554,10 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
     (it) => it.source === 'qr_table' && it.qrPrepaid === true && it.buffetIncluded !== true && !it.isBuffetEntry
   )
   // Only print delta once — use amount-based dedupe
-  const toPrint = kitchenLines.slice(-20)
+  const toPrint = kitchenLines.slice(-20).map((it) => ({
+    ...it,
+    name: `[Extra] ${String(it.name || '')}`,
+  }))
   if (toPrint.length) {
     await enqueueKitchenPrintJob({
       storeCode: session.storeCode,
