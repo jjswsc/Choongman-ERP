@@ -51,7 +51,7 @@ interface ShipmentFilterBarProps {
   itemSearch?: string
   onItemSearchChange?: (v: string) => void
   // Actions
-  onSearch: () => void
+  onSearch: (override?: { histMonth?: string }) => void
   onPrintInvoice?: () => void
   onExcelDownload?: () => void
   onEtaxXmlDownload?: () => void
@@ -167,6 +167,7 @@ export function ShipmentFilterBar({
   const handleApplyMonth = () => {
     onHistMonthChange(draftMonth)
     setIsMonthDialogOpen(false)
+    onSearch(draftMonth ? { histMonth: draftMonth } : undefined)
   }
 
   const handlePickCurrentMonth = () => {
@@ -177,6 +178,7 @@ export function ShipmentFilterBar({
   const handleClearMonth = () => {
     onHistMonthChange("")
     setIsMonthDialogOpen(false)
+    onSearch()
   }
 
   return (
@@ -334,7 +336,7 @@ export function ShipmentFilterBar({
         {/* Search Button */}
         <button
           type="button"
-          onClick={onSearch}
+          onClick={() => onSearch()}
           className="h-8 rounded bg-primary px-4 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-colors shadow-sm"
         >
           {t("stockBtnSearch")}

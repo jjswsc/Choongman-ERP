@@ -169,7 +169,18 @@ export async function getCombinedOutboundHistory(params: {
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.itemSearch?.trim()) q.set('itemSearch', params.itemSearch.trim())
   const res = await apiFetchWithOffline(`/api/getCombinedOutboundHistory?${q}`)
-  return jsonAsArray<OutboundHistoryItem>(await res.json())
+  const raw = await res.json().catch(() => null)
+  if (!res.ok) {
+    const msg =
+      raw && typeof raw === 'object' && !Array.isArray(raw) && 'error' in raw
+        ? String((raw as { error?: unknown }).error || '')
+        : `HTTP ${res.status}`
+    throw new Error(msg || 'getCombinedOutboundHistory failed')
+  }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'error' in raw) {
+    throw new Error(String((raw as { error?: unknown }).error || 'getCombinedOutboundHistory failed'))
+  }
+  return jsonAsArray<OutboundHistoryItem>(raw)
 }
 
 /** 출고 인보이스 인쇄(วางบิล) 상태 저장 */

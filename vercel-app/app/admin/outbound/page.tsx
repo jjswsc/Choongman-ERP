@@ -40,7 +40,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { storeCodeSearchVariants } from "@/lib/pos-sales-store-filter"
@@ -230,9 +230,9 @@ export default function OutboundPage() {
   const [saving, setSaving] = React.useState(false)
   const [deletingOutbound, setDeletingOutbound] = React.useState(false)
 
-  const [histStart, setHistStart] = React.useState(() => getBangkokTodayDateString())
-  const [histEnd, setHistEnd] = React.useState(() => getBangkokTodayDateString())
-  const [histMonth, setHistMonth] = React.useState("")
+  const [histStart, setHistStart] = React.useState(() => getBangkokMonthRange().startStr)
+  const [histEnd, setHistEnd] = React.useState(() => getBangkokMonthRange().endStr)
+  const [histMonth, setHistMonth] = React.useState(() => getBangkokMonthRange().yearMonth)
   const [histStore, setHistStore] = React.useState("")
   const [histTargetType, setHistTargetType] = React.useState<"" | "store" | "sales">("")
   const [histType, setHistType] = React.useState("")
@@ -258,8 +258,8 @@ export default function OutboundPage() {
   const [photoModalUrls, setPhotoModalUrls] = React.useState<string[]>([])
   const [photoModalLoading, setPhotoModalLoading] = React.useState(false)
 
-  const [whStart, setWhStart] = React.useState("")
-  const [whEnd, setWhEnd] = React.useState("")
+  const [whStart, setWhStart] = React.useState(() => getBangkokMonthRange().startStr)
+  const [whEnd, setWhEnd] = React.useState(() => getBangkokMonthRange().endStr)
   const [whFilterBy, setWhFilterBy] = React.useState<"order" | "delivery">("delivery")
   const [whLoading, setWhLoading] = React.useState(false)
   const [whData, setWhData] = React.useState<GetOutboundByWarehouseResult | null>(null)
@@ -273,10 +273,11 @@ export default function OutboundPage() {
   const [invSettingsLoading, setInvSettingsLoading] = React.useState(false)
   const [invSettingsSaving, setInvSettingsSaving] = React.useState(false)
 
-  const isOffice = React.useMemo(() => {
-    const store = (auth?.store || "").trim()
-    return OFFICE_STORES.some((s) => store.toLowerCase().includes(s.toLowerCase()))
-  }, [auth?.store])
+  /** 입고·주문승인과 동일: 본사 역할이면 전 매장 조회 (매장명만으로 본사 판정하지 않음) */
+  const isOffice = React.useMemo(
+    () => isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""),
+    [auth?.role, auth?.store]
+  )
 
   /** 출고 로그 단가 API·UI — JWT office 권한과 동일(역할 기준). 매장명이 본사가 아니어도 Officer/Director면 표시 */
   const canEditOutboundLogUnitPrice = React.useMemo(
@@ -319,12 +320,6 @@ export default function OutboundPage() {
     setHistEnd(today)
   }, [searchParams])
 
-  React.useEffect(() => {
-    const today = getBangkokTodayDateString()
-    setWhStart((p) => p || today)
-    setWhEnd((p) => p || today)
-  }, [])
-
   const handleHistStartChange = React.useCallback((next: string) => {
     setHistStart(next)
     if (next && histMonth) setHistMonth("")
@@ -361,16 +356,6 @@ export default function OutboundPage() {
     const { yearMonth } = getBangkokMonthRange()
     setSummaryMonthDraft(yearMonth)
   }, [])
-
-  const applySummaryMonth = React.useCallback(() => {
-    handleHistMonthChange(summaryMonthDraft)
-    setSummaryMonthDialogOpen(false)
-  }, [handleHistMonthChange, summaryMonthDraft])
-
-  const clearSummaryMonth = React.useCallback(() => {
-    handleHistMonthChange("")
-    setSummaryMonthDialogOpen(false)
-  }, [handleHistMonthChange])
 
   React.useEffect(() => {
     Promise.all([getAdminItems({ scope: 'outbound' }), getAdminVendors(), getStockStores(), getWarehouseLocations()])
@@ -820,7 +805,10 @@ export default function OutboundPage() {
       s = startStr
       e = endStr
     }
-    if (!s || !e) return
+    if (!s || !e) {
+      await appAlert(t("visit_stats_date_hint") || "기간을 선택해 주세요.")
+      return
+    }
     setHistoryLoading(true)
     setSelectedForPrint(new Set())
     try {
@@ -850,13 +838,15 @@ export default function OutboundPage() {
         })
         setUsageList(Array.isArray(usageListRes) ? usageListRes : [])
       }
-    } catch {
+    } catch (err) {
       setHistoryList([])
       setUsageList([])
+      const msg = err instanceof Error ? err.message : String(err)
+      await appAlert(`${t("outNoData")}\n\n${t("msg_error_prefix") || ""}${msg}`)
     } finally {
       setHistoryLoading(false)
     }
-  }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store])
+  }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store, t])
 
   const handleStoreMonthDrill = React.useCallback(
     (params: { store: string; yearMonth: string }) => {
@@ -884,15 +874,19 @@ export default function OutboundPage() {
     void fetchHistory()
   }, [histStart, histEnd, fetchHistory])
 
-  const fetchSummaryHistory = React.useCallback(async () => {
+  const fetchSummaryHistory = React.useCallback(async (override?: { histMonth?: string }) => {
+    const effectiveHistMonth = override?.histMonth !== undefined ? override.histMonth : histMonth
     let s = histStart
     let e = histEnd
-    if (histMonth) {
-      const { startStr, endStr } = getBangkokMonthRange(histMonth)
+    if (effectiveHistMonth) {
+      const { startStr, endStr } = getBangkokMonthRange(effectiveHistMonth)
       s = startStr
       e = endStr
     }
-    if (!s || !e) return
+    if (!s || !e) {
+      await appAlert(t("visit_stats_date_hint") || "기간을 선택해 주세요.")
+      return
+    }
     setHistoryLoading(true)
     try {
       const list = await getCombinedOutboundHistory({
@@ -913,19 +907,50 @@ export default function OutboundPage() {
       } else {
         setUsageList([])
       }
-    } catch {
+    } catch (err) {
       setHistoryList([])
       setUsageList([])
+      const msg = err instanceof Error ? err.message : String(err)
+      await appAlert(`${t("outNoData")}\n\n${t("msg_error_prefix") || ""}${msg}`)
     } finally {
       setHistoryLoading(false)
     }
-  }, [histStart, histEnd, histMonth, summaryMenuSearch, isOffice, auth?.store])
+  }, [histStart, histEnd, histMonth, summaryMenuSearch, isOffice, auth?.store, t])
 
+  const summaryTabAutoFetchDoneRef = React.useRef(false)
   React.useEffect(() => {
-    if (tabValue === "summary" && historyList.length === 0 && !historyLoading) {
-      fetchSummaryHistory()
+    if (tabValue !== "summary") {
+      summaryTabAutoFetchDoneRef.current = false
+      return
     }
+    if (summaryTabAutoFetchDoneRef.current || historyLoading) return
+    summaryTabAutoFetchDoneRef.current = true
+    if (historyList.length === 0) void fetchSummaryHistory()
   }, [tabValue, historyList.length, historyLoading, fetchSummaryHistory])
+
+  const initialHistFetchDoneRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!auth || initialHistFetchDoneRef.current) return
+    if (plDrillNavAppliedRef.current) {
+      initialHistFetchDoneRef.current = true
+      return
+    }
+    initialHistFetchDoneRef.current = true
+    void fetchHistory()
+  }, [auth, fetchHistory])
+
+  const applySummaryMonth = React.useCallback(() => {
+    const ym = String(summaryMonthDraft || "").trim()
+    handleHistMonthChange(ym)
+    setSummaryMonthDialogOpen(false)
+    void fetchSummaryHistory({ histMonth: ym })
+  }, [handleHistMonthChange, summaryMonthDraft, fetchSummaryHistory])
+
+  const clearSummaryMonth = React.useCallback(() => {
+    handleHistMonthChange("")
+    setSummaryMonthDialogOpen(false)
+    void fetchSummaryHistory({ histMonth: "" })
+  }, [handleHistMonthChange, fetchSummaryHistory])
 
   /** 출고처 드롭다운: 마스터 목록 + 조회 결과에 나온 매출처 병합 */
   const outboundTargetsForFilter = React.useMemo(() => {
@@ -2507,7 +2532,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     {t("outFilterMonth")}
                     {histMonth ? ` (${histMonth})` : ""}
                   </Button>
-                  <Button size="sm" onClick={fetchSummaryHistory} disabled={historyLoading}>
+                  <Button size="sm" onClick={() => void fetchSummaryHistory()} disabled={historyLoading}>
                     {historyLoading ? t("loading") : t("btn_query")}
                   </Button>
                 </div>

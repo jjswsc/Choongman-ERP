@@ -716,6 +716,7 @@ export async function GET(request: NextRequest) {
       markInventoryTenantIdColumnMissing()
     }
     console.error('getCombinedOutboundHistory:', e)
-    return NextResponse.json([], { headers })
+    const message = e instanceof Error ? e.message : String(e || 'getCombinedOutboundHistory failed')
+    return NextResponse.json({ error: message }, { status: 500, headers })
   }
 }
