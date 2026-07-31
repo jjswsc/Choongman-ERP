@@ -431,7 +431,22 @@ export async function POST(req: NextRequest) {
 
     const rowId = Number(d.row)
     const inputPhoneNorm = normalizePhoneForMatch(d.phone)
-    if (inputPhoneNorm) {
+    /** 기존 전화번호 유지(미변경)면 중복 검사 생략 — 과거 중복 데이터도 신분증 등 다른 필드 저장 가능 */
+    let phoneChanged = true
+    if (rowId > 0 && inputPhoneNorm) {
+      try {
+        const curRows = (await supabaseSelectFilter(
+          'employees',
+          appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'),
+          { limit: 1, select: 'phone' }
+        )) as { phone?: string | null }[]
+        const curNorm = normalizePhoneForMatch(curRows?.[0]?.phone)
+        phoneChanged = curNorm !== inputPhoneNorm
+      } catch {
+        phoneChanged = true
+      }
+    }
+    if (inputPhoneNorm && phoneChanged) {
       try {
         const rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
           select: 'id,phone,deleted_at,employment_status,resign_date',

@@ -1,17 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Camera, ImageIcon, Upload } from "lucide-react"
+import { Camera, ImageIcon, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useErpOverlayBack } from "@/lib/erp-navigation"
+import { appAlert } from "@/lib/app-message"
 import { ID_CARD_ASPECT, captureVideoIdCardFrame, cropFileToIdCardAspect } from "@/lib/id-card-image"
 import { cn } from "@/lib/utils"
 
@@ -21,6 +16,10 @@ type IdCardCaptureDialogProps = {
   onCapture: (dataUrl: string) => void
 }
 
+/**
+ * Sheet(Radix Dialog) 안의 중첩 Dialog는 포커스·파일선택·갤러리 업로드가 깨질 수 있음.
+ * 신분증 촬영은 고정 오버레이로 렌더해 Sheet와 Dialog를 중첩하지 않는다.
+ */
 export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCaptureDialogProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -30,6 +29,8 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
   const [cameraReady, setCameraReady] = React.useState(false)
   const [cameraBlocked, setCameraBlocked] = React.useState(false)
   const [capturing, setCapturing] = React.useState(false)
+
+  useErpOverlayBack(open, onOpenChange)
 
   const stopCamera = React.useCallback(() => {
     if (streamRef.current) {
@@ -92,10 +93,11 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
       onOpenChange(false)
     } catch {
       setCameraBlocked(true)
+      await appAlert(t("msg_upload_fail"))
     } finally {
       setCapturing(false)
     }
-  }, [cameraReady, onCapture, onOpenChange])
+  }, [cameraReady, onCapture, onOpenChange, t])
 
   const handleGalleryFile = React.useCallback(
     async (file: File | undefined) => {
@@ -106,21 +108,47 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
         onCapture(dataUrl)
         onOpenChange(false)
       } catch {
-        /* ignore */
+        await appAlert(t("msg_upload_fail"))
       } finally {
         setCapturing(false)
       }
     },
-    [onCapture, onOpenChange]
+    [onCapture, onOpenChange, t]
   )
 
+  if (!open) return null
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-3 p-4 sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-base">{t("emp_id_card_capture_title")}</DialogTitle>
-          <DialogDescription className="text-xs">{t("emp_id_card_capture_hint")}</DialogDescription>
-        </DialogHeader>
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("emp_id_card_capture_title")}
+      onClick={() => onOpenChange(false)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onOpenChange(false)
+      }}
+    >
+      <div
+        className="relative w-full max-w-md rounded-lg border bg-background p-4 shadow-xl sm:max-w-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 space-y-1 pr-8">
+          <h2 className="text-base font-semibold leading-none tracking-tight">
+            {t("emp_id_card_capture_title")}
+          </h2>
+          <p className="text-xs text-muted-foreground">{t("emp_id_card_capture_hint")}</p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="absolute right-2 top-2 h-8 w-8 rounded-full p-0"
+          onClick={() => onOpenChange(false)}
+          aria-label={t("close") || "✕"}
+        >
+          <X className="h-4 w-4" />
+        </Button>
 
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-black">
           {!cameraBlocked ? (
@@ -149,11 +177,11 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
           ) : null}
         </div>
 
+        {/* capture 속성 없음 — 데스크톱/갤러리 파일 선택용. 카메라 전용 capture는 별도 UX가 필요할 때만 */}
         <input
           ref={galleryInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]
@@ -162,7 +190,7 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
           }}
         />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button
             type="button"
             className="min-w-0 flex-1"
@@ -188,7 +216,7 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
           <Button
             type="button"
             variant="secondary"
-            className="w-full"
+            className="mt-2 w-full"
             disabled={capturing}
             onClick={() => galleryInputRef.current?.click()}
           >
@@ -196,7 +224,7 @@ export function IdCardCaptureDialog({ open, onOpenChange, onCapture }: IdCardCap
             {t("emp_id_card_upload")}
           </Button>
         ) : null}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   )
 }

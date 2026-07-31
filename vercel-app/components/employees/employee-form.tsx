@@ -246,6 +246,8 @@ interface EmployeeFormProps {
   onSave: () => void
   onNew: () => void
   saving?: boolean
+  /** photo·id_card_photo lazy load 중 — 업로드 버튼 비활성 */
+  mediaLoading?: boolean
   /** 매장 매니저일 때 true — 권한(role) 수정 불가 */
   roleDisabled?: boolean
   /** false면 Officer 선택 불가(단, 이미 Officer인 직원은 유지·하향만 가능) */
@@ -279,6 +281,7 @@ export function EmployeeForm({
   onSave,
   onNew,
   saving = false,
+  mediaLoading = false,
   roleDisabled = false,
   canAssignOfficerRole = false,
   canAssignDirectorRole = false,
@@ -485,6 +488,7 @@ export function EmployeeForm({
                           variant="outline"
                           size="sm"
                           className="h-8 w-full px-2 text-xs"
+                          disabled={mediaLoading || saving}
                           onClick={() => photoInputRef.current?.click()}
                         >
                           <Upload className="mr-1 h-3.5 w-3.5 shrink-0" />
@@ -685,6 +689,7 @@ export function EmployeeForm({
                         variant="outline"
                         size="sm"
                         className="h-8 w-full px-2 text-xs"
+                        disabled={mediaLoading || saving}
                         onClick={() => setIdCardCaptureOpen(true)}
                       >
                         <Upload className="mr-1 h-3.5 w-3.5" />

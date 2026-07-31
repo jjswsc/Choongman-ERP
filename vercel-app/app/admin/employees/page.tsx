@@ -291,11 +291,16 @@ export default function EmployeesPage() {
       setFormMediaLoading(true)
       void getAdminEmployeeMedia(rowId)
         .then((media) => {
-          setForm((prev) => ({
-            ...prev,
-            photo: media.photo || prev.photo,
-            idCardPhoto: media.idCardPhoto || prev.idCardPhoto,
-          }))
+          setForm((prev) => {
+            // 다른 직원으로 바뀌었으면 무시
+            if (Number(prev.row) !== rowId) return prev
+            // lazy load 전에 사용자가 이미 올린 값은 덮어쓰지 않음
+            return {
+              ...prev,
+              photo: prev.photo || media.photo || "",
+              idCardPhoto: prev.idCardPhoto || media.idCardPhoto || "",
+            }
+          })
         })
         .finally(() => setFormMediaLoading(false))
     },
@@ -772,6 +777,7 @@ export default function EmployeesPage() {
                     onSave={handleSave}
                     onNew={handleNew}
                     saving={saving || formMediaLoading}
+                    mediaLoading={formMediaLoading}
                     roleDisabled={isManager || isFranchiseeRole(userRole)}
                     canAssignOfficerRole={canAssignEmployeeOfficerRole(userRole)}
                     canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
