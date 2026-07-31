@@ -358,6 +358,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     orderTotalAmount: 0,
     truncated: false,
   })
+  const [cancelReasonLoading, setCancelReasonLoading] = React.useState(false)
 
   const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
 
@@ -994,6 +995,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     (insightShowTotals ||
       insightShowMenu ||
       insightShowChannel ||
+      cancelReasonLoading ||
       cancelReasonSummary.lineRows.length > 0 ||
       cancelReasonSummary.orderRows.length > 0)
 
@@ -2099,6 +2101,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gSummary = guarded(setSummaryCards)
     const gCancelReasonSummary = guarded(setCancelReasonSummary)
     setLoading(true)
+    if (
+      needFullSummary &&
+      (selectedView === "period" || selectedView === "store-period" || selectedView === "overview")
+    ) {
+      setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
+    }
     const tasks: Array<Promise<unknown>> = []
     const periodRowsFromResult = (res: Awaited<ReturnType<typeof periodRun>>): PosSalesPeriodRow[] =>
       res.kind === "split"
@@ -2125,6 +2133,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               setPeriodSplitSeries(null)
               setPeriodData(res.rows)
               setPeriodTruncated(res.truncated)
+            }
+            if (
+              needFullSummary &&
+              (selectedView === "period" ||
+                selectedView === "store-period" ||
+                selectedView === "overview")
+            ) {
+              setSummaryCards((prev) => ({
+                ...prev,
+                current: sumPeriodTotal(res),
+              }))
             }
           })
           .catch(() => {
@@ -2380,14 +2399,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const storeSummaryFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
       const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
         rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
+      // 당월 합계는 period 응답에서 채움 — store RPC는 전기·직전7일만 (중복 스캔 제거)
       tasks.push(
         Promise.all([
-          storeSummaryFetcher({
-            startStr,
-            endStr,
-            stores: salesFetchStoresParam,
-            orderTypes: orderTypesParam,
-          }),
           storeSummaryFetcher({
             startStr: prevStart,
             endStr: prevEnd,
@@ -2401,49 +2415,78 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             orderTypes: orderTypesParam,
           }),
         ])
-          .then(([currentRows, prevRows, weekRows]) => {
+          .then(([prevRows, weekRows]) => {
+            if (loadIdRef.current !== id) return
             const scope = (rows: { total?: number; storeName: string }[]) =>
               filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
-            gSummary({
-              current: sumScopedStoreTotal(scope(currentRows)),
+            setSummaryCards((prev) => ({
+              current: prev.current,
               prevRange: sumScopedStoreTotal(scope(prevRows)),
               prevWeek: sumScopedStoreTotal(scope(weekRows)),
-            })
+            }))
           })
-          .catch(() => gSummary({ current: 0, prevRange: 0, prevWeek: 0 }))
+          .catch(() => {
+            if (loadIdRef.current !== id) return
+            setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
+          })
       )
     }
+    // 취소사유는 스피너를 막지 않음 — 메인 집계와 병렬이지만 Promise.all 밖
     if (needCancelReason) {
-      tasks.push(
-        getPosCancelReasonSummary({
-          startStr,
-          endStr,
-          stores: salesFetchStoresParam,
-          orderTypes: orderTypesParam,
+      setCancelReasonLoading(true)
+      gCancelReasonSummary({
+        lineRows: [],
+        orderRows: [],
+        lineTotalCount: 0,
+        lineTotalAmount: 0,
+        orderTotalCount: 0,
+        orderTotalAmount: 0,
+        truncated: false,
+      })
+      void getPosCancelReasonSummary({
+        startStr,
+        endStr,
+        stores: salesFetchStoresParam,
+        orderTypes: orderTypesParam,
+      })
+        .then((res) => {
+          if (loadIdRef.current !== id) return
+          gCancelReasonSummary({
+            lineRows: res.lineRows,
+            orderRows: res.orderRows,
+            lineTotalCount: res.lineTotalCount,
+            lineTotalAmount: res.lineTotalAmount,
+            orderTotalCount: res.orderTotalCount,
+            orderTotalAmount: res.orderTotalAmount,
+            truncated: res.truncated === true,
+          })
         })
-          .then((res) =>
-            gCancelReasonSummary({
-              lineRows: res.lineRows,
-              orderRows: res.orderRows,
-              lineTotalCount: res.lineTotalCount,
-              lineTotalAmount: res.lineTotalAmount,
-              orderTotalCount: res.orderTotalCount,
-              orderTotalAmount: res.orderTotalAmount,
-              truncated: res.truncated === true,
-            })
-          )
-          .catch(() =>
-            gCancelReasonSummary({
-              lineRows: [],
-              orderRows: [],
-              lineTotalCount: 0,
-              lineTotalAmount: 0,
-              orderTotalCount: 0,
-              orderTotalAmount: 0,
-              truncated: false,
-            })
-          )
-      )
+        .catch(() => {
+          if (loadIdRef.current !== id) return
+          gCancelReasonSummary({
+            lineRows: [],
+            orderRows: [],
+            lineTotalCount: 0,
+            lineTotalAmount: 0,
+            orderTotalCount: 0,
+            orderTotalAmount: 0,
+            truncated: false,
+          })
+        })
+        .finally(() => {
+          if (loadIdRef.current === id) setCancelReasonLoading(false)
+        })
+    } else {
+      setCancelReasonLoading(false)
+      gCancelReasonSummary({
+        lineRows: [],
+        orderRows: [],
+        lineTotalCount: 0,
+        lineTotalAmount: 0,
+        orderTotalCount: 0,
+        orderTotalAmount: 0,
+        truncated: false,
+      })
     }
     Promise.all(tasks).finally(() => {
       if (loadIdRef.current === id) {
@@ -3084,6 +3127,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             insightBottomMenus={insightBottomMenus}
             insightTopChannels={insightTopChannels}
             cancelReasonSummary={cancelReasonSummary}
+            cancelReasonLoading={cancelReasonLoading}
             showInsightPanel={showInsightPanel}
             onCancelReasonDrilldown={handleCancelReasonDrilldown}
           />

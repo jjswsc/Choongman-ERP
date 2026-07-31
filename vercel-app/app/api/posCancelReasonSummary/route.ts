@@ -9,6 +9,7 @@ import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import { normalizePosCancelReasonKey } from '@/lib/pos-cancel-reason-key'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { isPosOrderStatsCancellation } from '@/lib/pos-order-merge'
+import { tryFetchPosCancelReasonSummaryAgg } from '@/lib/pos-cancel-reason-summary-rpc-server'
 
 const FETCH_LIMIT = 1_000_000
 
@@ -16,6 +17,16 @@ type CancelReasonRow = {
   reason: string
   count: number
   amount: number
+}
+
+const EMPTY = {
+  lineRows: [] as CancelReasonRow[],
+  orderRows: [] as CancelReasonRow[],
+  lineTotalCount: 0,
+  lineTotalAmount: 0,
+  orderTotalCount: 0,
+  orderTotalAmount: 0,
+  truncated: false,
 }
 
 export async function GET(request: NextRequest) {
@@ -34,18 +45,19 @@ export async function GET(request: NextRequest) {
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
-      return NextResponse.json(
-        {
-          lineRows: [],
-          orderRows: [],
-          lineTotalCount: 0,
-          lineTotalAmount: 0,
-          orderTotalCount: 0,
-          orderTotalAmount: 0,
-          truncated: false,
-        },
-        { headers }
-      )
+      return NextResponse.json(EMPTY, { headers })
+    }
+
+    const rpcSummary = await tryFetchPosCancelReasonSummaryAgg({
+      request,
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      orderTypes: orderTypesAllowed,
+    })
+    if (rpcSummary) {
+      headers.set('X-Pos-Sales-Source', 'rpc')
+      return NextResponse.json(rpcSummary, { headers })
     }
 
     const bizCtx = await loadPosBusinessDaySettingsContext()
@@ -143,6 +155,7 @@ export async function GET(request: NextRequest) {
 
     const truncated = ordersRaw.length >= FETCH_LIMIT
     if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', 'fetch')
 
     return NextResponse.json(
       {
@@ -158,18 +171,6 @@ export async function GET(request: NextRequest) {
     )
   } catch (e) {
     console.error('posCancelReasonSummary:', e)
-    return NextResponse.json(
-      {
-        lineRows: [],
-        orderRows: [],
-        lineTotalCount: 0,
-        lineTotalAmount: 0,
-        orderTotalCount: 0,
-        orderTotalAmount: 0,
-        truncated: false,
-      },
-      { headers }
-    )
+    return NextResponse.json(EMPTY, { headers })
   }
 }
-

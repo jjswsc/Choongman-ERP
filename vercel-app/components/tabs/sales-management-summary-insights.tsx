@@ -39,6 +39,7 @@ export type SalesManagementSummaryInsightsProps = {
     orderTotalAmount: number
     truncated: boolean
   }
+  cancelReasonLoading?: boolean
   showInsightPanel: boolean
   onCancelReasonDrilldown: (reason: string, kind: "line" | "order") => void
 }
@@ -58,6 +59,7 @@ export function SalesManagementSummaryInsights({
   insightBottomMenus,
   insightTopChannels,
   cancelReasonSummary,
+  cancelReasonLoading = false,
   showInsightPanel,
   onCancelReasonDrilldown,
 }: SalesManagementSummaryInsightsProps) {
@@ -110,9 +112,12 @@ export function SalesManagementSummaryInsights({
       ) : null}
 
       {showInsightPanel &&
-      (insightShowTotals || insightShowMenu || insightShowChannel ||
-      cancelReasonSummary.lineRows.length > 0 ||
-      cancelReasonSummary.orderRows.length > 0) ? (
+      (insightShowTotals ||
+        insightShowMenu ||
+        insightShowChannel ||
+        cancelReasonLoading ||
+        cancelReasonSummary.lineRows.length > 0 ||
+        cancelReasonSummary.orderRows.length > 0) ? (
         <div className="mb-3 grid gap-3 lg:grid-cols-2">
           {insightShowTotals ? (
             <Card>
@@ -215,6 +220,21 @@ export function SalesManagementSummaryInsights({
                     ))}
                   </ul>
                 )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {cancelReasonLoading &&
+          cancelReasonSummary.lineRows.length === 0 &&
+          cancelReasonSummary.orderRows.length === 0 ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {tr("salesCancelReasonTopLine", "품목 취소 사유 TOP")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">{tr("loading", "불러오는 중…")}</p>
               </CardContent>
             </Card>
           ) : null}
