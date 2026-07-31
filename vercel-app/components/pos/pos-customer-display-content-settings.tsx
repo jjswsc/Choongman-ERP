@@ -246,19 +246,20 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
         })
         if (!res.success || !res.url) {
           const detail = String(res.message || "").trim()
-          // 영문 UI에서 한글만 있는 오류는 fallback 으로 가려지므로, ASCII 상세가 있으면 뒤에 붙임
-          const localized = localizeApiMessage(
-            detail,
-            t,
-            tr(
-              "posCustomerIdleMediaUploadFail",
-              "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요."
-            ),
-            lang
+          const fallback = tr(
+            "posCustomerIdleMediaUploadFail",
+            "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요."
           )
-          const asciiDetail =
-            detail && !/[가-힣]/.test(detail) && !localized.includes(detail) ? ` (${detail})` : ""
-          await appAlert(localized + asciiDetail)
+          const localized = localizeApiMessage(detail, t, fallback, lang)
+          // 미매핑 ASCII(버킷/Storage 원문 등)만 뒤에 붙여 원인을 숨기지 않음
+          const extra =
+            detail &&
+            localized !== detail &&
+            !localized.includes(detail) &&
+            !/[가-힣]/.test(detail)
+              ? ` (${detail})`
+              : ""
+          await appAlert(localized + extra)
           return
         }
         setIdleMediaUrl(res.url)
@@ -403,7 +404,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
               accept={
                 idleMediaType === "video"
                   ? "video/mp4,video/webm,.mp4,.webm"
-                  : "image/jpeg,image/jpg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp"
+                  : "image/jpeg,image/jpg,image/png,image/gif,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif"
               }
               className="cursor-pointer"
               disabled={uploadingMedia}

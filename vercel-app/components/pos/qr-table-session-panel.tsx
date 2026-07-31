@@ -102,7 +102,7 @@ export function QrTableSessionPanel(props: {
 
   React.useEffect(() => {
     if (!session) return
-    const id = window.setInterval(() => void reload(), 8000)
+    const id = window.setInterval(() => void reload(), 5000)
     return () => window.clearInterval(id)
   }, [session, reload])
 

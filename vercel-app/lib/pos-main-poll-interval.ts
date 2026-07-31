@@ -3,13 +3,14 @@
  *
  * 안전 우선 규칙:
  * - HEALTHY: Realtime INSERT 채널이 SUBSCRIBED 이면 60s (조용한 매장도 8s 가속하지 않음).
- * - DEGRADED(15s): Realtime 미연결·전 INSERT 채널 실패 시만.
+ * - DEGRADED(5s): Realtime 미연결·전 INSERT 채널 실패 시만.
  * - `realtimeRecentlyActive`는 폴링 간격이 아니라 limit=800 풀 스캔 폴백(`shouldUseMainPosHeavyOrderScanFallback`)에만 사용.
  */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
 /** Realtime 정상 + 최근 이벤트 있음 → HTTP 폴링은 안전망만 (Edge Request 절감) */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 300_000
-export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 15_000
+/** Realtime 미연결·채널 실패 시 — 태블릿/QR 주문이 메인에 늦게 보이는 체감 완화 (기존 15s) */
+export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 5_000
 /** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded 로 간주 */
 export const MAIN_POS_REALTIME_STALE_MS = 90_000
 /** 채널 오류 시 전체 재구독 최소 간격 (6/12 Realtime 활성화 후 alias 오류 폭주 방지) */

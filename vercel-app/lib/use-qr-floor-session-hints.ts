@@ -6,6 +6,8 @@ import { qrTableStaffSessionsMap } from '@/lib/api-client/qr-table'
 export type QrFloorMarker = 'awaiting' | 'active' | 'call' | null
 
 /** Poll QR sessions for POS floor badges. Safe if schema missing (returns empty). */
+const QR_FLOOR_SESSION_HINTS_POLL_MS = 5_000
+
 export function useQrFloorSessionHints(storeCode: string | null | undefined) {
   const [byTable, setByTable] = React.useState<Record<string, QrFloorMarker>>({})
 
@@ -37,7 +39,7 @@ export function useQrFloorSessionHints(storeCode: string | null | undefined) {
 
   React.useEffect(() => {
     void reload()
-    const id = window.setInterval(() => void reload(), 12000)
+    const id = window.setInterval(() => void reload(), QR_FLOOR_SESSION_HINTS_POLL_MS)
     return () => window.clearInterval(id)
   }, [reload])
 

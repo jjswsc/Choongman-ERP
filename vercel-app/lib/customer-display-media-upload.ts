@@ -9,8 +9,42 @@ export const CUSTOMER_DISPLAY_IMAGE_MIME_TYPES = [
 
 export const CUSTOMER_DISPLAY_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm'] as const
 
+/** 영문 고정 — 비한국어 UI에서 한글 message가 fallback으로 가려지는 것 방지 */
+export const CUSTOMER_DISPLAY_MEDIA_ERR = {
+  TYPE_INVALID: 'Only JPG, PNG, GIF, WebP images or MP4, WebM videos can be uploaded.',
+  HEIC_UNSUPPORTED:
+    'HEIC/HEIF photos are not supported. Please export or Save As JPG/PNG, then upload again.',
+  IMAGE_TOO_LARGE: 'Images must be 4MB or smaller.',
+  VIDEO_TOO_LARGE: 'Videos must be 50MB or smaller.',
+  STORE_REQUIRED: 'Store code is required.',
+  FILE_REQUIRED: 'A file is required.',
+  BUCKET_MISSING:
+    'Storage bucket "pos-menu-images" is missing. Create it in Supabase Dashboard > Storage.',
+  VIDEO_SERVER_UNSUPPORTED: 'Videos must use direct upload. Please try again.',
+  UPLOAD_FAILED: 'Media upload failed.',
+} as const
+
 const IMAGE_SET = new Set<string>(CUSTOMER_DISPLAY_IMAGE_MIME_TYPES)
 const VIDEO_SET = new Set<string>(CUSTOMER_DISPLAY_VIDEO_MIME_TYPES)
+
+const HEIC_BRANDS = new Set([
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'mif1',
+  'msf1',
+  'heim',
+  'heis',
+  'hevm',
+  'hevs',
+])
+const AVIF_BRANDS = new Set(['avif', 'avis', 'mif1']) // mif1 also HEIF container
+
+function readFourCc(b: Uint8Array, offset: number): string {
+  if (b.length < offset + 4) return ''
+  return String.fromCharCode(b[offset]!, b[offset + 1]!, b[offset + 2]!, b[offset + 3]!).toLowerCase()
+}
 
 export function normalizeCustomerDisplayMediaContentType(raw: unknown): string {
   let ct = String(raw || '')
@@ -19,8 +53,18 @@ export function normalizeCustomerDisplayMediaContentType(raw: unknown): string {
     .split(';')[0]
     .trim()
   if (ct === 'image/jpg' || ct === 'image/pjpeg') ct = 'image/jpeg'
+  if (ct === 'image/heif') ct = 'image/heic'
   if (ct === 'video/x-mp4' || ct === 'audio/mp4') ct = 'video/mp4'
   return ct
+}
+
+export function isHeicOrAvifContentType(ct: string): boolean {
+  const n = normalizeCustomerDisplayMediaContentType(ct)
+  return n === 'image/heic' || n === 'image/avif'
+}
+
+export function looksLikeHeicFileName(name: string): boolean {
+  return /\.(heic|heif)$/i.test(String(name || ''))
 }
 
 /** 파일 선두 바이트로 MIME 추정 (확장자·type 비어 있는 Windows GUID 파일 대응) */
@@ -46,8 +90,12 @@ export async function sniffCustomerDisplayMediaContentType(file: Blob): Promise<
     ) {
       return 'image/webp'
     }
-    // ISO BMFF (mp4/mov): ....ftyp
-    if (b.length >= 8 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    // ISO BMFF: ....ftyp + major brand (HEIC/AVIF를 mp4로 오인하지 않음)
+    if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+      const brand = readFourCc(b, 8)
+      if (HEIC_BRANDS.has(brand) || brand === 'heic' || brand === 'heif') return 'image/heic'
+      if (AVIF_BRANDS.has(brand) && brand !== 'mif1') return 'image/avif'
+      if (brand === 'mif1' || brand === 'msf1') return 'image/heic'
       return 'video/mp4'
     }
     // WebM / Matroska: 1A 45 DF A3
@@ -68,12 +116,15 @@ export function guessCustomerDisplayMediaContentType(
   const normalized = normalizeCustomerDisplayMediaContentType(file.type)
   if (normalized && normalized !== 'application/octet-stream') {
     if (IMAGE_SET.has(normalized) || VIDEO_SET.has(normalized)) return normalized
+    if (isHeicOrAvifContentType(normalized)) return normalized
   }
   const n = (file.name || '').toLowerCase()
   if (/\.(jpe?g)$/i.test(n)) return 'image/jpeg'
   if (/\.png$/i.test(n)) return 'image/png'
   if (/\.gif$/i.test(n)) return 'image/gif'
   if (/\.webp$/i.test(n)) return 'image/webp'
+  if (/\.(heic|heif)$/i.test(n)) return 'image/heic'
+  if (/\.avif$/i.test(n)) return 'image/avif'
   if (/\.mp4$/i.test(n)) return 'video/mp4'
   if (/\.webm$/i.test(n)) return 'video/webm'
   // Windows Photos 등 GUID 파일명·확장자 숨김에서 type만 있는 경우
@@ -117,6 +168,50 @@ function ensureFileNameExtension(fileName: string, contentType: string): string 
   return ext ? `${base}${ext}` : base
 }
 
+function stripExtension(name: string): string {
+  const i = name.lastIndexOf('.')
+  return i > 0 ? name.slice(0, i) : name || 'media'
+}
+
+/**
+ * 브라우저에서 이미지를 JPEG로 재인코딩 (HEIC·이상 MIME·GUID 파일 복구).
+ * decode 불가 시 null.
+ */
+export async function reencodeCustomerDisplayImageAsJpeg(file: File): Promise<File | null> {
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null
+  let bmp: ImageBitmap | undefined
+  try {
+    bmp = await createImageBitmap(file)
+  } catch {
+    return null
+  }
+  try {
+    const maxEdge = 1920
+    const longEdge = Math.max(bmp.width, bmp.height)
+    const scale = longEdge > maxEdge ? maxEdge / longEdge : 1
+    const w = Math.max(1, Math.round(bmp.width * scale))
+    const h = Math.max(1, Math.round(bmp.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(bmp, 0, 0, w, h)
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.88)
+    })
+    if (!blob || blob.size <= 0) return null
+    const outName = `${stripExtension(file.name || 'photo')}.jpg`
+    return new File([blob], outName, { type: 'image/jpeg', lastModified: Date.now() })
+  } finally {
+    try {
+      bmp.close()
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Supabase signed PUT Content-Type 이 presign MIME 과 일치하도록 File 재래핑 */
 export function fileForCustomerDisplayMediaUpload(
   file: File,
@@ -125,6 +220,12 @@ export function fileForCustomerDisplayMediaUpload(
 ): { file: File; contentType: string } | null {
   let contentType = guessCustomerDisplayMediaContentType(file, preferredKind)
   const sniffed = normalizeCustomerDisplayMediaContentType(sniffedContentType || '')
+
+  // HEIC/AVIF는 허용 MIME이 아님 — 호출측에서 재인코딩 유도
+  if (isHeicOrAvifContentType(sniffed) || isHeicOrAvifContentType(contentType)) {
+    return null
+  }
+
   if (sniffed && (IMAGE_SET.has(sniffed) || VIDEO_SET.has(sniffed))) {
     // UI에서 고른 종류와 실제 바이트가 다르면 잘못된 MIME으로 올리지 않음
     if (preferredKind === 'image' && !IMAGE_SET.has(sniffed)) return null
@@ -155,13 +256,36 @@ export function fileForCustomerDisplayMediaUpload(
   }
 }
 
-/** 매직 바이트 스니프 후 File 재래핑 */
+export type PrepareCustomerDisplayMediaResult =
+  | { ok: true; file: File; contentType: string }
+  | { ok: false; message: string; code: 'type_invalid' | 'heic_unsupported' }
+
+/** 매직 바이트 스니프 후 File 재래핑 (+ 이미지면 JPEG 재인코딩 폴백) */
 export async function prepareCustomerDisplayMediaUpload(
   file: File,
   preferredKind?: 'image' | 'video'
-): Promise<{ file: File; contentType: string } | null> {
+): Promise<PrepareCustomerDisplayMediaResult> {
   const sniffed = await sniffCustomerDisplayMediaContentType(file)
-  return fileForCustomerDisplayMediaUpload(file, preferredKind, sniffed)
+  const wrapped = fileForCustomerDisplayMediaUpload(file, preferredKind, sniffed)
+  if (wrapped) return { ok: true, file: wrapped.file, contentType: wrapped.contentType }
+
+  const heicLike =
+    isHeicOrAvifContentType(sniffed) ||
+    isHeicOrAvifContentType(file.type) ||
+    looksLikeHeicFileName(file.name)
+
+  // 사진 선택 시: HEIC·이상 MIME·GUID 파일을 브라우저 디코드 → JPEG 로 복구 시도
+  if (preferredKind !== 'video') {
+    const reencoded = await reencodeCustomerDisplayImageAsJpeg(file)
+    if (reencoded) {
+      return { ok: true, file: reencoded, contentType: 'image/jpeg' }
+    }
+    if (heicLike) {
+      return { ok: false, message: CUSTOMER_DISPLAY_MEDIA_ERR.HEIC_UNSUPPORTED, code: 'heic_unsupported' }
+    }
+  }
+
+  return { ok: false, message: CUSTOMER_DISPLAY_MEDIA_ERR.TYPE_INVALID, code: 'type_invalid' }
 }
 
 export function isCustomerDisplayImageContentType(ct: string): boolean {

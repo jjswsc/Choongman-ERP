@@ -891,6 +891,8 @@ export const I18N_POS_KO: Record<string, string> = {
       '미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요.',
     posCustomerIdleMediaTypeInvalid:
       'JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.',
+    posCustomerIdleMediaHeicUnsupported:
+      'HEIC/HEIF 사진은 지원하지 않습니다. JPG/PNG로 저장한 뒤 다시 올려 주세요.',
     posCustomerIdleMediaImageTooLarge: '이미지는 4MB 이하만 업로드할 수 있습니다.',
     posCustomerIdleMediaVideoTooLarge: '동영상은 50MB 이하만 업로드할 수 있습니다.',
     posCustomerIdleMediaFbUrlWarn:
@@ -4189,6 +4191,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posCustomerIdleMediaUploadFail:
       'Media upload failed. Use JPG/PNG/WebP (≤4MB) or MP4/WebM (≤50MB).',
     posCustomerIdleMediaTypeInvalid: 'Only JPG, PNG, GIF, WebP images or MP4, WebM videos can be uploaded.',
+    posCustomerIdleMediaHeicUnsupported:
+      'HEIC/HEIF photos are not supported. Please export or Save As JPG/PNG, then upload again.',
     posCustomerIdleMediaImageTooLarge: 'Images must be 4MB or smaller.',
     posCustomerIdleMediaVideoTooLarge: 'Videos must be 50MB or smaller.',
     posCustomerIdleMediaFbUrlWarn:
@@ -7852,6 +7856,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posCustomerIdleMediaUploadFail:
       'อัปโหลดสื่อไม่สำเร็จ กรุณาใช้ JPG/PNG/WebP (≤4MB) หรือ MP4/WebM (≤50MB)',
     posCustomerIdleMediaTypeInvalid: 'อัปโหลดได้เฉพาะรูป JPG, PNG, GIF, WebP หรือวิดีโอ MP4, WebM',
+    posCustomerIdleMediaHeicUnsupported:
+      'ไม่รองรับรูป HEIC/HEIF กรุณา Save As เป็น JPG/PNG แล้วอัปโหลดใหม่ครับ',
     posCustomerIdleMediaImageTooLarge: 'รูปต้องไม่เกิน 4MB',
     posCustomerIdleMediaVideoTooLarge: 'วิดีโอต้องไม่เกิน 50MB',
     posCustomerIdleMediaFbUrlWarn:

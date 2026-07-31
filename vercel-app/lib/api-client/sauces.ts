@@ -427,28 +427,32 @@ export async function uploadCustomerDisplayMedia(params: {
   preferredKind?: 'image' | 'video'
 }) {
   const storeCode = String(params.storeCode || '').trim()
-  const { prepareCustomerDisplayMediaUpload, isCustomerDisplayImageContentType } = await import(
-    '@/lib/customer-display-media-upload'
-  )
+  const {
+    prepareCustomerDisplayMediaUpload,
+    isCustomerDisplayImageContentType,
+    CUSTOMER_DISPLAY_MEDIA_ERR,
+  } = await import('@/lib/customer-display-media-upload')
   const prepared = await prepareCustomerDisplayMediaUpload(params.file, params.preferredKind)
-  if (!prepared) {
+  if (!prepared.ok) {
     return {
       success: false,
-      message: 'JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.',
+      message: prepared.message,
+      code: prepared.code,
       url: undefined,
     }
   }
   const { file, contentType } = prepared
+  const isImage = isCustomerDisplayImageContentType(contentType)
 
   const uploadViaServer = async (): Promise<{
     success: boolean
     message?: string
     url?: string
   }> => {
-    if (!isCustomerDisplayImageContentType(contentType)) {
+    if (!isImage) {
       return {
         success: false,
-        message: `Storage upload failed (client PUT). Video must use direct upload.`,
+        message: CUSTOMER_DISPLAY_MEDIA_ERR.VIDEO_SERVER_UNSUPPORTED,
       }
     }
     const fd = new FormData()
@@ -460,7 +464,7 @@ export async function uploadCustomerDisplayMedia(params: {
       body: fd,
     })
     const raw = await res.text()
-    let json: { success?: boolean; message?: string; url?: string }
+    let json: { success?: boolean; message?: string; url?: string; code?: string }
     try {
       json = JSON.parse(raw) as typeof json
     } catch {
@@ -473,78 +477,79 @@ export async function uploadCustomerDisplayMedia(params: {
       }
     }
     if (!res.ok || !json.success || !json.url) {
-      return { success: false, message: json.message || `Storage upload failed (${res.status})` }
-    }
-    return { success: true, message: '업로드되었습니다.', url: json.url }
-  }
-
-  const pres = await apiFetchWithOffline('/api/uploadCustomerDisplayMedia/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      storeCode,
-      fileName: file.name,
-      contentType,
-      fileSize: file.size,
-    }),
-  })
-  const rawPres = await pres.text()
-  let pjson: { success?: boolean; message?: string; signedUrl?: string; publicUrl?: string }
-  try {
-    pjson = JSON.parse(rawPres) as typeof pjson
-  } catch {
-    const tooLarge =
-      pres.status === 413 ||
-      /413|payload too large|entity too large|request entity too large/i.test(rawPres)
-    if (tooLarge) {
-      return { success: false, message: POS_MENU_UPLOAD_TOO_LARGE, url: undefined }
-    }
-    // presign 파싱 실패 시 이미지 서버 폴백
-    return uploadViaServer()
-  }
-  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
-    if (isCustomerDisplayImageContentType(contentType)) {
-      const viaServer = await uploadViaServer()
-      if (viaServer.success) return viaServer
-    }
-    return {
-      success: false,
-      message: pjson.message,
-      url: undefined,
-    }
-  }
-  try {
-    const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
-    const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
-    if (!putRes.ok) {
-      const t = await putRes.text().catch(() => '')
-      if (isCustomerDisplayImageContentType(contentType)) {
-        const viaServer = await uploadViaServer()
-        if (viaServer.success) return viaServer
-      }
       return {
         success: false,
-        message: formatStoragePutError(putRes.status, t),
-        url: undefined,
+        message: json.message || `Storage upload failed (${res.status})`,
       }
     }
-    return {
-      success: true,
-      message: '업로드되었습니다.',
-      url: pjson.publicUrl,
+    return { success: true, message: 'Uploaded.', url: json.url }
+  }
+
+  const uploadViaSignedPut = async (): Promise<{
+    success: boolean
+    message?: string
+    url?: string
+  }> => {
+    const pres = await apiFetchWithOffline('/api/uploadCustomerDisplayMedia/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storeCode,
+        fileName: file.name,
+        contentType,
+        fileSize: file.size,
+      }),
+    })
+    const rawPres = await pres.text()
+    let pjson: { success?: boolean; message?: string; signedUrl?: string; publicUrl?: string }
+    try {
+      pjson = JSON.parse(rawPres) as typeof pjson
+    } catch {
+      const tooLarge =
+        pres.status === 413 ||
+        /413|payload too large|entity too large|request entity too large/i.test(rawPres)
+      return {
+        success: false,
+        message: tooLarge ? POS_MENU_UPLOAD_TOO_LARGE : `Presign failed (${pres.status})`,
+      }
     }
-  } catch (e) {
-    if (isCustomerDisplayImageContentType(contentType)) {
-      const viaServer = await uploadViaServer()
-      if (viaServer.success) return viaServer
+    if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+      return {
+        success: false,
+        message: pjson.message || `Presign failed (${pres.status})`,
+      }
     }
-    const msg = e instanceof Error ? e.message : String(e)
+    try {
+      const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+      const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+      if (!putRes.ok) {
+        const t = await putRes.text().catch(() => '')
+        return {
+          success: false,
+          message: formatStoragePutError(putRes.status, t),
+        }
+      }
+      return { success: true, message: 'Uploaded.', url: pjson.publicUrl }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, message: `Storage upload failed: ${msg}` }
+    }
+  }
+
+  // 이미지는 서버 경유 우선(브라우저→Supabase CORS/하이브리드 이슈 회피). 동영상은 signed PUT만.
+  if (isImage) {
+    const viaServer = await uploadViaServer()
+    if (viaServer.success) return viaServer
+    const viaPut = await uploadViaSignedPut()
+    if (viaPut.success) return viaPut
     return {
       success: false,
-      message: `Storage upload failed: ${msg}`,
+      message: [viaServer.message, viaPut.message].filter(Boolean).join(' | ') || CUSTOMER_DISPLAY_MEDIA_ERR.UPLOAD_FAILED,
       url: undefined,
     }
   }
+
+  return uploadViaSignedPut()
 }
 
 export async function deletePosMenu(params: { id: string }) {

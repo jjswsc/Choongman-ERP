@@ -2,6 +2,8 @@
  * purchase_orders.cart_json — 배열(레거시) 또는 { v:1, items, meta } (회계 PO 확장)
  */
 
+import { roundMoney2 } from "@/lib/invoice-vat-total"
+
 export type PoCartLine = {
   code?: string
   name?: string
@@ -19,8 +21,9 @@ export function poLineIsVatExempt(taxType?: string | null): boolean {
 }
 
 /**
- * 태국 7% VAT: 과세 줄 합계에만 VAT 적용(소계 합 → VAT round → 합계).
+ * 태국 7% VAT: 과세 줄 합계에만 VAT 적용(줄 금액 2자리 → 소계 → VAT round → 합계).
  * `savePurchaseOrder`와 동일한 금액 규칙.
+ * VAT포함 단가 환산(`vatExclusiveUnitFromInclusiveUnit`) 후 줄합이 FlowAccount와 맞도록 줄 금액을 2자리로 고정.
  */
 export function computePurchaseOrderMoneyTotals(items: PoCartLine[]): {
   subtotal: number
@@ -33,17 +36,13 @@ export function computePurchaseOrderMoneyTotals(items: PoCartLine[]): {
   for (const c of items) {
     const price = Number(c.price ?? (c as { cost?: number }).cost ?? 0)
     const qty = Number(c.qty || 0)
-    const amt = price * qty
-    subtotal += amt
-    if (!poLineIsVatExempt(c.taxType)) taxableSubtotal += amt
+    const amt = roundMoney2(price * qty)
+    subtotal = roundMoney2(subtotal + amt)
+    if (!poLineIsVatExempt(c.taxType)) taxableSubtotal = roundMoney2(taxableSubtotal + amt)
   }
-  const vat = Math.round(taxableSubtotal * 0.07 * 100) / 100
-  const total = Math.round((subtotal + vat) * 100) / 100
+  const vat = roundMoney2(taxableSubtotal * 0.07)
+  const total = roundMoney2(subtotal + vat)
   return { subtotal, taxableSubtotal, vat, total }
-}
-
-function roundMoney2(n: number): number {
-  return Math.round(n * 100) / 100
 }
 
 /** body/meta에서 온 수동 보정값 검증·정규화. 유효하지 않으면 null */

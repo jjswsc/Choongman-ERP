@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CUSTOMER_DISPLAY_MEDIA_ERR,
   fileForCustomerDisplayMediaUpload,
   guessCustomerDisplayMediaContentType,
   isUnstableCustomerDisplayMediaUrl,
   normalizeCustomerDisplayMediaContentType,
+  prepareCustomerDisplayMediaUpload,
   sniffCustomerDisplayMediaContentType,
 } from '@/lib/customer-display-media-upload'
 
@@ -54,12 +56,35 @@ describe('customer-display-media-upload', () => {
     expect(wrapped!.contentType).toBe('image/jpeg')
   })
 
+  it('sniffs HEIC ftyp brand as image/heic not video/mp4', async () => {
+    // size(4) + 'ftyp' + 'heic'
+    const heicHead = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63, 0x00, 0x00, 0x00, 0x00,
+    ])
+    const file = new File([heicHead], 'IMG_0001.HEIC', { type: '' })
+    expect(await sniffCustomerDisplayMediaContentType(file)).toBe('image/heic')
+    expect(fileForCustomerDisplayMediaUpload(file, 'image', 'image/heic')).toBeNull()
+  })
+
   it('rejects sniff that conflicts with preferredKind', () => {
     const file = new File([new Uint8Array([1])], '5842D275-D49D-4C17-9C45-88848E6EE48A', { type: '' })
     expect(fileForCustomerDisplayMediaUpload(file, 'image', 'video/mp4')).toBeNull()
     expect(fileForCustomerDisplayMediaUpload(file, 'video', 'image/jpeg')).toBeNull()
     const videoFile = new File([new Uint8Array([1])], 'clip.mp4', { type: 'video/mp4' })
     expect(fileForCustomerDisplayMediaUpload(videoFile, 'image')).toBeNull()
+  })
+
+  it('prepare returns English HEIC error when reencode is unavailable', async () => {
+    const heicHead = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63, 0x00, 0x00, 0x00, 0x00,
+    ])
+    const file = new File([heicHead], 'IMG_0001.HEIC', { type: 'image/heic' })
+    const result = await prepareCustomerDisplayMediaUpload(file, 'image')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.code).toBe('heic_unsupported')
+      expect(result.message).toBe(CUSTOMER_DISPLAY_MEDIA_ERR.HEIC_UNSUPPORTED)
+    }
   })
 
   it('detects unstable facebook cdn urls', () => {

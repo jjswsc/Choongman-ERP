@@ -4968,7 +4968,6 @@ export default function PosTerminalPage() {
     const wantPayment = autoPrintReceiptOnPayment
     const wantRemoteDineInAdd =
       (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder) || autoPrintKitchenSlipOnOrder
-    if (!wantPayment && !wantRemoteDineInAdd) return
 
     const onUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
@@ -5128,7 +5127,7 @@ export default function PosTerminalPage() {
           })
       }
 
-      if (!wantRemoteDineInAdd || packagingOnlyUpdate) return
+      if (packagingOnlyUpdate) return
       if (inferredOrderType !== 'dine_in') return
       /**
        * 결제(updatePosOrder + status 반영) UPDATE는 주방 추가주문 출력 대상이 아님.
@@ -5225,6 +5224,11 @@ export default function PosTerminalPage() {
       }
 
       refetchCurrentStore()
+
+      if (!wantRemoteDineInAdd) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        return
+      }
 
       const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
       if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {

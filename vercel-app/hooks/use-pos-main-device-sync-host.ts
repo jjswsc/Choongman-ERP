@@ -978,12 +978,11 @@ export function usePosMainDeviceSyncHost(): void {
     skipLocalKitchenAutoprintForOrder,
   ])
 
-  // Realtime UPDATE — payment receipt + dine-in remote add (simplified mirror)
+  // Realtime UPDATE — 홀 UI 갱신은 항상, 자동인쇄만 설정에 따름 (인쇄 OFF여도 태블릿/QR 메뉴 즉시 반영)
   useEffect(() => {
     if (!isMainPosDevice || !storeCode || !autoprintCtx) return
     const wantPayment = autoPrint.receiptOnPayment
     const wantRemoteDineInAdd = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder || autoPrint.kitchenOnOrder
-    if (!wantPayment && !wantRemoteDineInAdd) return
 
     const onUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
@@ -1129,7 +1128,7 @@ export function usePosMainDeviceSyncHost(): void {
           .catch((e) => console.error('tax invoice payment receipt reprint:', e))
       }
 
-      if (!wantRemoteDineInAdd || packagingOnlyUpdate || inferredOrderType !== 'dine_in') return
+      if (packagingOnlyUpdate || inferredOrderType !== 'dine_in') return
       if (posOrderRowPaymentSum(row) > 0) return
       if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
       const st = String(row.status ?? '').trim().toLowerCase()
@@ -1163,6 +1162,7 @@ export function usePosMainDeviceSyncHost(): void {
           const sid = buildDineInQtySnapshotForStore(parsedLocal.items)
           if (sid.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, sid)
         }
+        refetchStores({ scope: 'current' })
         return
       }
 
@@ -1195,6 +1195,10 @@ export function usePosMainDeviceSyncHost(): void {
       refetchStores({
         scope: skipLocalKitchenAutoprintForOrder(orderId, row) ? 'current' : 'all',
       })
+      if (!wantRemoteDineInAdd) {
+        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        return
+      }
       const shouldAutoPrintReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
       if (!shouldAutoPrintReceipt && !autoPrint.kitchenOnOrder) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)

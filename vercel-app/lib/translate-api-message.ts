@@ -192,13 +192,26 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "이미지 또는 동영상 파일만 업로드할 수 있습니다.": "repair_upload_media_type",
   "JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.":
     "posCustomerIdleMediaTypeInvalid",
+  "Only JPG, PNG, GIF, WebP images or MP4, WebM videos can be uploaded.":
+    "posCustomerIdleMediaTypeInvalid",
+  "HEIC/HEIF photos are not supported. Please export or Save As JPG/PNG, then upload again.":
+    "posCustomerIdleMediaHeicUnsupported",
   "이미지는 5MB 이하여야 합니다.": "repair_upload_image_max_5mb",
   "이미지는 5MB 이하만 업로드할 수 있습니다.": "repair_upload_image_max_5mb",
   "이미지는 4MB 이하만 업로드할 수 있습니다.": "posCustomerIdleMediaImageTooLarge",
+  "Images must be 4MB or smaller.": "posCustomerIdleMediaImageTooLarge",
   "동영상은 50MB 이하여야 합니다.": "repair_upload_video_max_50mb",
   "동영상은 50MB 이하만 업로드할 수 있습니다.": "posCustomerIdleMediaVideoTooLarge",
+  "Videos must be 50MB or smaller.": "posCustomerIdleMediaVideoTooLarge",
   "동영상은 직접 업로드(서명 URL)만 지원합니다. 다시 시도해 주세요.": "posCustomerIdleMediaUploadFail",
+  "Videos must use direct upload. Please try again.": "posCustomerIdleMediaUploadFail",
   "JPG, PNG, GIF, WebP 이미지만 서버 업로드할 수 있습니다.": "posCustomerIdleMediaTypeInvalid",
+  'Storage bucket "pos-menu-images" is missing. Create it in Supabase Dashboard > Storage.':
+    "posCustomerIdleMediaUploadFail",
+  "Store code is required.": "posCustomerIdleMediaUploadFail",
+  "A file is required.": "posCustomerIdleMediaUploadFail",
+  "Media upload failed.": "posCustomerIdleMediaUploadFail",
+
   "업로드 준비 실패": "msg_upload_fail",
   "업로드 준비에 실패했습니다.": "msg_upload_fail",
   "첨부 파일이 너무 커서 저장할 수 없습니다. PDF·이미지를 다시 업로드해 주세요.":

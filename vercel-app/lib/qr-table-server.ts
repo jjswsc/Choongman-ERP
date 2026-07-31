@@ -928,7 +928,9 @@ async function createOrEnsurePosOrderForSession(
     deliveryFee: 0,
     packagingFee: 0,
   })
-  const orderNo = await allocateNextPosOrderNo(session.storeCode, { tenantId: '' })
+  /** Omni Realtime은 tenant_id 필터 — 비우면 메인 POS가 폴링(5~15s)까지 메뉴를 못 봄 */
+  const tenantId = (await resolveTenantIdForStoreCode(session.storeCode)) || ''
+  const orderNo = await allocateNextPosOrderNo(session.storeCode, { tenantId })
   const now = getBangkokDateTimeString()
   const memo = tier
     ? `[QR테이블] ${buffetTierDisplayName(tier)} / ${session.guestCount}pax`
@@ -962,7 +964,7 @@ async function createOrEnsurePosOrderForSession(
       created_at: now,
       updated_at: now,
     },
-    { tenantId: '' }
+    { tenantId }
   )
 
   const inserted = (await supabaseInsertWithPgrst204Fallback(

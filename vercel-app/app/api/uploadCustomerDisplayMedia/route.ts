@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  fileForCustomerDisplayMediaUpload,
+  CUSTOMER_DISPLAY_MEDIA_ERR,
   isCustomerDisplayImageContentType,
   isCustomerDisplayVideoContentType,
+  prepareCustomerDisplayMediaUpload,
 } from '@/lib/customer-display-media-upload'
 import { supabaseStoragePublicUrl, supabaseStorageUpload } from '@/lib/supabase-server'
 
@@ -25,27 +26,35 @@ export async function POST(request: NextRequest) {
       preferredRaw === 'video' ? 'video' : preferredRaw === 'image' ? 'image' : undefined
     const raw = form.get('file')
     if (!storeCode) {
-      return NextResponse.json({ success: false, message: 'storeCode가 필요합니다.' }, { status: 400, headers })
+      return NextResponse.json(
+        { success: false, message: CUSTOMER_DISPLAY_MEDIA_ERR.STORE_REQUIRED, code: 'store_required' },
+        { status: 400, headers }
+      )
     }
     if (!(raw instanceof File) || raw.size <= 0) {
-      return NextResponse.json({ success: false, message: '파일 크기가 필요합니다.' }, { status: 400, headers })
+      return NextResponse.json(
+        { success: false, message: CUSTOMER_DISPLAY_MEDIA_ERR.FILE_REQUIRED, code: 'file_required' },
+        { status: 400, headers }
+      )
     }
     if (raw.size > MAX_SERVER_UPLOAD_BYTES) {
       return NextResponse.json(
         {
           success: false,
-          message: '이미지는 4MB 이하만 업로드할 수 있습니다.',
+          message: CUSTOMER_DISPLAY_MEDIA_ERR.IMAGE_TOO_LARGE,
+          code: 'image_too_large',
         },
         { status: 400, headers }
       )
     }
 
-    const prepared = fileForCustomerDisplayMediaUpload(raw, preferredKind)
-    if (!prepared) {
+    const prepared = await prepareCustomerDisplayMediaUpload(raw, preferredKind)
+    if (!prepared.ok) {
       return NextResponse.json(
         {
           success: false,
-          message: 'JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.',
+          message: prepared.message,
+          code: prepared.code,
         },
         { status: 400, headers }
       )
@@ -55,10 +64,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            isCustomerDisplayVideoContentType(contentType)
-              ? '동영상은 직접 업로드(서명 URL)만 지원합니다. 다시 시도해 주세요.'
-              : 'JPG, PNG, GIF, WebP 이미지만 서버 업로드할 수 있습니다.',
+          message: isCustomerDisplayVideoContentType(contentType)
+            ? CUSTOMER_DISPLAY_MEDIA_ERR.VIDEO_SERVER_UNSUPPORTED
+            : CUSTOMER_DISPLAY_MEDIA_ERR.TYPE_INVALID,
+          code: 'type_invalid',
         },
         { status: 400, headers }
       )
@@ -91,12 +100,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            'Supabase Storage 버킷 "pos-menu-images"를 먼저 생성하세요. (Supabase 대시보드 > Storage > New bucket)',
+          message: CUSTOMER_DISPLAY_MEDIA_ERR.BUCKET_MISSING,
+          code: 'bucket_missing',
         },
         { status: 400, headers }
       )
     }
-    return NextResponse.json({ success: false, message: '업로드 실패: ' + msg }, { status: 500, headers })
+    return NextResponse.json(
+      { success: false, message: `${CUSTOMER_DISPLAY_MEDIA_ERR.UPLOAD_FAILED} ${msg}`, code: 'upload_failed' },
+      { status: 500, headers }
+    )
   }
 }

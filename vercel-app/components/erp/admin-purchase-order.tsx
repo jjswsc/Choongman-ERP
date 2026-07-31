@@ -47,6 +47,7 @@ import {
   poLineIsVatExempt,
   type PoMoneyOverride,
 } from "@/lib/purchase-order-cart"
+import { vatExclusiveUnitFromInclusiveUnit } from "@/lib/invoice-vat-total"
 import { resolvePoIssuerStoreFromAuth } from "@/lib/po-issuer-scope"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
@@ -209,7 +210,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [manualLineName, setManualLineName] = React.useState("")
   const [manualLinePrice, setManualLinePrice] = React.useState("")
   const [manualLineQty, setManualLineQty] = React.useState("1")
-  const [manualLinePriceMode, setManualLinePriceMode] = React.useState<"vat_excluded" | "vat_included">("vat_excluded")
+  /** FlowAccount식: 기본은 VAT 포함 단가 입력 → 줄 합계÷1.07로 공급가 환산 */
+  const [manualLinePriceMode, setManualLinePriceMode] = React.useState<"vat_excluded" | "vat_included">("vat_included")
   /** 회계 PO 수동 줄 기본 VAT — Pepsi 프로모션 지원 등은 면세로 추가 */
   const [manualLineTaxType, setManualLineTaxType] = React.useState<"taxable" | "exempt">("taxable")
   /** 회계 PO: 선택 매장 (미선택 가능) */
@@ -319,11 +321,12 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     const name = manualLineName.trim()
     if (!name) return
     const inputPrice = Number(String(manualLinePrice).replace(/,/g, "")) || 0
+    const qty = Math.max(0.0001, Number(String(manualLineQty).replace(/,/g, "")) || 1)
+    // FlowAccount: 단가÷1.07이 아니라 (단가×수량)÷1.07 → 공급가 단가 (16,940 vs 16,940.03)
     const price =
       manualLinePriceMode === "vat_included" && !poLineIsVatExempt(manualLineTaxType)
-        ? Math.round((inputPrice / 1.07) * 100) / 100
+        ? vatExclusiveUnitFromInclusiveUnit(inputPrice, qty)
         : inputPrice
-    const qty = Math.max(0.0001, Number(String(manualLineQty).replace(/,/g, "")) || 1)
     const code = `SVC-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     setBillingIntentMode(null)
     setCart((prev) => [...prev, { code, name, price, qty, taxType: manualLineTaxType }])
