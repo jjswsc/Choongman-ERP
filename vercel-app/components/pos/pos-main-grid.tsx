@@ -48,9 +48,10 @@ export function POSMainGrid({
   return (
     <div
       className={cn(
-        "grid min-h-0 min-w-0 flex-1 grid-cols-1 items-stretch gap-2 px-2 pb-2 pt-2 min-[768px]:grid-cols-2 max-[920px]:grid-cols-1 min-[768px]:gap-3 min-[768px]:px-3 min-[768px]:pb-3 min-[768px]:pt-3",
+        /* items-start: 섹션이 뷰포트에 맞춰 줄어들며 overflow-hidden으로 잘리지 않게 함 → 바깥 스크롤 */
+        "grid min-h-0 min-w-0 flex-1 grid-cols-1 items-start gap-2 px-2 pb-2 pt-2",
+        "min-[921px]:grid-cols-2 min-[921px]:items-stretch min-[768px]:gap-3 min-[768px]:px-3 min-[768px]:pb-3 min-[768px]:pt-3",
         "min-[1025px]:gap-4 min-[1025px]:px-4 min-[1025px]:pb-4 min-[1025px]:pt-4",
-        /* overflow-x-hidden 은 떠 있는 라벨·세로 클리핑 이슈 유발 → 세로 스크롤만 */
         "overflow-y-auto overflow-x-visible overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y"
       )}
     >
@@ -58,22 +59,32 @@ export function POSMainGrid({
         <section
           data-tour="pos-tour-main-order-section"
           className={cn(
-            "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl",
+            "flex w-full min-w-0 flex-col rounded-2xl",
+            /* 좁은/세로: 콘텐츠 높이 유지. 넓은 가로: 열 높이에 맞춤 */
+            "min-h-0 min-[921px]:h-full min-[921px]:overflow-hidden",
             "border-2 border-emerald-200/90 bg-white shadow-lg shadow-emerald-500/[0.07]",
             "ring-1 ring-emerald-100/60"
           )}
         >
-          <header className="shrink-0 border-b border-emerald-100/90 bg-gradient-to-r from-emerald-50/95 via-white to-teal-50/40 px-3 py-3 min-[768px]:px-4 min-[768px]:py-3.5">
+          <header className="shrink-0 border-b border-emerald-100/90 bg-gradient-to-r from-emerald-50/95 via-white to-teal-50/40 px-3 py-2.5 min-[768px]:px-4 min-[768px]:py-3">
             <h2 className="text-base font-bold tracking-wide text-emerald-800 min-[768px]:text-lg min-[1025px]:text-xl">
               {t("posOrder")}
             </h2>
           </header>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2 min-[768px]:p-3 min-[1025px]:p-4">
+            {/*
+              2행 고정: 위=Dine-in, 아래=Takeout|Delivery.
+              예전 3행+row-span-2는 짧은 뷰포트에서 하단 행이 min-h(88px)보다 작아져 overflow-hidden에 잘림.
+            */}
             <div
               className={cn(
-                "grid min-h-[min(48vh,20rem)] min-[1024px]:min-h-[min(52vh,22rem)] w-full min-w-0 flex-1 auto-rows-[minmax(0,1fr)]",
-                "grid-cols-2 grid-rows-3 gap-2 min-[1025px]:gap-3",
-                "[grid-template-columns:minmax(0,1fr)_minmax(0,1fr)]"
+                "grid w-full min-w-0 flex-1 grid-cols-2 gap-2 min-[1025px]:gap-3",
+                "[grid-template-columns:minmax(0,1fr)_minmax(0,1fr)]",
+                /* 하단 행 ≥ POSTile min-h(88px≈5.5rem) — 짧으면 버튼이 잘림 */
+                "grid-rows-[minmax(7.5rem,1fr)_minmax(5.5rem,auto)]",
+                "min-[1025px]:grid-rows-[minmax(10rem,1fr)_minmax(6rem,auto)]",
+                "max-[920px]:min-h-[18rem]",
+                "min-[921px]:min-h-0"
               )}
             >
               {orderTiles.map((tile) => {
@@ -84,7 +95,7 @@ export function POSMainGrid({
                     data-tour={tourDataTourForTile(tile.type)}
                     className={cn(
                       "min-h-0 min-w-0",
-                      isLarge ? "col-span-2 row-span-2" : "col-span-1 row-span-1"
+                      isLarge ? "col-span-2 row-start-1" : "row-start-2"
                     )}
                   >
                     <POSTile
@@ -110,12 +121,13 @@ export function POSMainGrid({
         <section
           data-tour="pos-tour-main-manage-section"
           className={cn(
-            "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl",
+            "flex w-full min-w-0 flex-col rounded-2xl",
+            "min-h-0 min-[921px]:h-full min-[921px]:overflow-hidden",
             "border-2 border-slate-300/85 bg-gradient-to-b from-slate-50/95 to-slate-100/80",
             "shadow-lg shadow-slate-400/[0.08] ring-1 ring-slate-200/70"
           )}
         >
-          <header className="shrink-0 border-b border-slate-200/90 bg-gradient-to-r from-slate-100/90 via-white to-slate-50/50 px-3 py-3 min-[768px]:px-4 min-[768px]:py-3.5">
+          <header className="shrink-0 border-b border-slate-200/90 bg-gradient-to-r from-slate-100/90 via-white to-slate-50/50 px-3 py-2.5 min-[768px]:px-4 min-[768px]:py-3">
             <h2 className="text-base font-bold tracking-wide text-slate-700 min-[768px]:text-lg min-[1025px]:text-xl">
               {t("posManage")}
             </h2>
@@ -123,7 +135,7 @@ export function POSMainGrid({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y p-2 min-[768px]:p-3 min-[1025px]:p-4">
             <div
               className={cn(
-                "grid w-full min-w-0 flex-1 auto-rows-[minmax(0,1fr)] content-start",
+                "grid w-full min-w-0 content-start",
                 "grid-cols-1 gap-2 min-[420px]:grid-cols-2 min-[1025px]:gap-3",
                 "min-[420px]:[grid-template-columns:minmax(0,1fr)_minmax(0,1fr)]"
               )}
@@ -132,7 +144,7 @@ export function POSMainGrid({
                 <div
                   key={tile.id}
                   data-tour={tourDataTourForTile(tile.type)}
-                  className="min-h-[76px] min-w-0 min-[420px]:min-h-[88px] min-[420px]:h-full min-[1025px]:min-h-[96px]"
+                  className="min-h-[72px] min-w-0 min-[420px]:min-h-[80px] min-[1025px]:min-h-[96px]"
                 >
                   <POSTile
                     tile={tile}
