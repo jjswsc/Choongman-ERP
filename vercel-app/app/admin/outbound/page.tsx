@@ -246,6 +246,8 @@ export default function OutboundPage() {
   const [summaryVendorFilter, setSummaryVendorFilter] = React.useState("")
   const [summaryCategoryFilter, setSummaryCategoryFilter] = React.useState("")
   const [summaryMenuSearch, setSummaryMenuSearch] = React.useState("")
+  /** 품목 드롭다운에서 고른 코드 (직접 입력 시 비움) */
+  const [summaryItemPick, setSummaryItemPick] = React.useState("")
   const [summaryStoreFilter, setSummaryStoreFilter] = React.useState("")
   const [summaryVendorSortBy, setSummaryVendorSortBy] = React.useState<"qty" | "amount">("amount")
   const [summaryVendorSortDir, setSummaryVendorSortDir] = React.useState<"asc" | "desc">("desc")
@@ -1369,6 +1371,24 @@ export default function OutboundPage() {
   const summaryVendorOptions = React.useMemo(() => {
     return [...new Set(items.map((item) => String(item.vendor || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   }, [items])
+
+  /** 카테고리(·매입처)에 해당하는 품목 선택 목록 */
+  const summaryItemPickOptions = React.useMemo(() => {
+    let list = items.filter((item) => String(item.code || "").trim())
+    if (summaryCategoryFilter) {
+      list = list.filter((item) => String(item.category || "").trim() === summaryCategoryFilter)
+    }
+    if (summaryVendorFilter) {
+      list = list.filter((item) => String(item.vendor || "").trim() === summaryVendorFilter)
+    }
+    return [...list]
+      .sort((a, b) => compareItemCodes(String(a.code || ""), String(b.code || "")) || String(a.name || "").localeCompare(String(b.name || "")))
+      .map((item) => ({
+        code: String(item.code || "").trim(),
+        name: String(item.name || "").trim(),
+        spec: String(item.spec || "").trim(),
+      }))
+  }, [items, summaryCategoryFilter, summaryVendorFilter])
 
   const itemCategoryMap = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -2574,12 +2594,18 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={summaryCategoryFilter || "__all__"} onValueChange={(v) => setSummaryCategoryFilter(v === "__all__" ? "" : v)}>
+                  <Select
+                    value={summaryCategoryFilter || "__all__"}
+                    onValueChange={(v) => {
+                      setSummaryCategoryFilter(v === "__all__" ? "" : v)
+                      setSummaryItemPick("")
+                    }}
+                  >
                     <SelectTrigger className="w-[220px] h-9">
                       <SelectValue placeholder={t("itemsCategory")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
                       {summaryCategoryOptions.map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
@@ -2587,9 +2613,37 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       ))}
                     </SelectContent>
                   </Select>
+                  <Select
+                    value={summaryItemPick || "__all__"}
+                    onValueChange={(v) => {
+                      if (v === "__all__") {
+                        setSummaryItemPick("")
+                        setSummaryMenuSearch("")
+                        return
+                      }
+                      setSummaryItemPick(v)
+                      setSummaryMenuSearch(v)
+                    }}
+                  >
+                    <SelectTrigger className="w-[min(100%,280px)] h-9">
+                      <SelectValue placeholder={t("outSummaryItemPick")} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="__all__">{t("outSummaryItemAll")}</SelectItem>
+                      {summaryItemPickOptions.map((it) => (
+                        <SelectItem key={it.code} value={it.code}>
+                          [{it.code}] {it.name || "-"}
+                          {it.spec ? ` (${it.spec})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     value={summaryMenuSearch}
-                    onChange={(e) => setSummaryMenuSearch(e.target.value)}
+                    onChange={(e) => {
+                      setSummaryMenuSearch(e.target.value)
+                      setSummaryItemPick("")
+                    }}
                     placeholder={t("outItemSearchPh")}
                     className="w-[220px] h-9"
                   />
@@ -2607,7 +2661,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     </SelectContent>
                   </Select>
                 </div>
-                <p className="text-xs text-muted-foreground">{t("outSummaryHint")}</p>
               </div>
 
               <Dialog open={summaryMonthDialogOpen} onOpenChange={setSummaryMonthDialogOpen}>
