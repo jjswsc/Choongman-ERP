@@ -247,6 +247,8 @@ export default function OutboundPage() {
   const [summaryVendorSortDir, setSummaryVendorSortDir] = React.useState<"asc" | "desc">("desc")
   const [summaryMenuSortBy, setSummaryMenuSortBy] = React.useState<"qty" | "amount">("amount")
   const [summaryMenuSortDir, setSummaryMenuSortDir] = React.useState<"asc" | "desc">("desc")
+  const [summaryStoreSortBy, setSummaryStoreSortBy] = React.useState<"qty" | "amount">("qty")
+  const [summaryStoreSortDir, setSummaryStoreSortDir] = React.useState<"asc" | "desc">("desc")
   const [historySortKey, setHistorySortKey] = React.useState<ShipmentHistorySortKey>("orderDate")
   const [historySortDir, setHistorySortDir] = React.useState<"asc" | "desc">("desc")
   const [summaryMonthDialogOpen, setSummaryMonthDialogOpen] = React.useState(false)
@@ -1462,6 +1464,34 @@ export default function OutboundPage() {
     return rows
   }, [summarySourceRows, summaryMenuSortBy, summaryMenuSortDir])
 
+  /** 출고 목적지(매장)별 수량·금액 — 품목 검색 후 세로 목록으로 파악용 */
+  const summaryByStore = React.useMemo(() => {
+    const map = new Map<string, { store: string; qty: number; amount: number }>()
+    for (const row of summarySourceRows) {
+      const store = String(row.target || "").trim() || "-"
+      const current = map.get(store)
+      if (current) {
+        current.qty += Number(row.qty || 0)
+        current.amount += Number(row.amount || 0)
+      } else {
+        map.set(store, {
+          store,
+          qty: Number(row.qty || 0),
+          amount: Number(row.amount || 0),
+        })
+      }
+    }
+    const rows = Array.from(map.values())
+    rows.sort((a, b) => {
+      const primary = summaryStoreSortBy === "qty" ? a.qty - b.qty : a.amount - b.amount
+      if (primary !== 0) return summaryStoreSortDir === "asc" ? primary : -primary
+      const secondary = summaryStoreSortBy === "qty" ? a.amount - b.amount : a.qty - b.qty
+      if (secondary !== 0) return summaryStoreSortDir === "asc" ? secondary : -secondary
+      return a.store.localeCompare(b.store)
+    })
+    return rows
+  }, [summarySourceRows, summaryStoreSortBy, summaryStoreSortDir])
+
   const summaryTargetTotals = React.useMemo(() => {
     const base = summaryByTarget.reduce(
       (acc, row) => ({
@@ -1494,6 +1524,22 @@ export default function OutboundPage() {
     }
   }, [summaryByMenu])
 
+  const summaryStoreTotals = React.useMemo(() => {
+    const base = summaryByStore.reduce(
+      (acc, row) => ({
+        qty: acc.qty + row.qty,
+        amount: acc.amount + row.amount,
+      }),
+      { qty: 0, amount: 0 }
+    )
+    const tax = thaiInvoiceTotalsFromRawSubtotal(base.amount)
+    return {
+      ...base,
+      vat: tax.vatRounded,
+      total: tax.grandTotal,
+    }
+  }, [summaryByStore])
+
   const toggleVendorSort = (field: "qty" | "amount") => {
     if (summaryVendorSortBy === field) {
       setSummaryVendorSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
@@ -1510,6 +1556,15 @@ export default function OutboundPage() {
     }
     setSummaryMenuSortBy(field)
     setSummaryMenuSortDir("desc")
+  }
+
+  const toggleStoreSort = (field: "qty" | "amount") => {
+    if (summaryStoreSortBy === field) {
+      setSummaryStoreSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+      return
+    }
+    setSummaryStoreSortBy(field)
+    setSummaryStoreSortDir("desc")
   }
 
   const sortMark = (active: boolean, dir: "asc" | "desc") => {
@@ -1665,6 +1720,26 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     const summaryRow = [t("inv_total"), String(summaryMenuTotals.qty), String(summaryMenuTotals.amount), String(summaryMenuTotals.vat), String(summaryMenuTotals.total)]
     downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_menu")
   }, [summaryByMenu, summaryMenuTotals, downloadSummaryExcel, t])
+
+  const handleSummaryStoreExcelDownload = React.useCallback(async () => {
+    if (summaryByStore.length === 0) {
+      await appAlert(t("outNoData"))
+      return
+    }
+    const headers = [t("outSummaryStoreCol"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total")]
+    const rows = summaryByStore.map((row) => {
+      const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
+      return [
+        row.store,
+        String(row.qty),
+        String(row.amount),
+        String(vat.vatRounded),
+        String(vat.grandTotal),
+      ]
+    })
+    const summaryRow = [t("inv_total"), String(summaryStoreTotals.qty), String(summaryStoreTotals.amount), String(summaryStoreTotals.vat), String(summaryStoreTotals.total)]
+    downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_store")
+  }, [summaryByStore, summaryStoreTotals, downloadSummaryExcel, t])
 
   const handleExcelDownload = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => displayGroupedHistory[i]).filter(Boolean)
@@ -2520,6 +2595,82 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   </div>
                 </DialogContent>
               </Dialog>
+
+              <div className="rounded-xl border bg-card p-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold">{t("outSummaryByStore")}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("outSummaryByStoreHint")}</p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void handleSummaryStoreExcelDownload()}>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    {t("outExcelDownload")}
+                  </Button>
+                </div>
+                <div className={ADMIN_TABLE_SCROLL_PANEL_CN}>
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                      <tr className="border-b">
+                        <th className="py-2 px-2 text-left">{t("outSummaryStoreCol")}</th>
+                        <th className="py-2 px-2 text-right">
+                          <button
+                            type="button"
+                            className="font-semibold hover:text-primary"
+                            onClick={() => toggleStoreSort("qty")}
+                          >
+                            {t("outColQty")}
+                            {sortMark(summaryStoreSortBy === "qty", summaryStoreSortDir)}
+                          </button>
+                        </th>
+                        <th className="py-2 px-2 text-right">
+                          <button
+                            type="button"
+                            className="font-semibold hover:text-primary"
+                            onClick={() => toggleStoreSort("amount")}
+                          >
+                            {t("inColAmount")}
+                            {sortMark(summaryStoreSortBy === "amount", summaryStoreSortDir)}
+                          </button>
+                        </th>
+                        <th className="py-2 px-2 text-right">{t("inv_vat7")}</th>
+                        <th className="py-2 px-2 text-right">{t("inv_total")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summaryByStore.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                            {t("outNoData")}
+                          </td>
+                        </tr>
+                      ) : (
+                        summaryByStore.map((row) => (
+                          <tr key={row.store} className="border-b">
+                            <td className="py-2 px-2 font-medium">{row.store}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{row.qty.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums">
+                              {thaiInvoiceTotalsFromRawSubtotal(row.amount).vatRounded.toLocaleString()}
+                            </td>
+                            <td className="py-2 px-2 text-right tabular-nums">
+                              {thaiInvoiceTotalsFromRawSubtotal(row.amount).grandTotal.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      {summaryByStore.length > 0 && (
+                        <tr className="sticky bottom-0 bg-muted/90 border-t-2">
+                          <td className="py-2 px-2 font-semibold">{t("inv_total")}</td>
+                          <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.qty.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.amount.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.vat.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.total.toLocaleString()}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div className="rounded-xl border bg-card p-5">
