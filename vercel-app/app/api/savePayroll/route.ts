@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
+import { syncOfficePayrollExpenseAccruals } from '@/lib/payroll-office-expense-sync'
 import { syncPayrollSsoExpenseAccruals } from '@/lib/payroll-sso-expense-sync'
 import { syncTaxWithholdingLedgersFromPayroll } from '@/lib/tax-ledger-auto-sync'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
@@ -412,6 +413,7 @@ export async function POST(request: NextRequest) {
 
     let createdAccrualCount = 0
     let updatedAccrualCount = 0
+    /** 오피스(본사)는 직원별 지출 행을 만들지 않고 아래에서 매장 합산 1건만 동기화 */
     for (const r of list) {
       const netPay = Math.max(0, Number(r.netPay) || 0)
       const store = String(r.store || '').trim()
@@ -422,6 +424,7 @@ export async function POST(request: NextRequest) {
       /** 직원코드 문자열이 바뀌면 payee_code가 달라져 급여·미지급 행이 중복될 수 있음 → employee_id가 있으면 항상 id{n} 고정 */
       const employeeToken = employeeId > 0 ? `id${employeeId}` : employeeCode
       if (!store || !name || netPay <= 0) continue
+      if (isOfficeStore(store)) continue
 
       const payeeCode = buildPayrollPayeeCode(monthStr, store, name, employeeToken)
       const employeeVendorCode = buildEmployeeVendorCode(name, employeeId, employeeCode)
@@ -515,6 +518,30 @@ export async function POST(request: NextRequest) {
       createdAccrualCount++
     }
 
+    let officeExpenseSync = {
+      created: 0,
+      updated: 0,
+      skippedPaid: 0,
+      deleted: 0,
+      stores: [] as { store: string; totalBaht: number; employeeCount: number }[],
+    }
+    try {
+      officeExpenseSync = await syncOfficePayrollExpenseAccruals({
+        month: monthStr,
+        postedBy: auth.name || undefined,
+        expenseSubject,
+        payrollRows: list.map((r) => ({
+          store: String(r.store || '').trim(),
+          netPay: Number(r.netPay) || 0,
+          name: String(r.name || '').trim(),
+        })),
+      })
+      createdAccrualCount += officeExpenseSync.created
+      updatedAccrualCount += officeExpenseSync.updated
+    } catch (officeSyncErr) {
+      console.error('savePayroll office payroll expense sync:', officeSyncErr)
+    }
+
     let ssoExpenseSync = { created: 0, updated: 0, skippedPaid: 0, deleted: 0, stores: [] as { store: string; totalBaht: number; employeeCount: number }[] }
     try {
       ssoExpenseSync = await syncPayrollSsoExpenseAccruals({
@@ -544,6 +571,7 @@ export async function POST(request: NextRequest) {
         payrollExpenseSync: {
           created: createdAccrualCount,
           updated: updatedAccrualCount,
+          office: officeExpenseSync,
         },
         ssoExpenseSync,
         whtLedgerSync,

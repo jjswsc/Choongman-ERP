@@ -1735,7 +1735,7 @@ export const i18n = {
     helpSum_admin_payroll:
       '급여 계산·DB 저장, 명세서 조회·공지, 급여 변경 이력, 공휴일·규칙, 도움말을 한 화면에서 다룹니다.',
     helpHow_admin_payroll:
-      '① [급여 계산]: 귀속월 선택 → 계산 실행 → 확인 후 DB 저장.\n② [명세서]: 저장된 급여 조회·직원 공지·엑셀 내보내기.\n③ [도움말] 탭에서 지각·조퇴·OT·공휴일 반영 규칙을 확인합니다.',
+      '① [급여 계산]: 귀속월 선택 → 계산 실행 → 확인 후 DB 저장.\n② [명세서]: 저장된 급여 조회·직원 공지·엑셀 내보내기.\n③ [도움말] 탭에서 지각·조퇴·OT·공휴일 반영 규칙을 확인합니다.\n④ 오피스(본사) 급여를 확정 저장하면 지출관리에는 직원별이 아니라 매장·월 합산 1건만 올라갑니다(개인 명세는 급여 화면·오피스 급여 담당만).',
     adminHrCalendar: '인사 캘린더',
     hrCalHint:
       '재직 직원의 생일·입사 N년(1년, 2년, 3년…)·당해 입사일, 퇴사일을 월별로 표시합니다. 이름은 닉네임 기준이며, 칸에 마우스를 올리면 전체 문구를 볼 수 있습니다.',
@@ -4295,7 +4295,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 문서번호는 EXPyyyymm000x로 자동 발급되며, 거래처는 กรมสรรพากร VAT 검색으로 찾을 수 있습니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급됩니다.\n② 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n③ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n④ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑤ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다.\n⑥ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑦ 증빙 첨부 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급됩니다.\n② 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n③ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n④ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑤ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다.\n⑥ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑦ 증빙 첨부 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑧ 오피스(본사) 급여는 직원별 금액이 아니라 「Payroll — 매장」합산 1건으로만 표시됩니다. 개인별 명세는 급여 관리에서 확인하세요.',
     helpSum_admin_depreciation:
       '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
     helpHow_admin_depreciation:
@@ -9398,7 +9398,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_payroll:
       'Calculate and save payroll, view statements, salary change history, holidays, rules, and help in one place.',
     helpHow_admin_payroll:
-      '① Payroll calc: pick month → Calculate → review → Save to DB.\n② Records: view saved payroll, notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.',
+      '① Payroll calc: pick month → Calculate → review → Save to DB.\n② Records: view saved payroll, notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).',
     adminHrCalendar: 'HR calendar',
     hrCalHint:
       'Shows birthdays, hire milestones (Year 1, 2, 3…), hire dates in the join year, and resignations by month. Labels use nickname; hover a cell for the full text.',
@@ -11961,7 +11961,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Document numbers use EXPyyyymm000x; vendors can be looked up via Revenue Department VAT search.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create.\n② For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n③ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n④ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑤ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management.\n⑥ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑦ When attaching evidence, choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create.\n② For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n③ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n④ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑤ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management.\n⑥ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑦ When attaching evidence, choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.\n⑧ Office (HQ) payroll appears as one “Payroll — store” aggregate line, not per-employee amounts. Use Payroll for individual detail.',
     helpSum_admin_depreciation:
       'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
     helpHow_admin_depreciation:
