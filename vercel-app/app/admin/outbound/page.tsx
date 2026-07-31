@@ -1489,18 +1489,28 @@ export default function OutboundPage() {
     return rows
   }, [summarySourceRows, summaryMenuSortBy, summaryMenuSortDir])
 
-  /** 출고 목적지(매장)별 수량·금액 — 품목 검색 후 세로 목록으로 파악용 */
+  /** 출고 목적지(매장)×품목별 수량·금액 — 여러 품목이 섞인 합계로 오해되지 않게 */
   const summaryByStore = React.useMemo(() => {
-    const map = new Map<string, { store: string; qty: number; amount: number }>()
+    const map = new Map<
+      string,
+      { store: string; code: string; name: string; spec: string; qty: number; amount: number }
+    >()
     for (const row of summarySourceRows) {
       const store = String(row.target || "").trim() || "-"
-      const current = map.get(store)
+      const code = String(row.code || "").trim()
+      const name = String(row.name || "").trim()
+      const spec = String(row.spec || "").trim()
+      const key = `${store}__${code}__${name}__${spec}`
+      const current = map.get(key)
       if (current) {
         current.qty += Number(row.qty || 0)
         current.amount += Number(row.amount || 0)
       } else {
-        map.set(store, {
+        map.set(key, {
           store,
+          code,
+          name,
+          spec,
           qty: Number(row.qty || 0),
           amount: Number(row.amount || 0),
         })
@@ -1512,7 +1522,7 @@ export default function OutboundPage() {
       if (primary !== 0) return summaryStoreSortDir === "asc" ? primary : -primary
       const secondary = summaryStoreSortBy === "qty" ? a.amount - b.amount : a.qty - b.qty
       if (secondary !== 0) return summaryStoreSortDir === "asc" ? secondary : -secondary
-      return a.store.localeCompare(b.store)
+      return a.store.localeCompare(b.store) || a.code.localeCompare(b.code) || a.name.localeCompare(b.name)
     })
     return rows
   }, [summarySourceRows, summaryStoreSortBy, summaryStoreSortDir])
@@ -1751,18 +1761,37 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       await appAlert(t("outNoData"))
       return
     }
-    const headers = [t("outSummaryStoreCol"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total")]
+    const headers = [
+      t("outSummaryStoreCol"),
+      t("outColCode"),
+      t("outSummaryMenuCol"),
+      t("outColQty"),
+      t("inColAmount"),
+      t("inv_vat7"),
+      t("inv_total"),
+    ]
     const rows = summaryByStore.map((row) => {
       const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
+      const itemLabel = `${row.name || "-"}${row.spec ? ` (${row.spec})` : ""}`
       return [
         row.store,
+        row.code || "",
+        itemLabel,
         String(row.qty),
         String(row.amount),
         String(vat.vatRounded),
         String(vat.grandTotal),
       ]
     })
-    const summaryRow = [t("inv_total"), String(summaryStoreTotals.qty), String(summaryStoreTotals.amount), String(summaryStoreTotals.vat), String(summaryStoreTotals.total)]
+    const summaryRow = [
+      t("inv_total"),
+      "",
+      "",
+      String(summaryStoreTotals.qty),
+      String(summaryStoreTotals.amount),
+      String(summaryStoreTotals.vat),
+      String(summaryStoreTotals.total),
+    ]
     downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_store")
   }, [summaryByStore, summaryStoreTotals, downloadSummaryExcel, t])
 
@@ -2637,6 +2666,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                       <tr className="border-b">
                         <th className="py-2 px-2 text-left">{t("outSummaryStoreCol")}</th>
+                        <th className="py-2 px-2 text-left">{t("outSummaryMenuCol")}</th>
                         <th className="py-2 px-2 text-right">
                           <button
                             type="button"
@@ -2664,14 +2694,19 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     <tbody>
                       {summaryByStore.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             {t("outNoData")}
                           </td>
                         </tr>
                       ) : (
                         summaryByStore.map((row) => (
-                          <tr key={row.store} className="border-b">
+                          <tr key={`${row.store}-${row.code}-${row.name}-${row.spec}`} className="border-b">
                             <td className="py-2 px-2 font-medium">{row.store}</td>
+                            <td className="py-2 px-2">
+                              {row.code ? `[${row.code}] ` : ""}
+                              {row.name || "-"}
+                              {row.spec ? ` (${row.spec})` : ""}
+                            </td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{row.qty.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums">
@@ -2685,7 +2720,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       )}
                       {summaryByStore.length > 0 && (
                         <tr className="sticky bottom-0 bg-muted/90 border-t-2">
-                          <td className="py-2 px-2 font-semibold">{t("inv_total")}</td>
+                          <td className="py-2 px-2 font-semibold" colSpan={2}>{t("inv_total")}</td>
                           <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.qty.toLocaleString()}</td>
                           <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.amount.toLocaleString()}</td>
                           <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.vat.toLocaleString()}</td>
@@ -2773,7 +2808,10 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
 
                 <div className="rounded-xl border bg-card p-5">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-bold">{t("outSummaryByMenu")}</h3>
+                    <div>
+                      <h3 className="text-sm font-bold">{t("outSummaryByMenu")}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t("outSummaryByMenuHint")}</p>
+                    </div>
                     <Button type="button" size="sm" variant="outline" onClick={handleSummaryMenuExcelDownload}>
                       <Download className="mr-1.5 h-3.5 w-3.5" />
                       {t("outExcelDownload")}
@@ -2816,23 +2854,40 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                             </td>
                           </tr>
                         ) : (
-                          summaryByMenu.map((row) => (
-                            <tr key={`${row.code}-${row.name}-${row.spec}`} className="border-b">
-                              <td className="py-2 px-2">
-                                {row.code ? `[${row.code}] ` : ""}
-                                {row.name || "-"}
-                                {row.spec ? ` (${row.spec})` : ""}
-                              </td>
-                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
-                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
-                              <td className="py-2 px-2 text-right tabular-nums">
-                                {thaiInvoiceTotalsFromRawSubtotal(row.amount).vatRounded.toLocaleString()}
-                              </td>
-                              <td className="py-2 px-2 text-right tabular-nums">
-                                {thaiInvoiceTotalsFromRawSubtotal(row.amount).grandTotal.toLocaleString()}
-                              </td>
-                            </tr>
-                          ))
+                          summaryByMenu.map((row) => {
+                            const filterKey = row.code || row.name
+                            const isActive =
+                              Boolean(filterKey) &&
+                              summaryMenuSearch.trim().toLowerCase() === filterKey.toLowerCase()
+                            return (
+                              <tr
+                                key={`${row.code}-${row.name}-${row.spec}`}
+                                className={cn(
+                                  "border-b cursor-pointer hover:bg-muted/50",
+                                  isActive && "bg-primary/10"
+                                )}
+                                title={t("outSummaryMenuClickHint")}
+                                onClick={() => {
+                                  if (!filterKey) return
+                                  setSummaryMenuSearch(filterKey)
+                                }}
+                              >
+                                <td className="py-2 px-2">
+                                  {row.code ? `[${row.code}] ` : ""}
+                                  {row.name || "-"}
+                                  {row.spec ? ` (${row.spec})` : ""}
+                                </td>
+                                <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
+                                <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                                <td className="py-2 px-2 text-right tabular-nums">
+                                  {thaiInvoiceTotalsFromRawSubtotal(row.amount).vatRounded.toLocaleString()}
+                                </td>
+                                <td className="py-2 px-2 text-right tabular-nums">
+                                  {thaiInvoiceTotalsFromRawSubtotal(row.amount).grandTotal.toLocaleString()}
+                                </td>
+                              </tr>
+                            )
+                          })
                         )}
                         {summaryByMenu.length > 0 && (
                           <tr className="sticky bottom-0 bg-muted/90 border-t-2">
