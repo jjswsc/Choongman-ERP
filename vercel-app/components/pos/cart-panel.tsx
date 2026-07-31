@@ -1124,6 +1124,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       policy: tierDiscountPolicy,
       hasCollab: Boolean(appliedCollab),
       hasCoupons: appliedCoupons.length > 0,
+      orderType,
     })
   }, [
     appliedCollab,
@@ -1132,6 +1133,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     hasSelectedDiscountScope,
     lineDiscountModeByItemId,
     menuByIdForCollab,
+    orderType,
     selectedMemberId,
     selectedMemberTierDiscountRate,
     tierDiscountPolicy,
@@ -5402,6 +5404,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             tierDiscountAmt={tierDiscountAmt}
             selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
             memberSearchEmpty={memberSearchEmpty}
+            orderType={orderType}
             t={t}
             tr={tr}
           />
@@ -5816,6 +5819,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               tierDiscountAmt={tierDiscountAmt}
               selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
               memberSearchEmpty={memberSearchEmpty}
+              orderType={orderType}
               t={t}
               tr={tr}
             />

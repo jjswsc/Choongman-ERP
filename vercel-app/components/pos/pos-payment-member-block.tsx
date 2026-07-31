@@ -33,6 +33,8 @@ type PosMemberResultsSectionProps = {
   tierDiscountAmt: number
   selectedMemberTierDiscountRate: number
   memberSearchEmpty: boolean
+  /** delivery면 등급 할인 대신 포인트만 안내 */
+  orderType?: string | null
   compact?: boolean
   t: (key: string) => string
   tr: (key: string, fallback: string) => string
@@ -48,6 +50,7 @@ export function PosMemberResultsSection({
   tierDiscountAmt,
   selectedMemberTierDiscountRate,
   memberSearchEmpty,
+  orderType,
   compact = false,
   t,
   tr,
@@ -59,6 +62,11 @@ export function PosMemberResultsSection({
   const cardPad = compact ? 'p-2' : 'p-3'
   const gemBox = compact ? 'h-9 w-9 rounded-lg' : 'h-12 w-12 rounded-xl'
   const nameClass = compact ? 'text-sm font-semibold' : 'text-base font-semibold'
+  const isDeliveryOrder =
+    String(orderType || '')
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, '_') === 'delivery'
 
   if (!selectedMemberId && memberOptions.length === 0 && !memberSearchEmpty) {
     return null
@@ -152,6 +160,18 @@ export function PosMemberResultsSection({
                 {tr('posTierDiscountExpected', '등급 할인 예상')}: -{formatBahtNum(tierDiscountAmt)} ฿ (
                 {(selectedMemberTierDiscountRate * 100).toFixed(1)}%)
               </p>
+            ) : isDeliveryOrder && selectedMemberId ? (
+              <p
+                className={cn(
+                  'text-right font-medium leading-tight text-muted-foreground',
+                  compact ? 'text-[10px]' : 'text-[11px]'
+                )}
+              >
+                {tr(
+                  'posTierDiscountDeliveryBlocked',
+                  '배달 주문: 포인트만 적립 (등급 할인 없음)'
+                )}
+              </p>
             ) : null}
           </div>
         </div>
@@ -232,6 +252,7 @@ type PosPaymentMemberBlockProps = {
   tierDiscountAmt: number
   selectedMemberTierDiscountRate: number
   memberSearchEmpty: boolean
+  orderType?: string | null
   t: (key: string) => string
   tr: (key: string, fallback: string) => string
 }
@@ -253,6 +274,7 @@ export function PosPaymentMemberBlock({
   tierDiscountAmt,
   selectedMemberTierDiscountRate,
   memberSearchEmpty,
+  orderType,
   t,
   tr,
 }: PosPaymentMemberBlockProps) {
@@ -310,6 +332,7 @@ export function PosPaymentMemberBlock({
         tierDiscountAmt={tierDiscountAmt}
         selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
         memberSearchEmpty={memberSearchEmpty}
+        orderType={orderType}
         t={t}
         tr={tr}
       />

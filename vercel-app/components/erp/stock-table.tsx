@@ -230,7 +230,6 @@ ${filteredList.map((r) => {
                 setCategoryFilter(v === "__all__" ? "" : v)
                 setItemPick("")
               }}
-              disabled={list.length === 0}
             >
               <SelectTrigger className="h-9 w-[200px] text-xs">
                 <SelectValue placeholder={t("itemsCategoryAll")} />

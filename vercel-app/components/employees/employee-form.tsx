@@ -2,9 +2,10 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import { CircleHelp, Image as ImageIcon, Upload, Download } from "lucide-react"
+import { CircleHelp, Upload, Download, ZoomIn } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload, cn } from "@/lib/utils"
 import {
   Select,
@@ -293,6 +294,7 @@ export function EmployeeForm({
   const t = useT(lang)
   const photoInputRef = React.useRef<HTMLInputElement>(null)
   const [idCardCaptureOpen, setIdCardCaptureOpen] = React.useState(false)
+  const [idCardViewOpen, setIdCardViewOpen] = React.useState(false)
   const update = (k: keyof EmployeeFormData, v: string | number | boolean) => {
     onChange({ ...form, [k]: v })
   }
@@ -655,26 +657,22 @@ export function EmployeeForm({
                       style={{ aspectRatio: String(ID_CARD_ASPECT) }}
                     >
                       {form.idCardPhoto ? (
-                        <div className="group relative h-full w-full">
+                        <button
+                          type="button"
+                          className="group relative h-full w-full cursor-zoom-in"
+                          onClick={() => setIdCardViewOpen(true)}
+                          aria-label={t("emp_id_card_view")}
+                        >
                           <img
                             src={form.idCardPhoto}
                             alt={t("emp_id_card")}
-                            className="h-full w-full cursor-pointer object-contain bg-muted"
-                            onClick={() => window.open(form.idCardPhoto, "_blank")}
+                            className="h-full w-full object-contain bg-muted"
                           />
-                          <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="h-7 px-2 text-[10px]"
-                              onClick={() => window.open(form.idCardPhoto, "_blank")}
-                            >
-                              <ImageIcon className="mr-1 h-3 w-3" aria-hidden />
-                              {t("emp_id_card_view")}
-                            </Button>
-                          </div>
-                        </div>
+                          <span className="pointer-events-none absolute bottom-1 right-1 inline-flex items-center gap-0.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+                            <ZoomIn className="h-3 w-3" aria-hidden />
+                            {t("emp_id_card_view")}
+                          </span>
+                        </button>
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
                           —
@@ -895,6 +893,43 @@ export function EmployeeForm({
         onOpenChange={setIdCardCaptureOpen}
         onCapture={(dataUrl) => update("idCardPhoto", dataUrl)}
       />
+      {idCardViewOpen && form.idCardPhoto ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("emp_id_card_view")}
+          onClick={() => setIdCardViewOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setIdCardViewOpen(false)
+          }}
+        >
+          <div
+            className="relative w-full max-w-3xl rounded-lg bg-card p-3 shadow-xl sm:p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ImageViewerWithRotate
+              src={form.idCardPhoto}
+              alt={t("emp_id_card")}
+              imgClassName="max-h-[min(70vh,640px)] w-auto max-w-full rounded-lg object-contain"
+              rotateLeftLabel={t("imageRotateLeft")}
+              rotateRightLabel={t("imageRotateRight")}
+              zoomInLabel={t("att_zoom_in")}
+              zoomOutLabel={t("att_zoom_out")}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-black/50 p-0 text-white hover:bg-black/70 hover:text-white"
+              onClick={() => setIdCardViewOpen(false)}
+              aria-label={t("close") || "✕"}
+            >
+              ✕
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </TooltipProvider>
   )
 }

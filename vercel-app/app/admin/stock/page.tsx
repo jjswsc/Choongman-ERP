@@ -34,6 +34,8 @@ import {
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dedupeOfficeStoreOptions, isOfficeStoreVariant } from "@/lib/office-store-canonical"
+import { collectCategoryOptions } from "@/lib/stock-history-filter"
+import { useItemCategoryOptions } from "@/lib/use-item-category-options"
 
 /** 본사/오피스/본점/CM Office 등 → CM Office 로 통일 (중복 제거) */
 function normalizeStoreList(stores: string[]): string[] {
@@ -82,14 +84,15 @@ export default function StockPage() {
 
   const storeSelectDisabled = isManager && !!userStore
 
-  const categoryOptions = React.useMemo(() => {
-    const cats = new Set<string>()
-    for (const r of list) {
-      const c = (r.category || "").trim()
-      if (c) cats.add(c)
-    }
-    return Array.from(cats).sort()
-  }, [list])
+  const masterCategories = useItemCategoryOptions()
+  const categoryOptions = React.useMemo(
+    () =>
+      collectCategoryOptions(
+        list.map((r) => ({ item: r.name, itemCode: r.code, category: r.category })),
+        masterCategories
+      ),
+    [list, masterCategories]
+  )
 
   const fetchStock = React.useCallback(async () => {
     const store = storeFilter.trim()

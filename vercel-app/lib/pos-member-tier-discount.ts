@@ -12,6 +12,14 @@ import {
   menuIdsForCollabLineWithCatalog,
   menuMatchesCollabScope,
 } from '@/lib/pos-collab-discount'
+import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+
+/** 배달 주문은 멤버 연결·포인트 적립만 허용, 등급 할인 불가 */
+export function isMemberTierDiscountAllowedForOrderType(
+  orderType: string | null | undefined
+): boolean {
+  return normalizePosOrderTypeKey(orderType) !== 'delivery'
+}
 
 type CollabMenuPick = Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>
 
@@ -95,7 +103,10 @@ export function resolveMemberTierDiscountAmount(params: {
   policy: MemberTierDiscountPolicy
   hasCollab: boolean
   hasCoupons: boolean
+  /** dine-in | takeout | delivery — delivery면 항상 0 */
+  orderType?: string | null
 }): number {
+  if (!isMemberTierDiscountAllowedForOrderType(params.orderType)) return 0
   const rate = Math.max(0, Number(params.discountRate || 0))
   if (rate <= 0) return 0
   if (params.hasCollab && !params.policy.stackWithCollab) return 0

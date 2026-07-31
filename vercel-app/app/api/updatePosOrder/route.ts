@@ -16,7 +16,7 @@ import {
   posOrderPaymentSumFromAmounts,
 } from '@/lib/pos-order-paid-at'
 import { computePosPricing } from '@/lib/pos-pricing'
-import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
+import { isDineInOrderTypeForGuestCount, normalizePosOrderTypeKey, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
     const itemsWithOption = await enrichOrderItemsWithOptionCode(itemsRaw)
     let items = itemsWithOption
-    const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
+    let discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()
     const serviceAmt = Math.max(0, Number(body?.serviceAmt ?? body?.service_amt ?? 0))
     const serviceReason = String(body?.serviceReason ?? body?.service_reason ?? '').trim()
@@ -331,6 +331,15 @@ export async function POST(req: NextRequest) {
       appliedPre = [{ code: legacyCouponCode, name: legacyCouponCode, discountAmt: legacyCouponAmt, quantity: 1 }]
     }
     const preCouponSum = appliedPre.reduce((s, row) => s + Math.max(0, Number(row.discountAmt ?? 0) || 0), 0)
+    let tierDiscountAmt = Math.max(0, Number(body?.tierDiscountAmt ?? body?.tier_discount_amt ?? 0))
+    const orderTypeKey = normalizePosOrderTypeKey(
+      String(current?.order_type ?? body?.orderType ?? body?.order_type ?? '')
+    )
+    // 배달: 멤버 연결·포인트만 허용, 등급 할인은 강제 0
+    if (orderTypeKey === 'delivery' && tierDiscountAmt > 0.0001) {
+      discountAmt = Math.max(0, discountAmt - tierDiscountAmt)
+      tierDiscountAmt = 0
+    }
     const discountAmtNet = resolveManualDiscountNetForOrderSave({ discountAmt, serviceAmt, items })
     const manualDiscountForCoupons = Math.max(0, discountAmtNet - preCouponSum)
     const collabDiscountAmt = Math.max(0, Number(body?.collabDiscountAmt ?? body?.collab_discount_amt ?? 0))
@@ -345,7 +354,6 @@ export async function POST(req: NextRequest) {
       if (!Number.isFinite(n) || n <= 0) return null
       return Math.trunc(n)
     })()
-    const tierDiscountAmt = Math.max(0, Number(body?.tierDiscountAmt ?? body?.tier_discount_amt ?? 0))
     const memberTierCode =
       String(body?.memberTierCode ?? body?.member_tier_code ?? '').trim().toUpperCase() || null
     const couponResolved = await resolvePosOrderCouponsForSave({

@@ -54,4 +54,20 @@ describe('pos-member-tier-discount', () => {
     })
     expect(amt).toBe(0)
   })
+
+  it('blocks tier discount on delivery even when scope and rate allow it', () => {
+    const policy = {
+      ...DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+      scopeMainCategories: ['Chicken'],
+    }
+    const amt = resolveMemberTierDiscountAmount({
+      eligibleSubtotal: 1000,
+      discountRate: 0.05,
+      policy,
+      hasCollab: false,
+      hasCoupons: false,
+      orderType: 'delivery',
+    })
+    expect(amt).toBe(0)
+  })
 })
