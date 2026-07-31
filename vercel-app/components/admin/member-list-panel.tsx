@@ -674,6 +674,7 @@ export const MemberListPanel = React.memo(
           t("name"),
           t("memberPhone"),
           t("memberNo"),
+          t("memberJoinStore"),
           t("memberJoinAt"),
           t("memberTier"),
           t("memberPointsBalance"),
@@ -684,6 +685,9 @@ export const MemberListPanel = React.memo(
           m.name || "",
           m.phone || "",
           m.memberNo || "",
+          m.joinStoreCode
+            ? joinStoreLabels[m.joinStoreCode] || m.joinStoreCode
+            : joinStoreLabels.__unset__ || "",
           formatMemberJoinedAt(m.createdAt),
           m.tierCode || "",
           String(Number(m.pointBalance || 0)),

@@ -133,6 +133,8 @@ export async function savePurchaseOrder(params: {
   /** 공급사 견적/제안서 — cart_json meta (public URL) */
   quotationFileUrl?: string
   quotationFileName?: string
+  /** FlowAccount 등 외부 문서와 맞출 소계·VAT·합계 수동 보정 */
+  moneyOverride?: { subtotal: number; vat: number; total: number }
 }) {
   const res = await apiFetchWithOffline('/api/savePurchaseOrder', {
     method: 'POST',

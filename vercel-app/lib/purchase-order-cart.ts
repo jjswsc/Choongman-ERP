@@ -42,7 +42,60 @@ export function computePurchaseOrderMoneyTotals(items: PoCartLine[]): {
   return { subtotal, taxableSubtotal, vat, total }
 }
 
+function roundMoney2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** body/meta에서 온 수동 보정값 검증·정규화. 유효하지 않으면 null */
+export function normalizePoMoneyOverride(raw: unknown): PoMoneyOverride | null {
+  if (raw == null || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const subtotal = Number(o.subtotal)
+  const vat = Number(o.vat)
+  const total = Number(o.total)
+  if (![subtotal, vat, total].every((n) => Number.isFinite(n) && n >= 0)) return null
+  const s = roundMoney2(subtotal)
+  const v = roundMoney2(vat)
+  const t = roundMoney2(total)
+  // 소계+VAT ≈ 합계 (0.02 허용 — 외부 문서 반올림 잔차)
+  if (Math.abs(roundMoney2(s + v) - t) > 0.02) return null
+  return { subtotal: s, vat: v, total: t }
+}
+
+/**
+ * 라인 계산값에 moneyOverride가 있으면 소계·VAT·합계만 교체.
+ * taxableSubtotal은 항상 라인 기준(원천징수 참고용).
+ */
+export function resolvePurchaseOrderMoneyTotals(
+  items: PoCartLine[],
+  moneyOverride?: PoMoneyOverride | null
+): {
+  subtotal: number
+  taxableSubtotal: number
+  vat: number
+  total: number
+  overridden: boolean
+} {
+  const computed = computePurchaseOrderMoneyTotals(items)
+  const ov = normalizePoMoneyOverride(moneyOverride ?? null)
+  if (!ov) return { ...computed, overridden: false }
+  return {
+    subtotal: ov.subtotal,
+    taxableSubtotal: computed.taxableSubtotal,
+    vat: ov.vat,
+    total: ov.total,
+    overridden: true,
+  }
+}
+
 export type PoBillingKind = "royalty" | "delivery_gp" | "grab_gp" | "all"
+
+/** FlowAccount 등 외부 문서와 소수점 차이를 맞추기 위한 합계 수동 보정 */
+export type PoMoneyOverride = {
+  subtotal: number
+  vat: number
+  total: number
+}
 
 export type PoCartMeta = {
   /** 청구 발행 매장 — 없으면 본사 발행(레거시) */
@@ -63,6 +116,8 @@ export type PoCartMeta = {
   quotationFileUrl?: string
   /** 첨부 파일명(표시용) */
   quotationFileName?: string
+  /** 라인 자동계산 대신 저장·표시에 쓰는 소계·VAT·합계 */
+  moneyOverride?: PoMoneyOverride
 }
 
 export type PoCartPayloadV1 = {
@@ -74,7 +129,11 @@ export type PoCartPayloadV1 = {
 function isNonEmptyMeta(m?: PoCartMeta): boolean {
   if (!m || typeof m !== "object") return false
   if (String(m.billingMonthYm ?? "").trim() && String(m.billingKind ?? "").trim()) return true
-  return Object.values(m).some((v) => String(v ?? "").trim().length > 0)
+  if (normalizePoMoneyOverride(m.moneyOverride)) return true
+  return Object.values(m).some((v) => {
+    if (v != null && typeof v === "object") return false
+    return String(v ?? "").trim().length > 0
+  })
 }
 
 /** 저장용: 메타가 있으면 v1 래퍼, 없으면 순수 배열(하위 호환) */

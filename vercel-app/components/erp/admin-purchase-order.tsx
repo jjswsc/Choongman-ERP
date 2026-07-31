@@ -41,11 +41,16 @@ import {
 import { useStoreList } from "@/lib/use-store-list"
 import { useOrderCreate } from "@/lib/order-create-context"
 import { todayStrBangkok } from "@/lib/attendance-utils"
-import { computePurchaseOrderMoneyTotals, poLineIsVatExempt } from "@/lib/purchase-order-cart"
+import {
+  computePurchaseOrderMoneyTotals,
+  normalizePoMoneyOverride,
+  poLineIsVatExempt,
+  type PoMoneyOverride,
+} from "@/lib/purchase-order-cart"
 import { resolvePoIssuerStoreFromAuth } from "@/lib/po-issuer-scope"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
-import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip } from "lucide-react"
+import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip, Pencil } from "lucide-react"
 
 /** 본사 화면: 발행 주체 선택 — 본사 로열티·GP vs 매장 간 청구 */
 const PO_ISSUER_HQ = "_hq"
@@ -157,10 +162,33 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     return Array.from(cats.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   }, [items, t])
 
-  const { subtotal, vat, total } = React.useMemo(
+  const computedTotals = React.useMemo(
     () => computePurchaseOrderMoneyTotals(cart),
     [cart]
   )
+  /** 회계 PO: FlowAccount 등과 소수점 맞출 때 소계·VAT·합계 수동 보정 */
+  const [moneyOverride, setMoneyOverride] = React.useState<PoMoneyOverride | null>(null)
+  const [moneyEditOpen, setMoneyEditOpen] = React.useState(false)
+  const [moneyEditSubtotal, setMoneyEditSubtotal] = React.useState("")
+  const [moneyEditVat, setMoneyEditVat] = React.useState("")
+  const [moneyEditTotal, setMoneyEditTotal] = React.useState("")
+  const cartMoneyKey = React.useMemo(
+    () =>
+      cart
+        .map((c) => `${c.code}|${c.price}|${c.qty}|${c.taxType ?? ""}`)
+        .join(";"),
+    [cart]
+  )
+  React.useEffect(() => {
+    setMoneyOverride(null)
+    setMoneyEditOpen(false)
+  }, [cartMoneyKey])
+  const { subtotal, vat, total } = React.useMemo(() => {
+    const ov = normalizePoMoneyOverride(moneyOverride)
+    if (!ov) return computedTotals
+    return { subtotal: ov.subtotal, vat: ov.vat, total: ov.total }
+  }, [computedTotals, moneyOverride])
+  const moneyOverridden = moneyOverride != null
   /** 로열티·회계 PO: 공급가액(과세 전) 기준 원천징수(기본 3%) */
   const [applyWithholding, setApplyWithholding] = React.useState(false)
   const [poWhtRatePct, setPoWhtRatePct] = React.useState("3")
@@ -796,6 +824,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         ...(allowManualLines && withholdingTaxAmount > 0
           ? { withholdingTaxAmount, withholdingTaxRate: poWhtRateNum }
           : {}),
+        ...(allowManualLines && moneyOverride
+          ? { moneyOverride }
+          : {}),
         ...(poQuotation
           ? { quotationFileUrl: poQuotation.url, quotationFileName: poQuotation.name }
           : {}),
@@ -810,6 +841,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             : t("purchaseOrderSuccess")
         await appAlert(msg + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
+        setMoneyOverride(null)
+        setMoneyEditOpen(false)
         setPoReferenceNo("")
         setPoQuotation(null)
         setBillingIntentMode(null)
@@ -1672,24 +1705,171 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 </table>
               </div>
               <div className="mt-2 rounded-md border border-border/70 bg-muted/20 p-2 space-y-1.5 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>{t("subtotal")}</span>
-                  <span className="tabular-nums">{formatMoneyComma(subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>
-                    {vat >= 0.005
-                      ? t("poCartVatLabel7")
-                      : subtotal >= 0.005
-                        ? t("poCartVatLabelNone")
-                        : t("poCartVatLabel7")}
-                  </span>
-                  <span className="tabular-nums">{formatMoneyComma(vat)}</span>
-                </div>
-                <div className="flex justify-between border-t border-border/50 pt-1.5 font-semibold text-foreground">
-                  <span>{t("total")}</span>
-                  <span className="tabular-nums">{formatMoneyComma(total)}</span>
-                </div>
+                {allowManualLines && moneyEditOpen ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] leading-snug text-muted-foreground">{t("poMoneyOverrideHint")}</p>
+                    <label className="flex items-center justify-between gap-2">
+                      <span>{t("subtotal")}</span>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        className="h-8 w-28 text-right text-xs tabular-nums"
+                        value={moneyEditSubtotal}
+                        onChange={(e) => setMoneyEditSubtotal(e.target.value.replace(/[^\d.]/g, ""))}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2">
+                      <span>{t("poCartVatLabel7")}</span>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        className="h-8 w-28 text-right text-xs tabular-nums"
+                        value={moneyEditVat}
+                        onChange={(e) => setMoneyEditVat(e.target.value.replace(/[^\d.]/g, ""))}
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 font-semibold text-foreground">
+                      <span>{t("total")}</span>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        className="h-8 w-28 text-right text-xs tabular-nums font-semibold"
+                        value={moneyEditTotal}
+                        onChange={(e) => setMoneyEditTotal(e.target.value.replace(/[^\d.]/g, ""))}
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          const next = normalizePoMoneyOverride({
+                            subtotal: Number(moneyEditSubtotal),
+                            vat: Number(moneyEditVat),
+                            total: Number(moneyEditTotal),
+                          })
+                          if (!next) {
+                            void appAlert(t("poMoneyOverrideInvalid"))
+                            return
+                          }
+                          setMoneyOverride(next)
+                          setMoneyEditOpen(false)
+                        }}
+                      >
+                        {t("poMoneyOverrideApply")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setMoneyEditOpen(false)}
+                      >
+                        {t("cancel")}
+                      </Button>
+                      {moneyOverridden ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            setMoneyOverride(null)
+                            setMoneyEditOpen(false)
+                          }}
+                        >
+                          {t("poMoneyOverrideClear")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        {t("subtotal")}
+                        {moneyOverridden ? (
+                          <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                            {t("poMoneyOverrideBadge")}
+                          </Badge>
+                        ) : null}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="tabular-nums">{formatMoneyComma(subtotal)}</span>
+                        {allowManualLines ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                            title={t("poMoneyOverrideEdit")}
+                            onClick={() => {
+                              setMoneyEditSubtotal(String(subtotal))
+                              setMoneyEditVat(String(vat))
+                              setMoneyEditTotal(String(total))
+                              setMoneyEditOpen(true)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        ) : null}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>
+                        {vat >= 0.005
+                          ? t("poCartVatLabel7")
+                          : subtotal >= 0.005
+                            ? t("poCartVatLabelNone")
+                            : t("poCartVatLabel7")}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="tabular-nums">{formatMoneyComma(vat)}</span>
+                        {allowManualLines ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                            title={t("poMoneyOverrideEdit")}
+                            onClick={() => {
+                              setMoneyEditSubtotal(String(subtotal))
+                              setMoneyEditVat(String(vat))
+                              setMoneyEditTotal(String(total))
+                              setMoneyEditOpen(true)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        ) : null}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center border-t border-border/50 pt-1.5 font-semibold text-foreground">
+                      <span>{t("total")}</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="tabular-nums">{formatMoneyComma(total)}</span>
+                        {allowManualLines ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                            title={t("poMoneyOverrideEdit")}
+                            onClick={() => {
+                              setMoneyEditSubtotal(String(subtotal))
+                              setMoneyEditVat(String(vat))
+                              setMoneyEditTotal(String(total))
+                              setMoneyEditOpen(true)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        ) : null}
+                      </span>
+                    </div>
+                  </>
+                )}
                 {allowManualLines ? (
                   <div className="space-y-2 border-t border-border/50 pt-2">
                     <div className="flex flex-wrap items-center gap-2">

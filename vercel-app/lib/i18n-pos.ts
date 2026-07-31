@@ -893,6 +893,8 @@ export const I18N_POS_KO: Record<string, string> = {
       'JPG, PNG, GIF, WebP 이미지 또는 MP4, WebM 동영상만 업로드할 수 있습니다.',
     posCustomerIdleMediaImageTooLarge: '이미지는 4MB 이하만 업로드할 수 있습니다.',
     posCustomerIdleMediaVideoTooLarge: '동영상은 50MB 이하만 업로드할 수 있습니다.',
+    posCustomerIdleMediaFbUrlWarn:
+      'Facebook(scontent) 링크는 곧 만료되어 고객화면에 안 보일 수 있습니다. Clear media 후 파일을 직접 업로드해 주세요.',
     posCustomerIdleMessage: '평상시 문구',
     posCustomerIdleMessagePh: '예: 주문해 주셔서 감사합니다',
     posCustomerPaymentMessage: '결제중 문구',
@@ -4189,6 +4191,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posCustomerIdleMediaTypeInvalid: 'Only JPG, PNG, GIF, WebP images or MP4, WebM videos can be uploaded.',
     posCustomerIdleMediaImageTooLarge: 'Images must be 4MB or smaller.',
     posCustomerIdleMediaVideoTooLarge: 'Videos must be 50MB or smaller.',
+    posCustomerIdleMediaFbUrlWarn:
+      'Facebook (scontent) links expire soon and may not show on the customer display. Clear media, then upload the file directly.',
     posCustomerIdleMessage: 'Idle message',
     posCustomerIdleMessagePh: 'e.g. Thank you for visiting',
     posCustomerPaymentMessage: 'Payment message',
@@ -7850,6 +7854,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posCustomerIdleMediaTypeInvalid: 'อัปโหลดได้เฉพาะรูป JPG, PNG, GIF, WebP หรือวิดีโอ MP4, WebM',
     posCustomerIdleMediaImageTooLarge: 'รูปต้องไม่เกิน 4MB',
     posCustomerIdleMediaVideoTooLarge: 'วิดีโอต้องไม่เกิน 50MB',
+    posCustomerIdleMediaFbUrlWarn:
+      'ลิงก์ Facebook (scontent) จะหมดอายุเร็ว และอาจไม่โชว์บนจอลูกค้า กรุณา Clear media แล้วอัปโหลดไฟล์โดยตรงครับ',
     posCustomerIdleMessage: 'ข้อความตอนไม่สั่ง',
     posCustomerIdleMessagePh: 'เช่น ขอบคุณที่มาใช้บริการ',
     posCustomerPaymentMessage: 'ข้อความตอนชำระเงิน',

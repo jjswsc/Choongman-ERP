@@ -2,7 +2,6 @@ import {
   canAccessAiCenter,
   canViewMobileStoreSales,
   canAccessPosCostAnalysis,
-  canAccessPosCoupons,
   canAccessPosMenus,
   canAccessPosOrder,
   canAccessPosOrders,
@@ -39,8 +38,6 @@ export const ERP_NAV_POS_MENU_ACCESS: Record<string, (role: string, store?: stri
   "/admin/pos-screen-config": (role) => canAccessPosTerminalSettings(role),
   "/admin/pos-cost-analysis": canAccessPosCostAnalysis,
   "/admin/pos-printers": (role, store) => canAccessPosPrinters(role, store),
-  "/admin/pos-coupons": canAccessPosCoupons,
-  "/admin/crm/coupons?tab=definitions": canAccessPosCoupons,
   "/admin/pos-tax-invoice-recipients": canAccessPosOrders,
 }
 
@@ -52,7 +49,7 @@ export type ErpNavAccessContext = {
 }
 
 export function isErpNavHrefAccessible(href: string, ctx: ErpNavAccessContext): boolean {
-  const { role, store, saasModules, aiModuleEnabled } = ctx
+  const { role, saasModules, aiModuleEnabled } = ctx
   if (!isSaasModuleEnabled(saasModules, resolveAdminPathSaasModule(href))) return false
   if (href === "/admin/ai-center") {
     return canAccessAiCenter(role) && aiModuleEnabled !== false

@@ -2450,7 +2450,7 @@ export const i18n = {
     adminLeaveSub: '휴가 승인·반려와 사용·잔여 통계를 관리합니다.',
     adminAccountingPurchaseOrder: 'PO 관리',
     adminAccountingPurchaseOrderTitle: 'PO 관리',
-    adminAccountingPurchaseOrderSub: '로얄티·배달·Grab GP 등 매장 청구를 발주서로 기록합니다. [청구 비율 설정]에서 비율을 저장한 뒤, 본사 발주 탭에서 POS 매출 연동으로 줄을 넣을 수 있습니다. 매장 간 청구(Silom→The Street 등)는 발행 매장에서 해당 매장을 선택하세요.',
+    adminAccountingPurchaseOrderSub: '로얄티·배달·Grab GP 등 매장 청구를 발주서로 기록합니다. [청구 비율 설정]에서 비율을 저장한 뒤, 본사 발주 탭에서 POS 매출 연동으로 줄을 넣을 수 있습니다. 매장 간 청구(Silom→The Street 등)는 발행 매장에서 해당 매장을 선택하세요. FlowAccount 등과 소수점이 다르면 합계란 연필 아이콘으로 소계·VAT·합계를 수동 보정할 수 있습니다.',
     poBillingTabSettings: '청구 비율 설정',
     poBillingSettingsTitle: '매장별 청구 비율 (%)',
     poBillingSettingsHint:
@@ -2582,6 +2582,13 @@ export const i18n = {
     whtCertPrintBlocked: '팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요.',
     whtCertPrintNoWht: '원천징수액이 0이면 증명서를 인쇄할 수 없습니다.',
     poNetAfterWht: '차감 후 지급액(참고)',
+    poMoneyOverrideEdit: '금액·세금 수정',
+    poMoneyOverrideApply: '적용',
+    poMoneyOverrideClear: '자동계산으로 되돌리기',
+    poMoneyOverrideBadge: '수동',
+    poMoneyOverrideHint:
+      'FlowAccount 등 외부 문서와 소수점이 다를 때 소계·VAT·합계를 직접 맞춥니다. (소계+VAT ≈ 합계)',
+    poMoneyOverrideInvalid: '금액이 올바르지 않습니다. 0 이상이며 소계+VAT가 합계와 같아야 합니다.',
     poAccountingRelatedStoreFirstHint:
       '로열티·GP 청구 PO: 먼저 매장(지점)을 선택하면 연결된 법인이 아래에 맞춰집니다.',
     poIssuerStoreTitle: '발행 매장',
@@ -10097,7 +10104,7 @@ Only matters the employee must handle personally on a working day:
     adminAccountingPurchaseOrder: 'PO management',
     adminAccountingPurchaseOrderTitle: 'PO management',
     adminAccountingPurchaseOrderSub:
-      'Bill stores for royalty, delivery GP, Grab GP, etc. as POs. Set rates under [Billing rates], then add lines from POS sales on the HQ PO tab. For inter-store billing (e.g. Silom→The Street), pick the issuing store in the Issuing store dropdown.',
+      'Bill stores for royalty, delivery GP, Grab GP, etc. as POs. Set rates under [Billing rates], then add lines from POS sales on the HQ PO tab. For inter-store billing (e.g. Silom→The Street), pick the issuing store in the Issuing store dropdown. If decimals differ from FlowAccount, use the pencil icon on the totals to override subtotal, VAT, and total.',
     adminAccountingPurchaseOrderSubStore:
       'Store billing: your logged-in store issues invoices to other stores. Set your rates under [Billing rates], then load POS sales lines.',
     poBillingTabSettings: 'Billing rates',
@@ -10225,6 +10232,13 @@ Only matters the employee must handle personally on a working day:
     whtCertPrintBlocked: 'Popup may be blocked. Allow popups and try again.',
     whtCertPrintNoWht: 'Cannot print when withheld amount is zero.',
     poNetAfterWht: 'Net payable (after WHT, reference)',
+    poMoneyOverrideEdit: 'Edit amounts & VAT',
+    poMoneyOverrideApply: 'Apply',
+    poMoneyOverrideClear: 'Reset to calculated',
+    poMoneyOverrideBadge: 'Manual',
+    poMoneyOverrideHint:
+      'Override subtotal, VAT, and total to match an external document (e.g. FlowAccount). Subtotal + VAT must equal total.',
+    poMoneyOverrideInvalid: 'Invalid amounts. Values must be ≥ 0 and subtotal + VAT must equal total.',
     poAccountingRelatedStoreFirstHint:
       'For royalty / billing POs: pick the store first—the linked legal entity is set below.',
     poIssuerStoreTitle: 'Issuing store',
@@ -17515,7 +17529,7 @@ orderItemQty: 'จำนวน',
     adminAccountingPurchaseOrder: 'จัดการ PO',
     adminAccountingPurchaseOrderTitle: 'จัดการ PO',
     adminAccountingPurchaseOrderSub:
-      'เรียกเก็บร้านสำหรับรอยัลตี้ GP แอปส่ง Grab ฯลฯ เป็น PO ตั้ง % ใน [อัตราเรียกเก็บ] แล้วเพิ่มบรรทัดจากยอด POS ในแท็บ PO',
+      'เรียกเก็บร้านสำหรับรอยัลตี้ GP แอปส่ง Grab ฯลฯ เป็น PO ตั้ง % ใน [อัตราเรียกเก็บ] แล้วเพิ่มบรรทัดจากยอด POS ในแท็บ PO หากทศนิยมไม่ตรงกับ FlowAccount กดไอคอนดินสอที่สรุปยอดเพื่อแก้ยอดรวม VAT และยอดสุทธิเองได้',
     poBillingTabSettings: 'อัตราเรียกเก็บ',
     poBillingSettingsTitle: 'อัตราเรียกเก็บต่อสาขา (%)',
     poBillingSettingsHint:
@@ -17599,6 +17613,13 @@ orderItemQty: 'จำนวน',
     poWht3Remove: 'ยกเลิกการหัก ณ ที่จ่าย',
     poWht3LineLabel: 'ภาษีหัก ณ ที่จ่าย (3%)',
     poNetAfterWht: 'ยอดสุทธิหลังหัก (อ้างอิง)',
+    poMoneyOverrideEdit: 'แก้ไขยอดเงินและภาษี',
+    poMoneyOverrideApply: 'ใช้ยอดนี้',
+    poMoneyOverrideClear: 'กลับไปใช้ยอดคำนวณอัตโนมัติ',
+    poMoneyOverrideBadge: 'แก้ไขเอง',
+    poMoneyOverrideHint:
+      'กรณีทศนิยมไม่ตรงกับเอกสารภายนอก เช่น FlowAccount ให้แก้ยอดรวม VAT และยอดสุทธิเองได้ (ยอดรวม+VAT ≈ รวม)',
+    poMoneyOverrideInvalid: 'ยอดไม่ถูกต้อง ต้องเป็นค่า ≥ 0 และ ยอดรวม+VAT ต้องเท่ากับยอดรวมทั้งสิ้น',
     poAccountingRelatedStoreFirstHint:
       'PO ค่าธรรมเนียม/royalty: เลือกสาขาก่อน — นิติบุคคลที่เชื่อมจะถูกตั้งด้านล่าง',
     poVendorOrStoreHintAccounting:
@@ -31817,6 +31838,13 @@ orderItemQty: 'ຈຳນວນ',
     whtCertPrintBlocked: 'Popup may be blocked. Allow popups and try again.',
     whtCertPrintNoWht: 'Cannot print when withheld amount is zero.',
     poNetAfterWht: 'Net payable (after WHT, reference)',
+    poMoneyOverrideEdit: 'Edit amounts & VAT',
+    poMoneyOverrideApply: 'Apply',
+    poMoneyOverrideClear: 'Reset to calculated',
+    poMoneyOverrideBadge: 'Manual',
+    poMoneyOverrideHint:
+      'Override subtotal, VAT, and total to match an external document (e.g. FlowAccount). Subtotal + VAT must equal total.',
+    poMoneyOverrideInvalid: 'Invalid amounts. Values must be ≥ 0 and subtotal + VAT must equal total.',
     poAccountingRelatedStoreFirstHint:
       'For royalty / billing POs: pick the store first—the linked legal entity is set below.',
     poIssuerStoreTitle: 'Issuing store',

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import {
-  computePurchaseOrderMoneyTotals,
+  normalizePoMoneyOverride,
   parsePurchaseOrderCart,
+  resolvePurchaseOrderMoneyTotals,
   serializePurchaseOrderCart,
   type PoCartLine,
   type PoCartMeta,
@@ -137,6 +138,10 @@ export async function POST(request: NextRequest) {
     const quotationIn = String(body.quotationFileUrl ?? body.quotation_file_url ?? '').trim().slice(0, 2000)
     const quotationNameIn = String(body.quotationFileName ?? body.quotation_file_name ?? '').trim().slice(0, 200)
 
+    const moneyOverrideIn = normalizePoMoneyOverride(
+      body.moneyOverride ?? body.money_override ?? null
+    )
+
     const meta: PoCartMeta | undefined =
       relatedStore ||
       issuerStore ||
@@ -146,7 +151,8 @@ export async function POST(request: NextRequest) {
       billingUpsertEligible ||
       orderDateNorm ||
       referenceNoNorm ||
-      Boolean(quotationIn)
+      Boolean(quotationIn) ||
+      moneyOverrideIn
         ? {
             issuerStore: issuerStore || undefined,
             relatedStore: relatedStore || undefined,
@@ -160,6 +166,7 @@ export async function POST(request: NextRequest) {
             ...(quotationIn
               ? { quotationFileUrl: quotationIn, quotationFileName: quotationNameIn || undefined }
               : {}),
+            ...(moneyOverrideIn ? { moneyOverride: moneyOverrideIn } : {}),
           }
         : undefined
 
@@ -170,7 +177,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subtotal, vat, total } = computePurchaseOrderMoneyTotals(cart as PoCartLine[])
+    if (
+      (body.moneyOverride != null || body.money_override != null) &&
+      !moneyOverrideIn
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            'moneyOverride invalid: subtotal/vat/total must be >= 0 and subtotal+vat ≈ total',
+        },
+        { status: 400, headers }
+      )
+    }
+
+    const { subtotal, vat, total } = resolvePurchaseOrderMoneyTotals(
+      cart as PoCartLine[],
+      moneyOverrideIn
+    )
 
     let cartJson = serializePurchaseOrderCart(cart, meta)
 

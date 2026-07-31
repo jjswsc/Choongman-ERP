@@ -403,6 +403,22 @@ export async function uploadPosMenuImage(params: { file: File; menuId?: string |
   }
 }
 
+function formatStoragePutError(status: number, body: string): string {
+  const raw = String(body || '').trim()
+  if (raw) {
+    try {
+      const j = JSON.parse(raw) as { message?: string; error?: string; statusCode?: string | number }
+      const detail = String(j.message || j.error || '').trim()
+      if (detail) return `Storage upload failed (${status}): ${detail}`
+    } catch {
+      /* keep raw below */
+    }
+    // 영문 UI에서 한글 마스킹되지 않도록 ASCII 위주 메시지
+    if (!/[가-힣]/.test(raw)) return `Storage upload failed (${status}): ${raw.slice(0, 200)}`
+  }
+  return `Storage upload failed (${status})`
+}
+
 /** 고객화면 평상시 배경 이미지·동영상 (pos-menu-images 버킷, customer-display/ 경로) */
 export async function uploadCustomerDisplayMedia(params: {
   storeCode: string
@@ -411,8 +427,10 @@ export async function uploadCustomerDisplayMedia(params: {
   preferredKind?: 'image' | 'video'
 }) {
   const storeCode = String(params.storeCode || '').trim()
-  const { fileForCustomerDisplayMediaUpload } = await import('@/lib/customer-display-media-upload')
-  const prepared = fileForCustomerDisplayMediaUpload(params.file, params.preferredKind)
+  const { prepareCustomerDisplayMediaUpload, isCustomerDisplayImageContentType } = await import(
+    '@/lib/customer-display-media-upload'
+  )
+  const prepared = await prepareCustomerDisplayMediaUpload(params.file, params.preferredKind)
   if (!prepared) {
     return {
       success: false,
@@ -421,6 +439,45 @@ export async function uploadCustomerDisplayMedia(params: {
     }
   }
   const { file, contentType } = prepared
+
+  const uploadViaServer = async (): Promise<{
+    success: boolean
+    message?: string
+    url?: string
+  }> => {
+    if (!isCustomerDisplayImageContentType(contentType)) {
+      return {
+        success: false,
+        message: `Storage upload failed (client PUT). Video must use direct upload.`,
+      }
+    }
+    const fd = new FormData()
+    fd.set('storeCode', storeCode)
+    fd.set('file', file, file.name)
+    if (params.preferredKind) fd.set('preferredKind', params.preferredKind)
+    const res = await apiFetchWithOffline('/api/uploadCustomerDisplayMedia', {
+      method: 'POST',
+      body: fd,
+    })
+    const raw = await res.text()
+    let json: { success?: boolean; message?: string; url?: string }
+    try {
+      json = JSON.parse(raw) as typeof json
+    } catch {
+      return {
+        success: false,
+        message:
+          res.status === 413
+            ? POS_MENU_UPLOAD_TOO_LARGE
+            : `Storage upload failed (${res.status})`,
+      }
+    }
+    if (!res.ok || !json.success || !json.url) {
+      return { success: false, message: json.message || `Storage upload failed (${res.status})` }
+    }
+    return { success: true, message: '업로드되었습니다.', url: json.url }
+  }
+
   const pres = await apiFetchWithOffline('/api/uploadCustomerDisplayMedia/presign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -439,33 +496,54 @@ export async function uploadCustomerDisplayMedia(params: {
     const tooLarge =
       pres.status === 413 ||
       /413|payload too large|entity too large|request entity too large/i.test(rawPres)
-    return {
-      success: false,
-      message: tooLarge ? POS_MENU_UPLOAD_TOO_LARGE : undefined,
-      url: undefined,
+    if (tooLarge) {
+      return { success: false, message: POS_MENU_UPLOAD_TOO_LARGE, url: undefined }
     }
+    // presign 파싱 실패 시 이미지 서버 폴백
+    return uploadViaServer()
   }
   if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    if (isCustomerDisplayImageContentType(contentType)) {
+      const viaServer = await uploadViaServer()
+      if (viaServer.success) return viaServer
+    }
     return {
       success: false,
       message: pjson.message,
       url: undefined,
     }
   }
-  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
-  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
-  if (!putRes.ok) {
-    const t = await putRes.text().catch(() => '')
+  try {
+    const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+    const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+    if (!putRes.ok) {
+      const t = await putRes.text().catch(() => '')
+      if (isCustomerDisplayImageContentType(contentType)) {
+        const viaServer = await uploadViaServer()
+        if (viaServer.success) return viaServer
+      }
+      return {
+        success: false,
+        message: formatStoragePutError(putRes.status, t),
+        url: undefined,
+      }
+    }
+    return {
+      success: true,
+      message: '업로드되었습니다.',
+      url: pjson.publicUrl,
+    }
+  } catch (e) {
+    if (isCustomerDisplayImageContentType(contentType)) {
+      const viaServer = await uploadViaServer()
+      if (viaServer.success) return viaServer
+    }
+    const msg = e instanceof Error ? e.message : String(e)
     return {
       success: false,
-      message: t || `Storage 업로드 실패 (${putRes.status})`,
+      message: `Storage upload failed: ${msg}`,
       url: undefined,
     }
-  }
-  return {
-    success: true,
-    message: '업로드되었습니다.',
-    url: pjson.publicUrl,
   }
 }
 

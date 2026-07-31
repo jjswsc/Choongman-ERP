@@ -17,6 +17,7 @@ import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-sa
 import { ADMIN_UI_LANG_OPTIONS, isLangCode, useLang, type LangCode } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
+import { isUnstableCustomerDisplayMediaUrl } from "@/lib/customer-display-media-upload"
 
 function ToggleRow({
   label,
@@ -146,6 +147,16 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
     }
     setSaving(true)
     try {
+      const mediaUrl = idleMediaUrl.trim()
+      if (idleMediaType !== "none" && isUnstableCustomerDisplayMediaUrl(mediaUrl)) {
+        await appAlert(
+          tr(
+            "posCustomerIdleMediaFbUrlWarn",
+            "Facebook(scontent) 링크는 곧 만료되어 고객화면에 안 보일 수 있습니다. Clear media 후 파일을 직접 업로드해 주세요."
+          )
+        )
+        return false
+      }
       const latest = await getPosPrinterSettings({ storeCode: sc })
       const merged: PosPrinterSettings = {
         ...latest,
@@ -165,7 +176,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
         customerDisplayShowOrderSummary: showOrderSummary,
         customerDisplayShowOrderTotal: showOrderTotal,
         customerDisplayIdleMediaType: idleMediaType,
-        customerDisplayIdleMediaUrl: idleMediaUrl.trim(),
+        customerDisplayIdleMediaUrl: mediaUrl,
       }
       const res = await savePosPrinterSettings(
         posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
@@ -234,22 +245,30 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
           preferredKind: idleMediaType === 'video' ? 'video' : 'image',
         })
         if (!res.success || !res.url) {
-          await appAlert(
-            localizeApiMessage(
-              res.message,
-              t,
-              tr("posCustomerIdleMediaUploadFail", "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요."),
-              lang
-            )
+          const detail = String(res.message || "").trim()
+          // 영문 UI에서 한글만 있는 오류는 fallback 으로 가려지므로, ASCII 상세가 있으면 뒤에 붙임
+          const localized = localizeApiMessage(
+            detail,
+            t,
+            tr(
+              "posCustomerIdleMediaUploadFail",
+              "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요."
+            ),
+            lang
           )
+          const asciiDetail =
+            detail && !/[가-힣]/.test(detail) && !localized.includes(detail) ? ` (${detail})` : ""
+          await appAlert(localized + asciiDetail)
           return
         }
         setIdleMediaUrl(res.url)
         await appAlert(tr("posCustomerIdleMediaUploaded", "미디어가 업로드되었습니다. 저장을 눌러 반영하세요."))
       } catch (e) {
         await appAlert(
-          tr("posCustomerIdleMediaUploadFail", "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요.") +
-            (e instanceof Error && e.message ? `: ${e.message}` : "")
+          tr(
+            "posCustomerIdleMediaUploadFail",
+            "미디어 업로드에 실패했습니다. JPG/PNG/WebP(≤4MB) 또는 MP4/WebM(≤50MB)인지 확인해 주세요."
+          ) + (e instanceof Error && e.message ? `: ${e.message}` : "")
         )
       } finally {
         setUploadingMedia(false)

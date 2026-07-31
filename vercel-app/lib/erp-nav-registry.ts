@@ -127,7 +127,6 @@ export const ERP_NAV_MENU_SECTIONS: ErpNavMenuSection[] = [
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
       { titleKey: "adminPosQrTableOrder", icon: QrCode, href: "/admin/pos-qr-table-order" },
-      { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/crm/coupons?tab=definitions" },
       { titleKey: "adminPosTaxInvoiceRecipients", icon: FileText, href: "/admin/pos-tax-invoice-recipients" },
     ],
   },

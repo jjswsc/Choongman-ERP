@@ -197,6 +197,8 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "이미지는 4MB 이하만 업로드할 수 있습니다.": "posCustomerIdleMediaImageTooLarge",
   "동영상은 50MB 이하여야 합니다.": "repair_upload_video_max_50mb",
   "동영상은 50MB 이하만 업로드할 수 있습니다.": "posCustomerIdleMediaVideoTooLarge",
+  "동영상은 직접 업로드(서명 URL)만 지원합니다. 다시 시도해 주세요.": "posCustomerIdleMediaUploadFail",
+  "JPG, PNG, GIF, WebP 이미지만 서버 업로드할 수 있습니다.": "posCustomerIdleMediaTypeInvalid",
   "업로드 준비 실패": "msg_upload_fail",
   "업로드 준비에 실패했습니다.": "msg_upload_fail",
   "첨부 파일이 너무 커서 저장할 수 없습니다. PDF·이미지를 다시 업로드해 주세요.":
