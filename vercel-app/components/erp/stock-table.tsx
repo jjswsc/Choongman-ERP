@@ -98,7 +98,31 @@ export function StockTable({
   const [savingSafe, setSavingSafe] = React.useState(false)
   const [imagePreview, setImagePreview] = React.useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = React.useState(false)
+  const [itemPick, setItemPick] = React.useState("")
   const tableRef = React.useRef<HTMLTableElement>(null)
+
+  const itemPickOptions = React.useMemo(() => {
+    let rows = list
+    if (categoryFilter && categoryFilter !== "__all__") {
+      rows = rows.filter((r) => (r.category || "").trim() === categoryFilter)
+    }
+    if (purchaseSourceFilter === "hq" || purchaseSourceFilter === "store") {
+      rows = rows.filter((r) => (r.purchaseSource ?? "hq") === purchaseSourceFilter)
+    }
+    const byCode = new Map<string, { code: string; name: string; spec: string }>()
+    for (const r of rows) {
+      const code = String(r.code || "").trim()
+      if (!code || byCode.has(code)) continue
+      byCode.set(code, {
+        code,
+        name: String(r.name || "").trim(),
+        spec: String(r.spec || "").trim(),
+      })
+    }
+    return Array.from(byCode.values()).sort((a, b) =>
+      a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: "base" })
+    )
+  }, [list, categoryFilter, purchaseSourceFilter])
 
   const filteredList = React.useMemo(() => {
     let result = list
@@ -198,16 +222,53 @@ ${filteredList.map((r) => {
             />
           </AdminFilterField>
         )}
-        {categoryOptions.length > 0 && setCategoryFilter && (
+        {setCategoryFilter && (
           <AdminFilterField label={t("itemsCategory")}>
-            <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
-              <SelectTrigger className="h-9 w-32 text-xs">
-                <SelectValue />
+            <Select
+              value={categoryFilter || "__all__"}
+              onValueChange={(v) => {
+                setCategoryFilter(v === "__all__" ? "" : v)
+                setItemPick("")
+              }}
+              disabled={list.length === 0}
+            >
+              <SelectTrigger className="h-9 w-[200px] text-xs">
+                <SelectValue placeholder={t("itemsCategoryAll")} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-72">
                 <SelectItem value="__all__">{t("itemsCategoryAll")}</SelectItem>
                 {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </AdminFilterField>
+        )}
+        {setCategoryFilter && (
+          <AdminFilterField label={t("outSummaryItemPick")}>
+            <Select
+              value={itemPick || "__all__"}
+              onValueChange={(v) => {
+                if (v === "__all__") {
+                  setItemPick("")
+                  setSearchTerm("")
+                  return
+                }
+                setItemPick(v)
+                setSearchTerm(v)
+              }}
+              disabled={list.length === 0}
+            >
+              <SelectTrigger className="h-9 w-[min(100%,260px)] text-xs">
+                <SelectValue placeholder={t("outSummaryItemPick")} />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="__all__">{t("outSummaryItemAll")}</SelectItem>
+                {itemPickOptions.map((it) => (
+                  <SelectItem key={it.code} value={it.code}>
+                    [{it.code}] {it.name || "-"}
+                    {it.spec ? ` (${it.spec})` : ""}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -248,7 +309,10 @@ ${filteredList.map((r) => {
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value)
+                setItemPick("")
+              }}
               placeholder={t("stockSearchPh")}
               className="h-9 w-44 pl-8 text-xs"
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
