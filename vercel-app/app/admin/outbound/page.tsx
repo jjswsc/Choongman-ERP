@@ -218,6 +218,9 @@ export default function OutboundPage() {
   const [loading, setLoading] = React.useState(true)
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyList, setHistoryList] = React.useState<OutboundHistoryItem[]>([])
+  const [summaryLoading, setSummaryLoading] = React.useState(false)
+  const [summaryList, setSummaryList] = React.useState<OutboundHistoryItem[]>([])
+  const [summaryHasQueried, setSummaryHasQueried] = React.useState(false)
   const [usageList, setUsageList] = React.useState<UsageHistoryItem[]>([])
 
   const [outDate, setOutDate] = React.useState("")
@@ -888,7 +891,7 @@ export default function OutboundPage() {
       await appAlert(t("visit_stats_date_hint") || "기간을 선택해 주세요.")
       return
     }
-    setHistoryLoading(true)
+    setSummaryLoading(true)
     try {
       // 집계 탭: 매장 입고(From HQ)·ForcePush 기준 — HQ Outbound만 세면 직접정산·누락으로 과소집계됨
       const list = await getOutboundStoreItemSummary({
@@ -897,58 +900,36 @@ export default function OutboundPage() {
         itemSearch: summaryMenuSearch.trim() || undefined,
       })
       const rows = Array.isArray(list) ? list : []
+      setSummaryHasQueried(true)
       if (!isOffice && auth?.store) {
-        setHistoryList(
+        setSummaryList(
           rows.filter((r) => storeMatchesHistoryFilterClient(String(r.target || ""), auth.store || ""))
         )
       } else {
-        setHistoryList(rows)
+        setSummaryList(rows)
       }
-      setUsageList([])
     } catch (err) {
-      setHistoryList([])
-      setUsageList([])
+      setSummaryHasQueried(true)
+      setSummaryList([])
       const msg = err instanceof Error ? err.message : String(err)
       await appAlert(`${t("outNoData")}\n\n${t("msg_error_prefix") || ""}${msg}`)
     } finally {
-      setHistoryLoading(false)
+      setSummaryLoading(false)
     }
   }, [histStart, histEnd, histMonth, summaryMenuSearch, isOffice, auth?.store, t])
 
-  const summaryTabAutoFetchDoneRef = React.useRef(false)
-  React.useEffect(() => {
-    if (tabValue !== "summary") {
-      summaryTabAutoFetchDoneRef.current = false
-      return
-    }
-    if (summaryTabAutoFetchDoneRef.current || historyLoading) return
-    summaryTabAutoFetchDoneRef.current = true
-    if (historyList.length === 0) void fetchSummaryHistory()
-  }, [tabValue, historyList.length, historyLoading, fetchSummaryHistory])
-
-  const initialHistFetchDoneRef = React.useRef(false)
-  React.useEffect(() => {
-    if (!auth || initialHistFetchDoneRef.current) return
-    if (plDrillNavAppliedRef.current) {
-      initialHistFetchDoneRef.current = true
-      return
-    }
-    initialHistFetchDoneRef.current = true
-    void fetchHistory()
-  }, [auth, fetchHistory])
+  // 검색 버튼 클릭 시에만 조회. 탭 진입·페이지 로드 자동조회 금지. (손익 드릴다운만 예외)
 
   const applySummaryMonth = React.useCallback(() => {
     const ym = String(summaryMonthDraft || "").trim()
     handleHistMonthChange(ym)
     setSummaryMonthDialogOpen(false)
-    void fetchSummaryHistory({ histMonth: ym })
-  }, [handleHistMonthChange, summaryMonthDraft, fetchSummaryHistory])
+  }, [handleHistMonthChange, summaryMonthDraft])
 
   const clearSummaryMonth = React.useCallback(() => {
     handleHistMonthChange("")
     setSummaryMonthDialogOpen(false)
-    void fetchSummaryHistory({ histMonth: "" })
-  }, [handleHistMonthChange, fetchSummaryHistory])
+  }, [handleHistMonthChange])
 
   /** 출고처 드롭다운: 마스터 목록 + 조회 결과에 나온 매출처 병합 */
   const outboundTargetsForFilter = React.useMemo(() => {
@@ -1401,7 +1382,7 @@ export default function OutboundPage() {
 
   const summarySourceRows = React.useMemo(() => {
     // 기간 요약은 조회 기간 안 stock_log만 (주문 보강 outsidePeriodRange 제외)
-    let rows = historyList.filter((row) => !row.outsidePeriodRange)
+    let rows = summaryList.filter((row) => !row.outsidePeriodRange)
     if (summaryStoreFilter) {
       rows = rows.filter((row) => String(row.target || "").trim() === summaryStoreFilter)
     }
@@ -1426,7 +1407,7 @@ export default function OutboundPage() {
       )
     }
     return rows
-  }, [historyList, summaryStoreFilter, summaryVendorFilter, summaryCategoryFilter, summaryMenuSearch, itemCategoryMap, itemVendorMap])
+  }, [summaryList, summaryStoreFilter, summaryVendorFilter, summaryCategoryFilter, summaryMenuSearch, itemCategoryMap, itemVendorMap])
 
   const summaryByTarget = React.useMemo(() => {
     const map = new Map<string, { vendor: string; qty: number; amount: number }>()
@@ -1487,24 +1468,26 @@ export default function OutboundPage() {
     return rows
   }, [summarySourceRows, summaryMenuSortBy, summaryMenuSortDir])
 
-  /** 출고 목적지(매장)×품목별 수량·금액 — 여러 품목이 섞인 합계로 오해되지 않게 */
+  /** 날짜×매장×품목별 수량·금액 */
   const summaryByStore = React.useMemo(() => {
     const map = new Map<
       string,
-      { store: string; code: string; name: string; spec: string; qty: number; amount: number }
+      { date: string; store: string; code: string; name: string; spec: string; qty: number; amount: number }
     >()
     for (const row of summarySourceRows) {
+      const date = String(row.date || "").trim().slice(0, 10) || "-"
       const store = String(row.target || "").trim() || "-"
       const code = String(row.code || "").trim()
       const name = String(row.name || "").trim()
       const spec = String(row.spec || "").trim()
-      const key = `${store}__${code}__${name}__${spec}`
+      const key = `${date}__${store}__${code}__${name}__${spec}`
       const current = map.get(key)
       if (current) {
         current.qty += Number(row.qty || 0)
         current.amount += Number(row.amount || 0)
       } else {
         map.set(key, {
+          date,
           store,
           code,
           name,
@@ -1520,7 +1503,12 @@ export default function OutboundPage() {
       if (primary !== 0) return summaryStoreSortDir === "asc" ? primary : -primary
       const secondary = summaryStoreSortBy === "qty" ? a.amount - b.amount : a.qty - b.qty
       if (secondary !== 0) return summaryStoreSortDir === "asc" ? secondary : -secondary
-      return a.store.localeCompare(b.store) || a.code.localeCompare(b.code) || a.name.localeCompare(b.name)
+      return (
+        b.date.localeCompare(a.date) ||
+        a.store.localeCompare(b.store) ||
+        a.code.localeCompare(b.code) ||
+        a.name.localeCompare(b.name)
+      )
     })
     return rows
   }, [summarySourceRows, summaryStoreSortBy, summaryStoreSortDir])
@@ -1572,6 +1560,12 @@ export default function OutboundPage() {
       total: tax.grandTotal,
     }
   }, [summaryByStore])
+
+  const summaryEmptyLabel = summaryLoading
+    ? t("loading")
+    : !summaryHasQueried
+      ? t("outSummaryClickSearch")
+      : t("outNoData")
 
   const toggleVendorSort = (field: "qty" | "amount") => {
     if (summaryVendorSortBy === field) {
@@ -1760,6 +1754,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       return
     }
     const headers = [
+      t("outSummaryDateCol"),
       t("outSummaryStoreCol"),
       t("outColCode"),
       t("outSummaryMenuCol"),
@@ -1772,6 +1767,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
       const itemLabel = `${row.name || "-"}${row.spec ? ` (${row.spec})` : ""}`
       return [
+        row.date,
         row.store,
         row.code || "",
         itemLabel,
@@ -1783,6 +1779,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     })
     const summaryRow = [
       t("inv_total"),
+      "",
       "",
       "",
       String(summaryStoreTotals.qty),
@@ -2559,8 +2556,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     {t("outFilterMonth")}
                     {histMonth ? ` (${histMonth})` : ""}
                   </Button>
-                  <Button size="sm" onClick={() => void fetchSummaryHistory()} disabled={historyLoading}>
-                    {historyLoading ? t("loading") : t("btn_query")}
+                  <Button size="sm" onClick={() => void fetchSummaryHistory()} disabled={summaryLoading}>
+                    {summaryLoading ? t("loading") : t("btn_query")}
                   </Button>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -2641,7 +2638,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         {t("cancel")}
                       </Button>
                       <Button type="button" onClick={applySummaryMonth}>
-                        {t("btn_query")}
+                        {t("apply")}
                       </Button>
                     </div>
                   </div>
@@ -2663,6 +2660,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                       <tr className="border-b">
+                        <th className="py-2 px-2 text-left">{t("outSummaryDateCol")}</th>
                         <th className="py-2 px-2 text-left">{t("outSummaryStoreCol")}</th>
                         <th className="py-2 px-2 text-left">{t("outSummaryMenuCol")}</th>
                         <th className="py-2 px-2 text-right">
@@ -2692,13 +2690,14 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     <tbody>
                       {summaryByStore.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                            {t("outNoData")}
+                          <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                            {summaryEmptyLabel}
                           </td>
                         </tr>
                       ) : (
                         summaryByStore.map((row) => (
-                          <tr key={`${row.store}-${row.code}-${row.name}-${row.spec}`} className="border-b">
+                          <tr key={`${row.date}-${row.store}-${row.code}-${row.name}-${row.spec}`} className="border-b">
+                            <td className="py-2 px-2 tabular-nums whitespace-nowrap">{row.date}</td>
                             <td className="py-2 px-2 font-medium">{row.store}</td>
                             <td className="py-2 px-2">
                               {row.code ? `[${row.code}] ` : ""}
@@ -2718,7 +2717,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                       )}
                       {summaryByStore.length > 0 && (
                         <tr className="sticky bottom-0 bg-muted/90 border-t-2">
-                          <td className="py-2 px-2 font-semibold" colSpan={2}>{t("inv_total")}</td>
+                          <td className="py-2 px-2 font-semibold" colSpan={3}>{t("inv_total")}</td>
                           <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.qty.toLocaleString()}</td>
                           <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.amount.toLocaleString()}</td>
                           <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryStoreTotals.vat.toLocaleString()}</td>
@@ -2772,7 +2771,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         {summaryByTarget.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                              {t("outNoData")}
+                              {summaryEmptyLabel}
                             </td>
                           </tr>
                         ) : (
@@ -2848,7 +2847,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         {summaryByMenu.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                              {t("outNoData")}
+                              {summaryEmptyLabel}
                             </td>
                           </tr>
                         ) : (
