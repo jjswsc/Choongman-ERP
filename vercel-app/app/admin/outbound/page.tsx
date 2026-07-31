@@ -50,6 +50,7 @@ import {
   getStockStores,
   forceOutboundBatch,
   getCombinedOutboundHistory,
+  getOutboundStoreItemSummary,
   previewDeleteOutbound,
   deleteOutbound,
   getOrderReceivePhoto,
@@ -889,24 +890,21 @@ export default function OutboundPage() {
     }
     setHistoryLoading(true)
     try {
-      const list = await getCombinedOutboundHistory({
+      // 집계 탭: 매장 입고(From HQ)·ForcePush 기준 — HQ Outbound만 세면 직접정산·누락으로 과소집계됨
+      const list = await getOutboundStoreItemSummary({
         startStr: s,
         endStr: e,
-        // 집계 탭은 내역조회의 숨은 조건(histStore, histType)을 타지 않게 분리
-        vendorFilter: isOffice ? undefined : auth?.store || undefined,
         itemSearch: summaryMenuSearch.trim() || undefined,
       })
-      setHistoryList(Array.isArray(list) ? list : [])
-      if (!isOffice) {
-        const usageListRes = await getMyUsageHistory({
-          store: auth?.store || "",
-          startStr: s,
-          endStr: e,
-        })
-        setUsageList(Array.isArray(usageListRes) ? usageListRes : [])
+      const rows = Array.isArray(list) ? list : []
+      if (!isOffice && auth?.store) {
+        setHistoryList(
+          rows.filter((r) => storeMatchesHistoryFilterClient(String(r.target || ""), auth.store || ""))
+        )
       } else {
-        setUsageList([])
+        setHistoryList(rows)
       }
+      setUsageList([])
     } catch (err) {
       setHistoryList([])
       setUsageList([])

@@ -183,6 +183,32 @@ export async function getCombinedOutboundHistory(params: {
   return jsonAsArray<OutboundHistoryItem>(raw)
 }
 
+/** 집계 탭용: 매장 입고(From HQ)·ForcePush 기준 매장×품목 수량 */
+export async function getOutboundStoreItemSummary(params: {
+  startStr: string
+  endStr: string
+  itemSearch?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.itemSearch?.trim()) q.set('itemSearch', params.itemSearch.trim())
+  const res = await apiFetchWithOffline(`/api/getOutboundStoreItemSummary?${q}`)
+  const raw = await res.json().catch(() => null)
+  if (!res.ok) {
+    const msg =
+      raw && typeof raw === 'object' && !Array.isArray(raw) && 'error' in raw
+        ? String((raw as { error?: unknown }).error || '')
+        : `HTTP ${res.status}`
+    throw new Error(msg || 'getOutboundStoreItemSummary failed')
+  }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'error' in raw) {
+    throw new Error(String((raw as { error?: unknown }).error || 'getOutboundStoreItemSummary failed'))
+  }
+  return jsonAsArray<OutboundHistoryItem>(raw)
+}
+
 /** 출고 인보이스 인쇄(วางบิล) 상태 저장 */
 export async function markOutboundInvoicesPrinted(params: {
   invoiceNos: string[]
