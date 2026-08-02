@@ -737,45 +737,47 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       options?: { layoutFromCacheOnly?: boolean; skipPollMinimalCache?: boolean }
     ): Promise<StoreSnapshot> => {
       const primary = String(storeCode || '').trim()
-      const snapshotTimeoutMs = shouldPreferOfflineCache() ? 2800 : 12000
+      /** 수동 새로고침(skipPollMinimalCache)은 빈 배열 타임아웃 폴백 금지 — 느린망에서 홀/배달이 안 바뀐 것처럼 보임 */
+      const awaitFullNetwork = Boolean(options?.skipPollMinimalCache)
+      const snapshotTimeoutMs = shouldPreferOfflineCache()
+        ? 2800
+        : awaitFullNetwork
+          ? 45_000
+          : 12_000
       const cachedLayoutFallback = layoutByStoreIdRef.current[storeCode] || []
       const cachedFloorLabelsFallback = floorLabelsByStoreIdRef.current[storeCode] || {}
-      const layoutPromise =
+      const layoutFetch =
         options?.layoutFromCacheOnly && cachedLayoutFallback.length > 0
           ? Promise.resolve({
               layout: cachedLayoutFallback,
               floorLabels: cachedFloorLabelsFallback,
               storeCode: primary,
             })
-          : withPosSnapshotTimeout(
-              getPosTableLayout({ storeCode: primary }).catch(() => ({
-                layout: cachedLayoutFallback,
-                floorLabels: cachedFloorLabelsFallback,
-                storeCode: primary,
-              })),
-              snapshotTimeoutMs,
-              {
-                layout: cachedLayoutFallback,
-                floorLabels: cachedFloorLabelsFallback,
-                storeCode: primary,
-              }
-            )
-      const [layoutRes, ordersRes] = await Promise.all([
-        layoutPromise,
-        withPosSnapshotTimeout(
-          getPosOrdersWithCache({
+          : getPosTableLayout({ storeCode: primary }).catch(() => ({
+              layout: cachedLayoutFallback,
+              floorLabels: cachedFloorLabelsFallback,
+              storeCode: primary,
+            }))
+      const layoutPromise = awaitFullNetwork
+        ? layoutFetch
+        : withPosSnapshotTimeout(layoutFetch, snapshotTimeoutMs, {
+            layout: cachedLayoutFallback,
+            floorLabels: cachedFloorLabelsFallback,
             storeCode: primary,
-            startStr: businessDate,
-            endStr: businessDate,
-            posBizDayScope: true,
-            pollMinimal: true,
-            limit: 1000,
-            skipPollMinimalCache: Boolean(options?.skipPollMinimalCache),
-          }).catch(() => []),
-          snapshotTimeoutMs,
-          []
-        ),
-      ])
+          })
+      const ordersFetch = getPosOrdersWithCache({
+        storeCode: primary,
+        startStr: businessDate,
+        endStr: businessDate,
+        posBizDayScope: true,
+        pollMinimal: true,
+        limit: 1000,
+        skipPollMinimalCache: Boolean(options?.skipPollMinimalCache),
+      }).catch(() => [] as PosOrder[])
+      const ordersPromise = awaitFullNetwork
+        ? ordersFetch
+        : withPosSnapshotTimeout(ordersFetch, snapshotTimeoutMs, [] as PosOrder[])
+      const [layoutRes, ordersRes] = await Promise.all([layoutPromise, ordersPromise])
       const fetchedLayout = layoutRes.layout || []
       const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
       const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout

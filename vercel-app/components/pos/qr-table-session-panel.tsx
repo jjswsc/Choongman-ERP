@@ -1,9 +1,9 @@
 'use client'
 
 import * as React from 'react'
+import { QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -203,93 +203,142 @@ export function QrTableSessionPanel(props: {
   if (!loaded) return null
   if (!settings.enabled && !session) return null
 
+  const shellClass =
+    session?.staffCallAt
+      ? 'border-rose-300/80 bg-gradient-to-r from-rose-50 to-white shadow-sm shadow-rose-100/60'
+      : session
+        ? 'border-emerald-200/80 bg-gradient-to-r from-emerald-50/80 to-white shadow-sm shadow-emerald-100/40'
+        : 'border-slate-200/90 bg-gradient-to-r from-slate-50/90 via-white to-amber-50/40 shadow-sm shadow-slate-100/50'
+
   return (
-    <div className="space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{tr('qrTableSessionTitle', 'QR 테이블오더')}</p>
-        {badge ? (
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
-        ) : null}
-      </div>
-
-      {session?.staffCallAt ? (
-        <div className="space-y-2 rounded-md border border-rose-300 bg-rose-50 px-2.5 py-2 text-sm">
-          <p className="font-semibold text-rose-900">{tr('qrTableSessionStaffCall', '손님 호출')}</p>
-          {session.staffCallNote ? <p className="text-xs text-rose-800">{session.staffCallNote}</p> : null}
-          <Button size="sm" variant="destructive" disabled={busy} onClick={() => void ackCall()}>
-            {tr('qrTableSessionAckCall', '호출 확인')}
-          </Button>
+    <div className={`overflow-hidden rounded-xl border ${shellClass}`}>
+      {/* 한 줄 툴바 */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-2.5 py-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white"
+            title={
+              session
+                ? tr('qrTableSessionCloseHint', 'POS에서 결제·취소하면 QR 세션이 자동 종료됩니다.')
+                : undefined
+            }
+          >
+            <QrCode className="h-3.5 w-3.5" aria-hidden />
+          </span>
+          <span className="truncate text-xs font-semibold tracking-tight text-slate-800">
+            {tr('qrTableSessionTitle', 'QR 테이블오더')}
+          </span>
+          {badge ? (
+            <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+              {badge.label}
+            </span>
+          ) : null}
         </div>
-      ) : null}
 
-      {session ? (
-        <div className="space-y-2 text-sm">
-          <p>
-            {tr('qrTableSessionGuests', '인원')}{' '}
-            <button type="button" className="mx-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-200 text-sm" disabled={busy} onClick={() => void changeGuests(-1)}>
-              −
-            </button>
-            <span className="font-semibold tabular-nums">{session.guestCount}</span>
-            <button type="button" className="mx-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-200 text-sm" disabled={busy} onClick={() => void changeGuests(1)}>
-              +
-            </button>
-            · ฿{session.entryTotal.toLocaleString()} ·{' '}
-            {session.entryPaid
-              ? tr('qrTableSessionEntryConfirmed', '입장확정')
-              : tr('qrTableSessionEntryPending', '미확정')}
-          </p>
-          {orderBalance && orderBalance.orderId ? (
-            <div className="rounded-md border border-amber-200/80 bg-white/70 px-2.5 py-2 text-xs space-y-0.5">
-              <p>
-                {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
-                {Number(orderBalance.total || 0).toLocaleString()}
-              </p>
-              <p>
-                {tr('qrTableSessionPaidQr', 'QR 입금')} ฿
-                {Number(orderBalance.paymentQr || 0).toLocaleString()}
-              </p>
-              <p className="font-semibold text-amber-950">
-                {tr('qrTableSessionBalanceDue', '잔액')} ฿
-                {Number(orderBalance.balanceDue || 0).toLocaleString()}
-              </p>
+        <div className="mx-0.5 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden />
+
+        {session ? (
+          <>
+            <div className="flex items-center gap-1 text-xs text-slate-700">
+              <span className="text-[11px] text-slate-500">{tr('qrTableSessionGuests', '인원')}</span>
+              <button
+                type="button"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => void changeGuests(-1)}
+                aria-label="−"
+              >
+                −
+              </button>
+              <span className="min-w-[1.25rem] text-center text-sm font-semibold tabular-nums">{session.guestCount}</span>
+              <button
+                type="button"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => void changeGuests(1)}
+                aria-label="+"
+              >
+                +
+              </button>
             </div>
-          ) : null}
-          {session.status === 'awaiting_entry' && !session.entryPaid ? (
-            <Button size="sm" disabled={busy} onClick={() => void confirmEntry()}>
-              {tr('qrTableSessionConfirmEntry', '입장 후불 확정 (메뉴 오픈)')}
-            </Button>
-          ) : null}
-          {session.posOrderId ? (
-            <p className="text-xs text-muted-foreground">
-              {tr('qrTableSessionOrderNo', '주문 #{id}').replace('{id}', String(session.posOrderId))}
-            </p>
-          ) : null}
-          <p className="text-[11px] text-muted-foreground">
-            {tr('qrTableSessionCloseHint', 'POS에서 결제·취소하면 QR 세션이 자동 종료됩니다.')}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs">{tr('qrTableSessionGuests', '인원')}</Label>
+
+            <span className="text-xs font-semibold tabular-nums text-slate-800">
+              ฿{session.entryTotal.toLocaleString()}
+            </span>
+            <span
+              className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                session.entryPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+              }`}
+            >
+              {session.entryPaid
+                ? tr('qrTableSessionEntryConfirmed', '입장확정')
+                : tr('qrTableSessionEntryPending', '미확정')}
+            </span>
+
+            {orderBalance && orderBalance.orderId ? (
+              <span className="hidden items-center gap-1.5 text-[11px] text-slate-600 md:inline-flex">
+                <span>
+                  {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
+                  {Number(orderBalance.total || 0).toLocaleString()}
+                </span>
+                <span className="text-slate-300">·</span>
+                <span>
+                  {tr('qrTableSessionPaidQr', 'QR 입금')} ฿
+                  {Number(orderBalance.paymentQr || 0).toLocaleString()}
+                </span>
+                <span className="text-slate-300">·</span>
+                <span className="font-semibold text-amber-900">
+                  {tr('qrTableSessionBalanceDue', '잔액')} ฿
+                  {Number(orderBalance.balanceDue || 0).toLocaleString()}
+                </span>
+              </span>
+            ) : null}
+
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              {session.staffCallAt ? (
+                <Button size="sm" variant="destructive" className="h-8 px-3 text-xs" disabled={busy} onClick={() => void ackCall()}>
+                  {tr('qrTableSessionAckCall', '호출 확인')}
+                </Button>
+              ) : null}
+              {session.status === 'awaiting_entry' && !session.entryPaid ? (
+                <Button size="sm" className="h-8 px-3 text-xs" disabled={busy} onClick={() => void confirmEntry()}>
+                  {tr('qrTableSessionConfirmEntry', '입장 후불 확정')}
+                </Button>
+              ) : null}
+              {session.posOrderId ? (
+                <span className="text-[10px] text-slate-400">
+                  {tr('qrTableSessionOrderNo', '주문 #{id}').replace('{id}', String(session.posOrderId))}
+                </span>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                {tr('qrTableSessionGuests', '인원')}
+              </span>
               <Input
                 type="number"
                 min={1}
                 max={99}
                 value={guestCount}
                 onChange={(e) => setGuestCount(Math.max(1, Number(e.target.value || 1)))}
+                className="h-8 w-14 border-slate-200 bg-white px-2 text-center text-sm tabular-nums shadow-sm"
               />
-            </div>
-            <div>
-              <Label className="text-xs">{tr('qrTableSessionTier', '티어')}</Label>
+            </label>
+
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-[220px]">
+              <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                {tr('qrTableSessionTier', '티어')}
+              </span>
               {isAlaCarte ? (
-                <p className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
+                <span className="h-8 flex-1 truncate rounded-md border border-slate-200 bg-white px-2.5 text-xs leading-8 text-slate-500 shadow-sm">
                   {tr('qrTableSessionAlaCarte', '일반 메뉴 모드')}
-                </p>
+                </span>
               ) : (
                 <Select value={tierId} onValueChange={setTierId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 flex-1 border-slate-200 bg-white text-xs shadow-sm">
                     <SelectValue placeholder={tr('qrTableSessionSelectTier', '선택')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -302,12 +351,41 @@ export function QrTableSessionPanel(props: {
                 </Select>
               )}
             </div>
-          </div>
-          <Button size="sm" disabled={busy || (!isAlaCarte && !tierId)} onClick={() => void openSession()}>
-            {tr('qrTableSessionOpen', 'QR 세션 오픈')}
-          </Button>
+
+            <Button
+              size="sm"
+              className="ml-auto h-8 shrink-0 bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
+              disabled={busy || (!isAlaCarte && !tierId)}
+              onClick={() => void openSession()}
+            >
+              {tr('qrTableSessionOpen', 'QR 세션 오픈')}
+            </Button>
+          </>
+        )}
+      </div>
+
+      {/* 호출 메모·좁은 화면 잔액·힌트만 필요 시 한 줄 더 */}
+      {session?.staffCallAt && session.staffCallNote ? (
+        <p className="border-t border-rose-200/70 bg-rose-50/60 px-2.5 py-1.5 text-[11px] text-rose-800">
+          {session.staffCallNote}
+        </p>
+      ) : null}
+      {session && orderBalance && orderBalance.orderId ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-slate-100 px-2.5 py-1 text-[11px] text-slate-600 md:hidden">
+          <span>
+            {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
+            {Number(orderBalance.total || 0).toLocaleString()}
+          </span>
+          <span>
+            {tr('qrTableSessionPaidQr', 'QR 입금')} ฿
+            {Number(orderBalance.paymentQr || 0).toLocaleString()}
+          </span>
+          <span className="font-semibold text-amber-900">
+            {tr('qrTableSessionBalanceDue', '잔액')} ฿
+            {Number(orderBalance.balanceDue || 0).toLocaleString()}
+          </span>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

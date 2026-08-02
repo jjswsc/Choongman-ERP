@@ -131,6 +131,8 @@ export async function getPosTodaySales(params?: {
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
+  /** 수동 새로고침 — 브라우저·중간 캐시가 동일 URL을 재사용하지 않도록 */
+  if (params?.forceNetwork) q.set('_', String(Date.now()))
   const qs = q.toString()
   const url = '/api/getPosTodaySales' + (qs ? `?${qs}` : '')
   const cacheKey = `erp:posTodaySales:${params?.storeCode?.trim() || ''}:${params?.startStr?.trim() || ''}:${params?.endStr?.trim() || ''}`

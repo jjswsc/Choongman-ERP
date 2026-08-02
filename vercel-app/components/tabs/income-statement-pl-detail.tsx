@@ -17,9 +17,11 @@ import { type IncomeStatementVatDisplayMode } from "@/lib/income-statement-displ
 import { formatBahtInteger as formatBath } from "@/lib/financial-amount-format"
 import {
   accountingPlCogsRowCn,
+  accountingPlDeepIndentLabelCn,
   accountingPlDocumentCn,
   accountingPlExpenseRowCn,
   accountingPlGrossProfitRowCn,
+  accountingPlIndentLabelCn,
   accountingPlInventoryRowCn,
   accountingPlNetProfitRowCn,
   accountingPlSalesRowCn,
@@ -27,6 +29,7 @@ import {
   accountingPlSubTdLabelCn,
   accountingPlTableCn,
   accountingPlTableShellCn,
+  accountingPlTbodyCn,
   accountingPlTdAmountCn,
   accountingPlTdLabelCn,
   accountingPlTdPctCn,
@@ -35,6 +38,7 @@ import {
   accountingPlThRightCn,
   accountingPlTitleCn,
 } from "@/lib/accounting-result-ui"
+import { cn } from "@/lib/utils"
 import { AccountingPeriodChip } from "@/components/admin/accounting-result-primitives"
 import {
   lineDisplayAmount,
@@ -260,7 +264,7 @@ export function IncomePlDetailTableContent({
             <th className={accountingPlThRightCn}>{t("pL_pctOfSales")}</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={accountingPlTbodyCn}>
           {incomeStatementSalesBreakdown(data).length > 0 ? (
             <>
               <tr
@@ -320,7 +324,9 @@ export function IncomePlDetailTableContent({
             </tr>
           )}
           <tr className={accountingPlInventoryRowCn}>
-            <td className={`${accountingPlTdLabelCn} pl-10 text-muted-foreground`}>+ {t("pL_beginningInv")}</td>
+            <td className={cn(accountingPlTdLabelCn, accountingPlIndentLabelCn, "text-muted-foreground")}>
+              + {t("pL_beginningInv")}
+            </td>
             <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
               {formatBath(view.beginningInventory)}
             </td>
@@ -331,7 +337,7 @@ export function IncomePlDetailTableContent({
             onClick={onTogglePurchases}
             title={t("pL_clickToExpand") || ""}
           >
-            <td className={`${accountingPlTdLabelCn} pl-10 text-muted-foreground`}>
+            <td className={cn(accountingPlTdLabelCn, accountingPlIndentLabelCn, "text-muted-foreground")}>
               <span className="inline-flex items-center gap-1.5">
                 {expandPurchases ? (
                   <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
@@ -374,13 +380,15 @@ export function IncomePlDetailTableContent({
             ))}
           {expandPurchases && !(data.purchaseByVendor?.length || 0) && (
             <tr className={accountingPlSubRowCn}>
-              <td colSpan={3} className={`${accountingPlSubTdLabelCn} py-3`}>
+              <td colSpan={3} className={cn(accountingPlSubTdLabelCn, "py-3 max-sm:basis-full")}>
                 {t("inNoData") || "No data found."}
               </td>
             </tr>
           )}
           <tr className={accountingPlInventoryRowCn}>
-            <td className={`${accountingPlTdLabelCn} pl-10 text-muted-foreground`}>- {t("pL_endingInv")}</td>
+            <td className={cn(accountingPlTdLabelCn, accountingPlIndentLabelCn, "text-muted-foreground")}>
+              - {t("pL_endingInv")}
+            </td>
             <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
               {formatBath(view.endingInventory)}
             </td>
@@ -447,7 +455,7 @@ export function IncomePlDetailTableContent({
             ))}
           {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
             <tr className={accountingPlSubRowCn}>
-              <td colSpan={3} className={`${accountingPlSubTdLabelCn} py-3`}>
+              <td colSpan={3} className={cn(accountingPlSubTdLabelCn, "py-3 max-sm:basis-full")}>
                 {t("inNoData") || "No data found."}
               </td>
             </tr>
@@ -455,7 +463,9 @@ export function IncomePlDetailTableContent({
           {showExpenseDetails && (
             <>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>- {t("pL_expenseSourcePetty") || "Petty Cash"}</td>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                  - {t("pL_expenseSourcePetty") || "Petty Cash"}
+                </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
                 </td>
@@ -464,7 +474,9 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>- {t("pL_expenseSourceBank") || "Bank Withdrawal"}</td>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                  - {t("pL_expenseSourceBank") || "Bank Withdrawal"}
+                </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
                 </td>
@@ -473,7 +485,7 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
                   - {t("pL_expenseSourceDeliveryApps")}
                 </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
@@ -484,7 +496,7 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
                   - {t("pL_expenseSourceCardFees")}
                 </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
@@ -495,7 +507,9 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>- {t("pL_expenseSourceFixed") || "Fixed Cost"}</td>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                  - {t("pL_expenseSourceFixed") || "Fixed Cost"}
+                </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
                   {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
@@ -504,7 +518,7 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
                   - {t("pL_expenseSourceStockInbound") || "Inbound expense items"}
                 </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
@@ -515,7 +529,7 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
                   - {t("pL_expenseSourcePayroll") || "Payroll"}
                 </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
@@ -526,7 +540,7 @@ export function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className={accountingPlSubRowCn}>
-                <td className={`${accountingPlSubTdLabelCn} pl-12`}>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
                   - {t("pL_expenseSourceDepreciation") || "Depreciation"}
                 </td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
@@ -539,18 +553,22 @@ export function IncomePlDetailTableContent({
             </>
           )}
           <tr className={accountingPlNetProfitRowCn}>
-            <td className={`${accountingPlTdLabelCn} py-3.5 font-bold`}>{t("pL_netProfit")}</td>
+            <td className={cn(accountingPlTdLabelCn, "py-3.5 font-bold max-sm:py-0")}>{t("pL_netProfit")}</td>
             <td
-              className={`${accountingPlTdAmountCn} py-3.5 font-bold ${
+              className={cn(
+                accountingPlTdAmountCn,
+                "py-3.5 font-bold max-sm:py-0",
                 view.netProfit >= 0 ? "text-primary" : "text-destructive"
-              }`}
+              )}
             >
               {formatBath(view.netProfit)}
             </td>
             <td
-              className={`${accountingPlTdPctCn} py-3.5 font-bold ${
+              className={cn(
+                accountingPlTdPctCn,
+                "py-3.5 font-bold max-sm:py-0",
                 view.netProfit >= 0 ? "text-primary" : "text-destructive"
-              }`}
+              )}
             >
               {view.pct(view.netProfit)}
             </td>
@@ -559,7 +577,9 @@ export function IncomePlDetailTableContent({
             <>
               {(data.ebitdaBridge?.depreciation ?? 0) > 0 && (
                 <tr className={accountingPlSubRowCn}>
-                  <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaDepreciation")}</td>
+                  <td className={cn(accountingPlSubTdLabelCn, "max-sm:pl-0 sm:pl-8")}>
+                    + {t("pL_ebitdaDepreciation")}
+                  </td>
                   <td className={`${accountingPlTdAmountCn}`}>
                     {formatBath(data.ebitdaBridge!.depreciation)}
                   </td>
@@ -570,7 +590,9 @@ export function IncomePlDetailTableContent({
               )}
               {(data.ebitdaBridge?.interest ?? 0) > 0 && (
                 <tr className={accountingPlSubRowCn}>
-                  <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaInterest")}</td>
+                  <td className={cn(accountingPlSubTdLabelCn, "max-sm:pl-0 sm:pl-8")}>
+                    + {t("pL_ebitdaInterest")}
+                  </td>
                   <td className={`${accountingPlTdAmountCn}`}>
                     {formatBath(data.ebitdaBridge!.interest)}
                   </td>
@@ -581,7 +603,9 @@ export function IncomePlDetailTableContent({
               )}
               {(data.ebitdaBridge?.incomeTax ?? 0) > 0 && (
                 <tr className={accountingPlSubRowCn}>
-                  <td className={`${accountingPlSubTdLabelCn} pl-8`}>+ {t("pL_ebitdaIncomeTax")}</td>
+                  <td className={cn(accountingPlSubTdLabelCn, "max-sm:pl-0 sm:pl-8")}>
+                    + {t("pL_ebitdaIncomeTax")}
+                  </td>
                   <td className={`${accountingPlTdAmountCn}`}>
                     {formatBath(data.ebitdaBridge!.incomeTax)}
                   </td>
@@ -607,8 +631,11 @@ export function IncomePlDetailTableContent({
                   {view.pct(view.ebitda)}
                 </td>
               </tr>
-              <tr>
-                <td colSpan={3} className="px-3 pb-3 text-[11px] text-muted-foreground leading-relaxed">
+              <tr className={cn(accountingPlSubRowCn, "max-sm:!block")}>
+                <td
+                  colSpan={3}
+                  className="px-3 pb-3 text-[11px] text-muted-foreground leading-relaxed max-sm:basis-full max-sm:px-0 max-sm:pb-1"
+                >
                   {t("pL_ebitdaNote")}
                 </td>
               </tr>

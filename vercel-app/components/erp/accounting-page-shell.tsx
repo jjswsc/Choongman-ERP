@@ -24,15 +24,15 @@ export function AccountingPageShell({
   hideHeader = false,
 }: AccountingPageShellProps) {
   return (
-    <div className="flex-1 overflow-auto">
-      <div className={cn("mx-auto px-4 py-6 sm:px-6 lg:px-8", maxWidthClass, className)}>
+    <div className="min-w-0 flex-1 overflow-auto">
+      <div className={cn("mx-auto min-w-0 px-3 py-4 sm:px-6 sm:py-6 lg:px-8", maxWidthClass, className)}>
         {!hideHeader && title && Icon ? (
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+          <div className="mb-4 flex items-center gap-3 sm:mb-6">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 sm:h-10 sm:w-10">
               <Icon className="h-5 w-5 text-primary" aria-hidden />
             </div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h1>
               {subtitle ? <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p> : null}
             </div>
           </div>

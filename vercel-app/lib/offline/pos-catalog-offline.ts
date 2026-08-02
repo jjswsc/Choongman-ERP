@@ -95,11 +95,19 @@ export function notifyPosCatalogUpdated(
   }
 }
 
-async function fetchCatalogAndPersist<T>(relativeUrl: string, cacheKey: string, fallback: T): Promise<T> {
+async function fetchCatalogAndPersist<T>(
+  relativeUrl: string,
+  cacheKey: string,
+  fallback: T,
+  options?: { cache?: RequestCache }
+): Promise<T> {
   const signal = catalogFetchSignal()
   let res: Response
   try {
-    res = await apiFetch(relativeUrl, signal ? { signal } : undefined)
+    res = await apiFetch(relativeUrl, {
+      ...(signal ? { signal } : {}),
+      ...(options?.cache ? { cache: options.cache } : {}),
+    })
   } catch (e) {
     // #region agent log
     if (
@@ -180,11 +188,12 @@ export async function fetchPosCatalogCached<T>(
 ): Promise<T> {
   const forceNetwork = Boolean(options?.forceNetwork)
   const fromIdb = await readCacheOrNull<T>(cacheKey)
+  const networkOpts = forceNetwork ? ({ cache: 'no-store' } as const) : undefined
 
   if (shouldPreferOfflineCache()) {
     if (!forceNetwork && fromIdb !== null) return fromIdb
     try {
-      return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback)
+      return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, networkOpts)
     } catch {
       reportNetworkFailure()
       return fromIdb !== null ? fromIdb : fallback
@@ -198,7 +207,7 @@ export async function fetchPosCatalogCached<T>(
   }
 
   try {
-    return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback)
+    return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, networkOpts)
   } catch {
     reportNetworkFailure()
     return readCache(cacheKey, fallback)

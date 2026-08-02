@@ -178,6 +178,7 @@ export default function AdminLiveStoreSalesPage() {
       scope: isAllStoresTableTotal ? "all" : "current",
       storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
       immediate: true,
+      forceFullRefresh: true,
     })
     void Promise.resolve(refreshTask).finally(() => {
       refreshInFlight.current = false

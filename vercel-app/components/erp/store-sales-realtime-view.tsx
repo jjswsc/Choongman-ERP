@@ -60,6 +60,8 @@ export type StoreSalesRefetchOptions = {
   storeCode?: string
   /** 사용자 수동 새로고침 — 테이블 스냅샷 즉시 재조회 */
   immediate?: boolean
+  /** 수동 새로고침 — 레이아웃 재조회·주문 캐시 합집합 생략 */
+  forceFullRefresh?: boolean
 }
 
 export type StoreSalesRealtimeViewProps = {
@@ -181,10 +183,14 @@ export function StoreSalesRealtimeView({
   const refreshRealtimeSection = useCallback(() => {
     loadTodaySales({ forceNetwork: true })
     if (effectiveStoreCode && !isAllStoresSelected) {
-      void refetchStores({ storeCode: effectiveStoreCode, immediate: true })
+      void refetchStores({
+        storeCode: effectiveStoreCode,
+        immediate: true,
+        forceFullRefresh: true,
+      })
       return
     }
-    void refetchStores({ scope: "all", immediate: true })
+    void refetchStores({ scope: "all", immediate: true, forceFullRefresh: true })
   }, [loadTodaySales, refetchStores, effectiveStoreCode, isAllStoresSelected])
 
   /** 당일 매출 숫자만 자동 갱신. 테이블/주문(getPosOrders)은 부모 usePosStore 초기 로드·수동 새로고침에만 맡김 — 중복 호출·전송량 절감 */

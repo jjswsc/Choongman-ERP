@@ -54,19 +54,25 @@ export const accountingFinancialSubRowCn = "border-b bg-muted/15"
 
 export const accountingFinancialTotalRowCn = "border-t-2 border-border font-semibold bg-muted/20"
 
+/** 손익계산서 — 좁은 화면에서 행을 카드형 flex로 전환 (인쇄 시 테이블 복원) */
+const accountingPlRowMobileCn =
+  "max-sm:flex max-sm:flex-wrap max-sm:items-baseline max-sm:justify-between max-sm:gap-x-2 max-sm:gap-y-0.5 max-sm:px-3 max-sm:py-2.5 print:table-row print:px-0 print:py-0"
+
 /** 손익계산서 문서 카드 — 대형 보고서/PPT 톤 (탭 폭 전체 사용) */
 export const accountingPlDocumentCn =
-  "w-full rounded-xl border border-border/60 bg-gradient-to-br from-card via-muted/10 to-card p-6 sm:p-8 lg:p-10 text-foreground shadow-[0_4px_24px_-4px_rgba(0,0,0,0.1),0_2px_8px_-4px_rgba(0,0,0,0.04)]"
+  "w-full min-w-0 rounded-xl border border-border/60 bg-gradient-to-br from-card via-muted/10 to-card p-3 sm:p-6 md:p-8 lg:p-10 text-foreground shadow-[0_4px_24px_-4px_rgba(0,0,0,0.1),0_2px_8px_-4px_rgba(0,0,0,0.04)]"
 
-export const accountingPlTitleCn = "text-xl font-bold tracking-tight text-foreground"
+export const accountingPlTitleCn = "text-lg sm:text-xl font-bold tracking-tight text-foreground"
 
 export const accountingPlTableShellCn =
-  "w-full overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_2px_16px_-4px_rgba(0,0,0,0.4)]"
+  "w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-border/70 bg-card shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_2px_16px_-4px_rgba(0,0,0,0.4)] [-webkit-overflow-scrolling:touch]"
 
-export const accountingPlTableCn = "w-full text-sm border-collapse"
+export const accountingPlTableCn = "w-full text-sm border-collapse max-sm:block print:table"
+
+export const accountingPlTbodyCn = "max-sm:block print:table-row-group"
 
 export const accountingPlTheadCn =
-  "border-b-2 border-border/60 bg-gradient-to-r from-muted/95 via-muted/60 to-muted/95 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.5)_inset]"
+  "border-b-2 border-border/60 bg-gradient-to-r from-muted/95 via-muted/60 to-muted/95 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] max-sm:hidden print:table-header-group"
 
 /** 회계 리스트·드릴다운 — 섹션 제목(테이블 위) */
 export const accountingResultSectionTitleCn = "text-sm font-bold text-foreground mb-1.5"
@@ -75,44 +81,66 @@ export const accountingResultSectionTitleCn = "text-sm font-bold text-foreground
 export const accountingResultInlineTableCn = "w-full text-sm border-collapse"
 
 export const accountingPlThCn =
-  "pl-8 pr-5 py-3.5 text-sm font-bold uppercase tracking-wider"
+  "pl-4 pr-3 py-3 sm:pl-8 sm:pr-5 sm:py-3.5 text-sm font-bold uppercase tracking-wider"
 
-export const accountingPlThRightCn = cn(accountingPlThCn, "text-right pl-5 pr-8")
+export const accountingPlThRightCn = cn(accountingPlThCn, "text-right pl-3 pr-4 sm:pl-5 sm:pr-8")
 
-export const accountingPlTdLabelCn = "pl-8 pr-5 py-3 align-middle"
+export const accountingPlTdLabelCn =
+  "pl-3 pr-2 py-2.5 sm:pl-8 sm:pr-5 sm:py-3 align-middle max-sm:min-w-0 max-sm:flex-1 max-sm:break-words max-sm:p-0 print:table-cell print:pl-8 print:pr-5 print:py-3"
 
 export const accountingPlTdAmountCn =
-  "pl-5 pr-6 py-3 text-right font-mono tabular-nums align-middle whitespace-nowrap"
+  "pl-2 pr-3 py-2.5 sm:pl-5 sm:pr-6 sm:py-3 text-right font-mono tabular-nums align-middle whitespace-nowrap max-sm:shrink-0 max-sm:p-0 max-sm:text-[13px] print:table-cell print:pl-5 print:pr-6 print:py-3 print:text-sm"
 
 export const accountingPlTdPctCn =
-  "pl-5 pr-8 py-3 text-right tabular-nums text-muted-foreground align-middle whitespace-nowrap"
+  "pl-2 pr-3 py-2.5 sm:pl-5 sm:pr-8 sm:py-3 text-right tabular-nums text-muted-foreground align-middle whitespace-nowrap max-sm:basis-full max-sm:p-0 max-sm:pt-0.5 max-sm:text-xs print:table-cell print:basis-auto print:pl-5 print:pr-8 print:py-3 print:pt-3 print:text-sm"
 
 /** 매출 구간 */
-export const accountingPlSalesRowCn =
-  "border-b border-sky-200/70 bg-gradient-to-r from-sky-50/90 via-card to-sky-50/50 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset] transition-colors hover:brightness-[1.02] dark:border-sky-800/50 dark:from-sky-950/35 dark:via-card dark:to-sky-950/20"
+export const accountingPlSalesRowCn = cn(
+  "border-b border-sky-200/70 bg-gradient-to-r from-sky-50/90 via-card to-sky-50/50 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset] transition-colors hover:brightness-[1.02] dark:border-sky-800/50 dark:from-sky-950/35 dark:via-card dark:to-sky-950/20",
+  accountingPlRowMobileCn
+)
 
 /** 재고·매입 조정 구간 */
-export const accountingPlInventoryRowCn =
-  "border-b border-border/45 bg-gradient-to-r from-muted/25 via-muted/10 to-muted/20"
+export const accountingPlInventoryRowCn = cn(
+  "border-b border-border/45 bg-gradient-to-r from-muted/25 via-muted/10 to-muted/20",
+  accountingPlRowMobileCn
+)
 
 /** 매출원가 합계 */
-export const accountingPlCogsRowCn =
-  "border-y border-border/55 bg-gradient-to-r from-muted/40 via-muted/25 to-muted/40 font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+export const accountingPlCogsRowCn = cn(
+  "border-y border-border/55 bg-gradient-to-r from-muted/40 via-muted/25 to-muted/40 font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]",
+  accountingPlRowMobileCn
+)
 
 /** 비용 구간 */
-export const accountingPlExpenseRowCn =
-  "border-b border-amber-200/60 bg-gradient-to-r from-amber-50/70 via-card to-amber-50/40 transition-colors hover:brightness-[1.01] dark:border-amber-900/40 dark:from-amber-950/25 dark:via-card dark:to-amber-950/15"
+export const accountingPlExpenseRowCn = cn(
+  "border-b border-amber-200/60 bg-gradient-to-r from-amber-50/70 via-card to-amber-50/40 transition-colors hover:brightness-[1.01] dark:border-amber-900/40 dark:from-amber-950/25 dark:via-card dark:to-amber-950/15",
+  accountingPlRowMobileCn
+)
 
-export const accountingPlSubRowCn =
-  "border-b border-border/35 bg-muted/15 shadow-[inset_2px_0_0_rgba(0,0,0,0.04)] dark:shadow-[inset_2px_0_0_rgba(255,255,255,0.04)]"
+export const accountingPlSubRowCn = cn(
+  "border-b border-border/35 bg-muted/15 shadow-[inset_2px_0_0_rgba(0,0,0,0.04)] dark:shadow-[inset_2px_0_0_rgba(255,255,255,0.04)]",
+  accountingPlRowMobileCn
+)
 
-export const accountingPlSubTdLabelCn = "pl-14 pr-5 py-2.5 text-sm text-muted-foreground align-middle"
+export const accountingPlSubTdLabelCn =
+  "pl-6 pr-2 py-2 text-sm text-muted-foreground align-middle sm:pl-14 sm:pr-5 sm:py-2.5 max-sm:min-w-0 max-sm:flex-1 max-sm:break-words max-sm:p-0 max-sm:pl-2 print:table-cell print:pl-14 print:pr-5 print:py-2.5"
 
-export const accountingPlGrossProfitRowCn =
-  "border-y-2 border-primary/30 bg-gradient-to-r from-primary/12 via-primary/6 to-primary/12 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.5)]"
+export const accountingPlGrossProfitRowCn = cn(
+  "border-y-2 border-primary/30 bg-gradient-to-r from-primary/12 via-primary/6 to-primary/12 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.5)]",
+  accountingPlRowMobileCn
+)
 
-export const accountingPlNetProfitRowCn =
-  "border-t-2 border-foreground/20 bg-gradient-to-r from-muted/55 via-muted/75 to-muted/55 shadow-[0_-3px_12px_-4px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.4)]"
+export const accountingPlNetProfitRowCn = cn(
+  "border-t-2 border-foreground/20 bg-gradient-to-r from-muted/55 via-muted/75 to-muted/55 shadow-[0_-3px_12px_-4px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.4)]",
+  accountingPlRowMobileCn
+)
+
+/** 들여쓰기 보조 행(기초/기말재고·매입 등) — 데스크톱만 깊게 */
+export const accountingPlIndentLabelCn = "max-sm:pl-0 sm:pl-10"
+
+/** 비용 원천 세부 — 데스크톱만 깊게 */
+export const accountingPlDeepIndentLabelCn = "max-sm:pl-2 sm:pl-12"
 
 /** 재무제표 공통 문서 카드 (손익·재무상태표) */
 export const accountingFsDocumentCn = accountingPlDocumentCn

@@ -28,7 +28,7 @@ import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import {
   adminTabsContentCn,
   adminTabsListRowCn,
-  adminTabsRootCn,
+  adminTabsRootScrollableCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { IncomeStatementTab } from "@/components/tabs/income-statement-tab"
@@ -144,7 +144,7 @@ export default function FinancialStatementsPage() {
     >
         <AdminFilterBar className="mb-4">
             <div className="flex flex-wrap items-end gap-3">
-              <AdminFilterField label={t("fs_periodStartMonth")}>
+              <AdminFilterField label={t("fs_periodStartMonth")} className="min-w-0 flex-1 sm:flex-none">
                 <Select
                   value={yearMonthStart}
                   onValueChange={(v) => {
@@ -152,7 +152,7 @@ export default function FinancialStatementsPage() {
                     if (v > yearMonthEnd) setYearMonthEnd(v)
                   }}
                 >
-                  <SelectTrigger className="w-[140px] h-9">
+                  <SelectTrigger className="h-9 w-full sm:w-[140px]">
                     <SelectValue placeholder={t("fs_periodStartMonth")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -164,7 +164,7 @@ export default function FinancialStatementsPage() {
                   </SelectContent>
                 </Select>
               </AdminFilterField>
-              <AdminFilterField label={t("fs_periodEndMonth")}>
+              <AdminFilterField label={t("fs_periodEndMonth")} className="min-w-0 flex-1 sm:flex-none">
                 <Select
                   value={yearMonthEnd}
                   onValueChange={(v) => {
@@ -172,7 +172,7 @@ export default function FinancialStatementsPage() {
                     if (v < yearMonthStart) setYearMonthStart(v)
                   }}
                 >
-                  <SelectTrigger className="w-[140px] h-9">
+                  <SelectTrigger className="h-9 w-full sm:w-[140px]">
                     <SelectValue placeholder={t("fs_periodEndMonth")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -186,7 +186,7 @@ export default function FinancialStatementsPage() {
               </AdminFilterField>
 
               {(isOffice || isManager) && showMultiStorePicker ? (
-                <AdminFilterField label={t("pL_store")}>
+                <AdminFilterField label={t("pL_store")} className="min-w-0 w-full sm:w-auto">
                   <FinancialStatementStorePicker
                     value={storeFilter}
                     onChange={setStoreFilter}
@@ -197,13 +197,13 @@ export default function FinancialStatementsPage() {
                   />
                 </AdminFilterField>
               ) : (isOffice || isManager) ? (
-                <AdminFilterField label={t("pL_store")}>
+                <AdminFilterField label={t("pL_store")} className="min-w-0 flex-1 sm:flex-none">
                   <Select
                     value={storeFilter}
                     onValueChange={setStoreFilter}
                     disabled={isManager ? managerStoreOptions.length === 0 : false}
                   >
-                    <SelectTrigger className="w-[160px] h-9">
+                    <SelectTrigger className="h-9 w-full sm:w-[160px]">
                       <SelectValue placeholder={t("pL_store")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -231,7 +231,7 @@ export default function FinancialStatementsPage() {
                 </AdminFilterField>
               ) : null}
 
-              <Button size="sm" className="h-9" onClick={() => setQueryToken((v) => v + 1)}>
+              <Button size="sm" className="h-9 w-full sm:w-auto" onClick={() => setQueryToken((v) => v + 1)}>
                 <Search className="h-4 w-4 mr-1" />
                 {t("btn_query")}
               </Button>
@@ -241,7 +241,7 @@ export default function FinancialStatementsPage() {
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as "income" | "balance" | "reconcile" | "margin")}
-          className={adminTabsRootCn}
+          className={adminTabsRootScrollableCn}
         >
           <AdminTabsBarWithHelp>
             <TabsList className={adminTabsListRowCn}>
@@ -260,7 +260,7 @@ export default function FinancialStatementsPage() {
             </TabsList>
           </AdminTabsBarWithHelp>
 
-          <TabsContent value="income" className={cn(adminTabsContentCn, "space-y-3")}>
+          <TabsContent value="income" className={cn(adminTabsContentCn, "space-y-3 max-sm:px-3 max-sm:py-3")}>
             <IncomeStatementTab
               yearMonth={yearMonthEnd}
               yearMonthStart={yearMonthStart}

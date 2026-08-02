@@ -108,7 +108,7 @@ export function FinancialStatementStorePicker({
         type="button"
         size="sm"
         variant="outline"
-        className="h-9 min-w-[200px] justify-between"
+        className="h-9 w-full min-w-0 justify-between sm:min-w-[200px] sm:w-auto"
         disabled={disabled}
         aria-expanded={pickerOpen}
         aria-controls={pickerListId}
@@ -123,7 +123,7 @@ export function FinancialStatementStorePicker({
           id={pickerListId}
           role="dialog"
           aria-labelledby={pickerBtnId}
-          className="absolute z-30 mt-1 w-[320px] rounded-md border bg-background p-2 shadow-lg"
+          className="absolute z-30 mt-1 w-[min(320px,calc(100vw-2rem))] max-w-[calc(100vw-1.5rem)] rounded-md border bg-background p-2 shadow-lg left-0 right-auto sm:right-auto"
         >
           <Input
             value={storeSearch}

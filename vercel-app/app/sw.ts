@@ -13,8 +13,21 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope
 
+/**
+ * 실시간 매출·테이블 현황용 API — SW NetworkFirst(타임아웃 시 옛 캐시)에 넣으면
+ * 「검색」직후에도 배달 완료·홀 손님이 늦게/안 바뀐 것처럼 보인다. IndexedDB 폴백은 앱 코드에 있음.
+ */
+function isPosLiveOpsGetApi(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api/getPosTodaySales") ||
+    pathname.startsWith("/api/getPosOrders") ||
+    pathname.startsWith("/api/posRealtimeRevenueDashboard")
+  )
+}
+
 /** POS 오프라인·설치형(PWA)에서 메뉴 등 GET이 defaultCache(apis 16건 한도)에서 밀리지 않도록 전용 캐시 */
 function isPosWarmGetApi(pathname: string): boolean {
+  if (isPosLiveOpsGetApi(pathname)) return false
   if (pathname === "/api/members") return true
   const exact = new Set([
     "/api/getStoreList",
@@ -29,9 +42,7 @@ function isPosWarmGetApi(pathname: string): boolean {
     pathname.startsWith("/api/getPosTableLayout") ||
     pathname.startsWith("/api/getPosPrinterSettings") ||
     pathname.startsWith("/api/getPosDeliveryApps") ||
-    pathname.startsWith("/api/getPosTodaySales") ||
-    pathname.startsWith("/api/getPosPaymentMethodItems") ||
-    pathname.startsWith("/api/getPosOrders")
+    pathname.startsWith("/api/getPosPaymentMethodItems")
   )
 }
 
@@ -76,6 +87,23 @@ const downloadsBinaryNetworkOnly = {
     event?: ExtendableEvent
   }) {
     return sameOrigin && /^\/downloads\/.+\.(apk|exe)$/i.test(pathname)
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
+}
+
+/** 당일 매출·주문 목록 — 항상 네트워크(검색/실시간 반영이 캐시에 막히지 않게) */
+const posLiveOpsGetApisNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && isPosLiveOpsGetApi(pathname)
   },
   method: "GET" as const,
   handler: new NetworkOnly(),
@@ -382,6 +410,7 @@ const serwist = new Serwist({
     loginPagesGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,
+    posLiveOpsGetApisNetworkOnly,
     posWarmGetApis,
     erpWarmGetApis,
     supabaseStorageObjectImagesNetworkOnly,
