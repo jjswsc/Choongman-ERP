@@ -76,6 +76,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // POS 단말 역할 제한
   "단말 대수 설정은 본사(OFFICE) 직원만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",
   "단말 대수 설정은 POS 관리자만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",
+  "단말 대수 설정은 본사·매장 매니저만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",
   "메인 POS는 관리자 단말 설정에서 지정해야 합니다.": "posDeviceRoleLockedApi",
   "단말 역할(메인/주문)은 관리자 단말 설정에서만 변경할 수 있습니다.": "posDeviceRoleLockedApi",
 

@@ -9,7 +9,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { canEditPosDeviceRoleLimitsForStore } from '@/lib/permissions'
 import { syncTenantMaxPosFromErpAdmin } from '@/lib/saas-tenant-pos-licensed-server'
 
-/** POS 관리자 전용: 매장별 메인/주문 단말 대수·잠금 설정 */
+/** 본사·SV·매장 매니저·가맹점주: 매장별 메인/주문 단말 대수·잠금 설정 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     if (!canEditPosDeviceRoleLimitsForStore(authResult.auth.role || '', authResult.auth.store || '', storeCode)) {
       return NextResponse.json(
-        { success: false, message: '단말 대수 설정은 POS 관리자만 변경할 수 있습니다.' },
+        { success: false, message: '단말 대수 설정은 본사·매장 매니저만 변경할 수 있습니다.' },
         { status: 403, headers }
       )
     }

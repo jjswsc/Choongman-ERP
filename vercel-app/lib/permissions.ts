@@ -431,12 +431,15 @@ export function canAccessPosTerminalSettings(role: string): boolean {
   )
 }
 
-/** POS 단말 대수(메인/주문 슬롯)·잠금 — POS 관리자 화면(`/admin/pos-screen-config` → 단말) 접근 권한과 동일 */
+/**
+ * POS 단말 대수(메인/주문 슬롯)·현장 역할 잠금 ON/OFF
+ * — 본사·SV·매장 매니저·가맹점주 (`/admin/pos-screen-config` → 단말 과 동일)
+ */
 export function canEditPosDeviceRoleLimits(role: string): boolean {
   return canAccessPosTerminalSettings(role)
 }
 
-/** 매장 POS 관리자는 자기 매장만, 본사·순회 SV는 매장 선택 후 변경 가능 */
+/** 매장 매니저·가맹점주는 자기 매장만, 본사·순회 SV는 매장 선택 후 변경 가능 */
 export function canEditPosDeviceRoleLimitsForStore(
   role: string,
   authStore: string,

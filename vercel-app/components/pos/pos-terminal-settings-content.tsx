@@ -558,7 +558,7 @@ export function PosTerminalSettingsContent() {
         {canEditRoleLimits ? (
           <div className="space-y-3 rounded-md border border-primary/20 bg-background p-3">
             <p className="text-xs font-medium text-primary">
-              {t('posTerminalRoleLimitsAdminOnly') || 'POS 관리자 — 대수·잠금 조정'}
+              {t('posTerminalRoleLimitsAdminOnly') || '본사·매장 매니저 — 대수·잠금 조정'}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">
@@ -594,7 +594,10 @@ export function PosTerminalSettingsContent() {
                 onChange={(e) => setLimitsDraftLocked(e.target.checked)}
                 disabled={savingLimits}
               />
-              <span>{t('posTerminalRoleLimitsLockToggle') || '현장에서 메인/주문 변경 금지(관리자 지정만)'}</span>
+              <span>
+                {t('posTerminalRoleLimitsLockToggle') ||
+                  '현장에서 메인/주문 역할 변경 금지(본사·매장 매니저 지정)'}
+              </span>
             </label>
             <Button type="button" size="sm" disabled={!effectiveStore || savingLimits} onClick={handleSaveRoleLimits}>
               {savingLimits ? '…' : t('posTerminalRoleLimitsSave') || '대수 설정 저장'}
@@ -603,7 +606,7 @@ export function PosTerminalSettingsContent() {
         ) : (
           <p className="text-xs text-muted-foreground">
             {t('posTerminalRoleLimitsReadOnly') ||
-              '단말 대수 변경은 POS 관리자만 할 수 있습니다. 아래 목록에서 메인 지정·해제는 가능합니다.'}
+              '단말 대수·잠금 변경은 본사·매장 매니저만 할 수 있습니다. 아래 목록에서 메인 지정·해제는 가능합니다.'}
           </p>
         )}
       </div>
