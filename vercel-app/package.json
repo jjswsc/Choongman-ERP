@@ -15,7 +15,7 @@
     "icons:member": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-member-icons.ps1",
     "gen:limits": "node scripts/extract-api-limits.mjs",
     "build:prep": "npm run i18n:encoding:check && npm run i18n:pos:sync && npm run pos:tour:doc:sync && npm run gen:limits",
-    "build:next": "node --max-old-space-size=6144 node_modules/next/dist/bin/next build --webpack",
+    "build:next": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build --webpack",
     "build:fast": "npm run build:next && npm run postbuild",
     "dev": "node scripts/dev-with-i18n.cjs --webpack",
     "dev:fast": "node scripts/dev-with-i18n.cjs --webpack --no-i18n-watch",
