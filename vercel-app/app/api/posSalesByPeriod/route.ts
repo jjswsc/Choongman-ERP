@@ -19,14 +19,15 @@ import {
   tryFetchPosSalesAnalyticsAgg,
 } from '@/lib/pos-sales-analytics-rpc-server'
 import { canonicalizePeriodSeriesKeys } from '@/lib/pos-sales-analytics-rpc-map'
+import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+  const { searchParams } = new URL(request.url)
+  applyPosSalesCacheControl(headers, searchParams)
 
   try {
-    const { searchParams } = new URL(request.url)
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const groupBy = searchParams.get('groupBy') || 'day'

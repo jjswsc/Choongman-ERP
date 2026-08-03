@@ -21,7 +21,12 @@ function isPosLiveOpsGetApi(pathname: string): boolean {
   return (
     pathname.startsWith("/api/getPosTodaySales") ||
     pathname.startsWith("/api/getPosOrders") ||
-    pathname.startsWith("/api/posRealtimeRevenueDashboard")
+    pathname.startsWith("/api/posRealtimeRevenueDashboard") ||
+    pathname.startsWith("/api/posSalesByStore") ||
+    pathname.startsWith("/api/posSalesByStoreChannel") ||
+    pathname.startsWith("/api/posSalesByChannel") ||
+    pathname.startsWith("/api/posSalesByDeliveryApp") ||
+    pathname.startsWith("/api/posSalesByPeriod")
   )
 }
 
@@ -64,11 +69,8 @@ function isErpWarmGetApi(pathname: string): boolean {
     pathname.startsWith("/api/getPurchaseOrders") ||
     pathname.startsWith("/api/getPurchaseOrderItems") ||
     pathname.startsWith("/api/getPurchaseOrderSummaries") ||
-    pathname.startsWith("/api/getPosSalesByPeriod") ||
-    pathname.startsWith("/api/getPosSalesByDeliveryApp") ||
     pathname.startsWith("/api/getPosSalesByPayment") ||
-    pathname.startsWith("/api/posSalesByPaymentBreakdown") ||
-    pathname.startsWith("/api/getPosSalesByStore")
+    pathname.startsWith("/api/posSalesByPaymentBreakdown")
   )
 }
 

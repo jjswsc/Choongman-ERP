@@ -4,6 +4,15 @@
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { jsonAsArray, jsonAsPlainObject, jsonAsStringArray } from '../safe-api-json'
 
+/** 실시간 매출 등 — CDN·브라우저 캐시 우회 */
+function appendPosSalesFreshParam(q: URLSearchParams, fresh?: boolean) {
+  if (fresh) q.set('fresh', '1')
+}
+
+function posSalesFetchInit(fresh?: boolean): RequestInit | undefined {
+  return fresh ? { cache: 'no-store' } : undefined
+}
+
 export async function getPosSalesByStore(params: {
   startStr: string
   endStr: string
@@ -11,12 +20,15 @@ export async function getPosSalesByStore(params: {
   stores?: string[]
   /** dine_in / takeout / delivery — 복수 시 합산(OR) */
   orderTypes?: string[]
+  /** true면 Cache-Control no-store (실시간 매출「검색」) */
+  fresh?: boolean
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByStore?${q}`)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await apiFetchWithOffline(`/api/posSalesByStore?${q}`, posSalesFetchInit(params.fresh))
   return res.json() as Promise<
     {
       storeName: string
@@ -142,6 +154,7 @@ export async function getPosSalesByPeriod(params: {
   stores?: string[]
   orderTypes?: string[]
   splitByStore?: boolean
+  fresh?: boolean
 }): Promise<PosSalesByPeriodResult> {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -152,7 +165,8 @@ export async function getPosSalesByPeriod(params: {
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   if (params.splitByStore) q.set('splitByStore', '1')
-  const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`, posSalesFetchInit(params.fresh))
   const truncated = res.headers.get('X-Sales-Truncated') === '1'
   const json: unknown = await res.json()
   if (
@@ -177,12 +191,17 @@ export async function getPosSalesByDeliveryApp(params: {
   pos?: string
   stores?: string[]
   orderTypes?: string[]
+  fresh?: boolean
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByDeliveryApp?${q}`)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await apiFetchWithOffline(
+    `/api/posSalesByDeliveryApp?${q}`,
+    posSalesFetchInit(params.fresh)
+  )
   return res.json() as Promise<{
     items: {
       channelKey: string
@@ -200,12 +219,17 @@ export async function getPosSalesByStoreChannel(params: {
   pos?: string
   stores?: string[]
   orderTypes?: string[]
+  fresh?: boolean
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByStoreChannel?${q}`)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await apiFetchWithOffline(
+    `/api/posSalesByStoreChannel?${q}`,
+    posSalesFetchInit(params.fresh)
+  )
   return res.json() as Promise<
     { storeName: string; dineIn: number; takeout: number; delivery: number }[]
   >
@@ -217,12 +241,17 @@ export async function getPosSalesByChannel(params: {
   pos?: string
   stores?: string[]
   orderTypes?: string[]
+  fresh?: boolean
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByChannel?${q}`)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await apiFetchWithOffline(
+    `/api/posSalesByChannel?${q}`,
+    posSalesFetchInit(params.fresh)
+  )
   return jsonAsArray<{ channelKey: string; sales: number }>(await res.json())
 }
 

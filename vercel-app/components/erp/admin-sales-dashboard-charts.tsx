@@ -167,15 +167,26 @@ export function AdminSalesDashboardCharts({
       setBusinessDayYmd(today)
 
       const [stores, storeChannels, channels, delivery, periodRes] = await Promise.all([
-        getPosSalesByStore({ startStr: today, endStr: today, stores: storesParam }),
-        getPosSalesByStoreChannel({ startStr: today, endStr: today, stores: storesParam }),
-        getPosSalesByChannel({ startStr: today, endStr: today, stores: storesParam }),
-        getPosSalesByDeliveryApp({ startStr: today, endStr: today, stores: storesParam }),
+        getPosSalesByStore({ startStr: today, endStr: today, stores: storesParam, fresh: true }),
+        getPosSalesByStoreChannel({
+          startStr: today,
+          endStr: today,
+          stores: storesParam,
+          fresh: true,
+        }),
+        getPosSalesByChannel({ startStr: today, endStr: today, stores: storesParam, fresh: true }),
+        getPosSalesByDeliveryApp({
+          startStr: today,
+          endStr: today,
+          stores: storesParam,
+          fresh: true,
+        }),
         getPosSalesByPeriod({
           startStr: today,
           endStr: today,
           groupBy: "hour",
           stores: storesParam,
+          fresh: true,
         }),
       ])
       const scopedStores = storesParam?.length

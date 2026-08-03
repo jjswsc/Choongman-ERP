@@ -11,14 +11,15 @@ import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { groupPosSalesRowsByCanonicalStore } from '@/lib/pos-sales-period-aggregate'
 import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
 import { mapAnalyticsAggToStoreResults } from '@/lib/pos-sales-analytics-rpc-map'
+import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+  const { searchParams } = new URL(request.url)
+  applyPosSalesCacheControl(headers, searchParams)
 
   try {
-    const { searchParams } = new URL(request.url)
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
