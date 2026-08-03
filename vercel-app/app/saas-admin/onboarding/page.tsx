@@ -753,12 +753,22 @@ export default function SaasOnboardingPage() {
               <p className="text-sm text-muted-foreground">{t("saasAdminOnboard_companyIntro")}</p>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <Label>{t("saasAdminCust_tenantIdLabel")}</Label>
-                  <Input value={newTenantId} onChange={(e) => setNewTenantId(e.target.value)} placeholder={t("saasAdminCust_tenantIdPh")} />
+                  <Label>{t("saasAdminOnboard_loginCompanyLabel")}</Label>
+                  <Input
+                    value={newTenantName}
+                    onChange={(e) => setNewTenantName(e.target.value)}
+                    placeholder={t("saasAdminCust_tenantNamePh")}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("saasAdminOnboard_loginCompanyHint")}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label>{t("saasAdminCust_tenantNameLabel")}</Label>
-                  <Input value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} placeholder={t("saasAdminCust_tenantNamePh")} />
+                  <Label>{t("saasAdminCust_tenantIdLabel")}</Label>
+                  <Input
+                    value={newTenantId}
+                    onChange={(e) => setNewTenantId(e.target.value)}
+                    placeholder={t("saasAdminCust_tenantIdPh")}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("saasAdminOnboard_tenantIdNotLoginHint")}</p>
                 </div>
                 <div className="space-y-1">
                   <Label>{t("saasAdminCust_ownerLabel")}</Label>
@@ -788,12 +798,13 @@ export default function SaasOnboardingPage() {
               ) : null}
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <Label>{t("saasAdmin_labelTenant")}</Label>
+                  <Label>{t("saasAdminOnboard_loginCompanyLabel")}</Label>
                   <Input value={activeCompanyName || activeTenantId} disabled />
                 </div>
                 <div className="space-y-1">
-                  <Label>{t("saasAdmin_labelStoreName")}</Label>
+                  <Label>{t("saasAdminOnboard_loginStoreLabel")}</Label>
                   <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder={t("saasAdminStore_storeNamePh")} />
+                  <p className="text-xs text-muted-foreground">{t("saasAdminOnboard_loginStoreHint")}</p>
                 </div>
                 <div className="space-y-1 md:col-span-2">
                   <Label>{t("saasAdmin_storeCodeOptional")}</Label>
@@ -826,11 +837,11 @@ export default function SaasOnboardingPage() {
               ) : null}
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <Label>{t("saasAdmin_labelTenant")}</Label>
+                  <Label>{t("saasAdminOnboard_loginCompanyLabel")}</Label>
                   <Input value={activeCompanyName || activeTenantId} disabled />
                 </div>
                 <div className="space-y-1">
-                  <Label>{t("saasAdmin_labelStoreName")}</Label>
+                  <Label>{t("saasAdminOnboard_loginStoreLabel")}</Label>
                   {storeOptions.length > 1 ? (
                     <Select value={selectedStoreName || "__none__"} onValueChange={(v) => setSelectedStoreName(v === "__none__" ? "" : v)}>
                       <SelectTrigger>
@@ -856,8 +867,9 @@ export default function SaasOnboardingPage() {
                   )}
                 </div>
                 <div className="space-y-1">
-                  <Label>{t("saasAdminStore_managerName")}</Label>
+                  <Label>{t("saasAdminOnboard_loginNameLabel")}</Label>
                   <Input value={adminName} onChange={(e) => setAdminName(e.target.value)} placeholder={t("saasAdminStore_managerNamePh")} />
+                  <p className="text-xs text-muted-foreground">{t("saasAdminOnboard_loginNameHint")}</p>
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
@@ -958,14 +970,15 @@ export default function SaasOnboardingPage() {
               <p className="text-sm text-muted-foreground">{t("saasAdminOnboard_verifyIntro")}</p>
               {lastLoginCreds ? (
                 <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
+                  <p className="font-medium">{t("saasAdminOnboard_loginCredsTitle")}</p>
                   <p>
-                    {t("saasAdmin_labelTenant")}: <strong>{lastLoginCreds.company}</strong>
+                    {t("saasAdminOnboard_verifyLoginCompany")}: <strong>{lastLoginCreds.company}</strong>
                   </p>
                   <p>
-                    {t("saasAdmin_labelStoreName")}: <strong>{lastLoginCreds.store}</strong>
+                    {t("saasAdminOnboard_verifyLoginStore")}: <strong>{lastLoginCreds.store}</strong>
                   </p>
                   <p>
-                    {t("saasAdminStore_managerName")}: <strong>{lastLoginCreds.admin}</strong>
+                    {t("saasAdminOnboard_verifyLoginName")}: <strong>{lastLoginCreds.admin}</strong>
                   </p>
                 </div>
               ) : (
