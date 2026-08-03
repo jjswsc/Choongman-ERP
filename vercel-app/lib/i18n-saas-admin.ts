@@ -16,9 +16,9 @@ export const I18N_SAAS_ADMIN_KO: Record<string, string> = {
   saasAdminHeader_partnerScope: "대리점 · {name}",
   saasAdminOmniOnlyTitle: "Omni 전용 화면입니다",
   saasAdminOmniOnlyBody:
-    "SaaS Admin(고객사·한도·IP/2FA)은 Omni Foodtech 배포에서만 사용합니다. 충만(Choongman) ERP와는 분리되어 있습니다.",
+    "SaaS Admin(고객사·한도·IP)은 Omni Foodtech 배포에서만 사용합니다. 충만(Choongman) ERP와는 분리되어 있습니다.",
   saasAdminOmniBanner:
-    "Omni SaaS 제어면 · 충만 ERP와 DB/배포가 분리되어 있습니다. IP allowlist · 관리자 2FA · 태블릿 한도는 이 화면에서만 설정합니다.",
+    "Omni SaaS 제어면 · 충만 ERP와 DB/배포가 분리되어 있습니다. IP allowlist · 태블릿 한도는 이 화면에서만 설정합니다.",
   saasAdminGlobalLabel: "글로벌",
   saasAdminLanguageSelect: "표시 언어",
   saasAdminPageTitle: "SaaS 관리자 대시보드",
@@ -343,7 +343,6 @@ export const I18N_SAAS_ADMIN_KO: Record<string, string> = {
   saasAdminCust_yearlyThb: "연간 청구(THB)",
   saasAdminCust_autoSuspendOverdue: "연체 시 자동 정지",
   saasAdminCust_allowOverage: "허용량 초과 사용 허용 (후불 청구)",
-  saasAdminCust_require2fa: "관리자 2차 인증(2FA) 필수",
   saasAdminCust_requireIpAllowlist: "허용 IP 목록(Allowlist) 필수",
   saasAdminCust_forceWeeklyBackup: "주간 백업 강제",
   saasAdminCust_overdueGraceDays: "연체 유예일",
@@ -721,9 +720,9 @@ export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
   saasAdminHeader_partnerScope: "Partner · {name}",
   saasAdminOmniOnlyTitle: "Omni-only screen",
   saasAdminOmniOnlyBody:
-    "SaaS Admin (customers, limits, IP/2FA) is for Omni Foodtech deployments only. It is separate from Choongman ERP.",
+    "SaaS Admin (customers, limits, IP) is for Omni Foodtech deployments only. It is separate from Choongman ERP.",
   saasAdminOmniBanner:
-    "Omni SaaS control plane · Separate DB/deploy from Choongman ERP. Configure IP allowlist, admin 2FA, and tablets here only.",
+    "Omni SaaS control plane · Separate DB/deploy from Choongman ERP. Configure IP allowlist and tablets here only.",
   saasAdminGlobalLabel: "Global",
   saasAdminLanguageSelect: "Display language",
   saasAdminPageTitle: "SaaS admin dashboard",
@@ -1048,7 +1047,6 @@ export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
   saasAdminCust_yearlyThb: "Yearly (THB)",
   saasAdminCust_autoSuspendOverdue: "Auto-suspend on overdue",
   saasAdminCust_allowOverage: "Allow overage (bill later)",
-  saasAdminCust_require2fa: "Require admin 2FA",
   saasAdminCust_requireIpAllowlist: "Require IP allowlist",
   saasAdminCust_forceWeeklyBackup: "Force weekly backup",
   saasAdminCust_overdueGraceDays: "Overdue grace days",
@@ -1424,9 +1422,9 @@ export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
   saasAdminHeader_partnerScope: "ตัวแทน · {name}",
   saasAdminOmniOnlyTitle: "หน้าจอสำหรับ Omni เท่านั้น",
   saasAdminOmniOnlyBody:
-    "SaaS Admin (ลูกค้า วงเงิน IP/2FA) ใช้ได้เฉพาะการ deploy ของ Omni Foodtech ครับ แยกจาก Choongman ERP",
+    "SaaS Admin (ลูกค้า วงเงิน IP) ใช้ได้เฉพาะการ deploy ของ Omni Foodtech ครับ แยกจาก Choongman ERP",
   saasAdminOmniBanner:
-    "Omni SaaS · แยก DB/deploy จาก Choongman ERP ตั้งค่า IP allowlist · 2FA ผู้ดูแล · แท็บเล็ตที่นี่เท่านั้นครับ",
+    "Omni SaaS · แยก DB/deploy จาก Choongman ERP ตั้งค่า IP allowlist · แท็บเล็ตที่นี่เท่านั้นครับ",
   saasAdminGlobalLabel: "ทั่วโลก",
   saasAdminLanguageSelect: "ภาษาที่แสดง",
   saasAdminPageTitle: "แดชบอร์ดผู้ดูแล SaaS",
@@ -1750,7 +1748,6 @@ export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
   saasAdminCust_yearlyThb: "รายปี (THB)",
   saasAdminCust_autoSuspendOverdue: "ระงับอัตโนมัติเมื่อค้างชำระ",
   saasAdminCust_allowOverage: "อนุญาตเกินวงเงิน (เรียกเก็บทีหลัง)",
-  saasAdminCust_require2fa: "บังคับ 2FA ผู้ดูแล",
   saasAdminCust_requireIpAllowlist: "บังคับ IP Allowlist",
   saasAdminCust_forceWeeklyBackup: "บังคับสำรองรายสัปดาห์",
   saasAdminCust_overdueGraceDays: "วันผ่อนผันค้างชำระ",

@@ -51,9 +51,9 @@ DB 행이 없으면:
 
 ## SaaS 한도·보안 (런타임)
 - 직원/매니저/매장/POS단말/월주문/태블릿: API에서 fail-closed 검사
-- IP allowlist · admin 2FA: `tenant_policy_settings` + `employees.totp_*`
+- IP allowlist: `tenant_policy_settings`
 - 연체 자동정지: `/api/cron/saas-auto-suspend` (Omni만)
-- **UI**: `/saas-admin`는 Omni 브랜드만. 충만 배포에서는 진입 차단. 로그인 2FA 입력란도 Omni `/admin/login`만.
+- **UI**: `/saas-admin`는 Omni 브랜드만. 충만 배포에서는 진입 차단.
 
 ## 전용 프로젝트 분기
 1. 전용 Supabase 프로젝트 생성

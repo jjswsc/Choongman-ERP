@@ -330,11 +330,11 @@ export function QrTableSessionPanel(props: {
 
             <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-[220px]">
               <span className="shrink-0 text-[11px] font-medium text-slate-500">
-                {tr('qrTableSessionTier', '티어')}
+                {tr('qrTableSessionTier', '패키지')}
               </span>
               {isAlaCarte ? (
                 <span className="h-8 flex-1 truncate rounded-md border border-slate-200 bg-white px-2.5 text-xs leading-8 text-slate-500 shadow-sm">
-                  {tr('qrTableSessionAlaCarte', '일반 메뉴 모드')}
+                  {tr('qrTableSessionAlaCarte', '메뉴별 주문')}
                 </span>
               ) : (
                 <Select value={tierId} onValueChange={setTierId}>

@@ -2218,9 +2218,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuActive: '판매중',
     posMenuBanban: '반반 메뉴 (맛 2개 선택)',
     posMenuBanbanHint: 'POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩.',
-    posMenuBuffetIncludable: '뷔페 포함 가능 (QR)',
+    posMenuBuffetIncludable: '패키지 포함 가능 (QR)',
     posMenuBuffetIncludableHint:
-      'QR 뷔페 티어에서 포함(0원) 후보로 고를 수 있습니다. 실제 포함은 QR 테이블오더 티어에서 체크합니다.',
+      '선택 사항입니다. QR 테이블오더「인당 패키지」에서 포함 메뉴를 체크하면 자동으로 켜집니다.',
     posMenuBanbanFlavorWhitelistTitle: '반반 허용 맛',
     posMenuBanbanFlavorWhitelistHint:
       '이 반반 메뉴에서 보여줄 맛만 직접 선택합니다. 비워 두면 기존 자동 후보 규칙을 사용합니다.',
@@ -5505,9 +5505,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuActive: 'Active',
     posMenuBanban: 'Half & half (pick 2 flavors)',
     posMenuBanbanHint: 'Customer picks 2 chicken menus (S boneless) in POS. Cost = 0.5 each.',
-    posMenuBuffetIncludable: 'Buffet includable (QR)',
+    posMenuBuffetIncludable: 'Package includable (QR)',
     posMenuBuffetIncludableHint:
-      'Eligible for QR buffet tier includes (฿0). Actual include is selected on the QR table-order tier screen.',
+      'Optional. Checking a menu under QR table-order packages turns this on automatically.',
     posMenuBanbanFlavorWhitelistTitle: 'Allowed half-and-half flavors',
     posMenuBanbanFlavorWhitelistHint:
       'Choose exactly which flavors this half-and-half menu can show. Leave it empty to use the existing automatic chicken candidate rule.',
@@ -6614,9 +6614,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuActive: 'ขาย',
     posMenuBanban: 'ครึ่ง-ครึ่ง (เลือก 2 อย่าง)',
     posMenuBanbanHint: 'ลูกค้าเลือก 2 อย่างใน POS (เช่น ไก่ครึ่ง-ครึ่ง)',
-    posMenuBuffetIncludable: 'ใส่บุฟเฟต์ได้ (QR)',
+    posMenuBuffetIncludable: 'ใส่แพ็กเกจได้ (QR)',
     posMenuBuffetIncludableHint:
-      'เลือกเป็นเมนูรวม (฿0) ในระดับราคา QR ได้ การรวมจริงตั้งค่าที่หน้า QR โต๊ะออเดอร์',
+      'ไม่บังคับ — ถ้าติ๊กเมนูรวมที่หน้า QR โต๊ะออเดอร์ ระบบจะเปิดให้อัตโนมัติครับ',
     posMenuBanbanFlavorWhitelistTitle: 'รสชาติที่อนุญาตสำหรับครึ่ง-ครึ่ง',
     posMenuBanbanFlavorWhitelistHint:
       'เลือกรสชาติที่จะแสดงในเมนูครึ่ง-ครึ่งนี้โดยตรง หากปล่อยว่าง จะใช้กฎเลือกไก่อัตโนมัติเดิม',

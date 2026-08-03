@@ -60,7 +60,7 @@
 | 7 | `registerPosMainDevice` auth | POS 단말 등록 | **오피스 POS 등록** |
 | 8 | fail-open 제거 (tenantId 없을 때 게이트) | **충만 전체 차단** | **하지 않음** |
 | 9 | enabled-modules 실패 시 전 모듈 OFF | UI 잠금 | — |
-| 10 | 2FA / IP / auto_suspend enforce | 로그인 불가 | — |
+| 10 | IP / auto_suspend enforce | 로그인 불가 | — |
 
 ### ✅ 완료 (SaaS 판매 전 P0 — Omni만, 충만 무영향)
 
@@ -79,10 +79,9 @@
 - **KBank/Grab Omni env 폴백 금지**: `lib/tenant-integration-resolve.ts`
 - **연체 자동정지 cron**: `/api/cron/saas-auto-suspend` (Omni 브랜드만, 매일 UTC 17:15)
 - **매니저/태블릿 한도**: `saas-manager-limit-server` / `saas-tablet-limit-server` + `saasAdminDevices`
-- **IP allowlist + admin TOTP**: `loginCheck` enforce + `sql/omni_saas_login_security.sql` + `/api/saasAdminTotp`
+- **IP allowlist**: `loginCheck` enforce + `sql/omni_saas_login_security.sql` (admin 2FA/TOTP는 제거됨)
 - **테넌트 export**: `GET /api/saasAdminTenantExport?tenantId=`
 - **P2 UI (Omni만, 충만 로그인 UI 비표시)**:
-  - `/admin/login` Omni: TOTP 입력·등록 확인
   - `/saas-admin`: Omni 배너 + 비-Omni 브랜드 차단
   - 고객사: 허용 IP textarea · 테넌트 JSON export · 태블릿 탭
 - **고도화(감사 후)**:
@@ -90,7 +89,6 @@
   - Grab store map Omni env 폴백 제거
   - 모듈 게이트 DB 조회 실패 → 503
   - `requireAuth` 정지 계정을 401이 아닌 403/503으로 반환
-  - TOTP bootstrap IP allowlist + 이미 활성 시 재enroll 거부
   - `saasBootstrapTenantLogin` maxStores 검사
   - `/saas-admin/login`도 비-Omni 차단
 

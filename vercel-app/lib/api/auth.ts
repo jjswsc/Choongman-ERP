@@ -36,8 +36,6 @@ export async function loginCheck(params: {
   name: string
   pw: string
   isAdminPage?: boolean
-  /** Omni 관리자 2FA */
-  totpCode?: string
 }) {
   const res = await apiFetch('/api/loginCheck', {
     method: 'POST',
@@ -63,30 +61,6 @@ export async function loginCheck(params: {
     code?: string
   }
   return data
-}
-
-/** Omni 전용 — 로그인 전 2FA 등록(bootstrap) */
-export async function saasAdminTotpBootstrap(params: {
-  action: 'bootstrap_enroll' | 'bootstrap_confirm'
-  company?: string
-  store: string
-  name: string
-  pw: string
-  totpCode?: string
-}) {
-  const res = await apiFetch('/api/saasAdminTotp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return (await readJsonOrThrow(res, 'saasAdminTotp')) as {
-    success: boolean
-    message?: string
-    code?: string
-    secret?: string
-    otpauthUrl?: string
-    enabled?: boolean
-  }
 }
 
 export async function changePassword(params: {

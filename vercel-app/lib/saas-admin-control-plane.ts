@@ -26,7 +26,6 @@ export type TenantPolicy = {
   posDeviceBillingBasis: PosDeviceBillingBasis
   autoSuspendOnOverdue: boolean
   allowOverage: boolean
-  require2faAdmin: boolean
   requireIpAllowlist: boolean
   /** requireIpAllowlist 시 허용 IP/CIDR 목록 */
   allowedIps: string[]
@@ -198,7 +197,6 @@ export const DEFAULT_POLICY: TenantPolicy = {
   posDeviceBillingBasis: "usage",
   autoSuspendOnOverdue: true,
   allowOverage: false,
-  require2faAdmin: false,
   requireIpAllowlist: false,
   allowedIps: [],
   forceWeeklyBackup: false,

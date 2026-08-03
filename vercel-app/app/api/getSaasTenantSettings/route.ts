@@ -483,7 +483,6 @@ export async function GET(req: NextRequest) {
         posDeviceBillingBasis,
         autoSuspendOnOverdue: sub?.auto_suspend_on_overdue ?? DEFAULT_POLICY.autoSuspendOnOverdue,
         allowOverage: policyLimit?.allow_overage ?? DEFAULT_POLICY.allowOverage,
-        require2faAdmin: policyRow?.require_2fa_admin ?? DEFAULT_POLICY.require2faAdmin,
         requireIpAllowlist: policyRow?.require_ip_allowlist ?? DEFAULT_POLICY.requireIpAllowlist,
         allowedIps: Array.isArray(policyRow?.allowed_ips)
           ? (policyRow!.allowed_ips as unknown[]).map((x) => String(x || "").trim()).filter(Boolean)

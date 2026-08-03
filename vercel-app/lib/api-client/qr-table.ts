@@ -271,6 +271,8 @@ export async function qrTableStaffSessionsMap(storeCode: string) {
   )
   return parseJson<{
     success: boolean
+    /** false면 QR 미사용 매장 — 클라이언트는 폴링을 늦춤 */
+    enabled?: boolean
     sessions?: Array<{
       tableName: string
       status: string

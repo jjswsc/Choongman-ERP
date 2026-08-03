@@ -7,7 +7,7 @@
 
 export { apiFetch } from './api/fetch'
 export { apiFetchWithOffline } from './api/fetch-offline'
-export { loginCheck, changePassword, saasAdminTotpBootstrap } from './api/auth'
+export { loginCheck, changePassword } from './api/auth'
 export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
 export {

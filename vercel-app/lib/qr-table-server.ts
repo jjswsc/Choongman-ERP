@@ -375,41 +375,22 @@ export async function saveBuffetTier(input: {
   }
 
   if (Array.isArray(input.includedMenuIds)) {
-    let previousIds = new Set<number>()
-    if (tierId > 0) {
-      try {
-        const prevRows = (await supabaseSelectFilter(
-          'pos_buffet_tier_menus',
-          `tier_id=eq.${tierId}`,
-          { select: 'menu_id', limit: 5000 }
-        )) as Array<{ menu_id?: number }>
-        previousIds = new Set(
-          (prevRows || []).map((r) => Number(r.menu_id || 0)).filter((x) => x > 0)
-        )
-      } catch {
-        previousIds = new Set()
-      }
-    }
     await supabaseDeleteByFilter('pos_buffet_tier_menus', `tier_id=eq.${tierId}`)
-    let menuIds = [...new Set(input.includedMenuIds.map((x) => Math.floor(Number(x))).filter((x) => x > 0))]
-    if (menuIds.length > 0) {
-      try {
-        const includableRows = (await supabaseSelectFilter(
-          'pos_menus',
-          `id=in.(${menuIds.join(',')})&buffet_includable=eq.true`,
-          { select: 'id', limit: menuIds.length }
-        )) as Array<{ id?: number }>
-        const allowed = new Set(
-          (includableRows || []).map((r) => Number(r.id || 0)).filter((x) => x > 0)
-        )
-        // 후보 플래그 + 이 티어에 이미 연결되어 있던 메뉴(마이그레이션 전) 유지
-        menuIds = menuIds.filter((id) => allowed.has(id) || previousIds.has(id))
-      } catch {
-        // buffet_includable 컬럼 미배포 시 기존처럼 전부 허용
-      }
-    }
+    const menuIds = [...new Set(input.includedMenuIds.map((x) => Math.floor(Number(x))).filter((x) => x > 0))]
     for (const menu_id of menuIds) {
       await supabaseInsert('pos_buffet_tier_menus', { tier_id: tierId, menu_id })
+    }
+    // 포함으로 고른 메뉴는 buffet_includable 자동 ON (메뉴 관리 이중 설정 불필요)
+    if (menuIds.length > 0) {
+      try {
+        await supabaseUpdateByFilter(
+          'pos_menus',
+          `id=in.(${menuIds.join(',')})`,
+          { buffet_includable: true }
+        )
+      } catch {
+        // 컬럼 미배포 시 무시 — 티어 메뉴 연결만으로도 손님 앱 포함 동작
+      }
     }
   }
 
@@ -676,10 +657,20 @@ export type QrFloorSessionHint = {
   posOrderId: number | null
 }
 
-export async function listActiveQrSessionsForStore(storeCode: string): Promise<QrFloorSessionHint[]> {
+/**
+ * POS 홀 배지용 활성 QR 세션 맵.
+ * QR 미사용 매장은 세션 조회·만료 루프를 건너뛴다 (Vercel Fluid CPU 절감).
+ */
+export async function listActiveQrSessionsForStore(
+  storeCode: string
+): Promise<{ enabled: boolean; sessions: QrFloorSessionHint[] }> {
   const code = String(storeCode || '').trim()
-  if (!code) return []
+  if (!code) return { enabled: false, sessions: [] }
   try {
+    const settings = await loadQrOrderStoreSettings(code)
+    if (!settings.enabled) return { enabled: false, sessions: [] }
+
+    const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 240))
     const rows = (await supabaseSelectFilter(
       'pos_qr_table_sessions',
       `store_code=eq.${encodeURIComponent(code)}&status=in.(awaiting_entry,active)`,
@@ -692,9 +683,25 @@ export async function listActiveQrSessionsForStore(storeCode: string): Promise<Q
     )) as DbSession[]
     const out: QrFloorSessionHint[] = []
     const seen = new Set<string>()
+    const now = getBangkokDateTimeString()
     for (const row of rows || []) {
       const mapped = mapSession(row)
-      const live = await expireSessionIfStale(mapped)
+      // settings는 위에서 1회만 로드 — 행마다 loadQrOrderStoreSettings 호출하지 않음
+      let live: QrTableSession | null = mapped
+      if (sessionAgeMinutes(mapped.createdAt) >= maxMin) {
+        try {
+          await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${mapped.id}`, {
+            status: 'expired',
+            closed_at: now,
+            updated_at: now,
+            staff_call_at: null,
+            staff_call_note: null,
+          })
+          live = null
+        } catch {
+          // expireSessionIfStale와 동일: UPDATE 실패 시 힌트는 유지 (배지만 사라지지 않게)
+        }
+      }
       if (!live) continue
       const key = live.tableName.toLowerCase()
       if (seen.has(key)) continue
@@ -707,10 +714,12 @@ export async function listActiveQrSessionsForStore(storeCode: string): Promise<Q
         posOrderId: live.posOrderId,
       })
     }
-    return out
+    return { enabled: true, sessions: out }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    if (/pgrst205|schema_missing|pos_qr_table_sessions|could not find/i.test(msg)) return []
+    if (/pgrst205|schema_missing|pos_qr_table_sessions|pos_qr_order_store_settings|could not find/i.test(msg)) {
+      return { enabled: false, sessions: [] }
+    }
     throw e
   }
 }

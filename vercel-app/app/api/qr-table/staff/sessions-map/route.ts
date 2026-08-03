@@ -12,8 +12,10 @@ export async function GET(req: NextRequest) {
     const storeCode = String(req.nextUrl.searchParams.get('storeCode') || '').trim()
     const auth = await requirePosStoreWriteAuth(req, storeCode, headers)
     if (!auth.ok) return auth.response
-    const sessions = await listActiveQrSessionsForStore(storeCode)
-    return applyPosApiCors(NextResponse.json({ success: true, sessions }, { headers }))
+    const { enabled, sessions } = await listActiveQrSessionsForStore(storeCode)
+    return applyPosApiCors(
+      NextResponse.json({ success: true, enabled, sessions }, { headers })
+    )
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'error'
     return applyPosApiCors(NextResponse.json({ success: false, message: msg }, { status: 400, headers }))

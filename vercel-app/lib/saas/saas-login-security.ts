@@ -1,68 +1,7 @@
 /**
- * Omni SaaS 로그인 보안 — IP allowlist / TOTP(2FA) 순수 함수.
+ * Omni SaaS 로그인 보안 — IP allowlist 순수 함수.
  * tenantId 있을 때만 호출측에서 enforce.
  */
-
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
-
-const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-
-export function generateTotpSecret(bytes = 20): string {
-  const buf = randomBytes(bytes)
-  let bits = ""
-  for (const b of buf) bits += b.toString(2).padStart(8, "0")
-  let out = ""
-  for (let i = 0; i + 5 <= bits.length; i += 5) {
-    out += BASE32_ALPHABET[parseInt(bits.slice(i, i + 5), 2)]
-  }
-  return out
-}
-
-function base32ToBuffer(secret: string): Buffer {
-  const cleaned = String(secret || "")
-    .toUpperCase()
-    .replace(/=+$/g, "")
-    .replace(/[^A-Z2-7]/g, "")
-  let bits = ""
-  for (const c of cleaned) {
-    const idx = BASE32_ALPHABET.indexOf(c)
-    if (idx < 0) continue
-    bits += idx.toString(2).padStart(5, "0")
-  }
-  const bytes: number[] = []
-  for (let i = 0; i + 8 <= bits.length; i += 8) {
-    bytes.push(parseInt(bits.slice(i, i + 8), 2))
-  }
-  return Buffer.from(bytes)
-}
-
-function hotp(secret: Buffer, counter: number): string {
-  const buf = Buffer.alloc(8)
-  buf.writeBigUInt64BE(BigInt(counter))
-  const hmac = createHmac("sha1", secret).update(buf).digest()
-  const offset = hmac[hmac.length - 1]! & 0xf
-  const code =
-    ((hmac[offset]! & 0x7f) << 24) |
-    ((hmac[offset + 1]! & 0xff) << 16) |
-    ((hmac[offset + 2]! & 0xff) << 8) |
-    (hmac[offset + 3]! & 0xff)
-  return String(code % 1_000_000).padStart(6, "0")
-}
-
-/** RFC 6238 TOTP (30s step, SHA1, 6 digits) */
-export function verifyTotpCode(secret: string, code: string, window = 1, nowMs = Date.now()): boolean {
-  const expected = String(code || "").trim()
-  if (!/^\d{6}$/.test(expected)) return false
-  const key = base32ToBuffer(secret)
-  if (key.length < 10) return false
-  const step = Math.floor(nowMs / 1000 / 30)
-  const want = Buffer.from(expected)
-  for (let w = -window; w <= window; w++) {
-    const got = Buffer.from(hotp(key, step + w))
-    if (got.length === want.length && timingSafeEqual(got, want)) return true
-  }
-  return false
-}
 
 export function normalizeIpAllowlist(raw: unknown): string[] {
   if (Array.isArray(raw)) {

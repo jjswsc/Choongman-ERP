@@ -1730,18 +1730,6 @@ export default function SaasCustomersPage() {
                     </label>
                     <label className="flex items-center gap-2 text-sm">
                       <Checkbox
-                        checked={selectedTenant.policy.require2faAdmin}
-                        onCheckedChange={(checked) =>
-                          updateTenant((tenant) => ({
-                            ...tenant,
-                            policy: { ...tenant.policy, require2faAdmin: Boolean(checked) },
-                          }))
-                        }
-                      />
-                      {t("saasAdminCust_require2fa")}
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
                         checked={selectedTenant.policy.requireIpAllowlist}
                         onCheckedChange={(checked) =>
                           updateTenant((tenant) => ({

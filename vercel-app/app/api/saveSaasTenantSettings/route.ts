@@ -316,7 +316,7 @@ export async function POST(req: NextRequest) {
         pricing_mode: pricingMode,
         pos_device_billing_basis: posDeviceBillingBasis,
         support_tier: normalizeSupport(tenant.policy.supportTier),
-        require_2fa_admin: tenant.policy.require2faAdmin,
+        require_2fa_admin: false,
         require_ip_allowlist: tenant.policy.requireIpAllowlist,
         allowed_ips: Array.isArray(tenant.policy.allowedIps)
           ? tenant.policy.allowedIps.map((x) => String(x || "").trim()).filter(Boolean)
@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
       await supabaseUpsertMerge("tenant_policy_settings", "tenant_id", {
         tenant_id: tenantId,
         support_tier: normalizeSupport(tenant.policy.supportTier),
-        require_2fa_admin: tenant.policy.require2faAdmin,
+        require_2fa_admin: false,
         require_ip_allowlist: tenant.policy.requireIpAllowlist,
         force_weekly_backup: tenant.policy.forceWeeklyBackup,
         data_retention_days: Math.max(30, Math.floor(Number(tenant.policy.dataRetentionDays || 365))),

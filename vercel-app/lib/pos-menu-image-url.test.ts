@@ -23,6 +23,15 @@ describe('toHybridProxiedMenuImageHref', () => {
     expect(href).toContain('u=https%3A%2F%2Fx.supabase.co%2F')
     expect(href).not.toContain('http%3A')
   })
+
+  it('requests tile-sized render (Fast Data Transfer)', () => {
+    const href = toHybridProxiedMenuImageHref(
+      'https://x.supabase.co/storage/v1/object/public/b/p.jpg'
+    )
+    expect(href).toContain('w=400')
+    expect(href).toContain('q=70')
+    expect(href).toContain('v=3')
+  })
 })
 
 describe('toPosMenuDisplayImageHref', () => {
