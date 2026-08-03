@@ -27,7 +27,9 @@ export function AdminMobileOnly({
 }
 
 /**
- * 가로 스크롤 표 래퍼. 좁은 화면에서만 「옆으로 밀어서 보세요」힌트 표시.
+ * 표 스크롤 래퍼. 좁은 화면에서만 「옆으로 밀어서 보세요」힌트 표시.
+ * className(예: max-h + overflow-auto)은 스크롤 컨테이너에 붙여
+ * 가로·세로 스크롤을 한 곳에서 처리한다 — 세로로 내려도 가로 스크롤바가 맨 아래에 고정된다.
  */
 export function AdminTableScroll({
   children,
@@ -41,13 +43,19 @@ export function AdminTableScroll({
   const { lang } = useLang()
   const t = useT(lang)
   return (
-    <div className={cn("relative", className)}>
+    <div className="relative">
       {hint ? (
         <p className="mb-1.5 text-[10px] leading-snug text-muted-foreground md:hidden">
           {tOr(t, "adminTableScrollHint", "표를 좌우로 밀어 보세요")}
         </p>
       ) : null}
-      <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+      <div
+        className={cn(
+          // 가로·세로를 한 컨테이너에서 처리 → max-h 사용 시 가로 스크롤바가 항상 뷰포트 하단에 보임
+          "overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
+          className
+        )}
+      >
         {children}
       </div>
     </div>
