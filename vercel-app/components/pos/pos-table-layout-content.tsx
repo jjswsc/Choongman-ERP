@@ -19,9 +19,20 @@ import {
   RectangleVertical,
   Copy,
   ClipboardCopy,
+  CheckSquare,
+  XSquare,
+  Type,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -53,6 +64,10 @@ import {
   POS_TABLE_LAYOUT_COLOR_PRESETS,
 } from "@/lib/pos-table-layout-payload"
 import { computeAutoLayoutSlots } from "@/lib/pos-table-auto-layout"
+import {
+  buildPosTableBatchNames,
+  previewPosTableBatchNames,
+} from "@/lib/pos-table-batch-name"
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 
 const FLOOR_W = 720
@@ -144,6 +159,11 @@ export function PosTableLayoutContent() {
   const [copyLoading, setCopyLoading] = React.useState(false)
   const [bulkCount, setBulkCount] = React.useState(12)
   const [bulkShape, setBulkShape] = React.useState<TableShape>("rect")
+  const [batchNameOpen, setBatchNameOpen] = React.useState(false)
+  const [batchNamePrefix, setBatchNamePrefix] = React.useState("A-")
+  const [batchNameStart, setBatchNameStart] = React.useState(1)
+  const [batchNameStep, setBatchNameStep] = React.useState(1)
+  const [batchNameSuffix, setBatchNameSuffix] = React.useState("")
   const dragStartRef = React.useRef<{
     ids: string[]
     starts: Record<string, { x: number; y: number; w: number; h: number }>
@@ -727,17 +747,6 @@ export function PosTableLayoutContent() {
     })
   }
 
-  const handleAutoName = () => {
-    setLayout((prev) => {
-      const floorItems = prev
-        .filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor)
-        .slice()
-        .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x))
-      const patch = new Map(floorItems.map((tbl, i) => [tbl.id, formatAutoTableName(activeFloor, i + 1)]))
-      return prev.map((tbl) => (patch.has(tbl.id) ? { ...tbl, name: patch.get(tbl.id) || tbl.name } : tbl))
-    })
-  }
-
   const handleNormalizeToNumericName = () => {
     setLayout((prev) => {
       const floorItems = prev
@@ -765,6 +774,76 @@ export function PosTableLayoutContent() {
       }
       return prev.map((tbl) => (patch.has(tbl.id) ? { ...tbl, name: patch.get(tbl.id) || tbl.name } : tbl))
     })
+  }
+
+  const sortedFloorTables = React.useMemo(
+    () =>
+      currentFloorLayout
+        .slice()
+        .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x)),
+    [currentFloorLayout]
+  )
+
+  const batchNameTargets = React.useMemo(() => {
+    const selectedOnFloor = selectedIds
+      .filter((id) => currentFloorIdSet.has(id))
+      .map((id) => sortedFloorTables.find((t) => t.id === id))
+      .filter((t): t is PosTableItem => Boolean(t))
+    if (selectedOnFloor.length > 0) {
+      return selectedOnFloor
+        .slice()
+        .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x))
+    }
+    return sortedFloorTables
+  }, [currentFloorIdSet, selectedIds, sortedFloorTables])
+
+  const batchNamePreview = React.useMemo(
+    () =>
+      previewPosTableBatchNames({
+        count: batchNameTargets.length,
+        prefix: batchNamePrefix,
+        suffix: batchNameSuffix,
+        start: batchNameStart,
+        step: batchNameStep,
+      }),
+    [batchNamePrefix, batchNameStart, batchNameStep, batchNameSuffix, batchNameTargets.length]
+  )
+
+  const handleSelectAllFloor = () => {
+    const ids = sortedFloorTables.map((t) => t.id)
+    setSelectedIds(ids)
+    setSelectedId(ids[0] ?? null)
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds([])
+    setSelectedId(null)
+  }
+
+  const openBatchNameDialog = () => {
+    if (sortedFloorTables.length === 0) {
+      void appAlert(t("posTableBatchNameEmpty") || "이름을 바꿀 테이블이 없습니다.")
+      return
+    }
+    setBatchNameOpen(true)
+  }
+
+  const applyBatchNames = async () => {
+    const targets = batchNameTargets
+    if (targets.length === 0) {
+      await appAlert(t("posTableBatchNameEmpty") || "이름을 바꿀 테이블이 없습니다.")
+      return
+    }
+    const names = buildPosTableBatchNames({
+      count: targets.length,
+      prefix: batchNamePrefix,
+      suffix: batchNameSuffix,
+      start: batchNameStart,
+      step: batchNameStep,
+    })
+    const patch = new Map(targets.map((tbl, i) => [tbl.id, names[i] || tbl.name]))
+    setLayout((prev) => prev.map((tbl) => (patch.has(tbl.id) ? { ...tbl, name: patch.get(tbl.id) || tbl.name } : tbl)))
+    setBatchNameOpen(false)
   }
 
   const alignTables = (align: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
@@ -1137,13 +1216,34 @@ export function PosTableLayoutContent() {
           <RotateCcw className="h-4 w-4" />
           {t("posTableReset") || "초기화"}
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleAutoName}>
-          <Copy className="h-4 w-4" />
-          {t("posTableAutoNameAbc")}
+        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={openBatchNameDialog}>
+          <Type className="h-4 w-4" />
+          {t("posTableBatchName") || "일괄 이름"}
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleNormalizeToNumericName}>
           <Copy className="h-4 w-4" />
           {t("posTableAutoNameNumber") || "번호 이름 정리(번 제거)"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={handleSelectAllFloor}
+          disabled={currentFloorLayout.length === 0}
+          title={t("posTableSelectAllHint") || ""}
+        >
+          <CheckSquare className="h-4 w-4" />
+          {t("posTableSelectAll") || "전체 선택"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={handleClearSelection}
+          disabled={selectedCount === 0}
+        >
+          <XSquare className="h-4 w-4" />
+          {t("posTableClearSelection") || "선택 해제"}
         </Button>
       </div>
 
@@ -1462,6 +1562,73 @@ export function PosTableLayoutContent() {
       <p className="text-xs text-slate-500">
         {t("posTableDragHint") || "테이블을 드래그해 이동, 우하단 핸들로 크기 조절, 더블클릭으로 이름 수정. 추가/삭제 후 저장 버튼을 눌러 반영해 주세요."}
       </p>
+
+      <Dialog open={batchNameOpen} onOpenChange={setBatchNameOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("posTableBatchNameTitle") || "일괄 이름 변경"}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-1">
+            <p className="text-xs text-muted-foreground">
+              {(t("posTableBatchNameScopeHint") || "선택한 테이블 {n}개에 적용합니다. 선택이 없으면 현재 구역 전체 {m}개에 적용합니다.")
+                .replace("{n}", String(selectedIds.filter((id) => currentFloorIdSet.has(id)).length))
+                .replace("{m}", String(sortedFloorTables.length))}
+            </p>
+            <div className="grid gap-1.5">
+              <Label htmlFor="batch-name-prefix">{t("posTableBatchNamePrefix") || "접두사 (Prefix)"}</Label>
+              <Input
+                id="batch-name-prefix"
+                value={batchNamePrefix}
+                onChange={(e) => setBatchNamePrefix(e.target.value)}
+                placeholder="A-"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="batch-name-start">{t("posTableBatchNameStart") || "시작 번호"}</Label>
+                <Input
+                  id="batch-name-start"
+                  type="number"
+                  value={batchNameStart}
+                  onChange={(e) => setBatchNameStart(Number(e.target.value) || 1)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="batch-name-step">{t("posTableBatchNameStep") || "증가"}</Label>
+                <Input
+                  id="batch-name-step"
+                  type="number"
+                  value={batchNameStep}
+                  onChange={(e) => setBatchNameStep(Number(e.target.value) || 1)}
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="batch-name-suffix">{t("posTableBatchNameSuffix") || "접미사 (Suffix)"}</Label>
+              <Input
+                id="batch-name-suffix"
+                value={batchNameSuffix}
+                onChange={(e) => setBatchNameSuffix(e.target.value)}
+                placeholder=""
+              />
+            </div>
+            {batchNamePreview ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                <span className="font-medium text-slate-500">{t("posTableBatchNamePreview") || "미리보기"}: </span>
+                {batchNamePreview}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBatchNameOpen(false)}>
+              {t("cancel") || "취소"}
+            </Button>
+            <Button type="button" onClick={() => void applyBatchNames()}>
+              {t("posTableBatchNameApply") || "전체 적용"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
