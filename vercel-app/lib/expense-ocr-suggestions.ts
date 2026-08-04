@@ -44,11 +44,15 @@ export function suggestVendorFromHint(
 
 const MEMO_SUBJECT_KEYWORDS: { keys: RegExp; codes: string[] }[] = [
   { keys: /rent|lease|임대|ค่าเช่า/i, codes: ['5510', '5520'] },
-  { keys: /electric|water|utility|공과|ค่าไฟ|ค่าน้ำ/i, codes: ['5520', '5510'] },
+  { keys: /electric|water|utility|공과|ค่าไฟ|ค่าน้ำ|ค่าสาธารณูปโภค/i, codes: ['5520', '5510'] },
   { keys: /delivery|grab|lineman|shopee|배달|5528/i, codes: ['5528'] },
   { keys: /card fee|카드.?수수료|5529/i, codes: ['5529'] },
-  { keys: /repair|maint|수리|유지/i, codes: ['5520', '5530'] },
-  { keys: /marketing|광고|advert/i, codes: ['5540', '5520'] },
+  { keys: /repair|maint|수리|유지|ซ่อม|บำรุง/i, codes: ['5520', '5530'] },
+  { keys: /marketing|광고|advert|โฆษณา/i, codes: ['5540', '5520'] },
+  { keys: /oven|kitchen\s*equip|equipment|เครื่อง(?:ครัว|จักร)|เตาอบ|อุปกรณ์/i, codes: ['5530', '1520', '5520'] },
+  { keys: /packaging|บรรจุ|ถุง|กล่อง/i, codes: ['5520'] },
+  { keys: /insurance|ประกัน/i, codes: ['5520'] },
+  { keys: /fuel|น้ำมัน|gas|แก๊ส/i, codes: ['5520'] },
 ]
 
 export function suggestAccountSubjectId(
@@ -73,15 +77,24 @@ export function parseVendorNameHintFromText(text: string): string | undefined {
     .map((l) => l.trim())
     .filter(Boolean)
   const vendorLine = lines.find((l) =>
-    /(?:vendor|supplier|seller|from|บริษัท|ผู้ขาย|ผู้จำหน่าย|ชื่อผู้ขาย)/i.test(l)
+    /(?:vendor|supplier|seller|sold\s*by|from|บริษัท|หจก\.?|บจก\.?|ผู้ขาย|ผู้จำหน่าย|ชื่อผู้ขาย|ออกโดย|ร้าน)/i.test(l)
   )
   if (vendorLine) {
     const cleaned = vendorLine
       .replace(/^[^:：]+[:：]\s*/, '')
-      .replace(/(?:vendor|supplier|seller|from)\s*[:：]?\s*/i, '')
+      .replace(
+        /(?:vendor|supplier|seller|sold\s*by|from|ผู้ขาย|ผู้จำหน่าย|ชื่อผู้ขาย|ออกโดย)\s*[:：]?\s*/i,
+        ''
+      )
       .trim()
     if (cleaned.length >= 2) return cleaned.slice(0, 80)
   }
-  const ltd = lines.find((l) => /(co\.?,?\s*ltd|จำกัด|company|corp)/i.test(l) && l.length >= 4 && l.length <= 80)
+  const ltd = lines.find(
+    (l) =>
+      /(co\.?,?\s*ltd|จำกัด|company|corp|หจก\.?|บจก\.?)/i.test(l) &&
+      l.length >= 4 &&
+      l.length <= 80 &&
+      !/customer|ผู้ซื้อ|ลูกค้า|bill\s*to/i.test(l)
+  )
   return ltd?.slice(0, 80)
 }

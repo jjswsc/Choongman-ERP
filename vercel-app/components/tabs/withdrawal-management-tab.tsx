@@ -616,6 +616,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
       if (f.invoiceNo) {
         setInvoiceNo(f.invoiceNo)
+        // 문서번호가 인식되면 유형이 비어 있을 때 Invoice로 기본 선택
+        if (!documentType) applyDocumentType("invoice")
       }
       if (f.vendorNameHint) {
         const vendor = suggestVendorFromHint(vendors, f.vendorNameHint)
@@ -635,13 +637,23 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           .map((s) => ({ id: s.id!, code: s.code, name: s.name, nameEn: s.nameEn }))
         const sid = suggestAccountSubjectId(subjectOpts, {
           vendorName: f.vendorNameHint || payeeName,
-          memo,
+          memo: [memo, f.vendorNameHint].filter(Boolean).join(" "),
           vendorCode: payeeCode,
         })
         if (sid) setAccountSubjectId(String(sid))
       }
     },
-    [accountSubjectId, categoryMain, memo, payeeCode, payeeName, expenseSubjectOptions, vendors]
+    [
+      accountSubjectId,
+      applyDocumentType,
+      categoryMain,
+      documentType,
+      memo,
+      payeeCode,
+      payeeName,
+      expenseSubjectOptions,
+      vendors,
+    ]
   )
 
   const accrualNetPreview = React.useMemo(() => {
