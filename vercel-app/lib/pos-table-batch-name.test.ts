@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildPosTableBatchNames, previewPosTableBatchNames } from '@/lib/pos-table-batch-name'
+import {
+  buildPosTableBatchNames,
+  previewPosTableBatchNames,
+  resolvePosTableZoneNamePrefix,
+} from '@/lib/pos-table-batch-name'
 
 describe('pos-table-batch-name', () => {
   it('builds A-1 … A-10 style names', () => {
@@ -25,5 +29,12 @@ describe('pos-table-batch-name', () => {
     expect(previewPosTableBatchNames({ count: 10, prefix: 'A-', start: 1, step: 1 }, 3)).toBe(
       'A-1 A-2 A-3 … A-10'
     )
+  })
+
+  it('uses zone label for Name 1–99 prefix', () => {
+    expect(resolvePosTableZoneNamePrefix(2, 'VIP')).toBe('VIP-')
+    expect(resolvePosTableZoneNamePrefix(2, 'VIP-')).toBe('VIP-')
+    expect(resolvePosTableZoneNamePrefix(2, '')).toBe('2F-')
+    expect(resolvePosTableZoneNamePrefix(1, null)).toBe('1F-')
   })
 })

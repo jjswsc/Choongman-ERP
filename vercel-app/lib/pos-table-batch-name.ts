@@ -34,3 +34,22 @@ export function previewPosTableBatchNames(opts: PosTableBatchNameOptions, maxSho
   const head = names.slice(0, maxShow).join(' ')
   return `${head} … ${names[names.length - 1]}`
 }
+
+/**
+ * Name 1–99 / 일괄 이름 기본 접두사.
+ * 구역명이 VIP 이면 `VIP-`, 없으면 `2F-` (층 슬롯 번호).
+ */
+export function resolvePosTableZoneNamePrefix(
+  floor: number,
+  zoneLabel?: string | null
+): string {
+  const f = Math.min(3, Math.max(1, Math.trunc(Number(floor) || 1)))
+  const zone = String(zoneLabel ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24)
+  if (zone) {
+    return /[-_\s.]$/.test(zone) ? zone : `${zone}-`
+  }
+  return `${f}F-`
+}
