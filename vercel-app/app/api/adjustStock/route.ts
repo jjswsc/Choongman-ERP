@@ -6,6 +6,36 @@ import {
   resolveInventoryTenantScope,
   stampInventoryTenantId,
 } from '@/lib/inventory-tenant-scope'
+import { getBangkokEndOfDayUtcIso, getBangkokTodayDateString } from '@/lib/bangkok-time'
+
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * 화면 기준일(asOfDate)에 맞춘 log_date.
+ * - 과거일: 방콕 EOD → 기준일 조회(log_date <= EOD)에 포함
+ * - 오늘/미지정: 현재 시각
+ */
+function resolveAdjustLogDate(asOfDateRaw: string | undefined): { ok: true; logDate: string } | { ok: false; message: string } {
+  const asOf = String(asOfDateRaw || '').trim()
+  if (!asOf) {
+    return { ok: true, logDate: new Date().toISOString() }
+  }
+  if (!YMD_RE.test(asOf)) {
+    return { ok: false, message: '기준일 형식이 올바르지 않습니다. (YYYY-MM-DD)' }
+  }
+  const today = getBangkokTodayDateString()
+  if (asOf > today) {
+    return { ok: false, message: '미래 날짜로는 재고를 조정할 수 없습니다.' }
+  }
+  if (asOf === today) {
+    return { ok: true, logDate: new Date().toISOString() }
+  }
+  try {
+    return { ok: true, logDate: getBangkokEndOfDayUtcIso(asOf) }
+  } catch {
+    return { ok: false, message: '기준일 형식이 올바르지 않습니다. (YYYY-MM-DD)' }
+  }
+}
 
 /** 재고 조정 - 오피스 직원 또는 매니저(자기 매장만) */
 export async function POST(request: NextRequest) {
@@ -29,6 +59,8 @@ export async function POST(request: NextRequest) {
       spec?: string
       diffQty?: number
       memo?: string
+      /** 재고 목록 기준일(방콕 YYYY-MM-DD). 과거일이면 그 날 EOD로 저장 */
+      asOfDate?: string
     }
 
     const userRole = String(auth.role || '').toLowerCase()
@@ -72,14 +104,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const now = new Date().toISOString()
+    const logResolved = resolveAdjustLogDate(body.asOfDate)
+    if (!logResolved.ok) {
+      return NextResponse.json({ success: false, message: logResolved.message }, { headers })
+    }
+
     await supabaseInsert('stock_logs', stampInventoryTenantId({
       location: store,
       item_code: itemCode,
       item_name: String(body.itemName || '').trim(),
       spec: String(body.spec || '').trim() || 'Adjustment',
       qty: diffQty,
-      log_date: now,
+      log_date: logResolved.logDate,
       vendor_target: body.memo ? String(body.memo).trim() : '재고조정',
       log_type: 'Adjustment',
     }, tenantScope))

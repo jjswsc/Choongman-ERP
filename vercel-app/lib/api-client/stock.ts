@@ -159,6 +159,8 @@ export async function adjustStock(params: {
   diffQty: number
   memo?: string
   userRole?: string
+  /** 재고 목록 기준일(방콕 YYYY-MM-DD). 월말 실사 등 과거 기준일 조정에 필요 */
+  asOfDate?: string
 }) {
   const res = await apiFetchWithOffline('/api/adjustStock', {
     method: 'POST',

@@ -169,6 +169,7 @@ export default function StockPage() {
       diffQty,
       memo,
       userRole: auth?.role,
+      asOfDate: stockDateFilter.trim() || undefined,
     })
     if (!res.success) {
       await appAlert(translateApiMessage(res.message, t) || t("stockAdjustFailed"))
@@ -285,6 +286,7 @@ export default function StockPage() {
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
         item={adjustItem}
+        asOfDate={stockDateFilter.trim() || undefined}
         onConfirm={handleAdjustConfirm}
       />
     </div>

@@ -106,6 +106,8 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "적정재고가 수정되었습니다.": "stockSafeUpdated",
   "적정재고가 저장되었습니다.": "stockSafeSaveSuccess",
   "재고가 조정되었습니다.": "stockAdjustSuccess",
+  "미래 날짜로는 재고를 조정할 수 없습니다.": "stockAdjustFutureDateBlocked",
+  "기준일 형식이 올바르지 않습니다. (YYYY-MM-DD)": "stockAdjustBadAsOfDate",
 
   // 발주
   "발주가 저장되었습니다.": "purchaseOrderSuccess",

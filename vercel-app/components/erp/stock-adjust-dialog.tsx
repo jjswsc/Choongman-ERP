@@ -27,6 +27,8 @@ interface StockAdjustDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   item: StockStatusItem | null
+  /** 재고 목록 기준일(방콕 YYYY-MM-DD). 조정 log_date에 반영 */
+  asOfDate?: string
   onConfirm: (diffQty: number, memo?: string) => Promise<void>
 }
 
@@ -67,6 +69,7 @@ export function StockAdjustDialog({
   open,
   onOpenChange,
   item,
+  asOfDate,
   onConfirm,
 }: StockAdjustDialogProps) {
   const { lang } = useLang()
@@ -123,6 +126,11 @@ export function StockAdjustDialog({
       >
         <DialogHeader className="space-y-0 pb-4 text-left">
           <DialogTitle className="text-sm font-bold">{t("stockAdjustTitle")}</DialogTitle>
+          {asOfDate?.trim() ? (
+            <p className="pt-1 text-[11px] text-muted-foreground">
+              {t("stockAdjustAsOfHint").replace("{date}", asOfDate.trim())}
+            </p>
+          ) : null}
         </DialogHeader>
         {item && (
           <div className="space-y-4">
