@@ -440,21 +440,22 @@ export function PosTableLayoutContent() {
     setEditingNameId(null)
   }
 
-  const handleUpdateSeats = (id: string, seats: number) => {
-    setLayout((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, seats } : t))
-    )
-  }
-
-  const colorTargetIds = React.useCallback((): string[] => {
+  const selectionTargetIds = React.useCallback((): string[] => {
     const floorIds = selectedIds.filter((id) => currentFloorIdSet.has(id))
     if (floorIds.length > 0) return floorIds
     if (selectedId && currentFloorIdSet.has(selectedId)) return [selectedId]
     return []
   }, [currentFloorIdSet, selectedId, selectedIds])
 
+  const handleUpdateSeats = (seats: number) => {
+    const ids = selectionTargetIds()
+    if (ids.length === 0) return
+    setTableSeatsInput(seats)
+    setLayout((prev) => prev.map((t) => (ids.includes(t.id) ? { ...t, seats } : t)))
+  }
+
   const handleUpdateColor = (raw: string | undefined) => {
-    const ids = colorTargetIds()
+    const ids = selectionTargetIds()
     if (ids.length === 0) return
     const color = normalizePosTableColor(raw)
     setTableColorInput(color ?? "")
@@ -1281,11 +1282,9 @@ export function PosTableLayoutContent() {
         <Select
           value={tableSeatsInput ? String(tableSeatsInput) : "0"}
           onValueChange={(v) => {
-            const n = Number(v)
-            setTableSeatsInput(n)
-            if (selectedId) handleUpdateSeats(selectedId, n)
+            handleUpdateSeats(Number(v) || 0)
           }}
-          disabled={!selectedId}
+          disabled={selectedCount === 0}
         >
           <SelectTrigger className="h-8 w-20">
             <SelectValue placeholder="0" />

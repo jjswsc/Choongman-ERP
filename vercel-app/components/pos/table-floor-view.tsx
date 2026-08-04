@@ -140,12 +140,6 @@ function formatDisplayTableLabel(name: string, fallbackId: string): string {
   return raw.replace(/번\s*$/u, '')
 }
 
-function getTableBadgeNumber(label: string): string {
-  const text = String(label ?? '').trim()
-  const m = text.match(/(\d+)\s*$/)
-  return m?.[1] || text
-}
-
 function getElapsedMinutes(createdAt?: string): number {
   if (!createdAt) return 0
   const ms = Date.now() - new Date(createdAt).getTime()
@@ -477,7 +471,7 @@ export function TableFloorView({
         const surfWofAabb = tab.w / tab.aabbWpx
         const surfHofAabb = tab.h / tab.aabbHpx
         const floorTableLabel = formatDisplayTableLabel(tab.name, tab.id)
-        const tableBadgeNumber = getTableBadgeNumber(floorTableLabel)
+        const tableBadgeLabel = floorTableLabel
         const qrMarker = getQrSessionMarker?.(tab.id, tab.name) || null
 
         return (
@@ -581,10 +575,10 @@ export function TableFloorView({
               <div className="flex min-w-0 max-w-full flex-col items-center gap-0.5 px-0.5 leading-none">
                 <div className="flex max-w-full items-center justify-center gap-1 overflow-hidden">
                   <span
-                    className="inline-flex h-5.5 min-w-[1.45rem] max-w-[3.5rem] shrink-0 items-center justify-center rounded-full border-2 border-white bg-black/90 px-1.5 text-center text-[11px] font-black tabular-nums tracking-tight text-white shadow-[0_2px_4px_rgba(0,0,0,0.65)] sm:h-6 sm:text-xs"
+                    className="inline-flex h-5.5 min-w-[1.45rem] max-w-[5.5rem] shrink-0 items-center justify-center rounded-full border-2 border-white bg-black/90 px-1.5 text-center text-[10px] font-black tracking-tight text-white shadow-[0_2px_4px_rgba(0,0,0,0.65)] sm:h-6 sm:max-w-[6.5rem] sm:text-[11px]"
                     title={floorTableLabel}
                   >
-                    <span className="min-w-0 truncate leading-none">{tableBadgeNumber}</span>
+                    <span className="min-w-0 truncate leading-none">{tableBadgeLabel}</span>
                   </span>
                   {tab.seats > 0 && (
                     <span

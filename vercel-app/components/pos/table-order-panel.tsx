@@ -727,13 +727,13 @@ export function TableOrderPanel({
             />
             <span
               className={cn(
-                'inline-flex h-10 min-w-[2.5rem] max-w-[3.5rem] shrink-0 items-center justify-center rounded-full border px-1.5 shadow-sm',
+                'inline-flex h-10 min-w-[2.5rem] max-w-[9rem] shrink-0 items-center justify-center rounded-full border px-2 shadow-sm',
                 'border-emerald-600/45 bg-gradient-to-b from-emerald-50/95 to-emerald-100/90 text-emerald-950',
                 'dark:border-emerald-500/40 dark:from-emerald-950/55 dark:to-emerald-900/70 dark:text-emerald-50',
                 'ring-1 ring-emerald-700/15 dark:ring-emerald-400/20'
               )}
             >
-              <span className="truncate text-center text-sm font-extrabold tabular-nums leading-none tracking-tight">
+              <span className="truncate text-center text-sm font-extrabold leading-none tracking-tight">
                 {tableDisplayName}
               </span>
             </span>
