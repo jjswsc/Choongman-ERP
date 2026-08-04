@@ -77,6 +77,16 @@ export function QrTableGuestApp({ token }: { token: string }) {
     items: Array<{ name?: string; qty?: number; quantity?: number; price?: number; buffetIncluded?: boolean }>
   } | null>(null)
   const [lang, setLang] = React.useState<QrGuestLang>('th')
+  const extrasPayPollRef = React.useRef<number | null>(null)
+
+  const clearExtrasPayPoll = React.useCallback(() => {
+    if (extrasPayPollRef.current != null) {
+      window.clearInterval(extrasPayPollRef.current)
+      extrasPayPollRef.current = null
+    }
+  }, [])
+
+  React.useEffect(() => () => clearExtrasPayPoll(), [clearExtrasPayPoll])
 
   const g = React.useCallback((key: string) => qrGuestT(lang, key), [lang])
 
@@ -317,10 +327,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
           if (qr?.success) {
             setQrPayload(String(qr.qrPayload || ''))
             setQrAmount(Number(qr.qrAmount || 0))
-            const poll = window.setInterval(async () => {
+            clearExtrasPayPoll()
+            extrasPayPollRef.current = window.setInterval(async () => {
               const st = await qrTablePollExtrasPay(sessionAuth)
               if (st?.paid) {
-                window.clearInterval(poll)
+                clearExtrasPayPoll()
                 setQrPayload('')
                 const order = await qrTableGetOrder(sessionAuth)
                 if (order?.success && order.order) {

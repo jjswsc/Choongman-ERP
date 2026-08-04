@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   normalizePosFloorLabels,
+  normalizePosTableColor,
   parsePosTableLayoutJson,
   resolvePosFloorDisplayLabel,
   serializePosTableLayoutJson,
@@ -47,5 +48,25 @@ describe('pos-table-layout-payload', () => {
       1: '홀',
       2: 'Room',
     })
+  })
+
+  it('parses and serializes optional table color', () => {
+    const parsed = parsePosTableLayoutJson([
+      { id: 't1', name: '1', x: 0, y: 0, w: 80, h: 60, floor: 1, color: '#2563EB' },
+      { id: 't2', name: '2', x: 0, y: 0, w: 80, h: 60, floor: 1, color: 'not-a-color' },
+    ])
+    expect(parsed.tables[0]?.color).toBe('#2563eb')
+    expect(parsed.tables[1]?.color).toBeUndefined()
+    const serialized = serializePosTableLayoutJson(parsed.tables, {})
+    expect(Array.isArray(serialized)).toBe(true)
+    if (Array.isArray(serialized)) {
+      expect(serialized[0]).toMatchObject({ id: 't1', color: '#2563eb' })
+      expect(serialized[1]).not.toHaveProperty('color')
+    }
+  })
+
+  it('normalizes short hex colors', () => {
+    expect(normalizePosTableColor('#abc')).toBe('#aabbcc')
+    expect(normalizePosTableColor('')).toBeUndefined()
   })
 })

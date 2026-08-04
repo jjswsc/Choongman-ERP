@@ -7224,9 +7224,9 @@ export const i18n = {
     helpHow_admin_ops_center:
       '① 본사(오피스) 계정은 아래 「조회 매장」에서 지점을 고릅니다. KPI·경보는 매장 단위만 집계합니다(「전체 매장」 선택 없음).\n② 기준일(방콕)을 바꾸면 해당 날짜 기준으로 KPI가 다시 집계됩니다.\n③ 새로고침으로 최신 수치를 불러옵니다.\n④ 카드의 주문·결제·인쇄·일마감 건수를 확인하고, 경보 영역에서 우선 대응할 항목을 정합니다.\n⑤ 인쇄 경보가 있으면「실시간 매출」·프린터 설정·주방 라우팅·오프라인 동기를 함께 점검하세요.\n⑥ 일마감 경보는「POS 일정산」에서 검증(Validate)·확정(Finalize)으로 처리합니다. 주문 이벤트 원장·인쇄 잡은 DB에 쌓이며, 이 화면은 요약 지표용입니다.',
     helpSum_admin_pos_screen_config:
-      '매장별 POS 화면·테이블 배치·결제·배달앱·조리 규칙·주문 동작(손님 수 필수 등)을 설정하는 화면입니다. 테이블 탭에서 일괄 생성·자동 배치로 플로어에 맞게 격자를 만들고, 드래그로 미세 조정한 뒤 저장합니다.',
+      '매장별 POS 화면·테이블 배치·결제·배달앱·조리 규칙·주문 동작(손님 수 필수 등)을 설정하는 화면입니다. 테이블 탭에서 일괄 생성·자동 배치·색상으로 플로어에 맞게 격자를 만들고, 드래그로 미세 조정한 뒤 저장합니다.',
     helpHow_admin_pos_screen_config:
-      '① 상단에서 매장을 고른 뒤 탭(테이블·단말·주문 동작·결제 등)을 선택합니다.\n② 테이블: 구역(층)을 고르고, 개수·모양을 지정한 뒤「일괄 생성」으로 N개를 화면에 맞게 배치하거나「자동 배치」로 기존 테이블을 재정렬합니다. 한 개씩 추가·드래그·정렬도 가능합니다.\n③ 주문 동작: 홀(테이블) 주문 시 손님 수 필수 여부를 매장별로 켭니다. 끄면 손님 수 없이도 주문할 수 있습니다.\n④ 변경 후「저장」을 눌러 POS 단말에 반영합니다. 다른 매장 배치는「복사」로 가져올 수 있습니다.\n⑤ 권한에 따라 일부 탭이 보이지 않을 수 있습니다.',
+      '① 상단에서 매장을 고른 뒤 탭(테이블·단말·주문 동작·결제 등)을 선택합니다.\n② 테이블: 구역(층)을 고르고, 개수·모양을 지정한 뒤「일괄 생성」으로 N개를 화면에 맞게 배치하거나「자동 배치」로 기존 테이블을 재정렬합니다. 선택한 테이블의「색상」으로 빈 테이블 면 색을 지정할 수 있습니다(사용 중일 때는 조리시간 색이 우선). 한 개씩 추가·드래그·정렬도 가능합니다.\n③ 주문 동작: 홀(테이블) 주문 시 손님 수 필수 여부를 매장별로 켭니다. 끄면 손님 수 없이도 주문할 수 있습니다.\n④ 변경 후「저장」을 눌러 POS 단말에 반영합니다. 다른 매장 배치는「복사」로 가져올 수 있습니다.\n⑤ 권한에 따라 일부 탭이 보이지 않을 수 있습니다.',
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다. Omni에서는 노출 매장(Store)을 저장해야 해당 매장 POS에 보입니다.',
     helpHow_admin_pos_menus:
@@ -14897,9 +14897,9 @@ orderItemQty: 'Qty',
     helpHow_admin_ops_center:
       '① Head-office users pick a branch under Branch below. KPIs and alerts are per branch only (no All stores on this screen).\n② Change the Bangkok as-of date to re-run KPIs for that calendar day.\n③ Press Refresh to fetch the latest numbers.\n④ Review order/payment/print/day-close tiles, then triage from the Alerts section.\n⑤ For print alerts, also check Live sales, printer settings, kitchen routing, and offline sync.\n⑥ For day-close alerts, use POS settlement Validate/Finalize. Order-event and print-job rows live in the database; this screen shows rollups only.',
     helpSum_admin_pos_screen_config:
-      'Configure per-store POS screens, table layout, payments, delivery apps, cooking rules, and order behavior (e.g. require guest count). On the Tables tab, bulk-create or auto-arrange a floor grid, fine-tune by drag, then save.',
+      'Configure per-store POS screens, table layout, payments, delivery apps, cooking rules, and order behavior (e.g. require guest count). On the Tables tab, bulk-create, auto-arrange, or set table colors for a floor grid, fine-tune by drag, then save.',
     helpHow_admin_pos_screen_config:
-      '① Pick a store at the top, then choose a tab (Tables, Terminal, Order behavior, Payments, etc.).\n② Tables: select a zone (floor), set count and shape, then Bulk create to place N tables to fit the floor, or Auto arrange to re-grid existing ones. You can still add one-by-one, drag, and align.\n③ Order behavior: turn on/off requiring guest count for dine-in table orders per store. When off, orders are allowed without guest count.\n④ Press Save to apply to POS terminals. Copy can import another store’s layout.\n⑤ Some tabs may be hidden depending on your role.',
+      '① Pick a store at the top, then choose a tab (Tables, Terminal, Order behavior, Payments, etc.).\n② Tables: select a zone (floor), set count and shape, then Bulk create to place N tables to fit the floor, or Auto arrange to re-grid existing ones. Use Color on the selected table(s) for empty-table surface color (cook-time colors still win when occupied). You can still add one-by-one, drag, and align.\n③ Order behavior: turn on/off requiring guest count for dine-in table orders per store. When off, orders are allowed without guest count.\n④ Press Save to apply to POS terminals. Copy can import another store’s layout.\n⑤ Some tabs may be hidden depending on your role.',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery). On Omni, store scope must be saved for the menu to appear on that store’s POS.',
     helpHow_admin_pos_menus:

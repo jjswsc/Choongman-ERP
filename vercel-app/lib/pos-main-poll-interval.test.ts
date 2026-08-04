@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS,
+  MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS,
   MAIN_POS_POLL_INTERVAL_DEGRADED_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
   isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
+  resolveMainPosHeadPollIntervalMs,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
@@ -53,6 +56,15 @@ describe('pos-main-poll-interval', () => {
         realtimeRecentlyActive: true,
       })
     ).toBe(MAIN_POS_POLL_INTERVAL_DEGRADED_MS)
+  })
+
+  it('uses fast head poll when degraded and slower safety head when healthy', () => {
+    expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: false })).toBe(
+      MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS
+    )
+    expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: true })).toBe(
+      MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS
+    )
   })
 
   it('detects stale realtime by last event time', () => {

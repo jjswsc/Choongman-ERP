@@ -45,7 +45,12 @@ import { cn } from "@/lib/utils"
 import { getPosTableAabb } from "@/lib/pos-table-layout-aabb"
 import {
   normalizePosFloorLabels,
+  normalizePosTableColor,
   resolvePosFloorDisplayLabel,
+  resolvePosTableEmptyColor,
+  darkenPosTableColor,
+  posTableColorIsDark,
+  POS_TABLE_LAYOUT_COLOR_PRESETS,
 } from "@/lib/pos-table-layout-payload"
 import { computeAutoLayoutSlots } from "@/lib/pos-table-auto-layout"
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
@@ -133,6 +138,7 @@ export function PosTableLayoutContent() {
   const [floorLabels, setFloorLabels] = React.useState<PosFloorLabels>({})
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
+  const [tableColorInput, setTableColorInput] = React.useState<string>("")
   const [isFallbackLayout, setIsFallbackLayout] = React.useState(false)
   const [copyFromStoreCode, setCopyFromStoreCode] = React.useState("")
   const [copyLoading, setCopyLoading] = React.useState(false)
@@ -231,11 +237,13 @@ export function PosTableLayoutContent() {
       const item = layout.find((x) => x.id === selectedId)
       setTableNameInput(item?.name ?? "")
       setTableSeatsInput(item?.seats ?? 0)
+      setTableColorInput(normalizePosTableColor(item?.color) ?? "")
       const floor = Math.min(3, Math.max(1, Number(item?.floor ?? 1) || 1)) as 1 | 2 | 3
       setActiveFloor(floor)
     } else {
       setTableNameInput("")
       setTableSeatsInput(0)
+      setTableColorInput("")
     }
   }, [selectedId, layout])
 
@@ -413,6 +421,27 @@ export function PosTableLayoutContent() {
   const handleUpdateSeats = (id: string, seats: number) => {
     setLayout((prev) =>
       prev.map((t) => (t.id === id ? { ...t, seats } : t))
+    )
+  }
+
+  const colorTargetIds = React.useCallback((): string[] => {
+    const floorIds = selectedIds.filter((id) => currentFloorIdSet.has(id))
+    if (floorIds.length > 0) return floorIds
+    if (selectedId && currentFloorIdSet.has(selectedId)) return [selectedId]
+    return []
+  }, [currentFloorIdSet, selectedId, selectedIds])
+
+  const handleUpdateColor = (raw: string | undefined) => {
+    const ids = colorTargetIds()
+    if (ids.length === 0) return
+    const color = normalizePosTableColor(raw)
+    setTableColorInput(color ?? "")
+    setLayout((prev) =>
+      prev.map((t) => {
+        if (!ids.includes(t.id)) return t
+        if (color) return { ...t, color }
+        return { ...t, color: undefined }
+      })
     )
   }
 
@@ -1158,6 +1187,47 @@ export function PosTableLayoutContent() {
           </SelectContent>
         </Select>
         <div className="h-6 w-px bg-slate-200" />
+        <span className="text-xs font-medium text-slate-600">{t("posTableColor") || "색상"}</span>
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            className={cn(
+              "h-7 rounded-md border px-2 text-[11px] font-medium",
+              !tableColorInput
+                ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            )}
+            disabled={!selectedId && selectedIds.length === 0}
+            onClick={() => handleUpdateColor(undefined)}
+            title={t("posTableColorDefault") || "기본"}
+          >
+            {t("posTableColorDefault") || "기본"}
+          </button>
+          {POS_TABLE_LAYOUT_COLOR_PRESETS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={cn(
+                "h-7 w-7 rounded-md border-2 shadow-sm",
+                tableColorInput === c ? "border-emerald-500 ring-2 ring-emerald-300" : "border-white ring-1 ring-slate-300"
+              )}
+              style={{ backgroundColor: c }}
+              disabled={!selectedId && selectedIds.length === 0}
+              onClick={() => handleUpdateColor(c)}
+              title={c}
+              aria-label={c}
+            />
+          ))}
+          <input
+            type="color"
+            className="h-7 w-8 cursor-pointer rounded border border-slate-200 bg-white p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            value={tableColorInput || resolvePosTableEmptyColor(undefined, layout.find((x) => x.id === selectedId)?.shape)}
+            disabled={!selectedId && selectedIds.length === 0}
+            onChange={(e) => handleUpdateColor(e.target.value)}
+            title={t("posTableColor") || "색상"}
+          />
+        </div>
+        <div className="h-6 w-px bg-slate-200" />
         <span className="text-[11px] text-slate-500">{t("posTableMultiSelectHint")}</span>
         <div className="h-6 w-px bg-slate-200" />
         <div className="flex gap-1">
@@ -1250,6 +1320,11 @@ export function PosTableLayoutContent() {
           const rot = item.rotation ?? 0
           const surfWofAabb = item.w / aabb.w
           const surfHofAabb = item.h / aabb.h
+          const customColor = normalizePosTableColor(item.color)
+          const surfaceColor = resolvePosTableEmptyColor(item.color, item.shape)
+          const borderColor = darkenPosTableColor(surfaceColor, 0.22)
+          const seatColor = darkenPosTableColor(surfaceColor, 0.12)
+          const textDark = !posTableColorIsDark(surfaceColor)
           return (
           <div
             key={item.id}
@@ -1286,16 +1361,24 @@ export function PosTableLayoutContent() {
                 "absolute inset-0 flex flex-col items-center justify-center overflow-visible",
                 "rounded-xl shadow-sm",
                 "border-2 border-dashed",
-                isSquare
-                  ? "bg-stone-500/90 border-stone-600 text-white"
-                  : "bg-[#d4a574] border-amber-800/40 text-stone-800",
+                customColor
+                  ? textDark
+                    ? "text-stone-800"
+                    : "text-white"
+                  : isSquare
+                    ? "bg-stone-500/90 border-stone-600 text-white"
+                    : "bg-[#d4a574] border-amber-800/40 text-stone-800",
                 "hover:shadow-md",
                 selectedId === item.id && "ring-2 ring-emerald-500 ring-offset-2 border-solid border-amber-700/60",
-                selectedIds.includes(item.id) && "ring-2 ring-sky-500 ring-offset-2 border-solid border-sky-700/80 bg-sky-200/35",
+                selectedIds.includes(item.id) && "ring-2 ring-sky-500 ring-offset-2 border-solid border-sky-700/80",
+                selectedIds.includes(item.id) && !customColor && "bg-sky-200/35",
                 draggingId === item.id && "shadow-lg"
               )}
               style={{
                 boxShadow: !isSquare ? "inset 0 1px 2px rgba(255,255,255,0.3)" : undefined,
+                ...(customColor
+                  ? { backgroundColor: surfaceColor, borderColor }
+                  : {}),
               }}
             >
             {hasSeats && seatPositions.map((pos, i) => (
@@ -1303,15 +1386,19 @@ export function PosTableLayoutContent() {
                 key={i}
                 className={cn(
                   "absolute rounded-full pointer-events-none shadow-sm",
-                  isSquare
-                    ? "bg-stone-400/90 border border-stone-500"
-                    : "bg-[#c9a86c] border border-amber-800/50"
+                  !customColor &&
+                    (isSquare
+                      ? "bg-stone-400/90 border border-stone-500"
+                      : "bg-[#c9a86c] border border-amber-800/50")
                 )}
                 style={{
                   left: `calc(${(pos.x / Math.max(item.w, 1)) * 100}% - ${SEAT_R}px)`,
                   top: `calc(${(pos.y / Math.max(item.h, 1)) * 100}% - ${SEAT_R}px)`,
                   width: SEAT_R * 2,
                   height: SEAT_R * 2,
+                  ...(customColor
+                    ? { backgroundColor: seatColor, border: `1px solid ${borderColor}` }
+                    : {}),
                 }}
               />
             ))}

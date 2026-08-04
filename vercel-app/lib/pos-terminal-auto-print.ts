@@ -69,7 +69,11 @@ export const MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX = 'pos_main_last_seen_order_
 export const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
 export const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
 export const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
-export const MAIN_POS_META_SCAN_INTERVAL_MS = 12_000
+/**
+ * 홀 추가메뉴·Grab 취소 메타 스캔(items_json) 간격.
+ * head 폴링이 변경을 잡으면 즉시 heavy poll이 돌므로, 상시 스캔은 8s로 유지(기존 12s).
+ */
+export const MAIN_POS_META_SCAN_INTERVAL_MS = 8_000
 export const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
 export const DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS = 45_000
 

@@ -12,7 +12,7 @@ import {
   posCookStageTableTextClass,
 } from '@/lib/pos-ui-tokens'
 import type { PosFloorLabels, PosTableItem } from '@/lib/api-client'
-import { resolvePosFloorDisplayLabel } from '@/lib/pos-table-layout-payload'
+import { resolvePosFloorDisplayLabel, normalizePosTableColor, resolvePosTableEmptyColor, darkenPosTableColor, posTableColorIsDark } from '@/lib/pos-table-layout-payload'
 
 const FLOOR_W = 720
 const FLOOR_H = 480
@@ -269,6 +269,7 @@ export function TableFloorView({
           rotation: Number(item.rotation) || 0,
           shape: String(item.shape ?? 'rect'),
           seats: Number(item.seats ?? 0) || 0,
+          color: normalizePosTableColor(item.color),
         }
       })
   }, [layout, activeFloor, tableListMode, getTableStatus, getIsOccupied])
@@ -441,12 +442,18 @@ export function TableFloorView({
               ? statusLabel
               : ''
 
+        const hasCustomColor = Boolean(tab.color)
+        const emptySurfaceColor = resolvePosTableEmptyColor(tab.color, tab.shape)
+        const emptyBorderColor = darkenPosTableColor(emptySurfaceColor, 0.22)
+        const emptySeatColor = darkenPosTableColor(emptySurfaceColor, 0.12)
+        const emptyTextDark = !posTableColorIsDark(emptySurfaceColor)
+
         const tableSurfaceClass = cn(
           'absolute inset-0 shadow-sm border-2 border-dashed box-border',
           isRound ? 'rounded-full' : 'rounded-xl',
-          isSquare && !isOccupied && 'bg-stone-500/90 border-stone-600',
-          !isSquare && !isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
-          isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
+          !hasCustomColor && isSquare && !isOccupied && 'bg-stone-500/90 border-stone-600',
+          !hasCustomColor && !isSquare && !isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
+          !hasCustomColor && isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
           status === 'preparing' && stage === 'fresh' && posCookStageTableSurfaceClass.fresh,
           status === 'preparing' && stage === 'warning' && posCookStageTableSurfaceClass.warning,
           status === 'preparing' && stage === 'urgent' && posCookStageTableSurfaceClass.urgent,
@@ -458,9 +465,7 @@ export function TableFloorView({
           'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-0.5 pointer-events-none overflow-hidden rounded-sm px-0.5 text-center antialiased',
           /** 밝은 테이블 면 위에서도 글자가 잘 보이도록 */
           '[text-shadow:0_1px_2px_rgba(0,0,0,0.45)]',
-          isSquare && !isOccupied && 'text-white',
-          !isSquare && !isRound && !isOccupied && 'text-stone-800',
-          isRound && !isOccupied && 'text-stone-800',
+          !isOccupied && (emptyTextDark ? 'text-stone-800' : 'text-white'),
           status === 'preparing' && stage === 'fresh' && posCookStageTableTextClass.fresh,
           status === 'preparing' && stage === 'warning' && posCookStageTableTextClass.warning,
           status === 'preparing' && stage === 'urgent' && posCookStageTableTextClass.urgent,
@@ -538,6 +543,9 @@ export function TableFloorView({
                 className={tableSurfaceClass}
                 style={{
                   boxShadow: !isSquare ? 'inset 0 1px 2px rgba(255,255,255,0.3)' : undefined,
+                  ...(hasCustomColor && !isOccupied
+                    ? { backgroundColor: emptySurfaceColor, borderColor: emptyBorderColor }
+                    : {}),
                 }}
               >
               {tab.seats > 0 &&
@@ -546,15 +554,19 @@ export function TableFloorView({
                     key={idx}
                     className={cn(
                       'absolute rounded-full pointer-events-none shadow-sm',
-                      isSquare
-                        ? 'bg-stone-400/90 border border-stone-500'
-                        : 'bg-[#c9a86c] border border-amber-800/50'
+                      !hasCustomColor &&
+                        (isSquare
+                          ? 'bg-stone-400/90 border border-stone-500'
+                          : 'bg-[#c9a86c] border border-amber-800/50')
                     )}
                     style={{
                       left: `calc(${(pos.x / Math.max(tab.w, 1)) * 100}% - ${SEAT_R}px)`,
                       top: `calc(${(pos.y / Math.max(tab.h, 1)) * 100}% - ${SEAT_R}px)`,
                       width: SEAT_R * 2,
                       height: SEAT_R * 2,
+                      ...(hasCustomColor
+                        ? { backgroundColor: emptySeatColor, border: `1px solid ${emptyBorderColor}` }
+                        : {}),
                     }}
                   />
                 ))}

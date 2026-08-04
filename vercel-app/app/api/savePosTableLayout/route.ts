@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   normalizePosFloorLabels,
+  normalizePosTableColor,
   parsePosTableLayoutJson,
   serializePosTableLayoutJson,
   type PosFloorLabels,
@@ -55,18 +56,22 @@ export async function POST(req: NextRequest) {
 
     const layoutRows: PosTableLayoutTableRow[] = layout
       .filter((t: unknown) => t && typeof t === 'object' && (t as Record<string, unknown>).id)
-      .map((t: Record<string, unknown>) => ({
-        id: String(t.id ?? ''),
-        name: String(t.name ?? ''),
-        x: Number(t.x) || 0,
-        y: Number(t.y) || 0,
-        w: Number(t.w) || 80,
-        h: Number(t.h) || 60,
-        floor: clampPosTableFloor(Number(t.floor ?? 1) || 1),
-        shape: String(t.shape ?? 'rect'),
-        seats: Number(t.seats ?? 0) || 0,
-        rotation: Number(t.rotation ?? 0) || 0,
-      }))
+      .map((t: Record<string, unknown>) => {
+        const color = normalizePosTableColor(t.color)
+        return {
+          id: String(t.id ?? ''),
+          name: String(t.name ?? ''),
+          x: Number(t.x) || 0,
+          y: Number(t.y) || 0,
+          w: Number(t.w) || 80,
+          h: Number(t.h) || 60,
+          floor: clampPosTableFloor(Number(t.floor ?? 1) || 1),
+          shape: String(t.shape ?? 'rect'),
+          seats: Number(t.seats ?? 0) || 0,
+          rotation: Number(t.rotation ?? 0) || 0,
+          ...(color ? { color } : {}),
+        }
+      })
 
     // get과 동일 매칭으로 기존 행을 찾아 UPDATE — 표기만 다른 store_code에 INSERT하면 조회가 옛 1개 레이아웃을 반환할 수 있음
     const existing = await findExistingPosTableLayoutRow(storeCode)

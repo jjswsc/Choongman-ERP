@@ -24,7 +24,11 @@ import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { parseAppliedCouponsFromOrderRow } from '@/lib/pos-coupon-server'
 import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-pending'
 import { supabaseSelectFilterStrippingUnknownColumns, extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
-import { POS_ORDER_FULL_SELECT, POS_ORDER_POLL_MINIMAL_SELECT } from '@/lib/pos-order-select'
+import {
+  POS_ORDER_FULL_SELECT,
+  POS_ORDER_POLL_HEADS_SELECT,
+  POS_ORDER_POLL_MINIMAL_SELECT,
+} from '@/lib/pos-order-select'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -247,13 +251,19 @@ export async function GET(request: NextRequest) {
     searchParams.get('debugPosOrders') === '1' || searchParams.get('debugPosOrders') === 'true'
   const pollMinimal =
     searchParams.get('pollMinimal') === '1' || searchParams.get('pollMinimal') === 'true'
+  const pollHeads =
+    searchParams.get('pollHeads') === '1' || searchParams.get('pollHeads') === 'true'
+  /** head/minimal 폴링 — 멀티매장 OR·store 없는 fallback 금지 (Omni 교차조회·전송 폭증 방지) */
+  const pollLight = pollMinimal || pollHeads
   const orderIdParam = Number(searchParams.get('orderId') || searchParams.get('id') || 0)
   const rowSelect =
     orderIdParam > 0
       ? POS_ORDER_SELECT
-      : pollMinimal
-        ? POS_ORDER_POLL_MINIMAL_SELECT
-        : POS_ORDER_SELECT
+      : pollHeads
+        ? POS_ORDER_POLL_HEADS_SELECT
+        : pollMinimal
+          ? POS_ORDER_POLL_MINIMAL_SELECT
+          : POS_ORDER_SELECT
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
@@ -312,14 +322,14 @@ export async function GET(request: NextRequest) {
     searchParams.get('posBizDayScope') === '1' || searchParams.get('posBizDayScope') === 'true'
   const isSingleStoreBizDayList =
     orderId == null &&
-    pollMinimal &&
+    pollLight &&
     posBizDayScopeParam &&
     startStr &&
     endStr &&
     startStr.slice(0, 10) === endStr.slice(0, 10) &&
     Boolean(primaryStoreFilter) &&
     primaryStoreFilter !== 'All'
-  /** pollMinimal·단일 매장·단일 영업일 목록만 기본 1000(주문 건). 영수증 등 full select는 10000 유지 */
+  /** pollMinimal/heads·단일 매장·단일 영업일 목록만 기본 1000(주문 건). 영수증 등 full select는 10000 유지 */
   const listLimit =
     parsedListLimit != null
       ? Math.min(Math.max(parsedListLimit, 1), 2000)
@@ -458,7 +468,7 @@ export async function GET(request: NextRequest) {
       }
 
       const listStoreArg =
-        pollMinimal && !strictStore && storeFilterCandidates.length > 1
+        pollLight && !strictStore && storeFilterCandidates.length > 1
           ? storeFilterCandidates
           : primaryStoreFilter
       const filterStr = buildListFilter(listStoreArg)
@@ -471,7 +481,7 @@ export async function GET(request: NextRequest) {
         }, 'getPosOrders/list')) as typeof rows
 
         if (
-          !pollMinimal &&
+          !pollLight &&
           !strictStore &&
           storeFilterCandidates.length > 1 &&
           !(Array.isArray(listStoreArg) && listStoreArg.length > 1)
@@ -498,8 +508,8 @@ export async function GET(request: NextRequest) {
             rows = Array.from(mergedById.values())
           }
         }
-        /** pollMinimal(테이블 점유 폴링)에서는 store 없는 당일 전체 스캔 fallback 금지 — Omni 멀티매장에서 치명적 */
-        if (!pollMinimal && !strictStore && !rows?.length && primaryStoreFilter) {
+        /** pollLight(테이블 점유·head 폴링)에서는 store 없는 당일 전체 스캔 fallback 금지 — Omni 멀티매장에서 치명적 */
+        if (!pollLight && !strictStore && !rows?.length && primaryStoreFilter) {
           const fallbackFilterNoStore = buildListFilter('')
           const fallbackRows = (await selectPosOrders(fallbackFilterNoStore, {
             order: listOrder,
@@ -581,7 +591,7 @@ export async function GET(request: NextRequest) {
     }
 
     let serviceById = new Map<number, PosOrderServiceColumnsRow>()
-    if (!pollMinimal) {
+    if (!pollMinimal && !pollHeads) {
       const serviceFetchIds = orderIdsMissingServiceColumns(rows || [])
       if (serviceFetchIds.length > 0) {
         try {
@@ -593,7 +603,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const promoComponentMenuMap = rowsNeedPromoComponentMenuLookup(rows)
+    const promoComponentMenuMap = !pollHeads && rowsNeedPromoComponentMenuLookup(rows)
       ? await loadPromoComponentMenuMap(rows as Array<{ items_json?: string }> | null)
       : new Map<string, { name: string; code: string }>()
 
@@ -770,7 +780,7 @@ export async function GET(request: NextRequest) {
         }
       }
     }
-    if (pollMinimal && sinceId != null && sinceId > 0 && list.length === 0) {
+    if (pollLight && sinceId != null && sinceId > 0 && list.length === 0) {
       headers.set('X-Pos-Orders-Count', '0')
       return new NextResponse(null, { status: 204, headers })
     }

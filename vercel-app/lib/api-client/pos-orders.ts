@@ -198,6 +198,8 @@ export async function getPosOrders(params?: {
   limit?: number
   /** 메인 POS 폴링용 — linkpos 등 대형 컬럼 제외 select */
   pollMinimal?: boolean
+  /** items_json 없는 초경량 감지용 (신규 id·updated_at) */
+  pollHeads?: boolean
 }): Promise<PosOrder[]> {
   const q = new URLSearchParams()
   if (params?.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
@@ -212,7 +214,8 @@ export async function getPosOrders(params?: {
   if (params?.statusPaidLike) q.set('statusPaidLike', '1')
   if (params?.orderBy) q.set('orderBy', params.orderBy)
   if (params?.limit != null && params.limit > 0) q.set('limit', String(params.limit))
-  if (params?.pollMinimal) q.set('pollMinimal', '1')
+  if (params?.pollHeads) q.set('pollHeads', '1')
+  else if (params?.pollMinimal) q.set('pollMinimal', '1')
   const res = await apiFetchWithOffline('/api/getPosOrders?' + q.toString())
   if (res.status === 204) return []
   const data = await res.json().catch(() => null)

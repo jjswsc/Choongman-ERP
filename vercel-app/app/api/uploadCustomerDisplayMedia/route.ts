@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  CUSTOMER_DISPLAY_IMAGE_MIME_TYPES,
   CUSTOMER_DISPLAY_MEDIA_ERR,
+  CUSTOMER_DISPLAY_VIDEO_MIME_TYPES,
   isCustomerDisplayImageContentType,
   isCustomerDisplayVideoContentType,
   prepareCustomerDisplayMediaUpload,
 } from '@/lib/customer-display-media-upload'
-import { supabaseStoragePublicUrl, supabaseStorageUpload } from '@/lib/supabase-server'
+import {
+  looksLikeSupabaseStorageMissingBucketError,
+  supabaseStorageCreateBucketIfNeeded,
+  supabaseStoragePublicUrl,
+  supabaseStorageUpload,
+} from '@/lib/supabase-server'
 
 export const runtime = 'nodejs'
 
@@ -13,6 +20,11 @@ const BUCKET = 'pos-menu-images'
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 /** Vercel body 한도 내로 서버 폴백은 이미지만 (동영상은 signed PUT) */
 const MAX_SERVER_UPLOAD_BYTES = MAX_IMAGE_BYTES
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+const BUCKET_MIME_TYPES = [
+  ...CUSTOMER_DISPLAY_IMAGE_MIME_TYPES,
+  ...CUSTOMER_DISPLAY_VIDEO_MIME_TYPES,
+]
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -87,16 +99,29 @@ export async function POST(request: NextRequest) {
     }
     const storagePath = `customer-display/${safeStore}/${Date.now()}-${safeName}`
     const bytes = await file.arrayBuffer()
-    await supabaseStorageUpload(BUCKET, storagePath, bytes, {
-      contentType,
-      upsert: false,
-    })
+    const doUpload = () =>
+      supabaseStorageUpload(BUCKET, storagePath, bytes, {
+        contentType,
+        upsert: false,
+      })
+    try {
+      await doUpload()
+    } catch (firstErr) {
+      const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
+      if (!looksLikeSupabaseStorageMissingBucketError(fm)) throw firstErr
+      await supabaseStorageCreateBucketIfNeeded(BUCKET, {
+        public: true,
+        file_size_limit: MAX_VIDEO_BYTES,
+        allowed_mime_types: [...BUCKET_MIME_TYPES],
+      })
+      await doUpload()
+    }
     const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
     return NextResponse.json({ success: true, url: publicUrl, storagePath, contentType }, { headers })
   } catch (e) {
     console.error('uploadCustomerDisplayMedia:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('Bucket not found') || msg.includes('404') || msg.includes('does not exist')) {
+    if (looksLikeSupabaseStorageMissingBucketError(msg)) {
       return NextResponse.json(
         {
           success: false,

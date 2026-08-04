@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
+  supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 import { buildPosMenuImageStorageObjectName } from '@/lib/pos-menu-image-storage-path'
 
 const BUCKET = 'pos-menu-images'
 const MAX_FILE_BYTES = 4 * 1024 * 1024
+/** Idle 배경 동영상과 동일 버킷 — 한도는 50MB, MIME는 이미지+동영상 */
+const BUCKET_FILE_SIZE_LIMIT = 50 * 1024 * 1024
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const BUCKET_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+]
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -51,8 +63,26 @@ export async function POST(request: NextRequest) {
         ? buildPosMenuImageStorageObjectName(menuIdNum, fileName)
         : `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
-    const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
-    const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
+    const issue = async () => {
+      const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
+      const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
+      return { signedUrl, publicUrl }
+    }
+
+    let signedUrl: string
+    let publicUrl: string
+    try {
+      ;({ signedUrl, publicUrl } = await issue())
+    } catch (firstErr) {
+      const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
+      if (!looksLikeSupabaseStorageMissingBucketError(fm)) throw firstErr
+      await supabaseStorageCreateBucketIfNeeded(BUCKET, {
+        public: true,
+        file_size_limit: BUCKET_FILE_SIZE_LIMIT,
+        allowed_mime_types: BUCKET_MIME_TYPES,
+      })
+      ;({ signedUrl, publicUrl } = await issue())
+    }
 
     return NextResponse.json(
       { success: true, signedUrl, publicUrl, storagePath },
@@ -61,7 +91,7 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('uploadPosMenuImage/presign:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('Bucket not found') || msg.includes('404') || msg.includes('does not exist')) {
+    if (looksLikeSupabaseStorageMissingBucketError(msg)) {
       return NextResponse.json(
         {
           success: false,

@@ -290,9 +290,11 @@ import {
   MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS,
   MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS,
   MAIN_POS_TRIGGER_POLL_MIN_MS,
+  resolveMainPosHeadPollIntervalMs,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
+import { detectMainPosHeadPollChanges } from '@/lib/pos-main-head-poll'
 import {
   applyGrabCancelWatchRealtimeRow,
   syncGrabCancelWatchSnapshot,
@@ -5188,6 +5190,8 @@ export default function PosTerminalPage() {
       if (!prevQtyById) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         logPosPrintDebug('realtime_update_dine_in_snapshot_seeded', { orderId })
+        // 스냅샷만 채우고 UI를 안 갱신하면 태블릿/QR 첫 추가가 메타 스캔(수 초)까지 홀에 안 보임
+        refetchCurrentStore()
         return
       }
 
@@ -5877,6 +5881,62 @@ export default function PosTerminalPage() {
     formatLineNoteForPrint,
     mapPosOrderItemForKitchenDelta,
   ])
+
+  /** items_json 없는 head 폴링 — Realtime 누락·tenant 필터 미스를 3~6초 안에 잡아 heavy poll 트리거 */
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId) return
+    let cancelled = false
+    let timerId = 0
+    let seeded = false
+    const updatedAtByOrderId = new Map<number, string>()
+    const today = getPosBusinessDateStr()
+
+    const scheduleNext = () => {
+      if (cancelled) return
+      const delayMs = resolveMainPosHeadPollIntervalMs({
+        realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+      })
+      timerId = window.setTimeout(() => {
+        void (async () => {
+          try {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+            const heads = await getPosOrders({
+              startStr: today,
+              endStr: today,
+              posBizDayScope: true,
+              storeCode: currentStoreId,
+              pollHeads: true,
+              limit: 300,
+              orderBy: 'updated_at.desc',
+            })
+            const { hasNewOrder, hasUpdatedOpenOrder } = detectMainPosHeadPollChanges({
+              heads,
+              lastSeenOrderId: lastSeenOrderIdRef.current,
+              updatedAtByOrderId,
+              seedOnly: !seeded,
+            })
+            seeded = true
+            if (hasNewOrder || hasUpdatedOpenOrder) {
+              logPosPrintDebug('head_poll_change', { hasNewOrder, hasUpdatedOpenOrder })
+              if (hasUpdatedOpenOrder) lastMetaScanAtRef.current = 0
+              triggerMainPosPollNowRef.current?.()
+              refetchCurrentStore()
+            }
+          } catch {
+            /* head poll */
+          } finally {
+            scheduleNext()
+          }
+        })()
+      }, delayMs)
+    }
+
+    scheduleNext()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timerId)
+    }
+  }, [isMainPosDevice, currentStoreId, logPosPrintDebug, refetchCurrentStore])
 
   /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */
   useEffect(() => {

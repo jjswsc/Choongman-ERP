@@ -5,3 +5,10 @@ export const POS_ORDER_FULL_SELECT =
 /** 메인 POS 폴링·테이블 스냅샷 — linkpos 등 대형 컬럼 제외 (결제·테이블 UI·영수증 판별용 필드는 유지) */
 export const POS_ORDER_POLL_MINIMAL_SELECT =
   'id,order_no,store_code,order_type,table_name,memo,items_json,subtotal,vat,discount_amt,coupon_discount_amt,discount_reason,delivery_fee,packaging_fee,service_amt,service_reason,total,status,created_at,updated_at,paid_at,guest_count,delivery_app_code,member_id,member_no,coupon_code,point_used,point_earned,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,applied_coupons'
+
+/**
+ * 신규·변경 감지용 초경량 select (items_json 없음).
+ * Realtime 누락 시 3~6초 head 폴링 → 변경 있을 때만 pollMinimal 풀 조회.
+ */
+export const POS_ORDER_POLL_HEADS_SELECT =
+  'id,store_code,order_type,table_name,status,created_at,updated_at,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app'

@@ -32,9 +32,11 @@ import {
   MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS,
   MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS,
   MAIN_POS_TRIGGER_POLL_MIN_MS,
+  resolveMainPosHeadPollIntervalMs,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
+import { detectMainPosHeadPollChanges } from '@/lib/pos-main-head-poll'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
 import {
@@ -1180,6 +1182,7 @@ export function usePosMainDeviceSyncHost(): void {
       }
       if (!prevQtyById) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        refetchStores({ scope: 'current' })
         return
       }
       const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
@@ -1774,6 +1777,68 @@ export function usePosMainDeviceSyncHost(): void {
     releaseKitchenAutoPrintKey,
     notifyGrabCancelFromHost,
   ])
+
+  /** items_json 없는 head 폴링 — Realtime 누락 시 3~6초 내 heavy poll 트리거 */
+  useEffect(() => {
+    if (!isMainPosDevice || !storeCode) return
+    /** 터미널이 열려 있으면 터미널 head poll만 사용 (중복 Edge 요청 방지) */
+    if (isPosTerminalLocalAutoprintActive()) return
+    let cancelled = false
+    let timerId = 0
+    let seeded = false
+    const updatedAtByOrderId = new Map<number, string>()
+    const today = getPosBusinessDateStr()
+
+    const scheduleNext = () => {
+      if (cancelled) return
+      if (isPosTerminalLocalAutoprintActive()) {
+        timerId = window.setTimeout(() => scheduleNext(), 15_000)
+        return
+      }
+      const delayMs = resolveMainPosHeadPollIntervalMs({
+        realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+      })
+      timerId = window.setTimeout(() => {
+        void (async () => {
+          try {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+            if (isPosTerminalLocalAutoprintActive()) return
+            const heads = await getPosOrders({
+              startStr: today,
+              endStr: today,
+              posBizDayScope: true,
+              storeCode,
+              pollHeads: true,
+              limit: 300,
+              orderBy: 'updated_at.desc',
+            })
+            const { hasNewOrder, hasUpdatedOpenOrder } = detectMainPosHeadPollChanges({
+              heads,
+              lastSeenOrderId: lastSeenOrderIdRef.current,
+              updatedAtByOrderId,
+              seedOnly: !seeded,
+            })
+            seeded = true
+            if (hasNewOrder || hasUpdatedOpenOrder) {
+              if (hasUpdatedOpenOrder) lastMetaScanAtRef.current = 0
+              triggerMainPosPollNowRef.current?.()
+              refetchStores({ scope: 'current' })
+            }
+          } catch {
+            /* head poll */
+          } finally {
+            scheduleNext()
+          }
+        })()
+      }, delayMs)
+    }
+
+    scheduleNext()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timerId)
+    }
+  }, [isMainPosDevice, storeCode, refetchStores])
 
   // Grab 고객 취소 — Realtime UPDATE (메인 POS 전역)
   useEffect(() => {

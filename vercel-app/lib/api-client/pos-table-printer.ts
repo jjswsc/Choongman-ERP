@@ -22,6 +22,8 @@ export interface PosTableItem {
   seats?: number
   /** 테이블 회전 각도 (0, 90, 180, 270) */
   rotation?: number
+  /** 빈 테이블 면 색 `#rrggbb`. 없으면 모양별 기본색 */
+  color?: string
 }
 
 /** 매장별 구역(층·방 등) 표시명. 키는 슬롯 1~3 */

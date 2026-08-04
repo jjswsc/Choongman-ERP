@@ -731,6 +731,27 @@ async function loadIncludedMenuIdSet(tierId: number): Promise<Set<number>> {
   return new Set((rows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
 }
 
+async function loadPosMenusByIds(menuIds: number[]): Promise<DbMenu[]> {
+  const ids = [...new Set(menuIds.map((n) => Math.floor(Number(n) || 0)).filter((n) => n > 0))]
+  if (!ids.length) return []
+  const chunkSize = 80
+  const chunks: number[][] = []
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    chunks.push(ids.slice(i, i + chunkSize))
+  }
+  const parts = await Promise.all(
+    chunks.map(async (chunk) => {
+      const rows = (await supabaseSelectFilter(
+        'pos_menus',
+        `id=in.(${chunk.join(',')})&is_active=eq.true`,
+        { limit: chunk.length + 10 }
+      )) as DbMenu[]
+      return rows || []
+    })
+  )
+  return parts.flat()
+}
+
 async function loadHallMenusForStore(storeCode: string): Promise<DbMenu[]> {
   const code = String(storeCode || '').trim()
   const scopes = (await supabaseSelectFilter(
@@ -746,21 +767,86 @@ async function loadHallMenusForStore(storeCode: string): Promise<DbMenu[]> {
       order: 'sort_order.asc,id.asc',
     })) as DbMenu[]
   }
-  const chunkSize = 80
-  const out: DbMenu[] = []
-  for (let i = 0; i < menuIds.length; i += chunkSize) {
-    const chunk = menuIds.slice(i, i + chunkSize)
-    const rows = (await supabaseSelectFilter(
-      'pos_menus',
-      `id=in.(${chunk.join(',')})&is_active=eq.true`,
-      { limit: chunk.length + 10 }
-    )) as DbMenu[]
-    for (const r of rows || []) {
-      if (r.sell_hall === false) continue
-      out.push(r)
-    }
+  const rows = await loadPosMenusByIds(menuIds)
+  return rows.filter((r) => r.sell_hall !== false)
+}
+
+/**
+ * 카트 제출용 — 요청 menuId만 조회 (전체 홀 메뉴 순차 로드 제거).
+ * 매장 스코프가 있으면 스코프 안 메뉴만 허용.
+ */
+async function loadCartMenusByIdsForStore(
+  storeCode: string,
+  requestedMenuIds: number[]
+): Promise<Map<number, DbMenu>> {
+  const ids = [...new Set(requestedMenuIds.map((n) => Math.floor(Number(n) || 0)).filter((n) => n > 0))]
+  const out = new Map<number, DbMenu>()
+  if (!ids.length) return out
+
+  const code = String(storeCode || '').trim()
+  const [menuRows, scopedRows, anyScopeRow] = await Promise.all([
+    loadPosMenusByIds(ids),
+    supabaseSelectFilter(
+      'pos_menu_store_scopes',
+      `store_code=eq.${encodeURIComponent(code)}&menu_id=in.(${ids.join(',')})`,
+      { limit: ids.length + 10, select: 'menu_id' }
+    ) as Promise<Array<{ menu_id?: number }>>,
+    supabaseSelectFilter('pos_menu_store_scopes', `store_code=eq.${encodeURIComponent(code)}`, {
+      limit: 1,
+      select: 'menu_id',
+    }) as Promise<Array<{ menu_id?: number }>>,
+  ])
+
+  const storeUsesScopes = (anyScopeRow || []).length > 0
+  const allowed = storeUsesScopes
+    ? new Set((scopedRows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
+    : null
+
+  for (const r of menuRows || []) {
+    const id = Number(r.id || 0)
+    if (!id || r.sell_hall === false) continue
+    if (allowed && !allowed.has(id)) continue
+    out.set(id, r)
   }
   return out
+}
+
+export type QrGuestOrderSummary = {
+  orderId: number | null
+  items: Array<Record<string, unknown>>
+  subtotal: number
+  total: number
+  paymentQr: number
+  balanceDue: number
+  status: string
+}
+
+function buildGuestOrderSummaryFromOrderRow(params: {
+  orderId: number
+  items: Array<Record<string, unknown>>
+  subtotal: number
+  total: number
+  paymentQr?: number
+  paymentCash?: number
+  paymentCard?: number
+  paymentOther?: number
+  status?: string
+}): QrGuestOrderSummary {
+  const paid =
+    asNum(params.paymentQr) +
+    asNum(params.paymentCash) +
+    asNum(params.paymentCard) +
+    asNum(params.paymentOther)
+  const total = asNum(params.total)
+  return {
+    orderId: params.orderId,
+    items: params.items,
+    subtotal: asNum(params.subtotal),
+    total,
+    paymentQr: asNum(params.paymentQr),
+    balanceDue: Math.max(0, Math.round((total - paid) * 100) / 100),
+    status: String(params.status || ''),
+  }
 }
 
 export async function getPublicSessionBootstrap(token: string, origin?: string) {
@@ -1230,7 +1316,7 @@ export async function closeQrTableSessionsForPosOrder(params: {
 export async function submitQrCart(params: {
   session: QrTableSession
   lines: QrCartLineInput[]
-}): Promise<{ orderId: number; addedCount: number }> {
+}): Promise<{ orderId: number; addedCount: number; order: QrGuestOrderSummary }> {
   const session = params.session
   if (session.status !== 'active' || !session.entryPaid) throw new Error('entry_not_ready')
   if (!session.posOrderId) throw new Error('order_missing')
@@ -1240,22 +1326,32 @@ export async function submitQrCart(params: {
   }
 
   const tierId = Number(session.tierId || 0)
-  const included = tierId > 0 ? await loadIncludedMenuIdSet(tierId) : new Set<number>()
-  const menus = await loadHallMenusForStore(session.storeCode)
-  const byId = new Map(menus.map((m) => [Number(m.id || 0), m]))
+  const requestedIds = (params.lines || [])
+    .map((line) => Math.floor(Number(line.menuId) || 0))
+    .filter((id) => id > 0)
 
-  const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
-    limit: 1,
-    select: 'id,items_json,status,payment_qr,subtotal,total,store_code',
-  })) as Array<{
-    id?: number
-    items_json?: unknown
-    status?: string
-    payment_qr?: number
-    subtotal?: number
-    total?: number
-    store_code?: string
-  }>
+  const [included, byId, orderRows] = await Promise.all([
+    tierId > 0 ? loadIncludedMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
+    loadCartMenusByIdsForStore(session.storeCode, requestedIds),
+    supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+      limit: 1,
+      select: 'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code',
+    }) as Promise<
+      Array<{
+        id?: number
+        items_json?: unknown
+        status?: string
+        payment_qr?: number
+        payment_cash?: number
+        payment_card?: number
+        payment_other?: number
+        subtotal?: number
+        total?: number
+        store_code?: string
+      }>
+    >,
+  ])
+
   const order = orderRows?.[0]
   if (!order?.id) throw new Error('order_missing')
   const status = String(order.status || '').toLowerCase()
@@ -1328,15 +1424,16 @@ export async function submitQrCart(params: {
       [] as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
     ).map((line) => {
       const row = line as Record<string, unknown>
-      const included = row.buffetIncluded === true
+      const includedLine = row.buffetIncluded === true
       const baseName = String(row.name || '')
       return {
         ...row,
-        name: included ? `[Buffet] ${baseName}` : `[Extra] ${baseName}`,
+        name: includedLine ? `[Buffet] ${baseName}` : `[Extra] ${baseName}`,
       }
     })
     if (kitchenDelta.length) {
-      await enqueueKitchenPrintJob({
+      // 게스트 RTT에서 인쇄 큐 대기 제거 — 실패해도 주문 저장은 이미 완료
+      void enqueueKitchenPrintJob({
         storeCode: session.storeCode,
         orderId: session.posOrderId,
         source: 'qr_table_submit',
@@ -1345,11 +1442,23 @@ export async function submitQrCart(params: {
           action: 'update_order',
           kitchenLines: kitchenDelta,
         },
-      })
+      }).catch((e) => console.error('qr_table_submit kitchen enqueue:', e))
     }
   }
 
-  return { orderId: session.posOrderId, addedCount: newLines.length }
+  const orderSummary = buildGuestOrderSummaryFromOrderRow({
+    orderId: session.posOrderId,
+    items: nextItems,
+    subtotal,
+    total: pricing.finalTotal,
+    paymentQr: order.payment_qr,
+    paymentCash: order.payment_cash,
+    paymentCard: order.payment_card,
+    paymentOther: order.payment_other,
+    status: order.status,
+  })
+
+  return { orderId: session.posOrderId, addedCount: newLines.length, order: orderSummary }
 }
 
 /** Staff: change guest count. Increase adds buffet entry qty; decrease staff-only (never below 1). */
@@ -1587,11 +1696,11 @@ function partnerDedupe(amount: number): string {
   return `${Math.round(amount * 100)}`
 }
 
-export async function getGuestOrderSummary(session: QrTableSession) {
+export async function getGuestOrderSummary(session: QrTableSession): Promise<QrGuestOrderSummary> {
   if (!session.posOrderId) {
     return {
       orderId: null,
-      items: [] as Array<Record<string, unknown>>,
+      items: [],
       subtotal: 0,
       total: 0,
       paymentQr: 0,
@@ -1625,16 +1734,15 @@ export async function getGuestOrderSummary(session: QrTableSession) {
       status: 'none',
     }
   }
-  const paid =
-    asNum(order.payment_qr) + asNum(order.payment_cash) + asNum(order.payment_card) + asNum(order.payment_other)
-  const total = asNum(order.total)
-  return {
+  return buildGuestOrderSummaryFromOrderRow({
     orderId: order.id,
     items: parseItemsJson(order.items_json),
     subtotal: asNum(order.subtotal),
-    total,
-    paymentQr: asNum(order.payment_qr),
-    balanceDue: Math.max(0, Math.round((total - paid) * 100) / 100),
-    status: String(order.status || ''),
-  }
+    total: asNum(order.total),
+    paymentQr: order.payment_qr,
+    paymentCash: order.payment_cash,
+    paymentCard: order.payment_card,
+    paymentOther: order.payment_other,
+    status: order.status,
+  })
 }

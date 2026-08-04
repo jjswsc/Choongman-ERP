@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  CUSTOMER_DISPLAY_IMAGE_MIME_TYPES,
   CUSTOMER_DISPLAY_MEDIA_ERR,
+  CUSTOMER_DISPLAY_VIDEO_MIME_TYPES,
   isCustomerDisplayImageContentType,
   isCustomerDisplayVideoContentType,
   normalizeCustomerDisplayMediaContentType,
 } from '@/lib/customer-display-media-upload'
 import {
+  looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
+  supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 
 const BUCKET = 'pos-menu-images'
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+const BUCKET_MIME_TYPES = [
+  ...CUSTOMER_DISPLAY_IMAGE_MIME_TYPES,
+  ...CUSTOMER_DISPLAY_VIDEO_MIME_TYPES,
+]
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -86,8 +94,26 @@ export async function POST(request: NextRequest) {
     }
     const storagePath = `customer-display/${safeStore}/${Date.now()}-${safeName}`
 
-    const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
-    const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
+    const issue = async () => {
+      const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
+      const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
+      return { signedUrl, publicUrl }
+    }
+
+    let signedUrl: string
+    let publicUrl: string
+    try {
+      ;({ signedUrl, publicUrl } = await issue())
+    } catch (firstErr) {
+      const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
+      if (!looksLikeSupabaseStorageMissingBucketError(fm)) throw firstErr
+      await supabaseStorageCreateBucketIfNeeded(BUCKET, {
+        public: true,
+        file_size_limit: MAX_VIDEO_BYTES,
+        allowed_mime_types: [...BUCKET_MIME_TYPES],
+      })
+      ;({ signedUrl, publicUrl } = await issue())
+    }
 
     return NextResponse.json(
       { success: true, signedUrl, publicUrl, storagePath, contentType },
@@ -96,7 +122,7 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('uploadCustomerDisplayMedia/presign:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('Bucket not found') || msg.includes('404') || msg.includes('does not exist')) {
+    if (looksLikeSupabaseStorageMissingBucketError(msg)) {
       return NextResponse.json(
         {
           success: false,
