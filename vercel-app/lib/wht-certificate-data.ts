@@ -97,7 +97,8 @@ export function whtCertificateFromPurchaseOrder(
       wht_rate: rateRaw,
       wht_amount: wht,
       certificate_no: po.po_no ? `PO-${po.po_no}` : undefined,
-      direction: 'inbound',
+      // 발주 WHT 증명서는 당사(본사)가 원천징수·발급 → S&J 상단(ผู้มีหน้าที่หักภาษี)
+      direction: 'outbound',
     },
     headOffice
   )

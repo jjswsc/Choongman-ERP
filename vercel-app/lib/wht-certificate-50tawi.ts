@@ -381,14 +381,14 @@ export function buildWht50TawiCertificateHtml(
   return `<section class="wht50-sheet" data-copy="${copyNo}">${buildWht50TawiCertificateBody(data, copyNo)}</section>`
 }
 
-/** Vendor용 — ฉบับที่ 1·2 각 A4 1장 (원본 PDF와 동일) */
+/** Vendor용 — ฉบับที่ 1·2 각 A4 1장(양식 전체) → 인쇄 시 총 2페이지 */
 export function buildWht50TawiCertificateHtmlBothCopies(data: WhtCertificateData): string {
   return [1, 2]
     .map((n) => buildWht50TawiCertificateHtml(data, n as Wht50TawiCopyNo))
-    .join('\n')
+    .join('\n<div class="wht50-pagebreak" aria-hidden="true"></div>\n')
 }
 
-/** 원본 กรมสรรพากร 50 ทวิ A4 1장 기준 스타일 */
+/** 원본 กรมสรรพากร 50 ทวิ — A4 1장에 양식 1장(내용 전부) */
 export const WHT_50_TAWI_STYLES = `
   @page { size: A4 portrait; margin: 6mm 6mm 5mm 6mm; }
   * { box-sizing: border-box; }
@@ -401,10 +401,18 @@ export const WHT_50_TAWI_STYLES = `
   }
   .wht50-sheet {
     width: 100%; max-width: 198mm; margin: 0 auto;
-    page-break-after: always; page-break-inside: avoid;
-    break-after: page; break-inside: avoid;
+    page-break-after: always;
+    page-break-inside: avoid;
+    break-after: page;
+    break-inside: avoid;
   }
-  .wht50-sheet:last-child { page-break-after: auto; break-after: auto; }
+  .wht50-pagebreak {
+    display: none;
+    height: 0; margin: 0; padding: 0; border: 0;
+    page-break-after: always;
+    break-after: page;
+  }
+  .wht50-sheet:last-of-type { page-break-after: auto; break-after: auto; }
 
   .wht-form { border: 1.4px solid #000; padding: 2.2mm 2.5mm 2mm; }
 
@@ -499,9 +507,20 @@ export const WHT_50_TAWI_STYLES = `
   .wht-fn { font-size: 7.5px; margin-top: 1.2mm; line-height: 1.2; padding: 0 0.5mm; }
 
   @media print {
-    html, body { background: #fff !important; overflow: visible !important; }
-    .wht50-sheet { max-width: none; page-break-after: always; page-break-inside: avoid; }
-    .wht50-sheet:last-child { page-break-after: auto; }
+    html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+    .wht50-sheet {
+      max-width: none;
+      page-break-after: always !important;
+      break-after: page !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .wht50-pagebreak {
+      display: block !important;
+      page-break-after: always !important;
+      break-after: page !important;
+    }
+    .wht50-sheet:last-of-type { page-break-after: auto !important; break-after: auto !important; }
   }
   @media screen {
     body { padding: 12px; background: #cfcfcf; }
@@ -509,5 +528,6 @@ export const WHT_50_TAWI_STYLES = `
       background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,.2);
       margin-bottom: 16px;
     }
+    .wht50-pagebreak { display: none; }
   }
 `

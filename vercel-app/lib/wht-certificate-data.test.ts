@@ -25,6 +25,18 @@ describe('resolveWhtCertificateParties', () => {
     expect(parties.incomeRecipient.address).toBe('18 True Tower Ratchadaphisek')
     expect(parties.withholdingAgent.address).toBe('101 true digital park')
   })
+
+  it('puts head office (S&J) on top as withholding agent for outbound', () => {
+    const parties = resolveWhtCertificateParties({
+      direction: 'outbound',
+      payeeName: 'Jinwon f&b Co.,Ltd.',
+      payeeTaxId: '0105566228126',
+      payeeAddress: 'True Digital Park Retail',
+      headOffice,
+    })
+    expect(parties.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD.')
+    expect(parties.incomeRecipient.name).toBe('Jinwon f&b Co.,Ltd.')
+  })
 })
 
 describe('resolveVendorPayeeForWht', () => {

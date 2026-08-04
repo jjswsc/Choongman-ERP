@@ -3379,6 +3379,11 @@ export function AdminAccountingCompliance({
         const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName)
         const payeeTaxId = String(r.payee_tax_id || "").trim() || fromVendor.taxId
         const payeeAddress = fromVendor.address
+        // 발주 자동분(레거시 inbound 포함)은 당사 발급 증명서 → 본사 상단
+        const src = String(r.source_type || "").trim().toLowerCase()
+        const dirRaw = String(r.direction || "").trim().toLowerCase()
+        const direction =
+          src === "purchase_order" ? "outbound" : dirRaw === "inbound" ? "inbound" : "outbound"
         return whtCertificateFromLedgerRow(
           {
             payment_date: r.payment_date,
@@ -3394,7 +3399,7 @@ export function AdminAccountingCompliance({
             certificate_no: r.certificate_no,
             memo: r.memo,
             store_name: r.store_name,
-            direction: r.direction,
+            direction,
           },
           ho
         )
