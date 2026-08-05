@@ -601,20 +601,32 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const showRecurringTemplatesBar = categoryMain === "purchase" || categoryMain === "expense"
 
   const handleExpenseOcrFields = React.useCallback(
-    (f: ExpenseOcrFieldPayload) => {
-      if (f.amount && f.amount > 0) {
+    (f: ExpenseOcrFieldPayload, meta?: { force?: boolean }) => {
+      const force = meta?.force === true
+      const amountEmpty = parseMoneyAmount(amount) <= 0
+      const vatEmpty = Math.max(0, Math.abs(Number(String(accrualVatAmount).replace(/,/g, "")) || 0)) <= 0
+      const whtEmpty =
+        Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0)) <= 0
+
+      // 업로드 자동기입: 이미 입력·은행에서 넘어온 금액은 유지. 「지금 인식」만 덮어쓰기.
+      if (f.amount && f.amount > 0 && (force || amountEmpty)) {
         setAmount(moneyInputStringFromAmount(f.amount))
       }
-      if (f.vatAmount && f.vatAmount > 0) {
+      if (f.vatAmount && f.vatAmount > 0 && (force || vatEmpty)) {
         setAccrualVatAmount(moneyInputStringFromAmount(f.vatAmount))
       }
-      if (f.withholdingTaxAmount && f.withholdingTaxAmount > 0) {
+      if (f.withholdingTaxAmount && f.withholdingTaxAmount > 0 && (force || whtEmpty)) {
         setAccrualWithholdingTax(moneyInputStringFromAmount(f.withholdingTaxAmount))
       }
-      if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate)) {
+      // 일자는 기본값이 오늘이므로 빈칸 판정 대신: 금액이 이미 있으면(은행 연동 등) 유지, 아니면 OCR 반영
+      if (
+        f.expenseDate &&
+        /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate) &&
+        (force || amountEmpty)
+      ) {
         setTransDate(f.expenseDate)
       }
-      if (f.invoiceNo) {
+      if (f.invoiceNo && (force || !invoiceNo.trim())) {
         setInvoiceNo(f.invoiceNo)
         // 문서번호가 인식되면 유형이 비어 있을 때 Invoice로 기본 선택
         if (!documentType) applyDocumentType("invoice")
@@ -645,9 +657,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     },
     [
       accountSubjectId,
+      accrualVatAmount,
+      accrualWithholdingTax,
+      amount,
       applyDocumentType,
       categoryMain,
       documentType,
+      invoiceNo,
       memo,
       payeeCode,
       payeeName,

@@ -40,6 +40,9 @@ export type ExpenseOcrFieldPayload = {
   vendorNameHint?: string
 }
 
+/** force=true: 「지금 인식」— 기존 값 덮어쓰기 허용. 업로드 자동기입은 force=false(빈 칸만). */
+export type ExpenseOcrApplyMeta = { force?: boolean }
+
 export type ExpenseDocumentAttachPanelProps = {
   files: File[]
   onFilesChange: (files: File[]) => void
@@ -52,7 +55,7 @@ export type ExpenseDocumentAttachPanelProps = {
   onDocumentTypeChange?: (v: ExpenseDocumentType | "") => void
   invoiceNo: string
   onInvoiceNoChange: (v: string) => void
-  onOcrFields?: (fields: ExpenseOcrFieldPayload) => void
+  onOcrFields?: (fields: ExpenseOcrFieldPayload, meta?: ExpenseOcrApplyMeta) => void
   disabled?: boolean
   variant?: "full" | "receiptOnly"
   className?: string
@@ -163,7 +166,7 @@ export function ExpenseDocumentAttachPanel({
   }, [files])
 
   const runOcr = React.useCallback(
-    async (file: File, opts?: { silent?: boolean }) => {
+    async (file: File, opts?: { silent?: boolean; force?: boolean }) => {
       if (!onOcrFields) return false
       setOcrLoading(true)
       setOcrHint(null)
@@ -176,8 +179,17 @@ export function ExpenseDocumentAttachPanel({
           }
           return false
         }
-        onOcrFields(res.fields)
-        setOcrHint(tt("expenseDocOcrApplied", "문서에서 항목을 채웠습니다. 확인 후 수정하세요."))
+        // 업로드 자동기입: 빈 칸만. 「지금 인식」: 기존 금액·일자도 덮어쓸 수 있음.
+        const force = opts?.force === true
+        onOcrFields(res.fields, { force })
+        setOcrHint(
+          force
+            ? tt("expenseDocOcrApplied", "문서에서 항목을 채웠습니다. 확인 후 수정하세요.")
+            : tt(
+                "expenseDocOcrAppliedEmptyOnly",
+                "비어 있던 항목만 문서에서 채웠습니다. 이미 입력한 금액·일자는 유지됩니다."
+              )
+        )
         return true
       } catch {
         if (!opts?.silent) {
@@ -195,7 +207,7 @@ export function ExpenseDocumentAttachPanel({
     async (file: File) => {
       if (files.length >= maxFiles) return
       onFilesChange([...files, file].slice(0, maxFiles))
-      if (ocrAutoFill && onOcrFields) await runOcr(file, { silent: true })
+      if (ocrAutoFill && onOcrFields) await runOcr(file, { silent: true, force: false })
     },
     [files, maxFiles, ocrAutoFill, onFilesChange, onOcrFields, runOcr]
   )
@@ -280,7 +292,7 @@ export function ExpenseDocumentAttachPanel({
                 disabled={disabled || ocrLoading || files.length === 0}
                 onClick={() => {
                   const last = files[files.length - 1]
-                  if (last) void runOcr(last)
+                  if (last) void runOcr(last, { force: true })
                 }}
               >
                 <ScanLine className="h-3.5 w-3.5 mr-1" />
@@ -306,7 +318,7 @@ export function ExpenseDocumentAttachPanel({
         {ocrAutoFill && onOcrFields
           ? tt(
               "expenseDocAttachUnifiedHint",
-              "이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며 금액·일자 등을 자동 채웁니다(확인 후 수정 가능)."
+              "이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며, 비어 있는 금액·일자 등만 자동 채웁니다(이미 입력한 값은 유지). 「지금 인식」은 덮어씁니다."
             )
           : tt(
               "expenseDocAttachUnifiedHintManualOcr",

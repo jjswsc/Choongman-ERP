@@ -1821,14 +1821,19 @@ ${rows.map((row, ri) => {
                         onInvoiceReceivedChange={setAddInvoiceReceived}
                         invoiceNo={addInvoiceNo}
                         onInvoiceNoChange={setAddInvoiceNo}
-                        onOcrFields={(f) => {
-                          if (f.amount && f.amount > 0 && !addAmount) setAddAmount(String(f.amount))
-                          if (f.vatAmount && f.vatAmount > 0) setAddVatAmount(String(f.vatAmount))
-                          if (f.invoiceNo) {
+                        onOcrFields={(f, meta) => {
+                          const force = meta?.force === true
+                          if (f.amount && f.amount > 0 && (force || !addAmount)) setAddAmount(String(f.amount))
+                          if (f.vatAmount && f.vatAmount > 0 && (force || !addVatAmount)) {
+                            setAddVatAmount(String(f.vatAmount))
+                          }
+                          if (f.invoiceNo && (force || !addInvoiceNo.trim())) {
                             setAddInvoiceNo(f.invoiceNo)
                             setAddInvoiceReceived(true)
                           }
-                          if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate)) setAddDate(f.expenseDate)
+                          if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate) && (force || !addDate)) {
+                            setAddDate(f.expenseDate)
+                          }
                           if (f.vendorNameHint && !addMemo.trim()) setAddMemo(f.vendorNameHint)
                           if (!addAccountSubjectId) {
                             const sid = suggestAccountSubjectId(
@@ -2248,13 +2253,18 @@ ${rows.map((row, ri) => {
                         onInvoiceReceivedChange={setEditInvoiceReceived}
                         invoiceNo={editInvoiceNo}
                         onInvoiceNoChange={setEditInvoiceNo}
-                        onOcrFields={(f) => {
-                          if (f.vatAmount && f.vatAmount > 0) setEditVatAmount(String(f.vatAmount))
-                          if (f.invoiceNo) {
+                        onOcrFields={(f, meta) => {
+                          const force = meta?.force === true
+                          if (f.vatAmount && f.vatAmount > 0 && (force || !editVatAmount)) {
+                            setEditVatAmount(String(f.vatAmount))
+                          }
+                          if (f.invoiceNo && (force || !editInvoiceNo.trim())) {
                             setEditInvoiceNo(f.invoiceNo)
                             setEditInvoiceReceived(true)
                           }
-                          if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate)) setEditDate(f.expenseDate)
+                          if (f.expenseDate && /^\d{4}-\d{2}-\d{2}$/.test(f.expenseDate) && (force || !editDate)) {
+                            setEditDate(f.expenseDate)
+                          }
                         }}
                         disabled={editSaving}
                       />

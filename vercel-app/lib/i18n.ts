@@ -4050,15 +4050,17 @@ export const i18n = {
     expenseDocOcrAutoFill: '업로드 시 자동 입력',
     expenseDocOcrRunNow: '지금 인식',
     expenseDocOcrApplied: '문서에서 항목을 채웠습니다. 확인 후 수정하세요.',
+    expenseDocOcrAppliedEmptyOnly:
+      '비어 있던 항목만 문서에서 채웠습니다. 이미 입력한 금액·일자는 유지됩니다.',
     expenseDocOcrNoFields: '인식된 항목이 없습니다. 직접 입력해 주세요.',
     expenseDocOcrFail: '문서 인식에 실패했습니다.',
-    expenseDocOcrAutoFillOnHint: '첨부 후 금액·일자 등을 자동으로 채웁니다.',
+    expenseDocOcrAutoFillOnHint: '첨부 후 비어 있는 금액·일자 등만 자동으로 채웁니다(이미 입력한 값은 유지).',
     expenseDocOcrAutoFillOffHint: '자동 입력이 꺼져 있습니다. 「지금 인식」으로 수동 실행하세요.',
     expenseDocAttachUnifiedHintManualOcr:
       '이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부됩니다. 자동 입력이 꺼져 있으면 「지금 인식」을 누르세요.',
     expenseDocTakePhoto: '사진 촬영',
     expenseDocAttachUnifiedHint:
-      '이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며 금액·일자 등을 자동 채웁니다(확인 후 수정 가능).',
+      '이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며, 비어 있는 금액·일자 등만 자동 채웁니다(이미 입력한 값은 유지). 「지금 인식」은 덮어씁니다.',
     expenseDocScanTitle: '영수증 스캔 보정',
     expenseDocScanDesc:
       '영수증 가장자리를 맞춘 뒤 적용하세요. 자동 감지가 틀리면 꼭짓점을 드래그하거나 「직접 자르기」를 사용하세요.',
@@ -11719,15 +11721,17 @@ Only matters the employee must handle personally on a working day:
     expenseDocOcrAutoFill: 'Auto-fill on upload',
     expenseDocOcrRunNow: 'Recognize now',
     expenseDocOcrApplied: 'Fields filled from document. Review before saving.',
+    expenseDocOcrAppliedEmptyOnly:
+      'Only empty fields were filled from the document. Existing amount and date were kept.',
     expenseDocOcrNoFields: 'No fields recognized. Enter manually.',
     expenseDocOcrFail: 'Document recognition failed.',
-    expenseDocOcrAutoFillOnHint: 'Amount, date, etc. will auto-fill after attach.',
+    expenseDocOcrAutoFillOnHint: 'After attach, only empty amount/date fields are auto-filled (existing values kept).',
     expenseDocOcrAutoFillOffHint: 'Auto-fill is off. Use “Recognize now” when needed.',
     expenseDocAttachUnifiedHintManualOcr:
       'Up to 3 images or PDFs. Photos are scan-corrected first. Use “Recognize now” when auto-fill is off.',
     expenseDocTakePhoto: 'Take photo',
     expenseDocAttachUnifiedHint:
-      'Up to 3 images or PDFs. Photos open scan correction first; fields auto-fill (review before saving).',
+      'Up to 3 images or PDFs. Photos open scan correction first; only empty amount/date fields auto-fill (existing values kept). “Recognize now” overwrites.',
     expenseDocScanTitle: 'Receipt scan',
     expenseDocScanDesc:
       'Align receipt edges, then apply. Drag corner handles if auto-detect is wrong, or use manual crop.',
@@ -18820,15 +18824,18 @@ orderItemQty: 'จำนวน',
     expenseDocOcrAutoFill: 'กรอกอัตโนมัติเมื่ออัปโหลด',
     expenseDocOcrRunNow: 'อ่านตอนนี้',
     expenseDocOcrApplied: 'กรอกข้อมูลจากเอกสารแล้ว กรุณาตรวจสอบก่อนบันทึก',
+    expenseDocOcrAppliedEmptyOnly:
+      'กรอกเฉพาะช่องที่ว่างจากเอกสารแล้ว จำนวนเงินและวันที่ที่มีอยู่แล้วจะไม่ถูกทับ',
     expenseDocOcrNoFields: 'ไม่พบข้อมูลที่อ่านได้ กรุณากรอกเอง',
     expenseDocOcrFail: 'อ่านเอกสารไม่สำเร็จ',
-    expenseDocOcrAutoFillOnHint: 'หลังแนบไฟล์ ระบบจะกรอกจำนวนเงิน วันที่ ฯลฯ ให้อัตโนมัติ',
+    expenseDocOcrAutoFillOnHint:
+      'หลังแนบไฟล์ ระบบจะกรอกเฉพาะช่องว่าง (จำนวนเงิน·วันที่ที่มีอยู่แล้วจะไม่ถูกทับ)',
     expenseDocOcrAutoFillOffHint: 'ปิดกรอกอัตโนมัติแล้ว กด「อ่านตอนนี้」เมื่อต้องการ',
     expenseDocAttachUnifiedHintManualOcr:
       'รูปภาพหรือ PDF สูงสุด 3 ไฟล์ รูปจะผ่านการปรับสแกนก่อนแนบ หากปิดกรอกอัตโนมัติ ให้กด「อ่านตอนนี้」',
     expenseDocTakePhoto: 'ถ่ายรูป',
     expenseDocAttachUnifiedHint:
-      'รูปภาพหรือ PDF สูงสุด 3 ไฟล์ รูปจะปรับสแกนก่อนแนบ และกรอกจำนวนเงิน·วันที่ให้อัตโนมัติ (ตรวจสอบก่อนบันทึก)',
+      'รูปภาพหรือ PDF สูงสุด 3 ไฟล์ รูปจะปรับสแกนก่อนแนบ และกรอกเฉพาะช่องว่าง (จำนวนเงิน·วันที่ที่มีอยู่แล้วจะไม่ถูกทับ) กด「อ่านตอนนี้」หากต้องการทับค่า',
     expenseDocScanTitle: 'ปรับสแกนใบเสร็จ',
     expenseDocScanDesc:
       'จัดขอบใบเสร็จให้ตรงแล้วกดใช้ หากตรวจจับอัตโนมัติผิด ลากมุมหรือใช้「ตัดเอง」',
