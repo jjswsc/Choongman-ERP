@@ -20,10 +20,14 @@ function storeMatchesIncomeFilterLegacy(storeValue: string, filter: string): boo
   const a = String(storeValue || '').trim().toLowerCase()
   if (!filter || filter.trim().toLowerCase() === 'all') return true
   if (!a) return false
-  for (const v of storeCodeSearchVariants(filter)) {
-    const b = String(v || '').trim().toLowerCase()
-    if (!b) continue
-    if (a === b || a.includes(b) || b.includes(a)) return true
+  const terms = storeFilterSearchTerms(filter)
+  const searchTerms = terms.length > 0 ? terms : [filter]
+  for (const term of searchTerms) {
+    for (const v of storeCodeSearchVariants(term)) {
+      const b = String(v || '').trim().toLowerCase()
+      if (!b) continue
+      if (a === b || a.includes(b) || b.includes(a)) return true
+    }
   }
   return false
 }
@@ -37,6 +41,10 @@ export function storeMatchesIncomeFilterWithIndex(
   if (!filter || filter.trim().toLowerCase() === 'all') return true
   const v = String(storeValue || '').trim()
   if (!v) return false
+  const terms = storeFilterSearchTerms(filter)
+  if (terms.length > 1) {
+    return terms.some((f) => matchesAccountingStoreScopeRow(v, f, index.masters, index.legacyToCanonical))
+  }
   return matchesAccountingStoreScopeRow(v, filter, index.masters, index.legacyToCanonical)
 }
 
@@ -54,21 +62,43 @@ export function sqlIlikeContains(term: string): string {
   return `%${t.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
 }
 
+/**
+ * 손익·원장 storeFilter 검색어.
+ * 가맹 「복수 매장」은 `A,B,C` 형태 — 통째로 ilike 하면 PostgREST or=() 콤마와 충돌(PGRST100).
+ */
+export function storeFilterSearchTerms(storeFilter: string): string[] {
+  const s = String(storeFilter || '').trim()
+  if (!s || s === 'All' || s === '전체' || s === '*') return []
+  if (!s.includes(',')) return [s]
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of s.split(',')) {
+    const v = String(part || '').trim()
+    if (!v || seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out.length > 0 ? out : [s]
+}
+
 function incomeStoreSearchVariants(term: string): string[] {
   const raw = String(term || '').trim()
   if (!raw) return []
   return [...new Set([raw, ...storeCodeSearchVariants(raw)])].filter(Boolean)
 }
 
-/** PostgREST: 매장명·코드 변형 중 하나라도 ilike 일치 */
+/** PostgREST: 매장명·코드 변형 중 하나라도 ilike 일치 (복수 매장은 OR) */
 export function buildStoreFieldOrIlikeFragment(field: string, storeFilter: string): string {
   if (!storeFilter || storeFilter === 'All') return ''
   if (storeFilter === '입고등록') {
     return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`
   }
-  const variants = incomeStoreSearchVariants(storeFilter)
+  const terms = storeFilterSearchTerms(storeFilter)
+  if (terms.length === 0) return ''
+  const variants = [...new Set(terms.flatMap((t) => incomeStoreSearchVariants(t)))].filter(Boolean)
+  if (variants.length === 0) return ''
   if (variants.length === 1) {
-    return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(variants[0]))}`
+    return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(variants[0]!))}`
   }
   const inner = variants.map((v) => `${field}.ilike.${encodeURIComponent(sqlIlikeContains(v))}`).join(',')
   return `or=(${inner})`

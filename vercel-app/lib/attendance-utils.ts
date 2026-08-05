@@ -176,6 +176,11 @@ export const ATTENDANCE_PENDING_BADGE_LOOKBACK_DAYS = 30
 export type AttendancePendingApprovalFilterOptions = {
   /** 방콕 달력 기준 최근 N일(오늘 포함). 미지정 시 전체 기간 */
   lookbackDays?: number
+  /**
+   * 배지 전용: 지각·연장·조퇴(분) 자동 대기 제외.
+   * 위치미확인·승인대기·강제퇴근처럼 사람이 아직 손대지 않은(status) 건만.
+   */
+  actionRequiredStatusOnly?: boolean
 }
 
 /** PostgREST `attendance_logs` — 승인 대기(실제 처리 필요) 건수·목록 조회용 필터 */
@@ -184,14 +189,15 @@ export function attendancePendingApprovalPostgrestFilter(
   options?: AttendancePendingApprovalFilterOptions
 ): string {
   const pendingEq = encodeURIComponent('대기')
-  const statusOr = [
-    'late_min.gt.0',
-    'ot_min.gt.0',
-    'early_min.gt.0',
+  const statusOnly = [
     `status.like.${encodeURIComponent('*위치미확인*')}`,
     `status.like.${encodeURIComponent('*승인대기*')}`,
     `status.like.${encodeURIComponent('*강제퇴근*')}`,
-  ].join(',')
+  ]
+  const metricOr = options?.actionRequiredStatusOnly
+    ? statusOnly
+    : ['late_min.gt.0', 'ot_min.gt.0', 'early_min.gt.0', ...statusOnly]
+  const statusOr = metricOr.join(',')
   const core = `and=(approved.eq.${pendingEq},or(${statusOr}))`
 
   const parts: string[] = []

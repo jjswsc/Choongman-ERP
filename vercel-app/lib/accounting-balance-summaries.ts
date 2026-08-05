@@ -5,7 +5,7 @@ import {
   scopePayableLedgerRows,
 } from '@/lib/payable-attributed-store'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import { buildStoreFieldOrIlikeFragment, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 
 const ACCOUNTING_FALLBACK_MAX_ROWS = 2_000_000
 
@@ -44,7 +44,8 @@ export async function sumReceivablesBalance(params: {
 
   let filter = endStr ? `trans_date=lte.${endStr}` : 'id=gt.0'
   if (!isHQ && storeFilter !== 'All') {
-    filter += `&store_name=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`
+    const storeFrag = buildStoreFieldOrIlikeFragment('store_name', storeFilter)
+    if (storeFrag) filter += `&${storeFrag}`
   }
   const rows = (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
     select: 'amount',

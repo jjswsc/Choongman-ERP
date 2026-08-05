@@ -88,9 +88,9 @@ function mergeStoreAdmin(base: Record<string, string>, overrides: Partial<Record
 
 export const I18N_STORE_ADMIN_KO = pack({
   helpSum_admin_store_ops:
-    '매장 점검·방문·A/S·컴플레인 KPI를 한 화면에서 보고, 각 업무 화면으로 바로 이동하는 매장 운영 허브입니다.',
+    '매장 점검·방문·A/S·컴플레인 KPI를 한 화면에서 보고, 각 업무 화면으로 바로 이동하는 매장 운영 허브입니다. 사이드바 배지는 아직 미착수(접수) 건·당일 미점검만 표시합니다.',
   helpHow_admin_store_ops:
-    '① 상단 KPI에서 오늘 미점검 매장·지연 A/S·미처리 컴플레인·현장 방문 수를 확인합니다.\n② 카드를 클릭하거나 하위 메뉴로 해당 화면(점검·방문·A/S·컴플레인)으로 이동합니다.\n③ 본사는 매장별 우선순위를 정한 뒤 SV·매장에 후속 조치를 요청하세요.',
+    '① 상단 KPI·사이드바 배지는 「아직 아무도 손대지 않은」 건만 셉니다(A/S·컴플레인=접수, 조사중·진행중 제외·최근 30일).\n② 카드를 클릭하거나 하위 메뉴로 해당 화면(점검·방문·A/S·컴플레인)으로 이동합니다.\n③ 본사는 매장별 우선순위를 정한 뒤 SV·매장에 후속 조치를 요청하세요.',
   helpSum_admin_store_check:
     '매장 일일 점검 체크리스트를 입력·저장하고, 이력·FAIL 항목 요약·항목 설정(본사)을 관리하는 화면입니다.',
   helpHow_admin_store_check:
@@ -100,13 +100,13 @@ export const I18N_STORE_ADMIN_KO = pack({
   helpHow_admin_store_visit:
     '①「방문 목록」: 기간·매장·부서·직원·목적으로 방문 이력을 검색·정렬합니다.\n②「당일 방문 현황」: 오늘(방콕) 진행 중·완료 방문을 타임라인·매장별로 봅니다. 자동 갱신을 켤 수 있습니다.\n③「매장 방문 통계」: 기간별 방문 시간·횟수·히트맵·추이 차트를 확인합니다.',
   helpSum_admin_store_repairs:
-    '매장 시설·장비 A/S 티켓을 접수·처리·완료하고, KPI·진행 로그·사진·업체 정보를 관리하는 화면입니다.',
+    '매장 시설·장비 A/S 티켓을 접수·처리·완료하고, KPI·진행 로그·사진·업체 정보를 관리하는 화면입니다. 사이드바 배지는 최근 30일·3일+ 미착수(접수)만 표시합니다.',
   helpHow_admin_store_repairs:
-    '①「현황」: 기간·매장별 접수·진행·완료·긴급·평균 처리일 KPI와 차트를 봅니다.\n②「목록」: 티켓을 검색하고 행 클릭 시「처리·진행」탭으로 이동합니다. 3일+ 접수 지연은 강조 표시됩니다.\n③「처리·진행」: 티켓 선택 후 상태·담당자·조치·진행 메모·사진을 기록합니다.\n④「신규」: 매장·카테고리·우선순위·제목·설명·사진으로 티켓을 등록합니다.',
+    '①「현황」: 기간·매장별 접수·진행·완료·긴급·평균 처리일 KPI와 차트를 봅니다.\n②「목록」: 티켓을 검색하고 행 클릭 시「처리·진행」탭으로 이동합니다. 3일+ 접수 지연은 강조 표시됩니다.\n③「처리·진행」: 티켓 선택 후 상태·담당자·조치·진행 메모·사진을 기록합니다.\n④「신규」: 매장·카테고리·우선순위·제목·설명·사진으로 티켓을 등록합니다.\n⑤ 사이드바 숫자는 「접수」만(진행중 제외)·최근 30일·3일+ 지연만 집계합니다.',
   helpSum_admin_complaints:
-    '고객 컴플레인(클레임)을 접수·조사·처리하고, 유형·심각도별 현황을 조회하는 화면입니다.',
+    '고객 컴플레인(클레임)을 접수·조사·처리하고, 유형·심각도별 현황을 조회하는 화면입니다. 사이드바 배지는 최근 30일 「접수」만 표시합니다.',
   helpHow_admin_complaints:
-    '①「현황」: 기본 최근 30일(7·90일 프리셋 가능). 기간·매장·유형으로 KPI·차트를 봅니다.\n②「입력」: 고객·방문 경로·유형·내용·사진을 등록하거나 기존 건을 수정합니다. 「고객 답변」은 회원앱에 보이고, 「내부 조치」는 내부용입니다.\n③「검색」: 기간·키워드·매장·방문·유형·심각도·상태·유입으로 목록을 조회하고 상세보기로 수정합니다.\n④「처리」: 미완료 체크 시 기간과 무관하게 미완료 건을 모두 보여 줍니다. 키워드·매장·심각도로 좁힌 뒤 담당자·고객 답변·내부 조치·상태를 저장합니다.',
+    '①「현황」: 기본 최근 30일(7·90일 프리셋 가능). 기간·매장·유형으로 KPI·차트를 봅니다.\n②「입력」: 고객·방문 경로·유형·내용·사진을 등록하거나 기존 건을 수정합니다. 「고객 답변」은 회원앱에 보이고, 「내부 조치」는 내부용입니다.\n③「검색」: 기간·키워드·매장·방문·유형·심각도·상태·유입으로 목록을 조회하고 상세보기로 수정합니다.\n④「처리」: 미완료 체크 시 기간과 무관하게 미완료 건을 모두 보여 줍니다. 키워드·매장·심각도로 좁힌 뒤 담당자·고객 답변·내부 조치·상태를 저장합니다.\n⑤ 사이드바 배지는 「접수」만(조사중·보류 제외)·최근 30일입니다.',
   storeSubnavAria: '매장 관리 하위 메뉴',
   adminStoreOps: '매장 운영',
   store_ops_page_sub: '점검·방문·A/S·컴플레인 KPI 허브',
@@ -174,9 +174,9 @@ export const I18N_STORE_ADMIN_KO = pack({
 
 export const I18N_STORE_ADMIN_EN = pack({
   helpSum_admin_store_ops:
-    'Store operations hub: daily check, visits, repairs, and complaints KPIs with quick links to each screen.',
+    'Store operations hub: daily check, visits, repairs, and complaints KPIs with quick links. Sidebar badges count only untouched (Received) items and today’s unchecked stores.',
   helpHow_admin_store_ops:
-    '① Review KPIs for unchecked stores today, stale repairs, open complaints, and field visits.\n② Open the related screen from cards or sub-navigation.\n③ HQ: prioritize stores and assign follow-ups to SVs or managers.',
+    '① KPI and sidebar badges count only items nobody has started yet (repairs/complaints = Received; exclude In progress / Investigating; last 30 days).\n② Open the related screen from cards or sub-navigation.\n③ HQ: prioritize stores and assign follow-ups to SVs or managers.',
   helpSum_admin_store_check:
     'Daily store checklist entry, history, FAIL item summary, and checklist settings (HQ).',
   helpHow_admin_store_check:
@@ -186,13 +186,13 @@ export const I18N_STORE_ADMIN_EN = pack({
   helpHow_admin_store_visit:
     '① Visit List: filter by period, store, department, employee, purpose; sort columns.\n② Today: timeline of active and completed visits (Bangkok); optional auto-refresh.\n③ Visit Stats: duration, counts, heatmap, and trend charts.',
   helpSum_admin_store_repairs:
-    'Store facility/equipment repair tickets with KPI dashboard, progress log, photos, and vendors.',
+    'Store facility/equipment repair tickets with KPI dashboard, progress log, photos, and vendors. Sidebar badges show only Received tickets that are 3+ days old within the last 30 days.',
   helpHow_admin_store_repairs:
-    '① Dashboard: KPIs and charts by period and store.\n② List: search tickets; row click opens Process tab. Stale receipts (3+ days) are highlighted.\n③ Process: update status, handler, notes, and photos.\n④ New: register a ticket with category, priority, title, description, and photos.',
+    '① Dashboard: KPIs and charts by period and store.\n② List: search tickets; row click opens Process tab. Stale receipts (3+ days) are highlighted.\n③ Process: update status, handler, notes, and photos.\n④ New: register a ticket with category, priority, title, description, and photos.\n⑤ Sidebar counts Received only (not In progress), last 30 days, 3+ days stale.',
   helpSum_admin_complaints:
-    'Customer complaint intake, investigation, resolution, and KPI dashboard.',
+    'Customer complaint intake, investigation, resolution, and KPI dashboard. Sidebar badges show only Received items in the last 30 days.',
   helpHow_admin_complaints:
-    '① Dashboard: default last 30 days (7/90-day presets). Filter by period, store, type for KPIs.\n② Input: register or edit complaints with photos. Customer reply shows in the member app; Internal action is staff-only.\n③ List: search by period, keyword, store, visit path, type, severity, status, source.\n④ Process: with Open checked, shows all open items regardless of date. Narrow with keyword/store/severity, then save status, customer reply, and internal action.',
+    '① Dashboard: default last 30 days (7/90-day presets). Filter by period, store, type for KPIs.\n② Input: register or edit complaints with photos. Customer reply shows in the member app; Internal action is staff-only.\n③ List: search by period, keyword, store, visit path, type, severity, status, source.\n④ Process: with Open checked, shows all open items regardless of date. Narrow with keyword/store/severity, then save status, customer reply, and internal action.\n⑤ Sidebar badges count Received only (exclude Investigating/On hold), last 30 days.',
   storeSubnavAria: 'Store management sub-navigation',
   adminStoreOps: 'Store Operations',
   store_ops_page_sub: 'Checks · visits · repairs · complaints hub',

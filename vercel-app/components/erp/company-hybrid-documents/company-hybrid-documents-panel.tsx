@@ -212,7 +212,7 @@ export function CompanyHybridDocumentsPanel() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth, initialized, setAuth } = useAuth()
-  const { stores, loading: storeLoading, formatStoreLabel, resolveStoreKey } = useStoreList()
+  const { posStores: stores, loading: storeLoading, formatStoreLabel, resolveStoreKey } = useStoreList()
 
   const [mainTab, setMainTab] = React.useState<MainTab>("list")
   const [selectedStore, setSelectedStore] = React.useState("")

@@ -1720,17 +1720,17 @@ export const i18n = {
     helpHow_admin_hr_policies:
       '① 제목·첨부(또는 본문)·수신 대상(전체/오피스/매장/개인)을 입력한 뒤 저장합니다.\n② 규정 목록에서 대상 구분 필터·「등록 내용 보기」·열람 상세를 확인합니다.\n③ 게시·공지가 필요하면「대상·배포(공지)」로 활성화하고 안내를 보냅니다.',
     helpSum_admin_hr:
-      '인사 관리 허브 — 휴가·근태 승인 대기, 이번 주 인사 일정, 급여·직원·규정 메뉴로 바로 이동합니다.',
+      '인사 관리 허브 — 휴가·근태 미승인(사이드바 배지는 GPS·강제퇴근 등 미처리·최근 휴가 대기만), 이번 주 인사 일정, 급여·직원·규정 메뉴로 바로 이동합니다.',
     helpHow_admin_hr:
-      '① 상단 KPI 카드에서 대기 건수·이번 주 일정을 확인합니다.\n② 각 카드의 바로가기로 휴가·근태·캘린더·급여 화면으로 이동합니다.\n③ 상단 서브내비로 직원·규정·캘린더·근태·휴가·급여를 오갑니다.',
+      '① 상단 KPI·사이드바 배지는 「아직 아무도 승인하지 않은」 건만 셉니다(근태는 위치미확인·강제퇴근 등, 휴가는 최근 휴가일 대기).\n② 각 카드의 바로가기로 휴가·근태·캘린더·급여 화면으로 이동합니다.\n③ 상단 서브내비로 직원·규정·캘린더·근태·휴가·급여를 오갑니다.',
     helpSum_admin_attendance:
-      '출퇴근 기록 조회·승인, 지각·조퇴·연장 조정, 당일 실시간 근무, 주간 스케줄 조회·작성을 한 화면에서 처리합니다.',
+      '출퇴근 기록 조회·승인, 지각·조퇴·연장 조정, 당일 실시간 근무, 주간 스케줄 조회·작성을 한 화면에서 처리합니다. 사이드바 배지는 GPS·강제퇴근 등 미승인만 표시합니다.',
     helpHow_admin_attendance:
-      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다.\n④ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
+      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
-      '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다.',
+      '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
-      '① [승인]: 대기 목록에서 증명서 확인 후 승인·반려합니다.\n② [통계]: 기간·매장별 사용·잔여 연차를 조회합니다.\n③ 급여 관리에서 월별로 링크해 들어올 수 있습니다.',
+      '① [승인]: 대기 목록에서 증명서 확인 후 승인·반려합니다.\n② [통계]: 기간·매장별 사용·잔여 연차를 조회합니다.\n③ 급여 관리에서 월별로 링크해 들어올 수 있습니다.\n④ 사이드바 배지는 최근 30일(휴가일)~미래 미승인만 집계합니다.',
     helpSum_admin_hr_calendar:
       '재직 직원의 생일·입사·N년·퇴사일을 월별 캘린더와 목록으로 확인합니다.',
     helpHow_admin_hr_calendar:
@@ -9386,17 +9386,17 @@ Only matters the employee must handle personally on a working day:
     helpHow_admin_hr_policies:
       '① Enter title, attachment/body, and audience (all / head office / stores / individuals), then save.\n② Use list filters, “View registered content”, and read details to verify.\n③ Use “Targets & deploy (notice)” to publish and notify staff.',
     helpSum_admin_hr:
-      'HR hub — pending leave and attendance approvals, this week’s HR events, and quick links to payroll, staff, and policies.',
+      'HR hub — pending leave/attendance (sidebar badges count only unapproved GPS/forced clock-out and recent leave), this week’s HR events, and quick links to payroll, staff, and policies.',
     helpHow_admin_hr:
-      '① Review KPI cards for pending counts and this week’s schedule.\n② Use each card’s shortcut to open Leave, Attendance, Calendar, or Payroll.\n③ Use the sub-navigation bar for Employees, Policies, Calendar, Attendance, Leave, and Payroll.',
+      '① KPI and sidebar badges count only items nobody has approved yet (attendance: GPS/forced; leave: recent leave dates).\n② Use each card’s shortcut to open Leave, Attendance, Calendar, or Payroll.\n③ Use the sub-navigation bar for Employees, Policies, Calendar, Attendance, Leave, and Payroll.',
     helpSum_admin_attendance:
-      'Review and approve clock-in/out, adjust late/early/OT, view today’s live status, and browse or edit weekly schedules in one place.',
+      'Review and approve clock-in/out, adjust late/early/OT, view today’s live status, and browse or edit weekly schedules in one place. Sidebar badges show only unapproved GPS/forced items.',
     helpHow_admin_attendance:
-      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters.\n④ Help tab: read approval, adjustment, and OT rules.',
+      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
-      'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period.',
+      'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:
-      '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store.\n③ Payroll may deep-link here by month.',
+      '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store.\n③ Payroll may deep-link here by month.\n④ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
     helpSum_admin_hr_calendar:
       'View birthdays, hire dates, work anniversaries, and resignations on a monthly calendar and list.',
     helpHow_admin_hr_calendar:

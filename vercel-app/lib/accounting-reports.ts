@@ -47,7 +47,6 @@ import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
   buildStoreFieldOrIlikeFragment,
-  sqlIlikeContains,
   storeMatchesIncomeFilter,
 } from '@/lib/accounting-store-match'
 import {
@@ -2459,12 +2458,14 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
         | { id?: number; store?: string; opening_balance?: number }[]
         | null)?.filter((x) => isHqAccountingStoreRow(String(x.store || ''))) || []
     } else if (storeFilter !== 'All') {
-      bankAccounts =
-        ((await supabaseSelectFilter(
-          'bank_accounts',
-          `store=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`,
-          { select: 'id,store,opening_balance', limit: 2000 }
-        )) as { id?: number; store?: string; opening_balance?: number }[] | null) || []
+      const storeFrag = buildStoreFieldOrIlikeFragment('store', storeFilter)
+      // 빈 필터면 전 계좌 조회가 되어 잔액이 부풀 수 있음 → 매장 미매칭 시 빈 목록
+      bankAccounts = storeFrag
+        ? ((await supabaseSelectFilter('bank_accounts', storeFrag, {
+            select: 'id,store,opening_balance',
+            limit: 2000,
+          })) as { id?: number; store?: string; opening_balance?: number }[] | null) || []
+        : []
     } else {
       bankAccounts = ((await supabaseSelect('bank_accounts', { select: 'id,store,opening_balance', limit: 2000 })) as
         | { id?: number; store?: string; opening_balance?: number }[]
