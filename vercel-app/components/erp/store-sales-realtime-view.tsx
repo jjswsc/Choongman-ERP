@@ -252,22 +252,46 @@ export function StoreSalesRealtimeView({
     [isAllStoresSelected, operationalStores, currentStore, storeListCodes, legacyToCanonical]
   )
 
+  const expectedTotal =
+    todaySales != null ? Number(todaySales.completedTotal ?? 0) + summaryTableTotal : null
+
   const summaryMetricsGrid = (
-    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-      <div className="rounded-lg bg-background/60 px-2 py-2">
-        <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
-        <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
+    <div className="mt-4 space-y-2">
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-lg bg-background/60 px-2 py-2">
+          <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
+          <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
+        </div>
+        <div className="rounded-lg bg-background/60 px-2 py-2">
+          <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
+          <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
+        </div>
+        <div className="rounded-lg bg-background/60 px-2 py-2">
+          <p className="text-[10px] text-muted-foreground">
+            {tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
+          </p>
+          <p className="text-sm font-semibold tabular-nums leading-snug">
+            {loadingTables ? "—" : formatBahtInt(summaryTableTotal)}
+          </p>
+        </div>
       </div>
-      <div className="rounded-lg bg-background/60 px-2 py-2">
-        <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
-        <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
-      </div>
-      <div className="rounded-lg bg-background/60 px-2 py-2">
-        <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesTableTotal")}</p>
-        <p className="text-sm font-semibold tabular-nums leading-snug">
-          {loadingTables ? "—" : formatBahtInt(summaryTableTotal)}
+      <div className="rounded-lg border border-border/50 bg-background/40 px-3 py-2 text-center">
+        <p className="text-[10px] text-muted-foreground">
+          {tr("mobileStoreSalesExpectedTotal", "예상 총액")}
+          <span className="ml-1 text-muted-foreground/80">
+            ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미결제 테이블")})
+          </span>
+        </p>
+        <p className="text-base font-semibold tabular-nums text-foreground">
+          {expectedTotal == null || loadingTables ? "—" : formatBahtInt(expectedTotal)}
         </p>
       </div>
+      <p className="text-[10px] leading-relaxed text-muted-foreground">
+        {tr(
+          "mobileStoreSalesMetricSplitHint",
+          "확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 아직 결제 전 좌석 금액이며 홀(확정)에 더하지 않습니다. 서빙 완료(ready)는 확정에 포함됩니다."
+        )}
+      </p>
     </div>
   )
 
@@ -388,7 +412,9 @@ export function StoreSalesRealtimeView({
       <p className="text-xs leading-relaxed text-muted-foreground">{t("mobileStoreSalesSub")}</p>
 
       <section className="rounded-xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
-        <p className="text-xs font-medium text-muted-foreground">{t("mobileStoreSalesTodayTotal")}</p>
+        <p className="text-xs font-medium text-muted-foreground">
+          {tr("mobileStoreSalesConfirmedTotal", "확정 매출")}
+        </p>
         <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
           {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
         </p>
@@ -481,7 +507,7 @@ export function StoreSalesRealtimeView({
                     <Bar
                       dataKey="tableTotal"
                       fill="#3b82f6"
-                      name={t("mobileStoreSalesTableTotalAmount")}
+                      name={tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
                       radius={[0, 4, 4, 0]}
                     />
                   </BarChart>
@@ -520,7 +546,9 @@ export function StoreSalesRealtimeView({
               <div className="grid shrink-0 grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
                 <p className="min-w-0">{t("mobileStoreSalesStoreName")}</p>
                 <p className="min-w-0 text-right">{t("mobileStoreSalesPaidAmount")}</p>
-                <p className="min-w-0 text-right">{t("mobileStoreSalesTableTotalAmount")}</p>
+                <p className="min-w-0 text-right">
+                  {tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
+                </p>
               </div>
               <ul className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto overscroll-contain">
                 {byStoreRows.map((row) => (

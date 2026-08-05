@@ -1,14 +1,27 @@
+import { isPosPaidLikeStatus } from '@/lib/pos-order-policy'
 import { resolveStoreListKey } from '@/lib/store-list-keys'
 import { orderListMergeKey } from '@/lib/pos-terminal-active-orders-persist'
 import type { Store } from '@/lib/pos-types'
 
-/** 매장 스냅샷의 진행 중 테이블 주문 금액 합 — 동일 주문이 여러 테이블에 매칭돼도 1회만 합산 */
+/**
+ * 실시간「미결제 테이블」합산 대상 — pending/cooking/preparing 등.
+ * ready·paid·completed 는 확정 매출(홀)에 이미 포함되므로 제외해 이중 집계를 막는다.
+ */
+export function countsTowardUnpaidTableTotal(order: { status?: string } | null | undefined): boolean {
+  if (!order) return false
+  const st = String(order.status ?? 'pending').trim().toLowerCase()
+  if (['cancelled', 'canceled', 'refunded'].includes(st)) return false
+  if (isPosPaidLikeStatus(st)) return false
+  return true
+}
+
+/** 매장 스냅샷의 미결제 테이블 주문 금액 합 — 동일 주문이 여러 테이블에 매칭돼도 1회만 합산 */
 export function sumStoreTableOrders(store: Store | undefined | null): number {
   const seen = new Set<string>()
   let total = 0
   for (const tbl of store?.tables || []) {
     const order = tbl.order
-    if (!order) continue
+    if (!order || !countsTowardUnpaidTableTotal(order)) continue
     const key =
       orderListMergeKey(order) ||
       `${String(tbl.id || tbl.name || '').trim()}:${Number(order.total ?? 0)}`
@@ -19,7 +32,7 @@ export function sumStoreTableOrders(store: Store | undefined | null): number {
   return total
 }
 
-/** 단일 매장 또는 전체 매장 선택 시 테이블 총액 */
+/** 단일 매장 또는 전체 매장 선택 시 미결제 테이블 총액(ready·paid·completed 제외) */
 export function computeRealtimeTableTotal(params: {
   isAllStores: boolean
   stores: ReadonlyArray<Store>

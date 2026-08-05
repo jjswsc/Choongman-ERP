@@ -66,7 +66,7 @@ export type AdminSalesDashboardChartsProps = {
   isOfficeSelector: boolean
   /** 가맹 「내 매장 전체」등 — 명시 매장 코드(본사 All=undefined 와 구분) */
   salesStoreCodes?: string[]
-  /** POS 테이블 스냅샷 — 매장 canonical 키별 진행 중 주문 합계 */
+  /** POS 테이블 스냅샷 — 매장 canonical 키별 미결제 테이블 합계(ready·paid 제외) */
   tableTotalByStore?: Record<string, number>
   /** 부모 자동 갱신 토큰 */
   refreshToken?: number
@@ -417,7 +417,9 @@ export function AdminSalesDashboardCharts({
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindDineIn", "홀")}</th>
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindTakeout", "포장")}</th>
-                    <th className="px-3 py-2 text-right">{tr("mobileStoreSalesTableTotal", "테이블")}</th>
+                    <th className="px-3 py-2 text-right">
+                      {tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
+                    </th>
                     <th className="px-3 py-2 text-right">{tr("salesTotalLabel", "합계")}</th>
                   </tr>
                 </thead>
@@ -448,7 +450,7 @@ export function AdminSalesDashboardCharts({
             <p className="mt-1.5 text-[10px] text-muted-foreground">
               {tr(
                 "adminDashboardStoreTableFootnote",
-                "홀·배달·포장·합계는 당일 완료 매출(POS 영업일)입니다. 테이블은 진행 중 주문 합계로 실시간 패널「검색」 시 갱신됩니다."
+                "홀·배달·포장·합계는 당일 확정 매출(POS 영업일)입니다. 미결제 테이블은 결제·서빙완료(ready) 전 좌석만 합산하며 합계에 더하지 않습니다. 실시간 패널「검색」 시 갱신됩니다."
               )}
             </p>
           </div>
@@ -600,7 +602,9 @@ export function AdminSalesDashboardCharts({
               <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].takeoutTotal)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">{tr("mobileStoreSalesTableTotal", "테이블")}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
+              </p>
               <p className="text-lg font-bold tabular-nums">{formatSalesAmount(storeChartRows[0].tableTotal)}</p>
             </div>
             <div>

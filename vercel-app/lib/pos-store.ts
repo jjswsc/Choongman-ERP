@@ -793,7 +793,8 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         (o) =>
           isDineInOrderForTableDisplay(o.orderType, o.dbOrderType) &&
           (o.tableName ?? '').trim() !== '' &&
-          !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
+          // paid는 확정 매출 — 테이블에 남기면 실시간「테이블 총액」과 홀이 이중으로 잡힘. ready(서빙완료·미결제)는 좌석 표시용으로 유지.
+          !['cancelled', 'refunded', 'completed', 'paid'].includes((o.status ?? '').toLowerCase())
       )
       const tables = layoutToTables(layout, dineInOrders)
       return {

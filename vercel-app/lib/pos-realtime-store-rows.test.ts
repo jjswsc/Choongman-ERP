@@ -182,6 +182,21 @@ describe('sumStoreTableOrders', () => {
     }
     expect(sumStoreTableOrders(store)).toBe(800)
   })
+
+  it('excludes ready/paid/completed so hall-confirmed sales are not double-counted', () => {
+    const base = { type: 'dine-in' as const, items: [], createdAt: new Date() }
+    const store: Store = {
+      id: 'CM A',
+      name: 'CM A',
+      tables: [
+        { id: 'a', name: '1', order: { ...base, id: '1', total: 100, status: 'pending' }, isOccupied: true },
+        { id: 'b', name: '2', order: { ...base, id: '2', total: 200, status: 'ready' }, isOccupied: true },
+        { id: 'c', name: '3', order: { ...base, id: '3', total: 300, status: 'paid' }, isOccupied: true },
+        { id: 'd', name: '4', order: { ...base, id: '4', total: 400, status: 'completed' }, isOccupied: true },
+      ],
+    }
+    expect(sumStoreTableOrders(store)).toBe(100)
+  })
 })
 
 describe('computeRealtimeTableTotal', () => {

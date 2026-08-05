@@ -63,7 +63,7 @@ type PosRevenueRealtimeDashboardProps = {
   isOfficeSelector: boolean
   /** 가맹 허용 매장 합산 — stores 쿼리에 명시 */
   salesStoreCodes?: string[]
-  /** POS 테이블 스냅샷 기준 진행 중 주문 합계 */
+  /** POS 테이블 스냅샷 — 미결제(pending/cooking 등) 합계. ready·paid는 확정 매출에 포함되어 제외 */
   tableTotal?: number
   tableTotalLoading?: boolean
   /** 부모 자동 갱신 토큰 */
@@ -138,6 +138,16 @@ export function PosRevenueRealtimeDashboard({
 
   const store = data?.store
   const officeRows = data?.office?.stores || []
+  const officeTotals = data?.office?.totals
+
+  const confirmedRevenue = React.useMemo(() => {
+    if (store) return Number(store.completedRevenue ?? 0)
+    if (officeTotals) return Number(officeTotals.completedRevenue ?? 0)
+    if (officeRows.length > 0) {
+      return officeRows.reduce((s, r) => s + Number(r.completedRevenue ?? 0), 0)
+    }
+    return null
+  }, [store, officeTotals, officeRows])
 
   const storeRevenueBarRows = React.useMemo(() => {
     if (!store) return []
@@ -234,18 +244,43 @@ export function PosRevenueRealtimeDashboard({
         </p>
       ) : null}
 
-      {typeof tableTotal === "number" || tableTotalLoading ? (
-        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            {tr("mobileStoreSalesTableTotal", "테이블 총액")}
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
-            {tableTotalLoading ? "—" : formatBaht(tableTotal ?? 0)}
-          </p>
-          <p className="mt-1 text-[10px] text-muted-foreground">
+      {typeof tableTotal === "number" || tableTotalLoading || confirmedRevenue != null ? (
+        <div className="space-y-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border/60 bg-card px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {tr("mobileStoreSalesConfirmedTotal", "확정 매출")}
+              </p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
+                {confirmedRevenue == null ? "—" : formatBaht(confirmedRevenue)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
+              </p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
+                {tableTotalLoading ? "—" : formatBaht(tableTotal ?? 0)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {tr("mobileStoreSalesExpectedTotal", "예상 총액")}
+                <span className="ml-1 font-normal text-muted-foreground/80">
+                  ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미결제 테이블")})
+                </span>
+              </p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
+                {tableTotalLoading || confirmedRevenue == null
+                  ? "—"
+                  : formatBaht(confirmedRevenue + Number(tableTotal ?? 0))}
+              </p>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
             {tr(
               "adminRealtimeTableTotalHint",
-              "진행 중 테이블 주문 합계입니다. 아래 실시간 매출 패널「검색」으로 갱신합니다."
+              "미결제 테이블은 결제·서빙완료(ready) 전 좌석 합계입니다. 확정 매출과 더하지 말고, 예상 총액만 합산 참고용으로 보세요.「검색」으로 갱신합니다."
             )}
           </p>
         </div>
