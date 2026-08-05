@@ -37,6 +37,7 @@ import {
 import { ensureAppliedCouponsInDiscountReason } from '@/lib/pos-coupon-domain'
 import {
   resolveAppliedCouponsForOrderDbSave,
+  resolveCouponDiscountAmtForOrderPricing,
   isPosOrderCouponPaymentSettled,
 } from '@/lib/pos-order-coupon-fields'
 import { assertPosBusinessOpenForOrderSave } from '@/lib/pos-business-open-gate-server'
@@ -383,9 +384,11 @@ export async function POST(req: NextRequest) {
       couponDbSave.appliedCoupons,
       couponDbSave.couponCode
     )
+    // DB에 보존되는 쿠폰액과 total/discount_amt를 맞춘다 (재검증 0 + appliedPre 보존 시)
+    const couponAmtForPricing = resolveCouponDiscountAmtForOrderPricing(couponDbSave)
     const discountAmtForPricing = Math.min(
       subtotal,
-      Math.max(0, manualDiscountForCoupons + couponDiscountAmt)
+      Math.max(0, manualDiscountForCoupons + couponAmtForPricing)
     )
     const discountAmtNetFinal = Math.max(0, discountAmtForPricing - serviceAmt)
 

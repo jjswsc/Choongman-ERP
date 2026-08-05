@@ -1,6 +1,7 @@
 import {
   parseAppliedCouponsFromBody,
   parseAppliedCouponsFromOrderRow,
+  resolvePosSalesDiscountAmount,
   summarizeLegacyCouponFields,
   type PosAppliedCouponLine,
 } from '@/lib/pos-coupon-domain'
@@ -89,6 +90,69 @@ export function resolveAppliedCouponsForOrderDbSave(params: {
   }
 }
 
+/**
+ * 주문 저장 시 가격(total/discount_amt)에 쓸 쿠폰 금액.
+ * DB에 남기는 coupon_discount_amt와 동일해야 한다.
+ * (재검증이 0이어도 appliedPre가 보존되면 그 금액을 total에 반영)
+ */
+export function resolveCouponDiscountAmtForOrderPricing(couponDbSave: {
+  couponDiscountAmt: number
+}): number {
+  return Math.max(0, Number(couponDbSave.couponDiscountAmt) || 0)
+}
+
+/** 영수증 목록·상세 — 수동할인·쿠폰을 이중계산 없이 합산 */
+export function resolvePosOrderDisplayDiscountAmt(order: {
+  discountAmt?: number | null
+  couponDiscountAmt?: number | null
+}): number {
+  return resolvePosSalesDiscountAmount(
+    Math.max(0, Number(order.discountAmt) || 0),
+    Math.max(0, Number(order.couponDiscountAmt) || 0)
+  )
+}
+
+/**
+ * 영수증 목록 표시용 합계.
+ * coupon_discount_amt만 있고 discount_amt/total에 미반영된 레거시 행은 쿠폰만큼 차감.
+ */
+export function resolvePosOrderDisplayTotal(order: {
+  total?: number | null
+  discountAmt?: number | null
+  couponDiscountAmt?: number | null
+}): number {
+  const total = Math.max(0, Number(order.total) || 0)
+  const discountAmt = Math.max(0, Number(order.discountAmt) || 0)
+  const couponAmt = Math.max(0, Number(order.couponDiscountAmt) || 0)
+  if (couponAmt > 0.02 && discountAmt + 0.02 < couponAmt) {
+    return Math.max(0, Math.round((total - couponAmt) * 100) / 100)
+  }
+  return total
+}
+
+/** 영수증 상세 — 쿠폰 코드·명칭 한 줄 */
+export function formatPosOrderAppliedCouponLabel(order: {
+  couponCode?: string | null
+  appliedCoupons?: Array<{ code?: string | null; name?: string | null }> | null
+}): string {
+  const applied = Array.isArray(order.appliedCoupons) ? order.appliedCoupons : []
+  const parts = applied
+    .map((row) => {
+      const code = String(row.code ?? '')
+        .trim()
+        .toUpperCase()
+      if (!code) return ''
+      const name = String(row.name ?? '').trim()
+      if (name && name.toUpperCase() !== code) return `${name} (${code})`
+      return code
+    })
+    .filter(Boolean)
+  if (parts.length) return parts.join(', ')
+  return String(order.couponCode ?? '')
+    .trim()
+    .toUpperCase()
+}
+
 /** 결제 완료 판정 — 쿠폰만으로 0원 결제·paid_at 스탬프도 포함 */
 export function isPosOrderCouponPaymentSettled(params: {
   total: number
@@ -101,7 +165,12 @@ export function isPosOrderCouponPaymentSettled(params: {
   const paymentSum = Math.max(0, Number(params.paymentSum) || 0)
   const preCouponSum = Math.max(0, Number(params.preCouponSum ?? 0) || 0)
   const appliedPreCount = Math.max(0, Math.trunc(Number(params.appliedPreCount ?? 0) || 0))
-  if (total > 0.02) return paymentSum >= total - 0.02
+  if (total > 0.02) {
+    if (paymentSum >= total - 0.02) return true
+    // total이 쿠폰 미반영(gross)인 레거시: 결제액 + 쿠폰 ≈ total 이면 정산 완료로 본다
+    if (preCouponSum > 0.02 && paymentSum >= total - preCouponSum - 0.02) return true
+    return false
+  }
   if (paymentSum > 0) return true
   if (String(params.paidAtStamp ?? '').trim()) return true
   return preCouponSum > 0.02 || appliedPreCount > 0

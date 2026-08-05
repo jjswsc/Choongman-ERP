@@ -109,6 +109,11 @@ import {
   parsePosOrderMergedKeepRef,
 } from '@/lib/pos-order-merge'
 import {
+  formatPosOrderAppliedCouponLabel,
+  resolvePosOrderDisplayDiscountAmt,
+  resolvePosOrderDisplayTotal,
+} from '@/lib/pos-order-coupon-fields'
+import {
   buildKitchenPrintTrackingId,
   clearKitchenPrintFailure,
   extractOrderTokenFromKitchenPrintTrackingId,
@@ -659,10 +664,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     const cancelled = orders.filter((o) => isPosOrderStatsCancellation(o))
     return {
       completedCount: completed.length,
-      completedTotal: completed.reduce((s, o) => s + (o.total ?? 0), 0),
+      completedTotal: completed.reduce((s, o) => s + resolvePosOrderDisplayTotal(o), 0),
       pendingCount: pending.length,
       cancelledCount: cancelled.length,
-      cancelledTotal: cancelled.reduce((s, o) => s + (o.total ?? 0), 0),
+      cancelledTotal: cancelled.reduce((s, o) => s + resolvePosOrderDisplayTotal(o), 0),
     }
   }, [isToday, orders, statusFilter])
 
@@ -1814,7 +1819,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{receiptSegmentCell(o)}</td>
                         <td className="px-4 py-3 text-right font-bold tabular-nums">
-                          {formatBahtNum(o.total)} ฿
+                          <div>{formatBahtNum(resolvePosOrderDisplayTotal(o))} ฿</div>
+                          {resolvePosOrderDisplayDiscountAmt(o) > 0.02 && (
+                            <div className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400">
+                              {t('posDiscount') || '할인'}: -
+                              {formatBahtNum(resolvePosOrderDisplayDiscountAmt(o))}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -1887,7 +1898,10 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                               ) : null}
                               {(o.tableName ||
                                 o.memo ||
-                                (o.discountAmt && o.discountAmt > 0) ||
+                                resolvePosOrderDisplayDiscountAmt(o) > 0.02 ||
+                                String(o.discountReason || '').trim() ||
+                                String(o.couponCode || '').trim() ||
+                                (Array.isArray(o.appliedCoupons) && o.appliedCoupons.length > 0) ||
                                 (['delivery', 'takeout'].includes(
                                   normalizePosOrderTypeKey(o.orderType)
                                 ) &&
@@ -1908,19 +1922,38 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       {t('posCustomerMemo') || '메모'}: {o.memo}
                                     </div>
                                   )}
-                                  {o.discountAmt && o.discountAmt > 0 && (
-                                    <div className="text-green-600 mt-0.5">
-                                      {t('posDiscount') || '할인'}: -{formatBahtNum(o.discountAmt)} ฿
-                                      {(o.discountReason || o.couponCode) &&
-                                        ` (${
-                                          o.discountReason ||
-                                          i18nTr(t, 'posCouponDiscountReason', {
-                                            code: String(o.couponCode).trim().toUpperCase(),
-                                          }) ||
-                                          `쿠폰: ${String(o.couponCode).trim().toUpperCase()}`
-                                        })`}
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    const displayDiscount = resolvePosOrderDisplayDiscountAmt(o)
+                                    const couponLabel = formatPosOrderAppliedCouponLabel(o)
+                                    const reason = String(o.discountReason || '').trim()
+                                    if (
+                                      displayDiscount <= 0.02 &&
+                                      !couponLabel &&
+                                      !reason
+                                    ) {
+                                      return null
+                                    }
+                                    return (
+                                      <div className="mt-0.5 space-y-0.5 text-emerald-700 dark:text-emerald-400">
+                                        {displayDiscount > 0.02 && (
+                                          <div>
+                                            {t('posDiscount') || '할인'}: -
+                                            {formatBahtNum(displayDiscount)} ฿
+                                          </div>
+                                        )}
+                                        {couponLabel ? (
+                                          <div>
+                                            {t('posCoupon') || '쿠폰'}: {couponLabel}
+                                          </div>
+                                        ) : null}
+                                        {reason ? (
+                                          <div className="text-muted-foreground">
+                                            {t('posReceiptDiscountRemark') || '할인 비고'}: {reason}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    )
+                                  })()}
                                 </div>
                               )}
                               {o.items?.length ? (

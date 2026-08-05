@@ -13,6 +13,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCouponAppliedSuccess: '{code} 쿠폰이 적용되었습니다.',
     posCouponValidateError: '쿠폰 검증 중 오류가 발생했습니다.',
     posCouponDiscountReason: '쿠폰: {code}',
+    posReceiptDiscountRemark: '할인 비고',
     posMenuEditSetTemplateStepsOnly:
       '옵션 단계 템플릿만 적용되었습니다. 메뉴 저장 후 다시 누르면 예시 옵션도 자동 생성됩니다.',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -3308,6 +3309,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
     posCouponDiscountReason: 'Coupon: {code}',
+    posReceiptDiscountRemark: 'Discount note',
     posMenuEditSetTemplateStepsOnly:
       'Only the option-step template was applied. Save the menu, then tap again to auto-create sample options.',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -6599,6 +6601,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posCouponAppliedSuccess: 'ใช้คูปอง {code} แล้ว',
     posCouponValidateError: 'เกิดข้อผิดพลาดขณะตรวจสอบคูปอง',
     posCouponDiscountReason: 'คูปอง: {code}',
+    posReceiptDiscountRemark: 'หมายเหตุส่วนลด',
     posMenuEditSetTemplateStepsOnly:
       'ใช้เทมเพลตขั้นตอนตัวเลือกเท่านั้น บันทึกเมนูแล้วกดอีกครั้งเพื่อสร้างตัวเลือกตัวอย่างอัตโนมัติ',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -9745,6 +9748,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
     posCouponDiscountReason: 'Coupon: {code}',
+    posReceiptDiscountRemark: 'Discount note',
     posMenuEditSetTemplateStepsOnly:
       'Only the option-step template was applied. Save the menu, then tap again to auto-create sample options.',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -12644,6 +12648,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
     posCouponDiscountReason: 'Coupon: {code}',
+    posReceiptDiscountRemark: 'Discount note',
     posMenuEditSetTemplateStepsOnly:
       'Only the option-step template was applied. Save the menu, then tap again to auto-create sample options.',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -16995,6 +17000,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
     posCouponDiscountReason: 'Coupon: {code}',
+    posReceiptDiscountRemark: 'Discount note',
     posMenuEditSetTemplateStepsOnly:
       'Only the option-step template was applied. Save the menu, then tap again to auto-create sample options.',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -19928,6 +19934,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
     posCouponDiscountReason: 'Coupon: {code}',
+    posReceiptDiscountRemark: 'Discount note',
     posMenuEditSetTemplateStepsOnly:
       'Only the option-step template was applied. Save the menu, then tap again to auto-create sample options.',
     posMenuEditSetTemplateStepsSkipSamples:
@@ -22812,6 +22819,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posCouponAppliedSuccess: 'Coupon {code} has been applied.',
     posCouponValidateError: 'An error occurred while validating the coupon.',
     posCouponDiscountReason: 'Coupon: {code}',
+    posReceiptDiscountRemark: 'Discount note',
     posMenuEditSetTemplateStepsOnly:
       'Only the option-step template was applied. Save the menu, then tap again to auto-create sample options.',
     posMenuEditSetTemplateStepsSkipSamples:

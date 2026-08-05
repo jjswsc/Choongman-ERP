@@ -72,6 +72,50 @@ describe('resolveAppliedCouponsForOrderDbSave', () => {
   })
 })
 
+describe('resolvePosOrderDisplayTotal', () => {
+  it('subtracts coupon when discount_amt did not absorb it', async () => {
+    const { resolvePosOrderDisplayTotal, resolvePosOrderDisplayDiscountAmt } = await import(
+      '@/lib/pos-order-coupon-fields'
+    )
+    expect(
+      resolvePosOrderDisplayTotal({
+        total: 1196,
+        discountAmt: 0,
+        couponDiscountAmt: 249,
+      })
+    ).toBe(947)
+    expect(
+      resolvePosOrderDisplayDiscountAmt({
+        discountAmt: 0,
+        couponDiscountAmt: 249,
+      })
+    ).toBe(249)
+  })
+
+  it('keeps total when discount_amt already includes coupon', async () => {
+    const { resolvePosOrderDisplayTotal } = await import('@/lib/pos-order-coupon-fields')
+    expect(
+      resolvePosOrderDisplayTotal({
+        total: 947,
+        discountAmt: 249,
+        couponDiscountAmt: 249,
+      })
+    ).toBe(947)
+  })
+})
+
+describe('formatPosOrderAppliedCouponLabel', () => {
+  it('prefers coupon name with code', async () => {
+    const { formatPosOrderAppliedCouponLabel } = await import('@/lib/pos-order-coupon-fields')
+    expect(
+      formatPosOrderAppliedCouponLabel({
+        couponCode: 'CMHBDCOUPON',
+        appliedCoupons: [{ code: 'CMHBDCOUPON', name: 'Birthday Exclusive' }],
+      })
+    ).toBe('Birthday Exclusive (CMHBDCOUPON)')
+  })
+})
+
 describe('isPosOrderCouponPaymentSettled', () => {
   it('treats coupon-only zero-total checkout as settled', () => {
     expect(
@@ -95,6 +139,17 @@ describe('isPosOrderCouponPaymentSettled', () => {
       isPosOrderCouponPaymentSettled({
         total: 500,
         paymentSum: 500,
+      })
+    ).toBe(true)
+  })
+
+  it('treats gross total + coupon as settled when payment covers net', () => {
+    expect(
+      isPosOrderCouponPaymentSettled({
+        total: 1196,
+        paymentSum: 947,
+        preCouponSum: 249,
+        appliedPreCount: 1,
       })
     ).toBe(true)
   })
