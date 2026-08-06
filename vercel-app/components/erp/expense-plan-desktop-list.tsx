@@ -122,7 +122,14 @@ export function ExpensePlanDesktopList({
                     const missingBank = !String(r.payeeBankAccountNo || "").trim()
                     const bankLine = [r.payeeBankName, r.payeeBankAccountNo].filter(Boolean).join(" · ")
                     return (
-                      <tr key={r.id} className="border-b h-12">
+                      <tr
+                        key={r.id}
+                        className={cn(
+                          "h-12 border-b transition-colors",
+                          expensePlanRowAccentClass(r.status),
+                          expensePlanRowToneClass(r.status)
+                        )}
+                      >
                         <td className="px-2 py-2 text-center align-middle text-xs tabular-nums whitespace-nowrap">
                           {r.documentNo || "—"}
                         </td>
@@ -205,7 +212,7 @@ export function ExpensePlanDesktopList({
                             onCheckedChange={(v) => onInvoiceToggle(r, v === true)}
                           />
                         </td>
-                        <td className="sticky right-0 z-[1] border-l border-border/60 bg-card px-0.5 py-2 align-middle">
+                        <td className={expensePlanStickyCellClass(r.status)}>
                           <ExpensePlanRowActions
                             row={r}
                             tt={tt}

@@ -8,6 +8,8 @@ import { ExpensePlanStatusBadge } from "@/components/erp/expense-plan-status-bad
 import { AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
 import { expensePayeeVendorManageHref } from "@/lib/expense-payee-vendor-href"
+import { expensePlanRowAccentClass, expensePlanRowToneClass } from "@/lib/expense-plan-row-tone"
+import { cn } from "@/lib/utils"
 import { Pencil, Trash2 } from "lucide-react"
 
 type Tt = (key: string, fallback: string) => string
@@ -98,7 +100,11 @@ export function ExpensePlanMobileList({
                 return (
                   <div
                     key={r.id}
-                    className="space-y-2 border-b border-border/60 px-3 py-3 last:border-b-0"
+                    className={cn(
+                      "space-y-2 border-b border-border/60 px-3 py-3 last:border-b-0",
+                      expensePlanRowAccentClass(r.status),
+                      expensePlanRowToneClass(r.status)
+                    )}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 space-y-0.5">
@@ -186,7 +192,7 @@ export function ExpensePlanMobileList({
                       {canPay ? (
                         <Button
                           size="sm"
-                          className="h-9 flex-1 text-xs sm:flex-none"
+                          className="h-9 flex-1 text-xs font-semibold shadow-xs sm:flex-none"
                           onClick={() => onPay(r)}
                           disabled={payingId === r.id}
                         >
@@ -211,7 +217,7 @@ export function ExpensePlanMobileList({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-9 flex-1 border-primary/40 text-primary sm:flex-none"
+                            className="h-9 flex-1 border-sky-300 bg-sky-50 font-semibold text-sky-800 shadow-xs hover:bg-sky-100 sm:flex-none dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-200"
                             onClick={() => onApprove(r, "approve")}
                             disabled={payingId === r.id}
                           >
@@ -220,7 +226,7 @@ export function ExpensePlanMobileList({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-9 flex-1 border-destructive/40 text-destructive sm:flex-none"
+                            className="h-9 flex-1 border-rose-300 bg-rose-50 font-semibold text-rose-800 shadow-xs hover:bg-rose-100 sm:flex-none dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
                             onClick={() => onApprove(r, "reject")}
                             disabled={payingId === r.id}
                           >
@@ -230,7 +236,7 @@ export function ExpensePlanMobileList({
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-9 border-destructive/40 text-destructive"
+                              className="h-9 border-destructive/40 text-destructive shadow-xs"
                               onClick={() => onDelete(r)}
                               disabled={payingId === r.id || deletingPlanId === r.id}
                             >
@@ -238,24 +244,30 @@ export function ExpensePlanMobileList({
                             </Button>
                           ) : null}
                         </>
+                      ) : canPay ? null : r.status === "paid" ||
+                        (r.status === "partial" && (r.remainingAmount || 0) <= 0) ? (
+                        <span className="inline-flex h-9 items-center rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-800 shadow-xs dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                          {tt("expensePlanDoneShort", "Done")}
+                        </span>
                       ) : r.status === "approved" || r.status === "rejected" ? (
                         <>
                           <span
-                            className={
+                            className={cn(
+                              "inline-flex h-9 items-center rounded-md border px-2.5 text-[11px] font-semibold shadow-xs",
                               r.status === "approved"
-                                ? "text-[11px] text-primary"
-                                : "text-[11px] text-destructive"
-                            }
+                                ? "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-200"
+                                : "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
+                            )}
                           >
                             {r.status === "approved"
-                              ? tt("att_approved", "Approved")
-                              : tt("att_rejected", "Rejected")}
+                              ? tt("att_approve", "Approve")
+                              : tt("att_reject", "Reject")}
                           </span>
                           {canApproveByPolicy(r) ? (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-8 text-[10px]"
+                              className="h-9 text-[11px] font-semibold shadow-xs"
                               onClick={() => onApprovalEdit(r.id)}
                               disabled={payingId === r.id}
                             >
@@ -267,7 +279,7 @@ export function ExpensePlanMobileList({
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-9 border-destructive/40 text-destructive"
+                              className="h-9 border-destructive/40 text-destructive shadow-xs"
                               onClick={() => onDelete(r)}
                               disabled={payingId === r.id || deletingPlanId === r.id}
                             >
@@ -276,7 +288,7 @@ export function ExpensePlanMobileList({
                           ) : null}
                         </>
                       ) : r.status === "planned" && !canApproveByPolicy(r) ? (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="inline-flex h-9 items-center rounded-md border border-amber-200 bg-amber-50 px-2 text-[10px] font-semibold text-amber-800 shadow-xs dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                           {tt("expensePayAwaitApprovalShort", "Pending")}
                         </span>
                       ) : null}
