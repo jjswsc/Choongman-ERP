@@ -11,6 +11,7 @@ import {
   resolveAccountingPoIssuerStore,
   resolveAccountingPoReceivableStoreName,
   type PoBillingKind,
+  type PoCartLine,
 } from '@/lib/purchase-order-cart'
 import { PL_FRANCHISE_BILLING_SALES_KEY } from '@/lib/accounting-po-franchise-billing-pl-shared'
 
@@ -36,7 +37,7 @@ export type FranchiseBillingKindAmounts = {
   deliveryGpNet: number
   grabGpGross: number
   grabGpNet: number
-  /** billingKind === 'all' */
+  /** billingKind === 'all' 이고 라인 분류 불가분 */
   combinedGross: number
   combinedNet: number
 }
@@ -63,6 +64,7 @@ export type FranchiseBillingPoRow = {
 }
 
 const BILLING_KINDS = new Set<string>(['royalty', 'delivery_gp', 'grab_gp', 'all'])
+const SPLIT_KINDS = new Set<PoBillingKind>(['royalty', 'delivery_gp', 'grab_gp'])
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100
@@ -106,7 +108,7 @@ export function finalizeFranchiseBillingPlSlice(a: FranchiseBillingKindAmounts):
 
 function addKindAmount(
   target: FranchiseBillingKindAmounts,
-  kind: PoBillingKind,
+  kind: PoBillingKind | 'unknown',
   gross: number,
   net: number
 ): void {
@@ -124,6 +126,111 @@ function addKindAmount(
     target.combinedGross += gross
     target.combinedNet += net
   }
+}
+
+/** 라인명으로 청구 유형 추정 — Grab을 배달보다 먼저 */
+export function classifyFranchiseBillingLineName(name: string): PoBillingKind | 'unknown' {
+  const n = String(name || '')
+    .trim()
+    .toLowerCase()
+  if (!n) return 'unknown'
+  if (n.includes('grab')) return 'grab_gp'
+  if (n.includes('delivery') || n.includes('배달')) return 'delivery_gp'
+  if (n.includes('royalt') || n.includes('로열') || n.includes('로얄')) return 'royalty'
+  return 'unknown'
+}
+
+function lineNetAmount(line: PoCartLine): number {
+  const price = Number(line.price ?? (line as { cost?: number }).cost ?? 0)
+  const qty = Number(line.qty || 0)
+  return Math.max(0, round2(price * qty))
+}
+
+function lineStoredBillingKind(line: PoCartLine): PoBillingKind | null {
+  const raw = String(
+    (line as { billingKind?: string }).billingKind ??
+      (line as { poBillingKind?: string }).poBillingKind ??
+      ''
+  ).trim()
+  if (SPLIT_KINDS.has(raw as PoBillingKind)) return raw as PoBillingKind
+  return null
+}
+
+/**
+ * PO 헤더 금액(total/subtotal)을 kind별 net/gross로 배분.
+ * - billingKind가 royalty|delivery_gp|grab_gp 이고 라인이 단일 유형이면 헤더 전액
+ * - billingKind=all 이거나 라인 유형이 섞이면 라인명·라인 billingKind로 분해 후 VAT 비율 배분
+ */
+export function amountsByKindFromFranchisePo(po: FranchiseBillingPoRow): FranchiseBillingKindAmounts {
+  const out = emptyFranchiseBillingKindAmounts()
+  const headerKind = parseFranchiseBillingKind(po.cart_json)
+  if (!headerKind) return out
+
+  const headerGross = Math.max(0, round2(Number(po.total) || 0))
+  const headerNet = Math.max(0, round2(Number(po.subtotal) || 0))
+  if (headerGross <= 0 && headerNet <= 0) return out
+
+  const { items } = parsePurchaseOrderCart(po.cart_json)
+  const classified: { kind: PoBillingKind | 'unknown'; net: number }[] = []
+  for (const line of items) {
+    const net = lineNetAmount(line)
+    if (net <= 0) continue
+    const fromField = lineStoredBillingKind(line)
+    const kind = fromField ?? classifyFranchiseBillingLineName(String(line.name || ''))
+    classified.push({ kind, net })
+  }
+
+  const splitKindsPresent = new Set(
+    classified.map((c) => c.kind).filter((k): k is PoBillingKind => SPLIT_KINDS.has(k as PoBillingKind))
+  )
+  const shouldSplit = headerKind === 'all' || splitKindsPresent.size > 1
+
+  if (!shouldSplit && SPLIT_KINDS.has(headerKind)) {
+    addKindAmount(out, headerKind, headerGross, headerNet)
+    return out
+  }
+
+  if (classified.length === 0) {
+    addKindAmount(out, headerKind === 'all' ? 'all' : headerKind, headerGross, headerNet)
+    return out
+  }
+
+  const netByKind = emptyFranchiseBillingKindAmounts()
+  for (const row of classified) {
+    addKindAmount(netByKind, row.kind, 0, row.net)
+  }
+  const parts: { kind: PoBillingKind | 'unknown'; net: number }[] = [
+    { kind: 'royalty', net: netByKind.royaltyNet },
+    { kind: 'delivery_gp', net: netByKind.deliveryGpNet },
+    { kind: 'grab_gp', net: netByKind.grabGpNet },
+    { kind: 'all', net: netByKind.combinedNet },
+  ]
+  const sumNet = round2(parts.reduce((s, p) => s + p.net, 0))
+  const scaleBase = headerNet > 0 ? headerNet : sumNet
+  if (scaleBase <= 0) {
+    addKindAmount(out, headerKind === 'all' ? 'all' : headerKind, headerGross, headerNet)
+    return out
+  }
+
+  let allocatedGross = 0
+  const withNet = parts.filter((p) => p.net > 0)
+  withNet.forEach((p, idx) => {
+    const isLast = idx === withNet.length - 1
+    const gross = isLast
+      ? round2(headerGross - allocatedGross)
+      : round2(headerGross * (p.net / scaleBase))
+    allocatedGross = round2(allocatedGross + gross)
+    addKindAmount(out, p.kind, gross, p.net)
+  })
+
+  const usedNet = round2(out.royaltyNet + out.deliveryGpNet + out.grabGpNet + out.combinedNet)
+  const usedGross = round2(out.royaltyGross + out.deliveryGpGross + out.grabGpGross + out.combinedGross)
+  const netGap = round2(headerNet - usedNet)
+  const grossGap = round2(headerGross - usedGross)
+  if (netGap > 0 || grossGap > 0) {
+    addKindAmount(out, 'all', Math.max(0, grossGap), Math.max(0, netGap))
+  }
+  return out
 }
 
 /** 귀속월이 있으면 그 월만; 없으면 orderDate / created_at(방콕)이 기간 내 */
@@ -155,6 +262,17 @@ export function parseFranchiseBillingKind(cartJson: unknown): PoBillingKind | nu
   return k
 }
 
+function mergeKindAmounts(target: FranchiseBillingKindAmounts, src: FranchiseBillingKindAmounts): void {
+  target.royaltyGross += src.royaltyGross
+  target.royaltyNet += src.royaltyNet
+  target.deliveryGpGross += src.deliveryGpGross
+  target.deliveryGpNet += src.deliveryGpNet
+  target.grabGpGross += src.grabGpGross
+  target.grabGpNet += src.grabGpNet
+  target.combinedGross += src.combinedGross
+  target.combinedNet += src.combinedNet
+}
+
 /** 순수 집계 — 매칭 콜백으로 비용/매출 귀속 결정 */
 export function accumulateFranchiseBillingFromPos(
   rows: FranchiseBillingPoRow[],
@@ -177,10 +295,10 @@ export function accumulateFranchiseBillingFromPos(
     if (!kind) continue
     if (!franchiseBillingPoInPeriod(po, params.yearMonth, params.startStr, params.endStr)) continue
 
+    const byKind = amountsByKindFromFranchisePo(po)
+    const slice = finalizeFranchiseBillingPlSlice(byKind)
+    if (slice.totalGross <= 0 && slice.totalNet <= 0) continue
     fetched += 1
-    const gross = Math.max(0, round2(Number(po.total) || 0))
-    const net = Math.max(0, round2(Number(po.subtotal) || 0))
-    if (gross <= 0 && net <= 0) continue
 
     const relatedStore = resolveAccountingPoReceivableStoreName({
       cart_json: po.cart_json,
@@ -189,10 +307,10 @@ export function accumulateFranchiseBillingFromPos(
     const issuerStore = resolveAccountingPoIssuerStore({ cart_json: po.cart_json })
 
     if (relatedStore && params.matchExpense(relatedStore)) {
-      addKindAmount(expense, kind, gross, net)
+      mergeKindAmounts(expense, byKind)
     }
     if (params.matchRevenue(issuerStore)) {
-      addKindAmount(revenue, kind, gross, net)
+      mergeKindAmounts(revenue, byKind)
     }
   }
 
@@ -216,6 +334,7 @@ function shiftYmdMonths(ymd: string, deltaMonths: number): string {
 /**
  * Approved 회계 청구 PO를 로드해 손익용 비용(relatedStore)·매출(issuer)로 나눈다.
  * issuerStore 비어 있으면 본사 매출.
+ * created_at 윈도우는 넓게(±14개월) — billingMonthYm 귀속과 생성일이 어긋나도 누락 방지.
  */
 export async function loadFranchiseBillingForIncomeStatement(params: {
   yearMonth: string
@@ -225,7 +344,7 @@ export async function loadFranchiseBillingForIncomeStatement(params: {
   isHQ: boolean
 }): Promise<FranchiseBillingPlResult> {
   const { yearMonth, startStr, endStr, storeFilter, isHQ } = params
-  const windowStart = shiftYmdMonths(startStr, -2)
+  const windowStart = shiftYmdMonths(startStr, -14)
   const windowEnd = shiftYmdMonths(endStr, 2)
   const filter = [
     'status=eq.Approved',

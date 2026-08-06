@@ -552,108 +552,83 @@ export function IncomePlDetailTableContent({
                   {view.pct(data.expenseBreakdown?.depreciationExpense ?? 0)}
                 </td>
               </tr>
-              <tr className={accountingPlSubRowCn}>
-                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
-                  - {t("pL_expenseSourceFranchiseRoyalty")}
-                </td>
-                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
-                  {formatBath(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseRoyaltyGross ??
-                        data.expenseBreakdown?.franchiseRoyalty,
-                      data.displayAmounts?.franchiseRoyaltyNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-                <td className={`${accountingPlTdPctCn}`}>
-                  {view.pct(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseRoyaltyGross ??
-                        data.expenseBreakdown?.franchiseRoyalty,
-                      data.displayAmounts?.franchiseRoyaltyNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-              </tr>
-              <tr className={accountingPlSubRowCn}>
-                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
-                  - {t("pL_expenseSourceFranchiseDeliveryGp")}
-                </td>
-                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
-                  {formatBath(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseDeliveryGpGross ??
-                        data.expenseBreakdown?.franchiseDeliveryGp,
-                      data.displayAmounts?.franchiseDeliveryGpNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-                <td className={`${accountingPlTdPctCn}`}>
-                  {view.pct(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseDeliveryGpGross ??
-                        data.expenseBreakdown?.franchiseDeliveryGp,
-                      data.displayAmounts?.franchiseDeliveryGpNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-              </tr>
-              <tr className={accountingPlSubRowCn}>
-                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
-                  - {t("pL_expenseSourceFranchiseGrabGp")}
-                </td>
-                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
-                  {formatBath(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseGrabGpGross ??
-                        data.expenseBreakdown?.franchiseGrabGp,
-                      data.displayAmounts?.franchiseGrabGpNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-                <td className={`${accountingPlTdPctCn}`}>
-                  {view.pct(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseGrabGpGross ??
-                        data.expenseBreakdown?.franchiseGrabGp,
-                      data.displayAmounts?.franchiseGrabGpNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-              </tr>
-              <tr className={accountingPlSubRowCn}>
-                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
-                  - {t("pL_expenseSourceFranchiseBillingCombined")}
-                </td>
-                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
-                  {formatBath(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseBillingCombinedGross ??
-                        data.expenseBreakdown?.franchiseBillingCombined,
-                      data.displayAmounts?.franchiseBillingCombinedNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-                <td className={`${accountingPlTdPctCn}`}>
-                  {view.pct(
-                    pickFranchiseBillingVatAmount(
-                      data.displayAmounts?.franchiseBillingCombinedGross ??
-                        data.expenseBreakdown?.franchiseBillingCombined,
-                      data.displayAmounts?.franchiseBillingCombinedNet,
-                      vatMode
-                    )
-                  )}
-                </td>
-              </tr>
             </>
           )}
+          {(() => {
+            const royaltyAmt = pickFranchiseBillingVatAmount(
+              data.displayAmounts?.franchiseRoyaltyGross ?? data.expenseBreakdown?.franchiseRoyalty,
+              data.displayAmounts?.franchiseRoyaltyNet,
+              vatMode
+            )
+            const deliveryGpAmt = pickFranchiseBillingVatAmount(
+              data.displayAmounts?.franchiseDeliveryGpGross ??
+                data.expenseBreakdown?.franchiseDeliveryGp,
+              data.displayAmounts?.franchiseDeliveryGpNet,
+              vatMode
+            )
+            const grabGpAmt = pickFranchiseBillingVatAmount(
+              data.displayAmounts?.franchiseGrabGpGross ?? data.expenseBreakdown?.franchiseGrabGp,
+              data.displayAmounts?.franchiseGrabGpNet,
+              vatMode
+            )
+            const combinedAmt = pickFranchiseBillingVatAmount(
+              data.displayAmounts?.franchiseBillingCombinedGross ??
+                data.expenseBreakdown?.franchiseBillingCombined,
+              data.displayAmounts?.franchiseBillingCombinedNet,
+              vatMode
+            )
+            if (royaltyAmt <= 0 && deliveryGpAmt <= 0 && grabGpAmt <= 0 && combinedAmt <= 0) {
+              return null
+            }
+            return (
+              <>
+                {royaltyAmt > 0 && (
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                      - {t("pL_expenseSourceFranchiseRoyalty")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(royaltyAmt)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>{view.pct(royaltyAmt)}</td>
+                  </tr>
+                )}
+                {deliveryGpAmt > 0 && (
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                      - {t("pL_expenseSourceFranchiseDeliveryGp")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(deliveryGpAmt)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>{view.pct(deliveryGpAmt)}</td>
+                  </tr>
+                )}
+                {grabGpAmt > 0 && (
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                      - {t("pL_expenseSourceFranchiseGrabGp")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(grabGpAmt)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>{view.pct(grabGpAmt)}</td>
+                  </tr>
+                )}
+                {combinedAmt > 0 && (
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                      - {t("pL_expenseSourceFranchiseBillingCombined")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(combinedAmt)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>{view.pct(combinedAmt)}</td>
+                  </tr>
+                )}
+              </>
+            )
+          })()}
           <tr className={accountingPlNetProfitRowCn}>
             <td className={cn(accountingPlTdLabelCn, "py-3.5 font-bold max-sm:py-0")}>{t("pL_netProfit")}</td>
             <td

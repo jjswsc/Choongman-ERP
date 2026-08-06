@@ -90,9 +90,44 @@ describe('accounting-po-franchise-billing-pl', () => {
       matchExpense: () => true,
       matchRevenue: () => false,
     })
-    expect(r.expense.combinedGross).toBe(107)
-    expect(r.expense.combinedNet).toBe(100)
-    expect(r.expense.royaltyGross).toBe(0)
+    // 단일 라인이라도 이름이 royalty면 로열티로 분류
+    expect(r.expense.royaltyGross).toBe(107)
+    expect(r.expense.royaltyNet).toBe(100)
+    expect(r.expense.combinedGross).toBe(0)
+  })
+
+  it('splits billingKind all by line names into royalty delivery grab', () => {
+    const cart = serializePurchaseOrderCart(
+      [
+        { code: '1', name: 'Royalty (2026-05)', price: 1000, qty: 1, taxType: 'taxable' },
+        { code: '2', name: 'Delivery GP (2026-05)', price: 200, qty: 1, taxType: 'taxable' },
+        { code: '3', name: 'Grab GP (2026-05)', price: 50, qty: 1, taxType: 'taxable' },
+      ],
+      {
+        relatedStore: 'StoreA',
+        billingMonthYm: '2026-05',
+        billingKind: 'all',
+      }
+    )
+    const po: FranchiseBillingPoRow = {
+      status: 'Approved',
+      cart_json: cart,
+      subtotal: 1250,
+      total: 1337.5,
+      created_at: '2026-05-15T10:00:00+07:00',
+    }
+    const r = accumulateFranchiseBillingFromPos([po], {
+      yearMonth: '2026-05',
+      startStr: '2026-05-01',
+      endStr: '2026-05-31',
+      matchExpense: () => true,
+      matchRevenue: () => false,
+    })
+    expect(r.expense.royaltyNet).toBe(1000)
+    expect(r.expense.deliveryGpNet).toBe(200)
+    expect(r.expense.grabGpNet).toBe(50)
+    expect(r.expense.totalNet).toBe(1250)
+    expect(r.expense.totalGross).toBe(1337.5)
   })
 
   it('issuerStore revenue matches store issuer', () => {
