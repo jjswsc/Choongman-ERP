@@ -20,10 +20,8 @@ import {
   bumpErpKeepAliveRemount,
   clearErpKeepAliveRemountStamps,
 } from "@/lib/erp-keep-alive-remount"
-import { isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
 import {
   clearErpKeepAliveCacheRegistry,
-  hasErpKeepAliveCache,
 } from "@/lib/erp-keep-alive-registry"
 
 const STACK_KEY = "erp_nav_stack_v1"
@@ -207,6 +205,8 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     { href: "/admin", titleKey: "adminDashboard", lastSeen: 0 },
   ])
   const [softDisplayHref, setSoftDisplayHref] = React.useState<string | null>(null)
+  /** Next usePathname 기준 — window.location(soft pushState)과 어긋날 수 있어 별도 보관 */
+  const routerHrefRef = React.useRef<string>("/admin")
 
   React.useEffect(() => {
     setWorkspaceTabs(getErpWorkspaceTabs())
@@ -215,6 +215,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
   const onRouterHref = React.useCallback((href: string) => {
     const resolved = resolveErpWorkspaceTabHref(href)
+    routerHrefRef.current = resolved
     // Soft pushState가 Next pathname과 동기화되면 soft 대상과 같아짐 → 유지.
     // 사이드바 Link 등 hard nav로 다른 경로가 오면 soft 해제.
     setSoftDisplayHref((prev) => {
@@ -230,15 +231,13 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
   React.useEffect(() => {
     const onPopState = () => {
+      // 브라우저 뒤로/앞으로: soft 표시만 쓰지 않고 Next가 pathname을 맞추게 둔다.
+      // (과거 soft pushState로 URL만 바뀐 경우와 혼선 방지)
+      setSoftDisplayHref(null)
       const p = normalizePath(window.location.pathname)
       const qs = window.location.search
       const next = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
-      if (hasErpKeepAliveCache(next) && !isErpKeepAliveExcluded(next)) {
-        setSoftDisplayHref(next)
-        ensureErpWorkspaceTab(next)
-        return
-      }
-      setSoftDisplayHref(null)
+      ensureErpWorkspaceTab(next)
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
@@ -289,27 +288,17 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
   const activateWorkspaceTab = React.useCallback(
     (href: string) => {
       const target = resolveErpWorkspaceTabHref(href)
-      const p = typeof window !== "undefined" ? normalizePath(window.location.pathname) : ""
-      const qs = typeof window !== "undefined" ? window.location.search : ""
-      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
-      const current = softDisplayHref || routerCurrent
+      const full = getErpWorkspaceTabFullHref(target)
+      // window.location은 soft pushState로 Next pathname과 어긋날 수 있음 → routerHrefRef 사용
+      const current = softDisplayHref || routerHrefRef.current
       if (current === target) return
 
-      // 캐시 hit: history만 바꾸고 keep-alive 표시 전환 (RSC push 생략)
-      if (
-        typeof window !== "undefined" &&
-        hasErpKeepAliveCache(target) &&
-        !isErpKeepAliveExcluded(target)
-      ) {
-        setSoftDisplayHref(target)
-        ensureErpWorkspaceTab(target)
-        window.history.pushState({ erpSoftTab: 1 }, "", getErpWorkspaceTabFullHref(target))
-        return
-      }
-
+      // soft pushState만 하면 URL·탭만 바뀌고 본문이 안 바뀌는 사고가 있어
+      // 탭 전환은 항상 Next router.push (keep-alive가 캐시 슬롯 재사용)
       setSoftDisplayHref(null)
+      ensureErpWorkspaceTab(full)
       markErpBackNavigation()
-      router.push(target, { scroll: false })
+      router.push(full, { scroll: false })
     },
     [router, softDisplayHref]
   )
@@ -318,16 +307,18 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     (href: string) => {
       if (typeof window === "undefined") return
       const tabHref = resolveErpWorkspaceTabHref(href)
-      const p = normalizePath(window.location.pathname)
-      const qs = window.location.search
-      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const full = getErpWorkspaceTabFullHref(tabHref)
+      const routerCurrent = routerHrefRef.current
       const current = softDisplayHref || routerCurrent
       bumpErpKeepAliveRemount(tabHref)
       setSoftDisplayHref(null)
       if (current === tabHref || routerCurrent === tabHref) {
         markErpBackNavigation()
-        if (routerCurrent !== tabHref) router.push(tabHref, { scroll: false })
+        if (routerCurrent !== tabHref) router.push(full, { scroll: false })
         else router.refresh()
+      } else {
+        markErpBackNavigation()
+        router.push(full, { scroll: false })
       }
     },
     [router, softDisplayHref]
@@ -341,9 +332,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
       const before = getErpWorkspaceTabs()
       const neighbor = findNeighborWorkspaceTabHref(tabHref, before)
-      const p = normalizePath(window.location.pathname)
-      const qs = window.location.search
-      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const routerCurrent = routerHrefRef.current
       const current = softDisplayHref || routerCurrent
 
       removeHrefFromStack(tabHref)
@@ -352,7 +341,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
       if (current === tabHref) {
         setSoftDisplayHref(null)
         markErpBackNavigation({ evictHref: tabHref })
-        router.push(neighbor)
+        router.push(getErpWorkspaceTabFullHref(neighbor), { scroll: false })
       }
     },
     [router, softDisplayHref]
@@ -361,9 +350,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
   const closeOtherWorkspaceTabs = React.useCallback(
     (keepHref?: string) => {
       if (typeof window === "undefined") return
-      const p = normalizePath(window.location.pathname)
-      const qs = window.location.search
-      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const routerCurrent = routerHrefRef.current
       const current = softDisplayHref || routerCurrent
       const keep = resolveErpWorkspaceTabHref(keepHref || current)
       const removed = closeOtherErpWorkspaceTabs(keep)
@@ -371,7 +358,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
       if (current !== keep && keep !== "/admin") {
         setSoftDisplayHref(null)
         markErpBackNavigation()
-        router.push(keep, { scroll: false })
+        router.push(getErpWorkspaceTabFullHref(keep), { scroll: false })
       } else if (softDisplayHref && softDisplayHref !== keep) {
         setSoftDisplayHref(keep === routerCurrent ? null : keep)
       }
@@ -385,9 +372,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
   const closeCurrentPage = React.useCallback(() => {
     if (typeof window === "undefined") return
-    const p = normalizePath(window.location.pathname)
-    const qs = window.location.search
-    const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+    const routerCurrent = routerHrefRef.current
     const current = softDisplayHref || routerCurrent
     if (current === "/admin") return
     closeWorkspaceTab(current)

@@ -188,7 +188,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {entries.map(([key, { node }]) => {
         const active = key === effectiveDisplayHref
         return (
@@ -196,7 +196,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
             <div
               className={
                 active
-                  ? "min-h-0 flex-1 flex flex-col"
+                  ? "flex min-h-0 flex-1 flex-col"
                   : "pointer-events-none invisible absolute inset-0 -z-10 overflow-hidden opacity-0"
               }
               hidden={!active}

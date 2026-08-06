@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { RotateCw, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tOr } from "@/lib/i18n"
 import { isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
 import { normalizeErpHref, useErpNavigation } from "@/lib/erp-navigation"
 import {
@@ -60,10 +60,10 @@ export function ErpWorkspaceTabs() {
 
   if (pathname === "/admin/login") return null
 
-  const closeLabel = t("erpCloseTab") || t("erpCloseScreen") || "탭 닫기"
-  const refreshLabel = t("erpRefreshTab") || "탭 새로고침"
-  const remountHint = t("erpWorkspaceTabRemountHint") || "다른 메뉴로 나갔다 오면 새로 불러옵니다"
-  const closeOthersLabel = t("erpCloseOtherTabs") || "다른 탭 닫기"
+  const closeLabel = tOr(t, "erpCloseTab", "탭 닫기")
+  const refreshLabel = tOr(t, "erpRefreshTab", "탭 새로고침")
+  const remountHint = tOr(t, "erpWorkspaceTabRemountHint", "다른 메뉴로 나갔다 오면 새로 불러옵니다")
+  const closeOthersLabel = tOr(t, "erpCloseOtherTabs", "다른 탭 닫기")
   const canCloseOthers = workspaceTabs.some(
     (tab) => !isErpWorkspaceDashboardHref(tab.href) && tab.href !== activeHref
   )
