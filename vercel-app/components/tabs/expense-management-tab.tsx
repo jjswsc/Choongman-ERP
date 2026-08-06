@@ -54,7 +54,7 @@ import {
 } from "@/lib/api-client"
 import { EXPENSE_WITHDRAW_SUBJECT_FETCH } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { canApproveExpenseAccrual, canEditExpenseAccrualClassification } from "@/lib/expense-accrual-approve-policy"
+import { canApproveExpenseAccrual, canDeleteExpenseAccrual, canEditExpenseAccrualClassification } from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
@@ -492,6 +492,16 @@ export function ExpenseManagementTab() {
     (row: ExpenseAccrualPlanItem) => canApproveExpenseAccrual(auth?.role, row.storeName),
     [auth?.role]
   )
+  const canDeleteByPolicy = React.useCallback(
+    (row: ExpenseAccrualPlanItem) =>
+      canDeleteExpenseAccrual({
+        userRole: auth?.role,
+        storeName: row.storeName,
+        status: row.status,
+        paidAmount: row.paidAmount,
+      }),
+    [auth?.role]
+  )
 
   const approvablePlansForDay = React.useMemo(() => {
     const combined = [...(filteredExpensePlans || []), ...(filteredPurchasePlans || [])]
@@ -611,7 +621,30 @@ export function ExpenseManagementTab() {
 
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
     if (!row?.id) return
-    const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
+    if (
+      !canDeleteExpenseAccrual({
+        userRole: auth?.role,
+        storeName: row.storeName,
+        status: row.status,
+        paidAmount: row.paidAmount,
+      })
+    ) {
+      await appAlert(
+        tt(
+          "expensePlanDeleteDenied",
+          "You cannot delete this payment plan. Only request/rejected/approved(unpaid, unlinked) items can be deleted."
+        )
+      )
+      return
+    }
+    const confirmMsg =
+      String(row.status || "").toLowerCase() === "approved"
+        ? tt(
+            "expensePlanDeleteApprovedConfirm",
+            "This accrual is approved but unpaid. Delete it? Journals and payables for this plan will be removed."
+          )
+        : tt("emp_confirm_delete", "Delete this item?")
+    const ok = await appConfirm(confirmMsg)
     if (!ok) return
     setDeletingPlanId(row.id)
     try {
@@ -627,7 +660,7 @@ export function ExpenseManagementTab() {
     } finally {
       setDeletingPlanId(null)
     }
-  }, [auth?.role, loadPlans])
+  }, [auth?.role, loadPlans, t, tt])
 
   const handleCleanNoStore = React.useCallback(async () => {
     const ok = await appConfirm(tt("expenseCleanNoStoreConfirm", "Delete all payment plans with no store selected?"))
@@ -898,6 +931,7 @@ export function ExpenseManagementTab() {
     renderPayAmount: (r: ExpenseAccrualPlanItem) => renderPlanPayAmountCell(r, tt),
     planRowEditable,
     canApproveByPolicy,
+    canDeleteByPolicy,
     payingId,
     deletingPlanId,
     payEditorOpenById,
@@ -1175,7 +1209,7 @@ export function ExpenseManagementTab() {
                                   >
                                     {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
                                   </Button>
-                                ) : !String(r.storeName || "").trim() ? (
+                                ) : !String(r.storeName || "").trim() && canDeleteByPolicy(r) ? (
                                   <Button
                                     size="icon"
                                     variant="outline"
@@ -1217,6 +1251,7 @@ export function ExpenseManagementTab() {
                                       >
                                         <X className="h-3.5 w-3.5" />
                                       </Button>
+                                      {canDeleteByPolicy(r) && (
                                       <Button
                                         size="icon"
                                         variant="outline"
@@ -1227,6 +1262,7 @@ export function ExpenseManagementTab() {
                                       >
                                         {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                       </Button>
+                                      )}
                                     </div>
                                   </>
                                   ) : (
@@ -1251,7 +1287,7 @@ export function ExpenseManagementTab() {
                                             <Pencil className="h-3 w-3 mr-0.5" />
                                             {tt("btnEdit", "Edit")}
                                           </Button>
-                                          {r.status === "rejected" && (
+                                          {canDeleteByPolicy(r) && (
                                             <Button
                                               size="icon"
                                               variant="outline"
@@ -1465,7 +1501,7 @@ export function ExpenseManagementTab() {
                                       <Button size="sm" variant={payEditorOpenById[r.id] ? "outline" : "default"} className="h-7 px-2 text-xs" onClick={() => setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))} disabled={payingId === r.id}>
                                         {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
                                       </Button>
-                                    ) : !String(r.storeName || "").trim() ? (
+                                    ) : !String(r.storeName || "").trim() && canDeleteByPolicy(r) ? (
                                       <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                         {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                       </Button>
@@ -1484,9 +1520,11 @@ export function ExpenseManagementTab() {
                                         <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" onClick={() => handleApprove(r, "reject")} disabled={payingId === r.id} title={tt("att_reject", "Reject")}>
                                           <X className="h-3.5 w-3.5" />
                                         </Button>
+                                        {canDeleteByPolicy(r) && (
                                         <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                           {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                         </Button>
+                                        )}
                                       </div>
                                     ) : (r.status === "approved" || r.status === "rejected") && (
                                       <div className="flex flex-col items-center gap-1 w-full">
@@ -1500,7 +1538,7 @@ export function ExpenseManagementTab() {
                                             <Pencil className="h-3 w-3 mr-0.5" />
                                             {tt("btnEdit", "Edit")}
                                           </Button>
-                                          {r.status === "rejected" && (
+                                          {canDeleteByPolicy(r) && (
                                             <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                               {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                             </Button>

@@ -2287,7 +2287,11 @@ export default function PosOrderPage() {
                     {c.collabDetail.posDiscountType === "amount"
                       ? ` (${formatBahtNum(c.collabDetail.posDiscountValue)} ฿)`
                       : c.collabDetail.posDiscountType === "percent"
-                        ? ` (${c.collabDetail.posDiscountValue}%)`
+                        ? ` (${c.collabDetail.posDiscountValue}%${
+                            (c.collabDetail.posDiscountMaxAmount ?? 0) > 0
+                              ? ` · ${t("marketingCollabDetailPosDiscountMaxAmountShort")} ${formatBahtNum(c.collabDetail.posDiscountMaxAmount)}฿`
+                              : ""
+                          })`
                         : ""}
                   </SelectItem>
                 ))}

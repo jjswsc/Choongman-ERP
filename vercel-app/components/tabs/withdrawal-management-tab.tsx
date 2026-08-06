@@ -2904,7 +2904,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             <DialogDescription>
               {tt(
                 "deliveryFeeDialogDesc",
-                "앱별 빠른 입력 또는 월별 일괄 등록. 계정과목 5528(배달앱수수료)로 재무제표·손익에 반영됩니다."
+                "앱별 빠른 입력 또는 월별 일괄 등록. 계정과목 5528(배달앱수수료)로 손익계산서에 반영됩니다. (나중에 지급=등록 시점, 즉시 지급=출금 등록 시점)"
               )}
             </DialogDescription>
           </DialogHeader>
@@ -2995,7 +2995,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             <DialogDescription>
               {tt(
                 "cardFeeDialogDesc",
-                "유형별 빠른 입력 또는 월별 일괄 등록. 계정과목 5529(카드수수료)로 재무제표·손익에 반영됩니다."
+                "유형별 빠른 입력 또는 월별 일괄 등록. 계정과목 5529(카드수수료)로 손익계산서에 반영됩니다. (나중에 지급=등록 시점, 즉시 지급=출금 등록 시점)"
               )}
             </DialogDescription>
           </DialogHeader>

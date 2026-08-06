@@ -30,6 +30,11 @@ export type MarketingCollabDetail = {
    */
   posDiscountType: '' | 'percent' | 'amount'
   posDiscountValue: number
+  /**
+   * 정률(%) 할인 시 주문당 할인액 상한(฿). 0이면 상한 없음.
+   * 예: 10% · 최대 100฿ → min(대상×10%, 100)
+   */
+  posDiscountMaxAmount: number
   /** 정액 협업 할인 — POS에서 동일 캠페인 N회(수량) 적용. 퍼센트는 항상 1회 */
   posMaxPerOrder: number
   /** 정액일 때 POS 수량 입력(예: 100바트×4장) */
@@ -67,6 +72,7 @@ export function emptyMarketingCollabDetail(): MarketingCollabDetail {
     scopeNote: '',
     posDiscountType: '',
     posDiscountValue: 0,
+    posDiscountMaxAmount: 0,
     posMaxPerOrder: 1,
     posAllowQuantityEntry: false,
     discountPercentStore: '',
@@ -132,6 +138,7 @@ export function normalizeMarketingCollabDetail(raw: unknown): MarketingCollabDet
   const pdt = asStr(o.posDiscountType)
   e.posDiscountType = POS_DISCOUNT_TYPES.has(pdt) ? (pdt as MarketingCollabDetail['posDiscountType']) : ''
   e.posDiscountValue = Math.max(0, asNum(o.posDiscountValue))
+  e.posDiscountMaxAmount = Math.max(0, asNum(o.posDiscountMaxAmount))
   e.posMaxPerOrder = Math.max(1, Math.trunc(asNum(o.posMaxPerOrder ?? 1) || 1))
   e.posAllowQuantityEntry = asBool(o.posAllowQuantityEntry)
   if (e.posDiscountType === 'amount' && o.posMaxPerOrder == null && o.posAllowQuantityEntry == null) {
@@ -141,6 +148,8 @@ export function normalizeMarketingCollabDetail(raw: unknown): MarketingCollabDet
   if (e.posDiscountType === 'percent') {
     e.posMaxPerOrder = 1
     e.posAllowQuantityEntry = false
+  } else {
+    e.posDiscountMaxAmount = 0
   }
   e.discountPercentStore = asStr(o.discountPercentStore)
   if (!e.posDiscountType && e.posDiscountValue <= 0 && e.discountPercentStore) {
@@ -190,6 +199,7 @@ export function collabDetailToJson(d: MarketingCollabDetail): Record<string, unk
     scopeNote: d.scopeNote,
     posDiscountType: d.posDiscountType,
     posDiscountValue: d.posDiscountValue,
+    posDiscountMaxAmount: d.posDiscountMaxAmount,
     posMaxPerOrder: d.posMaxPerOrder,
     posAllowQuantityEntry: d.posAllowQuantityEntry,
     discountPercentStore: d.discountPercentStore,

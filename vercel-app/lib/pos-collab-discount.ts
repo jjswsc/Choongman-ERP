@@ -497,7 +497,10 @@ export function computeCollabDiscountAmount(
   if (!t || v <= 0 || eligibleSubtotal <= 0) return 0
   if (t === 'percent') {
     const pct = Math.min(100, v)
-    return Math.min(eligibleSubtotal, Math.floor((eligibleSubtotal * pct) / 100))
+    const raw = Math.floor((eligibleSubtotal * pct) / 100)
+    const maxCap = Math.max(0, Number(detail.posDiscountMaxAmount) || 0)
+    const capped = maxCap > 0 ? Math.min(raw, Math.floor(maxCap)) : raw
+    return Math.min(eligibleSubtotal, capped)
   }
   const qty = normalizeCollabApplyQuantity(detail, quantity)
   const unit = Math.round(v * 100) / 100

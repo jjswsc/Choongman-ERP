@@ -338,6 +338,40 @@ describe('pos-collab-discount amount stacking', () => {
     expect(collabDiscountAmountForCart(lines, menuById, percentCollab, 4)).toBe(50)
   })
 
+  it('정률 협업은 할인 상한(฿)을 적용한다 (10% · 최대 100฿)', () => {
+    const capped = detail({
+      posDiscountType: 'percent',
+      posDiscountValue: 10,
+      posDiscountMaxAmount: 100,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const lines = [{ id: '10', name: 'Banban Chicken', price: 5000, qty: 1, menuId: '10' }]
+    // 10% of 5000 = 500 → capped to 100
+    expect(collabDiscountAmountForCart(lines, menuById, capped)).toBe(100)
+  })
+
+  it('정률 상한이 % 할인액보다 크면 % 그대로 적용한다', () => {
+    const capped = detail({
+      posDiscountType: 'percent',
+      posDiscountValue: 10,
+      posDiscountMaxAmount: 100,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const lines = [{ id: '10', name: 'Banban Chicken', price: 500, qty: 1, menuId: '10' }]
+    expect(collabDiscountAmountForCart(lines, menuById, capped)).toBe(50)
+  })
+
+  it('정률 상한 0이면 상한 없이 %만 적용한다', () => {
+    const uncapped = detail({
+      posDiscountType: 'percent',
+      posDiscountValue: 10,
+      posDiscountMaxAmount: 0,
+      scopeMainCategories: ['Chicken', 'Korean'],
+    })
+    const lines = [{ id: '10', name: 'Banban Chicken', price: 5000, qty: 1, menuId: '10' }]
+    expect(collabDiscountAmountForCart(lines, menuById, uncapped)).toBe(500)
+  })
+
   it('수량 입력이 꺼져 있으면 정액도 1회만 적용한다', () => {
     const singleOnly = detail({
       posDiscountType: 'amount',

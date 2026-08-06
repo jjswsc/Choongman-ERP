@@ -39,16 +39,61 @@ export function looksLikeTaxAuthorityRemittanceMemo(memo: string | null | undefi
   return false
 }
 
-/** 손익 비용에 넣으면 안 되는 통장 출금 (내부 생성·세금 납부 정산) */
-export function shouldExcludeBankWithdrawFromPlExpense(row: {
-  note?: string | null
-  memo?: string | null
-}): boolean {
-  if (isExpenseInternalBankNote(row.note)) return true
+/**
+ * 손익 비용에 넣으면 안 되는 통장 출금.
+ * - 세금 납부(BS) 정산은 항상 제외
+ * - expense_internal 은 잔액·목록 이중 방지용 그림자라 기본 제외하되,
+ *   배달앱/카드 수수료(계정 5528·5529 또는 수수료 거래처·적요)만 손익에 포함
+ *   — 일반 경비 internal 까지 열면 실통장 CSV 분류와 이중계상 위험이 큼
+ */
+export function shouldExcludeBankWithdrawFromPlExpense(
+  row: {
+    note?: string | null
+    memo?: string | null
+    category?: string | null
+    account_subject_id?: number | null
+    vendor_code?: string | null
+  },
+  opts?: { feeAccountSubjectIds?: ReadonlySet<number> }
+): boolean {
   const wCat = extractWithdrawalCategoryFromNote(String(row.note || ''))
   if (wCat && isTaxSettlementWithdrawalCategory(wCat)) return true
   if (looksLikeTaxAuthorityRemittanceMemo(row.memo)) return true
-  return false
+  if (!isExpenseInternalBankNote(row.note)) return false
+
+  const cat = String(row.category || 'expense').toLowerCase()
+  if (cat !== 'expense' && cat !== 'fixed') return true
+
+  const sid = row.account_subject_id != null ? Number(row.account_subject_id) : 0
+  if (Number.isFinite(sid) && sid > 0 && opts?.feeAccountSubjectIds?.has(sid)) return false
+
+  const vendor = String(row.vendor_code || '').trim().toUpperCase()
+  if (
+    vendor === 'GRAB_FEE' ||
+    vendor === 'LINEMAN_FEE' ||
+    vendor === 'SHOPEE_FEE' ||
+    vendor === 'ROBINHOOD_FEE' ||
+    vendor === 'CARD_FEE' ||
+    vendor === 'CARD_INSTALLMENT_FEE'
+  ) {
+    return false
+  }
+
+  const memo = String(row.memo || '')
+  const memoLower = memo.toLowerCase()
+  if (
+    memoLower.includes('delivery app fee') ||
+    memoLower.includes('배달앱') ||
+    memoLower.includes('card fee') ||
+    memoLower.includes('카드 수수료') ||
+    memoLower.includes('카드수수료') ||
+    /ค่าธรรมเนียม.*(เดลิเว|delivery|แอป|แอพ)/i.test(memo) ||
+    /ค่าธรรมเนียมบัตร/i.test(memo)
+  ) {
+    return false
+  }
+
+  return true
 }
 
 export function extractWithdrawalCategoryFromNote(note: string): string | null {

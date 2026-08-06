@@ -235,7 +235,11 @@ export function CollabManagementDetailForm(props: {
                         ? ` · ${t("marketingCollabDetailPosMaxPerOrder")} ${draft.posMaxPerOrder ?? 10}`
                         : ""
                     }`
-                  : `${draft.posDiscountValue}%`}
+                  : `${draft.posDiscountValue}%${
+                      (draft.posDiscountMaxAmount ?? 0) > 0
+                        ? ` · ${t("marketingCollabDetailPosDiscountMaxAmountShort")} ${Number(draft.posDiscountMaxAmount).toLocaleString()}฿`
+                        : ""
+                    }`}
               </p>
             </div>
           )}
@@ -365,6 +369,7 @@ export function CollabManagementDetailForm(props: {
                     if (nextType === "amount") {
                       set({
                         posDiscountType: nextType,
+                        posDiscountMaxAmount: 0,
                         posMaxPerOrder: Math.max(1, draft.posMaxPerOrder || 10),
                         posAllowQuantityEntry: true,
                       })
@@ -375,7 +380,7 @@ export function CollabManagementDetailForm(props: {
                         posAllowQuantityEntry: false,
                       })
                     } else {
-                      set({ posDiscountType: nextType })
+                      set({ posDiscountType: nextType, posDiscountMaxAmount: 0 })
                     }
                   }}
                   className="flex h-9 w-full max-w-md rounded-md border border-input bg-transparent px-3 py-1 text-sm"
@@ -406,6 +411,31 @@ export function CollabManagementDetailForm(props: {
                 />
               </div>
             </div>
+            {draft.posDiscountType === "percent" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    {t("marketingCollabDetailPosDiscountMaxAmount")}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={draft.posDiscountMaxAmount || ""}
+                    onChange={(e) =>
+                      set({
+                        posDiscountMaxAmount: Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                      })
+                    }
+                    placeholder={t("marketingCollabDetailPosDiscountMaxAmountPh")}
+                    className="h-9"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("marketingCollabDetailPosDiscountMaxAmountHint")}
+                  </p>
+                </div>
+              </div>
+            ) : null}
             {draft.posDiscountType === "amount" ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">

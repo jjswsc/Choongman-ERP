@@ -19,6 +19,7 @@ export type ExpensePlanMobileListProps = {
   renderPayAmount: (r: ExpenseAccrualPlanItem) => ReactNode
   planRowEditable: (r: ExpenseAccrualPlanItem) => boolean
   canApproveByPolicy: (r: ExpenseAccrualPlanItem) => boolean
+  canDeleteByPolicy: (r: ExpenseAccrualPlanItem) => boolean
   payingId: number | null
   deletingPlanId: number | null
   payEditorOpenById: Record<number, boolean>
@@ -43,6 +44,7 @@ export function ExpensePlanMobileList({
   renderPayAmount,
   planRowEditable,
   canApproveByPolicy,
+  canDeleteByPolicy,
   payingId,
   deletingPlanId,
   payEditorOpenById,
@@ -128,7 +130,7 @@ export function ExpensePlanMobileList({
                         {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
                       </Button>
                     ) : null}
-                    {!String(r.storeName || "").trim() ? (
+                    {!String(r.storeName || "").trim() && canDeleteByPolicy(r) ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -165,15 +167,17 @@ export function ExpensePlanMobileList({
                           <X className="mr-1 h-3.5 w-3.5" />
                           {tt("att_reject", "Reject")}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-9 border-destructive/40 text-destructive"
-                          onClick={() => onDelete(r)}
-                          disabled={payingId === r.id || deletingPlanId === r.id}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {canDeleteByPolicy(r) ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9 border-destructive/40 text-destructive"
+                            onClick={() => onDelete(r)}
+                            disabled={payingId === r.id || deletingPlanId === r.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
                       </>
                     ) : r.status === "approved" || r.status === "rejected" ? (
                       <>
@@ -198,6 +202,17 @@ export function ExpensePlanMobileList({
                           >
                             <Pencil className="mr-0.5 h-3 w-3" />
                             {tt("btnEdit", "Edit")}
+                          </Button>
+                        ) : null}
+                        {canDeleteByPolicy(r) ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9 border-destructive/40 text-destructive"
+                            onClick={() => onDelete(r)}
+                            disabled={payingId === r.id || deletingPlanId === r.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         ) : null}
                       </>

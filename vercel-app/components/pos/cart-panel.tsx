@@ -5854,7 +5854,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         {c.collabDetail.posDiscountType === 'amount'
                           ? ` (${formatBahtNum(c.collabDetail.posDiscountValue)} ฿)`
                           : c.collabDetail.posDiscountType === 'percent'
-                            ? ` (${c.collabDetail.posDiscountValue}%)`
+                            ? ` (${c.collabDetail.posDiscountValue}%${
+                                (c.collabDetail.posDiscountMaxAmount ?? 0) > 0
+                                  ? ` · ${tr('marketingCollabDetailPosDiscountMaxAmountShort', '최대')} ${formatBahtNum(c.collabDetail.posDiscountMaxAmount)}฿`
+                                  : ''
+                              })`
                             : ''}
                       </SelectItem>
                     ))}

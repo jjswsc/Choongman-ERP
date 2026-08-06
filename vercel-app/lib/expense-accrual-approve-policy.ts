@@ -18,6 +18,59 @@ export function canApproveExpenseAccrual(userRoleRaw: string | undefined, storeN
   return isOfficeRole(role) || isAccountingRole(role)
 }
 
+/** 지급예정 수정·삭제 API 호출 가능(본사 + 회계). 매장별 승인 세부는 canApprove / canDelete 참고 */
+export function canMutateExpenseAccrualRecord(userRoleRaw: string | undefined): boolean {
+  const role = String(userRoleRaw || '')
+  return isOfficeRole(role) || isAccountingRole(role)
+}
+
+/**
+ * 지급 상태상 삭제 가능 여부
+ * - 매장 미선택: 정리용으로 허용
+ * - planned / rejected
+ * - approved 이면서 미지급·통장/패티 미연결
+ * - partial / paid / done 또는 지급·연결 있으면 차단
+ */
+export function isExpenseAccrualDeletableByPaymentState(input: {
+  status?: string
+  paidAmount?: number
+  hasPaymentLink?: boolean
+  isNoStore?: boolean
+}): boolean {
+  if (input.isNoStore) return true
+  if (input.hasPaymentLink) return false
+  const paid = Math.max(0, Number(input.paidAmount) || 0)
+  if (paid > 0.005) return false
+  const status = String(input.status || '').toLowerCase()
+  if (status === 'paid' || status === 'done' || status === 'partial') return false
+  return status === 'planned' || status === 'rejected' || status === 'approved'
+}
+
+/**
+ * 지급예정 삭제 권한
+ * - 매장 미선택: 본사·회계
+ * - 그 외: 해당 건 승인 가능 역할과 동일 + 지급 상태 가드
+ */
+export function canDeleteExpenseAccrual(input: {
+  userRole?: string
+  storeName?: string
+  status?: string
+  paidAmount?: number
+  hasPaymentLink?: boolean
+}): boolean {
+  const role = String(input.userRole || '')
+  const isNoStore = !String(input.storeName || '').trim()
+  if (!canMutateExpenseAccrualRecord(role)) return false
+  if (isNoStore) return true
+  if (!canApproveExpenseAccrual(role, input.storeName)) return false
+  return isExpenseAccrualDeletableByPaymentState({
+    status: input.status,
+    paidAmount: input.paidAmount,
+    hasPaymentLink: input.hasPaymentLink,
+    isNoStore: false,
+  })
+}
+
 /** 지급예정·지출등록 수정 가능 여부 (승인 후·미지급 포함, 지급 시작 후 차단) */
 export function canEditExpenseAccrualPlan(input: {
   status?: string

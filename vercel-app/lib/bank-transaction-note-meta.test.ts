@@ -54,11 +54,62 @@ describe('composeBankNoteWithCategoryAndOptionalAccrualPrefix', () => {
 })
 
 describe('shouldExcludeBankWithdrawFromPlExpense', () => {
-  it('excludes expense_internal shadow rows', () => {
+  it('excludes expense_internal tax settlement rows', () => {
     expect(
       shouldExcludeBankWithdrawFromPlExpense({
         note: 'expense_accrual_id:1;withdrawal_category:tax_vat;source:expense_internal',
         memo: 'ภ.พ.30 06/2026',
+        category: 'unclassified',
+      })
+    ).toBe(true)
+  })
+
+  it('includes expense_internal fee rows with fee account subject ids', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense(
+        {
+          note: 'withdrawal_category:expense;source:expense_internal',
+          memo: 'Delivery App fee 2026-07 - Grab',
+          category: 'expense',
+          account_subject_id: 128,
+          vendor_code: 'GRAB_FEE',
+        },
+        { feeAccountSubjectIds: new Set([128]) }
+      )
+    ).toBe(false)
+  })
+
+  it('still excludes expense_internal general expense even with account subject', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense(
+        {
+          note: 'withdrawal_category:expense;source:expense_internal',
+          memo: 'Office rent',
+          category: 'expense',
+          account_subject_id: 99,
+        },
+        { feeAccountSubjectIds: new Set([128, 129]) }
+      )
+    ).toBe(true)
+  })
+
+  it('includes expense_internal fee vendor even without subject id', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: 'withdrawal_category:expense;source:expense_internal',
+        memo: 'Card fee',
+        category: 'expense',
+        vendor_code: 'CARD_FEE',
+      })
+    ).toBe(false)
+  })
+
+  it('still excludes expense_internal transfer/shadow without expense classification', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: 'withdrawal_category:transfer;source:expense_internal',
+        memo: 'internal transfer',
+        category: 'transfer',
       })
     ).toBe(true)
   })

@@ -9,7 +9,11 @@ import {
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
-import { canEditExpenseAccrualPlan } from '@/lib/expense-accrual-approve-policy'
+import {
+  canDeleteExpenseAccrual,
+  canEditExpenseAccrualPlan,
+  canMutateExpenseAccrualRecord,
+} from '@/lib/expense-accrual-approve-policy'
 import { requireAuth } from '@/lib/verify-auth'
 import {
   invoiceReceivedFromDocumentType,
@@ -36,6 +40,7 @@ type PayableRow = {
   id?: number
   amount?: number
   bank_transaction_id?: number | null
+  petty_cash_transaction_id?: number | null
 }
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
@@ -80,13 +85,15 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
-    const authResult = await requireAuth(request, 'office')
+    const authResult = await requireAuth(request, 'any')
     if (authResult.errorResponse) {
       authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
       authResult.errorResponse.headers.set('Content-Type', 'application/json')
       return authResult.errorResponse
     }
     const body = await request.json()
+    // JWT role 우선 (본사·회계). body.userRole은 폴백만.
+    const effectiveRole = String(authResult.auth.role || body.userRole || body.user_role || '').trim()
 
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0)
     const action = String(body.action || 'update').trim().toLowerCase() // update | delete
@@ -95,6 +102,12 @@ export async function POST(request: NextRequest) {
     }
     if (!['update', 'delete'].includes(action)) {
       return NextResponse.json({ success: false, message: 'action은 update 또는 delete 이어야 합니다.' }, { status: 400, headers })
+    }
+    if (!canMutateExpenseAccrualRecord(effectiveRole)) {
+      return NextResponse.json(
+        { success: false, message: '본사 또는 회계 권한이 필요합니다.' },
+        { status: 403, headers }
+      )
     }
 
     const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
@@ -108,21 +121,39 @@ export async function POST(request: NextRequest) {
     const status = String(row.status || '').toLowerCase()
     await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
     const rowStoreName = String(row.store_name ?? '').trim()
-    const isNoStore = !rowStoreName
 
     const payableForEdit = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`, {
-      select: 'id,amount,bank_transaction_id',
+      select: 'id,amount,bank_transaction_id,petty_cash_transaction_id',
       limit: 50,
     })) as PayableRow[] | null
     let paidAmountForEdit = 0
+    let hasPaymentLink = false
     for (const tx of payableForEdit || []) {
       const a = Number(tx.amount || 0)
       if (a < 0) paidAmountForEdit += Math.abs(a)
+      if (Number(tx.bank_transaction_id || 0) > 0 || Number(tx.petty_cash_transaction_id || 0) > 0) {
+        hasPaymentLink = true
+      }
     }
 
     if (action === 'delete') {
-      if (!isNoStore && status !== 'planned' && status !== 'rejected') {
-        return NextResponse.json({ success: false, message: '요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.' }, { status: 400, headers })
+      if (
+        !canDeleteExpenseAccrual({
+          userRole: effectiveRole,
+          storeName: rowStoreName,
+          status,
+          paidAmount: paidAmountForEdit,
+          hasPaymentLink,
+        })
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              '삭제할 수 없습니다. 요청·반려·승인(미지급·미연결)만 가능하며, 매장 건은 승인 권한(본사·회계)이 필요합니다. 본사 명의 건은 임원만 삭제할 수 있습니다.',
+          },
+          { status: 403, headers }
+        )
       }
     } else if (!canEditExpenseAccrualPlan({ status, paidAmount: paidAmountForEdit })) {
       if (!(status === 'paid' || status === 'done' || paidAmountForEdit > 0.005)) {

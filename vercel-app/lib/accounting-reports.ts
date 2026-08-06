@@ -444,7 +444,8 @@ type BankWithdrawPlRow = {
 async function fetchBankWithdrawRowsForPl(
   accountIds: number[],
   startStr: string,
-  endStr: string
+  endStr: string,
+  opts?: { feeAccountSubjectIds?: ReadonlySet<number> }
 ): Promise<{ rows: BankWithdrawPlRow[]; fetched: number; truncated: boolean }> {
   if (accountIds.length === 0) return { rows: [], fetched: 0, truncated: false }
   const idList = accountIds.join(',')
@@ -457,8 +458,11 @@ async function fetchBankWithdrawRowsForPl(
     pageSize: 8000,
     maxRows: ACCOUNTING_ROWS_MAX,
   })) as BankWithdrawPlRow[]
-  /** 잔액 계산과 동일: expense_internal·세금납부(BS)는 손익 비용에서 제외 */
-  const rows = raw.filter((r) => !shouldExcludeBankWithdrawFromPlExpense(r))
+  /** 잔액 계산과 동일: expense_internal·세금납부(BS)는 손익 비용에서 제외(수수료 5528/5529만 예외) */
+  const feeIds = opts?.feeAccountSubjectIds
+  const rows = raw.filter(
+    (r) => !shouldExcludeBankWithdrawFromPlExpense(r, feeIds ? { feeAccountSubjectIds: feeIds } : undefined)
+  )
   const fetched = raw.length
   return { rows, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
 }
@@ -679,6 +683,19 @@ type AccountSubjectMetaRow = {
   statementType: string | null
 }
 
+function feeAccountSubjectIdsFromMeta(
+  subjectMeta: Map<number, AccountSubjectMetaRow>
+): { deliveryIds: Set<number>; cardIds: Set<number>; allIds: number[] } {
+  const deliveryIds = new Set<number>()
+  const cardIds = new Set<number>()
+  for (const [id, meta] of subjectMeta) {
+    const code = String(meta.code || '').trim()
+    if (code === '5528') deliveryIds.add(id)
+    if (code === '5529') cardIds.add(id)
+  }
+  return { deliveryIds, cardIds, allIds: [...deliveryIds, ...cardIds] }
+}
+
 export async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaRow>> {
   const out = new Map<number, AccountSubjectMetaRow>()
   try {
@@ -774,6 +791,115 @@ export function isPlExpenseAccountSubject(
   if (!meta) return true
   if (meta.type !== 'expense') return false
   return meta.pAndLSection !== 'cost'
+}
+
+/**
+ * 지출등록「배달앱/카드 수수료」(계정 5528/5529) 지급예정 — 손익 비용 반영.
+ * 통장 지급 연결분은 linkedBankTransactionIds 로 넘기고 통장 집계에서 제외해 이중계상 방지.
+ */
+async function loadDeliveryCardFeeAccrualsForPl(params: {
+  startStr: string
+  endStr: string
+  storeFilter: string
+  isHQ: boolean
+  subjectMeta: Map<number, AccountSubjectMetaRow>
+}): Promise<{
+  bySubject: Map<number | null, number>
+  deliveryAppFees: number
+  cardFees: number
+  linkedBankTransactionIds: Set<number>
+  fetched: number
+}> {
+  const empty = {
+    bySubject: new Map<number | null, number>(),
+    deliveryAppFees: 0,
+    cardFees: 0,
+    linkedBankTransactionIds: new Set<number>(),
+    fetched: 0,
+  }
+  const { deliveryIds, cardIds, allIds } = feeAccountSubjectIdsFromMeta(params.subjectMeta)
+  if (allIds.length === 0) return empty
+
+  try {
+    const idList = allIds.join(',')
+    const filter =
+      `expense_date=gte.${params.startStr}&expense_date=lte.${params.endStr}` +
+      `&account_subject_id=in.(${idList})&status=neq.rejected`
+    const rows = (await supabaseSelectFilterAllPages('expense_accruals', filter, {
+      select: 'id,amount,store_name,account_subject_id,payee_code,memo,status',
+      order: 'id.asc',
+      pageSize: 2000,
+      maxRows: ACCOUNTING_ROWS_MAX,
+    })) as {
+      id?: number
+      amount?: number
+      store_name?: string | null
+      account_subject_id?: number | null
+      payee_code?: string | null
+      memo?: string | null
+      status?: string | null
+    }[]
+
+    const bySubject = new Map<number | null, number>()
+    let deliveryAppFees = 0
+    let cardFees = 0
+    const accrualIds: number[] = []
+
+    for (const r of rows || []) {
+      const status = String(r.status || '').toLowerCase()
+      if (status === 'rejected') continue
+      const storeName = String(r.store_name || '').trim()
+      if (params.isHQ) {
+        if (!isHqAccountingStoreRow(storeName)) continue
+      } else if (params.storeFilter !== 'All') {
+        if (!storeMatchesIncomeFilter(storeName, params.storeFilter)) continue
+      }
+      const sid =
+        r.account_subject_id != null && !isNaN(Number(r.account_subject_id))
+          ? Number(r.account_subject_id)
+          : null
+      if (sid == null || (!deliveryIds.has(sid) && !cardIds.has(sid))) continue
+      if (!isPlExpenseAccountSubject(sid, params.subjectMeta)) continue
+
+      const amt = Math.abs(Number(r.amount) || 0)
+      if (!amt) continue
+      const accrualId = Number(r.id || 0)
+      if (accrualId > 0) accrualIds.push(accrualId)
+
+      addToSubjectMap(bySubject, sid, amt)
+      if (deliveryIds.has(sid)) deliveryAppFees += amt
+      else if (cardIds.has(sid)) cardFees += amt
+    }
+
+    const linkedBankTransactionIds = new Set<number>()
+    if (accrualIds.length > 0) {
+      const accrualList = accrualIds.join(',')
+      const payables = (await supabaseSelectFilterAllPages(
+        'payable_transactions',
+        `expense_accrual_id=in.(${accrualList})&bank_transaction_id=not.is.null`,
+        {
+          select: 'bank_transaction_id,expense_accrual_id',
+          order: 'id.asc',
+          pageSize: 2000,
+          maxRows: ACCOUNTING_ROWS_MAX,
+        }
+      )) as { bank_transaction_id?: number | null; expense_accrual_id?: number | null }[]
+      for (const p of payables || []) {
+        const bankId = Number(p.bank_transaction_id || 0)
+        if (bankId > 0) linkedBankTransactionIds.add(bankId)
+      }
+    }
+
+    return {
+      bySubject,
+      deliveryAppFees: round2(deliveryAppFees),
+      cardFees: round2(cardFees),
+      linkedBankTransactionIds,
+      fetched: rows?.length || 0,
+    }
+  } catch {
+    return empty
+  }
 }
 
 /** expense + p_and_l_section=cost → 손익「매입」 */
@@ -1253,6 +1379,23 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     addToSubjectMap(expenseBySubjectMap, payrollAgg.preferredSubjectId, payrollAgg.total)
   }
 
+  const feeAccrualPl = await loadDeliveryCardFeeAccrualsForPl({
+    startStr,
+    endStr,
+    storeFilter,
+    isHQ,
+    subjectMeta,
+  })
+  mergeExpenseSubjectMaps(expenseBySubjectMap, feeAccrualPl.bySubject)
+  deliveryAppFeeExpense += feeAccrualPl.deliveryAppFees
+  cardFeeExpense += feeAccrualPl.cardFees
+  const feeAccrualLinkedBankIds = feeAccrualPl.linkedBankTransactionIds
+  const feeAccountSubjectIds = new Set(feeAccountSubjectIdsFromMeta(subjectMeta).allIds)
+  limits.delivery_card_fee_accruals = {
+    fetched: feeAccrualPl.fetched,
+    limit: ACCOUNTING_ROWS_MAX,
+  }
+
   const shouldSkipSalaryCashBecausePayroll = (row: {
     account_subject_id?: number | null
     memo?: string | null
@@ -1408,9 +1551,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         const { rows: btRows, fetched, truncated } = await fetchBankWithdrawRowsForPl(
           hqAccountIds,
           startStr,
-          endStr
+          endStr,
+          { feeAccountSubjectIds }
         )
         for (const r of btRows) {
+          const bankId = Number(r.id || 0)
+          if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
           if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
@@ -1685,9 +1831,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         const { rows: btRows, fetched, truncated } = await fetchBankWithdrawRowsForPl(
           accountIds,
           startStr,
-          endStr
+          endStr,
+          { feeAccountSubjectIds }
         )
         for (const r of btRows) {
+          const bankId = Number(r.id || 0)
+          if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
           if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
@@ -2834,7 +2983,10 @@ export async function computeIncomeStatementExpenseDrillDown(
   const bankAcc: IncomeStatementExpenseDrillBankRow[] = []
   let bankFetchTruncated = false
   if (accountIds.length > 0) {
-    const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(accountIds, startStr, endStr)
+    const feeAccountSubjectIds = new Set(feeAccountSubjectIdsFromMeta(subjectMeta).allIds)
+    const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(accountIds, startStr, endStr, {
+      feeAccountSubjectIds,
+    })
     bankFetchTruncated = truncated
     for (const r of btRows) {
       if (!bankWithdrawCountsTowardPlExpense(r.category)) continue

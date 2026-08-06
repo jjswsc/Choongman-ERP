@@ -4190,6 +4190,10 @@ export const i18n = {
     expensePlanPickPlannedNeedsApproval:
       '선택한 건이 아직 승인 대기입니다. 저장 시 자동 승인됩니다. 본사(Office·HQ) 건은 Director·CEO·HR·Secretary 승인 권한이 필요합니다.',
     expensePlanDeletedCount: '{count}건 삭제되었습니다.',
+    expensePlanDeleteApprovedConfirm:
+      '승인된 지급예정(미지급)입니다. 삭제할까요? 관련 분개·미지급이 함께 제거됩니다.',
+    expensePlanDeleteDenied:
+      '삭제할 수 없습니다. 요청·반려·승인(미지급·미연결)만 가능합니다.',
     expensePayAwaitApprovalShort: '승인 대기',
     expensePayAwaitApprovalHint: 'Director·Secretary 등 승인 후 Pay 버튼이 표시됩니다.',
     officeRoleOnly: '본사 권한만 사용할 수 있습니다.',
@@ -4301,7 +4305,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 문서번호는 EXPyyyymm000x로 자동 발급되며, 거래처는 กรมสรรพากร VAT 검색으로 찾을 수 있습니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급됩니다.\n② 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n③ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n④ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑤ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다.\n⑥ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑦ 증빙 첨부 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑧ 오피스(본사) 급여는 직원별 금액이 아니라 「Payroll — 매장」합산 1건으로만 표시됩니다. 개인별 명세는 급여 관리에서 확인하세요.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급됩니다.\n② 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n③ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n④ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑤ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다.\n⑥ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑦ 증빙 첨부 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑧ 오피스(본사) 급여는 직원별 금액이 아니라 「Payroll — 매장」합산 1건으로만 표시됩니다. 개인별 명세는 급여 관리에서 확인하세요.\n⑨ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사 명의 건은 임원만, 일부지급·지급완료·연결 건은 삭제할 수 없습니다.',
     helpSum_admin_depreciation:
       '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
     helpHow_admin_depreciation:
@@ -6437,6 +6441,11 @@ export const i18n = {
     marketingCollabDetailPosDiscountTypeAmount: '정액 (฿)',
     marketingCollabDetailPosDiscountValuePercent: '할인율 (%)',
     marketingCollabDetailPosDiscountValueBaht: '할인액 (฿)',
+    marketingCollabDetailPosDiscountMaxAmount: '할인 상한 (฿)',
+    marketingCollabDetailPosDiscountMaxAmountPh: '예: 100 (비우면 상한 없음)',
+    marketingCollabDetailPosDiscountMaxAmountHint:
+      '정률 할인 시 주문당 최대 할인액입니다. 예: 10% · 최대 100฿. 비우거나 0이면 상한 없이 %만 적용합니다.',
+    marketingCollabDetailPosDiscountMaxAmountShort: '최대',
     marketingCollabDetailPosMaxPerOrder: '주문당 최대 적용',
     marketingCollabDetailPosMaxPerOrderHint: '정액 협업 할인을 한 주문에 여러 번(예: 100฿×4) 적용할 때 상한입니다.',
     marketingCollabDetailPosAllowQuantityEntry: 'POS에서 수량 입력 허용',
@@ -11868,6 +11877,10 @@ Only matters the employee must handle personally on a working day:
     expensePlanPickPlannedNeedsApproval:
       'Selected item is still pending approval. Saving will auto-approve. HQ/Office items require Director·CEO·HR·Secretary approval rights.',
     expensePlanDeletedCount: '{count} item(s) deleted.',
+    expensePlanDeleteApprovedConfirm:
+      'This accrual is approved but unpaid. Delete it? Journals and payables for this plan will be removed.',
+    expensePlanDeleteDenied:
+      'You cannot delete this payment plan. Only request/rejected/approved (unpaid, unlinked) items can be deleted.',
     expensePayAwaitApprovalShort: 'Pending',
     expensePayAwaitApprovalHint: 'Pay appears after Director/Secretary approves.',
     officeRoleOnly: 'Office role is required.',
@@ -11979,7 +11992,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Document numbers use EXPyyyymm000x; vendors can be looked up via Revenue Department VAT search.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create.\n② For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n③ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n④ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑤ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management.\n⑥ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑦ When attaching evidence, choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.\n⑧ Office (HQ) payroll appears as one “Payroll — store” aggregate line, not per-employee amounts. Use Payroll for individual detail.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create.\n② For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n③ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n④ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑤ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management.\n⑥ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑦ When attaching evidence, choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.\n⑧ Office (HQ) payroll appears as one “Payroll — store” aggregate line, not per-employee amounts. Use Payroll for individual detail.\n⑨ HQ and Accounting can delete request/rejected/approved (unpaid, unlinked) payment plans. HQ-named accruals need director-level approval rights; partial/paid/linked plans cannot be deleted.',
     helpSum_admin_depreciation:
       'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
     helpHow_admin_depreciation:
@@ -14116,6 +14129,11 @@ orderItemQty: 'Qty',
     marketingCollabDetailPosDiscountTypeAmount: 'Fixed (฿)',
     marketingCollabDetailPosDiscountValuePercent: 'Percent off',
     marketingCollabDetailPosDiscountValueBaht: 'Amount (฿)',
+    marketingCollabDetailPosDiscountMaxAmount: 'Max discount (฿)',
+    marketingCollabDetailPosDiscountMaxAmountPh: 'e.g. 100 (empty = no cap)',
+    marketingCollabDetailPosDiscountMaxAmountHint:
+      'Caps the percent discount per order. Example: 10% off, max 100฿. Leave empty or 0 for no baht cap.',
+    marketingCollabDetailPosDiscountMaxAmountShort: 'max',
     marketingCollabDetailPosMaxPerOrder: 'Max applications per order',
     marketingCollabDetailPosMaxPerOrderHint: 'Cap for stacking fixed collab discounts on one order (e.g. 100฿ × 4).',
     marketingCollabDetailPosAllowQuantityEntry: 'Allow quantity entry on POS',
@@ -18998,6 +19016,10 @@ orderItemQty: 'จำนวน',
     expensePlanPickPlannedNeedsApproval:
       'รายการที่เลือกยังรออนุมัติ การบันทึกจะอนุมัติอัตโนมัติ รายการสำนักงานใหญ่ต้องมีสิทธิ์ Director·CEO·HR·Secretary',
     expensePlanDeletedCount: 'ลบแล้ว {count} รายการ',
+    expensePlanDeleteApprovedConfirm:
+      'รายการนี้ผ่านอนุมัติแล้วแต่ยังไม่จ่าย ต้องการลบไหมครับ? ระบบจะลบสมุดรายวันและเจ้าหนี้ที่เกี่ยวข้องด้วย',
+    expensePlanDeleteDenied:
+      'ลบไม่ได้ครับ ลบได้เฉพาะรายการขอ/ปฏิเสธ/อนุมัติ(ยังไม่จ่ายและยังไม่เชื่อม)',
     expensePayAwaitApprovalShort: 'รออนุมัติ',
     expensePayAwaitApprovalHint: 'ปุ่มจ่ายจะแสดงหลัง Director/Secretary อนุมัติ',
     officeRoleOnly: 'ต้องใช้สิทธิ์ฝ่ายสำนักงาน',
@@ -20237,6 +20259,14 @@ orderItemQty: 'จำนวน',
     marketingCollabDetailPosDiscountTypeAmount: 'จำนวนเงิน (฿)',
     marketingCollabDetailPosDiscountValuePercent: 'เปอร์เซ็นต์ลด',
     marketingCollabDetailPosDiscountValueBaht: 'จำนวนลด (฿)',
+    marketingCollabDetailPosDiscountMaxAmount: 'ส่วนลดสูงสุด (฿)',
+    marketingCollabDetailPosDiscountMaxAmountPh: 'เช่น 100 (ว่าง = ไม่จำกัด)',
+    marketingCollabDetailPosDiscountMaxAmountHint:
+      'จำกัดส่วนลดแบบ % ต่อออเดอร์ เช่น ลด 10% สูงสุด 100 บาท ว่างหรือ 0 = ไม่จำกัดยอดบาท',
+    marketingCollabDetailPosDiscountMaxAmountShort: 'สูงสุด',
+    marketingCollabDetailPosMaxPerOrder: 'ใช้ได้สูงสุดต่อออเดอร์',
+    marketingCollabDetailPosMaxPerOrderHint: 'สำหรับส่วนลดจำนวนเงินซ้ำในออเดอร์เดียว (เช่น 100฿×4)',
+    marketingCollabDetailPosAllowQuantityEntry: 'อนุญาตให้ใส่จำนวนบน POS',
     marketingCollabDetailBasicsPosDiscount: 'ส่วนลดความร่วมมือ POS (ตั้งแล้ว)',
     marketingCollabIncludeInListTitle: 'รวมในรายการจัดการความร่วมมือ',
     marketingCollabIncludeInListHint: 'ต้องเปิดเพื่อบันทึกรายละเอียดที่นี่และให้ POS เลือกส่วนลดความร่วมมือ',
@@ -25194,6 +25224,11 @@ orderItemQty: 'အရေအတွက်',
     marketingCollabDetailPosDiscountTypeAmount: 'Fixed (฿)',
     marketingCollabDetailPosDiscountValuePercent: 'Percent off',
     marketingCollabDetailPosDiscountValueBaht: 'Amount (฿)',
+    marketingCollabDetailPosDiscountMaxAmount: 'Max discount (฿)',
+    marketingCollabDetailPosDiscountMaxAmountPh: 'e.g. 100 (empty = no cap)',
+    marketingCollabDetailPosDiscountMaxAmountHint:
+      'Caps the percent discount per order. Example: 10% off, max 100฿. Leave empty or 0 for no baht cap.',
+    marketingCollabDetailPosDiscountMaxAmountShort: 'max',
     marketingCollabDetailPosMaxPerOrder: 'Max applications per order',
     marketingCollabDetailPosMaxPerOrderHint: 'Cap for stacking fixed collab discounts on one order (e.g. 100฿ × 4).',
     marketingCollabDetailPosAllowQuantityEntry: 'Allow quantity entry on POS',
@@ -29956,6 +29991,11 @@ orderItemQty: 'ຈຳນວນ',
     marketingCollabDetailPosDiscountTypeAmount: 'Fixed (฿)',
     marketingCollabDetailPosDiscountValuePercent: 'Percent off',
     marketingCollabDetailPosDiscountValueBaht: 'Amount (฿)',
+    marketingCollabDetailPosDiscountMaxAmount: 'Max discount (฿)',
+    marketingCollabDetailPosDiscountMaxAmountPh: 'e.g. 100 (empty = no cap)',
+    marketingCollabDetailPosDiscountMaxAmountHint:
+      'Caps the percent discount per order. Example: 10% off, max 100฿. Leave empty or 0 for no baht cap.',
+    marketingCollabDetailPosDiscountMaxAmountShort: 'max',
     marketingCollabDetailPosMaxPerOrder: 'Max applications per order',
     marketingCollabDetailPosMaxPerOrderHint: 'Cap for stacking fixed collab discounts on one order (e.g. 100฿ × 4).',
     marketingCollabDetailPosAllowQuantityEntry: 'Allow quantity entry on POS',
