@@ -389,19 +389,19 @@ export function buildWht50TawiCertificateHtmlBothCopies(data: WhtCertificateData
     .join('\n<div class="wht50-pagebreak" aria-hidden="true"></div>\n')
 }
 
-/** 원본 กรมสรรพากร 50 ทวิ — A4 1장에 양식 1장(내용 전부) */
+/** 원본 กรมสรรพากร 50 ทวิ — A4 1장에 양식 1장(내용 전부, 글자·여백을 A4에 맞춤) */
 export const WHT_50_TAWI_STYLES = `
-  @page { size: A4 portrait; margin: 6mm 6mm 5mm 6mm; }
+  @page { size: A4 portrait; margin: 5mm 5mm 5mm 5mm; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; width: 100%;
     background: #fff; color: #000;
     font-family: "TH Sarabun New", "Sarabun", "Noto Sans Thai", Tahoma, sans-serif;
-    font-size: 11.5px; line-height: 1.18;
+    font-size: 14px; line-height: 1.22;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .wht50-sheet {
-    width: 100%; max-width: 198mm; margin: 0 auto;
+    width: 100%; max-width: 200mm; margin: 0 auto;
     page-break-after: always;
     page-break-inside: avoid;
     break-after: page;
@@ -415,107 +415,115 @@ export const WHT_50_TAWI_STYLES = `
   }
   .wht50-sheet:last-of-type { page-break-after: auto; break-after: auto; }
 
-  .wht-form { border: 1.4px solid #000; padding: 2.2mm 2.5mm 2mm; }
+  .wht-form {
+    border: 1.5px solid #000;
+    padding: 3mm 3mm 2.5mm;
+    min-height: 287mm;
+    display: flex;
+    flex-direction: column;
+  }
 
   /* —— Header (원본: 좌 ฉบับ / 중 제목 / 우 เล่ม·เลข) —— */
-  .wht-head { display: table; width: 100%; table-layout: fixed; margin-bottom: 1.5mm; }
+  .wht-head { display: table; width: 100%; table-layout: fixed; margin-bottom: 2.5mm; }
   .wht-head-l, .wht-head-c, .wht-head-r { display: table-cell; vertical-align: top; }
-  .wht-head-l { width: 34%; font-size: 8px; line-height: 1.22; padding-right: 1.5mm; }
-  .wht-copy { margin: 0; }
+  .wht-head-l { width: 34%; font-size: 10.5px; line-height: 1.28; padding-right: 1.5mm; }
+  .wht-copy { margin: 0 0 0.6mm; }
   .wht-copy.wht-on { font-weight: 700; text-decoration: underline; }
   .wht-head-c { width: 42%; text-align: center; }
-  .wht-ttl { font-size: 15.5px; font-weight: 700; line-height: 1.12; }
-  .wht-sub { font-size: 10.5px; margin-top: 0.4mm; }
-  .wht-head-r { width: 24%; text-align: right; font-size: 11.5px; padding-top: 0.8mm; line-height: 1.45; }
+  .wht-ttl { font-size: 20px; font-weight: 700; line-height: 1.15; }
+  .wht-sub { font-size: 13px; margin-top: 0.8mm; }
+  .wht-head-r { width: 24%; text-align: right; font-size: 14px; padding-top: 1mm; line-height: 1.5; }
 
   .wht-uline { display: inline-block; min-width: 78%; border-bottom: 1px dotted #000; }
-  .wht-uline-sm { display: inline-block; min-width: 28px; border-bottom: 1px dotted #000; text-align: center; font-weight: 600; }
+  .wht-uline-sm { display: inline-block; min-width: 36px; border-bottom: 1px dotted #000; text-align: center; font-weight: 600; }
   .wht-fill { font-weight: 600; border-bottom: 1px dotted #000; }
 
   /* —— Party boxes —— */
-  .wht-party { border: 1px solid #000; border-bottom: none; padding: 1.2mm 1.8mm; }
+  .wht-party { border: 1px solid #000; border-bottom: none; padding: 2mm 2.2mm; }
   .wht-party-tbl { width: 100%; border-collapse: collapse; }
   .wht-party-l { width: 60%; vertical-align: top; padding-right: 2mm; }
   .wht-party-r { width: 40%; vertical-align: top; text-align: right; }
-  .wht-party-h { font-weight: 700; font-size: 11.5px; margin-bottom: 0.6mm; }
-  .wht-fl { margin: 0.4mm 0; font-size: 11.5px; }
+  .wht-party-h { font-weight: 700; font-size: 14px; margin-bottom: 1mm; }
+  .wht-fl { margin: 0.8mm 0; font-size: 14px; }
   .wht-k { white-space: nowrap; }
-  .wht-note { font-size: 7.5px; color: #222; line-height: 1.12; }
-  .wht-tin-lab { font-size: 8.5px; margin-bottom: 0.8mm; }
+  .wht-note { font-size: 10px; color: #222; line-height: 1.2; margin-top: 0.4mm; }
+  .wht-tin-lab { font-size: 11px; margin-bottom: 1.2mm; }
   .wht-tin { border-collapse: collapse; margin-left: auto; }
   .wht-tin-cell {
-    width: 11.5px; height: 14px; border: 1px solid #000;
-    text-align: center; font-size: 10.5px; font-weight: 700;
-    padding: 0; line-height: 14px;
+    width: 14px; height: 18px; border: 1px solid #000;
+    text-align: center; font-size: 13px; font-weight: 700;
+    padding: 0; line-height: 18px;
   }
-  .wht-tin-dash { width: 7px; border: none; text-align: center; font-size: 10px; vertical-align: middle; }
+  .wht-tin-dash { width: 8px; border: none; text-align: center; font-size: 12px; vertical-align: middle; }
 
   /* —— PND row —— */
   .wht-pnd {
     border: 1px solid #000; border-bottom: none;
-    padding: 1.2mm 1.8mm; font-size: 9.5px; line-height: 1.35;
+    padding: 2mm 2.2mm; font-size: 12px; line-height: 1.4;
   }
-  .wht-pnd-note { font-size: 7.5px; margin-top: 0.4mm; }
+  .wht-pnd-note { font-size: 10px; margin-top: 0.8mm; }
   .chk {
-    display: inline-block; width: 11px; height: 11px; border: 1px solid #000;
-    text-align: center; font-size: 9px; font-weight: 700; line-height: 10px;
+    display: inline-block; width: 13px; height: 13px; border: 1px solid #000;
+    text-align: center; font-size: 11px; font-weight: 700; line-height: 12px;
     vertical-align: middle; margin: 0 1px;
   }
 
   /* —— Income table —— */
-  .wht-tbl { width: 100%; border-collapse: collapse; font-size: 9px; }
-  .wht-tbl th, .wht-tbl td { border: 1px solid #000; padding: 0.7mm 1.2mm; vertical-align: top; }
-  .wht-tbl th { text-align: center; font-weight: 700; font-size: 9px; }
+  .wht-tbl { width: 100%; border-collapse: collapse; font-size: 12px; flex: 1 1 auto; }
+  .wht-tbl th, .wht-tbl td { border: 1px solid #000; padding: 1.3mm 1.6mm; vertical-align: top; }
+  .wht-tbl th { text-align: center; font-weight: 700; font-size: 12px; }
   .c-type { width: 56%; }
   .c-date { width: 14%; }
   .c-amt { width: 15%; }
-  .wht-tbl td { font-size: 8.8px; line-height: 1.18; }
-  .tiny { font-size: 8px !important; line-height: 1.15 !important; }
-  .pad-l { padding-left: 3mm !important; }
-  .wht-date-col { text-align: center; font-size: 9.5px; white-space: nowrap; }
+  .wht-tbl td { font-size: 11.5px; line-height: 1.25; }
+  .tiny { font-size: 10.5px !important; line-height: 1.22 !important; }
+  .pad-l { padding-left: 3.5mm !important; }
+  .wht-date-col { text-align: center; font-size: 12.5px; white-space: nowrap; }
   .wht-amt-col {
     text-align: right; font-variant-numeric: tabular-nums;
-    white-space: nowrap; font-size: 9.5px;
+    white-space: nowrap; font-size: 12.5px;
   }
   .sum td { font-weight: 700; }
   .sum-l { text-align: center; }
-  .sum-words td { background: #d9d9d9; font-size: 10.5px; font-weight: 500; }
+  .sum-words td { background: #d9d9d9; font-size: 13px; font-weight: 500; padding-top: 1.6mm; padding-bottom: 1.6mm; }
 
   .wht-fund, .wht-paymode {
     border: 1px solid #000; border-top: none;
-    padding: 1mm 1.8mm; font-size: 9.5px; line-height: 1.35;
+    padding: 1.8mm 2.2mm; font-size: 12px; line-height: 1.4;
   }
 
   .wht-foot { width: 100%; border-collapse: collapse; border: 1px solid #000; border-top: none; }
   .wht-warn {
-    width: 38%; font-size: 8px; line-height: 1.25;
-    border-right: 1px solid #000; padding: 1.8mm; vertical-align: top;
+    width: 38%; font-size: 11px; line-height: 1.3;
+    border-right: 1px solid #000; padding: 2.5mm; vertical-align: top;
   }
   .wht-sign {
-    width: 62%; padding: 2mm 16mm 2mm 2mm; vertical-align: top;
-    position: relative; min-height: 26mm; text-align: center;
+    width: 62%; padding: 3mm 18mm 3mm 3mm; vertical-align: top;
+    position: relative; min-height: 36mm; text-align: center;
   }
-  .wht-cert { font-size: 10.5px; font-weight: 600; margin-bottom: 2mm; }
-  .wht-sign-ln { font-size: 11.5px; margin: 2.5mm 0 1mm; }
-  .wht-sign-dt { font-size: 11.5px; }
-  .wht-sign-cap { font-size: 8.5px; }
+  .wht-cert { font-size: 13px; font-weight: 600; margin-bottom: 3mm; }
+  .wht-sign-ln { font-size: 14px; margin: 4mm 0 1.5mm; }
+  .wht-sign-dt { font-size: 14px; }
+  .wht-sign-cap { font-size: 11px; margin-top: 0.8mm; }
   .wht-seal {
-    position: absolute; right: 2.5mm; top: 2mm;
-    width: 16mm; height: 16mm; border: 1px dashed #444; border-radius: 50%;
-    font-size: 7.5px; display: flex; align-items: center; justify-content: center;
-    text-align: center; line-height: 1.1;
+    position: absolute; right: 3mm; top: 3mm;
+    width: 20mm; height: 20mm; border: 1px dashed #444; border-radius: 50%;
+    font-size: 10px; display: flex; align-items: center; justify-content: center;
+    text-align: center; line-height: 1.15;
   }
-  .wht-fn { font-size: 7.5px; margin-top: 1.2mm; line-height: 1.2; padding: 0 0.5mm; }
+  .wht-fn { font-size: 10px; margin-top: 2mm; line-height: 1.28; padding: 0 0.5mm; }
 
   @media print {
     html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
     .wht50-sheet {
       max-width: none;
+      width: 100%;
       page-break-after: always !important;
       break-after: page !important;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
+    .wht-form { min-height: 287mm; }
     .wht50-pagebreak {
       display: block !important;
       page-break-after: always !important;
