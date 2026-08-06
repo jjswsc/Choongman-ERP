@@ -52,6 +52,32 @@ function sortByPayee(rows: ExpenseAccrualPlanItem[]) {
   })
 }
 
+function groupTransferByStore(
+  rows: ExpenseAccrualPlanItem[],
+  tt: Tt,
+  aggregateMode: boolean
+): [string, TransferDisplayRow[]][] {
+  const map = new Map<string, ExpenseAccrualPlanItem[]>()
+  for (const r of rows) {
+    const key = String(r.storeName || "").trim() || "—"
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(r)
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => (a[0] === "—" ? 1 : b[0] === "—" ? -1 : a[0].localeCompare(b[0])))
+    .map(([store, storeRows]) => {
+      const display = aggregateMode
+        ? aggregateByAccount(storeRows, tt)
+        : sortByPayee(storeRows).map((r) => ({
+            ...r,
+            _aggregateCount: 1,
+            _sourceIds: [r.id],
+            _isAggregate: false,
+          }))
+      return [store, display] as [string, TransferDisplayRow[]]
+    })
+}
+
 function aggregateByAccount(rows: ExpenseAccrualPlanItem[], tt: Tt): TransferDisplayRow[] {
   const map = new Map<string, TransferDisplayRow & { _payeeNames?: string[] }>()
   const orphans: TransferDisplayRow[] = []
@@ -172,15 +198,15 @@ export function ExpenseBankTransferView({
     return baseRows.filter((r) => !String(r.payeeBankAccountNo || "").trim())
   }, [baseRows, onlyMissingBank])
 
-  const rows: TransferDisplayRow[] = React.useMemo(() => {
-    if (aggregateMode) return aggregateByAccount(filteredBase, tt)
-    return filteredBase.map((r) => ({
-      ...r,
-      _aggregateCount: 1,
-      _sourceIds: [r.id],
-      _isAggregate: false,
-    }))
-  }, [filteredBase, aggregateMode, tt])
+  const rowsByStore = React.useMemo(
+    () => groupTransferByStore(filteredBase, tt, aggregateMode),
+    [filteredBase, aggregateMode, tt]
+  )
+
+  const rows: TransferDisplayRow[] = React.useMemo(
+    () => rowsByStore.flatMap(([, storeRows]) => storeRows),
+    [rowsByStore]
+  )
 
   const total = React.useMemo(
     () => rows.reduce((s, r) => s + (r.remainingAmount || 0), 0),
@@ -215,7 +241,9 @@ export function ExpenseBankTransferView({
           r.payeeName || "",
           accountName,
           r.payeeBankName || "",
-          (r.memo || "").replace(/\t|\n|\r/g, " "),
+          (r.memo || "").replace(/\t|\n|\r/g, " ")
+            ? `[${String(r.storeName || "").trim() || "—"}] ${(r.memo || "").replace(/\t|\n|\r/g, " ")}`
+            : `[${String(r.storeName || "").trim() || "—"}]`,
           fmtAmount(r.remainingAmount || 0),
         ].join("\t")
       })
@@ -246,7 +274,9 @@ export function ExpenseBankTransferView({
           r.payeeName || "",
           acctLine,
           r.payeeBankName || "",
-          r.memo || "",
+          r.memo
+            ? `[${String(r.storeName || "").trim() || "—"}] ${r.memo}`
+            : `[${String(r.storeName || "").trim() || "—"}]`,
           fmtAmount(r.remainingAmount || 0),
         ]
           .map(esc)
@@ -442,14 +472,23 @@ th{background:#e8f0fe;text-align:center}
             {rows.map((r, i) => {
               const missingBank = !String(r.payeeBankAccountNo || "").trim()
               const isEditing = editingId === r.id && !r._isAggregate
+              const storeLabel = String(r.storeName || "").trim() || "—"
+              const prevStore =
+                i > 0 ? String(rows[i - 1]?.storeName || "").trim() || "—" : null
+              const showStoreHeader = prevStore !== storeLabel
               return (
-                <div
-                  key={`${r.id}-${i}`}
-                  className={cn(
-                    "space-y-2 rounded-lg border border-border/60 px-3 py-3",
-                    missingBank && "border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20"
-                  )}
-                >
+                <React.Fragment key={`${r.id}-${i}`}>
+                  {showStoreHeader ? (
+                    <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm font-medium">
+                      {tt("store", "Store")}: {storeLabel}
+                    </div>
+                  ) : null}
+                  <div
+                    className={cn(
+                      "space-y-2 rounded-lg border border-border/60 px-3 py-3",
+                      missingBank && "border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20"
+                    )}
+                  >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-xs tabular-nums text-muted-foreground">No. {i + 1}</p>
@@ -525,6 +564,7 @@ th{background:#e8f0fe;text-align:center}
                     </>
                   )}
                 </div>
+                </React.Fragment>
               )
             })}
             <div className="rounded-md bg-yellow-100/90 px-3 py-2 text-right text-sm font-semibold dark:bg-yellow-900/40">
@@ -540,11 +580,18 @@ th{background:#e8f0fe;text-align:center}
               <h2 className="text-center text-sm font-semibold">
                 {companyName || tt("expenseBankTransferCompanyFallback", "Company")}
               </h2>
+              <p className="mt-0.5 text-center text-[11px] text-muted-foreground">
+                {tt(
+                  "expenseBankTransferPrintCompanyHint",
+                  "Company name for print — rows below are grouped by store"
+                )}
+              </p>
               <p className="mt-0.5 text-right text-xs text-muted-foreground">
                 {tt("date", "Date")} {asOfDate.replace(/-/g, ".")}
                 {aggregateMode
                   ? ` · ${tt("expenseBankAggregateOn", "Aggregated")}`
                   : ""}
+                {` · ${rowsByStore.length} ${tt("store", "Store")}`}
               </p>
             </div>
             <table className="w-full min-w-[720px] text-sm">
@@ -564,21 +611,44 @@ th{background:#e8f0fe;text-align:center}
               <tbody>
                 {rows.map((r, i) => {
                   const prev = i > 0 ? rows[i - 1] : null
+                  const storeLabel = String(r.storeName || "").trim() || "—"
+                  const prevStore = prev
+                    ? String(prev.storeName || "").trim() || "—"
+                    : null
+                  const showStoreHeader = prevStore !== storeLabel
                   const samePayee =
                     prev &&
+                    !showStoreHeader &&
                     String(prev.payeeName || "").trim().toLowerCase() ===
                       String(r.payeeName || "").trim().toLowerCase()
                   const missingBank = !String(r.payeeBankAccountNo || "").trim()
                   const isEditing = editingId === r.id && !r._isAggregate
                   return (
-                    <tr
-                      key={`${r.id}-${i}`}
-                      className={cn(
-                        "border-b",
-                        samePayee && "bg-orange-50/70 dark:bg-orange-950/20",
-                        missingBank && "bg-amber-50/40 dark:bg-amber-950/20"
-                      )}
-                    >
+                    <React.Fragment key={`${r.id}-${i}`}>
+                      {showStoreHeader ? (
+                        <tr className="border-b bg-muted/50">
+                          <td colSpan={7} className="px-3 py-2 text-sm font-semibold">
+                            {tt("store", "Store")}: {storeLabel}
+                            <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+                              {rowsByStore.find(([s]) => s === storeLabel)?.[1].length || 0}
+                              {tt("receivPayCount", "items")} · ฿
+                              {fmtAmount(
+                                (rowsByStore.find(([s]) => s === storeLabel)?.[1] || []).reduce(
+                                  (s, x) => s + (x.remainingAmount || 0),
+                                  0
+                                )
+                              )}
+                            </span>
+                          </td>
+                        </tr>
+                      ) : null}
+                      <tr
+                        className={cn(
+                          "border-b",
+                          samePayee && "bg-orange-50/70 dark:bg-orange-950/20",
+                          missingBank && "bg-amber-50/40 dark:bg-amber-950/20"
+                        )}
+                      >
                       <td className="px-2 py-2 text-center tabular-nums">{i + 1}</td>
                       <td className="px-2 py-2 align-top font-medium leading-snug">
                         {r.payeeName || "—"}
@@ -665,6 +735,7 @@ th{background:#e8f0fe;text-align:center}
                         )}
                       </td>
                     </tr>
+                    </React.Fragment>
                   )
                 })}
                 <tr className="border-t-2 bg-yellow-100/90 dark:bg-yellow-900/40">

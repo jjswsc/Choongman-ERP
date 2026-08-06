@@ -607,8 +607,9 @@ export function ExpenseManagementTab() {
     (kind: "__all__" | "general" | "logistics", segment: "approve" | "pay" | "all") => {
       setPlanKindFilter(kind)
       setPlanSegment(segment)
-      if (segment === "pay") setPayListMode("transfer")
-      else setPayListMode("list")
+      setPlanStoreFilter("__all__")
+      // 잔액·승인 KPI는 매장별 업무 목록으로 (이체 보기는 토글로 전환)
+      setPayListMode("list")
     },
     []
   )
