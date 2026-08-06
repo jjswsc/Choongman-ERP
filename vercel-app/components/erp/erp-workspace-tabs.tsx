@@ -32,7 +32,7 @@ function ChromeTabCurve({ side }: { side: "left" | "right" }) {
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute bottom-0 h-2.5 w-2.5 text-card",
+        "pointer-events-none absolute bottom-0 h-2.5 w-2.5 text-background",
         side === "left" ? "-left-2.5" : "-right-2.5"
       )}
     >
@@ -150,7 +150,7 @@ export function ErpWorkspaceTabs() {
                 setDragOverHref(null)
               }}
               className={cn(
-                "group relative flex h-9 max-w-[10.5rem] shrink-0 items-stretch sm:max-w-[14rem] sm:h-[2.125rem]",
+                "group relative flex h-8 max-w-[10.5rem] shrink-0 items-stretch sm:max-w-[13rem]",
                 index > 0 && "-ml-1",
                 active ? "z-20" : "z-10 hover:z-[15]",
                 !isDash && "cursor-grab active:cursor-grabbing",
@@ -171,7 +171,7 @@ export function ErpWorkspaceTabs() {
                 className={cn(
                   "relative flex min-w-0 flex-1 items-center rounded-t-[10px] border border-b-0 px-0.5 transition-[background-color,box-shadow,color,transform] duration-150",
                   active
-                    ? "border-border/70 bg-card text-foreground shadow-[0_-1px_0_0_hsl(var(--card))]"
+                    ? "border-border/70 bg-background text-foreground shadow-[0_1px_0_0_hsl(var(--background))]"
                     : "border-transparent bg-transparent text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]",
                   remountOnLeave && !active && "opacity-90",
                   isDropTarget && "ring-2 ring-primary/40 ring-inset"
@@ -190,7 +190,7 @@ export function ErpWorkspaceTabs() {
                   aria-selected={active}
                   title={titleParts.join(" — ")}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-1.5 truncate py-1.5 pl-2.5 text-left text-[12px] font-medium leading-none sm:text-[13px]",
+                    "flex min-w-0 flex-1 items-center gap-1.5 truncate py-1 pl-2 text-left text-[12px] font-medium leading-none sm:text-[13px]",
                     isDash ? "pr-2.5" : "pr-0.5"
                   )}
                   onClick={() => {
