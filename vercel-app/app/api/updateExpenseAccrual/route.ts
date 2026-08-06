@@ -19,6 +19,7 @@ import {
   invoiceReceivedFromDocumentType,
   parseExpenseDocumentTypeInput,
 } from '@/lib/expense-document-type'
+import { syncVendorBankFromExpense } from '@/lib/expense-vendor-bank-sync'
 
 type ExpenseAccrualRow = {
   id?: number
@@ -317,6 +318,8 @@ export async function POST(request: NextRequest) {
       Object.prototype.hasOwnProperty.call(body, 'payee_bank_name') ||
       Object.prototype.hasOwnProperty.call(body, 'payeeBankAccountNo') ||
       Object.prototype.hasOwnProperty.call(body, 'payee_bank_account_no')
+    let syncedBankName = ''
+    let syncedBankAcct = ''
     if (hasPayeeBankField) {
       const holder = String(
         (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payeeAccountHolder ??
@@ -337,6 +340,8 @@ export async function POST(request: NextRequest) {
       accrualPatch.payee_account_holder = holder
       accrualPatch.payee_bank_name = bankName
       accrualPatch.payee_bank_account_no = bankAcct
+      syncedBankName = bankName
+      syncedBankAcct = bankAcct
     }
 
     let bankFieldsSkipped = false
@@ -451,13 +456,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let vendorSyncWarning: string | null = null
+    if (!bankFieldsSkipped && hasPayeeBankField && (syncedBankName || syncedBankAcct)) {
+      const sync = await syncVendorBankFromExpense({
+        payeeCode,
+        bankName: syncedBankName,
+        bankAccountNo: syncedBankAcct,
+      })
+      vendorSyncWarning = sync.warning
+    }
+
+    const baseMessage = bankFieldsSkipped
+      ? '수정되었습니다. 이체 계좌 컬럼이 없어 계좌는 저장되지 않았습니다. sql/expense_payee_bank_transfer_fields.sql 을 실행해 주세요.'
+      : '수정되었습니다.'
+
     return NextResponse.json(
       {
         success: true,
-        message: bankFieldsSkipped
-          ? '수정되었습니다. 이체 계좌 컬럼이 없어 계좌는 저장되지 않았습니다. sql/expense_payee_bank_transfer_fields.sql 을 실행해 주세요.'
-          : '수정되었습니다.',
+        message: vendorSyncWarning ? `${baseMessage} ${vendorSyncWarning}` : baseMessage,
         ...(bankFieldsSkipped ? { bankFieldsSkipped: true } : {}),
+        ...(vendorSyncWarning ? { vendorSyncWarning } : {}),
       },
       { headers }
     )

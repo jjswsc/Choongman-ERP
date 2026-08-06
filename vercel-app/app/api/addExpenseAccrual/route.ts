@@ -24,6 +24,10 @@ import {
   invoiceReceivedFromDocumentType,
   parseExpenseDocumentTypeInput,
 } from '@/lib/expense-document-type'
+import {
+  loadVendorBankByCode,
+  syncVendorBankFromExpense,
+} from '@/lib/expense-vendor-bank-sync'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -256,21 +260,32 @@ export async function POST(request: NextRequest) {
       const photo = String(invoicePhotoRaw || '').trim()
       accrualRow.invoice_photo_url = photo || null
     }
-    const payeeAccountHolder = String(
+    let payeeAccountHolder = String(
       (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payeeAccountHolder ??
         (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payee_account_holder ??
         ''
     ).trim()
-    const payeeBankName = String(
+    let payeeBankName = String(
       (body as { payeeBankName?: unknown; payee_bank_name?: unknown }).payeeBankName ??
         (body as { payeeBankName?: unknown; payee_bank_name?: unknown }).payee_bank_name ??
         ''
     ).trim()
-    const payeeBankAccountNo = String(
+    let payeeBankAccountNo = String(
       (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payeeBankAccountNo ??
         (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payee_bank_account_no ??
         ''
     ).trim()
+    // 폼에 계좌가 비어 있으면 거래처 마스터에서 가져와 스냅샷에 넣음
+    if (!payeeBankName || !payeeBankAccountNo || !payeeAccountHolder) {
+      const vendorBank = await loadVendorBankByCode(payeeCode)
+      if (vendorBank) {
+        if (!payeeAccountHolder) {
+          payeeAccountHolder = String(vendorBank.name || payeeName || '').trim()
+        }
+        if (!payeeBankName) payeeBankName = String(vendorBank.bank_name || '').trim()
+        if (!payeeBankAccountNo) payeeBankAccountNo = String(vendorBank.bank_account_no || '').trim()
+      }
+    }
     if (payeeAccountHolder) accrualRow.payee_account_holder = payeeAccountHolder
     if (payeeBankName) accrualRow.payee_bank_name = payeeBankName
     if (payeeBankAccountNo) accrualRow.payee_bank_account_no = payeeBankAccountNo
@@ -369,17 +384,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let vendorSyncWarning: string | null = null
+    if (!bankFieldsSkipped && (payeeBankName || payeeBankAccountNo)) {
+      const sync = await syncVendorBankFromExpense({
+        payeeCode,
+        bankName: payeeBankName,
+        bankAccountNo: payeeBankAccountNo,
+      })
+      vendorSyncWarning = sync.warning
+    }
+
+    const baseMessage = bankFieldsSkipped
+      ? '지출 발생이 등록되었습니다. 이체 계좌 컬럼이 없어 계좌는 저장되지 않았습니다. sql/expense_payee_bank_transfer_fields.sql 을 실행해 주세요.'
+      : prepaymentAccrual
+        ? '전도금 보충 청구가 지급예정에 등록되었습니다. 승인 후 통장 거래와 연동하세요.'
+        : '지출 발생이 등록되었습니다.'
+
     return NextResponse.json(
       {
         success: true,
-        message: bankFieldsSkipped
-          ? '지출 발생이 등록되었습니다. 이체 계좌 컬럼이 없어 계좌는 저장되지 않았습니다. sql/expense_payee_bank_transfer_fields.sql 을 실행해 주세요.'
-          : prepaymentAccrual
-            ? '전도금 보충 청구가 지급예정에 등록되었습니다. 승인 후 통장 거래와 연동하세요.'
-            : '지출 발생이 등록되었습니다.',
+        message: vendorSyncWarning ? `${baseMessage} ${vendorSyncWarning}` : baseMessage,
         id: expenseAccrualId,
         documentNo,
         ...(bankFieldsSkipped ? { bankFieldsSkipped: true } : {}),
+        ...(vendorSyncWarning ? { vendorSyncWarning } : {}),
       },
       { headers }
     )

@@ -1,27 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpdate, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { canMutateExpenseAccrualRecord } from '@/lib/expense-accrual-approve-policy'
+import {
+  decodeExpensePayeeMasterCode,
+  syncVendorBankFromExpense,
+} from '@/lib/expense-vendor-bank-sync'
 import { requireAuth } from '@/lib/verify-auth'
 
 type AccrualRow = {
   id?: number
   payee_code?: string | null
   payee_name?: string | null
-}
-
-function decodePayeeCode(raw: string | undefined | null): string {
-  const src = String(raw || '').trim()
-  const marker = '::wm::'
-  const idx = src.lastIndexOf(marker)
-  if (idx < 0) return src
-  return src.slice(0, idx).trim()
-}
-
-function isMasterVendorCode(code: string): boolean {
-  const c = String(code || '').trim()
-  if (!c || c.startsWith('auto_')) return false
-  if (/^card_\d+$/i.test(c)) return false
-  return true
 }
 
 /**
@@ -92,22 +81,15 @@ export async function POST(request: NextRequest) {
 
     let vendorSynced = false
     let vendorSyncWarning: string | null = null
-    const payeeCode = decodePayeeCode(row.payee_code)
-    if (syncVendor && isMasterVendorCode(payeeCode) && (bankName || bankAccountNo || accountHolder)) {
-      try {
-        const vendorPatch: Record<string, unknown> = {}
-        if (bankAccountNo) vendorPatch.bank_account_no = bankAccountNo
-        if (bankName) vendorPatch.bank_name = bankName
-        // 예금주가 거래처명과 다를 때만 name 갱신하지 않음 — 계좌 마스터만 동기화
-        if (Object.keys(vendorPatch).length > 0) {
-          await supabaseUpdateByFilter('vendors', `code=eq.${encodeURIComponent(payeeCode)}`, vendorPatch)
-          vendorSynced = true
-        }
-      } catch (vendorErr) {
-        console.warn('updateExpenseAccrualPayeeBank vendor sync:', vendorErr)
-        vendorSyncWarning =
-          '지급 예정에는 저장됐지만 거래처 마스터 계좌 반영에 실패했습니다. 거래처 관리에서 확인하세요.'
-      }
+    const payeeCode = decodeExpensePayeeMasterCode(row.payee_code)
+    if (syncVendor && (bankName || bankAccountNo)) {
+      const sync = await syncVendorBankFromExpense({
+        payeeCode,
+        bankName,
+        bankAccountNo,
+      })
+      vendorSynced = sync.synced
+      vendorSyncWarning = sync.warning
     }
 
     return NextResponse.json(

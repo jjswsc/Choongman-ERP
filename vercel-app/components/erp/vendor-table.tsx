@@ -123,6 +123,7 @@ export function VendorTable({
             <col className="w-[72px]" />
             <col className="w-[88px]" />
             <col />
+            <col className="w-[140px]" />
             <col className="w-[120px]" />
             <col className="w-[88px]" />
             <col className="w-[80px]" />
@@ -132,6 +133,9 @@ export function VendorTable({
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColCode")}</th>
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColType")}</th>
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColName")}</th>
+              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">
+                {t("expensePayeeBankName") || "Bank"}
+              </th>
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColLinkedStores")}</th>
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground text-center">{t("vendorDirectSettlement")}</th>
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground text-center">{t("vendorColAction")}</th>
@@ -140,7 +144,7 @@ export function VendorTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={6} className="p-0">
+                <td colSpan={7} className="p-0">
                   <LogisticsEmptyState
                     icon={Search}
                     title={t("vendorSearchHint")}
@@ -150,13 +154,13 @@ export function VendorTable({
               </tr>
             ) : loading ? (
               <tr>
-                <td colSpan={6} className="p-0">
+                <td colSpan={7} className="p-0">
                   <div className="py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-0">
+                <td colSpan={7} className="p-0">
                   <LogisticsEmptyState
                     icon={ListFilter}
                     title={t("vendorNoResults")}
@@ -209,6 +213,23 @@ export function VendorTable({
                         ? vendor.gps_name?.trim() || vendor.sales_outlet
                         : vendor.name}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {vendor.bank_name || vendor.bank_account_no ? (
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium" title={vendor.bank_name || ""}>
+                          {vendor.bank_name || "—"}
+                        </p>
+                        <p
+                          className="truncate text-[11px] tabular-nums text-muted-foreground"
+                          title={vendor.bank_account_no || ""}
+                        >
+                          {vendor.bank_account_no || "—"}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
