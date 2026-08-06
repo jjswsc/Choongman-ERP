@@ -79,6 +79,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   const prevCacheHref = prevCacheHrefRef.current
   const existing = cacheRef.current.get(cacheHref)
   const stampMatches = existing != null && existing.stamp === remountStamp
+  // stamp가 같으면 같은 경로 재렌더·다른 탭 복귀 모두 기존 트리 유지(검색·필터 보존)
   const reactivating = shouldReuseKeepAliveCacheEntry(
     prevCacheHref,
     cacheHref,

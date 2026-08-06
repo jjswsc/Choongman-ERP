@@ -10,7 +10,10 @@ import {
 } from "@/lib/admin-help-registry"
 import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
 import { AdminHelpHandoverPanel } from "@/components/erp/admin-help-handover-panel"
-import { AdminHelpInlineRegistrationProvider, useAdminHelpInlineTabBarCount } from "@/components/erp/admin-help-inline-registration"
+import {
+  AdminHelpInlineRegistrationProvider,
+  useAdminHelpInlineTabBarCount,
+} from "@/components/erp/admin-help-inline-registration"
 import { AdminHelpModeToggle, ERP_HELP_PARAM } from "@/components/erp/admin-help-mode-toggle"
 import { AdminPageKeepAlive } from "@/components/erp/admin-page-keep-alive"
 
@@ -27,27 +30,17 @@ function AdminContentHelpShellBody({
   pathname: string
   helpSumKey: string | null
   matchedHref: string | null
-  /** `false`이면 도움말 셸 없이 자식만 (예: `/admin`, 급여·입고 제외 경로) */
+  /** `false`이면 도움말 스트립·패널 없이 keep-alive만 */
   shellActive: boolean
 }) {
   const sp = useSearchParams()
   const inlineTabBarCount = useAdminHelpInlineTabBarCount()
 
-  if (!shellActive) {
-    return (
-      <div className="min-h-0 flex-1">
-        <React.Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
-          <AdminPageKeepAlive>{children}</AdminPageKeepAlive>
-        </React.Suspense>
-      </div>
-    )
-  }
-
   const hk = helpSumKey || ""
   const mh = matchedHref || ""
-  const isHelp = sp.get(ERP_HELP_PARAM) === "1"
+  const isHelp = shellActive && sp.get(ERP_HELP_PARAM) === "1"
   const showFallbackStrip =
-    inlineTabBarCount === 0 && shouldShowAdminHelpModeToggle(pathname)
+    shellActive && inlineTabBarCount === 0 && shouldShowAdminHelpModeToggle(pathname)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -56,18 +49,26 @@ function AdminContentHelpShellBody({
           <AdminHelpModeToggle />
         </div>
       ) : null}
+
+      {/*
+        KeepAlive는 항상 마운트 유지.
+        - 바깥 Suspense로 감싸면 라우트 전환 중 fallback이 KeepAliveごと unmount → 검색 상태 소실
+        - 도움말 모드에서도 KeepAlive를 트리에서 빼지 않음
+      */}
+      <div className={isHelp ? "hidden" : "min-h-0 flex-1"} aria-hidden={isHelp}>
+        <AdminPageKeepAlive>
+          <React.Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
+            {children}
+          </React.Suspense>
+        </AdminPageKeepAlive>
+      </div>
+
       {isHelp ? (
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-border/40 bg-muted/5 px-4 py-5 sm:px-6">
           <HelpSumHowBlocks helpSumKey={hk} detail />
           <AdminHelpHandoverPanel helpHref={mh} />
         </div>
-      ) : (
-        <div className="min-h-0 flex-1">
-          <React.Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
-            <AdminPageKeepAlive>{children}</AdminPageKeepAlive>
-          </React.Suspense>
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }
