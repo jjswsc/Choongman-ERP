@@ -1,7 +1,9 @@
 /**
  * 승인된 회계 PO(로열티·배달 GP·Grab GP) → 손익 전기 집계.
  * VAT 포함 = purchase_orders.total, VAT 제외 = subtotal (원천세는 P&L에서 차감하지 않음).
+ * 서버 전용 — 클라이언트는 accounting-po-franchise-billing-pl-shared 만 import.
  */
+import 'server-only'
 import {
   isAccountingPurchaseOrderByCartJson,
   parsePurchaseOrderCart,
@@ -10,6 +12,9 @@ import {
   resolveAccountingPoReceivableStoreName,
   type PoBillingKind,
 } from '@/lib/purchase-order-cart'
+import { PL_FRANCHISE_BILLING_SALES_KEY } from '@/lib/accounting-po-franchise-billing-pl-shared'
+
+export { PL_FRANCHISE_BILLING_SALES_KEY }
 import {
   ensureErpStoreMatchIndex,
   storeMatchesIncomeFilterWithIndex,
@@ -261,5 +266,3 @@ export async function loadFranchiseBillingForIncomeStatement(params: {
     },
   })
 }
-
-export const PL_FRANCHISE_BILLING_SALES_KEY = '__pl_franchise_billing__'

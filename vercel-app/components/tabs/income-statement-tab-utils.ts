@@ -1,5 +1,5 @@
 import type { IncomeStatementData } from "@/lib/api-client"
-import { PL_FRANCHISE_BILLING_SALES_KEY } from "@/lib/accounting-po-franchise-billing-pl"
+import { PL_FRANCHISE_BILLING_SALES_KEY } from "@/lib/accounting-po-franchise-billing-pl-shared"
 import {
   convertLineAmount,
   pickFranchiseBillingVatAmount,
