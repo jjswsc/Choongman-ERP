@@ -78,8 +78,8 @@ const DOC_TYPE_OPTIONS: {
     labelFb: "Invoice",
     descKey: "expenseDocTypeInvoiceDesc",
     descFb: "일반 청구서",
-    accent: "text-slate-600",
-    selected: "border-slate-400 bg-slate-50 ring-1 ring-slate-300/80 shadow-sm",
+    accent: "text-slate-700",
+    selected: "border-slate-400 bg-slate-50 text-slate-800 ring-1 ring-slate-300/70",
   },
   {
     value: "tax_invoice",
@@ -88,8 +88,8 @@ const DOC_TYPE_OPTIONS: {
     labelFb: "Tax Invoice",
     descKey: "expenseDocTypeTaxInvoiceDesc",
     descFb: "ใบกำกับภาษี · PP.30",
-    accent: "text-emerald-700",
-    selected: "border-emerald-500 bg-emerald-50/90 ring-1 ring-emerald-400/70 shadow-sm",
+    accent: "text-emerald-800",
+    selected: "border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-400/60",
   },
   {
     value: "receipt",
@@ -98,8 +98,8 @@ const DOC_TYPE_OPTIONS: {
     labelFb: "Receipt",
     descKey: "expenseDocTypeReceiptDesc",
     descFb: "영수증·ใบเสร็จ",
-    accent: "text-amber-700",
-    selected: "border-amber-400 bg-amber-50/90 ring-1 ring-amber-300/80 shadow-sm",
+    accent: "text-amber-800",
+    selected: "border-amber-400 bg-amber-50 text-amber-900 ring-1 ring-amber-300/70",
   },
 ]
 
@@ -259,20 +259,21 @@ export function ExpenseDocumentAttachPanel({
     <div
       className={
         className ??
-        "max-w-2xl space-y-3.5 rounded-xl border border-border/70 bg-gradient-to-b from-muted/25 to-background p-3.5 shadow-sm"
+        "rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5 space-y-2"
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label className="text-sm font-semibold tracking-tight">
+      {/* Row 1: title + prefs + count */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <Label className="text-sm font-semibold tracking-tight shrink-0">
           {tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}
         </Label>
-        <div className="flex flex-wrap items-center gap-2">
-          {ocrLoading ? (
-            <span className="text-xs text-muted-foreground">{tt("expenseDocOcrRunning", "문서 인식 중…")}</span>
-          ) : null}
+        {ocrLoading ? (
+          <span className="text-[11px] text-muted-foreground">{tt("expenseDocOcrRunning", "문서 인식 중…")}</span>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 ml-auto">
           {onOcrFields ? (
             <>
-              <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-border/60 bg-background/90 px-2 py-1 shadow-sm">
+              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-muted-foreground">
                 <Checkbox
                   checked={ocrAutoFill}
                   onCheckedChange={(c) => {
@@ -281,14 +282,15 @@ export function ExpenseDocumentAttachPanel({
                     writeExpenseDocOcrAutoFill(on)
                   }}
                   disabled={disabled}
+                  className="h-3.5 w-3.5"
                 />
-                <span className="text-xs whitespace-nowrap">{tt("expenseDocOcrAutoFill", "업로드 시 자동 입력")}</span>
+                <span className="whitespace-nowrap">{tt("expenseDocOcrAutoFill", "업로드 시 자동 입력")}</span>
               </label>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="h-8"
+                className="h-7 px-2 text-[11px]"
                 disabled={disabled || ocrLoading || files.length === 0}
                 onClick={() => {
                   const last = files[files.length - 1]
@@ -300,7 +302,7 @@ export function ExpenseDocumentAttachPanel({
               </Button>
             </>
           ) : null}
-          <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-border/60 bg-background/90 px-2 py-1 shadow-sm">
+          <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-muted-foreground">
             <Checkbox
               checked={scanSkip}
               onCheckedChange={(c) => {
@@ -309,47 +311,21 @@ export function ExpenseDocumentAttachPanel({
                 writeExpenseDocScanSkip(on)
               }}
               disabled={disabled}
+              className="h-3.5 w-3.5"
             />
-            <span className="text-xs whitespace-nowrap">{tt("expenseDocScanSkip", "스캔 보정 건너뛰기")}</span>
+            <span className="whitespace-nowrap">{tt("expenseDocScanSkip", "스캔 보정 건너뛰기")}</span>
           </label>
+          <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+            {files.length}/{maxFiles}
+          </span>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        {ocrAutoFill && onOcrFields
-          ? tt(
-              "expenseDocAttachUnifiedHint",
-              "이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며, 비어 있는 금액·일자 등만 자동 채웁니다(이미 입력한 값은 유지). 「지금 인식」은 덮어씁니다."
-            )
-          : tt(
-              "expenseDocAttachUnifiedHintManualOcr",
-              "이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부됩니다. 자동 입력이 꺼져 있으면 「지금 인식」을 누르세요."
-            )}
-      </p>
-      {ocrHint ? <p className="text-xs text-primary/90">{ocrHint}</p> : null}
 
-      {showInvoice ? (
-        <div className="space-y-2.5">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <Label className="text-xs font-medium text-foreground/80">
-                {tt("expenseDocTypeLabel", "문서 유형")}
-              </Label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {tt(
-                  "expenseDocTypeHint",
-                  "Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다."
-                )}
-              </p>
-            </div>
-            {resolvedType === "tax_invoice" ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-                <ShieldCheck className="h-3 w-3" />
-                PP.30
-              </span>
-            ) : null}
-          </div>
+      {/* Row 2: doc type pills + invoice no + upload (horizontal) */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        {showInvoice ? (
           <div
-            className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+            className="inline-flex flex-wrap items-center gap-1"
             role="radiogroup"
             aria-label={tt("expenseDocTypeLabel", "문서 유형")}
           >
@@ -362,108 +338,117 @@ export function ExpenseDocumentAttachPanel({
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  title={tt(opt.descKey, opt.descFb)}
                   disabled={disabled}
                   onClick={() => setDocumentType(selected ? "" : opt.value)}
                   className={cn(
-                    "group relative flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-all",
-                    "hover:border-foreground/25 hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed",
-                    selected ? opt.selected : "border-border/70 bg-background/70"
+                    "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                    "hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed",
+                    selected ? opt.selected : "border-border/70 bg-background/80 text-muted-foreground"
                   )}
                 >
-                  <span className={cn("flex items-center gap-1.5 text-sm font-semibold", selected ? opt.accent : "text-foreground")}>
-                    <Icon className="h-4 w-4 shrink-0 opacity-90" />
-                    {tt(opt.labelKey, opt.labelFb)}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground leading-snug">
-                    {tt(opt.descKey, opt.descFb)}
-                  </span>
+                  <Icon className={cn("h-3.5 w-3.5 shrink-0", selected ? opt.accent : "opacity-70")} />
+                  {tt(opt.labelKey, opt.labelFb)}
+                  {opt.value === "tax_invoice" && selected ? (
+                    <span className="rounded bg-emerald-200/80 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-900">
+                      PP.30
+                    </span>
+                  ) : null}
                 </button>
               )
             })}
           </div>
+        ) : null}
 
-          {showDocNo ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/60 px-2.5 py-2">
-              <Label className="text-xs shrink-0 text-muted-foreground">
-                {tt("wm_invoiceNoLabel", "Invoice Number")}
-              </Label>
-              <Input
-                value={invoiceNo}
-                onChange={(e) => onInvoiceNoChange(e.target.value)}
-                placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
-                className="w-[160px] h-8 text-sm"
-                disabled={disabled}
-              />
-            </div>
-          ) : null}
+        {showDocNo ? (
+          <div className="flex items-center gap-1.5">
+            <Label className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+              {tt("wm_invoiceNoLabel", "Invoice Number")}
+            </Label>
+            <Input
+              value={invoiceNo}
+              onChange={(e) => onInvoiceNoChange(e.target.value)}
+              placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
+              className="h-8 w-[140px] text-sm"
+              disabled={disabled}
+            />
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-1.5 sm:ml-auto">
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*,application/pdf"
+            capture="environment"
+            className="sr-only"
+            onChange={(e) => {
+              ingestPicked(Array.from(e.target.files || []))
+              e.target.value = ""
+            }}
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,application/pdf"
+            multiple={maxFiles > 1}
+            className="sr-only"
+            onChange={(e) => {
+              ingestPicked(Array.from(e.target.files || []))
+              e.target.value = ""
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            disabled={disabled || files.length >= maxFiles || ocrLoading || scanOpen}
+            onClick={() => cameraRef.current?.click()}
+          >
+            <Camera className="h-3.5 w-3.5 mr-1" />
+            {tt("expenseDocTakePhoto", "사진 촬영")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            disabled={disabled || files.length >= maxFiles || ocrLoading || scanOpen}
+            onClick={() => fileRef.current?.click()}
+          >
+            {tt("chooseFile", "파일 선택")}
+          </Button>
         </div>
-      ) : null}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*,application/pdf"
-          capture="environment"
-          className="sr-only"
-          onChange={(e) => {
-            ingestPicked(Array.from(e.target.files || []))
-            e.target.value = ""
-          }}
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,application/pdf"
-          multiple={maxFiles > 1}
-          className="sr-only"
-          onChange={(e) => {
-            ingestPicked(Array.from(e.target.files || []))
-            e.target.value = ""
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9"
-          disabled={disabled || files.length >= maxFiles || ocrLoading || scanOpen}
-          onClick={() => cameraRef.current?.click()}
-        >
-          <Camera className="h-4 w-4 mr-1" />
-          {tt("expenseDocTakePhoto", "사진 촬영")}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9"
-          disabled={disabled || files.length >= maxFiles || ocrLoading || scanOpen}
-          onClick={() => fileRef.current?.click()}
-        >
-          {tt("chooseFile", "파일 선택")}
-        </Button>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {files.length}/{maxFiles}
-        </span>
       </div>
 
+      {(ocrHint || (ocrAutoFill && onOcrFields)) && (
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          {ocrHint
+            ? ocrHint
+            : tt(
+                "expenseDocAttachCompactHint",
+                "이미지·PDF 최대 3개. Tax Invoice만 PP.30 반영. 빈 칸만 자동 채움."
+              )}
+        </p>
+      )}
+
       {files.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-1.5">
           {files.map((f, i) => (
             <li
               key={`${f.name}-${i}`}
-              className="flex items-center gap-2 rounded-lg border bg-background/90 px-2 py-1.5 text-xs max-w-full shadow-sm"
+              className="flex items-center gap-1.5 rounded-md border bg-background/90 px-1.5 py-1 text-[11px] max-w-full"
             >
               {thumbUrls[i] && f.type.startsWith("image/") ? (
-                <img src={thumbUrls[i]} alt="" className="h-10 w-10 rounded-md object-cover border shrink-0" />
+                <img src={thumbUrls[i]} alt="" className="h-7 w-7 rounded object-cover border shrink-0" />
               ) : null}
-              <span className="truncate max-w-[120px]">{f.name}</span>
+              <span className="truncate max-w-[100px]">{f.name}</span>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-[11px] shrink-0"
+                className="h-5 px-1.5 text-[10px] shrink-0"
                 disabled={disabled}
                 onClick={() => onFilesChange(files.filter((_, j) => j !== i))}
               >

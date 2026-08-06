@@ -3961,6 +3961,7 @@ export const i18n = {
     wm_selectCategory: '출금 유형을 선택해 주세요.',
     wm_execute: '출금 등록',
     wm_successWithAsset: '등록되었습니다. 감가상각 메뉴에서 자동 연동 확인하세요.',
+    wm_fixedAssetNameOrMemoRequired: '자산명 또는 적요를 입력해 주세요.',
     wm_title: '출금 유형',
     wm_payMode: '지급 방식',
     wm_payImmediate: '즉시 지급',
@@ -4111,6 +4112,8 @@ export const i18n = {
     expenseDocTakePhoto: '사진 촬영',
     expenseDocAttachUnifiedHint:
       '이미지·PDF 최대 3개. 사진은 스캔 보정 후 첨부되며, 비어 있는 금액·일자 등만 자동 채웁니다(이미 입력한 값은 유지). 「지금 인식」은 덮어씁니다.',
+    expenseDocAttachCompactHint:
+      '이미지·PDF 최대 3개. Tax Invoice만 PP.30 반영. 빈 칸만 자동 채움.',
     expenseDocScanTitle: '영수증 스캔 보정',
     expenseDocScanDesc:
       '영수증 가장자리를 맞춘 뒤 적용하세요. 자동 감지가 틀리면 꼭짓점을 드래그하거나 「직접 자르기」를 사용하세요.',
@@ -4355,7 +4358,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 일괄 지급 시 계좌 미비 건이 있으면 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 일괄 지급 시 계좌 미비 건이 있으면 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영되며, 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
     helpSum_admin_depreciation:
       '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
     helpHow_admin_depreciation:
@@ -11710,6 +11713,7 @@ Only matters the employee must handle personally on a working day:
     wm_selectCategory: 'Select withdrawal type.',
     wm_execute: 'Register Withdrawal',
     wm_successWithAsset: 'Registered. Check depreciation menu for auto link.',
+    wm_fixedAssetNameOrMemoRequired: 'Enter an asset name or memo.',
     wm_title: 'Withdrawal Type',
     wm_payMode: 'Payment Mode',
     wm_payImmediate: 'Pay Now',
@@ -11860,6 +11864,8 @@ Only matters the employee must handle personally on a working day:
     expenseDocTakePhoto: 'Take photo',
     expenseDocAttachUnifiedHint:
       'Up to 3 images or PDFs. Photos open scan correction first; only empty amount/date fields auto-fill (existing values kept). “Recognize now” overwrites.',
+    expenseDocAttachCompactHint:
+      'Up to 3 images/PDFs. Tax Invoice only for PP.30. Auto-fills empty fields only.',
     expenseDocScanTitle: 'Receipt scan',
     expenseDocScanDesc:
       'Align receipt edges, then apply. Drag corner handles if auto-detect is wrong, or use manual crop.',
@@ -12104,7 +12110,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ Bulk pay blocks items missing bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management.\n⑧ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑨ When attaching evidence, choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.\n⑩ Office (HQ) payroll appears as one “Payroll — store” aggregate line, not per-employee amounts. Use Payroll for individual detail.\n⑪ HQ and Accounting can delete request/rejected/approved (unpaid, unlinked) payment plans. HQ-named accruals need director-level approval rights; partial/paid/linked plans cannot be deleted.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ Bulk pay blocks items missing bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management; you can attach invoice/receipt and enter VAT like Expense/Purchase.\n⑧ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑨ When attaching evidence (Expense/Purchase/Fixed Asset), choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.\n⑩ Office (HQ) payroll appears as one “Payroll — store” aggregate line, not per-employee amounts. Use Payroll for individual detail.\n⑪ HQ and Accounting can delete request/rejected/approved (unpaid, unlinked) payment plans. HQ-named accruals need director-level approval rights; partial/paid/linked plans cannot be deleted.',
     helpSum_admin_depreciation:
       'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
     helpHow_admin_depreciation:
@@ -18908,6 +18914,7 @@ orderItemQty: 'จำนวน',
     wm_selectCategory: 'กรุณาเลือกประเภทถอน',
     wm_execute: 'ลงทะเบียนถอน',
     wm_successWithAsset: 'ลงทะเบียนแล้ว ตรวจสอบเมนูค่าเสื่อมราคาสำหรับการเชื่อมโยงอัตโนมัติ',
+    wm_fixedAssetNameOrMemoRequired: 'กรุณาใส่ชื่อสินทรัพย์หรือหมายเหตุ',
     bankRegisterPayeeManual: 'ป้อนเอง',
     inv_account_no: 'เลขบัญชี',
     wm_payMode: 'โหมดการชำระ',
@@ -19062,6 +19069,8 @@ orderItemQty: 'จำนวน',
     expenseDocTakePhoto: 'ถ่ายรูป',
     expenseDocAttachUnifiedHint:
       'รูปภาพหรือ PDF สูงสุด 3 ไฟล์ รูปจะปรับสแกนก่อนแนบ และกรอกเฉพาะช่องว่าง (จำนวนเงิน·วันที่ที่มีอยู่แล้วจะไม่ถูกทับ) กด「อ่านตอนนี้」หากต้องการทับค่า',
+    expenseDocAttachCompactHint:
+      'รูป/PDF สูงสุด 3 ไฟล์ Tax Invoice เท่านั้นที่เข้า PP.30 กรอกเฉพาะช่องว่าง',
     expenseDocScanTitle: 'ปรับสแกนใบเสร็จ',
     expenseDocScanDesc:
       'จัดขอบใบเสร็จให้ตรงแล้วกดใช้ หากตรวจจับอัตโนมัติผิด ลากมุมหรือใช้「ตัดเอง」',

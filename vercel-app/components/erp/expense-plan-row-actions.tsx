@@ -32,9 +32,9 @@ export type ExpensePlanRowActionsProps = {
   compact?: boolean
 }
 
-const ACTION_H = "h-7"
+const ACTION_H = "!h-7"
 const ACTION_BTN =
-  "inline-flex h-7 items-center justify-center rounded-md border text-[11px] font-semibold leading-none shadow-xs transition-colors"
+  "inline-flex !h-7 items-center justify-center rounded-md border text-[11px] font-semibold leading-none shadow-xs transition-colors"
 
 export function ExpensePlanRowActions({
   row: r,
@@ -74,7 +74,7 @@ export function ExpensePlanRowActions({
       {showApprove ? (
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="outline"
           className={cn(
             ACTION_BTN,
@@ -89,7 +89,7 @@ export function ExpensePlanRowActions({
       ) : canPay ? (
         <Button
           type="button"
-          size="sm"
+          size="xs"
           className={cn(
             ACTION_H,
             "min-w-[2.75rem] rounded-md px-2 text-[11px] font-semibold leading-none shadow-xs"
@@ -136,16 +136,15 @@ export function ExpensePlanRowActions({
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
-              size="icon"
+              size="icon-xs"
               variant="outline"
               className={cn(
-                ACTION_H,
-                "w-7 shrink-0 border-border bg-background p-0 text-muted-foreground shadow-xs hover:bg-muted hover:text-foreground"
+                "!h-7 !w-7 shrink-0 border-border bg-background p-0 text-muted-foreground shadow-xs hover:bg-muted hover:text-foreground"
               )}
               disabled={busy}
               title={tt("pay_actions", "Action")}
             >
-              <MoreHorizontal className="h-3.5 w-3.5" />
+              <MoreHorizontal className="!h-3.5 !w-3.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
