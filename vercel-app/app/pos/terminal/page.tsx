@@ -2213,14 +2213,14 @@ export default function PosTerminalPage() {
   const isNarrowViewport = useMediaQuery('(max-width: 920px)')
   const showSidePanel =
     activeTab !== 'tables' ||
-    Boolean(servingTable?.order) ||
+    Boolean(servingTableId) ||
     Boolean(selectedTableId) ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null
   /**
    * 태블릿(좁은 화면): 서빙/배달/포장 상세를 메인 영역으로 채움.
-   * 홀은 `!selectedTableId` 기준 — 주문 전송 직후 `pendingDineInOrderId`가 잡혀도
-   * 플로어로 튕기지 않고 서빙 패널이 전체로 유지돼야 함.
+   * 홀은 `servingTableId` 기준 — 주문 전송 직후 refetch로 `servingTable.order`가
+   * 잠깐 비어도 플로어만 노출되지 않도록 한다.
    * (메뉴 키잉 중=`selectedTableId` 있음 → 기존처럼 메뉴+하단 카트)
    */
   const shouldFullscreenOrderDetailOnNarrow =
@@ -2228,7 +2228,7 @@ export default function PosTerminalPage() {
     (
       (activeTab === 'delivery' && Boolean(selectedDeliveryOrder)) ||
       (activeTab === 'takeout' && Boolean(selectedTakeoutOrder)) ||
-      (activeTab === 'tables' && Boolean(servingTable?.order) && !selectedTableId)
+      (activeTab === 'tables' && Boolean(servingTableId) && !selectedTableId)
     )
   const isDineInAddOrderMode =
     activeTab === 'tables' &&
@@ -9552,8 +9552,9 @@ export default function PosTerminalPage() {
                   queuedWithoutServerId,
                 }
                 /**
-                 * 태블릿: 메뉴→플로어로 전환하기 전에 테이블에 주문을 먼저 붙여
-                 * `servingTable?.order` 공백 프레임(플로어만 보이는 튕김)을 막는다.
+                 * 메뉴→서빙 전환 전에 테이블에 주문을 먼저 붙여
+                 * refetch 레이스에서 order가 비는 구간을 줄인다.
+                 * (UI 가드는 `servingTableId` 기준 — order 공백이어도 플로어만 노출하지 않음)
                  */
                 if (savedOrderId != null && savedOrderId > 0) {
                   upsertOptimisticOrder({
@@ -11483,6 +11484,26 @@ export default function PosTerminalPage() {
               }}
               t={t}
             />
+          ) : servingTableId ? (
+            /** order 공백 프레임: 플로어 노출 대신 서빙 슬롯 유지 */
+            <div className="flex flex-1 min-h-0 flex-col">
+              <div className="flex shrink-0 items-center justify-end border-b border-border px-2 py-1.5">
+                <button
+                  type="button"
+                  className="rounded-md px-2 py-1 text-lg leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    setServingTableId(null)
+                    setDemoDineInOrder(null)
+                  }}
+                  aria-label={t('posDialogClose') || '닫기'}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
+                {t('loading')}
+              </div>
+            </div>
           ) : null
           const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
@@ -11553,7 +11574,7 @@ export default function PosTerminalPage() {
               }}
               t={t}
             />
-          ) : activeTab === 'tables' && servingTable?.order ? (
+          ) : activeTab === 'tables' && servingTableId ? (
             isDineInAddOrderMode ? (
               <div className="flex flex-col flex-1 min-h-0">
                 <div className="min-h-0 flex-1 overflow-hidden">

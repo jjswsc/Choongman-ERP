@@ -43,7 +43,13 @@ test.describe("ERP navigation (keep-alive + URL tabs)", () => {
     }
 
     await page.goto("/admin/vendors")
-    await page.getByRole("button", { name: /탭 닫기|Close tab/i }).click()
+    await expect(page).toHaveURL(/\/admin\/vendors/)
+    // 활성 탭(벤더)의 닫기만 — 대시보드 닫기 버튼을 잘못 누르지 않음
+    await page
+      .locator('[role="presentation"]')
+      .filter({ has: page.locator('[role="tab"][aria-selected="true"]') })
+      .getByRole("button", { name: /탭 닫기|Close tab/i })
+      .click()
     await page.waitForURL((url) => url.pathname === "/admin" || url.pathname === "/admin/", {
       timeout: 30_000,
     })

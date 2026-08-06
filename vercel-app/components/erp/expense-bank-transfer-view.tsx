@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
+import { expensePayeeVendorManageHref } from "@/lib/expense-payee-vendor-href"
 import { appAlert } from "@/lib/app-message"
 import { Check, Copy, Download, Printer, Wallet } from "lucide-react"
 
@@ -536,9 +538,20 @@ th{background:#e8f0fe;text-align:center}
                       </p>
                       <p className="text-xs">
                         {r.payeeBankName ||
-                          (missingBank
-                            ? tt("expenseBankAccountMissing", "Account missing")
-                            : "—")}
+                          (missingBank ? (
+                            <Link
+                              href={expensePayeeVendorManageHref(r.payeeCode, r.payeeName)}
+                              className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+                              title={tt(
+                                "expenseBankAccountMissingHint",
+                                "Open Vendor Management to enter the bank account"
+                              )}
+                            >
+                              {tt("expenseBankAccountMissing", "Account missing")}
+                            </Link>
+                          ) : (
+                            "—"
+                          ))}
                       </p>
                       {r.memo ? (
                         <p className="text-[11px] text-muted-foreground line-clamp-3">{r.memo}</p>
@@ -664,8 +677,17 @@ th{background:#e8f0fe;text-align:center}
                                 ({r.payeeBankAccountNo})
                               </div>
                             ) : (
-                              <div className="text-xs text-amber-700 dark:text-amber-400">
-                                {tt("expenseBankAccountMissing", "Account missing")}
+                              <div>
+                                <Link
+                                  href={expensePayeeVendorManageHref(r.payeeCode, r.payeeName)}
+                                  className="text-xs font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+                                  title={tt(
+                                    "expenseBankAccountMissingHint",
+                                    "Open Vendor Management to enter the bank account"
+                                  )}
+                                >
+                                  {tt("expenseBankAccountMissing", "Account missing")}
+                                </Link>
                               </div>
                             )}
                           </>

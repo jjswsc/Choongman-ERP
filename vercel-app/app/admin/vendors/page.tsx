@@ -2,6 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Building2 } from "lucide-react"
 import { VendorForm, type VendorFormData } from "@/components/erp/vendor-form"
 import { VendorTable, type VendorTypeFilter } from "@/components/erp/vendor-table"
@@ -34,6 +35,7 @@ const emptyForm: VendorFormData = {
 export default function VendorsPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const searchParams = useSearchParams()
   const [vendors, setVendors] = React.useState<Vendor[]>([])
   const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState<VendorFormData>(emptyForm)
@@ -43,6 +45,7 @@ export default function VendorsPage() {
   const [typeFilter, setTypeFilter] = React.useState<VendorTypeFilter>("all")
   const [profilesByStore, setProfilesByStore] = React.useState<Record<string, { storeCode: string; vendorCode?: string }>>({})
   const reloadSeqRef = React.useRef(0)
+  const deepLinkKeyRef = React.useRef<string>("")
   const { stores: storeList, storeLabels, legacyToCanonical } = useStoreList()
 
   const storeCodes = React.useMemo(
@@ -220,6 +223,36 @@ export default function VendorsPage() {
     })
     setEditingCode(vendor.code)
   }
+
+  // Deep link from Expense Management "Account missing" → open vendor edit (+ bank fields).
+  React.useEffect(() => {
+    if (loading) return
+    const code = String(searchParams.get("code") || "").trim()
+    const q = String(searchParams.get("q") || "").trim()
+    const key = `${code}|${q}`
+    if (!code && !q) return
+    if (deepLinkKeyRef.current === key) return
+
+    if (code) {
+      const v = vendors.find((x) => x.code === code)
+      if (v) {
+        deepLinkKeyRef.current = key
+        handleEdit(v)
+        setSearchTerm(code)
+        setHasSearched(true)
+        requestAnimationFrame(() => {
+          document.getElementById("vendor-bank-fields")?.scrollIntoView({ behavior: "smooth", block: "center" })
+        })
+        return
+      }
+    }
+
+    deepLinkKeyRef.current = key
+    if (q || code) {
+      setSearchTerm(q || code)
+      setHasSearched(true)
+    }
+  }, [loading, vendors, searchParams])
 
   const handleDelete = async (vendor: Vendor) => {
     const displayName = (vendor.type === "sales" || vendor.type === "both") && (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())

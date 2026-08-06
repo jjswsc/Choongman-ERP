@@ -205,7 +205,7 @@ export function VendorForm({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4" id="vendor-bank-fields">
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <Landmark className="h-3.5 w-3.5 text-muted-foreground" />

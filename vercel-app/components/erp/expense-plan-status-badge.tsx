@@ -17,25 +17,26 @@ export function ExpensePlanStatusBadge({
   }
   const s = String(status || "").toLowerCase()
 
-  // Short labels so ko/th badges share one fixed width in the Status column.
   const label =
     s === "approved"
-      ? tt("att_approved", "Approved")
+      ? tt("att_approve", "Approve")
       : s === "rejected"
-        ? tt("att_rejected", "Rejected")
+        ? tt("att_reject", "Reject")
         : s === "paid" || s === "partial"
-          ? tt("expensePlanStatusPaid", "Paid")
+          ? tt("expensePlanDoneShort", "Done")
           : tt("expensePlanStatusPlanned", "Planned")
 
   return (
     <span
       title={label}
       className={cn(
-        "inline-flex h-6 w-[5.25rem] shrink-0 items-center justify-center rounded-md border px-1 text-center text-[10px] font-semibold leading-none tracking-tight",
-        s === "approved" && "border-primary/30 bg-primary/15 text-primary",
-        s === "rejected" && "border-destructive/30 bg-destructive/10 text-destructive",
+        "inline-flex h-7 w-[3.5rem] shrink-0 items-center justify-center rounded-md border text-center text-[10px] font-semibold leading-none tracking-tight shadow-xs",
+        s === "approved" &&
+          "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-200",
+        s === "rejected" &&
+          "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200",
         (s === "paid" || s === "partial") &&
-          "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+          "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
         s !== "approved" &&
           s !== "rejected" &&
           s !== "paid" &&
@@ -43,7 +44,7 @@ export function ExpensePlanStatusBadge({
           "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
       )}
     >
-      <span className="block max-w-full truncate">{label}</span>
+      <span className="block max-w-full truncate px-0.5">{label}</span>
     </span>
   )
 }

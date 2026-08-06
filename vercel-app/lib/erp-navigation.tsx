@@ -329,17 +329,26 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
       const before = getErpWorkspaceTabs()
       const neighbor = findNeighborWorkspaceTabHref(tabHref, before)
+      const neighborFull = getErpWorkspaceTabFullHref(neighbor)
+      const neighborKey = resolveErpWorkspaceTabHref(neighbor)
       const routerCurrent = routerHrefRef.current
       const current = softDisplayHref || routerCurrent
 
       removeHrefFromStack(tabHref)
       removeErpWorkspaceTab(tabHref)
 
-      if (current === tabHref) {
-        setSoftDisplayHref(null)
-        markErpBackNavigation({ evictHref: tabHref })
-        router.push(getErpWorkspaceTabFullHref(neighbor), { scroll: false })
+      if (current !== tabHref) return
+
+      setSoftDisplayHref(null)
+
+      // 이미 neighbor와 같은 URL이면 push가 no-op → ensure가 안 돌아 탭 바가 빈다
+      if (routerCurrent === neighborKey) {
+        ensureErpWorkspaceTab(neighborFull)
+        return
       }
+
+      markErpBackNavigation({ evictHref: tabHref })
+      router.push(neighborFull, { scroll: false })
     },
     [router, softDisplayHref]
   )
@@ -350,15 +359,16 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
       const routerCurrent = routerHrefRef.current
       const current = softDisplayHref || routerCurrent
       const keep = resolveErpWorkspaceTabHref(keepHref || current)
+      const keepFull = getErpWorkspaceTabFullHref(keep)
       const removed = closeOtherErpWorkspaceTabs(keep)
       for (const h of removed) removeHrefFromStack(h)
-      if (current !== keep && keep !== "/admin") {
-        setSoftDisplayHref(null)
-        markErpBackNavigation()
-        router.push(getErpWorkspaceTabFullHref(keep), { scroll: false })
-      } else if (softDisplayHref && softDisplayHref !== keep) {
-        setSoftDisplayHref(keep === routerCurrent ? null : keep)
+      setSoftDisplayHref(null)
+      if (current === keep || routerCurrent === keep) {
+        ensureErpWorkspaceTab(keepFull)
+        return
       }
+      markErpBackNavigation()
+      router.push(keepFull, { scroll: false })
     },
     [router, softDisplayHref]
   )
