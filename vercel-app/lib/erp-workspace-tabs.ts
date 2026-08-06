@@ -6,11 +6,9 @@
 import {
   normalizeErpPathOnly,
   resolveErpKeepAliveCacheHref,
+  stripErpHelpQueryParam,
 } from "@/lib/erp-keep-alive-config"
 import { buildErpNavItemByHrefMap } from "@/lib/erp-nav-registry"
-
-/** `admin-help-mode-toggle`의 ERP_HELP_PARAM과 동일 — client 모듈 의존 방지 */
-const ERP_HELP_PARAM = "erp_help"
 
 export const ERP_WORKSPACE_TABS_KEY = "erp_workspace_tabs_v1"
 export const ERP_WORKSPACE_FULL_HREF_KEY = "erp_workspace_tab_full_href_v1"
@@ -39,22 +37,9 @@ export function subscribeErpWorkspaceTabs(listener: () => void): () => void {
   }
 }
 
-function stripErpHelpParam(href: string): string {
-  const raw = (href || "").trim()
-  if (!raw) return ""
-  const q = raw.indexOf("?")
-  if (q < 0) return raw
-  const path = raw.slice(0, q)
-  const params = new URLSearchParams(raw.slice(q + 1))
-  if (!params.has(ERP_HELP_PARAM)) return raw
-  params.delete(ERP_HELP_PARAM)
-  const qs = params.toString()
-  return qs ? `${path}?${qs}` : path
-}
-
 /** 탭·keep-alive 공통 키 (도움말 쿼리 제거 + query-agnostic pathname) */
 export function resolveErpWorkspaceTabHref(href: string): string {
-  return resolveErpKeepAliveCacheHref(stripErpHelpParam(href))
+  return resolveErpKeepAliveCacheHref(href)
 }
 
 export function isErpWorkspaceDashboardHref(href: string): boolean {
@@ -133,7 +118,7 @@ export function rememberErpWorkspaceTabFullHref(fullHref: string): void {
   const key = resolveErpWorkspaceTabHref(fullHref)
   if (!key || key.startsWith("/admin/login")) return
   const map = readFullHrefMap()
-  map[key] = stripErpHelpParam(fullHref) || key
+  map[key] = stripErpHelpQueryParam(fullHref) || key
   sessionStorage.setItem(ERP_WORKSPACE_FULL_HREF_KEY, JSON.stringify(map))
 }
 

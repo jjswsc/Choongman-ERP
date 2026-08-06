@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
-import { Check, MoreHorizontal, Pencil, Trash2, Wallet, X } from "lucide-react"
+import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react"
 
 type Tt = (key: string, fallback: string) => string
 
@@ -55,49 +55,31 @@ export function ExpensePlanRowActions({
   const showNoStoreDelete = !String(r.storeName || "").trim() && canDeleteByPolicy(r)
 
   return (
-    <div className={`flex items-center ${compact ? "justify-end gap-1" : "justify-center gap-1.5"}`}>
+    <div className={`flex items-center ${compact ? "justify-end gap-0.5" : "justify-center gap-1"}`}>
       {showApprove ? (
-        <>
-          <Button
-            size={compact ? "sm" : "sm"}
-            variant="outline"
-            className="h-8 border-primary/40 px-2 text-xs text-primary"
-            onClick={() => onApprove(r, "approve")}
-            disabled={busy}
-            title={tt("att_approve", "Approve")}
-          >
-            <Check className="mr-1 h-3.5 w-3.5" />
-            {tt("att_approve", "Approve")}
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-8 w-8 border-destructive/40 text-destructive"
-            onClick={() => onApprove(r, "reject")}
-            disabled={busy}
-            title={tt("att_reject", "Reject")}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 border-primary/40 px-2 text-[11px] font-medium text-primary"
+          onClick={() => onApprove(r, "approve")}
+          disabled={busy}
+          title={tt("att_approve", "Approve")}
+        >
+          {tt("att_approve", "Approve")}
+        </Button>
       ) : canPay ? (
         <Button
           size="sm"
-          className="h-8 px-2.5 text-xs"
+          className="h-7 px-2 text-[11px] font-medium"
           onClick={() => onPay(r)}
           disabled={busy}
         >
-          <Wallet className="mr-1 h-3.5 w-3.5" />
           {tt("payBtn", "Pay")}
         </Button>
       ) : r.status === "planned" && !canApproveByPolicy(r) ? (
-        <span className="text-[11px] text-muted-foreground">
+        <span className="max-w-[3.5rem] truncate text-[10px] text-muted-foreground">
           {tt("expensePayAwaitApprovalShort", "Pending")}
         </span>
-      ) : r.status === "approved" ? (
-        <span className="text-[11px] text-primary">{tt("att_approved", "Approved")}</span>
-      ) : r.status === "rejected" ? (
-        <span className="text-[11px] text-destructive">{tt("att_rejected", "Rejected")}</span>
       ) : null}
 
       <DropdownMenu>
@@ -105,7 +87,7 @@ export function ExpensePlanRowActions({
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-muted-foreground"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
             disabled={busy}
             title={tt("pay_actions", "Action")}
           >
@@ -113,6 +95,15 @@ export function ExpensePlanRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
+          {showApprove ? (
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => onApprove(r, "reject")}
+            >
+              <X className="mr-2 h-3.5 w-3.5" />
+              {tt("att_reject", "Reject")}
+            </DropdownMenuItem>
+          ) : null}
           {planRowEditable(r) ? (
             <DropdownMenuItem onClick={() => onEdit(r)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
@@ -127,15 +118,9 @@ export function ExpensePlanRowActions({
               {tt("btnEdit", "Edit")} ({tt("att_approval", "Approval")})
             </DropdownMenuItem>
           ) : null}
-          {canPay ? (
-            <DropdownMenuItem onClick={() => onPay(r)}>
-              <Wallet className="mr-2 h-3.5 w-3.5" />
-              {tt("payBtn", "Pay")}
-            </DropdownMenuItem>
-          ) : null}
           {(canDeleteByPolicy(r) || showNoStoreDelete) && (
             <>
-              <DropdownMenuSeparator />
+              {(showApprove || planRowEditable(r)) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() => onDelete(r)}

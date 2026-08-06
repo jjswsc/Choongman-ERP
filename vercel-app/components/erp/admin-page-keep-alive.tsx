@@ -171,18 +171,42 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
     erpNav.clearSoftDisplayHref()
   }, [erpNav, hasDisplaySlot, entries.length, displayHref])
 
-  if (!keepAliveCurrent && !erpNav?.softDisplayHref) {
+  const hiddenSlotClass =
+    "pointer-events-none invisible absolute inset-0 -z-10 overflow-hidden opacity-0"
+  const activeSlotClass = "flex min-h-0 flex-1 flex-col"
+
+  /**
+   * 제외 경로(급여·재고 등)는 캐시에 넣지 않지만,
+   * 이미 열어 둔 keep-alive 탭 트리는 unmount하면 안 된다(상태 증발).
+   */
+  if (!keepAliveCurrent) {
     return (
-      <ErpPageVisibilityProvider active={true}>
-        <div className="min-h-0 flex-1 flex flex-col">{children}</div>
-      </ErpPageVisibilityProvider>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {entries.map(([key, { node }]) => (
+          <ErpPageVisibilityProvider key={key} active={false}>
+            <div
+              className={hiddenSlotClass}
+              hidden
+              aria-hidden
+              data-erp-keep-alive={key}
+            >
+              {node}
+            </div>
+          </ErpPageVisibilityProvider>
+        ))}
+        <ErpPageVisibilityProvider active={true}>
+          <div className={activeSlotClass} data-erp-keep-alive-live={cacheHref}>
+            {children}
+          </div>
+        </ErpPageVisibilityProvider>
+      </div>
     )
   }
 
   if (entries.length === 0) {
     return (
       <ErpPageVisibilityProvider active={true}>
-        <div className="min-h-0 flex-1 flex flex-col">{children}</div>
+        <div className={activeSlotClass}>{children}</div>
       </ErpPageVisibilityProvider>
     )
   }
@@ -194,11 +218,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
         return (
           <ErpPageVisibilityProvider key={key} active={active}>
             <div
-              className={
-                active
-                  ? "flex min-h-0 flex-1 flex-col"
-                  : "pointer-events-none invisible absolute inset-0 -z-10 overflow-hidden opacity-0"
-              }
+              className={active ? activeSlotClass : hiddenSlotClass}
               hidden={!active}
               aria-hidden={!active}
               data-erp-keep-alive={key}

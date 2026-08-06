@@ -89,7 +89,7 @@ export function ExpensePlanDesktopList({
               </span>
             </div>
             <AdminTableScroll className="rounded-none border-0" hint={false}>
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="w-full min-w-[920px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="w-[110px] px-2 py-2 text-center">{tt("expenseDocumentNo", "Doc No.")}</th>
@@ -97,11 +97,11 @@ export function ExpensePlanDesktopList({
                     <th className="min-w-[140px] px-2 py-2 text-left">{tt("vendor", "Vendor")}</th>
                     <th className="w-[120px] px-2 py-2 text-left">{tt("expensePayeeBankName", "Bank")}</th>
                     <th className="w-[92px] px-2 py-2 text-center">{tt("date", "Date")}</th>
-                    <th className="w-[72px] px-1 py-2 text-center">{tt("expensePlanStatusCol", "Status")}</th>
+                    <th className="w-[96px] px-1 py-2 text-center">{tt("expensePlanStatusCol", "Status")}</th>
                     <th className="w-[100px] px-2 py-2 text-right">{tt("expensePlanPayAmount", "Pay Amount")}</th>
                     <th className="w-10 px-1 py-2 text-center">{tt("expenseAccrualAttachCol", "Attachment")}</th>
                     <th className="w-12 px-1 py-2 text-center">{tt("poInvoice", "Invoice")}</th>
-                    <th className="sticky right-0 z-[2] w-[148px] bg-muted/95 px-2 py-2 text-center shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
+                    <th className="sticky right-0 z-[2] w-[96px] bg-muted/95 px-1 py-2 text-center shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
                       {tt("pay_actions", "Action")}
                     </th>
                   </tr>
@@ -181,7 +181,7 @@ export function ExpensePlanDesktopList({
                             onCheckedChange={(v) => onInvoiceToggle(r, v === true)}
                           />
                         </td>
-                        <td className="sticky right-0 z-[1] border-l border-border/60 bg-card px-2 py-2 align-middle">
+                        <td className="sticky right-0 z-[1] border-l border-border/60 bg-card px-1 py-2 align-middle">
                           <ExpensePlanRowActions
                             row={r}
                             tt={tt}

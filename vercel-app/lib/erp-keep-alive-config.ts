@@ -65,8 +65,23 @@ export function isErpKeepAliveQueryAgnostic(href: string): boolean {
   )
 }
 
-/** keep-alive Map 키 — 쿼리 무시 대상은 pathname만 사용 */
+/** keep-alive / 탭 공통 — 도움말 모드 쿼리는 캐시·탭 키에서 제외 */
+export function stripErpHelpQueryParam(href: string): string {
+  const raw = (href || "").trim()
+  if (!raw) return ""
+  const q = raw.indexOf("?")
+  if (q < 0) return raw
+  const path = raw.slice(0, q)
+  const params = new URLSearchParams(raw.slice(q + 1))
+  if (!params.has("erp_help")) return raw
+  params.delete("erp_help")
+  const qs = params.toString()
+  return qs ? `${path}?${qs}` : path
+}
+
+/** keep-alive Map 키 — 도움말 쿼리 제거 + 쿼리 무시 대상은 pathname만 */
 export function resolveErpKeepAliveCacheHref(href: string): string {
-  if (isErpKeepAliveQueryAgnostic(href)) return normalizeErpPathOnly(href)
-  return href
+  const cleaned = stripErpHelpQueryParam(href)
+  if (isErpKeepAliveQueryAgnostic(cleaned)) return normalizeErpPathOnly(cleaned)
+  return cleaned
 }

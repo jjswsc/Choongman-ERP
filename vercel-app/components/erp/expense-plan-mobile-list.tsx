@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ExpensePlanStatusBadge } from "@/components/erp/expense-plan-status-badge"
 import { AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
-import { Check, Pencil, Trash2, Wallet, X } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
 type Tt = (key: string, fallback: string) => string
 
@@ -180,11 +180,10 @@ export function ExpensePlanMobileList({
                       {canPay ? (
                         <Button
                           size="sm"
-                          className="h-9 flex-1 gap-1.5 text-xs sm:flex-none"
+                          className="h-9 flex-1 text-xs sm:flex-none"
                           onClick={() => onPay(r)}
                           disabled={payingId === r.id}
                         >
-                          <Wallet className="h-3.5 w-3.5" />
                           {tt("payBtn", "Pay")}
                         </Button>
                       ) : null}
@@ -210,7 +209,6 @@ export function ExpensePlanMobileList({
                             onClick={() => onApprove(r, "approve")}
                             disabled={payingId === r.id}
                           >
-                            <Check className="mr-1 h-3.5 w-3.5" />
                             {tt("att_approve", "Approve")}
                           </Button>
                           <Button
@@ -220,7 +218,6 @@ export function ExpensePlanMobileList({
                             onClick={() => onApprove(r, "reject")}
                             disabled={payingId === r.id}
                           >
-                            <X className="mr-1 h-3.5 w-3.5" />
                             {tt("att_reject", "Reject")}
                           </Button>
                           {canDeleteByPolicy(r) ? (

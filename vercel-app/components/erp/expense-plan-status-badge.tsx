@@ -1,6 +1,6 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -16,22 +16,34 @@ export function ExpensePlanStatusBadge({
     return !v || v === key ? fallback : v
   }
   const s = String(status || "").toLowerCase()
-  if (s === "approved") {
-    return <Badge className="bg-primary/15 text-primary border-primary/30">{tt("att_approved", "Approved")}</Badge>
-  }
-  if (s === "rejected") {
-    return <Badge variant="destructive">{tt("att_rejected", "Rejected")}</Badge>
-  }
-  if (s === "paid" || s === "partial") {
-    return (
-      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
-        {tt("expensePlanStatusPaid", "Paid")}
-      </Badge>
-    )
-  }
+
+  // Short labels so ko/th badges share one fixed width in the Status column.
+  const label =
+    s === "approved"
+      ? tt("att_approved", "Approved")
+      : s === "rejected"
+        ? tt("att_rejected", "Rejected")
+        : s === "paid" || s === "partial"
+          ? tt("expensePlanStatusPaid", "Paid")
+          : tt("expensePlanStatusPlanned", "Planned")
+
   return (
-    <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-      {tt("expensePlanStatusPlanned", "Planned")}
-    </Badge>
+    <span
+      title={label}
+      className={cn(
+        "inline-flex h-6 w-[5.25rem] shrink-0 items-center justify-center rounded-md border px-1 text-center text-[10px] font-semibold leading-none tracking-tight",
+        s === "approved" && "border-primary/30 bg-primary/15 text-primary",
+        s === "rejected" && "border-destructive/30 bg-destructive/10 text-destructive",
+        (s === "paid" || s === "partial") &&
+          "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+        s !== "approved" &&
+          s !== "rejected" &&
+          s !== "paid" &&
+          s !== "partial" &&
+          "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+      )}
+    >
+      <span className="block max-w-full truncate">{label}</span>
+    </span>
   )
 }
