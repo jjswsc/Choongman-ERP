@@ -965,7 +965,7 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
     const idList = allIds.join(',')
     const filter =
       `expense_date=gte.${params.startStr}&expense_date=lte.${params.endStr}` +
-      `&account_subject_id=in.(${idList})&status=neq.rejected`
+      `&account_subject_id=in.(${idList})&status=in.(approved,partial,paid)`
     const rows = (await supabaseSelectFilterAllPages('expense_accruals', filter, {
       select: 'id,amount,vat_amount,store_name,account_subject_id,payee_code,memo,status,expense_date',
       order: 'id.asc',
@@ -1000,7 +1000,8 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
 
     for (const r of rows || []) {
       const status = String(r.status || '').toLowerCase()
-      if (status === 'rejected') continue
+      // 승인·일부지급·지급완료만 손익 비용. planned(요청)는 제외.
+      if (status !== 'approved' && status !== 'partial' && status !== 'paid') continue
       const storeName = String(r.store_name || '').trim()
       if (params.isHQ) {
         if (!isHqAccountingStoreRow(storeName)) continue

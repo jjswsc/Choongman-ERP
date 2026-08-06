@@ -58,11 +58,11 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // 빈 문자열도 명시 저장 — 비운 뒤 거래처 마스터 계좌로 다시 채워지지 않게 함
+      // 빈 값은 null → 조회 시 거래처 마스터 계좌 fallback
       await supabaseUpdate('expense_accruals', expenseAccrualId, {
-        payee_account_holder: accountHolder,
-        payee_bank_name: bankName,
-        payee_bank_account_no: bankAccountNo,
+        payee_account_holder: accountHolder || null,
+        payee_bank_name: bankName || null,
+        payee_bank_account_no: bankAccountNo || null,
       })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)

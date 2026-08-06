@@ -475,6 +475,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (resolvedInvoiceReceived && bankTransactionId) {
+      try {
+        const { syncInvoiceBackedBankInputVatLedgerForBankId } = await import(
+          '@/lib/invoice-backed-input-vat-ledger'
+        )
+        await syncInvoiceBackedBankInputVatLedgerForBankId(bankTransactionId)
+      } catch (vatErr) {
+        console.error('executeWithdrawal input vat ledger:', vatErr)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: '등록되었습니다.',

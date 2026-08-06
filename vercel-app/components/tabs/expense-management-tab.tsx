@@ -562,15 +562,19 @@ export function ExpenseManagementTab() {
     [allFilteredPlans]
   )
 
-  /** 조회 기간(API) + 화면 매장·구분 필터 기준 합계 */
-  const filteredPlanTotals = React.useMemo(
-    () => ({
+  /** 조회 기간(API) + 화면 매장·구분 필터 기준 합계 — 잔액 KPI는 지급대기(approved·잔액>0)와 동일 */
+  const filteredPlanTotals = React.useMemo(() => {
+    const payableRemaining = (rows: ExpenseAccrualPlanItem[]) =>
+      rows.reduce((s, r) => {
+        if (r.status !== "approved" || (r.remainingAmount || 0) <= 0) return s
+        return s + (r.remainingAmount || 0)
+      }, 0)
+    return {
       expensePlanned: filteredExpensePlans.reduce((s, r) => s + (r.plannedAmount || 0), 0),
-      expenseRemaining: filteredExpensePlans.reduce((s, r) => s + (r.remainingAmount || 0), 0),
-      logisticsRemaining: filteredPurchasePlans.reduce((s, r) => s + (r.remainingAmount || 0), 0),
-    }),
-    [filteredExpensePlans, filteredPurchasePlans]
-  )
+      expenseRemaining: payableRemaining(filteredExpensePlans),
+      logisticsRemaining: payableRemaining(filteredPurchasePlans),
+    }
+  }, [filteredExpensePlans, filteredPurchasePlans])
 
   const canApproveByPolicy = React.useCallback(
     (row: ExpenseAccrualPlanItem) => canApproveExpenseAccrual(auth?.role, row.storeName),
@@ -1130,9 +1134,9 @@ export function ExpenseManagementTab() {
                 type="button"
                 className={cn(
                   "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  planSegment === "all" && planKindFilter === "__all__" && "ring-2 ring-primary"
+                  planSegment === "pay" && planKindFilter === "__all__" && "ring-2 ring-primary"
                 )}
-                onClick={() => applyPlanKpi("__all__", "all")}
+                onClick={() => applyPlanKpi("__all__", "pay")}
               >
                 <MetricCard
                   size="sm"

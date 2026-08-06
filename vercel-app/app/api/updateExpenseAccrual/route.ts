@@ -336,10 +336,10 @@ export async function POST(request: NextRequest) {
           (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payee_bank_account_no ??
           ''
       ).trim()
-      // 빈 문자열도 저장 — null 과 구분하여 거래처 마스터 fallback 을 막음
-      accrualPatch.payee_account_holder = holder
-      accrualPatch.payee_bank_name = bankName
-      accrualPatch.payee_bank_account_no = bankAcct
+      // 빈 값은 null 로 저장 → 조회 시 거래처 마스터 fallback 허용
+      accrualPatch.payee_account_holder = holder || null
+      accrualPatch.payee_bank_name = bankName || null
+      accrualPatch.payee_bank_account_no = bankAcct || null
       syncedBankName = bankName
       syncedBankAcct = bankAcct
     }

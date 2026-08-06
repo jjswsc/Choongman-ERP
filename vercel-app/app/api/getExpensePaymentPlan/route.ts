@@ -200,16 +200,16 @@ function resolvePayeeBankFields(
   const payeeName = String(r.payee_name || vendor?.name || payeeCode || '').trim()
   const vendorBank = String(vendor?.bank_name || '').trim()
   const vendorAcct = String(vendor?.bank_account_no || '').trim()
-  // 필드별: 해당 컬럼이 null 이 아니면(빈 문자열 포함) 스냅샷 우선, null 이면 거래처 마스터 fallback
-  const snapHolder =
-    r.payee_account_holder != null ? String(r.payee_account_holder || '').trim() : null
-  const snapBank = r.payee_bank_name != null ? String(r.payee_bank_name || '').trim() : null
-  const snapAcct =
-    r.payee_bank_account_no != null ? String(r.payee_bank_account_no || '').trim() : null
+  // 스냅샷이 null/빈 문자열이면 거래처 마스터 fallback (빈 문자열로 fallback을 막지 않음)
+  const snapHolderRaw =
+    r.payee_account_holder != null ? String(r.payee_account_holder).trim() : ''
+  const snapBankRaw = r.payee_bank_name != null ? String(r.payee_bank_name).trim() : ''
+  const snapAcctRaw =
+    r.payee_bank_account_no != null ? String(r.payee_bank_account_no).trim() : ''
   return {
-    payeeAccountHolder: (snapHolder != null ? snapHolder : '') || payeeName || null,
-    payeeBankName: (snapBank != null ? snapBank : vendorBank) || null,
-    payeeBankAccountNo: (snapAcct != null ? snapAcct : vendorAcct) || null,
+    payeeAccountHolder: snapHolderRaw || payeeName || null,
+    payeeBankName: snapBankRaw || vendorBank || null,
+    payeeBankAccountNo: snapAcctRaw || vendorAcct || null,
   }
 }
 

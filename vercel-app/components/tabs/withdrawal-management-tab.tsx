@@ -1025,9 +1025,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           categoryMain,
           categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           userRole: auth?.role,
-          payeeAccountHolder: payeeAccountHolder.trim(),
-          payeeBankName: payeeBankName.trim(),
-          payeeBankAccountNo: payeeBankAccountNo.trim(),
+          ...(payeeAccountHolder.trim()
+            ? { payeeAccountHolder: payeeAccountHolder.trim() }
+            : {}),
+          ...(payeeBankName.trim() ? { payeeBankName: payeeBankName.trim() } : {}),
+          ...(payeeBankAccountNo.trim()
+            ? { payeeBankAccountNo: payeeBankAccountNo.trim() }
+            : {}),
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
           ...(categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset"
             ? {
