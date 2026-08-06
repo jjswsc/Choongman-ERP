@@ -1212,7 +1212,7 @@ export function ExpenseManagementTab() {
             </Button>
           </AdminFilterBar>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
             {(
               [
                 { id: "approve" as const, label: tt("expensePlanSegApprove", "To Approve"), count: planSegmentCounts.approve },
@@ -1224,42 +1224,19 @@ export function ExpenseManagementTab() {
                 key={seg.id}
                 size="sm"
                 variant={planSegment === seg.id ? "default" : "outline"}
-                className="h-9"
+                className="h-9 shrink-0"
                 onClick={() => setPlanSegment(seg.id)}
               >
                 {seg.label}
                 <span className="ml-1.5 tabular-nums text-xs opacity-80">({seg.count})</span>
               </Button>
             ))}
-            {planSegment === "pay" ? (
-              <div className="ml-auto flex flex-wrap items-center gap-1 rounded-md border border-border/60 p-0.5">
-                <Button
-                  size="sm"
-                  variant={payListMode === "transfer" ? "secondary" : "ghost"}
-                  className="h-8"
-                  onClick={() => setPayListMode("transfer")}
-                >
-                  {tt("expensePayModeTransfer", "Bank Transfer")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={payListMode === "list" ? "secondary" : "ghost"}
-                  className="h-8"
-                  onClick={() => setPayListMode("list")}
-                >
-                  {tt("expensePayModeList", "List")}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
             {planSegment === "approve" ? (
               <>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                  className="h-9 shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                   onClick={handleApproveAllForDay}
                   disabled={approvingAll || approvablePlansForDay.length === 0}
                   title={`${startStr}${endStr && endStr !== startStr ? ` ~ ${endStr}` : ""}`}
@@ -1271,7 +1248,7 @@ export function ExpenseManagementTab() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                  className="h-9 shrink-0 border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
                   onClick={handleRejectAllForDay}
                   disabled={rejectingAll || approvablePlansForDay.length === 0}
                   title={`${startStr}${endStr && endStr !== startStr ? ` ~ ${endStr}` : ""}`}
@@ -1283,27 +1260,47 @@ export function ExpenseManagementTab() {
               </>
             ) : null}
             {planSegment === "pay" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 border-emerald-600/30 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/15"
-                onClick={openPayAllDialog}
-                disabled={payingAll || payablePlansForDay.length === 0}
-                title={tt(
-                  "expensePayAllDayHint",
-                  "Choose bank account and payment date, then pay all approved items in the current filter"
-                )}
-              >
-                {payingAll
-                  ? tt("loading", "...")
-                  : `${tt("expensePayAllDay", "Pay all for day")} (${payablePlansForDay.length})`}
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0 border-emerald-600/30 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/15"
+                  onClick={openPayAllDialog}
+                  disabled={payingAll || payablePlansForDay.length === 0}
+                  title={tt(
+                    "expensePayAllDayHint",
+                    "Choose bank account and payment date, then pay all approved items in the current filter"
+                  )}
+                >
+                  {payingAll
+                    ? tt("loading", "...")
+                    : `${tt("expensePayAllDay", "Pay all for day")} (${payablePlansForDay.length})`}
+                </Button>
+                <div className="ml-auto flex shrink-0 items-center gap-1 rounded-md border border-border/60 p-0.5">
+                  <Button
+                    size="sm"
+                    variant={payListMode === "transfer" ? "secondary" : "ghost"}
+                    className="h-8"
+                    onClick={() => setPayListMode("transfer")}
+                  >
+                    {tt("expensePayModeTransfer", "Bank Transfer")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={payListMode === "list" ? "secondary" : "ghost"}
+                    className="h-8"
+                    onClick={() => setPayListMode("list")}
+                  >
+                    {tt("expensePayModeList", "List")}
+                  </Button>
+                </div>
+              </>
             ) : null}
             {planSegment === "all" ? (
               <Button
                 size="sm"
                 variant="outline"
-                className="h-9 border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15"
+                className="h-9 shrink-0 border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15"
                 onClick={handleCleanNoStore}
                 disabled={cleaningNoStore}
                 title={tt("expenseCleanNoStoreHint", "Force delete payment plans with no store selected")}
