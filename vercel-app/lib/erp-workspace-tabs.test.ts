@@ -32,17 +32,16 @@ describe("erp-workspace-tabs", () => {
     expect(resolveErpKeepAliveCacheHref("/admin/leave?tab=stats")).toBe("/admin/leave")
   })
 
-  it("keeps dashboard first and accumulates menus", () => {
-    ensureErpWorkspaceTab("/admin")
+  it("accumulates menus without forcing dashboard", () => {
     ensureErpWorkspaceTab("/admin/vendors")
     ensureErpWorkspaceTab("/admin/leave?tab=stats")
-    const tabs = getErpWorkspaceTabs()
-    expect(tabs[0]?.href).toBe(ERP_WORKSPACE_DASHBOARD_HREF)
-    expect(tabs.map((t) => t.href)).toContain("/admin/vendors")
-    expect(tabs.map((t) => t.href)).toContain("/admin/leave")
+    const hrefs = getErpWorkspaceTabs().map((t) => t.href)
+    expect(hrefs).not.toContain(ERP_WORKSPACE_DASHBOARD_HREF)
+    expect(hrefs).toContain("/admin/vendors")
+    expect(hrefs).toContain("/admin/leave")
   })
 
-  it("does not close dashboard; neighbor after close", () => {
+  it("allows closing dashboard and finds neighbor", () => {
     ensureErpWorkspaceTab("/admin")
     ensureErpWorkspaceTab("/admin/vendors")
     ensureErpWorkspaceTab("/admin/members")
@@ -51,31 +50,29 @@ describe("erp-workspace-tabs", () => {
     expect(neighbor).toBe("/admin/members")
     removeErpWorkspaceTab("/admin/vendors")
     expect(getErpWorkspaceTabs().map((t) => t.href)).not.toContain("/admin/vendors")
-    const stillDash = removeErpWorkspaceTab("/admin")
-    expect(stillDash[0]?.href).toBe(ERP_WORKSPACE_DASHBOARD_HREF)
+    removeErpWorkspaceTab("/admin")
+    expect(getErpWorkspaceTabs().map((t) => t.href)).not.toContain("/admin")
   })
 
   it("evicts LRU when over max tabs", () => {
-    ensureErpWorkspaceTab("/admin")
     for (let i = 0; i < MAX_ERP_WORKSPACE_TABS + 2; i++) {
       ensureErpWorkspaceTab(`/admin/vendors?x=${i}`)
     }
-    // vendors is not query-agnostic — each ?x= is a separate tab; trim to max
     expect(getErpWorkspaceTabs().length).toBeLessThanOrEqual(MAX_ERP_WORKSPACE_TABS)
   })
 
-  it("reorders non-dashboard tabs and closes others", () => {
+  it("reorders any tabs and closes others without keeping dashboard", () => {
     ensureErpWorkspaceTab("/admin")
     ensureErpWorkspaceTab("/admin/vendors")
     ensureErpWorkspaceTab("/admin/items")
     ensureErpWorkspaceTab("/admin/notices")
     reorderErpWorkspaceTabs("/admin/notices", "/admin/vendors")
     const hrefs = getErpWorkspaceTabs().map((t) => t.href)
-    expect(hrefs[0]).toBe("/admin")
     expect(hrefs.indexOf("/admin/notices")).toBeLessThan(hrefs.indexOf("/admin/vendors"))
     const removed = closeOtherErpWorkspaceTabs("/admin/items")
     expect(removed).toContain("/admin/vendors")
-    expect(getErpWorkspaceTabs().map((t) => t.href)).toEqual(["/admin", "/admin/items"])
+    expect(removed).toContain("/admin")
+    expect(getErpWorkspaceTabs().map((t) => t.href)).toEqual(["/admin/items"])
   })
 })
 

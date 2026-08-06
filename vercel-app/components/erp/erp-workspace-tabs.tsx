@@ -93,9 +93,7 @@ export function ErpWorkspaceTabs() {
   const remountHint = tOr(t, "erpWorkspaceTabRemountHint", "다른 메뉴로 나갔다 오면 새로 불러옵니다")
   const closeOthersLabel = tOr(t, "erpCloseOtherTabs", "다른 탭 닫기")
   const dragHint = tOr(t, "erpWorkspaceTabDragHint", "드래그하여 순서 변경")
-  const canCloseOthers = workspaceTabs.some(
-    (tab) => !isErpWorkspaceDashboardHref(tab.href) && tab.href !== activeHref
-  )
+  const canCloseOthers = workspaceTabs.some((tab) => tab.href !== activeHref)
 
   return (
     <div className="relative min-w-0 flex-1">
@@ -114,22 +112,21 @@ export function ErpWorkspaceTabs() {
           const titleParts = [label]
           if (active) titleParts.push(refreshLabel)
           if (remountOnLeave) titleParts.push(remountHint)
-          if (!isDash) titleParts.push(dragHint)
+          titleParts.push(dragHint)
           const isDropTarget = dragOverHref === tab.href && dragFromRef.current !== tab.href
 
           return (
             <div
               key={tab.href}
               role="presentation"
-              draggable={!isDash}
+              draggable
               onDragStart={(e) => {
-                if (isDash) return
                 dragFromRef.current = tab.href
                 e.dataTransfer.setData("text/plain", tab.href)
                 e.dataTransfer.effectAllowed = "move"
               }}
               onDragOver={(e) => {
-                if (isDash || !dragFromRef.current) return
+                if (!dragFromRef.current) return
                 e.preventDefault()
                 e.dataTransfer.dropEffect = "move"
                 if (dragOverHref !== tab.href) setDragOverHref(tab.href)
@@ -142,7 +139,7 @@ export function ErpWorkspaceTabs() {
                 const from = dragFromRef.current || e.dataTransfer.getData("text/plain")
                 dragFromRef.current = null
                 setDragOverHref(null)
-                if (!from || isDash) return
+                if (!from) return
                 reorderWorkspaceTabs(from, tab.href)
               }}
               onDragEnd={() => {
@@ -150,14 +147,13 @@ export function ErpWorkspaceTabs() {
                 setDragOverHref(null)
               }}
               className={cn(
-                "group relative flex h-8 max-w-[10.5rem] shrink-0 items-stretch sm:max-w-[13rem]",
+                "group relative flex h-8 max-w-[10.5rem] shrink-0 cursor-grab items-stretch active:cursor-grabbing sm:max-w-[13rem]",
                 index > 0 && "-ml-1",
                 active ? "z-20" : "z-10 hover:z-[15]",
-                !isDash && "cursor-grab active:cursor-grabbing",
                 isDropTarget && "z-30"
               )}
               onAuxClick={(e) => {
-                if (e.button !== 1 || isDash) return
+                if (e.button !== 1) return
                 e.preventDefault()
                 closeWorkspaceTab(tab.href)
               }}
@@ -189,10 +185,7 @@ export function ErpWorkspaceTabs() {
                   role="tab"
                   aria-selected={active}
                   title={titleParts.join(" — ")}
-                  className={cn(
-                    "flex min-w-0 flex-1 items-center gap-1.5 truncate py-1 pl-2 text-left text-[12px] font-medium leading-none sm:text-[13px]",
-                    isDash ? "pr-2.5" : "pr-0.5"
-                  )}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 truncate py-1 pl-2 pr-0.5 text-left text-[12px] font-medium leading-none sm:text-[13px]"
                   onClick={() => {
                     if (!active) activateWorkspaceTab(tab.href)
                   }}
@@ -243,25 +236,23 @@ export function ErpWorkspaceTabs() {
                   </button>
                 ) : null}
 
-                {!isDash ? (
-                  <button
-                    type="button"
-                    className={cn(
-                      "mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground",
-                      active
-                        ? "opacity-80"
-                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                    )}
-                    title={closeLabel}
-                    aria-label={`${closeLabel}: ${label}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeWorkspaceTab(tab.href)
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className={cn(
+                    "mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground",
+                    active
+                      ? "opacity-80"
+                      : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  )}
+                  title={closeLabel}
+                  aria-label={`${closeLabel}: ${label}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    closeWorkspaceTab(tab.href)
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             </div>
           )

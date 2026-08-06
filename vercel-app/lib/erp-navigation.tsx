@@ -201,9 +201,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
   const handlersRef = React.useRef<ErpBackHandler[]>([])
   const pageClearListenersRef = React.useRef<(() => void)[]>([])
   const keepAliveCountListenersRef = React.useRef<((count: number) => void)[]>([])
-  const [workspaceTabs, setWorkspaceTabs] = React.useState<ErpWorkspaceTab[]>([
-    { href: "/admin", titleKey: "adminDashboard", lastSeen: 0 },
-  ])
+  const [workspaceTabs, setWorkspaceTabs] = React.useState<ErpWorkspaceTab[]>([])
   const [softDisplayHref, setSoftDisplayHref] = React.useState<string | null>(null)
   /** Next usePathname 기준 — window.location(soft pushState)과 어긋날 수 있어 별도 보관 */
   const routerHrefRef = React.useRef<string>("/admin")
@@ -328,7 +326,6 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     (href: string) => {
       if (typeof window === "undefined") return
       const tabHref = resolveErpWorkspaceTabHref(href)
-      if (tabHref === "/admin") return
 
       const before = getErpWorkspaceTabs()
       const neighbor = findNeighborWorkspaceTabHref(tabHref, before)
@@ -374,7 +371,6 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     if (typeof window === "undefined") return
     const routerCurrent = routerHrefRef.current
     const current = softDisplayHref || routerCurrent
-    if (current === "/admin") return
     closeWorkspaceTab(current)
   }, [closeWorkspaceTab, softDisplayHref])
 

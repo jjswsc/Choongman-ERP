@@ -73,10 +73,14 @@ function readTabs(): ErpWorkspaceTab[] {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
     const out: ErpWorkspaceTab[] = []
+    const seen = new Set<string>()
     for (const row of parsed) {
       if (!row || typeof row !== "object") continue
       const href = typeof (row as ErpWorkspaceTab).href === "string" ? (row as ErpWorkspaceTab).href : ""
       if (!href.startsWith("/admin") || href.startsWith("/admin/login")) continue
+      const resolved = resolveErpWorkspaceTabHref(href)
+      if (seen.has(resolved)) continue
+      seen.add(resolved)
       const titleKey =
         typeof (row as ErpWorkspaceTab).titleKey === "string"
           ? (row as ErpWorkspaceTab).titleKey
@@ -85,7 +89,7 @@ function readTabs(): ErpWorkspaceTab[] {
         typeof (row as ErpWorkspaceTab).lastSeen === "number"
           ? (row as ErpWorkspaceTab).lastSeen
           : Date.now()
-      out.push({ href: resolveErpWorkspaceTabHref(href), titleKey, lastSeen })
+      out.push({ href: resolved, titleKey, lastSeen })
     }
     return out
   } catch {
@@ -128,17 +132,6 @@ export function getErpWorkspaceTabFullHref(tabKeyOrHref: string): string {
   return mapped || key
 }
 
-function ensureDashboardFirst(tabs: ErpWorkspaceTab[]): ErpWorkspaceTab[] {
-  const dash = tabs.find((t) => isErpWorkspaceDashboardHref(t.href))
-  const rest = tabs.filter((t) => !isErpWorkspaceDashboardHref(t.href))
-  const dashboard: ErpWorkspaceTab = dash ?? {
-    href: ERP_WORKSPACE_DASHBOARD_HREF,
-    titleKey: "adminDashboard",
-    lastSeen: Date.now(),
-  }
-  return [dashboard, ...rest]
-}
-
 function trimToMax(
   tabs: ErpWorkspaceTab[],
   protectHref: string
@@ -146,7 +139,7 @@ function trimToMax(
   if (tabs.length <= MAX_ERP_WORKSPACE_TABS) return { tabs, evicted: [] }
   const protect = resolveErpWorkspaceTabHref(protectHref)
   const removable = tabs
-    .filter((t) => !isErpWorkspaceDashboardHref(t.href) && t.href !== protect)
+    .filter((t) => t.href !== protect)
     .sort((a, b) => a.lastSeen - b.lastSeen)
   const keep = new Set(tabs.map((t) => t.href))
   const evicted: ErpWorkspaceTab[] = []
@@ -173,7 +166,7 @@ function emitEvicted(evicted: ErpWorkspaceTab[]) {
 }
 
 export function getErpWorkspaceTabs(): ErpWorkspaceTab[] {
-  return ensureDashboardFirst(readTabs())
+  return readTabs()
 }
 
 /** keep-alive 동기화용 — 이미 resolve된 탭 href 목록 */
@@ -190,7 +183,7 @@ export function clearErpWorkspaceTabs(): void {
 
 /**
  * 현재 경로를 탭에 등록(이미 있으면 lastSeen·href 갱신).
- * 대시보드는 항상 첫 탭으로 유지. 상한 초과 시 LRU로 비활성 탭 제거.
+ * 상한 초과 시 LRU로 비활성 탭 제거.
  * @returns LRU로 닫힌 탭 목록
  */
 export function ensureErpWorkspaceTab(href: string): ErpWorkspaceTab[] {
@@ -200,7 +193,7 @@ export function ensureErpWorkspaceTab(href: string): ErpWorkspaceTab[] {
   rememberErpWorkspaceTabFullHref(href)
   const tabHref = resolveErpWorkspaceTabHref(href)
   const now = Date.now()
-  let tabs = ensureDashboardFirst(readTabs())
+  let tabs = readTabs()
   const idx = tabs.findIndex((t) => t.href === tabHref)
 
   if (idx >= 0) {
@@ -214,10 +207,6 @@ export function ensureErpWorkspaceTab(href: string): ErpWorkspaceTab[] {
           }
         : t
     )
-  } else if (isErpWorkspaceDashboardHref(tabHref)) {
-    tabs = tabs.map((t, i) =>
-      i === 0 ? { ...t, href: ERP_WORKSPACE_DASHBOARD_HREF, lastSeen: now, titleKey: "adminDashboard" } : t
-    )
   } else {
     tabs = [
       ...tabs,
@@ -230,58 +219,46 @@ export function ensureErpWorkspaceTab(href: string): ErpWorkspaceTab[] {
   }
 
   const trimmed = trimToMax(tabs, tabHref)
-  tabs = ensureDashboardFirst(trimmed.tabs)
-  writeTabs(tabs)
+  writeTabs(trimmed.tabs)
   emitEvicted(trimmed.evicted)
   return trimmed.evicted
 }
 
 export function removeErpWorkspaceTab(href: string): ErpWorkspaceTab[] {
   const tabHref = resolveErpWorkspaceTabHref(href)
-  if (isErpWorkspaceDashboardHref(tabHref)) {
-    return getErpWorkspaceTabs()
-  }
-  const next = ensureDashboardFirst(readTabs().filter((t) => t.href !== tabHref))
+  const next = readTabs().filter((t) => t.href !== tabHref)
   writeTabs(next)
   return next
 }
 
-/** 대시보드·keepHref만 남기고 나머지 탭 제거. 제거된 href 목록 반환 */
+/** keepHref만 남기고 나머지 탭 제거. 제거된 href 목록 반환 */
 export function closeOtherErpWorkspaceTabs(keepHref: string): string[] {
   const keep = resolveErpWorkspaceTabHref(keepHref)
-  const before = ensureDashboardFirst(readTabs())
-  const removed = before
-    .filter((t) => !isErpWorkspaceDashboardHref(t.href) && t.href !== keep)
-    .map((t) => t.href)
-  const next = before.filter((t) => isErpWorkspaceDashboardHref(t.href) || t.href === keep)
-  writeTabs(ensureDashboardFirst(next))
+  const before = readTabs()
+  const removed = before.filter((t) => t.href !== keep).map((t) => t.href)
+  const next = before.filter((t) => t.href === keep)
+  writeTabs(next)
   return removed
 }
 
-/**
- * 대시보드(첫 탭)는 고정. 그 외 탭끼리 순서 변경.
- * fromHref를 toHref 위치로 이동.
- */
+/** fromHref를 toHref 위치로 이동 */
 export function reorderErpWorkspaceTabs(fromHref: string, toHref: string): void {
   const from = resolveErpWorkspaceTabHref(fromHref)
   const to = resolveErpWorkspaceTabHref(toHref)
   if (from === to) return
-  if (isErpWorkspaceDashboardHref(from) || isErpWorkspaceDashboardHref(to)) return
 
-  const tabs = ensureDashboardFirst(readTabs())
-  const dash = tabs[0]!
-  const rest = tabs.slice(1)
-  const fromIdx = rest.findIndex((t) => t.href === from)
-  const toIdx = rest.findIndex((t) => t.href === to)
+  const tabs = readTabs()
+  const fromIdx = tabs.findIndex((t) => t.href === from)
+  const toIdx = tabs.findIndex((t) => t.href === to)
   if (fromIdx < 0 || toIdx < 0) return
-  const nextRest = [...rest]
-  const [item] = nextRest.splice(fromIdx, 1)
+  const next = [...tabs]
+  const [item] = next.splice(fromIdx, 1)
   if (!item) return
-  nextRest.splice(toIdx, 0, item)
-  writeTabs([dash, ...nextRest])
+  next.splice(toIdx, 0, item)
+  writeTabs(next)
 }
 
-/** 닫힌 탭 기준 이웃(오른쪽 → 왼쪽 → 대시보드) */
+/** 닫힌 탭 기준 이웃(오른쪽 → 왼쪽 → 대시보드 홈) */
 export function findNeighborWorkspaceTabHref(
   closedHref: string,
   tabsBeforeClose: ErpWorkspaceTab[]
