@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
       gps_name?: string
       sales_outlet?: string
       direct_settlement?: boolean
+      bank_account_no?: string | null
+      bank_name?: string | null
     }[] | null
 
     try {
@@ -80,6 +82,8 @@ export async function GET(request: NextRequest) {
           type: t,
           memo: String(row.memo || ''),
           direct_settlement: Boolean(row.direct_settlement),
+          bank_account_no: String(row.bank_account_no || '').trim() || undefined,
+          bank_name: String(row.bank_name || '').trim() || undefined,
         }
       })
 

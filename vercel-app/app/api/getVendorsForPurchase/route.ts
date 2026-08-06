@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
       tax_id?: string
       phone?: string
       bank_account_no?: string
+      bank_name?: string
       sales_outlet?: string
     }[] | null
 
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
         taxId: String((row as { tax_id?: string }).tax_id || '').trim(),
         phone: String((row as { phone?: string }).phone || '').trim(),
         bankAccountNo: String((row as { bank_account_no?: string }).bank_account_no || '').trim() || null,
+        bankName: String((row as { bank_name?: string }).bank_name || '').trim() || null,
         salesOutlet: String(row.sales_outlet || '').trim() || null,
       }))
 

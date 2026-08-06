@@ -27,6 +27,8 @@ const emptyForm: VendorFormData = {
   type: "purchase",
   memo: "",
   direct_settlement: false,
+  bank_name: "",
+  bank_account_no: "",
 }
 
 export default function VendorsPage() {
@@ -131,6 +133,8 @@ export default function VendorsPage() {
           type: v.type,
           memo: v.memo,
           direct_settlement: v.direct_settlement ?? false,
+          bank_name: v.bank_name ?? "",
+          bank_account_no: v.bank_account_no ?? "",
         })
       }
     } else {
@@ -162,6 +166,8 @@ export default function VendorsPage() {
       type: formData.type,
       memo: formData.memo.trim(),
       direct_settlement: formData.direct_settlement,
+      bank_name: formData.bank_name.trim() || undefined,
+      bank_account_no: formData.bank_account_no.trim() || undefined,
       editingCode: editingCode || undefined,
     })
     if (!res.success) {
@@ -181,6 +187,8 @@ export default function VendorsPage() {
       type: formData.type,
       memo: formData.memo.trim(),
       direct_settlement: formData.direct_settlement,
+      bank_name: formData.bank_name.trim() || undefined,
+      bank_account_no: formData.bank_account_no.trim() || undefined,
     }
     if (editingCode) {
       setVendors((prev) => prev.map((v) => (v.code === editingCode ? newVendor : v)))
@@ -207,6 +215,8 @@ export default function VendorsPage() {
       type: vendor.type,
       memo: vendor.memo,
       direct_settlement: vendor.direct_settlement ?? false,
+      bank_name: vendor.bank_name ?? "",
+      bank_account_no: vendor.bank_account_no ?? "",
     })
     setEditingCode(vendor.code)
   }

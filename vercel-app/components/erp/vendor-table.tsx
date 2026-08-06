@@ -37,6 +37,8 @@ export interface Vendor {
   type: "purchase" | "sales" | "both"
   memo: string
   direct_settlement?: boolean
+  bank_account_no?: string
+  bank_name?: string
 }
 
 export type VendorTypeFilter = "all" | "purchase" | "sales"

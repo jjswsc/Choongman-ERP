@@ -256,6 +256,24 @@ export async function POST(request: NextRequest) {
       const photo = String(invoicePhotoRaw || '').trim()
       accrualRow.invoice_photo_url = photo || null
     }
+    const payeeAccountHolder = String(
+      (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payeeAccountHolder ??
+        (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payee_account_holder ??
+        ''
+    ).trim()
+    const payeeBankName = String(
+      (body as { payeeBankName?: unknown; payee_bank_name?: unknown }).payeeBankName ??
+        (body as { payeeBankName?: unknown; payee_bank_name?: unknown }).payee_bank_name ??
+        ''
+    ).trim()
+    const payeeBankAccountNo = String(
+      (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payeeBankAccountNo ??
+        (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payee_bank_account_no ??
+        ''
+    ).trim()
+    if (payeeAccountHolder) accrualRow.payee_account_holder = payeeAccountHolder
+    if (payeeBankName) accrualRow.payee_bank_name = payeeBankName
+    if (payeeBankAccountNo) accrualRow.payee_bank_account_no = payeeBankAccountNo
     let subjectCode = '5520'
     let subjectName = '기타경비'
     if (accountSubjectId != null && !isNaN(Number(accountSubjectId))) {
@@ -271,7 +289,22 @@ export async function POST(request: NextRequest) {
       if (first?.name) subjectName = String(first.name)
     }
 
-    const inserted = (await supabaseInsert('expense_accruals', accrualRow)) as { id?: number }[]
+    let inserted: { id?: number }[]
+    let bankFieldsSkipped = false
+    try {
+      inserted = (await supabaseInsert('expense_accruals', accrualRow)) as { id?: number }[]
+    } catch (insertErr) {
+      const msg = insertErr instanceof Error ? insertErr.message : String(insertErr)
+      if (/payee_bank|payee_account|column/i.test(msg)) {
+        delete accrualRow.payee_account_holder
+        delete accrualRow.payee_bank_name
+        delete accrualRow.payee_bank_account_no
+        bankFieldsSkipped = !!(payeeAccountHolder || payeeBankName || payeeBankAccountNo)
+        inserted = (await supabaseInsert('expense_accruals', accrualRow)) as { id?: number }[]
+      } else {
+        throw insertErr
+      }
+    }
     const expenseAccrualId = Number(inserted?.[0]?.id || 0)
     if (!expenseAccrualId) {
       return NextResponse.json({ success: false, message: '지출 발생 등록에 실패했습니다.' }, { status: 500, headers })
@@ -339,11 +372,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: prepaymentAccrual
-          ? '전도금 보충 청구가 지급예정에 등록되었습니다. 승인 후 통장 거래와 연동하세요.'
-          : '지출 발생이 등록되었습니다.',
+        message: bankFieldsSkipped
+          ? '지출 발생이 등록되었습니다. 이체 계좌 컬럼이 없어 계좌는 저장되지 않았습니다. sql/expense_payee_bank_transfer_fields.sql 을 실행해 주세요.'
+          : prepaymentAccrual
+            ? '전도금 보충 청구가 지급예정에 등록되었습니다. 승인 후 통장 거래와 연동하세요.'
+            : '지출 발생이 등록되었습니다.',
         id: expenseAccrualId,
         documentNo,
+        ...(bankFieldsSkipped ? { bankFieldsSkipped: true } : {}),
       },
       { headers }
     )

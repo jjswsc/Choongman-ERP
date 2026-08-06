@@ -44,6 +44,10 @@ export async function POST(request: NextRequest) {
       memo?: string
       editingCode?: string
       direct_settlement?: boolean
+      bank_account_no?: string
+      bank_name?: string
+      bankAccountNo?: string
+      bankName?: string
     }
 
     const code = String(body.code || '').trim()
@@ -55,7 +59,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '코드와 거래처명이 필요합니다.' }, { headers })
     }
 
-    const row = {
+    const bankAccountNo = String(body.bank_account_no ?? body.bankAccountNo ?? '').trim()
+    const bankName = String(body.bank_name ?? body.bankName ?? '').trim()
+
+    const row: Record<string, unknown> = {
       code,
       name,
       gps_name: gpsName || null,
@@ -67,6 +74,8 @@ export async function POST(request: NextRequest) {
       tax_id: String(body.tax_no || '').trim() || null,
       memo: String(body.memo || '').trim(),
       direct_settlement: Boolean(body.direct_settlement),
+      bank_account_no: bankAccountNo || null,
+      bank_name: bankName || null,
     }
 
     const filterCode = editingCode || code
@@ -96,12 +105,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (existing && existing.length > 0) {
-      await supabaseUpdateByFilter('vendors', codeFilter, rowForDb)
+      try {
+        await supabaseUpdateByFilter('vendors', codeFilter, rowForDb)
+      } catch (updErr) {
+        const msg = updErr instanceof Error ? updErr.message : String(updErr)
+        if (/bank_account_no|bank_name|column/i.test(msg)) {
+          const { bank_account_no: _a, bank_name: _b, ...rest } = rowForDb as Record<string, unknown>
+          await supabaseUpdateByFilter('vendors', codeFilter, rest)
+        } else {
+          throw updErr
+        }
+      }
       clearDirectSettlementCache()
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
-    await supabaseInsert('vendors', stampInventoryTenantId(rowForDb, scope))
+    try {
+      await supabaseInsert('vendors', stampInventoryTenantId(rowForDb, scope))
+    } catch (insErr) {
+      const msg = insErr instanceof Error ? insErr.message : String(insErr)
+      if (/bank_account_no|bank_name|column/i.test(msg)) {
+        const { bank_account_no: _a, bank_name: _b, ...rest } = rowForDb as Record<string, unknown>
+        await supabaseInsert('vendors', stampInventoryTenantId(rest, scope))
+      } else {
+        throw insErr
+      }
+    }
     clearDirectSettlementCache()
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {

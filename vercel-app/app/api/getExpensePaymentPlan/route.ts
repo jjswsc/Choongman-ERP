@@ -53,6 +53,9 @@ type ExpenseAccrualRow = {
   invoice_no?: string | null
   invoice_photo_url?: string | null
   document_no?: string | null
+  payee_account_holder?: string | null
+  payee_bank_name?: string | null
+  payee_bank_account_no?: string | null
 }
 
 function parseAttachmentUrls(raw: string | null | undefined): string[] {
@@ -104,6 +107,9 @@ function isPurchaseWithdrawalCategory(cat: string | undefined): boolean {
 }
 
 const ACCRUAL_PLAN_SELECT =
+  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls,invoice_received,invoice_no,invoice_photo_url,document_no,payee_account_holder,payee_bank_name,payee_bank_account_no'
+
+const ACCRUAL_PLAN_SELECT_LEGACY =
   'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls,invoice_received,invoice_no,invoice_photo_url,document_no'
 
 async function fetchExpenseAccrualsForPlanRange(
@@ -112,23 +118,99 @@ async function fetchExpenseAccrualsForPlanRange(
   tenantScope: SaasTenantScope
 ): Promise<ExpenseAccrualRow[]> {
   const filters = buildExpenseAccrualPlanDateFilters(startStr, endStr)
-  const batches = await Promise.all(
-    filters.map((filter) =>
-      supabaseSelectFilter('expense_accruals', appendSaasTenantFilter(filter, tenantScope, 'expense_accruals'), {
-        select: ACCRUAL_PLAN_SELECT,
-        order: 'due_date.asc,expense_date.asc,id.desc',
-        limit: 5000,
-      }) as Promise<ExpenseAccrualRow[]>
+  const run = async (select: string) => {
+    const batches = await Promise.all(
+      filters.map((filter) =>
+        supabaseSelectFilter('expense_accruals', appendSaasTenantFilter(filter, tenantScope, 'expense_accruals'), {
+          select,
+          order: 'due_date.asc,expense_date.asc,id.desc',
+          limit: 5000,
+        }) as Promise<ExpenseAccrualRow[]>
+      )
     )
-  )
-  const byId = new Map<number, ExpenseAccrualRow>()
-  for (const rows of batches) {
-    for (const r of rows || []) {
-      const id = Number(r.id || 0)
-      if (id > 0) byId.set(id, r)
+    const byId = new Map<number, ExpenseAccrualRow>()
+    for (const rows of batches) {
+      for (const r of rows || []) {
+        const id = Number(r.id || 0)
+        if (id > 0) byId.set(id, r)
+      }
+    }
+    return [...byId.values()]
+  }
+  try {
+    return await run(ACCRUAL_PLAN_SELECT)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/payee_bank|payee_account|column/i.test(msg)) {
+      return await run(ACCRUAL_PLAN_SELECT_LEGACY)
+    }
+    throw e
+  }
+}
+
+type VendorBankRow = {
+  code?: string
+  name?: string
+  bank_account_no?: string | null
+  bank_name?: string | null
+}
+
+async function loadVendorBankByCodes(codes: string[]): Promise<Map<string, VendorBankRow>> {
+  const map = new Map<string, VendorBankRow>()
+  const unique = [...new Set(codes.map((c) => String(c || '').trim()).filter((c) => c && !c.startsWith('auto_')))]
+  if (unique.length === 0) return map
+  const chunkSize = 80
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize)
+    const inList = chunk.map((c) => encodeURIComponent(c)).join(',')
+    try {
+      const rows = (await supabaseSelectFilter('vendors', `code=in.(${inList})`, {
+        select: 'code,name,bank_account_no,bank_name',
+        limit: chunk.length,
+      })) as VendorBankRow[]
+      for (const r of rows || []) {
+        const code = String(r.code || '').trim()
+        if (code) map.set(code, r)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/bank_name|column/i.test(msg)) {
+        const rows = (await supabaseSelectFilter('vendors', `code=in.(${inList})`, {
+          select: 'code,name,bank_account_no',
+          limit: chunk.length,
+        })) as VendorBankRow[]
+        for (const r of rows || []) {
+          const code = String(r.code || '').trim()
+          if (code) map.set(code, r)
+        }
+      } else {
+        console.warn('getExpensePaymentPlan vendor bank:', e)
+      }
     }
   }
-  return [...byId.values()]
+  return map
+}
+
+function resolvePayeeBankFields(
+  r: ExpenseAccrualRow,
+  payeeCode: string,
+  vendorMap: Map<string, VendorBankRow>
+): { payeeAccountHolder: string | null; payeeBankName: string | null; payeeBankAccountNo: string | null } {
+  const vendor = vendorMap.get(payeeCode)
+  const payeeName = String(r.payee_name || vendor?.name || payeeCode || '').trim()
+  const vendorBank = String(vendor?.bank_name || '').trim()
+  const vendorAcct = String(vendor?.bank_account_no || '').trim()
+  // 필드별: 해당 컬럼이 null 이 아니면(빈 문자열 포함) 스냅샷 우선, null 이면 거래처 마스터 fallback
+  const snapHolder =
+    r.payee_account_holder != null ? String(r.payee_account_holder || '').trim() : null
+  const snapBank = r.payee_bank_name != null ? String(r.payee_bank_name || '').trim() : null
+  const snapAcct =
+    r.payee_bank_account_no != null ? String(r.payee_bank_account_no || '').trim() : null
+  return {
+    payeeAccountHolder: (snapHolder != null ? snapHolder : '') || payeeName || null,
+    payeeBankName: (snapBank != null ? snapBank : vendorBank) || null,
+    payeeBankAccountNo: (snapAcct != null ? snapAcct : vendorAcct) || null,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -194,22 +276,27 @@ export async function GET(request: NextRequest) {
       if (amt < 0) paymentByAccrual.set(accrualId, (paymentByAccrual.get(accrualId) || 0) + Math.abs(amt))
     }
 
-    const mappedAccrualPlans = (accrualRows || [])
-      .filter((r) => {
-        if (scopedAllowedStores.length > 0) {
-          const sn = String(r.store_name || '').trim()
-          const storeAllowed = scopedAllowedStores.some((s) => storesMatchForGradeLookup(s, sn))
-          if (!storeAllowed) return false
-        }
-        if ((startStr || endStr) && !accrualMatchesPlanDateRange(r, startStr, endStr)) return false
-        if (payeeFilter || vendorFilter) {
-          const decoded = decodePayeeCode(r.payee_code)
-          const target = `${decoded.payeeCode || ''} ${r.payee_name || ''} ${decoded.withdrawalCategory}`.toLowerCase()
-          if (payeeFilter && !target.includes(payeeFilter)) return false
-          if (vendorFilter && !target.includes(vendorFilter)) return false
-        }
-        return true
-      })
+    const scopedAccruals = (accrualRows || []).filter((r) => {
+      if (scopedAllowedStores.length > 0) {
+        const sn = String(r.store_name || '').trim()
+        const storeAllowed = scopedAllowedStores.some((s) => storesMatchForGradeLookup(s, sn))
+        if (!storeAllowed) return false
+      }
+      if ((startStr || endStr) && !accrualMatchesPlanDateRange(r, startStr, endStr)) return false
+      if (payeeFilter || vendorFilter) {
+        const decoded = decodePayeeCode(r.payee_code)
+        const target = `${decoded.payeeCode || ''} ${r.payee_name || ''} ${decoded.withdrawalCategory}`.toLowerCase()
+        if (payeeFilter && !target.includes(payeeFilter)) return false
+        if (vendorFilter && !target.includes(vendorFilter)) return false
+      }
+      return true
+    })
+
+    const vendorMap = await loadVendorBankByCodes(
+      scopedAccruals.map((r) => decodePayeeCode(r.payee_code).payeeCode)
+    )
+
+    const mappedAccrualPlans = scopedAccruals
       .map((r) => {
         const decoded = decodePayeeCode(r.payee_code)
         const id = Number(r.id || 0)
@@ -220,6 +307,7 @@ export async function GET(request: NextRequest) {
         const paid = paymentByAccrual.get(id) || 0
         const remaining = Math.max(0, planned - paid)
         const attachmentUrls = parseAttachmentUrls(r.attachment_urls)
+        const bankFields = resolvePayeeBankFields(r, decoded.payeeCode || '', vendorMap)
         return {
           id,
           payeeCode: decoded.payeeCode || '',
@@ -259,6 +347,7 @@ export async function GET(request: NextRequest) {
           rejectionNote: r.rejection_note || null,
           storeName: r.store_name || '',
           documentNo: String(r.document_no || '').trim() || null,
+          ...bankFields,
         }
       })
       .sort((a, b) => (a.dueDate || a.expenseDate).localeCompare(b.dueDate || b.expenseDate))

@@ -309,7 +309,51 @@ export async function POST(request: NextRequest) {
     if (invoicePhotoRaw !== undefined) {
       accrualPatch.invoice_photo_url = String(invoicePhotoRaw || '').trim() || null
     }
-    await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
+
+    const hasPayeeBankField =
+      Object.prototype.hasOwnProperty.call(body, 'payeeAccountHolder') ||
+      Object.prototype.hasOwnProperty.call(body, 'payee_account_holder') ||
+      Object.prototype.hasOwnProperty.call(body, 'payeeBankName') ||
+      Object.prototype.hasOwnProperty.call(body, 'payee_bank_name') ||
+      Object.prototype.hasOwnProperty.call(body, 'payeeBankAccountNo') ||
+      Object.prototype.hasOwnProperty.call(body, 'payee_bank_account_no')
+    if (hasPayeeBankField) {
+      const holder = String(
+        (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payeeAccountHolder ??
+          (body as { payeeAccountHolder?: unknown; payee_account_holder?: unknown }).payee_account_holder ??
+          ''
+      ).trim()
+      const bankName = String(
+        (body as { payeeBankName?: unknown; payee_bank_name?: unknown }).payeeBankName ??
+          (body as { payeeBankName?: unknown; payee_bank_name?: unknown }).payee_bank_name ??
+          ''
+      ).trim()
+      const bankAcct = String(
+        (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payeeBankAccountNo ??
+          (body as { payeeBankAccountNo?: unknown; payee_bank_account_no?: unknown }).payee_bank_account_no ??
+          ''
+      ).trim()
+      // 빈 문자열도 저장 — null 과 구분하여 거래처 마스터 fallback 을 막음
+      accrualPatch.payee_account_holder = holder
+      accrualPatch.payee_bank_name = bankName
+      accrualPatch.payee_bank_account_no = bankAcct
+    }
+
+    let bankFieldsSkipped = false
+    try {
+      await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
+    } catch (updErr) {
+      const msg = updErr instanceof Error ? updErr.message : String(updErr)
+      if (/payee_bank|payee_account|column/i.test(msg) && hasPayeeBankField) {
+        delete accrualPatch.payee_account_holder
+        delete accrualPatch.payee_bank_name
+        delete accrualPatch.payee_bank_account_no
+        bankFieldsSkipped = true
+        await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
+      } else {
+        throw updErr
+      }
+    }
 
     const bankIdsToSync = new Set<number>()
     for (const p of payableForEdit || []) {
@@ -407,7 +451,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+    return NextResponse.json(
+      {
+        success: true,
+        message: bankFieldsSkipped
+          ? '수정되었습니다. 이체 계좌 컬럼이 없어 계좌는 저장되지 않았습니다. sql/expense_payee_bank_transfer_fields.sql 을 실행해 주세요.'
+          : '수정되었습니다.',
+        ...(bankFieldsSkipped ? { bankFieldsSkipped: true } : {}),
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('updateExpenseAccrual:', e)
     return NextResponse.json(

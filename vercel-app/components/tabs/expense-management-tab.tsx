@@ -4,13 +4,10 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { ExpenseAttachmentPreviewItem } from "@/components/erp/expense-attachment-preview"
@@ -27,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Wallet, Link2, Check, X, Pencil, Trash2, Paperclip } from "lucide-react"
+import { Search, Paperclip } from "lucide-react"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -37,6 +34,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList } from "@/lib/api-client"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
   approveExpenseAccrual,
   deleteExpenseAccrual,
@@ -45,22 +43,53 @@ import {
   getAccountSubjects,
   getBankAccounts,
   getExpensePaymentPlan,
+  getHeadOfficeInfo,
   getUnlinkedBankWithdrawals,
   translateTexts,
   updateExpenseAccrualInvoice,
+  updateExpenseAccrualPayeeBank,
   type AccountSubjectItem,
   type BankAccount,
   type ExpenseAccrualPlanItem,
 } from "@/lib/api-client"
 import { EXPENSE_WITHDRAW_SUBJECT_FETCH } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { canApproveExpenseAccrual, canDeleteExpenseAccrual, canEditExpenseAccrualClassification } from "@/lib/expense-accrual-approve-policy"
+import {
+  canApproveExpenseAccrual,
+  canDeleteExpenseAccrual,
+  canEditExpenseAccrualClassification,
+  canMutateExpenseAccrualRecord,
+} from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
-import { AdminDesktopOnly, AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import { AdminDesktopOnly } from "@/components/erp/admin-responsive-list"
 import { ExpensePlanMobileList } from "@/components/erp/expense-plan-mobile-list"
+import { ExpensePlanDesktopList } from "@/components/erp/expense-plan-desktop-list"
+import { ExpensePlanPaySheet } from "@/components/erp/expense-plan-pay-sheet"
+import { ExpenseBankTransferView } from "@/components/erp/expense-bank-transfer-view"
 import { useSearchParams, useRouter } from "next/navigation"
+
+function groupPlansByStore(rows: ExpenseAccrualPlanItem[]): [string, ExpenseAccrualPlanItem[]][] {
+  const map = new Map<string, ExpenseAccrualPlanItem[]>()
+  for (const r of rows) {
+    const key = String(r.storeName || "").trim() || "—"
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(r)
+  }
+  return Array.from(map.entries()).sort((a, b) =>
+    a[0] === "—" ? 1 : b[0] === "—" ? -1 : a[0].localeCompare(b[0])
+  )
+}
+
+function matchesPlanSegment(
+  r: ExpenseAccrualPlanItem,
+  segment: "approve" | "pay" | "all"
+): boolean {
+  if (segment === "approve") return r.status === "planned"
+  if (segment === "pay") return r.status === "approved" && (r.remainingAmount || 0) > 0
+  return true
+}
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -131,6 +160,11 @@ export function ExpenseManagementTab() {
   const [purchasePlans, setPurchasePlans] = React.useState<ExpenseAccrualPlanItem[]>([])
   const [planTypeFilter, setPlanTypeFilter] = React.useState<string>("__all__")
   const [planStoreFilter, setPlanStoreFilter] = React.useState<string>("__all__")
+  const [planSegment, setPlanSegment] = React.useState<"approve" | "pay" | "all">("approve")
+  const [payListMode, setPayListMode] = React.useState<"list" | "transfer">("transfer")
+  const [paySheetRow, setPaySheetRow] = React.useState<ExpenseAccrualPlanItem | null>(null)
+  const [savingBankId, setSavingBankId] = React.useState<number | null>(null)
+  const [planKindFilter, setPlanKindFilter] = React.useState<"__all__" | "general" | "logistics">("__all__")
 
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
 
@@ -140,7 +174,6 @@ export function ExpenseManagementTab() {
   const [payMemoById, setPayMemoById] = React.useState<Record<number, string>>({})
   const [payBankById, setPayBankById] = React.useState<Record<number, string>>({})
   const [payStoreById, setPayStoreById] = React.useState<Record<number, string>>({})
-  const [payEditorOpenById, setPayEditorOpenById] = React.useState<Record<number, boolean>>({})
   const [payingId, setPayingId] = React.useState<number | null>(null)
   const [approvalEditById, setApprovalEditById] = React.useState<Record<number, boolean>>({})
   const [deletingPlanId, setDeletingPlanId] = React.useState<number | null>(null)
@@ -150,6 +183,11 @@ export function ExpenseManagementTab() {
   const [approvingAll, setApprovingAll] = React.useState(false)
   const [rejectingAll, setRejectingAll] = React.useState(false)
   const [payingAll, setPayingAll] = React.useState(false)
+  const [payAllOpen, setPayAllOpen] = React.useState(false)
+  const [payAllBankId, setPayAllBankId] = React.useState("")
+  const [payAllDate, setPayAllDate] = React.useState(todayStrBkk)
+  const [payAllAllowMissingBank, setPayAllAllowMissingBank] = React.useState(false)
+  const [transferCompanyName, setTransferCompanyName] = React.useState("")
   const [planDetailRow, setPlanDetailRow] = React.useState<ExpenseAccrualPlanItem | null>(null)
   const [cleaningNoStore, setCleaningNoStore] = React.useState(false)
   const [attachmentPreview, setAttachmentPreview] = React.useState<{ urls: string[]; title: string } | null>(null)
@@ -189,6 +227,20 @@ export function ExpenseManagementTab() {
   React.useEffect(() => {
     getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).catch(() => []).then(setBankAccounts)
   }, [auth?.role, auth?.store])
+
+  React.useEffect(() => {
+    let cancelled = false
+    getHeadOfficeInfo()
+      .then((ho) => {
+        if (!cancelled) setTransferCompanyName(String(ho?.companyName || "").trim())
+      })
+      .catch(() => {
+        if (!cancelled) setTransferCompanyName("")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     const items = [...expensePlans, ...purchasePlans, ...unlinkedList]
@@ -301,6 +353,10 @@ export function ExpenseManagementTab() {
     void loadPlansRef.current()
   }, [tab, auth?.role, planRefreshToken])
 
+  useErpRefetchOnActivate(() => {
+    if (tab === "plan") void loadPlansRef.current()
+  })
+
   const openLinkBank = async (row: ExpenseAccrualPlanItem) => {
     const accountId = payBankById[row.id]
     const amt = Number(payAmountById[row.id] ?? row.remainingAmount) || 0
@@ -386,6 +442,7 @@ export function ExpenseManagementTab() {
         return
       }
       setApprovalEditById((prev) => ({ ...prev, [row.id]: false }))
+      setPaySheetRow(null)
       await loadPlans()
     } finally {
       setPayingId(null)
@@ -449,16 +506,6 @@ export function ExpenseManagementTab() {
     [expensePlans, planStoreFilter, planTypeFilter]
   )
 
-  const expensePlansByStore = React.useMemo(() => {
-    const map = new Map<string, typeof filteredExpensePlans>()
-    for (const r of filteredExpensePlans) {
-      const key = String(r.storeName || "").trim() || "—"
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(r)
-    }
-    return Array.from(map.entries()).sort((a, b) => (a[0] === "—" ? 1 : b[0] === "—" ? -1 : a[0].localeCompare(b[0])))
-  }, [filteredExpensePlans])
-
   const filteredPurchasePlans = React.useMemo(
     () =>
       (purchasePlans || []).filter((r) =>
@@ -466,6 +513,53 @@ export function ExpenseManagementTab() {
         (planStoreFilter === "__all__" ? true : String(r.storeName || "").trim() === planStoreFilter)
       ),
     [purchasePlans, planStoreFilter, planTypeFilter]
+  )
+
+  const kindFilteredExpensePlans = React.useMemo(
+    () => (planKindFilter === "logistics" ? [] : filteredExpensePlans),
+    [filteredExpensePlans, planKindFilter]
+  )
+  const kindFilteredPurchasePlans = React.useMemo(
+    () => (planKindFilter === "general" ? [] : filteredPurchasePlans),
+    [filteredPurchasePlans, planKindFilter]
+  )
+
+  const allFilteredPlans = React.useMemo(
+    () => [...kindFilteredExpensePlans, ...kindFilteredPurchasePlans],
+    [kindFilteredExpensePlans, kindFilteredPurchasePlans]
+  )
+
+  const segmentedExpensePlans = React.useMemo(
+    () => kindFilteredExpensePlans.filter((r) => matchesPlanSegment(r, planSegment)),
+    [kindFilteredExpensePlans, planSegment]
+  )
+  const segmentedPurchasePlans = React.useMemo(
+    () => kindFilteredPurchasePlans.filter((r) => matchesPlanSegment(r, planSegment)),
+    [kindFilteredPurchasePlans, planSegment]
+  )
+
+  const expensePlansByStore = React.useMemo(
+    () => groupPlansByStore(segmentedExpensePlans),
+    [segmentedExpensePlans]
+  )
+  const purchasePlansByStore = React.useMemo(
+    () => groupPlansByStore(segmentedPurchasePlans),
+    [segmentedPurchasePlans]
+  )
+
+  const planSegmentCounts = React.useMemo(
+    () => ({
+      approve: allFilteredPlans.filter((r) => r.status === "planned").length,
+      pay: allFilteredPlans.filter((r) => r.status === "approved" && (r.remainingAmount || 0) > 0).length,
+      all: allFilteredPlans.length,
+    }),
+    [allFilteredPlans]
+  )
+
+  const transferPayablePlans = React.useMemo(
+    () =>
+      allFilteredPlans.filter((r) => r.status === "approved" && (r.remainingAmount || 0) > 0),
+    [allFilteredPlans]
   )
 
   /** 조회 기간(API) + 화면 매장·구분 필터 기준 합계 */
@@ -477,16 +571,6 @@ export function ExpenseManagementTab() {
     }),
     [filteredExpensePlans, filteredPurchasePlans]
   )
-
-  const purchasePlansByStore = React.useMemo(() => {
-    const map = new Map<string, typeof filteredPurchasePlans>()
-    for (const r of filteredPurchasePlans) {
-      const key = String(r.storeName || "").trim() || "—"
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(r)
-    }
-    return Array.from(map.entries()).sort((a, b) => (a[0] === "—" ? 1 : b[0] === "—" ? -1 : a[0].localeCompare(b[0])))
-  }, [filteredPurchasePlans])
 
   const canApproveByPolicy = React.useCallback(
     (row: ExpenseAccrualPlanItem) => canApproveExpenseAccrual(auth?.role, row.storeName),
@@ -504,20 +588,22 @@ export function ExpenseManagementTab() {
   )
 
   const approvablePlansForDay = React.useMemo(() => {
-    const combined = [...(filteredExpensePlans || []), ...(filteredPurchasePlans || [])]
-    return combined.filter((r) => {
-      const rowDate = String(r.dueDate || r.expenseDate || "").slice(0, 10)
-      return r.status === "planned" && canApproveByPolicy(r) && rowDate === startStr
-    })
-  }, [filteredExpensePlans, filteredPurchasePlans, canApproveByPolicy, startStr])
+    // 화면에 보이는 종류·매장·기간 필터와 동일 범위 (시작일만 제한하지 않음)
+    return allFilteredPlans.filter(
+      (r) => r.status === "planned" && canApproveByPolicy(r)
+    )
+  }, [allFilteredPlans, canApproveByPolicy])
 
   const payablePlansForDay = React.useMemo(() => {
-    const combined = [...(filteredExpensePlans || []), ...(filteredPurchasePlans || [])]
-    return combined.filter((r) => {
-      const rowDate = String(r.dueDate || r.expenseDate || "").slice(0, 10)
-      return r.status === "approved" && (r.remainingAmount || 0) > 0 && rowDate === startStr
-    })
-  }, [filteredExpensePlans, filteredPurchasePlans, startStr])
+    return allFilteredPlans.filter(
+      (r) => r.status === "approved" && (r.remainingAmount || 0) > 0
+    )
+  }, [allFilteredPlans])
+
+  const payAllMissingBankCount = React.useMemo(
+    () => payablePlansForDay.filter((r) => !String(r.payeeBankAccountNo || "").trim()).length,
+    [payablePlansForDay]
+  )
 
   const handleApprove = React.useCallback(async (row: ExpenseAccrualPlanItem, action: "approve" | "reject") => {
     const note = action === "reject"
@@ -540,7 +626,7 @@ export function ExpenseManagementTab() {
         await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         return
       }
-      setPayEditorOpenById((prev) => ({ ...prev, [row.id]: false }))
+      setApprovalEditById((prev) => ({ ...prev, [row.id]: false }))
       await loadPlans()
     } finally {
       setPayingId(null)
@@ -567,6 +653,10 @@ export function ExpenseManagementTab() {
       if ((row.memo || "").trim()) q.set("memo", (row.memo || "").trim())
       if (row.invoiceReceived) q.set("invoiceReceived", "1")
       if ((row.invoiceNo || "").trim()) q.set("invoiceNo", (row.invoiceNo || "").trim())
+      // 스냅샷 계좌 — 빈 값도 명시 전달(미전달 시 저장에서 기존 계좌가 지워질 수 있음)
+      q.set("payeeAccountHolder", String(row.payeeAccountHolder || "").trim())
+      q.set("payeeBankName", String(row.payeeBankName || "").trim())
+      q.set("payeeBankAccountNo", String(row.payeeBankAccountNo || "").trim())
       router.push(`/admin/expense-management?${q.toString()}`)
     },
     [router]
@@ -597,27 +687,55 @@ export function ExpenseManagementTab() {
     [t]
   )
 
-  const renderAccrualInvoiceCell = React.useCallback(
-    (r: ExpenseAccrualPlanItem) => (
-      <td className="py-2 px-1 text-center align-top min-w-[120px]">
-        <div className="flex flex-col items-center gap-1">
-          <Checkbox
-            checked={Boolean(r.invoiceReceived)}
-            onCheckedChange={(c) => handleAccrualInvoiceCheckChange(r, c === true)}
-            disabled={updatingInvoiceAccrualId === r.id}
-            title={tt("poInvoiceReceived", "Invoice Received")}
-            className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-          />
-          {r.invoiceNo ? (
-            <span className="text-[10px] text-muted-foreground max-w-[7rem] truncate" title={r.invoiceNo}>
-              {r.invoiceNo}
-            </span>
-          ) : null}
-        </div>
-      </td>
-    ),
-    [handleAccrualInvoiceCheckChange, tt, updatingInvoiceAccrualId]
+  const openPaySheet = React.useCallback((r: ExpenseAccrualPlanItem) => {
+    setPaySheetRow(r)
+    // 잔액·오늘로 강제 리셋 (이전 입력·부분지급 후 과다 지급 방지)
+    setPayAmountById((p) => ({ ...p, [r.id]: String(r.remainingAmount || 0) }))
+    setPayDateById((p) => ({ ...p, [r.id]: todayStrBkk() }))
+    setPayMethodById((p) => ({ ...p, [r.id]: p[r.id] || "bank" }))
+    setPayMemoById((p) => ({ ...p, [r.id]: r.memo || "" }))
+  }, [])
+
+  const handleSavePayeeBank = React.useCallback(
+    async (
+      r: ExpenseAccrualPlanItem,
+      patch: { payeeAccountHolder: string; payeeBankName: string; payeeBankAccountNo: string }
+    ): Promise<boolean> => {
+      setSavingBankId(r.id)
+      try {
+        const res = await updateExpenseAccrualPayeeBank({
+          expenseAccrualId: r.id,
+          ...patch,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          await appAlert(
+            translateApiMessage((res as { message?: string }).message, t) ||
+              (res as { message?: string }).message ||
+              t("processFail")
+          )
+          return false
+        }
+        if (res.vendorSyncWarning) {
+          await appAlert(res.vendorSyncWarning)
+        }
+        const localPatch = {
+          payeeAccountHolder: res.payeeAccountHolder ?? patch.payeeAccountHolder,
+          payeeBankName: res.payeeBankName ?? patch.payeeBankName,
+          payeeBankAccountNo: res.payeeBankAccountNo ?? patch.payeeBankAccountNo,
+        }
+        setExpensePlans((prev) => prev.map((x) => (x.id === r.id ? { ...x, ...localPatch } : x)))
+        setPurchasePlans((prev) => prev.map((x) => (x.id === r.id ? { ...x, ...localPatch } : x)))
+        await loadPlans()
+        return true
+      } finally {
+        setSavingBankId(null)
+      }
+    },
+    [auth?.role, loadPlans, t]
   )
+
+  const canEditPayeeBank = canMutateExpenseAccrualRecord(auth?.role)
 
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
     if (!row?.id) return
@@ -690,7 +808,7 @@ export function ExpenseManagementTab() {
       return
     }
     const ok = await appConfirm(
-      `${startStr} ${tt("expenseApproveAllDay", "Approve all for day")} (${approvablePlansForDay.length}${tt("receivPayCount", "items")})`
+      `${startStr}${endStr && endStr !== startStr ? ` ~ ${endStr}` : ""} ${tt("expenseApproveAllDay", "Approve all for day")} (${approvablePlansForDay.length}${tt("receivPayCount", "items")})`
     )
     if (!ok) return
     setApprovingAll(true)
@@ -713,18 +831,48 @@ export function ExpenseManagementTab() {
     }
   }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr, tt])
 
-  const handlePayAllForDay = React.useCallback(async () => {
+  const payAllTotal = React.useMemo(
+    () => payablePlansForDay.reduce((s, r) => s + (r.remainingAmount || 0), 0),
+    [payablePlansForDay]
+  )
+
+  const openPayAllDialog = React.useCallback(() => {
     if (payablePlansForDay.length === 0) {
-      await appAlert(tt("payableEmpty", "No items to pay."))
+      void appAlert(tt("payableEmpty", "No items to pay."))
       return
     }
-    const defaultBankId = bankAccounts[0]?.id
-    if (!defaultBankId) {
+    if (bankAccounts.length === 0) {
+      void appAlert(tt("bankAccount", "Account"))
+      return
+    }
+    setPayAllBankId(String(bankAccounts[0]?.id || ""))
+    setPayAllDate(todayStrBkk())
+    setPayAllAllowMissingBank(false)
+    setPayAllOpen(true)
+  }, [bankAccounts, payablePlansForDay.length, tt])
+
+  const handlePayAllForDay = React.useCallback(async () => {
+    const accountId = Number(payAllBankId || 0)
+    if (!accountId) {
       await appAlert(tt("bankAccount", "Account"))
       return
     }
+    const payDate = String(payAllDate || todayStrBkk()).slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
+      await appAlert(tt("date", "Date"))
+      return
+    }
+    if (payAllMissingBankCount > 0 && !payAllAllowMissingBank) {
+      await appAlert(
+        tt(
+          "expensePayAllMissingBankBlock",
+          "{count} item(s) are missing a bank account. Fill them in Bank transfer view, or check “Pay anyway without account”."
+        ).replace("{count}", String(payAllMissingBankCount))
+      )
+      return
+    }
     const ok = await appConfirm(
-      `${startStr} ${tt("expensePayAllDay", "Pay all approved for day")} (${payablePlansForDay.length}${tt("receivPayCount", "items")})`
+      `${payDate} ${tt("expensePayAllDay", "Pay all approved for day")} (${payablePlansForDay.length}${tt("receivPayCount", "items")}) · ฿${payAllTotal.toLocaleString()}`
     )
     if (!ok) return
     setPayingAll(true)
@@ -734,9 +882,9 @@ export function ExpenseManagementTab() {
           expenseAccrualId: row.id,
           paymentMethod: "bank",
           amount: row.remainingAmount || 0,
-          transDate: startStr,
+          transDate: payDate,
           memo: row.memo || "",
-          accountId: defaultBankId,
+          accountId,
           userName: auth?.user,
           userRole: auth?.role,
         })
@@ -749,46 +897,24 @@ export function ExpenseManagementTab() {
           break
         }
       }
+      setPayAllOpen(false)
       await loadPlans()
     } finally {
       setPayingAll(false)
     }
-  }, [auth?.role, auth?.user, bankAccounts, loadPlans, payablePlansForDay, startStr, t, tt])
-
-  const renderAttachmentCell = React.useCallback(
-    (r: ExpenseAccrualPlanItem) => {
-      const urls = r.attachmentUrls || []
-      const firstImage = urls.find((u) => expenseAttachmentKind(u) === "image")
-      return (
-        <td className="py-2 px-1 text-center align-top">
-          {urls.length > 0 ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0 text-primary p-0 overflow-hidden"
-              title={tt("expenseViewAttachment", "View Attachment")}
-              onClick={() =>
-                setAttachmentPreview({
-                  urls,
-                  title: `${r.payeeName || ""} #${r.id}`,
-                })
-              }
-            >
-              {firstImage ? (
-                <img src={firstImage} alt="" className="h-8 w-8 object-cover rounded" />
-              ) : (
-                <Paperclip className="h-4 w-4" />
-              )}
-            </Button>
-          ) : (
-            <span className="text-muted-foreground text-xs">—</span>
-          )}
-        </td>
-      )
-    },
-    [tt]
-  )
+  }, [
+    auth?.role,
+    auth?.user,
+    loadPlans,
+    payAllAllowMissingBank,
+    payAllBankId,
+    payAllDate,
+    payAllMissingBankCount,
+    payAllTotal,
+    payablePlansForDay,
+    t,
+    tt,
+  ])
 
   const renderAttachmentButton = React.useCallback(
     (r: ExpenseAccrualPlanItem) => {
@@ -821,106 +947,39 @@ export function ExpenseManagementTab() {
     [tt]
   )
 
-  const renderPlanPayEditor = React.useCallback(
-    (r: ExpenseAccrualPlanItem) => (
-      <div className="flex flex-wrap items-end gap-2 rounded-md border border-border/50 bg-muted/20 p-2">
-        <Select
-          value={payMethodById[r.id] || "bank"}
-          onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}
-        >
-          <SelectTrigger className="h-9 w-full min-w-0 sm:w-[120px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="bank">{tt("bankTitle", "Bank")}</SelectItem>
-            <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
-          </SelectContent>
-        </Select>
-        {(payMethodById[r.id] || "bank") === "bank" ? (
-          <Select
-            value={payBankById[r.id] || ""}
-            onValueChange={(v) => setPayBankById((p) => ({ ...p, [r.id]: v }))}
-          >
-            <SelectTrigger className="h-9 w-full min-w-0 sm:w-[220px]">
-              <SelectValue placeholder={tt("bankAccount", "Account")} />
-            </SelectTrigger>
-            <SelectContent>
-              {bankAccounts.map((a) => (
-                <SelectItem key={a.id} value={String(a.id)}>
-                  {a.bankName ? `[${a.bankName}] ` : ""}
-                  {a.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Select
-            value={payStoreById[r.id] || ""}
-            onValueChange={(v) => setPayStoreById((p) => ({ ...p, [r.id]: v }))}
-          >
-            <SelectTrigger className="h-9 w-full min-w-0 sm:w-[180px]">
-              <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
-            </SelectTrigger>
-            <SelectContent>
-              {(stores || []).map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Input
-          value={payAmountById[r.id] ?? String(r.remainingAmount)}
-          onChange={(e) => setPayAmountById((p) => ({ ...p, [r.id]: e.target.value }))}
-          className="h-9 w-full text-right sm:w-[120px]"
-          type="number"
-        />
-        <Input
-          type="date"
-          value={payDateById[r.id] || todayStrBkk()}
-          onChange={(e) => setPayDateById((p) => ({ ...p, [r.id]: e.target.value }))}
-          className="h-9 w-full sm:w-[140px]"
-        />
-        <Input
-          value={payMemoById[r.id] || ""}
-          onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))}
-          className="h-9 w-full sm:w-[220px]"
-          placeholder={tt("memo", "Memo")}
-        />
-        <Button size="sm" onClick={() => handlePay(r)} disabled={payingId === r.id} className="h-9 w-full sm:w-auto">
-          <Wallet className="mr-1 h-4 w-4" />
-          {tt("addPayment", "Add Payment")}
-        </Button>
-        {(payMethodById[r.id] || "bank") === "bank" && payBankById[r.id] ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openLinkBank(r)}
-            disabled={payingId === r.id}
-            className="h-9 w-full sm:w-auto"
-          >
-            <Link2 className="mr-1 h-4 w-4" />
-            {tt("expenseLinkBank", "Link with Bank Transaction")}
-          </Button>
-        ) : null}
-      </div>
-    ),
-    [
-      bankAccounts,
-      handlePay,
-      openLinkBank,
-      payAmountById,
-      payBankById,
-      payDateById,
-      payMemoById,
-      payMethodById,
-      payStoreById,
-      payingId,
-      stores,
-      tt,
-    ]
-  )
+  const openAttachmentPreview = React.useCallback((r: ExpenseAccrualPlanItem) => {
+    const urls = r.attachmentUrls || []
+    if (urls.length === 0) return
+    setAttachmentPreview({
+      urls,
+      title: `${r.payeeName || ""} #${r.id}`,
+    })
+  }, [])
+
+  const expensePlanListSharedProps = {
+    tt,
+    getPayeeLine,
+    getMemo,
+    renderWithdrawalType,
+    renderPayAmount: (r: ExpenseAccrualPlanItem) => renderPlanPayAmountCell(r, tt),
+    planRowEditable,
+    canApproveByPolicy,
+    canDeleteByPolicy,
+    payingId,
+    deletingPlanId,
+    approvalEditById,
+    updatingInvoiceAccrualId,
+    onPlanDetail: setPlanDetailRow,
+    onEdit: navigateToEditInRegister,
+    onPay: openPaySheet,
+    onDelete: handleDeletePlan,
+    onApprove: handleApprove,
+    onApprovalEdit: (id: number) => setApprovalEditById((prev) => ({ ...prev, [id]: true })),
+    onAttachment: openAttachmentPreview,
+    onInvoiceToggle: (r: ExpenseAccrualPlanItem, checked: boolean) => {
+      void handleAccrualInvoiceCheckChange(r, checked)
+    },
+  } as const
 
   const expensePlanMobileSharedProps = {
     tt,
@@ -934,17 +993,17 @@ export function ExpenseManagementTab() {
     canDeleteByPolicy,
     payingId,
     deletingPlanId,
-    payEditorOpenById,
     approvalEditById,
+    updatingInvoiceAccrualId,
     onPlanDetail: setPlanDetailRow,
     onEdit: navigateToEditInRegister,
-    onTogglePay: (id: number) =>
-      setPayEditorOpenById((prev) => ({ ...prev, [id]: !prev[id] })),
+    onPay: openPaySheet,
     onDelete: handleDeletePlan,
     onApprove: handleApprove,
-    onApprovalEdit: (id: number) =>
-      setApprovalEditById((prev) => ({ ...prev, [id]: true })),
-    renderPayEditor: renderPlanPayEditor,
+    onApprovalEdit: (id: number) => setApprovalEditById((prev) => ({ ...prev, [id]: true })),
+    onInvoiceToggle: (r: ExpenseAccrualPlanItem, checked: boolean) => {
+      void handleAccrualInvoiceCheckChange(r, checked)
+    },
     renderAttachmentButton,
   } as const
 
@@ -954,7 +1013,7 @@ export function ExpenseManagementTab() {
       return
     }
     const ok = await appConfirm(
-      `${startStr} ${tt("expenseRejectAllDay", "Reject all for day")} (${approvablePlansForDay.length}${tt("receivPayCount", "items")})`
+      `${startStr}${endStr && endStr !== startStr ? ` ~ ${endStr}` : ""} ${tt("expenseRejectAllDay", "Reject all for day")} (${approvablePlansForDay.length}${tt("receivPayCount", "items")})`
     )
     if (!ok) return
     setRejectingAll(true)
@@ -979,7 +1038,7 @@ export function ExpenseManagementTab() {
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "plan" | "expenseRegister" | "expenseSearch" | "card")} className={adminTabsRootCn}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "plan" | "expenseRegister" | "expenseSearch" | "card")} preserveInactiveTabs={false} className={adminTabsRootCn}>
         <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="plan" className={adminTabsTriggerCn}>
@@ -1000,30 +1059,47 @@ export function ExpenseManagementTab() {
         <TabsContent value="plan" className={cn(adminTabsContentCn, "space-y-4")}>
           {!loading ? (
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <MetricCard
-                size="sm"
-                variant={approvablePlansForDay.length > 0 ? "warning" : "default"}
-                label={t("acct_kpi_expense_approve_pending")}
-                value={String(approvablePlansForDay.length)}
-                subLabel={startStr}
-              />
-              <MetricCard
-                size="sm"
-                variant="primary"
-                label={t("acct_kpi_expense_remaining")}
-                value={`฿${filteredPlanTotals.expenseRemaining.toLocaleString()}`}
-              />
-              <MetricCard
-                size="sm"
-                label={t("acct_kpi_logistics_remaining")}
-                value={`฿${filteredPlanTotals.logisticsRemaining.toLocaleString()}`}
-              />
-              <MetricCard
-                size="sm"
-                label={tt("expensePlanTab", "Payment Plan")}
-                value={`฿${filteredPlanTotals.expensePlanned.toLocaleString()}`}
-                subLabel={`${startStr} ~ ${endStr}`}
-              />
+              <button type="button" className="text-left" onClick={() => setPlanSegment("approve")}>
+                <MetricCard
+                  size="sm"
+                  variant={approvablePlansForDay.length > 0 ? "warning" : "default"}
+                  label={t("acct_kpi_expense_approve_pending")}
+                  value={String(approvablePlansForDay.length)}
+                  subLabel={
+                    endStr && endStr !== startStr ? `${startStr} ~ ${endStr}` : startStr
+                  }
+                />
+              </button>
+              <button type="button" className="text-left" onClick={() => setPlanSegment("pay")}>
+                <MetricCard
+                  size="sm"
+                  variant="primary"
+                  label={t("acct_kpi_expense_remaining")}
+                  value={`฿${filteredPlanTotals.expenseRemaining.toLocaleString()}`}
+                />
+              </button>
+              <button
+                type="button"
+                className="text-left"
+                onClick={() => {
+                  setPlanKindFilter("logistics")
+                  setPlanSegment("pay")
+                }}
+              >
+                <MetricCard
+                  size="sm"
+                  label={t("acct_kpi_logistics_remaining")}
+                  value={`฿${filteredPlanTotals.logisticsRemaining.toLocaleString()}`}
+                />
+              </button>
+              <button type="button" className="text-left" onClick={() => setPlanSegment("all")}>
+                <MetricCard
+                  size="sm"
+                  label={tt("expensePlanTab", "Payment Plan")}
+                  value={`฿${filteredPlanTotals.expensePlanned.toLocaleString()}`}
+                  subLabel={`${startStr} ~ ${endStr}`}
+                />
+              </button>
             </div>
           ) : null}
           <AdminFilterBar>
@@ -1072,557 +1148,177 @@ export function ExpenseManagementTab() {
                 </SelectContent>
               </Select>
             </AdminFilterField>
+            <AdminFilterField label={tt("expensePlanKindFilter", "Kind")}>
+              <Select
+                value={planKindFilter}
+                onValueChange={(v) => setPlanKindFilter(v as "__all__" | "general" | "logistics")}
+              >
+                <SelectTrigger className="w-full h-9 sm:w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{tt("all", "All")}</SelectItem>
+                  <SelectItem value="general">{tt("expenseNonLogisticsSection", "General")}</SelectItem>
+                  <SelectItem value="logistics">{tt("expenseLogisticsPlanSection", "Logistics")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </AdminFilterField>
             <Button size="sm" onClick={() => void loadPlans()} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
               {t("btn_query")}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-              onClick={handleApproveAllForDay}
-              disabled={approvingAll || approvablePlansForDay.length === 0}
-            >
-              {approvingAll ? tt("loading", "...") : tt("expenseApproveAllDay", "Approve all for day")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
-              onClick={handleRejectAllForDay}
-              disabled={rejectingAll || approvablePlansForDay.length === 0}
-            >
-              {rejectingAll ? tt("loading", "...") : tt("expenseRejectAllDay", "Reject all for day")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 border-emerald-600/30 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/15"
-              onClick={() => void handlePayAllForDay()}
-              disabled={payingAll || payablePlansForDay.length === 0}
-              title={tt("expensePayAllDayHint", "Pay all approved items for the start date via default bank account")}
-            >
-              {payingAll ? tt("loading", "...") : tt("expensePayAllDay", "Pay all for day")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15"
-              onClick={handleCleanNoStore}
-              disabled={cleaningNoStore}
-              title={tt("expenseCleanNoStoreHint", "Force delete payment plans with no store selected")}
-            >
-              {cleaningNoStore ? tt("loading", "...") : tt("expenseCleanNoStore", "Clean No-Store Plans")}
-            </Button>
           </AdminFilterBar>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="text-sm font-semibold mb-2">{tt("expenseNonLogisticsSection", "General Expense Payment Plan")}</div>
-              {filteredExpensePlans.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6">{tt("payableEmpty", "No payable items found.")}</p>
-              ) : (
-                <>
-                <AdminDesktopOnly>
-                <AdminTableScroll className="rounded-md border border-border/60" hint={false}>
-                  <table className="w-full min-w-[1032px] text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="w-[120px] text-center py-2 px-2">{tt("expenseDocumentNo", "Doc No.")}</th>
-                        <th className="w-[88px] text-center py-2 px-2">{tt("bankCategoryLabel", "Category")}</th>
-                        <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
-                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
-                        <th className="w-[92px] text-center py-2 px-2">{tt("date", "Date")}</th>
-                        <th className="w-[72px] text-center py-2 px-1">{tt("expensePlanStatusCol", "Status")}</th>
-                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}>
-                          {tt("expensePlanPayAmount", "Pay Amount")}
-                        </th>
-                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{tt("memo", "Memo")}</th>
-                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "Attachment")}</th>
-                        <th className="w-[120px] text-center py-2 px-1" title={tt("poInvoice", "Invoice")}>
-                          {tt("poInvoice", "Invoice")}
-                        </th>
-                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "Action")}</th>
-                        <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
-                          {tt("att_approval", "Approval")}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {expensePlansByStore.map(([storeLabel, rows]) => (
-                        <React.Fragment key={storeLabel}>
-                          <tr className="border-b bg-muted/30">
-                            <td colSpan={12} className="py-2 px-3 text-sm font-medium">
-                              {tt("store", "Store")}: {storeLabel}
-                            </td>
-                          </tr>
-                          {rows.map((r) => (
-                            <React.Fragment key={r.id}>
-                              <tr className="border-b">
-                                {(() => {
-                                  const codeLabel = r.payeeCode && !r.payeeCode.startsWith("auto_") ? ` (${r.payeeCode})` : ""
-                                  return (
-                                    <>
-                                      <td className="py-2 px-2 text-center align-top tabular-nums text-xs whitespace-nowrap">
-                                        {r.documentNo || "—"}
-                                      </td>
-                                      <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
-                                      <td className="py-2 px-2 text-muted-foreground align-top break-words text-sm leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                      <td className="py-2 px-2 align-top text-sm leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={getPayeeLine(r.payeeName, codeLabel)}>{getPayeeLine(r.payeeName, codeLabel)}</td>
-                                    </>
-                                  )
-                                })()}
-                            <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                            <td className="py-2 px-1 text-center align-top">
-                              <ExpensePlanStatusBadge status={r.status} />
-                            </td>
-                            <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
-                            <td
-                              className="py-2 px-2 text-muted-foreground align-top text-sm leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
-                              title={r.memo || ""}
-                              onClick={() => setPlanDetailRow(r)}
-                            >{getMemo(r.memo)}</td>
-                            {renderAttachmentCell(r)}
-                            {renderAccrualInvoiceCell(r)}
-                            <td className="py-2 px-1 text-center align-top">
-                              <div className="flex flex-wrap items-center justify-center gap-1">
-                                {planRowEditable(r) ? (
-                                  <Button
-                                    size="icon"
-                                    variant="outline"
-                                    className="h-7 w-7"
-                                    title={tt("btnEdit", "Edit")}
-                                    onClick={() => navigateToEditInRegister(r)}
-                                    disabled={payingId === r.id || deletingPlanId === r.id}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                ) : null}
-                                {r.status === "approved" && r.remainingAmount > 0 ? (
-                                  <Button
-                                    size="sm"
-                                    variant={payEditorOpenById[r.id] ? "outline" : "default"}
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() =>
-                                      setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))
-                                    }
-                                    disabled={payingId === r.id}
-                                  >
-                                    {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
-                                  </Button>
-                                ) : !String(r.storeName || "").trim() && canDeleteByPolicy(r) ? (
-                                  <Button
-                                    size="icon"
-                                    variant="outline"
-                                    className="h-7 w-7 border-destructive/40 text-destructive"
-                                    title={tt("delete", "Delete")}
-                                    onClick={() => handleDeletePlan(r)}
-                                    disabled={payingId === r.id || deletingPlanId === r.id}
-                                  >
-                                    {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                  </Button>
-                                ) : planRowEditable(r) ? null : (
-                                  <span className="text-xs text-muted-foreground">-</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-1 text-center align-top sticky right-0 z-[1] border-l border-border/60 bg-card">
-                              <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">
-                                {canApproveByPolicy(r) && (
-                                  (r.status === "planned" || approvalEditById[r.id]) && r.status !== "paid" ? (
-                                  <>
-                                    <div className="flex flex-wrap items-center justify-center gap-1">
-                                      <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="h-7 w-7 shrink-0 border-primary/40 text-primary"
-                                        onClick={() => handleApprove(r, "approve")}
-                                        disabled={payingId === r.id}
-                                        title={tt("att_approve", "Approve")}
-                                      >
-                                        <Check className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
-                                        onClick={() => handleApprove(r, "reject")}
-                                        disabled={payingId === r.id}
-                                        title={tt("att_reject", "Reject")}
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </Button>
-                                      {canDeleteByPolicy(r) && (
-                                      <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
-                                        title={tt("delete", "Delete")}
-                                        onClick={() => handleDeletePlan(r)}
-                                        disabled={payingId === r.id || deletingPlanId === r.id}
-                                      >
-                                        {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                      </Button>
-                                      )}
-                                    </div>
-                                  </>
-                                  ) : (
-                                    (r.status === "approved" || r.status === "rejected") && (
-                                      <div className="flex flex-col items-center gap-1 w-full">
-                                        {r.status === "approved" ? (
-                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>
-                                        ) : (
-                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
-                                        )}
-                                        <div className="flex flex-wrap items-center justify-center gap-1">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-6 px-1.5 text-[10px]"
-                                            title={tt("btnEdit", "Edit")}
-                                            onClick={() =>
-                                              setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))
-                                            }
-                                            disabled={payingId === r.id}
-                                          >
-                                            <Pencil className="h-3 w-3 mr-0.5" />
-                                            {tt("btnEdit", "Edit")}
-                                          </Button>
-                                          {canDeleteByPolicy(r) && (
-                                            <Button
-                                              size="icon"
-                                              variant="outline"
-                                              className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
-                                              title={tt("delete", "Delete")}
-                                              onClick={() => handleDeletePlan(r)}
-                                              disabled={payingId === r.id || deletingPlanId === r.id}
-                                            >
-                                              {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )
-                                  )
-                                )}
-                                {!canApproveByPolicy(r) && r.status === "approved" ? (
-                                  <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>
-                                ) : !canApproveByPolicy(r) && r.status === "rejected" ? (
-                                  <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
-                                ) : r.status === "planned" && !approvalEditById[r.id] && !canApproveByPolicy(r) ? (
-                                  <span className="text-[10px] text-muted-foreground text-center leading-tight px-0.5" title={tt("expensePayAwaitApprovalHint", "Pay appears after approval")}>
-                                    {tt("expensePayAwaitApprovalShort", "Pending")}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                          {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
-                            <tr className="border-b bg-muted/20">
-                              <td className="py-2 px-2" colSpan={12}>
-                                <div className="flex flex-wrap items-end gap-2">
-                                  <Select
-                                    value={payMethodById[r.id] || "bank"}
-                                    onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}
-                                  >
-                                    <SelectTrigger className="w-[120px] h-9">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="bank">{tt("bankTitle", "Bank")}</SelectItem>
-                                      <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
-                                    </SelectContent>
-                                  </Select>
 
-                                  {(payMethodById[r.id] || "bank") === "bank" ? (
-                                    <Select
-                                      value={payBankById[r.id] || ""}
-                                      onValueChange={(v) => setPayBankById((p) => ({ ...p, [r.id]: v }))}
-                                    >
-                                      <SelectTrigger className="w-[220px] h-9">
-                                        <SelectValue placeholder={tt("bankAccount", "Account")} />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {bankAccounts.map((a) => (
-                                          <SelectItem key={a.id} value={String(a.id)}>
-                                            {a.bankName ? `[${a.bankName}] ` : ""}{a.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : (
-                                    <Select
-                                      value={payStoreById[r.id] || ""}
-                                      onValueChange={(v) => setPayStoreById((p) => ({ ...p, [r.id]: v }))}
-                                    >
-                                      <SelectTrigger className="w-[180px] h-9">
-                                        <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {(stores || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                { id: "approve" as const, label: tt("expensePlanSegApprove", "To Approve"), count: planSegmentCounts.approve },
+                { id: "pay" as const, label: tt("expensePlanSegPay", "To Pay"), count: planSegmentCounts.pay },
+                { id: "all" as const, label: tt("expensePlanSegAll", "All"), count: planSegmentCounts.all },
+              ] as const
+            ).map((seg) => (
+              <Button
+                key={seg.id}
+                size="sm"
+                variant={planSegment === seg.id ? "default" : "outline"}
+                className="h-9"
+                onClick={() => setPlanSegment(seg.id)}
+              >
+                {seg.label}
+                <span className="ml-1.5 tabular-nums text-xs opacity-80">({seg.count})</span>
+              </Button>
+            ))}
+            {planSegment === "pay" ? (
+              <div className="ml-auto flex flex-wrap items-center gap-1 rounded-md border border-border/60 p-0.5">
+                <Button
+                  size="sm"
+                  variant={payListMode === "transfer" ? "secondary" : "ghost"}
+                  className="h-8"
+                  onClick={() => setPayListMode("transfer")}
+                >
+                  {tt("expensePayModeTransfer", "Bank Transfer")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={payListMode === "list" ? "secondary" : "ghost"}
+                  className="h-8"
+                  onClick={() => setPayListMode("list")}
+                >
+                  {tt("expensePayModeList", "List")}
+                </Button>
+              </div>
+            ) : null}
+          </div>
 
-                                  <Input
-                                    value={payAmountById[r.id] ?? String(r.remainingAmount)}
-                                    onChange={(e) => setPayAmountById((p) => ({ ...p, [r.id]: e.target.value }))}
-                                    className="w-[120px] h-9 text-right"
-                                    type="number"
-                                  />
-                                  <Input
-                                    type="date"
-                                    value={payDateById[r.id] || todayStrBkk()}
-                                    onChange={(e) => setPayDateById((p) => ({ ...p, [r.id]: e.target.value }))}
-                                    className="w-[140px] h-9"
-                                  />
-                                  <Input
-                                    value={payMemoById[r.id] || ""}
-                                    onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))}
-                                    className="w-[220px] h-9"
-                                    placeholder={tt("memo", "Memo")}
-                                  />
-                                  <Button size="sm" onClick={() => handlePay(r)} disabled={payingId === r.id} className="h-9">
-                                    <Wallet className="h-4 w-4 mr-1" />
-                                    {tt("addPayment", "Add Payment")}
-                                  </Button>
-                                  {(payMethodById[r.id] || "bank") === "bank" && payBankById[r.id] && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => openLinkBank(r)}
-                                      disabled={payingId === r.id}
-                                      className="h-9"
-                                    >
-                                      <Link2 className="h-4 w-4 mr-1" />
-                                      {tt("expenseLinkBank", "Link with Bank Transaction")}
-                                    </Button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                            </React.Fragment>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </AdminTableScroll>
-                </AdminDesktopOnly>
+          <div className="flex flex-wrap items-center gap-2">
+            {planSegment === "approve" ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                  onClick={handleApproveAllForDay}
+                  disabled={approvingAll || approvablePlansForDay.length === 0}
+                  title={`${startStr}${endStr && endStr !== startStr ? ` ~ ${endStr}` : ""}`}
+                >
+                  {approvingAll
+                    ? tt("loading", "...")
+                    : `${tt("expenseApproveAllDay", "Approve all for day")} (${approvablePlansForDay.length})`}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                  onClick={handleRejectAllForDay}
+                  disabled={rejectingAll || approvablePlansForDay.length === 0}
+                  title={`${startStr}${endStr && endStr !== startStr ? ` ~ ${endStr}` : ""}`}
+                >
+                  {rejectingAll
+                    ? tt("loading", "...")
+                    : `${tt("expenseRejectAllDay", "Reject all for day")} (${approvablePlansForDay.length})`}
+                </Button>
+              </>
+            ) : null}
+            {planSegment === "pay" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 border-emerald-600/30 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/15"
+                onClick={openPayAllDialog}
+                disabled={payingAll || payablePlansForDay.length === 0}
+                title={tt(
+                  "expensePayAllDayHint",
+                  "Choose bank account and payment date, then pay all approved items in the current filter"
+                )}
+              >
+                {payingAll
+                  ? tt("loading", "...")
+                  : `${tt("expensePayAllDay", "Pay all for day")} (${payablePlansForDay.length})`}
+              </Button>
+            ) : null}
+            {planSegment === "all" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15"
+                onClick={handleCleanNoStore}
+                disabled={cleaningNoStore}
+                title={tt("expenseCleanNoStoreHint", "Force delete payment plans with no store selected")}
+              >
+                {cleaningNoStore ? tt("loading", "...") : tt("expenseCleanNoStore", "Clean No-Store Plans")}
+              </Button>
+            ) : null}
+          </div>
+
+          {planSegment === "pay" && payListMode === "transfer" ? (
+            <ExpenseBankTransferView
+              plans={transferPayablePlans}
+              tt={tt}
+              companyName={transferCompanyName}
+              asOfDate={endStr || startStr}
+              canEditBank={canEditPayeeBank}
+              savingId={savingBankId}
+              onSaveBank={handleSavePayeeBank}
+              onPay={openPaySheet}
+            />
+          ) : (
+            <>
+              <AdminDesktopOnly className="space-y-4">
+                {planKindFilter === "__all__" || planKindFilter === "general" ? (
+                  <ExpensePlanDesktopList
+                    title={tt("expenseNonLogisticsSection", "General Expense Payment Plan")}
+                    plansByStore={expensePlansByStore}
+                    emptyLabel={tt("payableEmpty", "No payable items found.")}
+                    {...expensePlanListSharedProps}
+                  />
+                ) : null}
+                {planKindFilter === "__all__" || planKindFilter === "logistics" ? (
+                  <ExpensePlanDesktopList
+                    title={tt("expenseLogisticsPlanSection", "Logistics Expense Payment Plan")}
+                    plansByStore={purchasePlansByStore}
+                    emptyLabel={tt("payableEmpty", "No logistics payable plans found.")}
+                    {...expensePlanListSharedProps}
+                  />
+                ) : null}
+              </AdminDesktopOnly>
+              {planKindFilter === "__all__" || planKindFilter === "general" ? (
                 <ExpensePlanMobileList
+                  title={tt("expenseNonLogisticsSection", "General Expense Payment Plan")}
+                  emptyLabel={tt("payableEmpty", "No payable items found.")}
                   plansByStore={expensePlansByStore}
                   {...expensePlanMobileSharedProps}
                 />
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-4">
-              <div className="text-sm font-semibold mb-2">{tt("expenseLogisticsPlanSection", "Logistics Expense Payment Plan")}</div>
-              {filteredPurchasePlans.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6">{tt("payableEmpty", "No logistics payable plans found.")}</p>
-              ) : (
-                <>
-                <AdminDesktopOnly>
-                <AdminTableScroll className="rounded-md border border-border/60" hint={false}>
-                  <table className="w-full min-w-[1032px] text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="w-[120px] text-center py-2 px-2">{tt("expenseDocumentNo", "Doc No.")}</th>
-                        <th className="w-[88px] text-center py-2 px-2">{tt("bankCategoryLabel", "Category")}</th>
-                        <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
-                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
-                        <th className="w-[92px] text-center py-2 px-2">{tt("date", "Date")}</th>
-                        <th className="w-[72px] text-center py-2 px-1">{tt("expensePlanStatusCol", "Status")}</th>
-                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}>
-                          {tt("expensePlanPayAmount", "Pay Amount")}
-                        </th>
-                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{tt("memo", "Memo")}</th>
-                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "Attachment")}</th>
-                        <th className="w-[120px] text-center py-2 px-1" title={tt("poInvoice", "Invoice")}>
-                          {tt("poInvoice", "Invoice")}
-                        </th>
-                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "Action")}</th>
-                        <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
-                          {tt("att_approval", "Approval")}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {purchasePlansByStore.map(([storeLabel, rows]) => (
-                        <React.Fragment key={storeLabel}>
-                          <tr className="border-b bg-muted/30">
-                            <td colSpan={12} className="py-2 px-3 text-sm font-medium">
-                              {tt("store", "Store")}: {storeLabel}
-                            </td>
-                          </tr>
-                          {rows.map((r) => (
-                            <React.Fragment key={r.id}>
-                              <tr className="border-b">
-                                <td className="py-2 px-2 text-center align-top tabular-nums text-xs whitespace-nowrap">
-                                  {r.documentNo || "—"}
-                                </td>
-                                <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
-                                <td className="py-2 px-2 text-muted-foreground align-top break-words text-sm leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                <td
-                                  className="py-2 px-2 align-top text-sm leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words"
-                                  title={
-                                    r.payeeCode && !r.payeeCode.startsWith("auto_")
-                                      ? getPayeeLine(r.payeeName, ` (${r.payeeCode})`)
-                                      : getPayeeLine(r.payeeName, "")
-                                  }
-                                >
-                                  {r.payeeCode && !r.payeeCode.startsWith("auto_")
-                                    ? getPayeeLine(r.payeeName, ` (${r.payeeCode})`)
-                                    : getPayeeLine(r.payeeName, "")}
-                                </td>
-                                <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                                <td className="py-2 px-1 text-center align-top">
-                                  <ExpensePlanStatusBadge status={r.status} />
-                                </td>
-                                <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">{renderPlanPayAmountCell(r, tt)}</td>
-                                <td
-                                  className="py-2 px-2 text-muted-foreground align-top text-sm leading-snug break-words min-w-[148px] max-w-[188px] cursor-pointer hover:text-foreground"
-                                  title={r.memo || ""}
-                                  onClick={() => setPlanDetailRow(r)}
-                                >{getMemo(r.memo)}</td>
-                                {renderAttachmentCell(r)}
-                                {renderAccrualInvoiceCell(r)}
-                                <td className="py-2 px-1 text-center align-top">
-                                  <div className="flex flex-wrap items-center justify-center gap-1">
-                                    {planRowEditable(r) ? (
-                                      <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "Edit")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </Button>
-                                    ) : null}
-                                    {r.status === "approved" && r.remainingAmount > 0 ? (
-                                      <Button size="sm" variant={payEditorOpenById[r.id] ? "outline" : "default"} className="h-7 px-2 text-xs" onClick={() => setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))} disabled={payingId === r.id}>
-                                        {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
-                                      </Button>
-                                    ) : !String(r.storeName || "").trim() && canDeleteByPolicy(r) ? (
-                                      <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
-                                        {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                      </Button>
-                                    ) : planRowEditable(r) ? null : (
-                                      <span className="text-xs text-muted-foreground">-</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-2 px-1 text-center align-top sticky right-0 z-[1] border-l border-border/60 bg-card">
-                                  <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">
-                                    {canApproveByPolicy(r) && (r.status === "planned" || approvalEditById[r.id]) && r.status !== "paid" ? (
-                                      <div className="flex flex-wrap items-center justify-center gap-1">
-                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-primary/40 text-primary" onClick={() => handleApprove(r, "approve")} disabled={payingId === r.id} title={tt("att_approve", "Approve")}>
-                                          <Check className="h-3.5 w-3.5" />
-                                        </Button>
-                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" onClick={() => handleApprove(r, "reject")} disabled={payingId === r.id} title={tt("att_reject", "Reject")}>
-                                          <X className="h-3.5 w-3.5" />
-                                        </Button>
-                                        {canDeleteByPolicy(r) && (
-                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
-                                          {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                        </Button>
-                                        )}
-                                      </div>
-                                    ) : (r.status === "approved" || r.status === "rejected") && (
-                                      <div className="flex flex-col items-center gap-1 w-full">
-                                        {r.status === "approved" ? (
-                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>
-                                        ) : (
-                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
-                                        )}
-                                        <div className="flex flex-wrap items-center justify-center gap-1">
-                                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" title={tt("btnEdit", "Edit")} onClick={() => setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))} disabled={payingId === r.id}>
-                                            <Pencil className="h-3 w-3 mr-0.5" />
-                                            {tt("btnEdit", "Edit")}
-                                          </Button>
-                                          {canDeleteByPolicy(r) && (
-                                            <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
-                                              {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {!canApproveByPolicy(r) && r.status === "approved" && <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>}
-                                    {!canApproveByPolicy(r) && r.status === "rejected" && <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>}
-                                    {r.status === "planned" && !canApproveByPolicy(r) && !approvalEditById[r.id] && (
-                                      <span className="text-[10px] text-muted-foreground text-center leading-tight px-0.5" title={tt("expensePayAwaitApprovalHint", "Pay appears after approval")}>
-                                        {tt("expensePayAwaitApprovalShort", "Pending")}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                              {r.remainingAmount > 0 && r.status === "approved" && payEditorOpenById[r.id] && (
-                                <tr className="border-b bg-muted/20">
-                                  <td className="py-2 px-2" colSpan={12}>
-                                    <div className="flex flex-wrap items-end gap-2">
-                                      <Select value={payMethodById[r.id] || "bank"} onValueChange={(v) => setPayMethodById((p) => ({ ...p, [r.id]: v as "bank" | "petty" }))}>
-                                        <SelectTrigger className="w-[120px] h-9">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="bank">{tt("bankTitle", "Bank")}</SelectItem>
-                                          <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      {(payMethodById[r.id] || "bank") === "bank" ? (
-                                        <Select value={payBankById[r.id] || ""} onValueChange={(v) => setPayBankById((p) => ({ ...p, [r.id]: v }))}>
-                                          <SelectTrigger className="w-[220px] h-9">
-                                            <SelectValue placeholder={tt("bankAccount", "Account")} />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {bankAccounts.map((a) => (
-                                              <SelectItem key={a.id} value={String(a.id)}>{a.bankName ? `[${a.bankName}] ` : ""}{a.name}</SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      ) : (
-                                        <Select value={payStoreById[r.id] || ""} onValueChange={(v) => setPayStoreById((p) => ({ ...p, [r.id]: v }))}>
-                                          <SelectTrigger className="w-[180px] h-9">
-                                            <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {(stores || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                          </SelectContent>
-                                        </Select>
-                                      )}
-                                      <Input value={payAmountById[r.id] ?? String(r.remainingAmount)} onChange={(e) => setPayAmountById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[120px] h-9 text-right" type="number" />
-                                      <Input type="date" value={payDateById[r.id] || todayStrBkk()} onChange={(e) => setPayDateById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[140px] h-9" />
-                                      <Input value={payMemoById[r.id] || ""} onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[220px] h-9" placeholder={tt("memo", "Memo")} />
-                                      <Button size="sm" onClick={() => handlePay(r)} disabled={payingId === r.id} className="h-9">
-                                        <Wallet className="h-4 w-4 mr-1" />
-                                        {tt("addPayment", "Add Payment")}
-                                      </Button>
-                                      {(payMethodById[r.id] || "bank") === "bank" && payBankById[r.id] && (
-                                        <Button size="sm" variant="outline" onClick={() => openLinkBank(r)} disabled={payingId === r.id} className="h-9">
-                                          <Link2 className="h-4 w-4 mr-1" />
-                                          {tt("expenseLinkBank", "Link with Bank Transaction")}
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </AdminTableScroll>
-                </AdminDesktopOnly>
+              ) : null}
+              {planKindFilter === "__all__" || planKindFilter === "logistics" ? (
                 <ExpensePlanMobileList
+                  title={tt("expenseLogisticsPlanSection", "Logistics Expense Payment Plan")}
+                  emptyLabel={tt("payableEmpty", "No logistics payable plans found.")}
                   plansByStore={purchasePlansByStore}
                   {...expensePlanMobileSharedProps}
                 />
-                </>
-              )}
-            </CardContent>
-          </Card>
+              ) : null}
+            </>
+          )}
 
           <Dialog open={!!attachmentPreview} onOpenChange={(open) => !open && setAttachmentPreview(null)}>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -1650,6 +1346,48 @@ export function ExpenseManagementTab() {
             </DialogContent>
           </Dialog>
 
+          <ExpensePlanPaySheet
+            open={!!paySheetRow}
+            row={paySheetRow}
+            tt={tt}
+            stores={stores || []}
+            bankAccounts={bankAccounts}
+            payingId={payingId}
+            payMethod={paySheetRow ? payMethodById[paySheetRow.id] || "bank" : "bank"}
+            payBankId={paySheetRow ? payBankById[paySheetRow.id] || "" : ""}
+            payStore={paySheetRow ? payStoreById[paySheetRow.id] || "" : ""}
+            payAmount={paySheetRow ? payAmountById[paySheetRow.id] ?? "" : ""}
+            payDate={paySheetRow ? payDateById[paySheetRow.id] || "" : ""}
+            payMemo={paySheetRow ? payMemoById[paySheetRow.id] || "" : ""}
+            onPayMethodChange={(v) => {
+              if (!paySheetRow) return
+              setPayMethodById((p) => ({ ...p, [paySheetRow.id]: v }))
+            }}
+            onPayBankChange={(v) => {
+              if (!paySheetRow) return
+              setPayBankById((p) => ({ ...p, [paySheetRow.id]: v }))
+            }}
+            onPayStoreChange={(v) => {
+              if (!paySheetRow) return
+              setPayStoreById((p) => ({ ...p, [paySheetRow.id]: v }))
+            }}
+            onPayAmountChange={(v) => {
+              if (!paySheetRow) return
+              setPayAmountById((p) => ({ ...p, [paySheetRow.id]: v }))
+            }}
+            onPayDateChange={(v) => {
+              if (!paySheetRow) return
+              setPayDateById((p) => ({ ...p, [paySheetRow.id]: v }))
+            }}
+            onPayMemoChange={(v) => {
+              if (!paySheetRow) return
+              setPayMemoById((p) => ({ ...p, [paySheetRow.id]: v }))
+            }}
+            onClose={() => setPaySheetRow(null)}
+            onSubmit={(r) => void handlePay(r)}
+            onLinkBank={(r) => void openLinkBank(r)}
+          />
+
           <Sheet open={!!planDetailRow} onOpenChange={(open) => !open && setPlanDetailRow(null)}>
             <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
               <SheetHeader>
@@ -1665,13 +1403,60 @@ export function ExpenseManagementTab() {
                     <ExpensePlanStatusBadge status={planDetailRow.status} />
                   </div>
                   <div>
+                    <div className="text-muted-foreground text-xs">{tt("expenseDocumentNo", "Doc No.")}</div>
+                    <div className="tabular-nums">{planDetailRow.documentNo || "—"}</div>
+                  </div>
+                  <div>
                     <div className="text-muted-foreground text-xs">{tt("vendor", "Vendor")}</div>
                     <div>{planDetailRow.payeeName || "—"}</div>
+                    {planDetailRow.payeeCode && !planDetailRow.payeeCode.startsWith("auto_") ? (
+                      <div className="text-[11px] text-muted-foreground">{planDetailRow.payeeCode}</div>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-muted-foreground text-xs">{tt("store", "Store")}</div>
+                      <div>{planDetailRow.storeName || "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground text-xs">{tt("date", "Date")}</div>
+                      <div>{planDetailRow.dueDate || planDetailRow.expenseDate || "—"}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">{tt("expensePayeeAccountHolder", "Account holder")}</div>
+                    <div>{planDetailRow.payeeAccountHolder || planDetailRow.payeeName || "—"}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-muted-foreground text-xs">{tt("expensePayeeBankName", "Bank")}</div>
+                      <div>{planDetailRow.payeeBankName || "—"}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground text-xs">{tt("inv_account_no", "Account")}</div>
+                      <div className="tabular-nums">{planDetailRow.payeeBankAccountNo || "—"}</div>
+                    </div>
                   </div>
                   <div>
                     <div className="text-muted-foreground text-xs">{tt("expensePlanPayAmount", "Pay Amount")}</div>
                     <div className="tabular-nums font-medium">
                       ฿{(planDetailRow.grossAmount ?? planDetailRow.plannedAmount ?? 0).toLocaleString()}
+                    </div>
+                    {(planDetailRow.remainingAmount || 0) > 0 &&
+                    planDetailRow.remainingAmount !== (planDetailRow.plannedAmount || 0) ? (
+                      <div className="text-[11px] text-muted-foreground tabular-nums">
+                        {tt("expensePlanNetPayShort", "Net")} remaining ฿
+                        {(planDetailRow.remainingAmount || 0).toLocaleString()}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">{tt("poInvoice", "Invoice")}</div>
+                    <div>
+                      {planDetailRow.invoiceReceived
+                        ? tt("poInvoiceReceived", "Invoice Received")
+                        : "—"}
+                      {planDetailRow.invoiceNo ? ` · ${planDetailRow.invoiceNo}` : ""}
                     </div>
                   </div>
                   <div>
@@ -1725,6 +1510,78 @@ export function ExpenseManagementTab() {
           <CardManagementTab />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={payAllOpen} onOpenChange={(open) => !open && setPayAllOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tt("expensePayAllDay", "Pay all for day")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              {startStr}
+              {endStr && endStr !== startStr ? ` ~ ${endStr}` : ""} · {payablePlansForDay.length}
+              {tt("receivPayCount", "items")} · ฿{payAllTotal.toLocaleString()}
+            </p>
+            {payAllMissingBankCount > 0 ? (
+              <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-50/80 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                <p>
+                  {tt(
+                    "expensePayAllMissingBankWarn",
+                    "{count} item(s) missing bank account — fill them before transfer, or allow pay without account."
+                  ).replace("{count}", String(payAllMissingBankCount))}
+                </p>
+                <label className="flex items-center gap-2 font-medium">
+                  <Checkbox
+                    checked={payAllAllowMissingBank}
+                    onCheckedChange={(v) => setPayAllAllowMissingBank(v === true)}
+                  />
+                  {tt("expensePayAllMissingBankAllow", "Pay anyway without account")}
+                </label>
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">{tt("bankAccount", "Account")}</label>
+              <Select value={payAllBankId} onValueChange={setPayAllBankId}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={tt("bankAccount", "Account")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankAccounts.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.bankName ? `[${a.bankName}] ` : ""}
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">{tt("date", "Date")}</label>
+              <Input
+                type="date"
+                className="h-9"
+                value={payAllDate}
+                onChange={(e) => setPayAllDate(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setPayAllOpen(false)} disabled={payingAll}>
+                {tt("btnClose", "Close")}
+              </Button>
+              <Button
+                onClick={() => void handlePayAllForDay()}
+                disabled={
+                  payingAll ||
+                  !payAllBankId ||
+                  (payAllMissingBankCount > 0 && !payAllAllowMissingBank)
+                }
+              >
+                {payingAll ? tt("loading", "...") : tt("expensePayAllDay", "Pay all for day")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!linkBankRow} onOpenChange={(open) => !open && setLinkBankRow(null)}>
         <DialogContent className="max-w-lg">

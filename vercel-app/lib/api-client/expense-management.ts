@@ -41,6 +41,12 @@ export interface ExpenseAccrualPlanItem {
   storeName?: string
   /** FlowAccount식 EXPyyyymmNNNN */
   documentNo?: string | null
+  /** 이체용 예금주 (스냅샷 또는 거래처) */
+  payeeAccountHolder?: string | null
+  /** 이체용 은행명 */
+  payeeBankName?: string | null
+  /** 이체용 계좌번호 */
+  payeeBankAccountNo?: string | null
   /** getApprovedExpenseAccrualsForBankTx: 통장 적요 vs 지급처(느슨) */
   payeeMemoMatchQuality?: PayeeMemoMatchQuality
   payeeMemoMatchDetail?: string
@@ -130,6 +136,10 @@ export async function addExpenseAccrual(params: {
   documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
+  /** 이체용 예금주·은행·계좌 (스냅샷) */
+  payeeAccountHolder?: string
+  payeeBankName?: string
+  payeeBankAccountNo?: string
 }) {
   const res = await apiFetchWithOffline('/api/addExpenseAccrual', {
     method: 'POST',
@@ -212,6 +222,10 @@ export async function updateExpenseAccrual(params: {
   documentType?: 'invoice' | 'tax_invoice' | 'receipt' | null
   invoiceNo?: string
   invoicePhotoUrl?: string
+  /** 이체용 예금주·은행·계좌 (스냅샷) */
+  payeeAccountHolder?: string
+  payeeBankName?: string
+  payeeBankAccountNo?: string
 }) {
   const res = await apiFetchWithOffline('/api/updateExpenseAccrual', {
     method: 'POST',
@@ -246,6 +260,30 @@ export async function updateExpenseAccrualInvoice(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateExpenseAccrualPayeeBank(params: {
+  expenseAccrualId: number
+  payeeAccountHolder?: string
+  payeeBankName?: string
+  payeeBankAccountNo?: string
+  syncVendor?: boolean
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/updateExpenseAccrualPayeeBank', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    payeeAccountHolder?: string | null
+    payeeBankName?: string | null
+    payeeBankAccountNo?: string | null
+    vendorSynced?: boolean
+    vendorSyncWarning?: string
+  }>
 }
 
 export async function deleteExpenseAccrualsWithoutStore(params: { userRole?: string }) {

@@ -49,6 +49,9 @@ export interface AdminVendor {
   tax_no?: string
   type: 'purchase' | 'sales' | 'both'
   memo: string
+  direct_settlement?: boolean
+  bank_account_no?: string
+  bank_name?: string
 }
 
 export async function getAdminItems(options?: { scope?: 'outbound' | 'order' }) {
@@ -149,6 +152,8 @@ export async function saveVendor(params: {
   memo?: string
   direct_settlement?: boolean
   editingCode?: string
+  bank_account_no?: string
+  bank_name?: string
 }) {
   const res = await apiFetchWithOffline('/api/saveVendor', {
     method: 'POST',

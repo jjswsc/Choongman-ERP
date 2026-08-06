@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useErpPageActive, useErpTabActive } from "@/lib/erp-page-visibility"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList } from "@/lib/api-client"
 import {
@@ -169,6 +170,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [payeeCode, setPayeeCode] = React.useState("")
   const [payeeName, setPayeeName] = React.useState("")
   const [payeeManual, setPayeeManual] = React.useState(false)
+  const [payeeAccountHolder, setPayeeAccountHolder] = React.useState("")
+  const [payeeBankName, setPayeeBankName] = React.useState("")
+  const [payeeBankAccountNo, setPayeeBankAccountNo] = React.useState("")
+  const lastBankAutofillCodeRef = React.useRef("")
   const [advanceInstallments, setAdvanceInstallments] = React.useState("1")
   const [advanceInstallmentCurrent, setAdvanceInstallmentCurrent] = React.useState("1")
 
@@ -177,7 +182,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [inboundLinkLoading, setInboundLinkLoading] = React.useState(false)
 
   const [vendors, setVendors] = React.useState<
-    { code: string; name: string; bankAccountNo?: string | null; taxId?: string; address?: string }[]
+    {
+      code: string
+      name: string
+      bankAccountNo?: string | null
+      bankName?: string | null
+      taxId?: string
+      address?: string
+    }[]
   >([])
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
   const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
@@ -249,6 +261,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const accrualWhtParam = searchParams.get("accrualWht")
     const invoiceReceivedParam = searchParams.get("invoiceReceived")
     const invoiceNoParam = searchParams.get("invoiceNo")
+    const payeeAccountHolderParam = searchParams.get("payeeAccountHolder")
+    const payeeBankNameParam = searchParams.get("payeeBankName")
+    const payeeBankAccountNoParam = searchParams.get("payeeBankAccountNo")
     const hasAnyParam =
       amountParam ||
       bankMemoParam ||
@@ -267,7 +282,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       accrualVatParam ||
       accrualWhtParam ||
       invoiceReceivedParam ||
-      invoiceNoParam
+      invoiceNoParam ||
+      payeeAccountHolderParam ||
+      payeeBankNameParam ||
+      payeeBankAccountNoParam
     if (hasAnyParam) {
       hasAppliedParams.current = true
       if (amountParam && parseMoneyAmount(amountParam) > 0) setAmount(moneyInputStringFromAmount(amountParam))
@@ -329,6 +347,16 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (invoiceNoParam) setInvoiceNo(invoiceNoParam)
       if (editAccrualId) {
         setExpensePayMode("later")
+        // 수정 진입 시 계좌 파라미터는 항상 반영(빈 문자열 포함)
+        setPayeeAccountHolder(payeeAccountHolderParam ?? "")
+        setPayeeBankName(payeeBankNameParam ?? "")
+        setPayeeBankAccountNo(payeeBankAccountNoParam ?? "")
+        const bankCode = (vendorCodeParam || payeeCodeParam || "").trim()
+        if (bankCode) lastBankAutofillCodeRef.current = bankCode
+      } else {
+        if (payeeAccountHolderParam != null) setPayeeAccountHolder(payeeAccountHolderParam)
+        if (payeeBankNameParam != null) setPayeeBankName(payeeBankNameParam)
+        if (payeeBankAccountNoParam != null) setPayeeBankAccountNo(payeeBankAccountNoParam)
       }
     }
   }, [searchParams, mapCategoryToMainSub, applyDocumentType])
@@ -497,18 +525,21 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     setStoreName(pickOfficeStore(availableStores))
   }, [availableStores, pickOfficeStore, storeName, resolveStoreInList])
 
+  const withdrawalPageActive = useErpPageActive()
+  const withdrawalTabActive = useErpTabActive()
   React.useEffect(() => {
     const reloadSubjects = () => {
       getAccountSubjects(EXPENSE_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setSubjects)
       getAccountSubjects(TRANSFER_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setTransferSubjects)
     }
     reloadSubjects()
+    if (!withdrawalPageActive || !withdrawalTabActive) return
     const onVisible = () => {
       if (document.visibilityState === "visible") reloadSubjects()
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
-  }, [])
+  }, [withdrawalPageActive, withdrawalTabActive])
 
   const expenseSubjectOptions = React.useMemo(
     () => filterExpenseWithdrawAccountSubjects(subjects),
@@ -767,6 +798,34 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     [vendors]
   )
 
+  const applyVendorBankFields = React.useCallback(
+    (codeRaw: string, force = false) => {
+      const code = String(codeRaw || "").trim()
+      const found = vendors.find((v) => v.code === code)
+      if (!found) return
+      if (force) {
+        setPayeeAccountHolder(found.name || "")
+        setPayeeBankName(found.bankName || "")
+        setPayeeBankAccountNo(found.bankAccountNo || "")
+        return
+      }
+      // 수정 모드: 빈 값(명시적 비움)을 거래처 마스터로 다시 채우지 않음
+      if (isEditAccrualMode) return
+      setPayeeAccountHolder((prev) => prev || found.name || "")
+      setPayeeBankName((prev) => prev || found.bankName || "")
+      setPayeeBankAccountNo((prev) => prev || found.bankAccountNo || "")
+    },
+    [vendors, isEditAccrualMode]
+  )
+
+  React.useEffect(() => {
+    const code = (categoryMain === "purchase" ? vendorCode : payeeCode).trim()
+    if (!code || payeeManual) return
+    const force = lastBankAutofillCodeRef.current !== "" && lastBankAutofillCodeRef.current !== code
+    lastBankAutofillCodeRef.current = code
+    applyVendorBankFields(code, force)
+  }, [categoryMain, vendorCode, payeeCode, payeeManual, applyVendorBankFields])
+
   const resolveWithdrawalCategory = React.useCallback((main: string, sub: string): string => {
     if (main === "purchase") return sub === "advance" ? "purchase_advance" : "purchase_payment"
     if (main === "expense") return sub === "advance" ? "expense_advance" : "expense"
@@ -948,6 +1007,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           categoryMain,
           categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           userRole: auth?.role,
+          payeeAccountHolder: payeeAccountHolder.trim(),
+          payeeBankName: payeeBankName.trim(),
+          payeeBankAccountNo: payeeBankAccountNo.trim(),
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
           ...(categoryMain === "purchase" || categoryMain === "expense"
             ? {
@@ -961,6 +1023,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         if (!res.success) {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
+        }
+        if ((res as { bankFieldsSkipped?: boolean }).bankFieldsSkipped && res.message) {
+          await appAlert(translateApiMessage(res.message, t) || res.message)
         }
         await openExpenseWhtCertificateIfNeeded({
           certificateNo: `EAW-${editAccrualIdParam}`,
@@ -992,7 +1057,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setActiveFeeVatMode(null)
         hasAppliedParams.current = false
         onAccrualSaved?.({ expenseDate: transDate })
-        await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
+        if (!(res as { bankFieldsSkipped?: boolean }).bankFieldsSkipped) {
+          await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
+        }
       } else {
         const res = await addExpenseAccrual({
           payeeCode: code || name,
@@ -1010,6 +1077,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           storeName: storeName || undefined,
           userName: auth?.user,
           userRole: auth?.role,
+          ...(payeeAccountHolder.trim()
+            ? { payeeAccountHolder: payeeAccountHolder.trim() }
+            : {}),
+          ...(payeeBankName.trim() ? { payeeBankName: payeeBankName.trim() } : {}),
+          ...(payeeBankAccountNo.trim()
+            ? { payeeBankAccountNo: payeeBankAccountNo.trim() }
+            : {}),
           ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
           ...(categoryMain === "purchase" || categoryMain === "expense"
             ? {
@@ -1023,6 +1097,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         if (!res.success) {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
+        }
+        if ((res as { bankFieldsSkipped?: boolean }).bankFieldsSkipped && res.message) {
+          await appAlert(translateApiMessage(res.message, t) || res.message)
         }
         const queued = (res as { queued?: boolean }).queued === true
         const newId = Math.floor(Number(res.id) || 0)
@@ -1048,6 +1125,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setPayeeCode("")
         setPayeeName("")
         setVendorCode("")
+        setPayeeAccountHolder("")
+        setPayeeBankName("")
+        setPayeeBankAccountNo("")
         setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
@@ -2304,8 +2384,50 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     />
                   </div>
                   {vendorCode && (
-                    <div className="text-sm text-muted-foreground pb-2">
-                      {tt("inv_account_no", "Account")}: {vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"}
+                    <div className="space-y-2 pb-2">
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">
+                            {tt("expensePayeeAccountHolder", "Account holder")}
+                          </Label>
+                          <Input
+                            className="h-9 w-[160px]"
+                            value={payeeAccountHolder}
+                            onChange={(e) => setPayeeAccountHolder(e.target.value)}
+                            placeholder={vendors.find((x) => x.code === vendorCode)?.name || ""}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">
+                            {tt("expensePayeeBankName", "Bank")}
+                          </Label>
+                          <Input
+                            className="h-9 w-[120px]"
+                            value={payeeBankName}
+                            onChange={(e) => setPayeeBankName(e.target.value)}
+                            placeholder="K-BANK"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">
+                            {tt("inv_account_no", "Account")}
+                          </Label>
+                          <Input
+                            className="h-9 w-[160px]"
+                            value={payeeBankAccountNo}
+                            onChange={(e) => setPayeeBankAccountNo(e.target.value)}
+                            placeholder={
+                              vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"
+                            }
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {tt(
+                          "expensePayeeBankRegisterHint",
+                          "Saved on this expense for bank transfer. Also updates the vendor master when a vendor is selected."
+                        )}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -2454,6 +2576,40 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         }
                       }}
                     />
+                  </div>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        {tt("expensePayeeAccountHolder", "Account holder")}
+                      </Label>
+                      <Input
+                        className="h-9 w-[160px]"
+                        value={payeeAccountHolder}
+                        onChange={(e) => setPayeeAccountHolder(e.target.value)}
+                        placeholder={payeeName || ""}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        {tt("expensePayeeBankName", "Bank")}
+                      </Label>
+                      <Input
+                        className="h-9 w-[120px]"
+                        value={payeeBankName}
+                        onChange={(e) => setPayeeBankName(e.target.value)}
+                        placeholder="K-BANK"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        {tt("inv_account_no", "Account")}
+                      </Label>
+                      <Input
+                        className="h-9 w-[160px]"
+                        value={payeeBankAccountNo}
+                        onChange={(e) => setPayeeBankAccountNo(e.target.value)}
+                      />
+                    </div>
                   </div>
                   <div className="flex items-end gap-2">
                     <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>

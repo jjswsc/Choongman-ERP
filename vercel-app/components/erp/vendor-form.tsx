@@ -16,6 +16,7 @@ import {
   Map,
   FileText,
   Store,
+  Landmark,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,6 +45,8 @@ export interface VendorFormData {
   type: "purchase" | "sales" | "both"
   memo: string
   direct_settlement: boolean
+  bank_name: string
+  bank_account_no: string
 }
 
 export interface VendorFormProps {
@@ -201,6 +204,37 @@ export function VendorForm({
             onChange={(e) => update("tax_no", e.target.value)}
           />
         </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Landmark className="h-3.5 w-3.5 text-muted-foreground" />
+              {t("expensePayeeBankName") || "Bank"}
+            </label>
+            <Input
+              placeholder="K-BANK / SCB / PromptPay"
+              className="h-10 text-sm"
+              value={formData.bank_name}
+              onChange={(e) => update("bank_name", e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Landmark className="h-3.5 w-3.5 text-muted-foreground" />
+              {t("inv_account_no") || "Account"}
+            </label>
+            <Input
+              placeholder={t("vendorBankAccountPh") || "Account number"}
+              className="h-10 text-sm"
+              value={formData.bank_account_no}
+              onChange={(e) => update("bank_account_no", e.target.value)}
+            />
+          </div>
+        </div>
+        <p className="text-[10px] text-muted-foreground -mt-3">
+          {t("vendorBankHint") ||
+            "Used on Expense Management bank-transfer view for payouts."}
+        </p>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
