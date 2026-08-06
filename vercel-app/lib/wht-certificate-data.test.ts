@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatWhtAgentDisplayName,
   resolveVendorPayeeForWht,
   resolveWhtCertificateParties,
+  resolveWhtWithholdingAgentCompany,
   whtCertificateFromExpenseRegister,
   whtCertificateFromLedgerRow,
 } from '@/lib/wht-certificate-data'
 
 const headOffice = {
-  companyName: 'S&J GLOBAL CO., LTD.',
+  companyName: 'S&J GLOBAL CO., LTD. (Head Office)',
   taxId: '0105566137147',
   address: '101 true digital park',
 }
@@ -34,8 +36,59 @@ describe('resolveWhtCertificateParties', () => {
       payeeAddress: 'True Digital Park Retail',
       headOffice,
     })
-    expect(parties.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD.')
+    expect(parties.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
     expect(parties.incomeRecipient.name).toBe('Jinwon f&b Co.,Ltd.')
+  })
+})
+
+describe('resolveWhtWithholdingAgentCompany', () => {
+  it('keeps head office when store is HQ/Office', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'Office',
+      profile: { taxpayerName: 'Should Not Use', placeOfBusiness: 'Other' },
+    })
+    expect(agent.companyName).toBe(headOffice.companyName)
+    expect(agent.address).toBe(headOffice.address)
+  })
+
+  it('appends สาขา store label and uses profile address/TIN', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'Union Mall',
+      profile: {
+        taxpayerName: 'S&J GLOBAL CO., LTD.',
+        taxId: '0105566137147',
+        placeOfBusiness: 'Union Mall, Bangkok',
+        branchNo: '00001',
+      },
+    })
+    expect(agent.companyName).toBe('S&J GLOBAL CO., LTD. (สาขา Union Mall)')
+    expect(agent.address).toBe('Union Mall, Bangkok')
+    expect(agent.taxId).toBe('0105566137147')
+  })
+
+  it('falls back to HQ address/TIN when profile incomplete', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'EM District',
+      profile: null,
+    })
+    expect(agent.companyName).toBe('S&J GLOBAL CO., LTD. (สาขา EM District)')
+    expect(agent.address).toBe(headOffice.address)
+    expect(agent.taxId).toBe(headOffice.taxId)
+  })
+})
+
+describe('formatWhtAgentDisplayName', () => {
+  it('keeps profile name when it already has สาขา', () => {
+    expect(
+      formatWhtAgentDisplayName({
+        taxpayerName: 'S&J GLOBAL CO., LTD. (สาขา Custom)',
+        headOfficeName: headOffice.companyName,
+        storeLabel: 'Union Mall',
+      })
+    ).toBe('S&J GLOBAL CO., LTD. (สาขา Custom)')
   })
 })
 
@@ -78,6 +131,30 @@ describe('whtCertificateFromExpenseRegister', () => {
     )
     expect(cert?.incomeRecipient.taxId).toBe('0105553045044')
     expect(cert?.incomeRecipient.address).toContain('ทรู ทาวเวอร์')
+  })
+
+  it('uses branch agent block for store expense', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'CentralWorld',
+      profile: { placeOfBusiness: 'CentralWorld address' },
+    })
+    const cert = whtCertificateFromExpenseRegister(
+      {
+        certificateNo: 'EAW-1',
+        paymentDate: '2026-08-01',
+        payeeName: 'Vendor',
+        payeeTaxId: '0105553045044',
+        grossInclVat: 100,
+        vatAmount: 0,
+        whtRate: 3,
+        whtAmount: 3,
+        storeName: 'CentralWorld',
+      },
+      agent
+    )
+    expect(cert?.withholdingAgent.name).toContain('สาขา CentralWorld')
+    expect(cert?.withholdingAgent.address).toBe('CentralWorld address')
   })
 })
 

@@ -1,7 +1,10 @@
 /** 원천징수 증명서(หนังสือรับรอง) 인쇄용 당사자·금액 */
 
-import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { isOfficeStore } from '@/lib/permissions'
 import { purchaseOrderMetaOrderDate } from '@/lib/purchase-order-cart'
+import { cleanTaxEntityDisplayName } from '@/lib/tax-entity-scope-label'
+import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
 
 export type WhtCertificateParty = {
   name: string
@@ -30,6 +33,89 @@ export type HeadOfficeCompany = {
   taxId: string
   address: string
   phone?: string
+}
+
+/** 매장 세무 프로필(클라이언트 DTO·서버 profile 공통 최소 필드) */
+export type WhtStoreAgentProfile = {
+  taxpayerName?: string | null
+  taxId?: string | null
+  branchNo?: string | null
+  placeOfBusiness?: string | null
+  phone?: string | null
+  ssoPhone?: string | null
+}
+
+function normalizeWhtTaxId(raw: unknown): string {
+  return String(raw || '')
+    .replace(/\D/g, '')
+    .trim()
+    .slice(0, 13)
+}
+
+function isHqScopeStoreForWht(storeName: string): boolean {
+  const s = String(storeName || '').trim()
+  if (!s || s === 'All' || s === '*') return true
+  return isOfficeStore(s) || isHeadOfficeLikeStoreName(s)
+}
+
+/**
+ * 50 ทวิ ผู้มีหน้าที่หัก — 지출/원장 매장 기준 표시명.
+ * 본사·Office면 본사명 유지. 그 외는 법인명 + (สาขา {매장}).
+ */
+export function formatWhtAgentDisplayName(params: {
+  taxpayerName?: string | null
+  headOfficeName: string
+  storeLabel: string
+}): string {
+  const store = String(params.storeLabel || '').trim()
+  const fromProfile = String(params.taxpayerName || '').trim()
+  if (fromProfile && /(\(สาขา|\(branch\b|\(สำนักงาน)/i.test(fromProfile)) {
+    return fromProfile
+  }
+  const base =
+    cleanTaxEntityDisplayName(fromProfile || params.headOfficeName) ||
+    fromProfile ||
+    String(params.headOfficeName || '').trim() ||
+    '—'
+  if (!store || isHqScopeStoreForWht(store)) {
+    return fromProfile || String(params.headOfficeName || '').trim() || base
+  }
+  return `${base} (สาขา ${store})`
+}
+
+/**
+ * 지출 등록 매장·세무 프로필로 원천징수자(상단) 회사 블록 결정.
+ * Tax ID는 프로필 13자리 우선, 없으면 본사. 주소는 place_of_business 우선.
+ */
+export function resolveWhtWithholdingAgentCompany(params: {
+  headOffice: HeadOfficeCompany
+  storeName?: string | null
+  profile?: WhtStoreAgentProfile | null
+}): HeadOfficeCompany {
+  const ho = params.headOffice
+  const store = String(params.storeName || '').trim()
+  if (!store || isHqScopeStoreForWht(store)) {
+    return { ...ho }
+  }
+
+  const profile = params.profile
+  const profileTin = normalizeWhtTaxId(profile?.taxId)
+  const taxId = profileTin.length === 13 ? profileTin : normalizeWhtTaxId(ho.taxId) || String(ho.taxId || '')
+  const place = String(profile?.placeOfBusiness || '').trim()
+  const address = place || String(ho.address || '')
+  const phone =
+    String(profile?.phone || profile?.ssoPhone || '').trim() || (ho.phone ? String(ho.phone) : undefined)
+
+  return {
+    companyName: formatWhtAgentDisplayName({
+      taxpayerName: profile?.taxpayerName,
+      headOfficeName: ho.companyName,
+      storeLabel: store,
+    }),
+    taxId,
+    address,
+    phone,
+  }
 }
 
 export function resolveWhtCertificateParties(params: {
@@ -221,6 +307,7 @@ export function whtCertificateFromLedgerRow(
       resolveWhtPndFormHint({
         payeeName: parties.incomeRecipient.name,
         incomeType,
+        payeeTaxId: parties.incomeRecipient.taxId,
       }),
     paymentDate: String(row.payment_date || '').slice(0, 10),
     taxMonth: String(row.tax_month || '').slice(0, 7),

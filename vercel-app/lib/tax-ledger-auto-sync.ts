@@ -806,7 +806,11 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
       gross_amount: grossBase > 0 ? grossBase : rawAmount,
       wht_rate: whtRate,
       wht_amount: wht,
-      form_hint: resolveWhtPndFormHint({ incomeType: 'ค่าบริการ', payeeName }),
+      form_hint: resolveWhtPndFormHint({
+        incomeType: 'ค่าบริการ',
+        payeeName,
+        payeeTaxId,
+      }),
       certificate_no: `EAW-${expenseId}`.slice(0, 128),
       memo: `${memoTag} 지출 원천세 자동`.slice(0, 2000),
       filing_status: 'draft',
@@ -963,6 +967,7 @@ export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
       form_hint: resolveWhtPndFormHint({
         incomeType: isAccountingPo ? '로열티' : '서비스',
         payeeName,
+        payeeTaxId,
       }),
       certificate_no: (poNo ? `PO-${poNo}` : `PO-${poId}`).slice(0, 128),
       memo: `${memoTag} ${isAccountingPo ? '발주(수입) 원천세 자동' : '발주(매입) 원천세 자동'}`.slice(
@@ -1509,7 +1514,11 @@ export async function syncTaxWithholdingLedgersFromBankWithdrawals(params: {
       gross_amount: grossBase > 0 ? grossBase : grossIncl,
       wht_rate: whtRate,
       wht_amount: whtAmount,
-      form_hint: resolveWhtPndFormHint({ incomeType: 'ค่าบริการ', payeeName }),
+      form_hint: resolveWhtPndFormHint({
+        incomeType: 'ค่าบริการ',
+        payeeName,
+        payeeTaxId,
+      }),
       certificate_no: `BTW-${bankId}`.slice(0, 128),
       memo: `${memoTag} 통장 출금 원천세 자동`.slice(0, 2000),
       filing_status: 'draft',

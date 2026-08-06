@@ -28,6 +28,7 @@ import {
   getVendorsForPurchase,
   getVendorsForSalesFranchiseMaster,
   getHeadOfficeInfo,
+  getStoreTaxFilingProfile,
   processPurchaseOrderApproval,
   processPurchaseOrderCancel,
   updatePurchaseOrderInvoice,
@@ -63,12 +64,16 @@ import {
   parsePurchaseOrderCart,
   poQuotationFromMeta,
   resolveAccountingPoIssuerStore,
+  resolveAccountingPoReceivableStoreName,
 } from "@/lib/purchase-order-cart"
 import { resolvePoIssuerCompany } from "@/lib/po-issuer-company"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
-import { whtCertificateFromPurchaseOrder } from "@/lib/wht-certificate-data"
+import {
+  resolveWhtWithholdingAgentCompany,
+  whtCertificateFromPurchaseOrder,
+} from "@/lib/wht-certificate-data"
 
 /** 방콕 달력 YYYY-MM-DD에 달 수만큼 더함(일은 월 말에 맞춤) */
 function addCalendarMonthsBangkokYmd(ymd: string, deltaMonth: number): string {
@@ -264,14 +269,26 @@ export function AdminPurchaseOrderHistory() {
         const ho = await getHeadOfficeInfo()
         const vendorCode = String(po.vendor_code || "").trim()
         const vendorResolved = vendors.find((v) => v.code === vendorCode)
-        const cert = whtCertificateFromPurchaseOrder(
-          po,
-          {
+        const storeKey =
+          resolveAccountingPoIssuerStore(po) ||
+          resolveAccountingPoReceivableStoreName(po) ||
+          ""
+        const profileRes = storeKey
+          ? await getStoreTaxFilingProfile(storeKey).catch(() => ({ profile: null }))
+          : { profile: null }
+        const agent = resolveWhtWithholdingAgentCompany({
+          headOffice: {
             companyName: ho.companyName || "",
             taxId: ho.taxId || "",
             address: ho.address || "",
             phone: ho.phone,
           },
+          storeName: storeKey,
+          profile: profileRes.profile,
+        })
+        const cert = whtCertificateFromPurchaseOrder(
+          po,
+          agent,
           vendorResolved?.taxId,
           vendorResolved?.address
         )

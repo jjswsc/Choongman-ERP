@@ -123,6 +123,7 @@ export function resolveWht50Tawi(data: WhtCertificateData): Wht50TawiResolved {
   const recipientHint = resolveWhtPndFormHint({
     payeeName: data.incomeRecipient.name,
     incomeType: data.incomeType,
+    payeeTaxId: data.incomeRecipient.taxId,
   })
   if (recipientHint === 'PND3') pnd.pnd3 = true
   else pnd.pnd53 = true

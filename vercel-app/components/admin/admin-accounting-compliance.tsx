@@ -206,7 +206,7 @@ import {
 } from "./admin-accounting-compliance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
-import { whtCertificateFromLedgerRow, resolveVendorPayeeForWht, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
+import { whtCertificateFromLedgerRow, resolveVendorPayeeForWht, resolveWhtWithholdingAgentCompany, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
 import {
   downloadThaiSsoSps110FromPayrollXlsx,
   type Sps110EmployerInfo,
@@ -3375,36 +3375,53 @@ export function AdminAccountingCompliance({
       }
       const ho = await loadHeadOfficeForWht()
       const vendors = await getVendorsForPurchase().catch(() => [])
-      const items = eligible.map((r) => {
-        const payeeName = String(r.payee_name || "").trim()
-        const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName)
-        const payeeTaxId = String(r.payee_tax_id || "").trim() || fromVendor.taxId
-        const payeeAddress = fromVendor.address
-        // 발주 자동분(레거시 inbound 포함)은 당사 발급 증명서 → 본사 상단
-        const src = String(r.source_type || "").trim().toLowerCase()
-        const dirRaw = String(r.direction || "").trim().toLowerCase()
-        const direction =
-          src === "purchase_order" ? "outbound" : dirRaw === "inbound" ? "inbound" : "outbound"
-        return whtCertificateFromLedgerRow(
-          {
-            payment_date: r.payment_date,
-            tax_month: r.tax_month,
-            payee_name: r.payee_name,
-            payee_tax_id: payeeTaxId,
-            payee_address: payeeAddress,
-            income_type: r.income_type,
-            gross_amount: r.gross_amount,
-            wht_rate: r.wht_rate,
-            wht_amount: r.wht_amount,
-            form_hint: r.form_hint,
-            certificate_no: r.certificate_no,
-            memo: r.memo,
-            store_name: r.store_name,
-            direction,
-          },
-          ho
-        )
-      })
+      const profileCache = new Map<string, Awaited<ReturnType<typeof getStoreTaxFilingProfile>>["profile"]>()
+      const resolveAgentForStore = async (storeRaw: string) => {
+        const storeKey = String(storeRaw || "").trim()
+        if (!storeKey) return ho
+        if (!profileCache.has(storeKey)) {
+          const res = await getStoreTaxFilingProfile(storeKey).catch(() => ({ profile: null }))
+          profileCache.set(storeKey, res.profile)
+        }
+        return resolveWhtWithholdingAgentCompany({
+          headOffice: ho,
+          storeName: storeKey,
+          profile: profileCache.get(storeKey),
+        })
+      }
+      const items = await Promise.all(
+        eligible.map(async (r) => {
+          const payeeName = String(r.payee_name || "").trim()
+          const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName)
+          const payeeTaxId = String(r.payee_tax_id || "").trim() || fromVendor.taxId
+          const payeeAddress = fromVendor.address
+          // 발주 자동분(레거시 inbound 포함)은 당사 발급 증명서 → 원천징수자 상단
+          const src = String(r.source_type || "").trim().toLowerCase()
+          const dirRaw = String(r.direction || "").trim().toLowerCase()
+          const direction =
+            src === "purchase_order" ? "outbound" : dirRaw === "inbound" ? "inbound" : "outbound"
+          const agent = await resolveAgentForStore(String(r.store_name || ""))
+          return whtCertificateFromLedgerRow(
+            {
+              payment_date: r.payment_date,
+              tax_month: r.tax_month,
+              payee_name: r.payee_name,
+              payee_tax_id: payeeTaxId,
+              payee_address: payeeAddress,
+              income_type: r.income_type,
+              gross_amount: r.gross_amount,
+              wht_rate: r.wht_rate,
+              wht_amount: r.wht_amount,
+              form_hint: r.form_hint,
+              certificate_no: r.certificate_no,
+              memo: r.memo,
+              store_name: r.store_name,
+              direction,
+            },
+            agent
+          )
+        })
+      )
       if (!openWhtCertificatePrintWindow(items, lang)) {
         appAlert(t("whtCertPrintBlocked"))
       }

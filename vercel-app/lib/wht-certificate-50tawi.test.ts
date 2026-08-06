@@ -70,6 +70,16 @@ describe('resolveWht50Tawi', () => {
     expect(r.pndChecks.pnd53).toBe(false)
   })
 
+  it('uses PND3 for Thai personal names without title', () => {
+    const r = resolveWht50Tawi({
+      ...base,
+      formHint: 'PND53',
+      incomeRecipient: { name: 'รักษา วิจิตรโสภาพันธ์', taxId: '3101800833583' },
+    })
+    expect(r.pndChecks.pnd3).toBe(true)
+    expect(r.pndChecks.pnd53).toBe(false)
+  })
+
   it('overrides stale PND3 form hint when recipient is a juristic person', () => {
     const r = resolveWht50Tawi({
       ...base,

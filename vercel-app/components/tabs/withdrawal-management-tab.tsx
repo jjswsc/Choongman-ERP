@@ -42,6 +42,7 @@ import {
   markBankTransactionForPettyCash,
   translateTexts,
   getHeadOfficeInfo,
+  getStoreTaxFilingProfile,
   type AccountSubjectItem,
   type BankAccount,
   type CardAccount,
@@ -74,6 +75,7 @@ import {
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import {
   resolveVendorPayeeForWht,
+  resolveWhtWithholdingAgentCompany,
   whtCertificateFromExpenseRegister,
 } from "@/lib/wht-certificate-data"
 import {
@@ -710,6 +712,20 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (!autoCreateWhtCert || params.whtAmount <= 0) return
       try {
         const ho = await getHeadOfficeInfo()
+        const storeKey = String(params.storeName || "").trim()
+        const profileRes = storeKey
+          ? await getStoreTaxFilingProfile(storeKey).catch(() => ({ profile: null }))
+          : { profile: null }
+        const agent = resolveWhtWithholdingAgentCompany({
+          headOffice: {
+            companyName: ho.companyName || "",
+            taxId: ho.taxId || "",
+            address: ho.address || "",
+            phone: ho.phone,
+          },
+          storeName: storeKey,
+          profile: profileRes.profile,
+        })
         const cert = whtCertificateFromExpenseRegister(
           {
             certificateNo: params.certificateNo,
@@ -724,12 +740,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             memo: params.memo,
             storeName: params.storeName,
           },
-          {
-            companyName: ho.companyName || "",
-            taxId: ho.taxId || "",
-            address: ho.address || "",
-            phone: ho.phone,
-          }
+          agent
         )
         if (cert) openWhtCertificatePrintWindow([cert], lang)
       } catch (e) {
