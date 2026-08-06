@@ -5882,7 +5882,7 @@ export default function PosTerminalPage() {
     mapPosOrderItemForKitchenDelta,
   ])
 
-  /** items_json 없는 head 폴링 — Realtime 누락·tenant 필터 미스를 3~6초 안에 잡아 heavy poll 트리거 */
+  /** items_json 없는 head 폴링 — Realtime 누락·tenant 필터 미스 안전망 (degraded~10s / healthy~90s) */
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
     let cancelled = false

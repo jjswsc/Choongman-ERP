@@ -58,7 +58,9 @@ describe('pos-main-poll-interval', () => {
     ).toBe(MAIN_POS_POLL_INTERVAL_DEGRADED_MS)
   })
 
-  it('uses fast head poll when degraded and slower safety head when healthy', () => {
+  it('uses modest head poll when degraded and sparse safety head when healthy', () => {
+    expect(MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS).toBeGreaterThanOrEqual(10_000)
+    expect(MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS).toBeGreaterThanOrEqual(60_000)
     expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: false })).toBe(
       MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS
     )

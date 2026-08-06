@@ -1778,7 +1778,7 @@ export function usePosMainDeviceSyncHost(): void {
     notifyGrabCancelFromHost,
   ])
 
-  /** items_json 없는 head 폴링 — Realtime 누락 시 3~6초 내 heavy poll 트리거 */
+  /** items_json 없는 head 폴링 — Realtime 누락 시 degraded~10s / healthy~90s 안전망 */
   useEffect(() => {
     if (!isMainPosDevice || !storeCode) return
     /** 터미널이 열려 있으면 터미널 head poll만 사용 (중복 Edge 요청 방지) */

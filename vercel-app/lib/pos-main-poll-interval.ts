@@ -2,9 +2,11 @@
  * 메인 POS 보조 폴링 간격 — Realtime이 1차, 폴링은 안전망(fallback)만 담당.
  *
  * 안전 우선 규칙:
- * - HEALTHY: Realtime INSERT 채널이 SUBSCRIBED 이면 180s (조용한 매장도 가속하지 않음).
- * - DEGRADED: Realtime 미연결 시 **heavy**(items_json) 폴링은 12s.
+ * - HEALTHY: Realtime INSERT 채널이 SUBSCRIBED 이면 heavy 180s (조용한 매장도 가속하지 않음).
+ * - DEGRADED: Realtime 미연결 시 heavy(items_json) 15s + head(초경량) 10s.
  * - HEAD: items_json 없는 초경량 폴링으로 신규 id·updated_at 만 감시 → 변경 시 heavy 즉시 트리거.
+ * - 2026-08-04 head(healthy 6s / degraded 3s)는 전 매장 getPosOrders 폭증으로 Fluid Active CPU가
+ *   약 2배가 되어, healthy는 90s 안전망·degraded는 10s로 되돌림 (7/27 요금대 복구).
  * - `realtimeRecentlyActive`는 폴링 간격이 아니라 limit=800 풀 스캔 폴백(`shouldUseMainPosHeavyOrderScanFallback`)에만 사용.
  */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
@@ -12,23 +14,26 @@ export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 300_000
 /**
  * Realtime 미연결·채널 실패 시 heavy(pollMinimal+items_json) 보조 폴링.
- * 전체 목록 5s 폴링은 Fluid CPU·전송 비용이 커서 피하고, head(3s) + heavy(12s)로 나눔.
+ * 5s 전체 목록 폴링은 Fluid CPU·전송 비용이 커서 15s 유지.
  */
-export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 12_000
+export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 15_000
 /**
- * items_json 없는 head 폴링.
- * Realtime 실패 시 태블릿→메인 체감(기존 15s·메타 12s)을 ~3s로 줄인다.
+ * items_json 없는 head 폴링 (Realtime 실패 시).
+ * 3s는 Active CPU 폭증 → 10s로 완화 (태블릿→메인 체감은 Realtime 복구가 1차).
  */
-export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 3_000
-/** Realtime 정상인데 이벤트 누락(필터·tenant_id) 대비 — 전송량 작은 안전망 */
-export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS = 6_000
+export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 10_000
+/**
+ * Realtime 정상인데 이벤트 누락(필터·tenant_id) 대비 초경량 안전망.
+ * 6s 상시 폴링은 매장×단말 수만큼 getPosOrders를 돌려 Fluid Active CPU를 2배로 올림 → 90s.
+ */
+export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS = 90_000
 /** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded 로 간주 */
 export const MAIN_POS_REALTIME_STALE_MS = 90_000
 /** 채널 오류 시 전체 재구독 최소 간격 (6/12 Realtime 활성화 후 alias 오류 폭주 방지) */
 export const MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS = 60_000
 export const MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS = 15_000
 /** Realtime 이벤트·채널 오류로 즉시 poll 호출 시 최소 간격 */
-export const MAIN_POS_TRIGGER_POLL_MIN_MS = 2_000
+export const MAIN_POS_TRIGGER_POLL_MIN_MS = 5_000
 
 export function resolveMainPosHeadPollIntervalMs(opts: {
   realtimeChannelHealthy: boolean
