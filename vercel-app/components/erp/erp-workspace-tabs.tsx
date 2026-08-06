@@ -167,8 +167,8 @@ export function ErpWorkspaceTabs() {
                 className={cn(
                   "relative flex min-w-0 flex-1 items-center rounded-t-[10px] border border-b-0 px-0.5 transition-[background-color,box-shadow,color,transform] duration-150",
                   active
-                    ? "border-border/70 bg-background text-foreground shadow-[0_1px_0_0_hsl(var(--background))]"
-                    : "border-transparent bg-transparent text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]",
+                    ? "border-border bg-background text-foreground shadow-[0_1px_0_0_hsl(var(--background))]"
+                    : "border-border/40 bg-muted-foreground/[0.08] text-muted-foreground hover:bg-background/70 hover:text-foreground dark:bg-muted-foreground/15",
                   remountOnLeave && !active && "opacity-90",
                   isDropTarget && "ring-2 ring-primary/40 ring-inset"
                 )}
@@ -263,7 +263,7 @@ export function ErpWorkspaceTabs() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="mb-0.5 ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+                className="mb-0.5 ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-background/60 text-muted-foreground hover:bg-background hover:text-foreground"
                 title={closeOthersLabel}
                 aria-label={closeOthersLabel}
               >

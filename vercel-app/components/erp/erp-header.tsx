@@ -75,7 +75,7 @@ export function ErpHeader() {
   const staffMobileLabel = t("goToStaffMobile") || t("goToMobile") || "현장 모바일"
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center gap-1 border-b bg-muted/50 px-1.5 print:hidden pointer-events-none sm:gap-1.5 sm:px-3 dark:bg-muted/30">
+    <header className="sticky top-0 z-30 flex h-12 items-center gap-1 border-b border-border bg-muted px-1.5 shadow-sm print:hidden pointer-events-none sm:gap-1.5 sm:px-3">
       <div className="pointer-events-auto flex min-w-0 flex-1 items-end gap-0.5 self-stretch pt-1.5 sm:gap-1">
         <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
           <SidebarTrigger className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" />
@@ -84,7 +84,7 @@ export function ErpHeader() {
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-background/80 hover:text-foreground"
               onClick={goBack}
               title={t("posBack") || "뒤로가기"}
             >
