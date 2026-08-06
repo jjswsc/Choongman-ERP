@@ -49,6 +49,10 @@ import {
   salesBreakdownIsHqOutbound,
   salesBreakdownRowLabel,
 } from "./income-statement-tab-utils"
+import {
+  isFranchiseBillingExpenseSubjectCode,
+  PL_FRANCHISE_EXPENSE_SUBJECT_CODES,
+} from "@/lib/accounting-po-franchise-billing-pl-shared"
 import { IncomePurchaseDrillDialog } from "./income-statement-purchase-drill-dialog"
 import { IncomeExpenseDrillDialog } from "./income-statement-expense-drill-dialog"
 
@@ -163,6 +167,7 @@ export function IncomePlDetailTableContent({
   const openExpenseDrill = React.useCallback(
     (row: NonNullable<IncomeStatementData["expenseByAccountSubject"]>[number]) => {
       if (!purchaseDrillContext?.yearMonth) return
+      if (isFranchiseBillingExpenseSubjectCode(row.code)) return
       setExpenseDrillTitle(expenseAccountRowLabel(row, t, lang))
       setExpenseDrillOpen(true)
       setExpenseDrillLoading(true)
@@ -423,38 +428,76 @@ export function IncomePlDetailTableContent({
                 - {t("pL_expenses")}
               </span>
             </td>
-            <td className={`${accountingPlTdAmountCn} font-medium text-muted-foreground`}>{formatBath(data.expenses)}</td>
-            <td className={`${accountingPlTdPctCn} font-medium`}>{view.pct(data.expenses)}</td>
+            <td className={`${accountingPlTdAmountCn} font-medium text-muted-foreground`}>{formatBath(view.expenses)}</td>
+            <td className={`${accountingPlTdPctCn} font-medium`}>{view.pct(view.expenses)}</td>
           </tr>
           {expandExpenseAccounts &&
             (data.expenseByAccountSubject?.length || 0) > 0 &&
-            data.expenseByAccountSubject!.map((row, idx) => (
+            data.expenseByAccountSubject!.map((row, idx) => {
+              const isPoBilling = isFranchiseBillingExpenseSubjectCode(row.code)
+              const label = isPoBilling
+                ? formatAccountSubjectLabel(lang, {
+                    code: row.code,
+                    name: row.name,
+                    nameEn: row.nameEn,
+                    nameTh: row.nameTh,
+                  }) || `${row.code} ${row.name}`
+                : row.accountSubjectId == null
+                  ? t("pL_accountUnclassified") || "Unclassified account"
+                  : formatAccountSubjectLabel(lang, {
+                      code: row.code,
+                      name: row.name,
+                      nameEn: row.nameEn,
+                      nameTh: row.nameTh,
+                    }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")
+              const amount = isPoBilling
+                ? pickFranchiseBillingVatAmount(
+                    row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty
+                      ? data.displayAmounts?.franchiseRoyaltyGross ?? row.amount
+                      : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp
+                        ? data.displayAmounts?.franchiseDeliveryGpGross ?? row.amount
+                        : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp
+                          ? data.displayAmounts?.franchiseGrabGpGross ?? row.amount
+                          : data.displayAmounts?.franchiseBillingCombinedGross ?? row.amount,
+                    row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty
+                      ? data.displayAmounts?.franchiseRoyaltyNet
+                      : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp
+                        ? data.displayAmounts?.franchiseDeliveryGpNet
+                        : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp
+                          ? data.displayAmounts?.franchiseGrabGpNet
+                          : data.displayAmounts?.franchiseBillingCombinedNet,
+                    vatMode
+                  )
+                : row.amount
+              return (
               <tr
-                key={`${row.accountSubjectId ?? "u"}-${idx}`}
+                key={`${row.code || "x"}-${row.accountSubjectId ?? "u"}-${idx}`}
                 className={
-                  purchaseDrillContext?.yearMonth
+                  purchaseDrillContext?.yearMonth && !isPoBilling
                     ? `${accountingPlSubRowCn} cursor-pointer hover:brightness-[1.03]`
                     : accountingPlSubRowCn
                 }
-                onClick={purchaseDrillContext?.yearMonth ? () => openExpenseDrill(row) : undefined}
-                title={purchaseDrillContext?.yearMonth ? t("pL_expenseDrillClickHint") : undefined}
+                onClick={
+                  purchaseDrillContext?.yearMonth && !isPoBilling
+                    ? () => openExpenseDrill(row)
+                    : undefined
+                }
+                title={
+                  isPoBilling
+                    ? t("pL_expenseSourceFranchiseRoyalty")
+                    : purchaseDrillContext?.yearMonth
+                      ? t("pL_expenseDrillClickHint")
+                      : undefined
+                }
               >
-                <td className={accountingPlSubTdLabelCn}>
-                  {row.accountSubjectId == null
-                    ? t("pL_accountUnclassified") || "Unclassified account"
-                    : formatAccountSubjectLabel(lang, {
-                        code: row.code,
-                        name: row.name,
-                        nameEn: row.nameEn,
-                        nameTh: row.nameTh,
-                      }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")}
-                </td>
+                <td className={accountingPlSubTdLabelCn}>{label}</td>
                 <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
-                  {formatBath(row.amount)}
+                  {formatBath(amount)}
                 </td>
-                <td className={`${accountingPlTdPctCn}`}>{view.pct(row.amount)}</td>
+                <td className={`${accountingPlTdPctCn}`}>{view.pct(amount)}</td>
               </tr>
-            ))}
+              )
+            })}
           {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
             <tr className={accountingPlSubRowCn}>
               <td colSpan={3} className={cn(accountingPlSubTdLabelCn, "py-3 max-sm:basis-full")}>

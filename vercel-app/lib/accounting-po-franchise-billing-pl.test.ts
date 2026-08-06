@@ -150,4 +150,32 @@ describe('accounting-po-franchise-billing-pl', () => {
     expect(r.expense.grabGpNet).toBe(50)
     expect(r.revenue.grabGpGross).toBe(53.5)
   })
+
+  it('infers royalty from line name when billingKind meta missing', () => {
+    const cart = serializePurchaseOrderCart(
+      [{ code: '1', name: '로얄티 (2026-07)', price: 500, qty: 1, taxType: 'taxable' }],
+      {
+        relatedStore: 'CM MBK',
+        billingMonthYm: '2026-07',
+        orderDate: '2026-07-31',
+      }
+    )
+    const po: FranchiseBillingPoRow = {
+      status: 'Approved',
+      cart_json: cart,
+      subtotal: 500,
+      total: 535,
+      created_at: '2026-07-31T10:00:00+07:00',
+    }
+    const r = accumulateFranchiseBillingFromPos([po], {
+      yearMonth: '2026-07',
+      startStr: '2026-07-01',
+      endStr: '2026-07-31',
+      matchExpense: (s) => s === 'CM MBK',
+      matchRevenue: () => false,
+    })
+    expect(r.expense.royaltyNet).toBe(500)
+    expect(r.expense.royaltyGross).toBe(535)
+    expect(r.fetched).toBe(1)
+  })
 })

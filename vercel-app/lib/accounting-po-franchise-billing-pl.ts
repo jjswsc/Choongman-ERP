@@ -160,6 +160,7 @@ function lineStoredBillingKind(line: PoCartLine): PoBillingKind | null {
  * PO 헤더 금액(total/subtotal)을 kind별 net/gross로 배분.
  * - billingKind가 royalty|delivery_gp|grab_gp 이고 라인이 단일 유형이면 헤더 전액
  * - billingKind=all 이거나 라인 유형이 섞이면 라인명·라인 billingKind로 분해 후 VAT 비율 배분
+ * - meta.billingKind 없어도 라인명으로 추정된 kind면 동일 처리
  */
 export function amountsByKindFromFranchisePo(po: FranchiseBillingPoRow): FranchiseBillingKindAmounts {
   const out = emptyFranchiseBillingKindAmounts()
@@ -190,8 +191,16 @@ export function amountsByKindFromFranchisePo(po: FranchiseBillingPoRow): Franchi
     return out
   }
 
+  // headerKind=all 인데 라인 분류가 전부 라인 분해; 라인이 없으면 헤더 전액 combined
   if (classified.length === 0) {
     addKindAmount(out, headerKind === 'all' ? 'all' : headerKind, headerGross, headerNet)
+    return out
+  }
+
+  // all 이 아니어도 라인만 있고 분류 가능하면(추정 kind) 라인 우선 분해하지 않고 위에서 처리됨.
+  // all 이거나 혼합이면 라인 분해.
+  if (!shouldSplit) {
+    addKindAmount(out, headerKind, headerGross, headerNet)
     return out
   }
 
@@ -256,10 +265,20 @@ export function franchiseBillingPoInPeriod(
 }
 
 export function parseFranchiseBillingKind(cartJson: unknown): PoBillingKind | null {
-  const { meta } = parsePurchaseOrderCart(cartJson)
+  const { meta, items } = parsePurchaseOrderCart(cartJson)
   const k = String(meta?.billingKind ?? '').trim() as PoBillingKind
-  if (!BILLING_KINDS.has(k)) return null
-  return k
+  if (BILLING_KINDS.has(k)) return k
+
+  // 구버전·메타 누락: 라인명/라인 billingKind로 추정
+  const inferred = new Set<PoBillingKind>()
+  for (const line of items) {
+    const fromField = lineStoredBillingKind(line)
+    const kind = fromField ?? classifyFranchiseBillingLineName(String(line.name || ''))
+    if (SPLIT_KINDS.has(kind as PoBillingKind)) inferred.add(kind as PoBillingKind)
+  }
+  if (inferred.size === 0) return null
+  if (inferred.size === 1) return [...inferred][0]!
+  return 'all'
 }
 
 function mergeKindAmounts(target: FranchiseBillingKindAmounts, src: FranchiseBillingKindAmounts): void {
@@ -305,8 +324,18 @@ export function accumulateFranchiseBillingFromPos(
       location_name: po.location_name ?? undefined,
     })
     const issuerStore = resolveAccountingPoIssuerStore({ cart_json: po.cart_json })
+    const { items, meta } = parsePurchaseOrderCart(po.cart_json)
+    const expenseStoreCandidates = new Set<string>()
+    if (relatedStore) expenseStoreCandidates.add(relatedStore)
+    const metaRelated = String(meta?.relatedStore ?? '').trim()
+    if (metaRelated) expenseStoreCandidates.add(metaRelated)
+    for (const line of items) {
+      const s = String(line.store ?? '').trim()
+      if (s) expenseStoreCandidates.add(s)
+    }
 
-    if (relatedStore && params.matchExpense(relatedStore)) {
+    const expenseMatched = [...expenseStoreCandidates].some((s) => params.matchExpense(s))
+    if (expenseMatched) {
       mergeKindAmounts(expense, byKind)
     }
     if (params.matchRevenue(issuerStore)) {

@@ -71,6 +71,7 @@ import {
   PL_FRANCHISE_BILLING_SALES_KEY,
   type FranchiseBillingPlSlice,
 } from '@/lib/accounting-po-franchise-billing-pl'
+import { PL_FRANCHISE_EXPENSE_SUBJECT_CODES } from '@/lib/accounting-po-franchise-billing-pl-shared'
 import {
   accumulateNetByItemTax,
   emptyNetVatBuckets,
@@ -1078,6 +1079,62 @@ function buildExpenseByAccountList(
   return rows
 }
 
+/** 승인 회계 PO 가맹 청구 — 계정과목 펼침에 보이도록 합성 행 추가(5528 플랫폼 수수료와 분리) */
+function appendFranchiseBillingExpenseSubjects(
+  rows: NonNullable<IncomeStatementReport['expenseByAccountSubject']> | undefined,
+  franchise: FranchiseBillingPlSlice
+): NonNullable<IncomeStatementReport['expenseByAccountSubject']> {
+  const base = [...(rows || [])]
+  const extras: NonNullable<IncomeStatementReport['expenseByAccountSubject']> = []
+  const push = (
+    code: string,
+    amount: number,
+    name: string,
+    nameEn: string,
+    nameTh: string
+  ) => {
+    if (amount <= 0) return
+    extras.push({
+      accountSubjectId: null,
+      code,
+      name,
+      nameEn,
+      nameTh,
+      amount: round2(amount),
+    })
+  }
+  push(
+    PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty,
+    franchise.royaltyGross,
+    '본사 로열티 청구(승인 PO)',
+    'HQ royalty (approved PO)',
+    'ค่าสิทธิ์สำนักงานใหญ่ (PO อนุมัติ)'
+  )
+  push(
+    PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp,
+    franchise.deliveryGpGross,
+    '본사 배달 GP 청구(승인 PO)',
+    'HQ delivery GP (approved PO)',
+    'Delivery GP สำนักงานใหญ่ (PO อนุมัติ)'
+  )
+  push(
+    PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp,
+    franchise.grabGpGross,
+    '본사 Grab GP 청구(승인 PO)',
+    'HQ Grab GP (approved PO)',
+    'Grab GP สำนักงานใหญ่ (PO อนุมัติ)'
+  )
+  push(
+    PL_FRANCHISE_EXPENSE_SUBJECT_CODES.combined,
+    franchise.combinedGross,
+    '본사 가맹 청구 합산(승인 PO)',
+    'HQ franchise billing combined (approved PO)',
+    'เรียกเก็บแฟรนไชส์รวม (PO อนุมัติ)'
+  )
+  if (extras.length === 0) return base
+  return [...base, ...extras].sort((a, b) => b.amount - a.amount)
+}
+
 function isExcludedHqStockLocation(location: string): boolean {
   const n = String(location || '').trim().toLowerCase()
   if (!n) return true
@@ -2016,7 +2073,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     mergeExpenseSubjectMaps(expenseBySubjectMap, depAgg.byAccountSubjectId)
   }
 
-  const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
+  const expenseByAccountSubject = appendFranchiseBillingExpenseSubjects(
+    buildExpenseByAccountList(expenseBySubjectMap, subjectMeta),
+    franchiseExpense
+  )
   /** petty·통장·고정비·급여·감가상각·입고(비용 계정 품목) 등 + 승인 회계 PO 가맹 청구 */
   const expensesFromSubjects = sumExpenseSubjectAmounts(expenseBySubjectMap)
   const franchiseRoyaltyExpense = franchiseExpense.royaltyGross
