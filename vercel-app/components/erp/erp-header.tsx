@@ -75,33 +75,41 @@ export function ErpHeader() {
   const staffMobileLabel = t("goToStaffMobile") || t("goToMobile") || "현장 모바일"
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b bg-card px-2 print:hidden pointer-events-none sm:gap-2 sm:px-4">
-      <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
-        <SidebarTrigger className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground md:h-8 md:w-8" />
-        {showBackButton && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
-            onClick={goBack}
-            title={t("posBack") || "뒤로가기"}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">{t("posBack") || "뒤로가기"}</span>
-          </Button>
-        )}
-        {!isLoginPage ? (
-          <>
-            <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
-            <Suspense fallback={<div className="min-w-0 flex-1" aria-hidden />}>
-              <ErpWorkspaceTabs />
-            </Suspense>
-          </>
-        ) : null}
-      </div>
+    <header className="sticky top-0 z-30 flex flex-col border-b bg-card print:hidden">
+      {!isLoginPage ? (
+        <div className="pointer-events-auto flex items-end gap-1 border-b border-border/40 bg-muted/70 px-1 pt-1.5 dark:bg-muted/40 sm:gap-2 sm:px-3">
+          <div className="mb-1 flex shrink-0 items-center gap-0.5 sm:gap-1">
+            <SidebarTrigger className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" />
+            {showBackButton ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.08]"
+                onClick={goBack}
+                title={t("posBack") || "뒤로가기"}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="sr-only">{t("posBack") || "뒤로가기"}</span>
+              </Button>
+            ) : null}
+          </div>
+          <Suspense fallback={<div className="min-h-9 min-w-0 flex-1" aria-hidden />}>
+            <ErpWorkspaceTabs />
+          </Suspense>
+        </div>
+      ) : null}
 
-      <div className="pointer-events-auto flex shrink-0 items-center gap-1 sm:gap-2">
+      <div className="pointer-events-none flex h-11 items-center gap-1 bg-card px-2 sm:gap-2 sm:px-4">
+        {isLoginPage ? (
+          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+            <SidebarTrigger className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground md:h-8 md:w-8" />
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1" aria-hidden />
+        )}
+
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1 sm:gap-2">
         <Link
           href="/"
           className="flex h-10 shrink-0 items-center gap-1 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-auto sm:p-2 lg:hidden"
@@ -243,6 +251,7 @@ export function ErpHeader() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
     </header>
   )
