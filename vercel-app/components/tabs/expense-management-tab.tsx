@@ -594,6 +594,25 @@ export function ExpenseManagementTab() {
     )
   }, [allFilteredPlans, canApproveByPolicy])
 
+  /** KPI 카드용 — 유형 필터와 무관하게 기간·매장·용도만 반영 */
+  const kpiApprovePendingCount = React.useMemo(
+    () =>
+      [...filteredExpensePlans, ...filteredPurchasePlans].filter(
+        (r) => r.status === "planned" && canApproveByPolicy(r)
+      ).length,
+    [filteredExpensePlans, filteredPurchasePlans, canApproveByPolicy]
+  )
+
+  const applyPlanKpi = React.useCallback(
+    (kind: "__all__" | "general" | "logistics", segment: "approve" | "pay" | "all") => {
+      setPlanKindFilter(kind)
+      setPlanSegment(segment)
+      if (segment === "pay") setPayListMode("transfer")
+      else setPayListMode("list")
+    },
+    []
+  )
+
   const payablePlansForDay = React.useMemo(() => {
     return allFilteredPlans.filter(
       (r) => r.status === "approved" && (r.remainingAmount || 0) > 0
@@ -1059,18 +1078,32 @@ export function ExpenseManagementTab() {
         <TabsContent value="plan" className={cn(adminTabsContentCn, "space-y-4")}>
           {!loading ? (
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <button type="button" className="text-left" onClick={() => setPlanSegment("approve")}>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  planSegment === "approve" && planKindFilter === "__all__" && "ring-2 ring-primary"
+                )}
+                onClick={() => applyPlanKpi("__all__", "approve")}
+              >
                 <MetricCard
                   size="sm"
-                  variant={approvablePlansForDay.length > 0 ? "warning" : "default"}
+                  variant={kpiApprovePendingCount > 0 ? "warning" : "default"}
                   label={t("acct_kpi_expense_approve_pending")}
-                  value={String(approvablePlansForDay.length)}
+                  value={String(kpiApprovePendingCount)}
                   subLabel={
                     endStr && endStr !== startStr ? `${startStr} ~ ${endStr}` : startStr
                   }
                 />
               </button>
-              <button type="button" className="text-left" onClick={() => setPlanSegment("pay")}>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  planSegment === "pay" && planKindFilter === "general" && "ring-2 ring-primary"
+                )}
+                onClick={() => applyPlanKpi("general", "pay")}
+              >
                 <MetricCard
                   size="sm"
                   variant="primary"
@@ -1080,11 +1113,11 @@ export function ExpenseManagementTab() {
               </button>
               <button
                 type="button"
-                className="text-left"
-                onClick={() => {
-                  setPlanKindFilter("logistics")
-                  setPlanSegment("pay")
-                }}
+                className={cn(
+                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  planSegment === "pay" && planKindFilter === "logistics" && "ring-2 ring-primary"
+                )}
+                onClick={() => applyPlanKpi("logistics", "pay")}
               >
                 <MetricCard
                   size="sm"
@@ -1092,11 +1125,20 @@ export function ExpenseManagementTab() {
                   value={`฿${filteredPlanTotals.logisticsRemaining.toLocaleString()}`}
                 />
               </button>
-              <button type="button" className="text-left" onClick={() => setPlanSegment("all")}>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  planSegment === "all" && planKindFilter === "__all__" && "ring-2 ring-primary"
+                )}
+                onClick={() => applyPlanKpi("__all__", "all")}
+              >
                 <MetricCard
                   size="sm"
                   label={tt("expensePlanTab", "Payment Plan")}
-                  value={`฿${filteredPlanTotals.expensePlanned.toLocaleString()}`}
+                  value={`฿${(
+                    filteredPlanTotals.expenseRemaining + filteredPlanTotals.logisticsRemaining
+                  ).toLocaleString()}`}
                   subLabel={`${startStr} ~ ${endStr}`}
                 />
               </button>
@@ -1272,6 +1314,7 @@ export function ExpenseManagementTab() {
 
           {planSegment === "pay" && payListMode === "transfer" ? (
             <ExpenseBankTransferView
+              key={`transfer-${planKindFilter}-${startStr}-${endStr}`}
               plans={transferPayablePlans}
               tt={tt}
               companyName={transferCompanyName}
