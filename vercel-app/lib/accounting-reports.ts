@@ -46,6 +46,12 @@ import { shouldExcludeBankWithdrawFromPlExpense } from '@/lib/bank-transaction-n
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
+  sumEbitdaAddBacksFromExpenseSubjects,
+  type IncomeStatementAmountBasisKind,
+  type IncomeStatementDisplayAmounts,
+  type IncomeStatementEbitdaBridge,
+} from '@/lib/income-statement-display'
+import {
   buildStoreFieldOrIlikeFragment,
   storeMatchesIncomeFilter,
 } from '@/lib/accounting-store-match'
@@ -61,11 +67,10 @@ import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time
 import { resolveInventoryAsOfUtcIso, resolveStockValuationUnitCost } from '@/lib/accounting-inventory-asof'
 import { appendInventoryTenantFilter } from '@/lib/inventory-tenant-scope'
 import {
-  sumEbitdaAddBacksFromExpenseSubjects,
-  type IncomeStatementAmountBasisKind,
-  type IncomeStatementDisplayAmounts,
-  type IncomeStatementEbitdaBridge,
-} from '@/lib/income-statement-display'
+  loadFranchiseBillingForIncomeStatement,
+  PL_FRANCHISE_BILLING_SALES_KEY,
+  type FranchiseBillingPlSlice,
+} from '@/lib/accounting-po-franchise-billing-pl'
 import {
   accumulateNetByItemTax,
   emptyNetVatBuckets,
@@ -172,6 +177,14 @@ export type IncomeStatementReport = {
     payrollExpense: number
     /** 감가상각(depreciation_entries) — 당기순이익 비용에 포함 */
     depreciationExpense: number
+    /** 승인 회계 PO 로열티 — VAT 포함(total) 기준 저장, 화면은 displayAmounts로 토글 */
+    franchiseRoyalty: number
+    /** 승인 회계 PO 배달 GP */
+    franchiseDeliveryGp: number
+    /** 승인 회계 PO Grab GP */
+    franchiseGrabGp: number
+    /** billingKind=all 합산 */
+    franchiseBillingCombined: number
     total: number
   }
   /** 계정과목(세부)별 비용 — 현금시재·통장출금·고정비 합산 (표시명은 클라이언트에서 lang 반영) */
@@ -1434,6 +1447,20 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     limit: ACCOUNTING_ROWS_MAX,
   }
 
+  const franchiseBillingPl = await loadFranchiseBillingForIncomeStatement({
+    yearMonth,
+    startStr,
+    endStr,
+    storeFilter,
+    isHQ,
+  })
+  limits.franchise_billing_pos = {
+    fetched: franchiseBillingPl.fetched,
+    limit: ACCOUNTING_ROWS_MAX,
+  }
+  const franchiseExpense: FranchiseBillingPlSlice = franchiseBillingPl.expense
+  const franchiseRevenue: FranchiseBillingPlSlice = franchiseBillingPl.revenue
+
   const shouldSkipSalaryCashBecausePayroll = (row: {
     account_subject_id?: number | null
     memo?: string | null
@@ -1938,6 +1965,22 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     purchaseByVendor.sort((a, b) => b.amount - a.amount)
   }
 
+  // 승인 회계 PO(로열티·배달/Grab GP) — 발행측 매출 (displayAmounts는 VAT 버킷 확정 후 가산)
+  if (franchiseRevenue.totalGross > 0 || franchiseRevenue.totalNet > 0) {
+    sales += franchiseRevenue.totalGross
+    // 매장 POS 일별(salesByDay) 우선권을 깨지 않도록 본사(또는 이미 매출처 분해)일 때만 행 추가
+    if (isHQ || salesByCustomer.length > 0) {
+      salesByCustomer = [
+        ...salesByCustomer,
+        {
+          key: PL_FRANCHISE_BILLING_SALES_KEY,
+          amount: franchiseRevenue.totalGross,
+          amountBasis: 'pos_gross' as const,
+        },
+      ]
+    }
+  }
+
   if (input.includeDebug) {
     try {
       const countFilter =
@@ -1974,8 +2017,15 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   }
 
   const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
-  /** petty·통장·고정비·급여·감가상각·입고(비용 계정 품목) 등 */
-  const expenses = sumExpenseSubjectAmounts(expenseBySubjectMap)
+  /** petty·통장·고정비·급여·감가상각·입고(비용 계정 품목) 등 + 승인 회계 PO 가맹 청구 */
+  const expensesFromSubjects = sumExpenseSubjectAmounts(expenseBySubjectMap)
+  const franchiseRoyaltyExpense = franchiseExpense.royaltyGross
+  const franchiseDeliveryGpExpense = franchiseExpense.deliveryGpGross
+  const franchiseGrabGpExpense = franchiseExpense.grabGpGross
+  const franchiseBillingCombinedExpense = franchiseExpense.combinedGross
+  const franchiseBillingExpenseGross = franchiseExpense.totalGross
+  const franchiseBillingExpenseNet = franchiseExpense.totalNet
+  const expenses = round2(expensesFromSubjects + franchiseBillingExpenseGross)
   const cogs = beginningInventory + purchases - endingInventory
   const grossProfit = sales - cogs
   const netProfit = grossProfit - expenses
@@ -2046,6 +2096,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     salesNetForDisplay = netTotalFromBuckets(salesStockVatBuckets)
     salesGrossForDisplay = grossFromNetVatBuckets(salesStockVatBuckets)
   }
+  // 승인 회계 PO 가맹 청구 매출(발행측) — 물류 출고 VAT 버킷과 별도 가산
+  if (franchiseRevenue.totalGross > 0 || franchiseRevenue.totalNet > 0) {
+    salesGrossForDisplay = round2(salesGrossForDisplay + franchiseRevenue.totalGross)
+    salesNetForDisplay = round2(salesNetForDisplay + franchiseRevenue.totalNet)
+  }
   if (salesNetForDisplay <= 0 && sales > 0) {
     salesNetForDisplay = sales
     salesGrossForDisplay = salesGrossForDisplay > 0 ? salesGrossForDisplay : sales
@@ -2066,6 +2121,18 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     beginningInventoryNet: round2(begInvNet),
     endingInventoryGross: grossFromNetVatBuckets(endInvBuckets),
     endingInventoryNet: round2(endInvNet),
+    franchiseBillingGross: franchiseBillingExpenseGross,
+    franchiseBillingNet: franchiseBillingExpenseNet,
+    franchiseRoyaltyGross: franchiseExpense.royaltyGross,
+    franchiseRoyaltyNet: franchiseExpense.royaltyNet,
+    franchiseDeliveryGpGross: franchiseExpense.deliveryGpGross,
+    franchiseDeliveryGpNet: franchiseExpense.deliveryGpNet,
+    franchiseGrabGpGross: franchiseExpense.grabGpGross,
+    franchiseGrabGpNet: franchiseExpense.grabGpNet,
+    franchiseBillingCombinedGross: franchiseExpense.combinedGross,
+    franchiseBillingCombinedNet: franchiseExpense.combinedNet,
+    franchiseRevenueGross: franchiseRevenue.totalGross,
+    franchiseRevenueNet: franchiseRevenue.totalNet,
     ...(isHQ ? { salesStockVatBuckets } : {}),
     purchasesStockVatBuckets,
   }
@@ -2114,6 +2181,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       stockInboundExpense: round2(stockInboundExpense),
       payrollExpense: round2(payrollExpense),
       depreciationExpense: round2(depreciationExpense),
+      franchiseRoyalty: round2(franchiseRoyaltyExpense),
+      franchiseDeliveryGp: round2(franchiseDeliveryGpExpense),
+      franchiseGrabGp: round2(franchiseGrabGpExpense),
+      franchiseBillingCombined: round2(franchiseBillingCombinedExpense),
       total: expenses,
     },
     expenseByAccountSubject,

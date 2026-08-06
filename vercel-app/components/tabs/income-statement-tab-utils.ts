@@ -1,12 +1,26 @@
 import type { IncomeStatementData } from "@/lib/api-client"
-import { convertLineAmount, type IncomeStatementAmountBasisKind, type IncomeStatementVatDisplayMode } from "@/lib/income-statement-display"
+import { PL_FRANCHISE_BILLING_SALES_KEY } from "@/lib/accounting-po-franchise-billing-pl"
+import {
+  convertLineAmount,
+  pickFranchiseBillingVatAmount,
+  type IncomeStatementAmountBasisKind,
+  type IncomeStatementVatDisplayMode,
+} from "@/lib/income-statement-display"
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from "@/lib/income-statement-purchase-drill-nav"
 
 export function lineDisplayAmount(
-  row: { amount: number; amountBasis?: IncomeStatementAmountBasisKind },
+  row: { amount: number; amountBasis?: IncomeStatementAmountBasisKind; key?: string },
   vatMode: IncomeStatementVatDisplayMode,
-  stockVatBuckets?: { taxableNet: number; exemptNet: number } | null
+  stockVatBuckets?: { taxableNet: number; exemptNet: number } | null,
+  displayAmounts?: IncomeStatementData["displayAmounts"]
 ): number {
+  if (row.key === PL_FRANCHISE_BILLING_SALES_KEY && displayAmounts) {
+    return pickFranchiseBillingVatAmount(
+      displayAmounts.franchiseRevenueGross ?? row.amount,
+      displayAmounts.franchiseRevenueNet,
+      vatMode
+    )
+  }
   return convertLineAmount(row.amount, row.amountBasis ?? "stock_net", vatMode, stockVatBuckets)
 }
 
@@ -34,6 +48,9 @@ export function purchaseAmountForVendor(data: IncomeStatementData | undefined, v
 }
 
 function salesCustomerRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
+  if (row.key === PL_FRANCHISE_BILLING_SALES_KEY) {
+    return t("pL_salesFranchiseBilling") || "Franchise billing (approved PO)"
+  }
   if (row.key === "__pl_sales_customer_unknown__") return t("pL_salesCustomerUnknown") || "Unspecified customer"
   const n = String(row.label || "").trim()
   return n || row.key
@@ -249,6 +266,10 @@ export function yearlyExpenseBreakdownField(
     | "stockInboundExpense"
     | "payrollExpense"
     | "depreciationExpense"
+    | "franchiseRoyalty"
+    | "franchiseDeliveryGp"
+    | "franchiseGrabGp"
+    | "franchiseBillingCombined"
 ): number {
   let s = 0
   for (const { ym, data } of rows) {

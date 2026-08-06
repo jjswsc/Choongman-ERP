@@ -31,6 +31,10 @@ export interface IncomeStatementData {
     stockInboundExpense?: number
     payrollExpense?: number
     depreciationExpense?: number
+    franchiseRoyalty?: number
+    franchiseDeliveryGp?: number
+    franchiseGrabGp?: number
+    franchiseBillingCombined?: number
     total: number
   }
   diagnostics?: {
@@ -84,6 +88,18 @@ export interface IncomeStatementData {
     beginningInventoryNet: number
     endingInventoryGross: number
     endingInventoryNet: number
+    franchiseBillingGross?: number
+    franchiseBillingNet?: number
+    franchiseRoyaltyGross?: number
+    franchiseRoyaltyNet?: number
+    franchiseDeliveryGpGross?: number
+    franchiseDeliveryGpNet?: number
+    franchiseGrabGpGross?: number
+    franchiseGrabGpNet?: number
+    franchiseBillingCombinedGross?: number
+    franchiseBillingCombinedNet?: number
+    franchiseRevenueGross?: number
+    franchiseRevenueNet?: number
     salesStockVatBuckets?: { taxableNet: number; exemptNet: number }
     purchasesStockVatBuckets?: { taxableNet: number; exemptNet: number }
   }

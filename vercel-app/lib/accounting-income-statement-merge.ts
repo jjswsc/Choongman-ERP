@@ -78,6 +78,10 @@ export function mergeIncomeStatementReports(
         stockInboundExpense: 0,
         payrollExpense: 0,
         depreciationExpense: 0,
+        franchiseRoyalty: 0,
+        franchiseDeliveryGp: 0,
+        franchiseGrabGp: 0,
+        franchiseBillingCombined: 0,
         total: 0,
       },
     }
@@ -129,6 +133,10 @@ export function mergeIncomeStatementReports(
     stockInboundExpense: sum((r) => r.expenseBreakdown.stockInboundExpense ?? 0),
     payrollExpense: sum((r) => r.expenseBreakdown.payrollExpense ?? 0),
     depreciationExpense: sum((r) => r.expenseBreakdown.depreciationExpense ?? 0),
+    franchiseRoyalty: sum((r) => r.expenseBreakdown.franchiseRoyalty ?? 0),
+    franchiseDeliveryGp: sum((r) => r.expenseBreakdown.franchiseDeliveryGp ?? 0),
+    franchiseGrabGp: sum((r) => r.expenseBreakdown.franchiseGrabGp ?? 0),
+    franchiseBillingCombined: sum((r) => r.expenseBreakdown.franchiseBillingCombined ?? 0),
     total: sum((r) => r.expenseBreakdown.total),
   }
 
@@ -159,6 +167,18 @@ export function mergeIncomeStatementReports(
     beginningInventoryNet: sum((r) => r.displayAmounts?.beginningInventoryNet ?? r.beginningInventory),
     endingInventoryGross: sum((r) => r.displayAmounts?.endingInventoryGross ?? r.endingInventory),
     endingInventoryNet: sum((r) => r.displayAmounts?.endingInventoryNet ?? r.endingInventory),
+    franchiseBillingGross: sum((r) => r.displayAmounts?.franchiseBillingGross ?? 0),
+    franchiseBillingNet: sum((r) => r.displayAmounts?.franchiseBillingNet ?? 0),
+    franchiseRoyaltyGross: sum((r) => r.displayAmounts?.franchiseRoyaltyGross ?? 0),
+    franchiseRoyaltyNet: sum((r) => r.displayAmounts?.franchiseRoyaltyNet ?? 0),
+    franchiseDeliveryGpGross: sum((r) => r.displayAmounts?.franchiseDeliveryGpGross ?? 0),
+    franchiseDeliveryGpNet: sum((r) => r.displayAmounts?.franchiseDeliveryGpNet ?? 0),
+    franchiseGrabGpGross: sum((r) => r.displayAmounts?.franchiseGrabGpGross ?? 0),
+    franchiseGrabGpNet: sum((r) => r.displayAmounts?.franchiseGrabGpNet ?? 0),
+    franchiseBillingCombinedGross: sum((r) => r.displayAmounts?.franchiseBillingCombinedGross ?? 0),
+    franchiseBillingCombinedNet: sum((r) => r.displayAmounts?.franchiseBillingCombinedNet ?? 0),
+    franchiseRevenueGross: sum((r) => r.displayAmounts?.franchiseRevenueGross ?? 0),
+    franchiseRevenueNet: sum((r) => r.displayAmounts?.franchiseRevenueNet ?? 0),
     ...(salesStockVatBuckets.taxableNet > 0 || salesStockVatBuckets.exemptNet > 0
       ? { salesStockVatBuckets }
       : {}),

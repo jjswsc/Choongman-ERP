@@ -18,6 +18,20 @@ export type IncomeStatementDisplayAmounts = {
   beginningInventoryNet: number
   endingInventoryGross: number
   endingInventoryNet: number
+  /** 승인 회계 PO 가맹 청구 비용 — VAT 포함(total) / 제외(subtotal) */
+  franchiseBillingGross?: number
+  franchiseBillingNet?: number
+  franchiseRoyaltyGross?: number
+  franchiseRoyaltyNet?: number
+  franchiseDeliveryGpGross?: number
+  franchiseDeliveryGpNet?: number
+  franchiseGrabGpGross?: number
+  franchiseGrabGpNet?: number
+  franchiseBillingCombinedGross?: number
+  franchiseBillingCombinedNet?: number
+  /** 발행측(본사/issuer) 매출 — VAT 토글용 */
+  franchiseRevenueGross?: number
+  franchiseRevenueNet?: number
   /** 품목 tax_type 반영 — 펼침 행 환산용 */
   salesStockVatBuckets?: NetVatBuckets
   purchasesStockVatBuckets?: NetVatBuckets
@@ -35,6 +49,15 @@ export type IncomeStatementDisplayPrefs = {
 }
 
 const PREFS_STORAGE_KEY = 'cm_erp_income_statement_display_prefs_v1'
+
+/** 손익 VAT 토글용 — 승인 회계 PO 비용/매출 행 */
+export function pickFranchiseBillingVatAmount(
+  gross: number | undefined,
+  net: number | undefined,
+  mode: IncomeStatementVatDisplayMode
+): number {
+  return mode === 'included' ? Math.max(0, Number(gross) || 0) : Math.max(0, Number(net) || 0)
+}
 
 export function grossFromNetSubtotal(net: number): number {
   if (!net || net <= 0) return 0
@@ -147,7 +170,13 @@ export function buildIncomeStatementViewNumbers(input: {
   expenses: number
   ebitda: number | null
 } {
-  const expenses = Number(input.data.expenses) || 0
+  const b = input.data.displayAmounts
+  const fbG = Math.max(0, Number(b?.franchiseBillingGross) || 0)
+  const fbN = Math.max(0, Number(b?.franchiseBillingNet) || 0)
+  // report.expenses 는 franchise gross 포함 가정 — VAT 제외 시 franchise분만 net으로 교체
+  const expensesBase = Math.max(0, (Number(input.data.expenses) || 0) - fbG)
+  const expenses =
+    expensesBase + (input.vatMode === 'included' ? fbG : fbN)
   const sales = resolveIncomeStatementSalesAmount(input.data, input.vatMode, input.manualSales)
   const purchases = resolveIncomeStatementPurchasesAmount(input.data, input.vatMode)
   const beginningInventory = resolveIncomeStatementInventoryAmount(

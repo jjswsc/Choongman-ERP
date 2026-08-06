@@ -51,6 +51,30 @@ describe('income-statement-display', () => {
     expect(excl.purchases).toBe(500)
   })
 
+  it('switches franchise billing expense by vat mode only', () => {
+    const data = stubData({
+      expenses: 307,
+      displayAmounts: {
+        salesGross: 1070,
+        salesNet: 1000,
+        purchasesGross: 535,
+        purchasesNet: 500,
+        beginningInventoryGross: 107,
+        beginningInventoryNet: 100,
+        endingInventoryGross: 214,
+        endingInventoryNet: 200,
+        franchiseBillingGross: 107,
+        franchiseBillingNet: 100,
+      },
+    })
+    const incl = buildIncomeStatementViewNumbers({ data, vatMode: 'included' })
+    const excl = buildIncomeStatementViewNumbers({ data, vatMode: 'excluded' })
+    expect(incl.expenses).toBe(307)
+    expect(excl.expenses).toBe(300)
+    expect(incl.netProfit).toBe(incl.grossProfit - 307)
+    expect(excl.netProfit).toBe(excl.grossProfit - 300)
+  })
+
   it('computes ebitda from bridge', () => {
     const data = stubData({
       ebitdaBridge: { depreciation: 50, interest: 10, incomeTax: 20 },
