@@ -1,0 +1,93 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { afterEach, describe, expect, it } from "vitest"
+import {
+  ERP_WORKSPACE_DASHBOARD_HREF,
+  ERP_WORKSPACE_TABS_KEY,
+  MAX_ERP_WORKSPACE_TABS,
+  clearErpWorkspaceTabs,
+  closeOtherErpWorkspaceTabs,
+  ensureErpWorkspaceTab,
+  findNeighborWorkspaceTabHref,
+  getErpWorkspaceTabs,
+  removeErpWorkspaceTab,
+  reorderErpWorkspaceTabs,
+  resolveErpWorkspaceTabHref,
+} from "@/lib/erp-workspace-tabs"
+import { resolveErpKeepAliveCacheHref, isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
+
+describe("erp-workspace-tabs", () => {
+  afterEach(() => {
+    clearErpWorkspaceTabs()
+    sessionStorage.removeItem(ERP_WORKSPACE_TABS_KEY)
+  })
+
+  it("resolves help query off tab key", () => {
+    expect(resolveErpWorkspaceTabHref("/admin/vendors?erp_help=1")).toBe("/admin/vendors")
+  })
+
+  it("keeps leave?tab= under one workspace key", () => {
+    expect(resolveErpWorkspaceTabHref("/admin/leave?tab=stats")).toBe("/admin/leave")
+    expect(resolveErpKeepAliveCacheHref("/admin/leave?tab=stats")).toBe("/admin/leave")
+  })
+
+  it("keeps dashboard first and accumulates menus", () => {
+    ensureErpWorkspaceTab("/admin")
+    ensureErpWorkspaceTab("/admin/vendors")
+    ensureErpWorkspaceTab("/admin/leave?tab=stats")
+    const tabs = getErpWorkspaceTabs()
+    expect(tabs[0]?.href).toBe(ERP_WORKSPACE_DASHBOARD_HREF)
+    expect(tabs.map((t) => t.href)).toContain("/admin/vendors")
+    expect(tabs.map((t) => t.href)).toContain("/admin/leave")
+  })
+
+  it("does not close dashboard; neighbor after close", () => {
+    ensureErpWorkspaceTab("/admin")
+    ensureErpWorkspaceTab("/admin/vendors")
+    ensureErpWorkspaceTab("/admin/members")
+    const before = getErpWorkspaceTabs()
+    const neighbor = findNeighborWorkspaceTabHref("/admin/vendors", before)
+    expect(neighbor).toBe("/admin/members")
+    removeErpWorkspaceTab("/admin/vendors")
+    expect(getErpWorkspaceTabs().map((t) => t.href)).not.toContain("/admin/vendors")
+    const stillDash = removeErpWorkspaceTab("/admin")
+    expect(stillDash[0]?.href).toBe(ERP_WORKSPACE_DASHBOARD_HREF)
+  })
+
+  it("evicts LRU when over max tabs", () => {
+    ensureErpWorkspaceTab("/admin")
+    for (let i = 0; i < MAX_ERP_WORKSPACE_TABS + 2; i++) {
+      ensureErpWorkspaceTab(`/admin/vendors?x=${i}`)
+    }
+    // vendors is not query-agnostic — each ?x= is a separate tab; trim to max
+    expect(getErpWorkspaceTabs().length).toBeLessThanOrEqual(MAX_ERP_WORKSPACE_TABS)
+  })
+
+  it("reorders non-dashboard tabs and closes others", () => {
+    ensureErpWorkspaceTab("/admin")
+    ensureErpWorkspaceTab("/admin/vendors")
+    ensureErpWorkspaceTab("/admin/items")
+    ensureErpWorkspaceTab("/admin/notices")
+    reorderErpWorkspaceTabs("/admin/notices", "/admin/vendors")
+    const hrefs = getErpWorkspaceTabs().map((t) => t.href)
+    expect(hrefs[0]).toBe("/admin")
+    expect(hrefs.indexOf("/admin/notices")).toBeLessThan(hrefs.indexOf("/admin/vendors"))
+    const removed = closeOtherErpWorkspaceTabs("/admin/items")
+    expect(removed).toContain("/admin/vendors")
+    expect(getErpWorkspaceTabs().map((t) => t.href)).toEqual(["/admin", "/admin/items"])
+  })
+})
+
+describe("erp-keep-alive-config excludes", () => {
+  it("excludes heavy P0/P1 paths", () => {
+    expect(isErpKeepAliveExcluded("/admin/outbound")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/pos-printers")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/pos-orders")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/attendance")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/payroll")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/stock")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/vendors")).toBe(false)
+    expect(isErpKeepAliveExcluded("/admin/sales-management")).toBe(false)
+  })
+})

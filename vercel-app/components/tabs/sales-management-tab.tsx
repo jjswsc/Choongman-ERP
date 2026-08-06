@@ -28,6 +28,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
 import { useT, i18n, tOr } from "@/lib/i18n"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
   combinedKindLabel,
   combinedLayerLabel,
@@ -2513,6 +2514,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedStores.length,
     forecastHorizon,
   ])
+
+  useErpRefetchOnActivate(() => {
+    if (!showSalesResults) return
+    loadAllAnalytics()
+  })
 
   const online = useOnlineStatus()
   const prevOnlineRef = React.useRef(online)

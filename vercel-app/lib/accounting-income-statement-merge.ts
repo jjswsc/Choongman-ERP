@@ -4,6 +4,7 @@ import type {
   IncomeStatementReport,
   UnpostedBankTransaction,
 } from '@/lib/accounting-reports'
+import { plExpenseSubjectRowKey } from '@/lib/accounting-po-franchise-billing-pl-shared'
 import { emptyNetVatBuckets, mergeNetVatBuckets } from '@/lib/income-statement-item-vat'
 
 function round2(n: number): number {
@@ -18,10 +19,13 @@ function mergeLineDetails(rows: IncomeStatementLineDetail[][]): IncomeStatementL
     const key = String(row.key || '').trim() || '__unknown__'
     const prev = byKey.get(key)
     const amt = round2((prev?.amount ?? 0) + Number(row.amount || 0))
+    const vat = round2((prev?.vatAmount ?? 0) + Number(row.vatAmount || 0))
     byKey.set(key, {
       key,
       amount: amt,
       label: prev?.label || row.label,
+      amountBasis: prev?.amountBasis || row.amountBasis,
+      ...(vat > 0 ? { vatAmount: vat } : {}),
     })
   }
   return Array.from(byKey.values()).sort((a, b) => b.amount - a.amount)
@@ -34,9 +38,10 @@ function mergeExpenseBySubject(
   if (flat.length === 0) return undefined
   const byId = new Map<string, NonNullable<IncomeStatementReport['expenseByAccountSubject']>[number]>()
   for (const row of flat) {
-    const idKey = row.accountSubjectId == null ? 'null' : String(row.accountSubjectId)
+    const idKey = plExpenseSubjectRowKey(row)
     const prev = byId.get(idKey)
     const amt = round2((prev?.amount ?? 0) + Number(row.amount || 0))
+    const vat = round2((prev?.vatAmount ?? 0) + Number(row.vatAmount || 0))
     byId.set(idKey, {
       accountSubjectId: row.accountSubjectId,
       code: prev?.code || row.code,
@@ -44,6 +49,7 @@ function mergeExpenseBySubject(
       nameEn: prev?.nameEn ?? row.nameEn,
       nameTh: prev?.nameTh ?? row.nameTh,
       amount: amt,
+      ...(vat > 0 ? { vatAmount: vat } : {}),
     })
   }
   return Array.from(byId.values()).sort((a, b) => b.amount - a.amount)
@@ -179,6 +185,8 @@ export function mergeIncomeStatementReports(
     franchiseBillingCombinedNet: sum((r) => r.displayAmounts?.franchiseBillingCombinedNet ?? 0),
     franchiseRevenueGross: sum((r) => r.displayAmounts?.franchiseRevenueGross ?? 0),
     franchiseRevenueNet: sum((r) => r.displayAmounts?.franchiseRevenueNet ?? 0),
+    expensesCashVat: sum((r) => r.displayAmounts?.expensesCashVat ?? 0),
+    purchasesBankVat: sum((r) => r.displayAmounts?.purchasesBankVat ?? 0),
     ...(salesStockVatBuckets.taxableNet > 0 || salesStockVatBuckets.exemptNet > 0
       ? { salesStockVatBuckets }
       : {}),

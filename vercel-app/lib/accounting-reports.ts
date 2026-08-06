@@ -88,6 +88,7 @@ import {
 } from '@/lib/accounting-payroll-pl'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purchase-drill-nav'
+import { resolveBankPlCashVat, safePlCashVat } from '@/lib/income-statement-cash-vat'
 
 export {
   buildHqVendorMatchIndex,
@@ -150,6 +151,8 @@ export type IncomeStatementLineDetail = {
   label?: string
   /** 손익 화면 VAT 토글용 — 미설정 시 stock_net */
   amountBasis?: IncomeStatementAmountBasisKind
+  /** 통장·패티 매입 등 cash_gross 행의 명시 VAT (원천 amount는 gross) */
+  vatAmount?: number
 }
 
 export type IncomeStatementReport = {
@@ -196,6 +199,8 @@ export type IncomeStatementReport = {
     nameEn: string | null
     nameTh: string | null
     amount: number
+    /** 명시 VAT 합 — VAT 제외 표시 시 amount에서 차감 */
+    vatAmount?: number
   }[]
   /** 매장: 본사 발주 + 직접입고 거래처별. 본사: 입고 거래처별 */
   purchaseByVendor?: IncomeStatementLineDetail[]
@@ -445,6 +450,7 @@ export function buildBankWithdrawPlPeriodOrFilter(startStr: string, endStr: stri
 type BankWithdrawPlRow = {
   id?: number
   amount?: number
+  vat_amount?: number | null
   category?: string
   trans_date?: string
   expense_date?: string | null
@@ -453,6 +459,81 @@ type BankWithdrawPlRow = {
   memo?: string | null
   note?: string | null
   store?: string | null
+}
+
+type ExpenseAccrualVatByBankId = Map<number, { gross: number; vat: number }>
+
+/** 통장 출금 ↔ 지급예정 VAT 보완용 (추정 없음) */
+async function loadExpenseAccrualVatByBankIds(bankIds: number[]): Promise<ExpenseAccrualVatByBankId> {
+  const out: ExpenseAccrualVatByBankId = new Map()
+  const ids = [...new Set(bankIds.filter((id) => id > 0))]
+  if (ids.length === 0) return out
+  try {
+    const payables = (await supabaseSelectFilterAllPages(
+      'payable_transactions',
+      `bank_transaction_id=in.(${ids.join(',')})&expense_accrual_id=not.is.null`,
+      {
+        select: 'bank_transaction_id,expense_accrual_id',
+        order: 'id.asc',
+        pageSize: 2000,
+        maxRows: ACCOUNTING_ROWS_MAX,
+      }
+    )) as { bank_transaction_id?: number | null; expense_accrual_id?: number | null }[]
+    const bankToAccrual = new Map<number, number>()
+    const accrualIds: number[] = []
+    for (const p of payables || []) {
+      const bankId = Number(p.bank_transaction_id || 0)
+      const accrualId = Number(p.expense_accrual_id || 0)
+      if (bankId <= 0 || accrualId <= 0) continue
+      if (!bankToAccrual.has(bankId)) {
+        bankToAccrual.set(bankId, accrualId)
+        accrualIds.push(accrualId)
+      }
+    }
+    if (accrualIds.length === 0) return out
+    const accruals = (await supabaseSelectFilterAllPages(
+      'expense_accruals',
+      `id=in.(${[...new Set(accrualIds)].join(',')})`,
+      {
+        select: 'id,amount,vat_amount',
+        order: 'id.asc',
+        pageSize: 2000,
+        maxRows: ACCOUNTING_ROWS_MAX,
+      }
+    )) as { id?: number; amount?: number; vat_amount?: number | null }[]
+    const accrualById = new Map<number, { gross: number; vat: number }>()
+    for (const a of accruals || []) {
+      const id = Number(a.id || 0)
+      if (id <= 0) continue
+      const split = safePlCashVat(Number(a.amount) || 0, a.vat_amount)
+      if (split.vat > 0) accrualById.set(id, { gross: split.gross, vat: split.vat })
+    }
+    for (const [bankId, accrualId] of bankToAccrual) {
+      const acc = accrualById.get(accrualId)
+      if (acc) out.set(bankId, acc)
+    }
+  } catch {
+    // VAT 보완 실패 시 통장 명시 VAT만 사용
+  }
+  return out
+}
+
+function pickVendorVatForKeptAmounts(
+  vatByVendor: Record<string, number>,
+  keptAmounts: Record<string, number>
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const k of Object.keys(keptAmounts)) {
+    const v = Number(vatByVendor[k]) || 0
+    if (v > 0) out[k] = round2(v)
+  }
+  return out
+}
+
+function sumVendorMap(m: Record<string, number>): number {
+  let s = 0
+  for (const v of Object.values(m)) s += Number(v) || 0
+  return round2(s)
 }
 
 async function fetchBankWithdrawRowsForPl(
@@ -467,7 +548,7 @@ async function fetchBankWithdrawRowsForPl(
     `account_id=in.(${idList})&trans_type=eq.withdraw&` +
     buildBankWithdrawPlPeriodOrFilter(startStr, endStr)
   const raw = (await supabaseSelectFilterAllPages('bank_transactions', filter, {
-    select: 'id,amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo,note,store',
+    select: 'id,amount,vat_amount,category,trans_date,expense_date,account_subject_id,vendor_code,memo,note,store',
     order: 'id.asc',
     pageSize: 8000,
     maxRows: ACCOUNTING_ROWS_MAX,
@@ -490,7 +571,12 @@ async function fetchBankPurchasePaymentsByVendor(params: {
   storeFilter: string
   startStr: string
   endStr: string
-}): Promise<{ byVendor: Record<string, number>; fetched: number; truncated: boolean }> {
+}): Promise<{
+  byVendor: Record<string, number>
+  byVendorVat: Record<string, number>
+  fetched: number
+  truncated: boolean
+}> {
   const { isHQ, storeFilter, startStr, endStr } = params
   let accountIds: number[] = []
   try {
@@ -514,29 +600,42 @@ async function fetchBankPurchasePaymentsByVendor(params: {
       accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
     }
   } catch {
-    return { byVendor: {}, fetched: 0, truncated: false }
+    return { byVendor: {}, byVendorVat: {}, fetched: 0, truncated: false }
   }
-  if (accountIds.length === 0) return { byVendor: {}, fetched: 0, truncated: false }
+  if (accountIds.length === 0) return { byVendor: {}, byVendorVat: {}, fetched: 0, truncated: false }
   const idList = accountIds.join(',')
-  let btRows: { id?: number; amount?: number; vendor_code?: string; store?: string | null }[] = []
+  let btRows: {
+    id?: number
+    amount?: number
+    vat_amount?: number | null
+    vendor_code?: string
+    store?: string | null
+  }[] = []
   try {
     btRows = (await supabaseSelectFilterAllPages(
       'bank_transactions',
       `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
       {
-        select: 'id,amount,vendor_code,store',
+        select: 'id,amount,vat_amount,vendor_code,store',
         order: 'id.asc',
         pageSize: 8000,
         maxRows: ACCOUNTING_ROWS_MAX,
       }
-    )) as { id?: number; amount?: number; vendor_code?: string; store?: string | null }[]
+    )) as {
+      id?: number
+      amount?: number
+      vat_amount?: number | null
+      vendor_code?: string
+      store?: string | null
+    }[]
   } catch {
-    return { byVendor: {}, fetched: 0, truncated: false }
+    return { byVendor: {}, byVendorVat: {}, fetched: 0, truncated: false }
   }
   const linkedByBankId = await loadInboundLinkedAmountByBankId(
     btRows.map((r) => Number(r.id)).filter((id) => id > 0)
   )
   const out: Record<string, number> = {}
+  const outVat: Record<string, number> = {}
   for (const r of btRows) {
     if (storeFilter !== 'All') {
       const bts = String(r.store || '').trim()
@@ -547,6 +646,7 @@ async function fetchBankPurchasePaymentsByVendor(params: {
       }
     }
     const bankId = Number(r.id)
+    const grossAmt = Math.abs(Number(r.amount) || 0)
     const netAmt = netBankPurchasePaymentForIncomeStatement(
       Number(r.amount) || 0,
       bankId > 0 ? linkedByBankId.get(bankId) || 0 : 0
@@ -554,9 +654,16 @@ async function fetchBankPurchasePaymentsByVendor(params: {
     if (netAmt <= 0) continue
     const v = String(r.vendor_code || '').trim() || '__pl_vendor_unknown__'
     out[v] = (out[v] || 0) + netAmt
+    // 입고 연동으로 일부만 남을 때 VAT도 비례 (명시 VAT만)
+    const vatFull = safePlCashVat(grossAmt, r.vat_amount).vat
+    if (vatFull > 0 && grossAmt > 0) {
+      const vatScaled = round2(vatFull * (netAmt / grossAmt))
+      const vat = safePlCashVat(netAmt, vatScaled).vat
+      if (vat > 0) outVat[v] = (outVat[v] || 0) + vat
+    }
   }
   const fetched = btRows.length
-  return { byVendor: out, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
+  return { byVendor: out, byVendorVat: outVat, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
 }
 
 export function normalizeIncomeScope(input: IncomeScopeInput): {
@@ -819,8 +926,10 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
   subjectMeta: Map<number, AccountSubjectMetaRow>
 }): Promise<{
   bySubject: Map<number | null, number>
+  bySubjectVat: Map<number | null, number>
   deliveryAppFees: number
   cardFees: number
+  cashExpenseVat: number
   linkedBankTransactionIds: Set<number>
   fetched: number
   rows: {
@@ -834,8 +943,10 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
 }> {
   const empty = {
     bySubject: new Map<number | null, number>(),
+    bySubjectVat: new Map<number | null, number>(),
     deliveryAppFees: 0,
     cardFees: 0,
+    cashExpenseVat: 0,
     linkedBankTransactionIds: new Set<number>(),
     fetched: 0,
     rows: [] as {
@@ -856,13 +967,14 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
       `expense_date=gte.${params.startStr}&expense_date=lte.${params.endStr}` +
       `&account_subject_id=in.(${idList})&status=neq.rejected`
     const rows = (await supabaseSelectFilterAllPages('expense_accruals', filter, {
-      select: 'id,amount,store_name,account_subject_id,payee_code,memo,status,expense_date',
+      select: 'id,amount,vat_amount,store_name,account_subject_id,payee_code,memo,status,expense_date',
       order: 'id.asc',
       pageSize: 2000,
       maxRows: ACCOUNTING_ROWS_MAX,
     })) as {
       id?: number
       amount?: number
+      vat_amount?: number | null
       store_name?: string | null
       account_subject_id?: number | null
       payee_code?: string | null
@@ -872,8 +984,10 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
     }[]
 
     const bySubject = new Map<number | null, number>()
+    const bySubjectVat = new Map<number | null, number>()
     let deliveryAppFees = 0
     let cardFees = 0
+    let cashExpenseVat = 0
     const accrualIds: number[] = []
     const detailRows: {
       id: number
@@ -902,10 +1016,15 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
 
       const amt = Math.abs(Number(r.amount) || 0)
       if (!amt) continue
+      const vat = safePlCashVat(amt, r.vat_amount).vat
       const accrualId = Number(r.id || 0)
       if (accrualId > 0) accrualIds.push(accrualId)
 
       addToSubjectMap(bySubject, sid, amt)
+      if (vat > 0) {
+        addToSubjectMap(bySubjectVat, sid, vat)
+        cashExpenseVat += vat
+      }
       if (deliveryIds.has(sid)) deliveryAppFees += amt
       else if (cardIds.has(sid)) cardFees += amt
 
@@ -942,8 +1061,10 @@ async function loadDeliveryCardFeeAccrualsForPl(params: {
 
     return {
       bySubject,
+      bySubjectVat,
       deliveryAppFees: round2(deliveryAppFees),
       cardFees: round2(cardFees),
+      cashExpenseVat: round2(cashExpenseVat),
       linkedBankTransactionIds,
       fetched: rows?.length || 0,
       rows: detailRows,
@@ -969,29 +1090,43 @@ export function isPlCogsPurchaseAccountSubject(
 function addPettyCashRowToPl(params: {
   row: {
     amount?: number
+    vat_amount?: number | null
     trans_type?: string
     account_subject_id?: number | null
     vendor_code?: string | null
   }
   subjectMeta: Map<number, AccountSubjectMetaRow>
   purchaseVendorMap: Record<string, number>
+  purchaseVendorVatMap: Record<string, number>
   expenseBySubjectMap: Map<number | null, number>
+  expenseVatBySubjectMap: Map<number | null, number>
   onExpense: (amt: number) => void
+  onExpenseVat?: (vat: number) => void
   onPurchase: (amt: number) => void
+  onPurchaseVat?: (vat: number) => void
   onSkippedNonPl?: (amt: number) => void
 }) {
   if ((params.row.trans_type || '').toLowerCase() !== 'expense') return
   const amt = Math.abs(Number(params.row.amount) || 0)
   if (!amt) return
+  const vat = safePlCashVat(amt, params.row.vat_amount).vat
   if (isPlExpenseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
     params.onExpense(amt)
     addToSubjectMap(params.expenseBySubjectMap, params.row.account_subject_id, amt)
+    if (vat > 0) {
+      params.onExpenseVat?.(vat)
+      addToSubjectMap(params.expenseVatBySubjectMap, params.row.account_subject_id, vat)
+    }
     return
   }
   if (isPlCogsPurchaseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
     params.onPurchase(amt)
     const vKey = String(params.row.vendor_code || '').trim() || PL_PETTY_CASH_PURCHASE_VENDOR_KEY
     params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+    if (vat > 0) {
+      params.onPurchaseVat?.(vat)
+      params.purchaseVendorVatMap[vKey] = (params.purchaseVendorVatMap[vKey] || 0) + vat
+    }
     return
   }
   params.onSkippedNonPl?.(amt)
@@ -1000,32 +1135,50 @@ function addPettyCashRowToPl(params: {
 function addBankExpenseWithdrawToPl(params: {
   row: {
     amount?: number
+    vat_amount?: number | null
     account_subject_id?: number | null
     vendor_code?: string | null
     memo?: string | null
   }
   subjectMeta: Map<number, AccountSubjectMetaRow>
   purchaseVendorMap: Record<string, number>
+  purchaseVendorVatMap: Record<string, number>
   expenseBySubjectMap: Map<number | null, number>
+  expenseVatBySubjectMap: Map<number | null, number>
+  resolvedVat?: number
   onExpense: (amt: number) => void
+  onExpenseVat?: (vat: number) => void
   onPurchase: (amt: number) => void
+  onPurchaseVat?: (vat: number) => void
   onDeliveryFee?: (amt: number) => void
   onCardFee?: (amt: number) => void
   onSkippedNonPl?: (amt: number) => void
 }) {
   const amt = Math.abs(Number(params.row.amount) || 0)
   if (!amt) return
+  const vat =
+    params.resolvedVat != null
+      ? safePlCashVat(amt, params.resolvedVat).vat
+      : safePlCashVat(amt, params.row.vat_amount).vat
   if (isPlExpenseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
     params.onExpense(amt)
     if (params.onDeliveryFee && isDeliveryAppFeeWithdrawRow(params.row)) params.onDeliveryFee(amt)
     if (params.onCardFee && isCardFeeWithdrawRow(params.row)) params.onCardFee(amt)
     addToSubjectMap(params.expenseBySubjectMap, params.row.account_subject_id, amt)
+    if (vat > 0) {
+      params.onExpenseVat?.(vat)
+      addToSubjectMap(params.expenseVatBySubjectMap, params.row.account_subject_id, vat)
+    }
     return
   }
   if (isPlCogsPurchaseAccountSubject(params.row.account_subject_id, params.subjectMeta)) {
     params.onPurchase(amt)
     const vKey = String(params.row.vendor_code || '').trim() || '__pl_vendor_unknown__'
     params.purchaseVendorMap[vKey] = (params.purchaseVendorMap[vKey] || 0) + amt
+    if (vat > 0) {
+      params.onPurchaseVat?.(vat)
+      params.purchaseVendorVatMap[vKey] = (params.purchaseVendorVatMap[vKey] || 0) + vat
+    }
     return
   }
   params.onSkippedNonPl?.(amt)
@@ -1049,11 +1202,13 @@ export function sumExpenseSubjectAmounts(map: Map<number | null, number>): numbe
 
 function buildExpenseByAccountList(
   map: Map<number | null, number>,
-  meta: Map<number, AccountSubjectMetaRow>
+  meta: Map<number, AccountSubjectMetaRow>,
+  vatMap?: Map<number | null, number>
 ): IncomeStatementReport['expenseByAccountSubject'] {
   const rows: NonNullable<IncomeStatementReport['expenseByAccountSubject']> = []
   for (const [sid, amt] of map) {
     if (!amt) continue
+    const vatAmt = Math.max(0, Number(vatMap?.get(sid)) || 0)
     if (sid == null) {
       rows.push({
         accountSubjectId: null,
@@ -1062,6 +1217,7 @@ function buildExpenseByAccountList(
         nameEn: null,
         nameTh: null,
         amount: amt,
+        ...(vatAmt > 0 ? { vatAmount: round2(vatAmt) } : {}),
       })
       continue
     }
@@ -1073,6 +1229,7 @@ function buildExpenseByAccountList(
       nameEn: m?.nameEn ?? null,
       nameTh: m?.nameTh ?? null,
       amount: amt,
+      ...(vatAmt > 0 ? { vatAmount: round2(vatAmt) } : {}),
     })
   }
   rows.sort((a, b) => b.amount - a.amount)
@@ -1106,30 +1263,30 @@ function appendFranchiseBillingExpenseSubjects(
   push(
     PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty,
     franchise.royaltyGross,
-    '본사 로열티 청구(승인 PO)',
-    'HQ royalty (approved PO)',
-    'ค่าสิทธิ์สำนักงานใหญ่ (PO อนุมัติ)'
+    '본사 로열티 청구 (승인 회계 PO)',
+    'HQ royalty billing (approved accounting PO)',
+    'ค่าสิทธิ์จากสำนักงานใหญ่ (PO บัญชีที่อนุมัติ)'
   )
   push(
     PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp,
     franchise.deliveryGpGross,
-    '본사 배달 GP 청구(승인 PO)',
-    'HQ delivery GP (approved PO)',
-    'Delivery GP สำนักงานใหญ่ (PO อนุมัติ)'
+    '본사 배달 GP 청구 (승인 회계 PO)',
+    'HQ delivery GP billing (approved accounting PO)',
+    'Delivery GP จากสำนักงานใหญ่ (PO ที่อนุมัติ)'
   )
   push(
     PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp,
     franchise.grabGpGross,
-    '본사 Grab GP 청구(승인 PO)',
-    'HQ Grab GP (approved PO)',
-    'Grab GP สำนักงานใหญ่ (PO อนุมัติ)'
+    '본사 Grab GP 청구 (승인 회계 PO·추가 %)',
+    'HQ Grab GP billing (approved PO · extra %)',
+    'Grab GP จากสำนักงานใหญ่ (PO ที่อนุมัติ · % เพิ่ม)'
   )
   push(
     PL_FRANCHISE_EXPENSE_SUBJECT_CODES.combined,
     franchise.combinedGross,
-    '본사 가맹 청구 합산(승인 PO)',
+    '본사 가맹 청구 합산 (승인 회계 PO)',
     'HQ franchise billing combined (approved PO)',
-    'เรียกเก็บแฟรนไชส์รวม (PO อนุมัติ)'
+    'เรียกเก็บแฟรนไชส์รวม (PO ที่อนุมัติ)'
   )
   if (extras.length === 0) return base
   return [...base, ...extras].sort((a, b) => b.amount - a.amount)
@@ -1461,6 +1618,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let purchases = 0
   let purchasesStockNet = 0
   let purchasesBankGross = 0
+  let purchasesBankVat = 0
+  let cashExpenseVat = 0
   const bankPurchaseVendorKeys = new Set<string>()
   let pettyCashExpense = 0
   let bankWithdrawExpense = 0
@@ -1475,6 +1634,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let beginningInventory = 0
   let endingInventory = 0
   const expenseBySubjectMap = new Map<number | null, number>()
+  const expenseVatBySubjectMap = new Map<number | null, number>()
+  const purchaseVendorVatMapAccum: Record<string, number> = {}
 
   const payrollAgg = await loadPayrollAggregateForIncomeStatement({
     yearMonth,
@@ -1495,6 +1656,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     subjectMeta,
   })
   mergeExpenseSubjectMaps(expenseBySubjectMap, feeAccrualPl.bySubject)
+  mergeExpenseSubjectMaps(expenseVatBySubjectMap, feeAccrualPl.bySubjectVat)
+  cashExpenseVat += feeAccrualPl.cashExpenseVat
   deliveryAppFeeExpense += feeAccrualPl.deliveryAppFees
   cardFeeExpense += feeAccrualPl.cardFees
   const feeAccrualLinkedBankIds = feeAccrualPl.linkedBankTransactionIds
@@ -1600,6 +1763,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       )
     }
     const bankPayByVendorHqNorm = normalizeVendorAmountMap(bankPayHqFetch.byVendor, vendorPurchaseKeyIndex)
+    const bankPayVatHqNorm = normalizeVendorAmountMap(bankPayHqFetch.byVendorVat, vendorPurchaseKeyIndex)
     purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
       inboundByVendorHq,
       bankPayByVendorHqNorm
@@ -1608,14 +1772,17 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       inboundByVendorHq,
       bankPayByVendorHqNorm
     )
+    const bankPayVatByVendorHq = pickVendorVatForKeptAmounts(bankPayVatHqNorm, bankPayByVendorHq)
     const purchaseVendorMapHq: Record<string, number> = { ...inboundByVendorHq }
     mergeVendorAmountMap(purchaseVendorMapHq, bankPayByVendorHq)
+    mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorHq)
     /** 거래처별: 직접입고(발생) + 통장 매입지급(입고 없는 거래처만) */
     const inboundHqTotal = Object.values(inboundByVendorHq).reduce((a, b) => a + b, 0)
     const bankHqTotal = Object.values(bankPayByVendorHq).reduce((a, b) => a + b, 0)
     for (const k of Object.keys(bankPayByVendorHq)) bankPurchaseVendorKeys.add(k)
     purchasesStockNet += inboundHqTotal
     purchasesBankGross += bankHqTotal
+    purchasesBankVat += sumVendorMap(bankPayVatByVendorHq)
     purchases += inboundHqTotal + bankHqTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundHq.expenseBySubject)
     stockInboundExpense += sumExpenseSubjectAmounts(inboundHq.expenseBySubject)
@@ -1624,7 +1791,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       'petty_cash_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`,
       {
-        select: 'store,amount,trans_type,account_subject_id,vendor_code,memo',
+        select: 'store,amount,vat_amount,trans_type,account_subject_id,vendor_code,memo',
         order: 'id.asc',
         pageSize: 8000,
         maxRows: ACCOUNTING_ROWS_MAX,
@@ -1632,6 +1799,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     )) as {
       store?: string
       amount?: number
+      vat_amount?: number | null
       trans_type?: string
       account_subject_id?: number | null
       vendor_code?: string | null
@@ -1645,13 +1813,21 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         row: r,
         subjectMeta,
         purchaseVendorMap: purchaseVendorMapHq,
+        purchaseVendorVatMap: purchaseVendorVatMapAccum,
         expenseBySubjectMap,
+        expenseVatBySubjectMap,
         onExpense: (amt) => {
           pettyCashExpense += amt
+        },
+        onExpenseVat: (vat) => {
+          cashExpenseVat += vat
         },
         onPurchase: (amt) => {
           purchasesBankGross += amt
           purchases += amt
+        },
+        onPurchaseVat: (vat) => {
+          purchasesBankVat += vat
         },
         onSkippedNonPl: (amt) => {
           skippedNonPlExpense += amt
@@ -1676,6 +1852,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           endStr,
           { feeAccountSubjectIds }
         )
+        const accrualVatByBank = await loadExpenseAccrualVatByBankIds(
+          btRows.map((r) => Number(r.id || 0)).filter((id) => id > 0)
+        )
         for (const r of btRows) {
           const bankId = Number(r.id || 0)
           if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
@@ -1684,17 +1863,33 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
           if (cat === 'fixed') bankCategoryFixedExpense += Math.abs(Number(r.amount) || 0)
           if (shouldSkipSalaryCashBecausePayroll(r)) continue
+          const accrual = bankId > 0 ? accrualVatByBank.get(bankId) : undefined
+          const resolved = resolveBankPlCashVat({
+            bankAmount: Number(r.amount) || 0,
+            bankVatAmount: r.vat_amount,
+            accrualGross: accrual?.gross,
+            accrualVat: accrual?.vat,
+          })
           addBankExpenseWithdrawToPl({
             row: r,
             subjectMeta,
             purchaseVendorMap: purchaseVendorMapHq,
+            purchaseVendorVatMap: purchaseVendorVatMapAccum,
             expenseBySubjectMap,
+            expenseVatBySubjectMap,
+            resolvedVat: resolved.vat,
             onExpense: (amt) => {
               bankWithdrawExpense += amt
+            },
+            onExpenseVat: (vat) => {
+              cashExpenseVat += vat
             },
             onPurchase: (amt) => {
               purchasesBankGross += amt
               purchases += amt
+            },
+            onPurchaseVat: (vat) => {
+              purchasesBankVat += vat
             },
             onDeliveryFee: (amt) => {
               deliveryAppFeeExpense += amt
@@ -1727,7 +1922,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     endingInventory = await getInventoryValue('본사', endStr, false, itemUnitCostMap, false)
     purchaseByVendor = Object.entries(purchaseVendorMapHq)
       .filter(([, v]) => v > 0)
-      .map(([key, amount]) => ({ key, amount }))
+      .map(([key, amount]) => {
+        const vat = Math.max(0, Number(purchaseVendorVatMapAccum[key]) || 0)
+        return vat > 0 ? { key, amount, vatAmount: round2(vat) } : { key, amount }
+      })
       .sort((a, b) => b.amount - a.amount)
   } else {
     const posSalesSum = await sumCompletedPosSalesTotal({
@@ -1866,6 +2064,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       )
     }
     const bankPayByVendorStorePreHq: Record<string, number> = {}
+    const bankPayVatByVendorStorePreHq: Record<string, number> = {}
     for (const [k, v] of Object.entries(bankPayStoreFetch.byVendor)) {
       const amt = Number(v) || 0
       if (amt <= 0) continue
@@ -1874,10 +2073,16 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         continue
       }
       bankPayByVendorStorePreHq[k] = amt
+      const vat = Number(bankPayStoreFetch.byVendorVat[k]) || 0
+      if (vat > 0) bankPayVatByVendorStorePreHq[k] = vat
     }
     const inboundByVendorStoreNorm = normalizeVendorAmountMap(inboundByVendorStore, vendorPurchaseKeyIndexStore)
     const bankPayByVendorStoreNorm = normalizeVendorAmountMap(
       bankPayByVendorStorePreHq,
+      vendorPurchaseKeyIndexStore
+    )
+    const bankPayVatByVendorStoreNorm = normalizeVendorAmountMap(
+      bankPayVatByVendorStorePreHq,
       vendorPurchaseKeyIndexStore
     )
     purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
@@ -1888,14 +2093,20 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       inboundByVendorStoreNorm,
       bankPayByVendorStoreNorm
     )
+    const bankPayVatByVendorStore = pickVendorVatForKeptAmounts(
+      bankPayVatByVendorStoreNorm,
+      bankPayByVendorStore
+    )
     const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStoreNorm }
     mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
+    mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorStore)
     /** 본사 창고 출고 + 거래처별(직접입고 + 통장 매입지급, 본사 법인 제외) — 펼침 합계와 매입 총액 일치 */
     const inboundStoreTotal = Object.values(inboundByVendorStoreNorm).reduce((a, b) => a + b, 0)
     const bankStoreTotal = Object.values(bankPayByVendorStore).reduce((a, b) => a + b, 0)
     for (const k of Object.keys(bankPayByVendorStore)) bankPurchaseVendorKeys.add(k)
     purchasesStockNet += ordersPurchaseSubtotal + inboundStoreTotal
     purchasesBankGross += bankStoreTotal
+    purchasesBankVat += sumVendorMap(bankPayVatByVendorStore)
     purchases += ordersPurchaseSubtotal + inboundStoreTotal + bankStoreTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundStore.expenseBySubject)
     stockInboundExpense += sumExpenseSubjectAmounts(inboundStore.expenseBySubject)
@@ -1905,12 +2116,13 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
     }
     const pettyRows = (await supabaseSelectFilterAllPages('petty_cash_transactions', pettyFilter, {
-      select: 'amount,trans_type,account_subject_id,vendor_code,memo',
+      select: 'amount,vat_amount,trans_type,account_subject_id,vendor_code,memo',
       order: 'id.asc',
       pageSize: 8000,
       maxRows: ACCOUNTING_ROWS_MAX,
     })) as {
       amount?: number
+      vat_amount?: number | null
       trans_type?: string
       account_subject_id?: number | null
       vendor_code?: string | null
@@ -1922,13 +2134,21 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         row: r,
         subjectMeta,
         purchaseVendorMap: purchaseVendorMapStore,
+        purchaseVendorVatMap: purchaseVendorVatMapAccum,
         expenseBySubjectMap,
+        expenseVatBySubjectMap,
         onExpense: (amt) => {
           pettyCashExpense += amt
+        },
+        onExpenseVat: (vat) => {
+          cashExpenseVat += vat
         },
         onPurchase: (amt) => {
           purchasesBankGross += amt
           purchases += amt
+        },
+        onPurchaseVat: (vat) => {
+          purchasesBankVat += vat
         },
         onSkippedNonPl: (amt) => {
           skippedNonPlExpense += amt
@@ -1956,6 +2176,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           endStr,
           { feeAccountSubjectIds }
         )
+        const accrualVatByBank = await loadExpenseAccrualVatByBankIds(
+          btRows.map((r) => Number(r.id || 0)).filter((id) => id > 0)
+        )
         for (const r of btRows) {
           const bankId = Number(r.id || 0)
           if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
@@ -1964,17 +2187,33 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
           if (cat === 'fixed') bankCategoryFixedExpense += Math.abs(Number(r.amount) || 0)
           if (shouldSkipSalaryCashBecausePayroll(r)) continue
+          const accrual = bankId > 0 ? accrualVatByBank.get(bankId) : undefined
+          const resolved = resolveBankPlCashVat({
+            bankAmount: Number(r.amount) || 0,
+            bankVatAmount: r.vat_amount,
+            accrualGross: accrual?.gross,
+            accrualVat: accrual?.vat,
+          })
           addBankExpenseWithdrawToPl({
             row: r,
             subjectMeta,
             purchaseVendorMap: purchaseVendorMapStore,
+            purchaseVendorVatMap: purchaseVendorVatMapAccum,
             expenseBySubjectMap,
+            expenseVatBySubjectMap,
+            resolvedVat: resolved.vat,
             onExpense: (amt) => {
               bankWithdrawExpense += amt
+            },
+            onExpenseVat: (vat) => {
+              cashExpenseVat += vat
             },
             onPurchase: (amt) => {
               purchasesBankGross += amt
               purchases += amt
+            },
+            onPurchaseVat: (vat) => {
+              purchasesBankVat += vat
             },
             onDeliveryFee: (amt) => {
               deliveryAppFeeExpense += amt
@@ -2017,7 +2256,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       purchaseByVendor.push({ key: '__pl_hq_orders__', amount: ordersPurchaseSubtotal })
     }
     for (const [key, amount] of Object.entries(purchaseVendorMapStore)) {
-      if (amount > 0) purchaseByVendor.push({ key, amount })
+      if (amount > 0) {
+        const vat = Math.max(0, Number(purchaseVendorVatMapAccum[key]) || 0)
+        purchaseByVendor.push(
+          vat > 0 ? { key, amount, vatAmount: round2(vat) } : { key, amount }
+        )
+      }
     }
     purchaseByVendor.sort((a, b) => b.amount - a.amount)
   }
@@ -2074,7 +2318,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   }
 
   const expenseByAccountSubject = appendFranchiseBillingExpenseSubjects(
-    buildExpenseByAccountList(expenseBySubjectMap, subjectMeta),
+    buildExpenseByAccountList(expenseBySubjectMap, subjectMeta, expenseVatBySubjectMap),
     franchiseExpense
   )
   /** petty·통장·고정비·급여·감가상각·입고(비용 계정 품목) 등 + 승인 회계 PO 가맹 청구 */
@@ -2167,7 +2411,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   }
   if (salesGrossForDisplay <= 0 && sales > 0) salesGrossForDisplay = sales
 
-  const purchasesNetForDisplay = round2(purchasesStockNet + purchasesBankGross)
+  const purchasesBankVatRounded = round2(purchasesBankVat)
+  const purchasesNetForDisplay = round2(
+    purchasesStockNet + Math.max(0, purchasesBankGross - purchasesBankVatRounded)
+  )
   const purchasesGrossForDisplay = round2(
     grossFromNetVatBuckets(purchasesStockVatBuckets) + purchasesBankGross
   )
@@ -2193,6 +2440,8 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     franchiseBillingCombinedNet: franchiseExpense.combinedNet,
     franchiseRevenueGross: franchiseRevenue.totalGross,
     franchiseRevenueNet: franchiseRevenue.totalNet,
+    expensesCashVat: round2(cashExpenseVat),
+    purchasesBankVat: purchasesBankVatRounded,
     ...(isHQ ? { salesStockVatBuckets } : {}),
     purchasesStockVatBuckets,
   }

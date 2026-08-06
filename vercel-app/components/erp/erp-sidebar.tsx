@@ -33,6 +33,10 @@ import {
 } from "@/lib/erp-nav-registry"
 import { useErpNavAccess } from "@/lib/use-erp-nav-access"
 import { useErpNavFavorites } from "@/lib/erp-nav-favorites-context"
+import { useErpNavigationOptional } from "@/lib/erp-navigation"
+import {
+  getErpWorkspaceTabFullHref,
+} from "@/lib/erp-workspace-tabs"
 import { ErpSidebarNavRow } from "@/components/erp/erp-sidebar-nav-row"
 
 export { getErpNavItemsForHelp, ERP_NAV_HELP_ITEM_COUNT, type ErpNavHelpItem }
@@ -119,7 +123,24 @@ function isErpNavHrefActive(pathname: string, searchParams: URLSearchParams, hre
 export function ErpSidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const erpNav = useErpNavigationOptional()
   const router = useRouter()
+
+  /** soft 탭 전환 시 Next pathname과 달라도 사이드바 활성 표시를 맞춤 */
+  const { navPathname, navSearchParams } = React.useMemo(() => {
+    const soft = erpNav?.softDisplayHref
+    if (!soft) return { navPathname: pathname, navSearchParams: searchParams }
+    const full = getErpWorkspaceTabFullHref(soft)
+    const q = full.indexOf("?")
+    if (q < 0) {
+      return { navPathname: full, navSearchParams: new URLSearchParams() }
+    }
+    return {
+      navPathname: full.slice(0, q),
+      navSearchParams: new URLSearchParams(full.slice(q + 1)),
+    }
+  }, [erpNav?.softDisplayHref, pathname, searchParams])
+
   const { auth, logout } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -198,7 +219,7 @@ export function ErpSidebar() {
   }, [])
 
   React.useEffect(() => {
-    if (!pathname.startsWith("/admin/members") && !pathname.startsWith("/admin/crm")) return
+    if (!navPathname.startsWith("/admin/members") && !navPathname.startsWith("/admin/crm")) return
     setExpandedSections((prev) => {
       if (prev.adminSectionCustomerCrm === true) return prev
       const next = { ...prev, adminSectionCustomerCrm: true }
@@ -209,10 +230,10 @@ export function ErpSidebar() {
       }
       return next
     })
-  }, [pathname])
+  }, [navPathname])
 
   React.useEffect(() => {
-    if (!pathname.startsWith("/admin/marketing")) return
+    if (!navPathname.startsWith("/admin/marketing")) return
     setExpandedSections((prev) => {
       if (prev.adminSectionMarketing === true) return prev
       const next = { ...prev, adminSectionMarketing: true }
@@ -223,15 +244,15 @@ export function ErpSidebar() {
       }
       return next
     })
-  }, [pathname])
+  }, [navPathname])
 
   React.useEffect(() => {
     if (
-      !pathname.startsWith("/admin/store-ops") &&
-      !pathname.startsWith("/admin/store-check") &&
-      !pathname.startsWith("/admin/store-visit") &&
-      !pathname.startsWith("/admin/store-repairs") &&
-      !pathname.startsWith("/admin/complaints")
+      !navPathname.startsWith("/admin/store-ops") &&
+      !navPathname.startsWith("/admin/store-check") &&
+      !navPathname.startsWith("/admin/store-visit") &&
+      !navPathname.startsWith("/admin/store-repairs") &&
+      !navPathname.startsWith("/admin/complaints")
     ) {
       return
     }
@@ -245,7 +266,7 @@ export function ErpSidebar() {
       }
       return next
     })
-  }, [pathname])
+  }, [navPathname])
 
   React.useEffect(() => {
     if (!isLogisticsStaff) return
@@ -262,7 +283,7 @@ export function ErpSidebar() {
   }, [isLogisticsStaff])
 
   React.useEffect(() => {
-    if (!pathname.startsWith("/admin/interior")) return
+    if (!navPathname.startsWith("/admin/interior")) return
     setExpandedSections((prev) => {
       if (prev.adminSectionInterior === true) return prev
       const next = { ...prev, adminSectionInterior: true }
@@ -273,7 +294,7 @@ export function ErpSidebar() {
       }
       return next
     })
-  }, [pathname])
+  }, [navPathname])
 
   const toggleSection = (titleKey: string) => {
     setExpandedSections((prev) => {
@@ -363,8 +384,8 @@ export function ErpSidebar() {
                   <ErpSidebarNavRow
                     key={`fav-${item.href}`}
                     item={item}
-                    pathname={pathname}
-                    active={isErpNavHrefActive(pathname, searchParams, item.href)}
+                    pathname={navPathname}
+                    active={isErpNavHrefActive(navPathname, navSearchParams, item.href)}
                     showFavoriteToggle
                   />
                 ))}
@@ -377,8 +398,8 @@ export function ErpSidebar() {
                   <ErpSidebarNavRow
                     key={item.href}
                     item={item}
-                    pathname={pathname}
-                    active={isErpNavHrefActive(pathname, searchParams, item.href)}
+                    pathname={navPathname}
+                    active={isErpNavHrefActive(navPathname, navSearchParams, item.href)}
                   />
                 ))}
               </div>
@@ -418,8 +439,8 @@ export function ErpSidebar() {
                           <ErpSidebarNavRow
                             key={item.href}
                             item={item}
-                            pathname={pathname}
-                            active={isErpNavHrefActive(pathname, searchParams, item.href)}
+                            pathname={navPathname}
+                            active={isErpNavHrefActive(navPathname, navSearchParams, item.href)}
                             badge={renderBadge(badgeVal, badgeVariantEff)}
                           />
                         )
@@ -438,8 +459,8 @@ export function ErpSidebar() {
           {showSettings && navItemByHref.get("/admin/settings") ? (
             <ErpSidebarNavRow
               item={navItemByHref.get("/admin/settings")!}
-              pathname={pathname}
-              active={pathname === "/admin/settings"}
+              pathname={navPathname}
+              active={navPathname === "/admin/settings"}
             />
           ) : null}
           <button

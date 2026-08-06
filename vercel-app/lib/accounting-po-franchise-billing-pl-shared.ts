@@ -18,3 +18,14 @@ export function isFranchiseBillingExpenseSubjectCode(code: string | null | undef
     c === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.combined
   )
 }
+
+/** 손익 비용 계정 행 병합 키 — PO 합성행은 id=null 이어도 code로 구분 */
+export function plExpenseSubjectRowKey(row: {
+  accountSubjectId: number | null
+  code?: string | null
+}): string {
+  if (row.accountSubjectId != null) return `id:${row.accountSubjectId}`
+  const code = String(row.code || '').trim()
+  if (code) return `code:${code}`
+  return 'null'
+}

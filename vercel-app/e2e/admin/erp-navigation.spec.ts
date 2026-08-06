@@ -35,7 +35,7 @@ test.describe("ERP navigation (keep-alive + URL tabs)", () => {
     await expect(page).toHaveURL(/tab=stats/, { timeout: 30_000 })
   })
 
-  test("close screen returns to dashboard", async ({ page }) => {
+  test("close workspace tab returns to dashboard", async ({ page }) => {
     const ok = await loginAdmin(page)
     if (!ok) {
       test.skip()
@@ -43,7 +43,7 @@ test.describe("ERP navigation (keep-alive + URL tabs)", () => {
     }
 
     await page.goto("/admin/vendors")
-    await page.getByTitle(/화면 닫기|Close screen/i).click()
+    await page.getByRole("button", { name: /탭 닫기|Close tab/i }).click()
     await page.waitForURL((url) => url.pathname === "/admin" || url.pathname === "/admin/", {
       timeout: 30_000,
     })

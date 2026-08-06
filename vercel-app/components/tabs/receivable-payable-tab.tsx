@@ -78,6 +78,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
   isManagerOrFranchiseeRole,
   isManagerRole,
@@ -915,6 +916,11 @@ export function ReceivablePayableTab() {
       void loadList({ fresh: true, skipCrossTabNotify: true })
     })
   }, [loadList])
+
+  useErpRefetchOnActivate(() => {
+    if (!hasSearchedListRef.current) return
+    void loadList({ fresh: true, skipCrossTabNotify: true })
+  })
 
   const handleLoadList = React.useCallback(() => {
     setHasSearchedList(true)
@@ -1779,6 +1785,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
       <Tabs
         value={tabUi}
         onValueChange={(v) => applyTab(v as "receivable" | "payable")}
+        preserveInactiveTabs={false}
         className={adminTabsRootCn}
       >
         <AdminTabsBarWithHelp>

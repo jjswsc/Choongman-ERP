@@ -27,6 +27,10 @@ import {
   fetchIncomeStatementOverrides,
 } from "@/lib/api-client"
 import { formatAccountSubjectLabel } from "@/lib/account-subject-display"
+import {
+  isFranchiseBillingExpenseSubjectCode,
+  PL_FRANCHISE_EXPENSE_SUBJECT_CODES,
+} from "@/lib/accounting-po-franchise-billing-pl-shared"
 import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
   aggregateIncomeStatementByYear,
@@ -68,6 +72,7 @@ import {
 } from "@/components/admin/accounting-result-primitives"
 import {
   buildIncomeStatementViewNumbers,
+  convertExpenseSubjectAmount,
   pickFranchiseBillingVatAmount,
   readIncomeStatementDisplayPrefs,
   writeIncomeStatementDisplayPrefs,
@@ -856,8 +861,15 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     })
     if ((data.expenseByAccountSubject?.length || 0) > 0) {
       for (const row of data.expenseByAccountSubject!) {
-        const label =
-          row.accountSubjectId == null
+        const isPoBilling = isFranchiseBillingExpenseSubjectCode(row.code)
+        const label = isPoBilling
+          ? formatAccountSubjectLabel(lang, {
+              code: row.code,
+              name: row.name,
+              nameEn: row.nameEn,
+              nameTh: row.nameTh,
+            }) || `${row.code} ${row.name}`
+          : row.accountSubjectId == null
             ? t("pL_accountUnclassified") || "Unclassified account"
             : formatAccountSubjectLabel(lang, {
                 code: row.code,
@@ -865,10 +877,29 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 nameEn: row.nameEn,
                 nameTh: row.nameTh,
               }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")
+        const amount = isPoBilling
+          ? pickFranchiseBillingVatAmount(
+              row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty
+                ? data.displayAmounts?.franchiseRoyaltyGross ?? row.amount
+                : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp
+                  ? data.displayAmounts?.franchiseDeliveryGpGross ?? row.amount
+                  : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp
+                    ? data.displayAmounts?.franchiseGrabGpGross ?? row.amount
+                    : data.displayAmounts?.franchiseBillingCombinedGross ?? row.amount,
+              row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty
+                ? data.displayAmounts?.franchiseRoyaltyNet
+                : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp
+                  ? data.displayAmounts?.franchiseDeliveryGpNet
+                  : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp
+                    ? data.displayAmounts?.franchiseGrabGpNet
+                    : data.displayAmounts?.franchiseBillingCombinedNet,
+              vatDisplayMode
+            )
+          : convertExpenseSubjectAmount(row.amount, row.vatAmount, vatDisplayMode)
         rows.push({
           label: `      ${label}`,
-          amount: q(row.amount),
-          pct: view.pct(row.amount),
+          amount: q(amount),
+          pct: view.pct(amount),
         })
       }
     }
@@ -911,76 +942,6 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       label: `    - ${t("pL_expenseSourceDepreciation") || "Depreciation"}`,
       amount: q(data.expenseBreakdown?.depreciationExpense ?? 0),
       pct: view.pct(data.expenseBreakdown?.depreciationExpense ?? 0),
-    })
-    rows.push({
-      label: `    - ${t("pL_expenseSourceFranchiseRoyalty")}`,
-      amount: q(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseRoyaltyGross ?? data.expenseBreakdown?.franchiseRoyalty,
-          data.displayAmounts?.franchiseRoyaltyNet,
-          vatDisplayMode
-        )
-      ),
-      pct: view.pct(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseRoyaltyGross ?? data.expenseBreakdown?.franchiseRoyalty,
-          data.displayAmounts?.franchiseRoyaltyNet,
-          vatDisplayMode
-        )
-      ),
-    })
-    rows.push({
-      label: `    - ${t("pL_expenseSourceFranchiseDeliveryGp")}`,
-      amount: q(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseDeliveryGpGross ?? data.expenseBreakdown?.franchiseDeliveryGp,
-          data.displayAmounts?.franchiseDeliveryGpNet,
-          vatDisplayMode
-        )
-      ),
-      pct: view.pct(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseDeliveryGpGross ?? data.expenseBreakdown?.franchiseDeliveryGp,
-          data.displayAmounts?.franchiseDeliveryGpNet,
-          vatDisplayMode
-        )
-      ),
-    })
-    rows.push({
-      label: `    - ${t("pL_expenseSourceFranchiseGrabGp")}`,
-      amount: q(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseGrabGpGross ?? data.expenseBreakdown?.franchiseGrabGp,
-          data.displayAmounts?.franchiseGrabGpNet,
-          vatDisplayMode
-        )
-      ),
-      pct: view.pct(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseGrabGpGross ?? data.expenseBreakdown?.franchiseGrabGp,
-          data.displayAmounts?.franchiseGrabGpNet,
-          vatDisplayMode
-        )
-      ),
-    })
-    rows.push({
-      label: `    - ${t("pL_expenseSourceFranchiseBillingCombined")}`,
-      amount: q(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseBillingCombinedGross ??
-            data.expenseBreakdown?.franchiseBillingCombined,
-          data.displayAmounts?.franchiseBillingCombinedNet,
-          vatDisplayMode
-        )
-      ),
-      pct: view.pct(
-        pickFranchiseBillingVatAmount(
-          data.displayAmounts?.franchiseBillingCombinedGross ??
-            data.expenseBreakdown?.franchiseBillingCombined,
-          data.displayAmounts?.franchiseBillingCombinedNet,
-          vatDisplayMode
-        )
-      ),
     })
     rows.push({
       label: t("pL_netProfit"),
@@ -1711,13 +1672,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       compareUnifiedExpandExpenses &&
                                       compareMergedExpenseSubjects.map((sub) => (
                                         <tr
-                                          key={`y-es-${sub.accountSubjectId ?? "u"}`}
+                                          key={`y-es-${sub.accountSubjectId != null ? sub.accountSubjectId : sub.code || "u"}`}
                                           className="border-b bg-muted/10 last:border-0"
                                         >
                                           <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                            {sub.accountSubjectId == null
-                                              ? t("pL_accountUnclassified") || "Unclassified account"
-                                              : formatAccountSubjectLabel(lang, {
+                                            {isFranchiseBillingExpenseSubjectCode(sub.code) ||
+                                            sub.accountSubjectId != null
+                                              ? formatAccountSubjectLabel(lang, {
                                                   code: sub.code,
                                                   name: sub.name,
                                                   nameEn: sub.nameEn,
@@ -1725,7 +1686,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                                 }) ||
                                                 (sub.accountSubjectId != null
                                                   ? `#${sub.accountSubjectId}`
-                                                  : "")}
+                                                  : `${sub.code} ${sub.name}`)
+                                              : t("pL_accountUnclassified") || "Unclassified account"}
                                           </td>
                                           {incomeCompareCols.map((c) => (
                                             <td
@@ -1737,7 +1699,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                                 yearlyExpenseSubjectAmount(
                                                   compareIncomeRows,
                                                   c.key,
-                                                  sub.accountSubjectId
+                                                  sub,
+                                                  vatDisplayMode
                                                 )
                                               )}
                                             </td>
@@ -1903,86 +1866,6 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                                     compareIncomeRows,
                                                     c.key,
                                                     "depreciationExpense"
-                                                  )
-                                                )}
-                                              </td>
-                                            ))}
-                                          </tr>
-                                          <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                              - {t("pL_expenseSourceFranchiseRoyalty")}
-                                            </td>
-                                            {incomeCompareCols.map((c) => (
-                                              <td
-                                                key={c.key}
-                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                                title={t("fs_compareYearAggregateHint")}
-                                              >
-                                                {formatBath(
-                                                  yearlyExpenseBreakdownField(
-                                                    compareIncomeRows,
-                                                    c.key,
-                                                    "franchiseRoyalty"
-                                                  )
-                                                )}
-                                              </td>
-                                            ))}
-                                          </tr>
-                                          <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                              - {t("pL_expenseSourceFranchiseDeliveryGp")}
-                                            </td>
-                                            {incomeCompareCols.map((c) => (
-                                              <td
-                                                key={c.key}
-                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                                title={t("fs_compareYearAggregateHint")}
-                                              >
-                                                {formatBath(
-                                                  yearlyExpenseBreakdownField(
-                                                    compareIncomeRows,
-                                                    c.key,
-                                                    "franchiseDeliveryGp"
-                                                  )
-                                                )}
-                                              </td>
-                                            ))}
-                                          </tr>
-                                          <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                              - {t("pL_expenseSourceFranchiseGrabGp")}
-                                            </td>
-                                            {incomeCompareCols.map((c) => (
-                                              <td
-                                                key={c.key}
-                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                                title={t("fs_compareYearAggregateHint")}
-                                              >
-                                                {formatBath(
-                                                  yearlyExpenseBreakdownField(
-                                                    compareIncomeRows,
-                                                    c.key,
-                                                    "franchiseGrabGp"
-                                                  )
-                                                )}
-                                              </td>
-                                            ))}
-                                          </tr>
-                                          <tr className="border-b bg-muted/10 last:border-0">
-                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                              - {t("pL_expenseSourceFranchiseBillingCombined")}
-                                            </td>
-                                            {incomeCompareCols.map((c) => (
-                                              <td
-                                                key={c.key}
-                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                                title={t("fs_compareYearAggregateHint")}
-                                              >
-                                                {formatBath(
-                                                  yearlyExpenseBreakdownField(
-                                                    compareIncomeRows,
-                                                    c.key,
-                                                    "franchiseBillingCombined"
                                                   )
                                                 )}
                                               </td>
@@ -2223,11 +2106,18 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                 </tr>
                                 {compareUnifiedExpandExpenses &&
                                   compareMergedExpenseSubjects.map((sub) => (
-                                    <tr key={String(sub.accountSubjectId ?? "u")} className="border-b bg-muted/10">
+                                    <tr
+                                      key={
+                                        sub.accountSubjectId != null
+                                          ? String(sub.accountSubjectId)
+                                          : sub.code || "u"
+                                      }
+                                      className="border-b bg-muted/10"
+                                    >
                                       <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                        {sub.accountSubjectId == null
-                                          ? t("pL_accountUnclassified") || "Unclassified account"
-                                          : formatAccountSubjectLabel(lang, {
+                                        {isFranchiseBillingExpenseSubjectCode(sub.code) ||
+                                        sub.accountSubjectId != null
+                                          ? formatAccountSubjectLabel(lang, {
                                               code: sub.code,
                                               name: sub.name,
                                               nameEn: sub.nameEn,
@@ -2235,7 +2125,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                             }) ||
                                             (sub.accountSubjectId != null
                                               ? `#${sub.accountSubjectId}`
-                                              : "")}
+                                              : `${sub.code} ${sub.name}`)
+                                          : t("pL_accountUnclassified") || "Unclassified account"}
                                       </td>
                                       {compareIncomeRows.map(({ ym, data: rowData }) => (
                                         <td
@@ -2244,9 +2135,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         >
                                           {rowData.error
                                             ? "—"
-                                            : formatBath(
-                                                expenseAmountForSubject(rowData, sub.accountSubjectId)
-                                              )}
+                                            : formatBath(expenseAmountForSubject(rowData, sub, vatDisplayMode))}
                                         </td>
                                       ))}
                                     </tr>
@@ -2370,94 +2259,6 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           {rowData.error
                                             ? "—"
                                             : formatBath(rowData.expenseBreakdown?.depreciationExpense ?? 0)}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                    <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                        - {t("pL_expenseSourceFranchiseRoyalty")}
-                                      </td>
-                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
-                                        <td
-                                          key={ym}
-                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                        >
-                                          {rowData.error
-                                            ? "—"
-                                            : formatBath(
-                                                pickFranchiseBillingVatAmount(
-                                                  rowData.displayAmounts?.franchiseRoyaltyGross ??
-                                                    rowData.expenseBreakdown?.franchiseRoyalty,
-                                                  rowData.displayAmounts?.franchiseRoyaltyNet,
-                                                  vatDisplayMode
-                                                )
-                                              )}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                    <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                        - {t("pL_expenseSourceFranchiseDeliveryGp")}
-                                      </td>
-                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
-                                        <td
-                                          key={ym}
-                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                        >
-                                          {rowData.error
-                                            ? "—"
-                                            : formatBath(
-                                                pickFranchiseBillingVatAmount(
-                                                  rowData.displayAmounts?.franchiseDeliveryGpGross ??
-                                                    rowData.expenseBreakdown?.franchiseDeliveryGp,
-                                                  rowData.displayAmounts?.franchiseDeliveryGpNet,
-                                                  vatDisplayMode
-                                                )
-                                              )}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                    <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                        - {t("pL_expenseSourceFranchiseGrabGp")}
-                                      </td>
-                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
-                                        <td
-                                          key={ym}
-                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                        >
-                                          {rowData.error
-                                            ? "—"
-                                            : formatBath(
-                                                pickFranchiseBillingVatAmount(
-                                                  rowData.displayAmounts?.franchiseGrabGpGross ??
-                                                    rowData.expenseBreakdown?.franchiseGrabGp,
-                                                  rowData.displayAmounts?.franchiseGrabGpNet,
-                                                  vatDisplayMode
-                                                )
-                                              )}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                    <tr className="border-b bg-muted/10">
-                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
-                                        - {t("pL_expenseSourceFranchiseBillingCombined")}
-                                      </td>
-                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
-                                        <td
-                                          key={ym}
-                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
-                                        >
-                                          {rowData.error
-                                            ? "—"
-                                            : formatBath(
-                                                pickFranchiseBillingVatAmount(
-                                                  rowData.displayAmounts?.franchiseBillingCombinedGross ??
-                                                    rowData.expenseBreakdown?.franchiseBillingCombined,
-                                                  rowData.displayAmounts?.franchiseBillingCombinedNet,
-                                                  vatDisplayMode
-                                                )
-                                              )}
                                         </td>
                                       ))}
                                     </tr>

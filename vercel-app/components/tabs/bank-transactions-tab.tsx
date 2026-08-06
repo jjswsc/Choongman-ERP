@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useErpPageActive, useErpTabActive, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canDeleteBankAccount, canViewBankAccountAuditLogs } from "@/lib/permissions"
@@ -970,6 +971,10 @@ export function BankTransactionsTab() {
     loadData()
   }, [accountId, loadData])
 
+  useErpRefetchOnActivate(() => {
+    if (accountId) void loadData()
+  })
+
   React.useEffect(() => {
     const txId = restoreOpenRegisterTxIdRef.current
     if (!txId || loading) return
@@ -1108,13 +1113,16 @@ export function BankTransactionsTab() {
     reloadAccountSubjectOptions()
   }, [reloadAccountSubjectOptions])
 
+  const bankPageActive = useErpPageActive()
+  const bankTabActive = useErpTabActive()
   React.useEffect(() => {
+    if (!bankPageActive || !bankTabActive) return
     const onVis = () => {
       if (document.visibilityState === "visible") reloadAccountSubjectOptions()
     }
     document.addEventListener("visibilitychange", onVis)
     return () => document.removeEventListener("visibilitychange", onVis)
-  }, [reloadAccountSubjectOptions])
+  }, [bankPageActive, bankTabActive, reloadAccountSubjectOptions])
 
   const getDefaultImportCategory = React.useCallback((row: KDepositParsedResult["rows"][number]) => {
     return row.transType === "deposit" ? "receivable_receive" : "unclassified"
@@ -2135,6 +2143,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       <Tabs
         value={activeBankTab}
         onValueChange={setActiveBankTab}
+        preserveInactiveTabs={false}
         className={adminTabsRootCn}
       >
         <AdminTabsBarWithHelp>

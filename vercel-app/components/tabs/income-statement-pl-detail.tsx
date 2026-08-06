@@ -13,7 +13,7 @@ import {
 } from "@/lib/api-client"
 import { formatAccountSubjectLabel } from "@/lib/account-subject-display"
 import { isMaterialHqOutboundOrderDiff } from "@/lib/income-statement-hq-diff"
-import { type IncomeStatementVatDisplayMode, pickFranchiseBillingVatAmount } from "@/lib/income-statement-display"
+import { type IncomeStatementVatDisplayMode, pickFranchiseBillingVatAmount, convertExpenseSubjectAmount } from "@/lib/income-statement-display"
 import { formatBahtInteger as formatBath } from "@/lib/financial-amount-format"
 import {
   accountingPlCogsRowCn,
@@ -468,7 +468,7 @@ export function IncomePlDetailTableContent({
                           : data.displayAmounts?.franchiseBillingCombinedNet,
                     vatMode
                   )
-                : row.amount
+                : convertExpenseSubjectAmount(row.amount, row.vatAmount, vatMode)
               return (
               <tr
                 key={`${row.code || "x"}-${row.accountSubjectId ?? "u"}-${idx}`}
@@ -484,7 +484,13 @@ export function IncomePlDetailTableContent({
                 }
                 title={
                   isPoBilling
-                    ? t("pL_expenseSourceFranchiseRoyalty")
+                    ? row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty
+                      ? t("pL_expenseSourceFranchiseRoyalty")
+                      : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp
+                        ? t("pL_expenseSourceFranchiseDeliveryGp")
+                        : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.grabGp
+                          ? t("pL_expenseSourceFranchiseGrabGp")
+                          : t("pL_expenseSourceFranchiseBillingCombined")
                     : purchaseDrillContext?.yearMonth
                       ? t("pL_expenseDrillClickHint")
                       : undefined

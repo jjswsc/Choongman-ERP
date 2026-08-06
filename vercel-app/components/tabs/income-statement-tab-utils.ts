@@ -1,7 +1,11 @@
 import type { IncomeStatementData } from "@/lib/api-client"
-import { PL_FRANCHISE_BILLING_SALES_KEY } from "@/lib/accounting-po-franchise-billing-pl-shared"
+import {
+  PL_FRANCHISE_BILLING_SALES_KEY,
+  plExpenseSubjectRowKey,
+} from "@/lib/accounting-po-franchise-billing-pl-shared"
 import {
   convertLineAmount,
+  convertExpenseSubjectAmount,
   pickFranchiseBillingVatAmount,
   type IncomeStatementAmountBasisKind,
   type IncomeStatementVatDisplayMode,
@@ -9,7 +13,12 @@ import {
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from "@/lib/income-statement-purchase-drill-nav"
 
 export function lineDisplayAmount(
-  row: { amount: number; amountBasis?: IncomeStatementAmountBasisKind; key?: string },
+  row: {
+    amount: number
+    amountBasis?: IncomeStatementAmountBasisKind
+    key?: string
+    vatAmount?: number
+  },
   vatMode: IncomeStatementVatDisplayMode,
   stockVatBuckets?: { taxableNet: number; exemptNet: number } | null,
   displayAmounts?: IncomeStatementData["displayAmounts"]
@@ -21,7 +30,13 @@ export function lineDisplayAmount(
       vatMode
     )
   }
-  return convertLineAmount(row.amount, row.amountBasis ?? "stock_net", vatMode, stockVatBuckets)
+  return convertLineAmount(
+    row.amount,
+    row.amountBasis ?? "stock_net",
+    vatMode,
+    stockVatBuckets,
+    row.vatAmount
+  )
 }
 
 export function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
@@ -164,11 +179,14 @@ export function mergePurchaseVendorKeysForCompare(
 
 export function expenseAmountForSubject(
   data: IncomeStatementData | undefined,
-  accountSubjectId: number | null
+  subject: { accountSubjectId: number | null; code?: string | null },
+  vatMode: IncomeStatementVatDisplayMode = "included"
 ): number {
   if (!data?.expenseByAccountSubject) return 0
-  const r = data.expenseByAccountSubject.find((x) => x.accountSubjectId === accountSubjectId)
-  return r ? Number(r.amount) || 0 : 0
+  const key = plExpenseSubjectRowKey(subject)
+  const r = data.expenseByAccountSubject.find((x) => plExpenseSubjectRowKey(x) === key)
+  if (!r) return 0
+  return convertExpenseSubjectAmount(Number(r.amount) || 0, r.vatAmount, vatMode)
 }
 
 export function mergeExpenseSubjectsForCompare(rows: { data: IncomeStatementData }[]): {
@@ -191,7 +209,7 @@ export function mergeExpenseSubjectsForCompare(rows: { data: IncomeStatementData
   for (const { data } of rows) {
     if (data.error) continue
     for (const r of data.expenseByAccountSubject || []) {
-      const k = r.accountSubjectId == null ? '__null__' : String(r.accountSubjectId)
+      const k = plExpenseSubjectRowKey(r)
       if (!metaByKey.has(k)) {
         metaByKey.set(k, {
           accountSubjectId: r.accountSubjectId,
@@ -205,8 +223,8 @@ export function mergeExpenseSubjectsForCompare(rows: { data: IncomeStatementData
   }
   const list = [...metaByKey.values()]
   list.sort((a, b) => {
-    const ta = rows.reduce((s, x) => s + expenseAmountForSubject(x.data, a.accountSubjectId), 0)
-    const tb = rows.reduce((s, x) => s + expenseAmountForSubject(x.data, b.accountSubjectId), 0)
+    const ta = rows.reduce((s, x) => s + expenseAmountForSubject(x.data, a), 0)
+    const tb = rows.reduce((s, x) => s + expenseAmountForSubject(x.data, b), 0)
     return tb - ta
   })
   return list
@@ -243,13 +261,14 @@ export function yearlySalesBreakdownAmount(
 export function yearlyExpenseSubjectAmount(
   rows: { ym: string; data: IncomeStatementData }[],
   year: string,
-  accountSubjectId: number | null
+  subject: { accountSubjectId: number | null; code?: string | null },
+  vatMode: IncomeStatementVatDisplayMode = "included"
 ): number {
   let s = 0
   for (const { ym, data } of rows) {
     if (!ym.startsWith(year)) continue
     if (data.error) continue
-    s += expenseAmountForSubject(data, accountSubjectId)
+    s += expenseAmountForSubject(data, subject, vatMode)
   }
   return s
 }

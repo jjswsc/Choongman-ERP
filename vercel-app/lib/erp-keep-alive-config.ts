@@ -5,20 +5,40 @@
 export const ERP_KEEP_ALIVE_EXCLUDED_PATH_PREFIXES = [
   "/admin/live-store-sales",
   "/admin/pos-menus",
+  "/admin/pos-orders",
+  "/admin/pos-printers",
   "/admin/inbound",
+  "/admin/outbound",
+  "/admin/stock",
+  "/admin/attendance",
+  "/admin/payroll",
   "/admin/marketing/campaigns",
+  "/admin/marketing/materials",
+  "/admin/crm/member-app",
   "/admin/interior",
 ] as const
 
 /**
- * 쿼리(?menu=&topic=&stores= 등)마다 keep-alive 캐시가 갈라지면
- * router.replace 시 이전·다음 URL 슬롯이 번갈아 보이며 화면이 깜박일 수 있다.
- * 매출 관리처럼 필터를 URL에 두는 화면은 pathname만 캐시 키로 쓴다.
+ * 쿼리(?tab=&menu= 등)마다 탭·keep-alive 슬롯이 갈라지지 않도록 pathname만 키로 쓴다.
+ * (필터·내부 탭 상태를 URL에 두는 화면)
  */
 export const ERP_KEEP_ALIVE_QUERY_AGNOSTIC_PATH_PREFIXES = [
   "/admin/sales-management",
-  // 세무 신고: 내부 탭·매장 필터가 쿼리를 건드리면 keep-alive 슬롯이 갈라져 PP.30으로 리셋됨
   "/admin/tax-filing",
+  "/admin/leave",
+  "/admin/expense-management",
+  "/admin/bank-transactions",
+  "/admin/work-log",
+  "/admin/notices",
+  "/admin/company-documents",
+  "/admin/crm/coupons",
+  "/admin/members",
+  "/admin/members/visits",
+  "/admin/pos-cost-analysis",
+  "/admin/pos-screen-config",
+  "/admin/marketing/report",
+  "/admin/order-create",
+  "/admin/accounting/purchase-order",
 ] as const
 
 export function normalizeErpPathOnly(href: string): string {

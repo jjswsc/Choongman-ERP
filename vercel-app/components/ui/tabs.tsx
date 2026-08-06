@@ -7,15 +7,27 @@ import { useErpNavigationOptional } from '@/lib/erp-navigation'
 import { ErpTabActiveProvider } from '@/lib/erp-page-visibility'
 
 const ErpTabsValueContext = React.createContext<string | undefined>(undefined)
+/** ERP에서 비활성 TabsContent forceMount 여부 (무거운 화면은 false) */
+const ErpTabsPreserveInactiveContext = React.createContext(true)
 
-function Tabs({
-  value,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+export type ErpTabsRootProps = React.ComponentProps<typeof TabsPrimitive.Root> & {
+  /**
+   * ERP keep-alive 환경에서 비활성 탭 DOM 유지 여부.
+   * 지출·은행·미수미지급 등 무거운 화면은 false로 두어 메모리 부담을 줄인다.
+   * @default true
+   */
+  preserveInactiveTabs?: boolean
+}
+
+function Tabs({ value, preserveInactiveTabs = true, ...props }: ErpTabsRootProps) {
+  const inErp = useErpNavigationOptional() != null
+  const preserve = inErp && preserveInactiveTabs !== false
   return (
-    <ErpTabsValueContext.Provider value={value}>
-      <TabsPrimitive.Root value={value} {...props} />
-    </ErpTabsValueContext.Provider>
+    <ErpTabsPreserveInactiveContext.Provider value={preserve}>
+      <ErpTabsValueContext.Provider value={value}>
+        <TabsPrimitive.Root value={value} {...props} />
+      </ErpTabsValueContext.Provider>
+    </ErpTabsPreserveInactiveContext.Provider>
   )
 }
 
@@ -53,7 +65,7 @@ const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, value, ...props }, ref) => {
-  const preserveInactive = useErpNavigationOptional() != null
+  const preserveInactive = React.useContext(ErpTabsPreserveInactiveContext)
   const selectedValue = React.useContext(ErpTabsValueContext)
   // value 미전달(비제어 Tabs)이면 활성 탭을 알 수 없으므로 기존처럼 모두 active로 둔다.
   const tabActive =

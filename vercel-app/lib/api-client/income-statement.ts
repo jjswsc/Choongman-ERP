@@ -57,12 +57,14 @@ export interface IncomeStatementData {
     nameEn: string | null
     nameTh: string | null
     amount: number
+    vatAmount?: number
   }[]
   purchaseByVendor?: {
     key: string
     amount: number
     label?: string
     amountBasis?: 'stock_net' | 'pos_gross' | 'cash_gross'
+    vatAmount?: number
   }[]
   /** 본사 손익: 출고 발주 store_name(매출처)별 매출 */
   salesByCustomer?: {
@@ -102,6 +104,8 @@ export interface IncomeStatementData {
     franchiseRevenueNet?: number
     salesStockVatBuckets?: { taxableNet: number; exemptNet: number }
     purchasesStockVatBuckets?: { taxableNet: number; exemptNet: number }
+    expensesCashVat?: number
+    purchasesBankVat?: number
   }
   /** 손익 EBITDA 토글 — 순이익 가산 */
   ebitdaBridge?: {

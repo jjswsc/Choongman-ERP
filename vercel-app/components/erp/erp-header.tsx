@@ -1,12 +1,10 @@
 "use client"
 
-import { appAlert } from "@/lib/app-message"
-import { useCallback, useMemo } from "react"
+import { Suspense, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { AiCenterDrawer } from "@/components/ai/ai-center-drawer"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -23,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download, X } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft, Languages } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -36,14 +34,14 @@ import {
 } from "@/lib/franchisee-multi-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { useAutoTranslate } from "@/lib/auto-translate"
-import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { useErpNavigation } from "@/lib/erp-navigation"
+import { ErpWorkspaceTabs } from "@/components/erp/erp-workspace-tabs"
 
 export function ErpHeader() {
   const router = useRouter()
   const pathname = usePathname()
-  const { goBack, clearPageCache, closeCurrentPage } = useErpNavigation()
+  const { goBack, clearPageCache, invalidateKeepAliveCaches } = useErpNavigation()
   const { auth, logout, setAuth } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
@@ -65,14 +63,7 @@ export function ErpHeader() {
   )
 
   const isLoginPage = pathname === "/admin/login"
-  const isDashboard = pathname === "/admin" || pathname === "/admin/"
-  const showBackButton = !isLoginPage && !isDashboard
-  const erpWindowsDownloadLabel = t("erpWindowsDownload") || "윈도우 ERP 받기"
-  const handleErpInstallerCopy = useCallback(async () => {
-    const r = await copyWindowsInstallerUrl(WINDOWS_ERP_SETUP_PATH)
-    if (r.ok) await appAlert(t("windowsInstallerCopyHint") || "")
-    else await appAlert((t("windowsInstallerCopyFail") || "") + r.url)
-  }, [t])
+  const showBackButton = !isLoginPage
   const autoTranslateLabel = t("header_auto_translate")
 
   const handleLogout = () => {
@@ -84,39 +75,36 @@ export function ErpHeader() {
   const staffMobileLabel = t("goToStaffMobile") || t("goToMobile") || "현장 모바일"
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b bg-card px-2 print:hidden pointer-events-none sm:gap-0 sm:px-4">
-      <div className="pointer-events-auto flex min-w-0 items-center gap-1 sm:gap-3">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b bg-card px-2 print:hidden pointer-events-none sm:gap-2 sm:px-4">
+      <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
         <SidebarTrigger className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground md:h-8 md:w-8" />
         {showBackButton && (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-10 gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8"
-              onClick={goBack}
-              title={t("posBack") || "뒤로가기"}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline text-xs">{t("posBack") || "뒤로가기"}</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
-              onClick={closeCurrentPage}
-              title={t("erpCloseScreen") || "화면 닫기"}
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">{t("erpCloseScreen") || "화면 닫기"}</span>
-            </Button>
-            <Separator orientation="vertical" className="hidden h-5 sm:block" />
-          </>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
+            onClick={goBack}
+            title={t("posBack") || "뒤로가기"}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="sr-only">{t("posBack") || "뒤로가기"}</span>
+          </Button>
         )}
+        {!isLoginPage ? (
+          <>
+            <Separator orientation="vertical" className="hidden h-5 shrink-0 sm:block" />
+            <Suspense fallback={<div className="min-w-0 flex-1" aria-hidden />}>
+              <ErpWorkspaceTabs />
+            </Suspense>
+          </>
+        ) : null}
+      </div>
+
+      <div className="pointer-events-auto flex shrink-0 items-center gap-1 sm:gap-2">
         <Link
           href="/"
-          className="flex h-10 items-center gap-1 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-auto sm:p-2"
+          className="flex h-10 shrink-0 items-center gap-1 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:h-auto sm:p-2 lg:hidden"
           title={`${brand.appName} · ${staffMobileLabel}`}
         >
           <Smartphone className="h-4 w-4 shrink-0" />
@@ -124,22 +112,6 @@ export function ErpHeader() {
             {staffMobileLabel}
           </span>
         </Link>
-        <Separator orientation="vertical" className="hidden h-5 sm:block" />
-      </div>
-
-      <div className="pointer-events-auto ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="hidden h-8 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:inline-flex sm:px-3"
-          title={erpWindowsDownloadLabel}
-          onClick={() => void handleErpInstallerCopy()}
-        >
-          <Download className="h-4 w-4 shrink-0" />
-          <span className="hidden md:inline">{erpWindowsDownloadLabel}</span>
-        </Button>
-        <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
         <Button
           type="button"
           variant={autoTranslateEnabled ? "default" : "outline"}
@@ -162,6 +134,7 @@ export function ErpHeader() {
                   : auth.store || franchiseeSwitchStores[0]
               }
               onValueChange={(v) => {
+                invalidateKeepAliveCaches()
                 if (v === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE) {
                   setViewStore(FRANCHISEE_AGGREGATE_ALL_STORES_VALUE)
                   return
@@ -192,8 +165,13 @@ export function ErpHeader() {
             <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
           </>
         )}
-        {/* Language */}
-        <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
+        <Select
+          value={lang}
+          onValueChange={(v) => {
+            invalidateKeepAliveCaches()
+            setLang(v as LangCode)
+          }}
+        >
           <SelectTrigger className="h-10 min-w-[4.5rem] max-w-[7rem] text-xs sm:h-8 sm:min-w-[7.5rem] sm:max-w-[10rem]">
             <SelectValue />
           </SelectTrigger>
@@ -206,9 +184,7 @@ export function ErpHeader() {
           </SelectContent>
         </Select>
         <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
-        {/* Search */}
         <div className="hidden sm:contents">
-          <AiCenterDrawer />
           <Button
             variant="ghost"
             size="icon"
@@ -218,7 +194,6 @@ export function ErpHeader() {
             <span className="sr-only">{t("search")}</span>
           </Button>
 
-          {/* Notifications */}
           <Button
             variant="ghost"
             size="icon"
@@ -231,7 +206,6 @@ export function ErpHeader() {
           <Separator orientation="vertical" className="mx-1 h-5" />
         </div>
 
-        {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

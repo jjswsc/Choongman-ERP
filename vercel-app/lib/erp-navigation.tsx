@@ -3,6 +3,28 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ERP_HELP_PARAM } from "@/components/erp/admin-help-mode-toggle"
+import {
+  clearErpWorkspaceTabs,
+  closeOtherErpWorkspaceTabs,
+  ensureErpWorkspaceTab,
+  findNeighborWorkspaceTabHref,
+  getErpWorkspaceTabFullHref,
+  getErpWorkspaceTabs,
+  removeErpWorkspaceTab,
+  reorderErpWorkspaceTabs,
+  resolveErpWorkspaceTabHref,
+  subscribeErpWorkspaceTabs,
+  type ErpWorkspaceTab,
+} from "@/lib/erp-workspace-tabs"
+import {
+  bumpErpKeepAliveRemount,
+  clearErpKeepAliveRemountStamps,
+} from "@/lib/erp-keep-alive-remount"
+import { isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
+import {
+  clearErpKeepAliveCacheRegistry,
+  hasErpKeepAliveCache,
+} from "@/lib/erp-keep-alive-registry"
 
 const STACK_KEY = "erp_nav_stack_v1"
 const BACK_FLAG_KEY = "erp_nav_back_pending"
@@ -44,16 +66,15 @@ function writeStack(stack: string[]) {
   sessionStorage.setItem(STACK_KEY, JSON.stringify(stack.slice(-MAX_STACK)))
 }
 
-/** keep-alive 캐시와 스택 동기화용 */
+/** keep-alive 캐시와 스택 동기화용 (레거시·디버그) */
 export function getErpNavigationStack(): string[] {
   return readStack()
 }
 
 function removeHrefFromStack(href: string) {
   const stack = readStack()
-  const idx = stack.lastIndexOf(href)
-  if (idx < 0) return
-  writeStack(stack.slice(0, idx))
+  const target = resolveErpWorkspaceTabHref(href)
+  writeStack(stack.filter((s) => resolveErpWorkspaceTabHref(s) !== target))
 }
 
 export function markErpBackNavigation(opts?: { evictHref?: string }) {
@@ -118,15 +139,30 @@ type ErpNavigationContextValue = {
   registerBackHandler: (handler: ErpBackHandler) => () => void
   goBack: () => void
   closeCurrentPage: () => void
+  closeWorkspaceTab: (href: string) => void
+  closeOtherWorkspaceTabs: (keepHref?: string) => void
+  activateWorkspaceTab: (href: string) => void
+  refreshWorkspaceTab: (href: string) => void
+  reorderWorkspaceTabs: (fromHref: string, toHref: string) => void
+  /** keep-alive soft 전환 중 URL(라우터보다 우선). null이면 Next pathname */
+  softDisplayHref: string | null
+  clearSoftDisplayHref: () => void
+  workspaceTabs: ErpWorkspaceTab[]
   registerPageClearListener: (listener: () => void) => () => void
   clearPageCache: () => void
+  /** 매장·언어 등 컨텍스트 변경 — 탭 목록은 유지하고 keep-alive 트리만 비움 */
+  invalidateKeepAliveCaches: () => void
   registerKeepAliveCountListener: (listener: (count: number) => void) => () => void
   notifyKeepAliveCount: (count: number) => void
 }
 
 const ErpNavigationContext = React.createContext<ErpNavigationContextValue | null>(null)
 
-function ErpNavigationTracker() {
+function ErpNavigationTracker({
+  onRouterHref,
+}: {
+  onRouterHref: (href: string) => void
+}) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -137,7 +173,12 @@ function ErpNavigationTracker() {
   }, [pathname, searchParams])
 
   React.useEffect(() => {
+    onRouterHref(href)
+  }, [href, onRouterHref])
+
+  React.useEffect(() => {
     if (!href.startsWith("/admin") || href.startsWith("/admin/login")) return
+    ensureErpWorkspaceTab(href)
     if (consumeErpBackNavigation()) return
     pushToStack(href)
   }, [href])
@@ -146,7 +187,9 @@ function ErpNavigationTracker() {
     const onPopState = () => {
       const p = normalizePath(window.location.pathname)
       const qs = window.location.search
-      trimStackToHref(normalizeErpHref(p, qs))
+      const next = normalizeErpHref(p, qs)
+      ensureErpWorkspaceTab(next)
+      trimStackToHref(next)
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
@@ -160,6 +203,46 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
   const handlersRef = React.useRef<ErpBackHandler[]>([])
   const pageClearListenersRef = React.useRef<(() => void)[]>([])
   const keepAliveCountListenersRef = React.useRef<((count: number) => void)[]>([])
+  const [workspaceTabs, setWorkspaceTabs] = React.useState<ErpWorkspaceTab[]>([
+    { href: "/admin", titleKey: "adminDashboard", lastSeen: 0 },
+  ])
+  const [softDisplayHref, setSoftDisplayHref] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    setWorkspaceTabs(getErpWorkspaceTabs())
+    return subscribeErpWorkspaceTabs(() => setWorkspaceTabs(getErpWorkspaceTabs()))
+  }, [])
+
+  const onRouterHref = React.useCallback((href: string) => {
+    const resolved = resolveErpWorkspaceTabHref(href)
+    // Soft pushState가 Next pathname과 동기화되면 soft 대상과 같아짐 → 유지.
+    // 사이드바 Link 등 hard nav로 다른 경로가 오면 soft 해제.
+    setSoftDisplayHref((prev) => {
+      if (!prev) return null
+      if (resolveErpWorkspaceTabHref(prev) === resolved) return prev
+      return null
+    })
+  }, [])
+
+  const clearSoftDisplayHref = React.useCallback(() => {
+    setSoftDisplayHref(null)
+  }, [])
+
+  React.useEffect(() => {
+    const onPopState = () => {
+      const p = normalizePath(window.location.pathname)
+      const qs = window.location.search
+      const next = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      if (hasErpKeepAliveCache(next) && !isErpKeepAliveExcluded(next)) {
+        setSoftDisplayHref(next)
+        ensureErpWorkspaceTab(next)
+        return
+      }
+      setSoftDisplayHref(null)
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [])
 
   const registerBackHandler = React.useCallback((handler: ErpBackHandler) => {
     handlersRef.current.push(handler)
@@ -187,19 +270,128 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
   }, [])
 
   const clearPageCache = React.useCallback(() => {
+    setSoftDisplayHref(null)
+    clearErpWorkspaceTabs()
+    clearErpKeepAliveRemountStamps()
+    clearErpKeepAliveCacheRegistry()
     for (const listener of pageClearListenersRef.current) listener()
+  }, [])
+
+  /** 탭은 유지한 채 숨김 keep-alive만 비우고 현재 화면 RSC 갱신 */
+  const invalidateKeepAliveCaches = React.useCallback(() => {
+    setSoftDisplayHref(null)
+    clearErpKeepAliveCacheRegistry()
+    for (const listener of pageClearListenersRef.current) listener()
+    markErpBackNavigation()
+    router.refresh()
+  }, [router])
+
+  const activateWorkspaceTab = React.useCallback(
+    (href: string) => {
+      const target = resolveErpWorkspaceTabHref(href)
+      const p = typeof window !== "undefined" ? normalizePath(window.location.pathname) : ""
+      const qs = typeof window !== "undefined" ? window.location.search : ""
+      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const current = softDisplayHref || routerCurrent
+      if (current === target) return
+
+      // 캐시 hit: history만 바꾸고 keep-alive 표시 전환 (RSC push 생략)
+      if (
+        typeof window !== "undefined" &&
+        hasErpKeepAliveCache(target) &&
+        !isErpKeepAliveExcluded(target)
+      ) {
+        setSoftDisplayHref(target)
+        ensureErpWorkspaceTab(target)
+        window.history.pushState({ erpSoftTab: 1 }, "", getErpWorkspaceTabFullHref(target))
+        return
+      }
+
+      setSoftDisplayHref(null)
+      markErpBackNavigation()
+      router.push(target, { scroll: false })
+    },
+    [router, softDisplayHref]
+  )
+
+  const refreshWorkspaceTab = React.useCallback(
+    (href: string) => {
+      if (typeof window === "undefined") return
+      const tabHref = resolveErpWorkspaceTabHref(href)
+      const p = normalizePath(window.location.pathname)
+      const qs = window.location.search
+      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const current = softDisplayHref || routerCurrent
+      bumpErpKeepAliveRemount(tabHref)
+      setSoftDisplayHref(null)
+      if (current === tabHref || routerCurrent === tabHref) {
+        markErpBackNavigation()
+        if (routerCurrent !== tabHref) router.push(tabHref, { scroll: false })
+        else router.refresh()
+      }
+    },
+    [router, softDisplayHref]
+  )
+
+  const closeWorkspaceTab = React.useCallback(
+    (href: string) => {
+      if (typeof window === "undefined") return
+      const tabHref = resolveErpWorkspaceTabHref(href)
+      if (tabHref === "/admin") return
+
+      const before = getErpWorkspaceTabs()
+      const neighbor = findNeighborWorkspaceTabHref(tabHref, before)
+      const p = normalizePath(window.location.pathname)
+      const qs = window.location.search
+      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const current = softDisplayHref || routerCurrent
+
+      removeHrefFromStack(tabHref)
+      removeErpWorkspaceTab(tabHref)
+
+      if (current === tabHref) {
+        setSoftDisplayHref(null)
+        markErpBackNavigation({ evictHref: tabHref })
+        router.push(neighbor)
+      }
+    },
+    [router, softDisplayHref]
+  )
+
+  const closeOtherWorkspaceTabs = React.useCallback(
+    (keepHref?: string) => {
+      if (typeof window === "undefined") return
+      const p = normalizePath(window.location.pathname)
+      const qs = window.location.search
+      const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+      const current = softDisplayHref || routerCurrent
+      const keep = resolveErpWorkspaceTabHref(keepHref || current)
+      const removed = closeOtherErpWorkspaceTabs(keep)
+      for (const h of removed) removeHrefFromStack(h)
+      if (current !== keep && keep !== "/admin") {
+        setSoftDisplayHref(null)
+        markErpBackNavigation()
+        router.push(keep, { scroll: false })
+      } else if (softDisplayHref && softDisplayHref !== keep) {
+        setSoftDisplayHref(keep === routerCurrent ? null : keep)
+      }
+    },
+    [router, softDisplayHref]
+  )
+
+  const reorderWorkspaceTabs = React.useCallback((fromHref: string, toHref: string) => {
+    reorderErpWorkspaceTabs(fromHref, toHref)
   }, [])
 
   const closeCurrentPage = React.useCallback(() => {
     if (typeof window === "undefined") return
     const p = normalizePath(window.location.pathname)
     const qs = window.location.search
-    const current = normalizeErpHref(p, qs)
+    const routerCurrent = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
+    const current = softDisplayHref || routerCurrent
     if (current === "/admin") return
-    markErpBackNavigation({ evictHref: current })
-    removeHrefFromStack(current)
-    router.push("/admin")
-  }, [router])
+    closeWorkspaceTab(current)
+  }, [closeWorkspaceTab, softDisplayHref])
 
   const goBack = React.useCallback(() => {
     if (typeof window === "undefined") return
@@ -222,16 +414,19 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
     const prev = popStackAndGetPrev(current)
     if (prev) {
+      setSoftDisplayHref(null)
       markErpBackNavigation()
       router.push(prev)
       return
     }
 
     if (window.history.length > 1) {
+      setSoftDisplayHref(null)
       markErpBackNavigation()
       router.back()
       return
     }
+    setSoftDisplayHref(null)
     router.push("/admin")
   }, [router])
 
@@ -240,8 +435,17 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
       registerBackHandler,
       goBack,
       closeCurrentPage,
+      closeWorkspaceTab,
+      closeOtherWorkspaceTabs,
+      activateWorkspaceTab,
+      refreshWorkspaceTab,
+      reorderWorkspaceTabs,
+      softDisplayHref,
+      clearSoftDisplayHref,
+      workspaceTabs,
       registerPageClearListener,
       clearPageCache,
+      invalidateKeepAliveCaches,
       registerKeepAliveCountListener,
       notifyKeepAliveCount,
     }),
@@ -249,8 +453,17 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
       registerBackHandler,
       goBack,
       closeCurrentPage,
+      closeWorkspaceTab,
+      closeOtherWorkspaceTabs,
+      activateWorkspaceTab,
+      refreshWorkspaceTab,
+      reorderWorkspaceTabs,
+      softDisplayHref,
+      clearSoftDisplayHref,
+      workspaceTabs,
       registerPageClearListener,
       clearPageCache,
+      invalidateKeepAliveCaches,
       registerKeepAliveCountListener,
       notifyKeepAliveCount,
     ]
@@ -259,7 +472,7 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
   return (
     <ErpNavigationContext.Provider value={value}>
       <React.Suspense fallback={null}>
-        <ErpNavigationTracker />
+        <ErpNavigationTracker onRouterHref={onRouterHref} />
       </React.Suspense>
       {children}
     </ErpNavigationContext.Provider>

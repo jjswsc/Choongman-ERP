@@ -3,6 +3,7 @@
  */
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import type { IncomeStatementData } from '@/lib/api-client'
+import { safePlCashVat } from '@/lib/income-statement-cash-vat'
 import { stockNetLineGrossAmount, type NetVatBuckets } from '@/lib/income-statement-item-vat'
 
 export type IncomeStatementVatDisplayMode = 'excluded' | 'included'
@@ -35,6 +36,13 @@ export type IncomeStatementDisplayAmounts = {
   /** 품목 tax_type 반영 — 펼침 행 환산용 */
   salesStockVatBuckets?: NetVatBuckets
   purchasesStockVatBuckets?: NetVatBuckets
+  /**
+   * 통장·패티·수수료 지급예정에 등록된(또는 연결 지출등록) 명시 VAT 합.
+   * data.expenses(gross)에는 포함되어 있으며 VAT 제외 표시 시에만 차감.
+   */
+  expensesCashVat?: number
+  /** 통장·패티 매입(cash) 명시 VAT — purchasesNet에 이미 반영됨(검증·디버그) */
+  purchasesBankVat?: number
 }
 
 export type IncomeStatementEbitdaBridge = {
@@ -77,7 +85,8 @@ export function convertLineAmount(
   amount: number,
   kind: IncomeStatementAmountBasisKind,
   mode: IncomeStatementVatDisplayMode,
-  stockVatBuckets?: NetVatBuckets | null
+  stockVatBuckets?: NetVatBuckets | null,
+  cashVatAmount?: number | null
 ): number {
   const n = Math.max(0, Number(amount) || 0)
   if (n <= 0) return 0
@@ -91,8 +100,19 @@ export function convertLineAmount(
     return n
   }
   if (kind === 'pos_gross') return netFromGrossSubtotal(n)
-  if (kind === 'cash_gross') return n
+  if (kind === 'cash_gross') return safePlCashVat(n, cashVatAmount).net
   return n
+}
+
+/** 비용 계정 줄 — VAT 제외 시 명시 vatAmount만 차감 */
+export function convertExpenseSubjectAmount(
+  amount: number,
+  vatAmount: number | null | undefined,
+  mode: IncomeStatementVatDisplayMode
+): number {
+  const n = Math.max(0, Number(amount) || 0)
+  if (mode === 'included') return n
+  return safePlCashVat(n, vatAmount).net
 }
 
 export function pickDisplayAmount(
@@ -173,10 +193,14 @@ export function buildIncomeStatementViewNumbers(input: {
   const b = input.data.displayAmounts
   const fbG = Math.max(0, Number(b?.franchiseBillingGross) || 0)
   const fbN = Math.max(0, Number(b?.franchiseBillingNet) || 0)
-  // report.expenses 는 franchise gross 포함 가정 — VAT 제외 시 franchise분만 net으로 교체
-  const expensesBase = Math.max(0, (Number(input.data.expenses) || 0) - fbG)
+  const cashVat = Math.max(0, Number(b?.expensesCashVat) || 0)
+  // report.expenses 는 franchise gross + cash gross 포함 — 제외 시 franchise net + cash vat 차감
+  const expensesGrossTotal = Math.max(0, Number(input.data.expenses) || 0)
+  const expensesBase = Math.max(0, expensesGrossTotal - fbG)
   const expenses =
-    expensesBase + (input.vatMode === 'included' ? fbG : fbN)
+    input.vatMode === 'included'
+      ? expensesBase + fbG
+      : Math.max(0, expensesBase - cashVat) + fbN
   const sales = resolveIncomeStatementSalesAmount(input.data, input.vatMode, input.manualSales)
   const purchases = resolveIncomeStatementPurchasesAmount(input.data, input.vatMode)
   const beginningInventory = resolveIncomeStatementInventoryAmount(

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
+import { useErpPageActive, useErpTabActive } from "@/lib/erp-page-visibility"
 import { ERP_DOWNLOAD_FONT_SIZE_PT } from "@/lib/erp-excel-export"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import {
@@ -143,10 +144,13 @@ export function HrTab() {
   const [payrollLoading, setPayrollLoading] = useState(false)
   const [payrollPreviewOpen, setPayrollPreviewOpen] = useState(false)
 
+  const pageActive = useErpPageActive()
+  const tabActive = useErpTabActive()
   useEffect(() => {
+    if (!pageActive || !tabActive) return
     const tid = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(tid)
-  }, [])
+  }, [pageActive, tabActive])
 
   const loadButtonState = useCallback(() => {
     if (!auth?.store || !auth?.user) return Promise.resolve()
