@@ -12,7 +12,7 @@ import {
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
-import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import { parseGrabStoreMap, resolveErpStoreCodeFromGrabMap } from '@/lib/grab-store-map-env'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { normStoreKey } from '@/lib/store-list-keys'
 import {
@@ -633,20 +633,16 @@ function extractPartnerStoreDigits(raw: string): string {
   return digits?.[1] || ''
 }
 
-/** 같은 Grab 맵 체인 안에서만 값을 따라 최종 partner/ERP 문자열까지 진행 (정책 매칭용, BFS·다매장 탐색 없음) */
+/**
+ * Grab 맵 체인 → ERP store_code (정책·카테고리 정렬 매칭용).
+ * `1050 ↔ CM The street`처럼 역매핑이 있으면 단순 follow는 숫자(1050)로 끝나
+ * categoryOrders가 통째로 빠져 Set이 뒤로 밀린다(The Street 2026-08).
+ * 비숫자 ERP 코드를 종단으로 고른다(`resolveErpStoreCodeFromGrabMap`).
+ */
 function followGrabStoreMapChainToTerminal(start: string): string {
-  const map = parseGrabStoreMap()
-  let cur = String(start || '').trim()
-  if (!cur) return ''
-  const seen = new Set<string>()
-  for (let i = 0; i < 10; i++) {
-    if (seen.has(cur)) break
-    seen.add(cur)
-    const next = String(map[cur] || '').trim()
-    if (!next || next === cur) break
-    cur = next
-  }
-  return cur
+  const seed = String(start || '').trim()
+  if (!seed) return ''
+  return resolveErpStoreCodeFromGrabMap(seed) || seed
 }
 
 function resolveStoreCodeFromGrabMerchant(merchantID: string, partnerMerchantID: string): string {
